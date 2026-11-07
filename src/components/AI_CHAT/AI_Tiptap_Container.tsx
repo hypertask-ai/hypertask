@@ -276,6 +276,25 @@ export function AI_Tiptap_Container({
   if (isMbl) composerClassName = `${chatCleanupEnabled ? "!rounded-[4px]" : "!rounded-[5px]"} px-3 pb-2 pt-3`;
   else if (fullScreenCleanup || chatCleanupEnabled || plusLayout) composerClassName = "!rounded-[4px] p-2";
 
+  const desktopScope = !pathname?.startsWith("/chat")
+    ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />
+    : null;
+  const desktopModel = (
+    <AIModelDropDownButton
+      keyboardNavigation={sharedShortcuts}
+      shortcutHint={sharedShortcuts ? chatShortcutHint("model") : undefined}
+      onKeyboardClose={() => editor?.commands.focus("end")}
+      optionCallback={dropDownButtonAICallback}
+      aiSelected={currentAiOption}
+      modelTeamId={modelTeamId}
+      modelBilling={modelBilling}
+      currentOptions={displayAiOptions}
+      className="bottom-[110%] top-auto"
+      stackSubmenus
+      effortLabelClassName={plusLayout || pathname?.startsWith("/chat") ? undefined : "hidden"}
+    />
+  );
+
   return (
     <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root inert={disabled || !active || undefined}
       onKeyDownCapture={controlledComposer ? (event) => {
@@ -410,29 +429,15 @@ export function AI_Tiptap_Container({
           hasText={hasComposerText}
           leadingControls={
             plusLayout ? (
-              <ChatPlusMenu
+              <ChatAddActions
                 disabled={isRecording || audioProcessing}
                 onAttach={handleAttachmentClick}
                 onAddContext={handleAddContext}
               />
-            ) : controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
+            ) : controlledComposer ? (agentContextFlag && agentContextEnabled ? desktopScope : null) : (
               <>
-                <AIModelDropDownButton
-                  keyboardNavigation={sharedShortcuts}
-                  shortcutHint={sharedShortcuts ? chatShortcutHint("model") : undefined}
-                  onKeyboardClose={() => editor?.commands.focus("end")}
-                  optionCallback={dropDownButtonAICallback}
-                  aiSelected={currentAiOption}
-                  modelTeamId={modelTeamId}
-                  modelBilling={modelBilling}
-                  currentOptions={displayAiOptions}
-                  className={"bottom-[110%] top-auto"}
-                  stackSubmenus
-                  effortLabelClassName={
-                    pathname?.startsWith("/chat") ? undefined : "hidden"
-                  }
-                />
-                {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />}
+                {desktopModel}
+                {desktopScope}
               </>
             )
           }
@@ -586,26 +591,15 @@ export function AI_Tiptap_Container({
       </div>
       {plusLayout && (
         <div data-ai-chat-below-row className="flex w-full items-center justify-between gap-2 pt-2">
-          {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />}
-          <AIModelDropDownButton
-            keyboardNavigation={sharedShortcuts}
-            shortcutHint={sharedShortcuts ? chatShortcutHint("model") : undefined}
-            onKeyboardClose={() => editor?.commands.focus("end")}
-            optionCallback={dropDownButtonAICallback}
-            aiSelected={currentAiOption}
-            modelTeamId={modelTeamId}
-            modelBilling={modelBilling}
-            currentOptions={displayAiOptions}
-            className="bottom-[110%] top-auto"
-            stackSubmenus
-          />
+          {desktopScope}
+          {desktopModel}
         </div>
       )}
     </div>
   );
 }
 
-function ChatPlusMenu({
+function ChatAddActions({
   disabled,
   onAttach,
   onAddContext,

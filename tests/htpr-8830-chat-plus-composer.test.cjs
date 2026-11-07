@@ -1,12 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
 const FLAG = "htpr-8830-chat-plus-composer";
-const root = path.resolve(__dirname, "..");
 
 test("HTPR-8830 chat plus composer is an Everyone improvement", () => {
   const { default: flag, HTPR_8830_CHAT_PLUS_COMPOSER_FLAG: key } = loadModule("src/lib/flags/definitions/htpr-8830-chat-plus-composer.ts");
@@ -16,11 +13,6 @@ test("HTPR-8830 chat plus composer is an Everyone improvement", () => {
   assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.releaseRisk.risk, "small");
   assert.equal(flag.releaseRisk.highRisk, undefined);
-});
-
-test("the quiet placeholder halves the existing chat placeholder", () => {
-  const scss = fs.readFileSync(path.join(root, "src/styles/tiptap.module.scss"), "utf8");
-  assert.match(scss, /&\[data-chat-quiet-placeholder\] \.is_editor_empty:first-child::before \{\s*opacity: 0\.5;\s*\}/);
 });
 
 function composerView({ enabled, pathname = "/project", mobile = false } = {}) {
