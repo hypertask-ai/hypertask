@@ -506,6 +506,7 @@
             "staleNudgedAt": null,
             "blockerCommentId": null,
             "waitingOnUserId": null,
+            "waitingOnAgentId": null,
             "waitingOnSetById": null,
             "waitingOnSetAt": null,
             "dueDate": null,

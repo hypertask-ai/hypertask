@@ -29,8 +29,9 @@ export async function getBlockers(request: NextRequest, ctx: McpAuthContext) {
   const projects = rawProjects.map(positiveId)
   const mine = users.length === 0 || users[0] === 'me'
   const agentUuid = !mine && users.length === 1 && AGENT_UUID.test(users[0]) ? users[0] : null
-  const agentList = Boolean(ctx.agentId) && await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, ctx.user.id)
-  if (agentUuid && !agentList) {
+  const agentFlag = await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, ctx.user.id)
+  const agentList = Boolean(ctx.agentId) && agentFlag
+  if (agentUuid && !agentFlag) {
     return NextResponse.json({ success: false, error: 'Invalid waiting_on, projectId, project, or state.' }, { status: 400 })
   }
   const target = mine ? ctx.user.id : agentUuid ? null : positiveId(users[0])
@@ -40,6 +41,7 @@ export async function getBlockers(request: NextRequest, ctx: McpAuthContext) {
     return NextResponse.json({ success: false, error: 'Invalid waiting_on, projectId, project, or state.' }, { status: 400 })
   }
   const personId = target ?? ctx.user.id
+  const answerAgentId = agentUuid ?? (mine && agentList ? ctx.agentId : null)
   const projectIds = projects.filter((id): id is number => id !== null)
   const tasks = await prisma.task.findMany({
     where: {
@@ -54,13 +56,23 @@ export async function getBlockers(request: NextRequest, ctx: McpAuthContext) {
     },
     select: {
       id: true, uniqueIndex: true, ticketNumber: true, title: true, section: true,
-      projectId: true, waitingOnSetAt: true, blockerCommentId: true,
+      projectId: true, waitingOnSetAt: true, blockerCommentId: true, waitingOnAgentId: true,
       project: { select: { title: true, name: true } },
       priority: { select: { Priority_Value: true } },
       blockerComment: { select: { id: true, taskId: true, text: true, commentText: true, activity: true, createdAt: true,
-        reactions: { where: { userId: personId, agentId: null, agentDisplayName: null, isDeleted: false }, select: { createdAt: true } },
+        reactions: {
+          where: answerAgentId
+            ? { isDeleted: false, OR: [{ userId: personId, agentId: null, agentDisplayName: null }, { agentId: answerAgentId }] }
+            : { userId: personId, agentId: null, agentDisplayName: null, isDeleted: false },
+          select: { createdAt: true, agentId: true },
+        },
       } },
-      comments: { where: { creatorId: personId, agentId: null, agentDisplayName: null, activity: { equals: Prisma.DbNull } }, select: { createdAt: true } },
+      comments: {
+        where: answerAgentId
+          ? { activity: { equals: Prisma.DbNull }, OR: [{ creatorId: personId, agentId: null, agentDisplayName: null }, { agentId: answerAgentId }] }
+          : { creatorId: personId, agentId: null, agentDisplayName: null, activity: { equals: Prisma.DbNull } },
+        select: { createdAt: true, agentId: true },
+      },
     },
     orderBy: { id: 'asc' },
   })
@@ -74,8 +86,11 @@ export async function getBlockers(request: NextRequest, ctx: McpAuthContext) {
     const value = (index: number) => index < 0 ? null :
       (lines[index].replace(/^[^:]+:\s*/, '').trim() || (lines[index + 1] && !/^(question|(?:my )?recommendation|why|yes|no):/i.test(lines[index + 1]) ? lines[index + 1] : null))
     const questionAt = valid ? marked.createdAt : null
-    const answered = marked !== null && questionAt !== null && (task.comments.some((comment) => comment.createdAt > questionAt) ||
-      marked.reactions.some((reaction) => reaction.createdAt > questionAt))
+    const onAgent = Boolean(answerAgentId) && task.waitingOnAgentId === answerAgentId
+    const replies = task.comments.filter((comment) => !answerAgentId || (onAgent ? comment.agentId === answerAgentId : comment.agentId == null))
+    const reactions = marked ? marked.reactions.filter((reaction) => !answerAgentId || (onAgent ? reaction.agentId === answerAgentId : reaction.agentId == null)) : []
+    const answered = marked !== null && questionAt !== null && (replies.some((comment) => comment.createdAt > questionAt) ||
+      reactions.some((reaction) => reaction.createdAt > questionAt))
     const state = !valid ? 'no-question' : answered ? 'answered' : 'waiting'
     return {
       id: task.id, ticketNumber: task.ticketNumber,

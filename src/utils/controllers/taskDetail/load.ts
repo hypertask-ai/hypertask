@@ -17,7 +17,6 @@ import {
 } from "@/lib/agents/publicAgent";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
-import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -154,6 +153,22 @@ const userSelect = {
   email: true,
 } satisfies Prisma.UserSelect;
 
+function publicWaitingAgent(
+  agent: {
+    id: string;
+    displayName: string | null;
+    photoURL: string | null;
+    userId: number;
+    visibility: AgentVisibility;
+    members: readonly { projectId: number }[];
+  } | null,
+  userId: number,
+  projectId: number,
+) {
+  if (!agent || !isAgentVisibleToUser(agent, userId, projectId)) return null;
+  return { id: agent.id, displayName: agent.displayName, photoURL: agent.photoURL };
+}
+
 export function projectVisibleTaskAgent(
   agent:
     | (PublicAgent & {
@@ -241,7 +256,16 @@ export async function findTaskByTicketNumber(ticketNumber: string, userId: numbe
 export function taskDetailInclude(userId: number, projectId: number) {
   return {
     user: { select: userSelect },
-    waitingOnAgent: { select: { id: true, displayName: true, photoURL: true } },
+    waitingOnAgent: {
+      select: {
+        id: true,
+        displayName: true,
+        photoURL: true,
+        userId: true,
+        visibility: true,
+        members: { select: { projectId: true } },
+      },
+    },
     description_: {
       select: {
         id: true,
@@ -494,11 +518,11 @@ export async function fetchTaskDetail(
   }
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
-  const showWaitingAgent = await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, userId);
+  const waitingAgent = publicWaitingAgent(task.waitingOnAgent, userId, task.projectId);
   return {
     ...stripForeignTaskRelations(task),
-    waitingOnAgentId: showWaitingAgent ? task.waitingOnAgentId : null,
-    waitingOnAgent: showWaitingAgent ? task.waitingOnAgent : null,
+    waitingOnAgentId: waitingAgent ? task.waitingOnAgentId : null,
+    waitingOnAgent: waitingAgent,
     agentId: visibleAgent ? task.agentId : null,
     agent: visibleAgent,
     description_: task.description_
