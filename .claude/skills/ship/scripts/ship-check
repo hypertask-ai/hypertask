@@ -465,10 +465,13 @@ live_proof_ok() {
       fi
       if ! git -C "$source" show "$sha:$relative" > "$tmp/payload" 2>/dev/null || ! cmp -s "$target" "$tmp/payload"; then rm -rf "$tmp"; return 1; fi
       rm -rf "$tmp"
-      out=$(systemctl --user show "$unit" -p Result -p ExecMainStatus 2>/dev/null) || return 1
+      if [[ $REPO == hypertask-ai/hypertask ]]; then
+        out=$(systemctl --user show "$unit" --timestamp=us -p Result -p ExecMainStatus -p NeedDaemonReload -p ExecMainStartTimestamp -p ExecMainExitTimestamp -p DropInPaths 2>/dev/null) || return 1
+      else
+        out=$(systemctl --user show "$unit" -p Result -p ExecMainStatus 2>/dev/null) || return 1
+      fi
       grep -qx 'Result=success' <<<"$out" && grep -qx 'ExecMainStatus=0' <<<"$out" || return 1
       if [[ $REPO == hypertask-ai/hypertask ]]; then
-        out=$(systemctl --user show "$unit" --timestamp=us -p NeedDaemonReload -p ExecMainStartTimestamp -p ExecMainExitTimestamp -p DropInPaths 2>/dev/null) || return 1
         grep -qx 'NeedDaemonReload=no' <<<"$out" && grep -qx 'DropInPaths=' <<<"$out" || return 1
         start=$(sed -n 's/^ExecMainStartTimestamp=//p' <<<"$out")
         exit_time=$(sed -n 's/^ExecMainExitTimestamp=//p' <<<"$out")

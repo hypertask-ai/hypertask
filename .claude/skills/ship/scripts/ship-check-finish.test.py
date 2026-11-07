@@ -111,9 +111,12 @@ else:
         install(fragment, unit.read_text())
         install(installed, payload.read_text())
         self.write('systemctl', f'''#!/bin/sh
+printf '%s\\n' "$*" >> "$FIXTURE_ROOT/systemctl.log"
 case "$*" in
   *FragmentPath*) echo "{fragment}" ;;
-  *--timestamp=us*NeedDaemonReload*) printf 'NeedDaemonReload=%s\\nExecMainStartTimestamp=%s\\nExecMainExitTimestamp=%s\\nDropInPaths=%s\\n' "${{RELOAD:-no}}" "${{START-@{start}}}" "${{EXIT-@{start}}}" "${{DROP_INS-}}" ;;
+  *--timestamp=us*NeedDaemonReload*)
+    if [ "${{RACE:-}}" = yes ]; then RESULT=exit-code STATUS=1; fi
+    printf 'Result=%s\\nExecMainStatus=%s\\nNeedDaemonReload=%s\\nExecMainStartTimestamp=%s\\nExecMainExitTimestamp=%s\\nDropInPaths=%s\\n' "${{RESULT:-success}}" "${{STATUS:-0}}" "${{RELOAD:-no}}" "${{START-@{start}}}" "${{EXIT-@{start}}}" "${{DROP_INS-}}" ;;
   *Result*) printf 'Result=%s\\nExecMainStatus=%s\\n' "${{RESULT:-success}}" "${{STATUS:-0}}" ;;
   *) exit 1 ;;
 esac
@@ -133,6 +136,14 @@ esac
         self.check('deployed', ticket, success=False)
         record(sha)
         self.assertIn('agent live proof', self.check('deployed', ticket))
+        log = self.root / 'systemctl.log'
+        log.write_text('')
+        self.check('deployed', ticket, success=False, RACE='yes')
+        queries = [line for line in log.read_text().splitlines() if 'FragmentPath' not in line]
+        self.assertEqual(len(queries), 1)
+        for prop in ['Result', 'ExecMainStatus', 'NeedDaemonReload',
+                     'ExecMainStartTimestamp', 'ExecMainExitTimestamp', 'DropInPaths']:
+            self.assertIn(f'-p {prop}', queries[0])
         self.assertIn('agent live proof', self.check('deployed', ticket,
                                                     START=f'@{start}.100000000', EXIT=f'@{start}.200000000'))
         self.check('deployed', ticket, success=False, STATUS='1')
