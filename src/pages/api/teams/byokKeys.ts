@@ -412,6 +412,7 @@ const handler: NextApiHandler = async (
               update: {
                 ciphertext,
                 enabled: typeof enabled === "boolean" ? enabled : true,
+                ...(enabled === false ? { alwaysUse: false } : {}),
               },
             });
           },
@@ -467,6 +468,7 @@ const handler: NextApiHandler = async (
               update: {
                 ciphertext,
                 ...(typeof enabled === "boolean" ? { enabled } : {}),
+                ...(enabled === false ? { alwaysUse: false } : {}),
               },
             }),
           syncProviderEnabled,

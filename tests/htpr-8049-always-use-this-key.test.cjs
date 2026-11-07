@@ -13,8 +13,11 @@ const basetenFlagKey = "htpr-7732-baseten-byok";
 const lookup = { trustedTeamId: "fixture-team", userId: 985 };
 const managedKey = "vck_fake-managed";
 
-function routingHarness({ enabled = true, forcedProvider = "baseten", ownKeyOnly = false, plan = "Pro", basetenEnabled = true, secrets = {} } = {}) {
-  const settings = ownKeyOnly ? { ownKeyOnly: true } : {};
+function routingHarness({ enabled = true, forcedProvider = "baseten", ownKeyOnly = false, plan = "Pro", basetenEnabled = true, gdprSafeMode = false, secrets = {} } = {}) {
+  const settings = {
+    ...(ownKeyOnly ? { ownKeyOnly: true } : {}),
+    ...(gdprSafeMode ? { gdprSafeMode: true } : {}),
+  };
   const stored = {
     baseten: "team-baseten-secret",
     deepseek: "team-deepseek-secret",
@@ -176,6 +179,19 @@ test("a forced gateway key serves the provider models it can run", async () => {
   );
 });
 
+test("a forced gateway key pauses a GDPR-restricted provider instead of using allowance", async () => {
+  const api = routingHarness({ forcedProvider: "gateway", gdprSafeMode: true });
+  await assert.rejects(
+    () => api.getByokOrTeamGatewayApiKey("deepseek", [], lookup),
+    (error) => error.name === "ForcedTeamKeyError" && error.message.includes("Allowance is not used"),
+  );
+  assert.equal(await api.getByokOrTeamGatewayApiKey("claude", [], lookup), "vck_team-gateway");
+  await assert.rejects(
+    () => api.getByokOrTeamGatewayApiKeyForModelOption(catalog.getAiModelOptionById("deepseek-v4-pro"), [], lookup),
+    (error) => error.name === "ForcedTeamKeyError",
+  );
+});
+
 test("a forced key on a free plan pauses instead of using the key or the allowance", async () => {
   const api = routingHarness({ forcedProvider: "baseten", plan: "Free" });
   await assert.rejects(
@@ -247,6 +263,27 @@ test("turning a key off clears Always use this key", async () => {
   assert.equal((await api.request("POST", { provider: "deepseek", enabled: false })).status, 200);
   assert.equal(api.rows.deepseek.enabled, false);
   assert.equal(api.rows.deepseek.alwaysUse, false);
+});
+
+test("saving a replacement secret while the key is off clears Always use this key", async () => {
+  const api = settingsHarness();
+  assert.equal((await api.request("POST", { provider: "deepseek", apiKey: "replaced-secret", enabled: false })).status, 200);
+  assert.equal(api.rows.deepseek.enabled, false);
+  assert.equal(api.rows.deepseek.alwaysUse, false);
+  assert.equal(api.rows.deepseek.ciphertext, "replaced-secret");
+
+  api.rows.custom = { enabled: true, ciphertext: "old-custom", alwaysUse: true };
+  const custom = await api.request("POST", {
+    provider: "custom",
+    apiKey: "custom-secret",
+    baseUrl: "https://example.com/v1",
+    modelId: "custom-model",
+    gdprCompliant: true,
+    enabled: false,
+  });
+  assert.equal(custom.status, 200);
+  assert.equal(api.rows.custom.enabled, false);
+  assert.equal(api.rows.custom.alwaysUse, false);
 });
 
 test("a forced-key failure stays the pause message instead of a generic model error", () => {
