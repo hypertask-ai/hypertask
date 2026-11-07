@@ -6,6 +6,7 @@ import prisma from "@/lib/prisma";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { signConsentToken, verifyConsentToken } from "@/lib/oauth/consent";
 import { DEVICE_PAIRING_COOKIE } from "@/lib/auth/devicePairingCookie";
+import { HTPR_7552_AGENT_CODE_SIGNIN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
 export const metadata: Metadata = {
@@ -112,9 +113,10 @@ export default async function OAuthConsentPage(props: {
 
   const clientName = safeClientName(client.client_name);
   const browserSecret = cookieStore.get(DEVICE_PAIRING_COOKIE)?.value;
-  const pairing = browserSecret && !session.agentId && !agentId
-    ? await (await import("@/lib/auth/devicePairingOAuth")).pendingBrowserDevicePairing(session.id, browserSecret)
-    : null;
+  let pairing = null;
+  if (!session.agentId && !agentId && browserSecret && await isFeatureEnabled(HTPR_7552_AGENT_CODE_SIGNIN_FLAG, session.id)) {
+    pairing = await (await import("@/lib/auth/devicePairingOAuth")).pendingBrowserDevicePairing(session.id, browserSecret);
+  }
 
   return (
     <div className={cn(PANEL)}>
@@ -155,7 +157,7 @@ export default async function OAuthConsentPage(props: {
             <input type="hidden" name="device_pairing_id" value={pairing.id} />
             <input type="hidden" name="consent_token" value={signConsentToken({ userId: session.id, clientId, redirectUri, codeChallenge, agentId: null, devicePairingId: pairing.id })} />
             <p className="text-text-light-gray text-content mb-4">Or create a free board for this agent. It can read and change that board only.</p>
-            <button type="submit" className={cn(PRIMARY_BUTTON)}>Approve a new agent board only</button>
+            <button type="submit" className={cn(SECONDARY_BUTTON)}>Approve a new agent board only</button>
           </form>
         )}
 

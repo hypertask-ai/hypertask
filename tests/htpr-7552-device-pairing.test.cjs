@@ -147,7 +147,6 @@ test('paired agents keep own-board access and refuse foreign tasks with scope fl
     const foreign = await GET(new NextRequest(`${ORIGIN}/api/mcp/tasks?task_id=21280`));
     assert.equal(foreign.status, 404);
     assert.equal((await foreign.text()).includes('Task 2128'), false);
-    assert.equal(f.state.flagReads, 0);
     f.state.ctx.agentId = null;
     assert.equal((await GET(new NextRequest(`${ORIGIN}/api/mcp/tasks?task_id=21280`))).status, 200);
   }

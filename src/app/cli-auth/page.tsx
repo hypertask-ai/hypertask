@@ -4,7 +4,6 @@ import { Suspense, useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { z } from 'zod';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7552_AGENT_CODE_SIGNIN_FLAG } from '@/lib/flags/definitions/htpr-7552-agent-code-signin';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import useCurrentUser from '@/hooks/General/useCurrentUserCheckFromCookies';
@@ -94,7 +93,7 @@ function CopyableField({
           value={value}
           aria-describedby={description ? `${id}-description` : undefined}
           className={cn(
-            'flex-1 min-w-0 rounded-md border border-[#262626]',
+            'flex-1 min-w-0 rounded border border-[#262626]',
             'bg-[#0a0a0a] px-3 py-2.5 text-meta sm:text-content text-white font-mono',
             'focus:outline-none focus:border-[#666666]',
             'select-all'
@@ -103,7 +102,7 @@ function CopyableField({
         <button
           type="button"
           onClick={onCopy}
-          className="shrink-0 rounded-md border border-[#262626] px-3 py-2.5 text-content text-white hover:bg-white/10 transition-colors"
+          className="shrink-0 rounded border border-[#262626] px-3 py-2.5 text-content text-white hover:bg-white/10 transition-colors"
         >
           <Copy className="text-white" size={16} strokeWidth={1.75} />
         </button>
@@ -116,7 +115,7 @@ function CliAuthContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const currentUser = useCurrentUser();
-  const agentCodeSignIn = useFlag(HTPR_7552_AGENT_CODE_SIGNIN_FLAG);
+  const agentCodeSignIn = useFlag('htpr-7552-agent-code-signin');
   const [step, setStep] = useState<CliStep>('consent');
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState<ConnectedPayload | null>(null);

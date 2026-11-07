@@ -12,6 +12,16 @@ import { defaultFilterSettings } from "@/utils/helperFunctions/Views/FilterHelpe
 import { FREE_BOARD_LIMIT_MESSAGE, isBoardLimitReached } from "./boardQuota";
 
 
+export function starterBoardSections() {
+  return {
+    create: [
+      { section_title: "Todo", ranking: "A0100" },
+      { section_title: "Doing", ranking: "A0200" },
+      { section_title: "Done", ranking: "A0300" },
+    ],
+  };
+}
+
 const create = async (userId: number, title: string, teamId: string, googleAccountId: string, ticketPrefix?: unknown) => {
   try {
     if (!userId || !title || !teamId || !googleAccountId) {

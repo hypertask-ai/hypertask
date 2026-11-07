@@ -284,6 +284,11 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
       console.log('🔐 OAuth params detected, allowing login page access for OAuth flow');
       return NextResponse.next();
     }
+
+    const agentReturn = parseSafeReturnTo(request.nextUrl.searchParams.get('returnTo'));
+    if (agentReturn === '/login/agent' || agentReturn?.startsWith('/cli-auth')) {
+      return NextResponse.redirect(new URL(agentReturn, request.url));
+    }
     
     if (previousBoard?.value && checkIfOnboarded(user)) {
       console.log('🔄 Authenticated user on login page, redirecting to previous board');

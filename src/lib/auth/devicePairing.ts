@@ -8,6 +8,8 @@ import { HTPR_7552_AGENT_CODE_SIGNIN_FLAG } from "@/lib/flags/definitions/htpr-7
 import { getManagementKeyTeam } from "@/lib/mcp/managementKeyTeamScope";
 import { encryptSecret, decryptSecret } from "@/lib/crypto/byokCipher";
 import { agentTokenCredentialFields, createMcpToken, verifyMcpJwtToken, MCP_TOKEN_ISSUED_AT_MS_CLAIM } from "@/lib/mcp/auth/verifyJwt";
+import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
+import { starterBoardSections } from "@/utils/controllers/projects/create";
 import { createProjectWithStableName } from "@/utils/controllers/projects/createProjectWithStableName";
 import { createProjectViewAndCreateDefault } from "@/utils/controllers/projects/create";
 
@@ -142,12 +144,9 @@ export async function approveDevicePairing(ownerId: number, browserSecret: strin
     const teamScope = { teamId: grant.id, accessBinding: grant.accessBinding };
     const board = await createProjectWithStableName({
       ownerId, title: "MyBoard", googleAccountId: account.id, teamId: team.id, uniqueIdentifier: "AGENT",
-      section: { create: [
-        { section_title: "Todo", ranking: "A0100" },
-        { section_title: "Doing", ranking: "A0200" },
-        { section_title: "Done", ranking: "A0300", isDone: true },
-      ] },
+      section: starterBoardSections(),
     }, { actorUserId: ownerId, entryPoint: "cli.device.approve" }, tx);
+    const analyticsKey = await enqueueBoardCreated(tx, board.id, "manual", { userId: ownerId });
     await createProjectViewAndCreateDefault({ userId: ownerId, projectId: board.id }, tx);
     const agent = await tx.agent.create({
       data: {
@@ -167,9 +166,10 @@ export async function approveDevicePairing(ownerId: number, browserSecret: strin
       data: { agentId: agent.id, teamId: team.id, projectId: board.id, tokenGeneration: fields.mcpTokenJti, credential: encryptSecret(credential) },
     });
     assertUnexpired(updated, new Date());
-    return updated;
+    return { updated, analyticsKey };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-  return devicePairingStatus(flow);
+  processAnalyticsIntentSoon(flow.analyticsKey);
+  return devicePairingStatus(flow.updated);
 }
 
 export async function denyDevicePairing(ownerId: number, browserSecret: string, flowId: string) {

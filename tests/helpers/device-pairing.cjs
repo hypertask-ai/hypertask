@@ -84,7 +84,11 @@ function fixture() {
       state.boards.push(board);
       return board;
     } },
-    '@/utils/controllers/projects/create': { createProjectViewAndCreateDefault: async () => {} },
+    '@/utils/controllers/projects/create': {
+      starterBoardSections: () => ({ create: [] }),
+      createProjectViewAndCreateDefault: async () => {},
+    },
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => 'analytics-key', processAnalyticsIntentSoon: () => {} },
   };
   const domain = load('src/lib/auth/devicePairing.ts', mocks);
   const { POST } = load('src/app/api/cli/device/[action]/route.ts', { ...mocks, '@/lib/auth/devicePairing': domain });

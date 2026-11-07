@@ -62,9 +62,11 @@ function oauthFixture() {
     const response = await request('POST', approval(flow), flow);
     assert.equal(response.status, 303);
     const url = new URL(response.headers.get('location'));
-    assert.equal(url.origin, new URL(REDIRECT).origin);
-    assert.equal(url.searchParams.get('state'), base.state);
-    return { ...flow, code: url.searchParams.get('code') };
+    assert.equal(url.pathname, '/oauth/success');
+    const target = new URL(url.searchParams.get('redirect_uri'));
+    assert.equal(target.origin, new URL(REDIRECT).origin);
+    assert.equal(target.searchParams.get('state'), base.state);
+    return { ...flow, code: target.searchParams.get('code') };
   }
   return { ...f, deviceRequest: f.request, auth, paired, base, request, exchange, approval, approved };
 }

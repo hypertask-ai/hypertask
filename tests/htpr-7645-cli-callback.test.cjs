@@ -62,6 +62,8 @@ async function withPage(query, check) {
         CLI_CALLBACK_WINDOW_NAME: 'fixture-callback',
       },
       'lucide-react': { Copy: () => React.createElement('svg') },
+      'next/link': { __esModule: true, default: ({ children, href }) => React.createElement('a', { href }, children) },
+      '@/hooks/useFlag': { useFlag: () => false },
     };
     const mod = { exports: {} };
     const browser = { location: { set href(url) { navigated.push(url); } } };

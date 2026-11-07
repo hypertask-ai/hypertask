@@ -4,8 +4,6 @@ import LoginComponent from "./LoginComponent";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { isActivationEligible } from "@/lib/telemetry/activationAnalytics";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7552_AGENT_CODE_SIGNIN_FLAG } from "@/lib/flags/definitions/htpr-7552-agent-code-signin";
 import SignupPageViewed from "./SignupPageViewed";
 
 
@@ -38,16 +36,11 @@ const Login = async () => {
 	} catch {
 		enabled = false;
 	}
-	const agentSignInEnabled = Boolean(
-		analyticsSession &&
-		!analyticsSession.agentId &&
-		await isFeatureEnabled(HTPR_7552_AGENT_CODE_SIGNIN_FLAG, analyticsSession.id).catch(() => false)
-	);
 	return (
 		<>
 			<SignupPageViewed enabled={enabled} userId={userId} />
 			<UTMCookieHandler />
-			<LoginComponent agentSignInEnabled={agentSignInEnabled} />
+			<LoginComponent />
 		</>
 	);
 };
