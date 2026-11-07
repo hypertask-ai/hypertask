@@ -1,6 +1,8 @@
 "use client";
 
 import toast from "react-hot-toast";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8861_AGENT_LOGIN_RECOVERY_FLAG } from "@/lib/flags/definitions/htpr-8861-agent-login-recovery";
 import type { useAgentDetailState } from "./useAgentDetailState";
 
 type Props = Pick<
@@ -21,6 +23,7 @@ export function useAgentDetailLifecycle({
   agent, togglePending, setTogglePending, setAgent, agentId, openingChat, setOpeningChat, router,
   tokenBusy, setTokenBusy,
 }: Props) {
+  const loginRecovery = useFlag(HTPR_8861_AGENT_LOGIN_RECOVERY_FLAG);
   const handleToggle = async () => {
     if (!agent || togglePending) return;
     setTogglePending(true);
@@ -106,7 +109,7 @@ export function useAgentDetailLifecycle({
         throw new Error(data.error ?? "Failed to generate token");
       }
       setAgent((prev) =>
-        prev ? { ...prev, mcpToken: data.token, hasMcpToken: true } : prev,
+        prev ? { ...prev, mcpToken: data.token, hasMcpToken: true, ...(loginRecovery ? { revokedAt: null } : {}) } : prev,
       );
       toast.success("Token generated");
     } catch (e) {

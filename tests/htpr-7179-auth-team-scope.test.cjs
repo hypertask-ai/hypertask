@@ -196,3 +196,34 @@ test('accepted member binding is retained, but removed or reaccepted grants cann
   f.team.members = [{ id: 'membership-a', managementKeyAccessGeneration: 1 }];
   assert.equal(await f.auth.validateJwtToken(token), null);
 });
+
+test('owner CLI recovery retains team scope and invalidates the prior credential', async () => {
+  const f = authFixture();
+  f.agent.runtimeType = 'EXTERNAL';
+  const oldToken = f.mint();
+  f.agent.revokedAt = new Date('2026-01-01');
+  const { handleRotateAgentTokenRequest } = f.load('src/lib/mcp/agents/rotateToken.ts', {
+    '@/lib/mcp/auth': {
+      ...f.auth,
+      checkMcpRateLimit: async () => null,
+      managementAgentTokenScope: () => null,
+      validateMcpAuth: async () => ({ user: f.user, agentId: null }),
+    },
+  });
+  const request = () => new NextRequest('https://app.hypertask.ai/api/mcp/agents/rotate-token', {
+    method: 'POST', body: JSON.stringify({ agent_id: f.agent.id }),
+  });
+  const response = await handleRotateAgentTokenRequest(request());
+  assert.equal(response.status, 200);
+  const { token } = await response.json();
+  const claims = jwt.verify(token, process.env.JWT_SECRET);
+  assert.equal(claims.agentId, f.agent.id);
+  assert.equal(claims.agentTeamId, scopeA.teamId);
+  assert.equal(claims.agentTeamAccessBinding, scopeA.accessBinding);
+  assert.equal(await f.auth.validateJwtToken(oldToken), null);
+  assert.deepEqual((await f.auth.validateJwtToken(token)).teamScope, scopeA);
+  f.state.noGrant = true;
+  f.writes.length = 0;
+  assert.equal((await handleRotateAgentTokenRequest(request())).status, 403);
+  assert.deepEqual(f.writes, []);
+});

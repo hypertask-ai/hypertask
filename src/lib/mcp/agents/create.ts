@@ -146,6 +146,9 @@ export async function createAgentForUser(
     return NextResponse.json(
       {
         success: false,
+        recoveryUrl: 'https://app.hypertask.ai/agents',
+        command: `hypertask agents rotate-token --id ${existingAgent.id}`,
+        message: 'An owner or authorized management key can replace this agent login. Keep the same identity. The old login stops working; save the new token securely.',
         error: teamId
           ? `An agent named "${displayName}" already exists in this team.`
           : `An agent named "${displayName}" already exists (id ${existingAgent.id}). Its token is shown only at creation. Rotate it with POST /api/mcp/admin/agents/${existingAgent.id}/token or the MCP rotate-token endpoint; rotating invalidates the old token.`,

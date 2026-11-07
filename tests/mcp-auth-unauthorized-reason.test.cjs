@@ -361,3 +361,22 @@ test('a management key that does not verify stays a generic rejection', async ()
 
   assert.equal(reason, 'invalid_token')
 })
+
+
+test('every shared login rejection names a recovery page and command', async () => {
+  const { createUnauthorizedResponse } = jiti(path.join(root, 'src/lib/mcp/auth/mcpAuthErrors.ts'))
+  for (const reason of ['token_revoked', 'token_expired', 'invalid_token', 'missing_token', 'insufficient_scope', 'legacy_token', 'agent_revoked', 'agent_token_superseded']) {
+    const response = createUnauthorizedResponse(undefined, reason)
+    const body = await response.json()
+    assert.equal(response.status, 401)
+    assert.equal(body.reason, reason)
+    assert.match(body.message, /https:\/\/app\.hypertask\.ai\/agents/)
+    assert.match(body.message, /hypertask login --token/)
+    if (reason !== 'insufficient_scope') {
+      assert.match(body.message, /hypertask agents rotate-token --id/)
+      assert.match(body.message, /same agent/)
+      assert.match(body.message, /Update available/)
+    }
+    assert.doesNotMatch(body.message, /create a new agent identity/)
+  }
+})
