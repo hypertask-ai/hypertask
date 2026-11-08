@@ -3,7 +3,7 @@ import { z } from "zod";
 import { taskWriteRoute } from "./route";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/keys";
 import { setTaskWaitingOn } from "@/lib/tasks/setWaitingOn";
 
 export const POST = taskWriteRoute({

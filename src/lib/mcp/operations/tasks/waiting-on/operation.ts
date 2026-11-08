@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7723_TASK_WAITING_ON_FLAG } from "@/lib/flags/definitions/htpr-7723-task-waiting-on";
-import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
+import { HTPR_7723_TASK_WAITING_ON_FLAG, HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/keys";
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import {
   wrapMcpRoute,

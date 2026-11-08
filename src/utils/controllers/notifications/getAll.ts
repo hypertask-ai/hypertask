@@ -1,7 +1,5 @@
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
-import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8090-assignee-inbox";
-import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG, HTPR_8090_ASSIGNEE_INBOX_FLAG, HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/keys";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";

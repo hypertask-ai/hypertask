@@ -623,6 +623,7 @@ export const taskBoardOmit = {
   hardDeleteProcessingAt: true,
   deletedAt: true,
   archivedAt: true,
+  waitingOnAgentId: true,
 } satisfies Prisma.TaskOmit;
 
 export const getFullProjectInclude = (

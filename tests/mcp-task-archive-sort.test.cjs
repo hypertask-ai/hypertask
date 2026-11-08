@@ -87,6 +87,7 @@ function loadRoute(tasks = []) {
       HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer",
       HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG: "htpr-7733-person-assignment-filter",
       HTPR_8340_ASSIGNEE_FILTER_VALIDATION_FLAG: "htpr-8340-assignee-filter-validation",
+      HTPR_8917_AGENT_WAITING_PERSON_FLAG: "htpr-8917-agent-waiting-person",
     },
     "@/lib/mcp/listQuery": {
       hasPrWhere: () => null,

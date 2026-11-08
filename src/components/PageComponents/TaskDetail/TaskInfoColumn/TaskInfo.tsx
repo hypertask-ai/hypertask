@@ -1,6 +1,6 @@
 import type { LabelResponse } from "@/lib/api/contracts/taskWrites";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/keys";
 import React, {
   Suspense,
   useContext,

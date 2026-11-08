@@ -15,7 +15,7 @@ import {
 import type { TaskDetail } from '@/lib/mcp/tasks/types'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person'
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/keys'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { IUser } from '@/models/model'
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard'

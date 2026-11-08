@@ -105,7 +105,7 @@ test("person with flag on can read the newest AI summary through every task iden
     });
     assert.equal(f.queries.length, 1);
     assert.deepEqual(f.queries[0].include.Task_Summary, summaryInclude);
-    assert.deepEqual(f.flagReads, [{ key: flag, userId: 985 }, agentWaitingRead, downloadRead]);
+    assert.deepEqual(f.flagReads, [{ key: flag, userId: 985 }, downloadRead, agentWaitingRead]);
   }
 });
 
@@ -134,7 +134,7 @@ test("agent caller omits ai_summary without looking up the person flag", async (
   assert.equal(response.status, 200);
   assert.equal(Object.hasOwn(response.body.tasks[0], "ai_summary"), false);
   assert.equal(Object.hasOwn(f.queries[0].include, "Task_Summary"), false);
-  assert.deepEqual(f.flagReads, [agentWaitingRead, downloadRead]);
+  assert.deepEqual(f.flagReads, [downloadRead, agentWaitingRead]);
 });
 
 test("person with flag on receives null when the task has no AI summary", async () => {
@@ -151,7 +151,7 @@ test("management caller omits ai_summary without looking up the person flag", as
   assert.equal(response.status, 200);
   assert.equal(Object.hasOwn(response.body.tasks[0], "ai_summary"), false);
   assert.equal(Object.hasOwn(f.queries[0].include, "Task_Summary"), false);
-  assert.deepEqual(f.flagReads, [agentWaitingRead, downloadRead]);
+  assert.deepEqual(f.flagReads, [downloadRead, agentWaitingRead]);
 });
 
 test("failed flag lookup leaves task reads working without AI summary data", async () => {
@@ -160,7 +160,7 @@ test("failed flag lookup leaves task reads working without AI summary data", asy
   assert.equal(response.status, 200);
   assert.equal(Object.hasOwn(response.body.tasks[0], "ai_summary"), false);
   assert.equal(Object.hasOwn(f.queries[0].include, "Task_Summary"), false);
-  assert.deepEqual(f.flagReads, [{ key: flag, userId: 985 }, downloadRead]);
+  assert.deepEqual(f.flagReads, [{ key: flag, userId: 985 }, downloadRead, agentWaitingRead]);
 });
 
 test("AI summary updated_at falls back to createdAt when updatedAt is null", async () => {
