@@ -136,6 +136,4 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   )
 }
 
-export { ViewControlButton } from "@/lib/kanban/view-control-button"
-
 export default ShellViewControls

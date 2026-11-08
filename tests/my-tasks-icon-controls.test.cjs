@@ -13,6 +13,7 @@ const flag = "htpr-6938-my-tasks-icon-controls";
 const controlsFile = "src/app/my-tasks/MyTasksViewControls.tsx";
 const tabsFile = "src/app/my-tasks/MyTasksViewTabs.tsx";
 const shellFile = "src/components/PageComponents/Kanban/HeaderComponents/ShellViewControls.tsx";
+const viewControlButtonFile = "src/lib/kanban/view-control-button.tsx";
 const splitFile = "src/components/Common/TaskRowComponents/TaskListRow.tsx";
 const tasksFile = "src/app/my-tasks/MyTasks.tsx";
 let enabled = false;
