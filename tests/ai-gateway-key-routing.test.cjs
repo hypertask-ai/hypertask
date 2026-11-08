@@ -1580,7 +1580,13 @@ test("custom instruction upload uses the authenticated project team over caller 
 
   assert.deepEqual(
     findUniqueCalls.map((call) => call.where),
-    [{ teamId_provider: { teamId: projectTeamId, provider: "openai" } }],
+    [
+      { teamId_provider: { teamId: projectTeamId, provider: "openai" } },
+      { teamId_provider: { teamId: projectTeamId, provider: "gateway" } },
+      { teamId_provider: { teamId: projectTeamId, provider: "managed_gateway" } },
+      { teamId_provider: { teamId: projectTeamId, provider: "openai" } },
+      { teamId_provider: { teamId: projectTeamId, provider: "claude" } },
+    ],
   );
   assert.equal(upsertedRows.length, 1);
   assert.equal(upsertedRows[0].teamId, projectTeamId);

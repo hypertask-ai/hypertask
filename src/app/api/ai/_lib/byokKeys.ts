@@ -622,28 +622,16 @@ export async function getByokOrTeamGatewayApiKey(
   if (provider === "openrouter" || provider === "custom") return undefined;
 
   if (isVercelAiGatewayKey(byokApiKey)) {
-    const classified = await classifiedLegacyGatewayKey(byokApiKey, lookup);
-    if (classified) return classified;
+    const fromFlag = flags?.some((flag) => String(flag.provider ?? "").trim().toLowerCase() === provider && flag.enabled && String(flag.ciphertext ?? "").trim());
+    if (isPlatformManagedGatewayKey(byokApiKey)) registerManagedGatewayKey(byokApiKey);
+    if (!fromFlag) {
+      const funding = await getTeamGatewayFunding(lookup);
+      if (funding?.apiKey === byokApiKey) return funding.apiKey;
+    }
+    return byokApiKey;
   }
 
   return getTeamGatewayApiKey(lookup);
-}
-
-async function classifiedLegacyGatewayKey(apiKey: string, lookup?: ByokLookupContext) {
-  const funding = await getTeamGatewayFunding(lookup);
-  if (funding?.apiKey === apiKey) return funding.apiKey;
-  let enabled = false;
-  const managed = await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, lookup, {
-    includeDisabled: true,
-    onResolved: (row) => { enabled = row.enabled; },
-  });
-  if (managed === apiKey) {
-    if (!enabled) return undefined;
-    registerManagedGatewayKey(apiKey);
-    return apiKey;
-  }
-  if (isPlatformManagedGatewayKey(apiKey)) registerManagedGatewayKey(apiKey);
-  return apiKey;
 }
 
 export async function getByokOrTeamGatewayApiKeyForModelOption(

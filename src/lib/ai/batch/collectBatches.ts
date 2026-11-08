@@ -65,16 +65,6 @@ export async function collectBatches(nowMs = Date.now()) {
 
 type Plan = { outcomes: BatchItemOutcome[]; finalStatus: "completed" | "cancelled" } | "waiting";
 
-async function batchSpendUsd(model: string, outcomes: BatchItemOutcome[]) {
-  if (!outcomes.some((outcome) => outcome.status === "succeeded")) return 0;
-  const pricing = await modelPricing(model);
-  return outcomes.reduce((sum, outcome) => (
-    outcome.status === "succeeded"
-      ? sum + modelCostUsd(pricing, outcome.usage.inputTokens, outcome.usage.outputTokens, outcome.usage.cachedInputTokens ?? 0, outcome.usage.cacheWriteInputTokens ?? 0)
-      : sum
-  ), 0);
-}
-
 async function planBatch(batch: BatchRow, itemIds: string[], stale: boolean): Promise<Plan> {
   const allFailed = outcomesForItems(itemIds, []);
   const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: batch.teamId });
@@ -126,13 +116,6 @@ async function collectOne(batch: BatchRow, nowMs: number): Promise<"waiting" | "
 
   if (batch.kind === "slack-summary") await applySlackBatch(batch, items, plan.outcomes);
   else if (batch.kind === "smart-label") await applyLabelBatch(batch, items, plan.outcomes);
-  try {
-    const { settleBatchHold } = await import("@/app/api/ai/_lib/batchCap");
-    const actualUsd = plan.finalStatus === "cancelled" ? 0 : await batchSpendUsd(batch.model, plan.outcomes);
-    await settleBatchHold(batch.gatewayBatchId, actualUsd);
-  } catch (error) {
-    console.error(`AI batch ${batch.id} allowance settle failed`, error);
-  }
   await prisma.aiBatch.update({ where: { id: batch.id }, data: { status: plan.finalStatus, completedAt: new Date() } });
   return plan.finalStatus;
 }
