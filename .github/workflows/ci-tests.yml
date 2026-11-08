@@ -18,12 +18,7 @@ on:
 
 concurrency:
   group: ci-tests-${{ github.event.pull_request.number || github.sha }}
-  # HYCI-182: without queue: max, a burst of synchronize events while a run is
-  # cancelling can drop the newest head entirely (PR 3023 stopped at f22583a).
-  # GitHub rejects queue: max together with cancel-in-progress, so every pending
-  # synchronize keeps a slot and superseded PR runs finish instead of cancelling.
   queue: max
-  # Production pushes still must finish their full test report and warning path.
   cancel-in-progress: false
 
 # One knob for the Test step. YPER4-554 (HT Product Lead, 2026-10-24) capped it
@@ -88,9 +83,9 @@ jobs:
     # review-first `full-ci` label (owner, 2026-08-26) left ci-tests SKIPPED
     # until the label arrived, and GitHub's ruleset counts SKIPPED as passing:
     # PRs 782, 798 and 799 went live that way, and 782 broke the suite. Every
-    # non-draft PR now runs the gate on code/lifecycle events; superseded runs are
-    # cancelled by the concurrency group above, so only the newest one costs
-    # runner time. A job-level skip is never used here, because a skipped run
+    # non-draft PR now runs the gate on code/lifecycle events; superseded runs
+    # queue behind earlier pending runs instead of cancelling them. A job-level
+    # skip is never used here, because a skipped run
     # newer than a failed one would read as passing again.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest

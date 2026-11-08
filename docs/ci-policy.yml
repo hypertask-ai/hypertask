@@ -547,7 +547,7 @@ policies:
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
-    non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-lane]
+    non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-lane, ci-tests]
     prefer_queue_over_oom: true
   review:
     required_check_name: ai-review
@@ -673,6 +673,10 @@ ci_tests:
     pool_jobs_when_not_started: 0
     measured_2026_11_01: {pushes: 35, ci_prepare_median_seconds: 55, stress_runs: 8, stress_seconds_total: 2659}
   pull_request_types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_concurrency:
+    group: ci-tests-${{ github.event.pull_request.number || github.sha }}
+    queue: max
+    cancel_in_progress: false
   # HYCI-10: one candidate build per change. The required browser-smoke job
   # publishes its .next (without .next/cache) and the visual comparison
   # downloads it, so a screen change never builds the candidate twice.
