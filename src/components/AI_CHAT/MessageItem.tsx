@@ -33,8 +33,11 @@ import {
 } from "@/utils/helperFunctions/messageHtmlLinks";
 import { TypingIndicator } from "./TypingIndicator";
 import { extractSettingCards } from "@/lib/ai/settings/catalog";
+import { HTPR_7779_SKILL_OFFERS_FLAG } from "@/lib/flags/definitions/htpr-7779-skill-offers";
+import { extractSkillOfferIds } from "@/lib/ai/skillOffers/contract";
 
 const AiSettingChangeCard = dynamic(() => import("./AiSettingChangeCard").then((module) => module.AiSettingChangeCard), { ssr: false });
+const AiSkillOfferCard = dynamic(() => import("./AiSkillOfferCard").then((module) => module.AiSkillOfferCard), { ssr: false });
 
 const AttachmentsCarousel = dynamic(
   () => import("@/components/Common/AttachmentsView/AttachmentsCarousel"),
@@ -296,6 +299,7 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
     useAiChatContext();
   const isMbl = useContext(MobileViewContext);
   const handoffEnabled = useFlag(HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG);
+  const skillOffersEnabled = useFlag(HTPR_7779_SKILL_OFFERS_FLAG);
 
   const revealNavigationTarget = () => {
     if (isMbl && showAiChatInterface) togglePopover();
@@ -307,15 +311,21 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
   };
 
   const settingCards = useMemo(() => message.role === "assistant" ? extractSettingCards(message.content) : { html: message.content, ids: [] }, [message.content, message.role]);
+  const skillOfferCards = useMemo(
+    () => message.role === "assistant" && skillOffersEnabled
+      ? extractSkillOfferIds(settingCards.html)
+      : { html: settingCards.html, ids: [] },
+    [settingCards.html, message.role, skillOffersEnabled],
+  );
   const messageHtmlWithTableScroll = useMemo(
     () => {
       const content =
         message.role === "assistant"
-          ? normalizeAssistantHtml(settingCards.html)
-          : settingCards.html;
+          ? normalizeAssistantHtml(skillOfferCards.html)
+          : skillOfferCards.html;
       return wrapTablesInMessageHtml(sanitizeAiHtml(content));
     },
-    [settingCards.html, message.role]
+    [skillOfferCards.html, message.role]
   );
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -344,6 +354,7 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
           dangerouslySetInnerHTML={{ __html: messageHtmlWithTableScroll }}
         />
         {settingCards.ids.map((id) => <AiSettingChangeCard key={id} id={id} />)}
+        {skillOfferCards.ids.map((id) => <AiSkillOfferCard key={id} id={id} />)}
         {message.role === "assistant" && message.isDelivered && ticketGroups?.length ? <AiChatTicketRows groups={ticketGroups} onNavigate={(url) => { followInternalLink(); router.push(url); }} /> : null}
         {message.role === "assistant" && !message.isDelivered && (
           <AssistantStreamingStatus

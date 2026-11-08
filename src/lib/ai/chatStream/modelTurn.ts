@@ -36,6 +36,7 @@ import { buildTools } from "@/lib/ai/tools";
 import type { StreamState } from "./streamState";
 
 import { generateModelReply } from "./modelReply";
+import { maybeOfferRepeatedInstruction } from "@/lib/ai/skillOffers/offer";
 import { nameChatFromFirstMessage } from "./chatNames";
 
 export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest, skillResolution: Awaited<ReturnType<typeof resolveSkillsForAiRequest>>) {
@@ -187,6 +188,17 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
       chunks.push(card);
       state.send("content", { content: card });
     }
+  }
+
+  const skillOfferCard = await maybeOfferRepeatedInstruction({
+    userId: dbUser.id,
+    projectId: usageProjectId,
+    sessionId: body.session_id,
+    actingAgentId: actingAgent?.id ?? null,
+  });
+  if (skillOfferCard) {
+    chunks.push(skillOfferCard);
+    state.send("content", { content: skillOfferCard });
   }
 
   const ticketRowsAllowed = reply?.ticketRowsAllowed ?? false;
