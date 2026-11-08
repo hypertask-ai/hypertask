@@ -128,10 +128,5 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-8049 keeps the existing chat streamText call. The error callback now pauses when a team key is forced, instead of starting another model request. No new model, retry, or token budget.",
     "source": "https://app.hypertask.ai/detail/project-15/8049"
-  },
-  "src/app/login/EmailAuth/useEmailAuth.ts:3e0bc2e523c757507e39dd356c1bb46891da1080f0946249a41ee14779404b76": {
-    "maxUsdPerDay": 0,
-    "reason": "HTPR-7553 keeps the existing same-origin send-email-link POST on submit; credentials include only forwards session cookies so straight-board signup can reuse the logged-in browser. No new third-party API.",
-    "source": "https://app.hypertask.ai/detail/project-15/7553"
   }
 }
