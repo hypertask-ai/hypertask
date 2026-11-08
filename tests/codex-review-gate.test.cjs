@@ -45,6 +45,38 @@ test('a running or findings summary stays pending without a review', () => {
   assert.equal(stateOf({}), 'pending');
 });
 
+const flagGatePass = [{ context: 'feature-flag-gate', state: 'success' }];
+
+test('P1 flag-default complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode should be "EVERYONE" for new UI, not Owner + QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
+test('imperative widen-to-Everyone complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) Default this visible UI flag to Everyone while defaultMode stays OWNER_AND_QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
+test('direct defaultMode should be EVERYONE complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode should be EVERYONE for this visible UI.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
+test('security findings that mention Everyone rollout context stay blocking when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) The authorization fix must happen before exposing this route to Everyone; defaultMode: OWNER_AND_QA is not protection.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'failure');
+});
+
+test('P1 flag-default complaints still fail without feature-flag-gate success', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode must be "EVERYONE" for this visible change.';
+  assert.equal(stateOf({ reviews: [review([finding])] }), 'failure');
+});
+
+test('P1 findings that demand OWNER_AND_QA stay blocking when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode is "EVERYONE", but this customer-email flag should be OWNER_AND_QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'failure');
+});
+
 test('badge parsing and bot login matching', () => {
   assert.equal(priorityOf(badge(2)), 2);
   assert.equal(priorityOf('plain'), null);

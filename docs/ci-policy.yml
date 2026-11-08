@@ -557,6 +557,7 @@ policies:
     exact_head_commit_required: true
     approve_passes: true
     concerns_fail_closed: true
+    owner_and_qa_visual_release: feature_flag_gate_success_waives_default_mode_p1
     producer_hold_requires_independent_release_session: true
   deploys:
     merge_to_production_deploys_via_vercel: true

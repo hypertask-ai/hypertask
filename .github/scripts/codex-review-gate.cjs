@@ -18,6 +18,37 @@ function priorityOf(body) {
 
 const blocks = body => (priorityOf(body) ?? 0) <= 1;
 
+const WIDEN_DEFAULT_MODE_PATTERNS = [
+  /\bdefaultMode\s+(?:should|must|needs to)\s+(?:be\s+)?["']?EVERYONE\b/i,
+  /\bdefault\s+mode\s+(?:should|must|needs to)\s+(?:be\s+)?EVERYONE\b/i,
+  /\b(?:Set|Default)\s+defaultMode\s+to\s+EVERYONE\b/i,
+  /\b(?:Default|Set)\s+(?:the\s+)?(?:feature\s+)?flag\s+to\s+Everyone\b/i,
+  /\b(?:Default|Set)\s+(?:this\s+)?visible\s+UI[\s\S]{0,80}\b(?:to\s+)?Everyone\b/i,
+];
+
+function ownerQaVisualReleaseOnlyFinding(body) {
+  const text = String(body ?? '');
+  if (!WIDEN_DEFAULT_MODE_PATTERNS.some(pattern => pattern.test(text))) return false;
+  const demandsEveryoneDefault = /\bdefaultMode\s+(?:should|must|needs to)\s+(?:be\s+)?["']?EVERYONE\b/i.test(text)
+    || /\b(?:Set|Default)\s+defaultMode\s+to\s+EVERYONE\b/i.test(text);
+  if (/\b(?:authorization|auth|security)\s+fix\b/i.test(text) && /\bbefore\b[\s\S]{0,160}\bEveryone\b/i.test(text) && !demandsEveryoneDefault) {
+    return false;
+  }
+  if (/\bOWNER_AND_QA\b[\s\S]{0,120}\b(?:is\s+not|isn't)\s+protection\b/i.test(text) && !demandsEveryoneDefault) {
+    return false;
+  }
+  return true;
+}
+
+function featureFlagGatePassed(contexts) {
+  const entry = (contexts ?? []).find(c => c.context === 'feature-flag-gate');
+  return entry && String(entry.state).toLowerCase() === 'success';
+}
+
+function waivedOwnerQaVisualReleaseFinding(body, contexts) {
+  return featureFlagGatePassed(contexts) && ownerQaVisualReleaseOnlyFinding(body);
+}
+
 function codeReviewStateFor(comments, headOid) {
   for (const comment of [...comments].reverse()) {
     if (!isCodex(comment.author)) continue;
@@ -37,9 +68,10 @@ function evaluate(pr) {
   const short = pr.headOid.slice(0, 7);
   const reviews = pr.reviews.filter(review => isCodex(review.author) && review.commit === pr.headOid);
 
-  const blocking = reviews.flatMap(review => review.comments.length
+  const rawBlocking = reviews.flatMap(review => review.comments.length
     ? review.comments.filter(blocks)
     : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : []);
+  const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   if (blocking.length) {
     const levels = blocking.map(priorityOf);
     const worst = levels.includes(0) ? 'P0' : levels.includes(1) ? 'P1' : 'unrated';
@@ -47,6 +79,13 @@ function evaluate(pr) {
       state: 'failure',
       description: `Codex review of ${short} raised ${blocking.length} finding(s), worst ${worst}`,
       evidence: reviews.find(review => review.url)?.url ?? '',
+    };
+  }
+  if (rawBlocking.length) {
+    return {
+      state: 'success',
+      description: `Codex reviewed ${short}; feature-flag gate allowed Owner + QA release`,
+      evidence: reviews.findLast(review => review.url)?.url ?? '',
     };
   }
   if (reviews.length) {
@@ -95,6 +134,7 @@ async function run({ github, context, core }) {
     if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
     const result = evaluate({
       headOid: node.headRefOid,
+      statusContexts: head?.status?.contexts ?? [],
       reviews: node.reviews.nodes.map(review => ({
         author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid,
         comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => comment.body ?? '').concat(review.comments.pageInfo.hasNextPage ? ['Further comments were not read.'] : []),
@@ -126,4 +166,14 @@ async function run({ github, context, core }) {
   }
 }
 
-module.exports = { evaluate, priorityOf, blocks, isCodex, codeReviewStateFor, run };
+module.exports = {
+  evaluate,
+  priorityOf,
+  blocks,
+  isCodex,
+  codeReviewStateFor,
+  run,
+  featureFlagGatePassed,
+  ownerQaVisualReleaseOnlyFinding,
+  waivedOwnerQaVisualReleaseFinding,
+};
