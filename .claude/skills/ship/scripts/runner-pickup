@@ -237,7 +237,7 @@ finish_recovery() {
 
 ack_recovery() {
   local n=$1 ticket=$2 pending="$STATE/runner-$1.recovery.json"
-  [[ $ticket =~ ^(HTPR|YPER4)-[0-9]+$ ]] || return 1
+  [[ $ticket =~ ^(HTPR|YPER4|HYCI)-[0-9]+$ ]] || return 1
   [ -f "$pending" ] || return 0
   exec 9>"$STATE/runner-$n.lock"; flock -x 9
   jq -e --arg ticket "$ticket" '.ticket == $ticket and .phase == "ready"' "$pending" >/dev/null || return 1
@@ -263,7 +263,7 @@ recover_blocks() {
     | .ticketNumber' <<<"$resp") || return 1
   while IFS= read -r ticket; do
     [ -n "$ticket" ] || continue
-    [[ $ticket =~ ^(HTPR|YPER4)-[0-9]+$ ]] || return 1
+    [[ $ticket =~ ^(HTPR|YPER4|HYCI)-[0-9]+$ ]] || return 1
     comments=$(board "$n" comment list "$ticket" --sort createdAt:desc --limit 100 --json) || return 1
     block=$(jq -er --arg name "runner $n" --argjson lift "$lift" '
       select(.success == true and (.comments | type == "array") and (.comments | length) < 100 and (.nextCursor // null) == null)
