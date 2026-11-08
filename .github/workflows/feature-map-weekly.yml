@@ -37,6 +37,6 @@ jobs:
           node-version: ^24.22.1
           check-latest: true
       - name: Test offline fixtures
-        run: node --test .claude/skills/maintain-verification-skill/scripts/feature-map-check.test.mjs
+        run: node --test .claude/skills/maintain-verification-skill/scripts/feature-map-check.test.mjs tests/feature-map-live-weekly-file.test.cjs
       - name: Check feature map
         run: node .claude/skills/maintain-verification-skill/scripts/feature-map-check.mjs
