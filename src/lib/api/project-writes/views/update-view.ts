@@ -139,14 +139,15 @@ const route = taskWriteRoute({
         view_settings.table_sort_column,
         view_settings.table_sort_direction
       );
+      const tableGroupByTagEnabled = await isFeatureEnabled(
+        HTPR_8630_TABLE_GROUP_BY_TAG_FLAG,
+        userId,
+      );
       let sanitizedTableGroupBy: ReturnType<typeof sanitizeTableGroupBy> | undefined =
         Object.prototype.hasOwnProperty.call(view_settings ?? {}, "table_group_by")
           ? sanitizeTableGroupBy(view_settings.table_group_by)
           : undefined;
-      if (
-        sanitizedTableGroupBy === "tag" &&
-        !await isFeatureEnabled(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG, userId)
-      ) {
+      if (sanitizedTableGroupBy === "tag" && !tableGroupByTagEnabled) {
         sanitizedTableGroupBy = "column";
       }
       const sanitizedBoardFilters = sanitizeBoardFilters(view_settings.board_filters);

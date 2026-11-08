@@ -69,16 +69,17 @@ const route = taskWriteRoute({
       table_sort_column,
       table_sort_direction
     );
+    const tableGroupByTagEnabled = await isFeatureEnabled(
+      HTPR_8630_TABLE_GROUP_BY_TAG_FLAG,
+      userId,
+    );
     let sanitizedTableGroupBy = Object.prototype.hasOwnProperty.call(
       req.body,
       "table_group_by",
     )
       ? sanitizeTableGroupBy(table_group_by)
       : undefined;
-    if (
-      sanitizedTableGroupBy === "tag" &&
-      !await isFeatureEnabled(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG, userId)
-    ) {
+    if (sanitizedTableGroupBy === "tag" && !tableGroupByTagEnabled) {
       sanitizedTableGroupBy = "column";
     }
     const project = await prisma.project.findFirst({

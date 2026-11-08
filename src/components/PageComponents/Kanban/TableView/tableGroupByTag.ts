@@ -1,6 +1,10 @@
 import type { ISection, ITask } from "@/models/model";
 
+import type { TableCreateTaskSection, TableSectionIdentifier } from "./tableCreateTask";
+
 export type TableGroupBy = "column" | "tag";
+
+export type TableTagGroupedSection = TableCreateTaskSection & { items: ITask[] };
 
 export const TABLE_GROUP_BY_TAG_NONE = "tag:none" as const;
 export const NO_TAG_SECTION_TITLE = "No tag";
@@ -14,7 +18,7 @@ export const sanitizeTableGroupBy = (value: unknown): TableGroupBy | null =>
 
 export const tableGroupSectionId = (labelId: string) => `tag:${labelId}`;
 
-export function buildTableSectionsGroupedByTag(sections: ISection[]): ISection[] {
+export function buildTableSectionsGroupedByTag(sections: ISection[]): TableTagGroupedSection[] {
   const groups = new Map<string, { title: string; items: ITask[] }>();
 
   const pushTask = (key: string, title: string, task: ITask) => {
@@ -70,9 +74,11 @@ export function dedupeTasksForFlatTableSort(tasks: ITask[]): ITask[] {
   return next;
 }
 
-export function sectionsUseTagGrouping(sections: ISection[]): boolean {
+export function sectionsUseTagGrouping(
+  sections: readonly TableCreateTaskSection[],
+): boolean {
   return sections.some((section) => {
-    const id = section.sectionId ?? section.id;
+    const id: TableSectionIdentifier | null | undefined = section.sectionId ?? section.id;
     return typeof id === "string" && id.startsWith("tag:");
   });
 }

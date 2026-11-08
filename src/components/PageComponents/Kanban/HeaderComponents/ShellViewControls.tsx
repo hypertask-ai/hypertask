@@ -14,7 +14,8 @@ import {
   getActiveTableGroupByFromProject,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
 import { ArrowUpDown, Funnel, Layers, MoreHorizontal, Timer } from "lucide-react"
-import { lazy, Suspense, useContext, useState } from "react"
+import OptionPickerModal from "@/components/Modals/OptionPicker"
+import { useContext, useState } from "react"
 import { useKanbanModalStatesContext } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext"
 import { SaveView } from "./SaveViewHeaderKanban"
 import SearchFilter from "./SearchFilter"
@@ -22,10 +23,6 @@ import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
 import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag"
 import type { TableGroupBy } from "@/components/PageComponents/Kanban/TableView/tableGroupByTag"
-
-const TableBoardGroupPicker = lazy(
-  () => import("@/components/PageComponents/Kanban/HeaderComponents/TableBoardGroupPicker"),
-)
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
   const isMbl = useContext(MobileViewContext)
@@ -90,16 +87,19 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
             <Layers size={18} strokeWidth={1.75} />
           </ViewControlButton>
           {groupOpen && (
-            <Suspense fallback={null}>
-              <TableBoardGroupPicker
-                groupBy={tableGroupBy}
-                onClose={() => setGroupOpen(false)}
-                onChange={(next: TableGroupBy) => {
-                  setGroupOpen(false)
-                  void setTableGroupByViewAndReturn(project, next)
-                }}
-              />
-            </Suspense>
+            <OptionPickerModal
+              header="Group by"
+              options={[
+                { id: "column", label: "Column", hint: "Board columns", checked: tableGroupBy === "column" },
+                { id: "tag", label: "Tag", hint: "One group per label", checked: tableGroupBy === "tag" },
+              ]}
+              onSelect={(option) => {
+                if (option.id !== "column" && option.id !== "tag") return
+                setGroupOpen(false)
+                void setTableGroupByViewAndReturn(project, option.id as TableGroupBy)
+              }}
+              onClose={() => setGroupOpen(false)}
+            />
           )}
         </>
       )}

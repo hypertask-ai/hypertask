@@ -115,11 +115,12 @@ const route = taskWriteRoute({
         view_settings.table_sort_column,
         view_settings.table_sort_direction
       );
+      const tableGroupByTagEnabled = await isFeatureEnabled(
+        HTPR_8630_TABLE_GROUP_BY_TAG_FLAG,
+        userId,
+      );
       let sanitizedTableGroupBy = sanitizeTableGroupBy(view_settings.table_group_by);
-      if (
-        sanitizedTableGroupBy === "tag" &&
-        !await isFeatureEnabled(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG, userId)
-      ) {
+      if (sanitizedTableGroupBy === "tag" && !tableGroupByTagEnabled) {
         sanitizedTableGroupBy = "column";
       }
       const sanitizedBoardFilters = sanitizeBoardFilters(

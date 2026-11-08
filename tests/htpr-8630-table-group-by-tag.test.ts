@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import type { ITask } from "../src/models/model";
 import {
   buildTableSectionsGroupedByTag,
   dedupeTasksForFlatTableSort,
@@ -18,15 +19,15 @@ test("buildTableSectionsGroupedByTag duplicates multi-tag tasks and groups untag
   const taskA = {
     id: 1,
     taskLabels: [{ label: { id: "l1", value: "Beta" } }],
-  };
+  } as ITask;
   const taskB = {
     id: 2,
     taskLabels: [
       { label: { id: "l1", value: "Beta" } },
       { label: { id: "l2", value: "Alpha" } },
     ],
-  };
-  const taskC = { id: 3, taskLabels: [] };
+  } as ITask;
+  const taskC = { id: 3, taskLabels: [] } as ITask;
   const sections = buildTableSectionsGroupedByTag([
     { section_title: "Backlog", items: [taskA, taskB, taskC] },
   ]);
@@ -45,6 +46,6 @@ test("tableGroupSectionId prefixes label ids", () => {
 });
 
 test("dedupeTasksForFlatTableSort keeps first occurrence", () => {
-  const tasks = [{ id: 1 }, { id: 2 }, { id: 1 }];
+  const tasks = [{ id: 1 }, { id: 2 }, { id: 1 }] as ITask[];
   assert.deepEqual(dedupeTasksForFlatTableSort(tasks).map((task) => task.id), [1, 2]);
 });

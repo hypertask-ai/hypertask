@@ -178,7 +178,7 @@ export function useTableState(context: Context) {
     tableGroupByTagEnabled &&
     getActiveTableGroupByFromProject(_currentProject) === "tag"
   ) {
-    sections = buildTableSectionsGroupedByTag(sections);
+    sections = buildTableSectionsGroupedByTag(sections) as typeof sections;
   }
 
   useEffect(() => {
