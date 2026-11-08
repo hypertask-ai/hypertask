@@ -577,7 +577,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
           THEN (c.activity #>> '{data,toUser,userId}')::int END
       LEFT JOIN "Agent" waiting_activity_agent
-        ON waiting_activity_agent.id = (c.activity #>> '{data,waitingOnAgentId}')::uuid
+        ON waiting_activity_agent.id = (c.activity #>> '{data,waitingOnAgentId}')
       WHERE c."taskId" = ${taskId}
     ),
     reaction_groups AS (
@@ -717,7 +717,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
           THEN (c.activity #>> '{data,toUser,userId}')::int END
       LEFT JOIN "Agent" waiting_activity_agent
-        ON waiting_activity_agent.id = (c.activity #>> '{data,waitingOnAgentId}')::uuid
+        ON waiting_activity_agent.id = (c.activity #>> '{data,waitingOnAgentId}')
     ),
     reaction_groups AS (
       SELECT r."commentId", r."emoji", r."unified",

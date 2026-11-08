@@ -47,8 +47,6 @@ import { isDoneColumn } from '@/lib/doneColumns'
 import { columnRole } from '@/lib/mcp/boards/columnRole'
 import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inboxZero'
 
-import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person'
-
 const HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG = 'htpr-8742-attachment-download-hint'
 
 export function attachmentDownloadHint(taskId: number, attachmentId: number) {
