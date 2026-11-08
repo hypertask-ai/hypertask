@@ -23,16 +23,22 @@ const emailStraightBoardStubs = {
 };
 
 function withStubs(base = {}, extra = {}) {
-  base = { ...emailStraightBoardStubs, ...base };
   const guard = base['@/lib/agents/writing']
   if (guard && !base['@/lib/agents/writingEnforcement']) {
     base = { ...base, '@/lib/agents/writingEnforcement': enforcementFor(guard) }
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base || request in plainLanguageTicketStubs,
+    has: (_target, request) =>
+      request in extra || request in base || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
     get: (_target, request) =>
-      request in extra ? extra[request] : request in base ? base[request] : plainLanguageTicketStubs[request],
+      request in extra
+        ? extra[request]
+        : request in base
+          ? base[request]
+          : request in emailStraightBoardStubs
+            ? emailStraightBoardStubs[request]
+            : plainLanguageTicketStubs[request],
   });
 }
 
-module.exports = { withStubs, enforcementFor };
+module.exports = { withStubs, enforcementFor, emailStraightBoardStubs };

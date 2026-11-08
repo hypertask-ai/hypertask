@@ -74,6 +74,7 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
     '@/lib/auth/emailCodeRateLimit': { claimEmailCodeAttempt: async () => ({ ipAllowed: true, emailAllowed: true }), getEmailCodeClientIp: () => '127.0.0.1' },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/auth/requestBaseUrl': { getRequestBaseUrl: () => 'https://app.hypertask.ai' },
+    '@/lib/auth/emailStraightBoard': { blockUnverifiedStraightBoardInvite: async () => false, finishStraightBoardEmailSignup: async () => ({ ok: false }), sendSignupVerificationEmail: async () => {}, clearStraightBoardSignupCookie: () => {}, sessionEmailUnverified: async () => false, isPlausibleSignupEmail: () => true },
     '@/lib/auth/session': { SESSION_COOKIE: 'ht_session', SESSION_TTL_SECONDS: 3600, signSession: () => 'session', sessionCookieOptions: () => ({}), clearBetterAuthSessionCookies: () => {} },
     '@/lib/auth/slimUserCookie': { slimUserForCookie: (value) => value },
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },

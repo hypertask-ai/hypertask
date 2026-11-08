@@ -1,16 +1,4 @@
 const { withStubs } = require('./helpers/stub-map.cjs')
-const straightBoardRouteStubs = {
-  '@/lib/auth/getSessionUser': { getSessionUser: async () => null },
-  '@/lib/flags/definitions/htpr-7553-email-straight-board': { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG: 'htpr-7553-email-straight-board' },
-  '@/lib/auth/emailStraightBoard': {
-    finishStraightBoardEmailSignup: async () => ({ ok: false }),
-    sendSignupVerificationEmail: async () => {},
-    clearStraightBoardSignupCookie: () => {},
-    blockUnverifiedStraightBoardInvite: async () => false,
-    sessionEmailUnverified: async () => false,
-    isPlausibleSignupEmail: () => true,
-  },
-}
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -21,7 +9,7 @@ const { NextRequest } = require('next/server')
 const root = path.resolve(__dirname, '..')
 
 function loadTypescriptModule(relativePath, aliases = {}) {
-  aliases = withStubs(straightBoardRouteStubs, {
+  aliases = withStubs({
     '@/lib/flags/keys': require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts'),
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
     ...aliases,

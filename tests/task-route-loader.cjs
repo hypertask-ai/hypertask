@@ -1,4 +1,4 @@
-const { withStubs } = require("./helpers/stub-map.cjs");
+const { withStubs, emailStraightBoardStubs } = require("./helpers/stub-map.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
@@ -13,6 +13,7 @@ function load(file, mocks = {}) {
       return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
     }
     if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
+    if (specifier in emailStraightBoardStubs) return emailStraightBoardStubs[specifier];
     if (specifier === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (specifier === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {}, assertTicketRoom: async () => {} };
     if (specifier === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };

@@ -6,18 +6,7 @@ const ts = require('typescript')
 const jwt = require('jsonwebtoken')
 const { NextRequest } = require('next/server')
 
-const straightBoardRouteStubs = {
-  '@/lib/auth/getSessionUser': { getSessionUser: async () => null },
-  '@/lib/flags/definitions/htpr-7553-email-straight-board': { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG: 'htpr-7553-email-straight-board' },
-  '@/lib/auth/emailStraightBoard': {
-    finishStraightBoardEmailSignup: async () => ({ ok: false }),
-    sendSignupVerificationEmail: async () => {},
-    clearStraightBoardSignupCookie: () => {},
-    blockUnverifiedStraightBoardInvite: async () => false,
-    sessionEmailUnverified: async () => false,
-    isPlausibleSignupEmail: () => true,
-  },
-}
+const { emailStraightBoardStubs } = require('./helpers/stub-map.cjs')
 const root = path.resolve(__dirname, '..')
 const testSecret = 'htpr-7032-unit-test-signing-key'
 
@@ -86,8 +75,6 @@ function harness(t, { existingUser = null, modes = {} } = {}) {
     '@/lib/agentRuns/model': {},
   })
   const { POST } = loadTs('src/app/api/auth/send-email-link/route.ts', {
-    ...straightBoardRouteStubs,
-    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
     '@/lib/prisma': { default: prisma, __esModule: true },
     '@/lib/flags': flags,
     '@/lib/services/verificationCodeService': loadTs('src/lib/services/verificationCodeService.ts', {

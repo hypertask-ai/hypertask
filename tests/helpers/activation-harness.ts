@@ -195,12 +195,6 @@ export function activationHarness() {
     "@/utils/controllers/members/updateTrial": { updateTrial: noop },
     "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 402, body: {} }), assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {} },
     "@/lib/tickets/plainLanguageTicket.mjs": { PlainLanguageTicketError: class PlainLanguageTicketError extends Error {}, hasPlainLanguageTicketBlock: () => true, assertPlainLanguageTicketBlock: () => {}, isInternalAgentTicketBoard: () => false, plainLanguageTicketRefusalMessage: () => "" },
-    "@/lib/auth/emailStraightBoard": {
-      blockUnverifiedStraightBoardInvite: async () => false,
-      clearStraightBoardSignupCookie: () => {},
-      sessionEmailUnverified: async () => false,
-      isPlausibleSignupEmail: () => true,
-    },
   };
   const cache = new Map<string, any>();
   function load(file: string, source?: string): any {
