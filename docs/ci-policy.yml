@@ -1,5 +1,5 @@
 version: 15
-last_updated: 2026-11-08
+last_updated: 2026-11-02
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -13,17 +13,8 @@ topology:
   additional_runner_hosts: false
   vpn_for_runner_compute: false
   review_lane:
-    # 2026-11-08: AI review is Codex's built-in GitHub code review (bot
-    # chatgpt-codex-connector, Automatic review on every push). The
-    # codex-review-gate workflow, on ubuntu-latest with the built-in workflow
-    # token, turns its review of the head commit into the ai-review status
-    # (and its legacy twin claude-review). The self-hosted reviewer and its
-    # dispatcher timer are retired; no review work runs on the shared server.
-    label: ai-review
     reviewer: chatgpt-codex-connector
     workflow: .github/workflows/codex-review-gate.yml
-    script: .github/scripts/codex-review-gate.cjs
-    signals: [review_with_no_p0_p1_badge, completed_summary_for_exact_head_with_no_findings]
     runs_on: ubuntu-latest
     dedicated_runners: []
   production_branch: production
@@ -559,7 +550,6 @@ policies:
     non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-lane]
     prefer_queue_over_oom: true
   review:
-    engine: chatgpt-codex-connector (Codex built-in GitHub code review)
     required_check_name: ai-review
     legacy_check_name: claude-review
     status_writer: .github/workflows/codex-review-gate.yml
@@ -793,7 +783,7 @@ schema_drift_monitor:
 agent_rules:
   - "Read docs/ci.md before changing workflows, runner labels, rulesets, or deployment checks."
   - "App CI runs on GitHub-hosted ubuntu-latest runners; do not re-register self-hosted app runners or add a VPN runner or extra host without a recorded decision."
-  - "Never expose provider or gateway keys to pull request code."
+  - "Never expose AI_REVIEW_GATEWAY_KEY to pull request code."
   - "Never store subscription credentials in the repository or expose them to jobs that execute pull request code."
   - "Require an exact-head Codex review with no P0 or P1 finding before ai-review turns green; a comment existing is not enough."
   - "Keep DeepSeek-produced PRs on hold until an independent trusted release session accepts them."

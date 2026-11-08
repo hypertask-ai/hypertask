@@ -10,11 +10,6 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
-    inputs:
-      pr:
-        description: "PR number to evaluate (blank = every open PR)"
-        required: false
-        type: string
 
 permissions:
   contents: read

@@ -167,18 +167,13 @@ the count is 24 jobs per push: four shards plus the summary.
 
 ## Review gate
 
-- AI review is Codex's built-in GitHub code review (the `chatgpt-codex-connector` bot), turned on for this repository with Automatic review, Review: All PRs, and Review trigger: On every push. The bot posts a standard pull request review: one inline comment per finding, each carrying a P0 or P1 badge ([OpenAI Codex GitHub integration](https://developers.openai.com/codex/integrations/github), which redirects to https://learn.chatgpt.com/docs/third-party/github). Codex flags only P0 and P1 issues.
+- AI review is Codex's built-in GitHub code review (the `chatgpt-codex-connector` bot), turned on for this repository with Automatic review, Review: All PRs, and Review trigger: On every push. It posts a standard pull request review with one inline comment per finding, each carrying a priority badge such as P1 or P2 ([OpenAI Codex GitHub integration](https://developers.openai.com/codex/integrations/github), which redirects to https://learn.chatgpt.com/docs/third-party/github).
 - The required review gate is GitHub AI Review (`ai-review`). The legacy `claude-review` context stays in the live ruleset, and the gate sets both to the same state.
-- [Codex review gate](../.github/workflows/codex-review-gate.yml) turns the bot's review into that commit status. It runs on GitHub-hosted `ubuntu-latest` with the built-in workflow token only. It wakes on a Codex pull request review, review comment or issue comment, and sweeps every open PR every ten minutes.
-- Codex also keeps one summary comment per PR with a hidden `codex-review-state:v1` JSON block. It names the reviewed commit, a status (`running` or `completed`) and whether the review had findings. That block is the only clean-review signal tied to an exact commit. Reactions and comment timestamps are never used, because they cannot say which commit they cover.
-- For each open same-repository PR to `production`, it reads the Codex signals for the current head commit only. Success: Codex reviewed that head and no inline comment carries a P0 or P1 badge, or the summary block for that exact head says `completed` with no findings. Failure: a Codex review of that head has an inline comment with a P0 or P1 badge, or with no badge at all (an unrated finding fails closed). Pending: Codex has not answered for that head yet. A review of an older commit never counts for a newer head.
-- A new push gets a fresh Codex review, so a failure clears when the next head is reviewed clean. Comment `@codex review` on the PR to ask for a review without a push. On 2026-11-08 two pushes to the gate PR drew no review in ten minutes, and `@codex review` started one within seconds, so a PR still waiting after a push needs that comment.
-- On success it also posts one `APPROVE` comment naming `reviewed-commit: <head sha>` and the Codex review link. Auto-merge still requires that exact-head `APPROVE` comment as its defense in depth, so the comment keeps the contract it had with the old reviewer.
-- The workflow loads its script from the `production` branch (`.github/scripts/codex-review-gate.cjs`) and reads PR content only as data. It never checks out or runs PR code.
-- Auto-merge keeps its `REQUIRED` list, including `ai-review`. The five-minute auto-merge sweep re-evaluates green PRs, so a status set by this workflow needs no extra dispatch.
-- Codex review guidance for this repository belongs in `AGENTS.md` under a `## Code Review Rules` heading. Those rules guide Codex; they do not replace tests, branch protections or required approvals.
-- DeepSeek-produced PRs keep the `hold` label. The Codex review is evidence, but a trusted release session must still remove the hold before merge.
-- Retired: the self-hosted reviewer (`hypertask-ai/reviewer` on the `contabo-1` runner), its 30-second `hypertask-ai-review-dispatch` systemd timer, the `reviewdispatch` and `aireviewer` accounts, and the manual `repository_dispatch` retry. Do not re-enable them: CI work on the shared server is forbidden. The reviewer repository stays in place until it is retired.
+- [Codex review gate](../.github/workflows/codex-review-gate.yml) turns the bot's review into that commit status. It runs on GitHub-hosted `ubuntu-latest` with the built-in workflow token only, wakes on a Codex review, review comment or issue comment, and sweeps every open PR every ten minutes. It loads its script from the `production` branch and reads PR content only as data.
+- Codex also keeps one summary comment per PR with a hidden `codex-review-state:v1` JSON block naming the reviewed commit, a status (`running` or `completed`) and whether there were findings. Reactions and timestamps are never used, because they cannot say which commit they cover.
+- Rules for each open same-repository PR to `production`, using the current head commit only (a review of an older commit never counts). Success: Codex reviewed that head and no inline comment has a P0 or P1 badge, or the summary block for that head says `completed` with no findings. P2 and lower findings do not fail the gate. Failure: an inline comment on that head has a P0 or P1 badge, or no badge at all. Pending: Codex has not answered for that head. A new push gets a fresh review, but on 2026-11-08 two pushes drew none in ten minutes and `@codex review` started one within seconds, so a PR still waiting needs that comment.
+- On success it posts one `APPROVE` comment naming `reviewed-commit: <head sha>` and the review link. Auto-merge keeps its `REQUIRED` list, including `ai-review`, and still requires that exact-head `APPROVE` comment. DeepSeek-produced PRs keep the `hold` label until a trusted release session removes it.
+- Retired: the self-hosted reviewer (`hypertask-ai/reviewer` on `contabo-1`), its 30-second dispatch timer, the `reviewdispatch` and `aireviewer` accounts, and the manual `repository_dispatch` retry. Do not re-enable them: CI work on the shared server is forbidden.
 
 ## Release contract
 
@@ -346,8 +341,6 @@ is pinned to the GitHub Actions integration. This changes no repository
 settings, runners, or required checks.
 
 ## AI review verdict on the ticket (YPER4-675)
-
-_Note (2026-11-08): this mirror matches only comments by `hypertask-ai-review`, the retired self-hosted reviewer. The Codex review gate posts as `github-actions[bot]`, so the mirror no longer fires. Mirroring Codex verdicts to tickets is a separate follow-up._
 
 [AI review verdict to ticket](../.github/workflows/ai-review-mirror.yml) copies
 the current GitHub AI Review verdict onto the ticket named by the branch, so the
@@ -706,8 +699,6 @@ The manifest at [`.github/actions/action-archive-cache-manifest.txt`](../.github
 The private reviewer workflow is commit-pinned separately in `valentinyeo/hypertask-reviewer`; its checkout and setup-node SHAs must remain present in this shared manifest.
 
 ## Reviewer engine deployment proof
-
-_Historical (2026-11-08): the self-hosted reviewer is retired and AI review is Codex's built-in GitHub review. This proof applies only if `hypertask-ai/reviewer` is ever released again; see the Review gate section._
 
 For `hypertask-ai/reviewer` on `main`, with `SHIP_DEPLOY=none`, `ship-check deployed`
 requires a recorded `live-proof` in the ticket's evidence folder:

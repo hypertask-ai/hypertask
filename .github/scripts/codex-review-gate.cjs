@@ -72,7 +72,7 @@ query($owner: String!, $name: String!, $after: String) {
       nodes {
         number isCrossRepository headRefOid
         commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 30) { nodes { author { login } url body commit { oid } comments(first: 50) { nodes { body } } } }
+        reviews(last: 30) { nodes { author { login } url body commit { oid } comments(first: 50) { nodes { body author { login } replyTo { id } } } } }
         comments(last: 50) { nodes { author { login } url body } }
       }
     }
@@ -81,7 +81,7 @@ query($owner: String!, $name: String!, $after: String) {
 
 async function run({ github, context, core }) {
   const { owner, repo } = context.repo;
-  const only = context.payload.pull_request?.number ?? context.payload.issue?.number ?? Number(context.payload.inputs?.pr || 0);
+  const only = context.payload.pull_request?.number ?? context.payload.issue?.number ?? 0;
 
   const nodes = [];
   for (let after = null, more = true; more;) {
@@ -90,19 +90,17 @@ async function run({ github, context, core }) {
     ({ hasNextPage: more, endCursor: after } = pullRequests.pageInfo);
   }
 
-  const summary = { success: 0, failure: 0, pending: 0, skipped: 0 };
   for (const node of nodes.filter(node => !only || node.number === only)) {
     const head = node.commits.nodes[0]?.commit;
-    if (node.isCrossRepository || head?.oid !== node.headRefOid) { summary.skipped++; continue; }
+    if (node.isCrossRepository || head?.oid !== node.headRefOid) continue;
     const result = evaluate({
       headOid: node.headRefOid,
       reviews: node.reviews.nodes.map(review => ({
         author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid,
-        comments: review.comments.nodes.map(comment => comment.body ?? ''),
+        comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => comment.body ?? ''),
       })),
       comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
     });
-    summary[result.state]++;
 
     const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
     const existing = new Map((head.status?.contexts ?? []).map(entry => [entry.context, entry]));
@@ -126,8 +124,6 @@ async function run({ github, context, core }) {
     }
     core.info(`PR #${node.number} ${node.headRefOid.slice(0, 7)}: ${result.state}. ${result.description}`);
   }
-  core.info(`Codex review gate: ${JSON.stringify(summary)}`);
-  return summary;
 }
 
 module.exports = { evaluate, priorityOf, blocks, isCodex, codeReviewStateFor, run };
