@@ -51,14 +51,6 @@ async function sendVerificationEmail(to: string, link: string) {
     return
   }
 
-  if (
-    isProbeRecipientEmail(to) &&
-    (await isFeatureEnabled(HTPR_7294_DAILY_FUNNEL_PROBE_FLAG, FEATURE_FLAG_OWNER_USER_ID))
-  ) {
-    const runId = to.split('@')[0] ?? 'probe'
-    await storeProbeVerificationLink(to, runId, link)
-  }
-
   await sendEmail({
     to,
     from: `Hypertask <${EMAIL_FROM}>`,
@@ -102,6 +94,14 @@ async function sendVerificationEmail(to: string, link: string) {
           </div>
         `,
   })
+
+  if (
+    isProbeRecipientEmail(to) &&
+    (await isFeatureEnabled(HTPR_7294_DAILY_FUNNEL_PROBE_FLAG, FEATURE_FLAG_OWNER_USER_ID))
+  ) {
+    const runId = to.split('@')[0] ?? 'probe'
+    await storeProbeVerificationLink(to, runId, link)
+  }
 
   console.log('✅ Verification email sent via Resend')
 }

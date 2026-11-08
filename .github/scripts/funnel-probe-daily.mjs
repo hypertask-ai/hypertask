@@ -35,7 +35,6 @@ async function pollInbox(email) {
 }
 
 async function postReport(passed) {
-  if (!REPORT_TOKEN) return true;
   const lines = steps.map((s) => `<li><p>${s.ok ? "PASS" : "FAIL"}: ${s.step} — ${s.detail}</p></li>`).join("");
   const body = `<p><strong>${passed ? "PASS" : "FAIL"}: daily funnel probe signup</strong></p><ul>${lines}</ul>`;
   try {
@@ -56,11 +55,12 @@ async function postReport(passed) {
 
 async function finish(passed) {
   const reported = await postReport(passed);
-  if (!passed || (REPORT_TOKEN && !reported)) process.exitCode = 1;
+  if (!passed || !reported) process.exitCode = 1;
 }
 
 async function main() {
   if (!INBOX_SECRET) throw new Error("CRON_SECRET is required");
+  if (!REPORT_TOKEN) throw new Error("HYPERTASK_MCP_TOKEN is required");
   const email = dailyEmail();
   record("new probe identity", true, email.split("@")[0]);
   const signup = await fetch(`${BASE}/api/auth/instant-signup`, {
@@ -77,13 +77,19 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   let verified = false;
+  let verifyDetail = "navigation failed";
   try {
     await page.goto(verifyUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
     await page.getByText("successfully verified", { exact: false }).waitFor({ timeout: 120_000 });
     verified = true;
+    try {
+      verifyDetail = new URL(page.url()).pathname;
+    } catch {
+      verifyDetail = "verified";
+    }
   } catch { verified = false; }
   finally { await browser.close(); }
-  record("email verify navigation", verified, page.url());
+  record("email verify navigation", verified, verifyDetail);
   return finish(steps.every((s) => s.ok));
 }
 

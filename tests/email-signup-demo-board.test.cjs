@@ -312,7 +312,10 @@ test('funnel-probe-inbox accepts deployment CRON_SECRET', async () => {
   try {
     const route = load('src/app/api/ops/funnel-probe-inbox/route.ts', {
       '@/lib/flags': { FEATURE_FLAG_OWNER_USER_ID: 6, isFeatureEnabled: async () => true },
-      '@/lib/funnelProbe/inbox': { readProbeInbox: async (to) => (to === email ? { runId: 'x' } : null) },
+      '@/lib/funnelProbe/inbox': {
+        isProbeRecipientEmail: (to) => to === email,
+        readProbeInbox: async (to) => (to === email ? { runId: 'x' } : null),
+      },
     })
     const url = `https://app.hypertask.ai/api/ops/funnel-probe-inbox?email=${encodeURIComponent(email)}`
     assert.equal((await route.GET(new NextRequest(url))).status, 401)
