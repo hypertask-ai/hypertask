@@ -1331,9 +1331,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      {(straightBoardSignup || enrolledStraightBoard) && (
-        <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />
-      )}
+      {(straightBoardSignup || enrolledStraightBoard) && <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />}
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}

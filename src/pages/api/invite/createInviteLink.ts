@@ -69,9 +69,7 @@ export const addMemberController = async (
   emails: string[],
   actingAgentId?: string | null,
 ) => {
-  if ((await unverifiedEmailAccount(userId)) !== "allowed") {
-    return { status: 403, json: { message: "Please confirm your email before inviting people." } };
-  }
+  if ((await unverifiedEmailAccount(userId)) !== "allowed") return { status: 403, json: { message: "Please confirm your email before inviting people." } };
   try {
     const currentProject = await prisma.project.findFirst({
       where: {

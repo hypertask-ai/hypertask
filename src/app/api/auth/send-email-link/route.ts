@@ -219,6 +219,7 @@ export async function POST(request: NextRequest) {
 
     const session = await getSessionUser(request.headers)
     const signupRequesterId = session?.userId ?? 0
+    const safeReturnTo = parseSafeReturnTo(typeof rawReturnTo === 'string' ? rawReturnTo : null)
     const inviteCarried = Boolean(inviteData) && typeof inviteData === 'object'
       && ['project', 'key', 'projectId'].some((name) => Boolean((inviteData as Record<string, unknown>)[name]))
 
@@ -230,16 +231,14 @@ export async function POST(request: NextRequest) {
     if (
       !existingUser &&
       !inviteCarried &&
+      !safeReturnTo &&
       (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, signupRequesterId))
     ) {
-      const knownEmail = await findUserByEmail(normalizedEmail)
-      if (!knownEmail) {
-        const finished = await finishStraightBoardEmailSignup(
-          request,
-          normalizedEmail,
-          signupContextId,
-          signupAttributionFromHeaders(request.headers, 'email', utmParams.utm_source),
-        )
+      const finished = await findUserByEmail(normalizedEmail) ? null : await finishStraightBoardEmailSignup(
+        request, normalizedEmail, signupContextId,
+        signupAttributionFromHeaders(request.headers, 'email', utmParams.utm_source),
+      )
+      if (finished) {
         if (!finished.ok) return finished.response
         await sendSignupVerificationEmail(request, normalizedEmail, utmParams).catch((emailError) =>
           console.error('Failed to send straight-board verification email:', emailError))
@@ -250,10 +249,6 @@ export async function POST(request: NextRequest) {
     const token = createEmailLoginToken(normalizedEmail, signupContextId)
     const verificationCode = generateVerificationCode()
     
-    const safeReturnTo = parseSafeReturnTo(
-      typeof rawReturnTo === 'string' ? rawReturnTo : null
-    )
-
     const baseSignInUrl = `${getRequestBaseUrl(request)}/login`
     const signInLink = buildSignInLinkWithUTM(
       baseSignInUrl,

@@ -26,9 +26,7 @@ export default  async function handler(
         const {projectId:projectIdFromParam} = req.query
         const projectId = parseInt(projectIdFromParam as string)
         if (!projectId) return res.status(400).json({message:"Missing required information"})
-        if ((await unverifiedEmailAccount(session.userId)) !== "allowed") {
-          return res.status(403).json({ message: "Please confirm your email before inviting people." });
-        }
+        if ((await unverifiedEmailAccount(session.userId)) !== "allowed") return res.status(403).json({ message: "Please confirm your email before inviting people." });
         const project = await prisma.project.findUnique({
             where:{
                 id:projectId
@@ -47,9 +45,7 @@ export default  async function handler(
 
         const {projectId} = req.body
         if (!projectId) return res.status(400).json({message:"Missing required information"})
-        if ((await unverifiedEmailAccount(session.userId)) !== "allowed") {
-          return res.status(403).json({ message: "Please confirm your email before inviting people." });
-        }
+        if ((await unverifiedEmailAccount(session.userId)) !== "allowed") return res.status(403).json({ message: "Please confirm your email before inviting people." });
         const project = await prisma.project.findUnique({
             where:{
                 id:projectId
