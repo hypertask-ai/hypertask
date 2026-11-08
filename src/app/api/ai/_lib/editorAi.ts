@@ -12,7 +12,9 @@ import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, typ
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { remainingSpendPathEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
+import { nativeWebSearchAllowed } from "@/lib/ai/spend/remainingSpend";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
@@ -842,8 +844,11 @@ export async function selectTaskWriterModel(args: {
       feature: args.feature ?? "task-writer",
       tags,
       modelOption: selection.modelOption,
-      includeNativeWebSearch:
-        selection.provider === "claude" || selection.provider === "openai",
+      includeNativeWebSearch: nativeWebSearchAllowed(
+        selection.provider,
+        Boolean(byokApiKey && !isOurGatewayKey(byokApiKey)),
+        Boolean(teamContext.teamId) && await remainingSpendPathEnabled(teamContext.teamId!),
+      ),
     }
   );
   const selected = {

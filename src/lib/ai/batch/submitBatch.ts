@@ -16,17 +16,30 @@ export async function submitBatch(args: {
   items: Record<string, unknown>;
   claim?: (tx: Prisma.TransactionClient, batchId: string) => Promise<string[]>;
 }): Promise<string | null> {
+  const idempotencyKey = batchIdempotencyKey(args.kind, args.teamId, args.requests);
   const { assertBatchWithinTeamCap } = await import("@/app/api/ai/_lib/batchCap");
+  const { holdPlanBatch, rememberBatchGateway, releasePlanBatch } = await import("@/lib/ai/spend/batchHold");
   await assertBatchWithinTeamCap({
     teamId: args.teamId,
     userId: args.userId,
     gatewayKey: args.gatewayKey,
   });
-  const gatewayBatchId = await startGatewayBatch(
-    args.gatewayKey,
-    args.requests,
-    batchIdempotencyKey(args.kind, args.teamId, args.requests),
-  );
+  await holdPlanBatch({
+    idempotencyKey,
+    teamId: args.teamId,
+    userId: args.userId,
+    gatewayKey: args.gatewayKey,
+    model: args.model,
+    requests: args.requests,
+  });
+  let gatewayBatchId: string;
+  try {
+    gatewayBatchId = await startGatewayBatch(args.gatewayKey, args.requests, idempotencyKey);
+  } catch (error) {
+    await releasePlanBatch(idempotencyKey);
+    throw error;
+  }
+  await rememberBatchGateway(idempotencyKey, gatewayBatchId);
   return prisma.$transaction(async (tx) => {
     const existing = await tx.aiBatch.findUnique({ where: { gatewayBatchId }, select: { id: true } });
     if (existing) return existing.id;

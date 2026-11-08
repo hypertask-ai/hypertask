@@ -429,6 +429,16 @@ function isPlatformManagedGatewayKey(apiKey: string): boolean {
   return PLATFORM_GATEWAY_ENV_NAMES.some((name) => process.env[name]?.trim() === normalized);
 }
 
+export function isOurGatewayKey(apiKey: unknown): boolean {
+  if (typeof apiKey !== "string") return false;
+  const normalized = apiKey.trim();
+  if (!normalized) return false;
+  if (normalized === process.env.AI_GATEWAY_API_KEY?.trim()) return true;
+  if (normalized === process.env.DEMO_AI_GATEWAY_API_KEY?.trim()) return true;
+  if (normalized === process.env.TURBOPUFFER_EMBEDDINGS_API_KEY?.trim()) return true;
+  return isPlatformManagedGatewayKey(normalized);
+}
+
 type GatewayKeyProvenance = { managedKeyId: string; managedKeyUpdatedAt: string };
 
 function provenanceFromRow(row: { id: string; updatedAt: Date }): GatewayKeyProvenance | undefined {
