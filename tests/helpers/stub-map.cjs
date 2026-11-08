@@ -28,6 +28,25 @@ function enforcementFor(guard) {
 
 const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
 
+const emailStraightBoardStubs = {
+  "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+  "@/utils/controllers/users/findUserByEmail": { findUserByEmail: async () => null },
+  "@/lib/flags/definitions/htpr-7553-email-straight-board": { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG: "htpr-7553-email-straight-board" },
+  "@/lib/auth/unverifiedEmailAccount": {
+    unverifiedEmailAccount: async () => "allowed",
+  },
+  "@/lib/auth/emailStraightBoard": {
+    finishStraightBoardEmailSignup: async () => ({ ok: false }),
+    sendSignupVerificationEmail: async () => {},
+  },
+};
+
+const straightBoardGuardStubs = {
+  "@/lib/auth/unverifiedEmailAccount": {
+    unverifiedEmailAccount: async () => "allowed",
+  },
+};
+
 function withStubs(base = {}, extra = {}) {
   const guard = base['@/lib/agents/writing']
   if (guard && !base['@/lib/agents/writingEnforcement']) {
@@ -38,13 +57,14 @@ function withStubs(base = {}, extra = {}) {
     defaults[QUIET_PERSONAL_LOG] = quietPersonalLogStub()
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base || request in defaults || request in plainLanguageTicketStubs,
+    has: (_target, request) => request in extra || request in base || request in defaults || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
     get: (_target, request) =>
       request in extra ? extra[request]
       : request in base ? base[request]
       : request in defaults ? defaults[request]
+      : request in emailStraightBoardStubs ? emailStraightBoardStubs[request]
       : plainLanguageTicketStubs[request],
   });
 }
 
-module.exports = { withStubs, enforcementFor, quietPersonalLogStub };
+module.exports = { withStubs, enforcementFor, quietPersonalLogStub, emailStraightBoardStubs, straightBoardGuardStubs };

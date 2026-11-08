@@ -11,6 +11,7 @@ import { IViewType } from '@/models/model';
 import { sendEmailNotification } from '@/utils/controllers/notifications/sendNotification';
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
+import { unverifiedEmailAccount } from "@/lib/auth/unverifiedEmailAccount";
 
 
 
@@ -39,6 +40,9 @@ export default  async function handler(
     if (!Number.isInteger(projectId) || !email) return res.status(400).json({message:"Missing required information"})
     const allowed = await getMemberAndOwner(projectId)
     if (!Array.isArray(allowed) || !allowed.includes(user.id)) return res.status(403).json({message:"Forbidden"})
+    if ((await unverifiedEmailAccount(user.id)) !== "allowed") {
+      return res.status(403).json({ message: "Please confirm your email before inviting people." });
+    }
     const userId = user.id
 
       var invite:any = undefined

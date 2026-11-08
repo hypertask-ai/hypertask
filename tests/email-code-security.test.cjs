@@ -1,4 +1,4 @@
-const { withStubs } = require('./helpers/stub-map.cjs')
+const { withStubs, emailStraightBoardStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -12,6 +12,9 @@ function loadTypescriptModule(relativePath, aliases = {}) {
   aliases = withStubs({
     '@/lib/flags/keys': require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts'),
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
+    '@/lib/auth/getSessionUser': { getSessionUser: async () => null },
+    '@/utils/controllers/users/findUserByEmail': { findUserByEmail: async () => null },
   }, aliases)
 
   const filename = path.join(root, relativePath)
@@ -164,6 +167,7 @@ test('send-email-link never returns authentication secrets', async () => {
     const { POST } = loadTypescriptModule(
       'src/app/api/auth/send-email-link/route.ts',
       {
+        ...emailStraightBoardStubs,
         '@/lib/prisma': { user: { findFirst: async () => null } },
         '@/lib/flags': {
           HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
@@ -218,6 +222,7 @@ test('send-email-link keeps the stored code when Resend times out', async () => 
     const { POST } = loadTypescriptModule(
       'src/app/api/auth/send-email-link/route.ts',
       {
+        ...emailStraightBoardStubs,
         '@/lib/prisma': { user: { findFirst: async () => null } },
         '@/lib/flags': {
           HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',

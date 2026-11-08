@@ -4,13 +4,21 @@ import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo'
+import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { sendEmail } from '@/lib/email/sendEmail'
 import prisma from '@/lib/prisma'
+import { findUserByEmail } from '@/utils/controllers/users/findUserByEmail'
+import { isFeatureEnabled } from '@/lib/flags'
 import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
-  isFeatureEnabled,
-} from '@/lib/flags'
+  HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG,
+} from '@/lib/flags/keys'
+import {
+  finishStraightBoardEmailSignup,
+  sendSignupVerificationEmail,
+} from '@/lib/auth/emailStraightBoard'
+import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
@@ -178,6 +186,10 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = email.trim().toLowerCase()
     console.log('📧 Generating email link and code for:', normalizedEmail)
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return NextResponse.json({ success: false, error: 'Please enter a valid email address.' }, { status: 400 })
+    }
+
     const rateLimitCheck = VerificationCodeService.isRateLimited(normalizedEmail)
     if (rateLimitCheck.limited) {
       return NextResponse.json(
@@ -191,10 +203,44 @@ export async function POST(request: NextRequest) {
     }
 
     const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
+
+    let existingUser = await prisma.user.findFirst({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    })
+
+    const utmParams =
+      utmData && typeof utmData === 'object'
+        ? (utmData as Record<string, string | undefined>)
+        : {}
+
+    const session = await getSessionUser(request.headers)
+    const signupRequesterId = session?.userId ?? 0
+
+    if (
+      !existingUser &&
+      (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, signupRequesterId))
+    ) {
+      const knownEmail = await findUserByEmail(normalizedEmail)
+      if (!knownEmail) {
+        const finished = await finishStraightBoardEmailSignup(
+          request,
+          normalizedEmail,
+          signupContextId,
+          signupAttributionFromHeaders(request.headers, 'email', utmParams.utm_source),
+        )
+        if (!finished.ok) return finished.response
+        try {
+          await sendSignupVerificationEmail(request, normalizedEmail, utmParams)
+        } catch (emailError) {
+          console.error('Failed to send straight-board verification email:', emailError)
+        }
+        return finished.response
+      }
+    }
+
     const token = createEmailLoginToken(normalizedEmail, signupContextId)
     const verificationCode = generateVerificationCode()
-    
-    const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
     
     const safeReturnTo = parseSafeReturnTo(
       typeof rawReturnTo === 'string' ? rawReturnTo : null
@@ -212,10 +258,6 @@ export async function POST(request: NextRequest) {
     await VerificationCodeService.storeCode(verificationCode, normalizedEmail, CODE_EXPIRY_MINUTES)
     if (signupContextId) await bindSignupCodeContext(normalizedEmail, verificationCode, signupContextId)
 
-    const existingUser = await prisma.user.findFirst({
-      where: { email: normalizedEmail },
-      select: { id: true },
-    })
     const recipientId = existingUser?.id ?? 0
     const correctExpiry = await isFeatureEnabled(HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, recipientId)
     const firstTime = !existingUser

@@ -23,6 +23,7 @@ stub("src/utils/api/invite/generatePublicInviteController.ts", { getInviteFromPr
 stub("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: () => ({}) });
 stub("src/utils/helperFunctions/Views/ViewsHelperFunctions.ts", { getViewFromProject: () => undefined });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 985 }) });
+stub("src/lib/auth/unverifiedEmailAccount.ts", { unverifiedEmailAccount: async () => "allowed" });
 stub("src/utils/controllers/getMemberAndOwnerForBoard.ts", { default: async () => [985] });
 stub("src/utils/api/Homepage/index.ts", { getProjectInviteURL: async () => ({}) });
 const rqPath = require.resolve("@tanstack/react-query");

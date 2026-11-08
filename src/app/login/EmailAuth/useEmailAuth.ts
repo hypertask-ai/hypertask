@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation'
 import { parseSafeReturnTo, POST_LOGIN_REDIRECT_STORAGE_KEY } from '@/lib/auth/safeReturnTo'
 import { getSignupContextInput } from '@/lib/analytics/signupIdentityClient'
 import { authClient } from '@/lib/auth/betterAuthClient'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/keys'
 
 export type EmailAuthStep = 'form' | 'link-sent' | 'signing-in' | 'code-input'
 
@@ -47,6 +49,7 @@ export function useEmailAuth(initialEmail = '') {
   const { loginWithEmail } = useAuth()
   const accountRecoveryStartedRef = useRef(false)
   const conditionalPasskeyStartedRef = useRef(false)
+  const straightBoardSignup = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -393,6 +396,11 @@ export function useEmailAuth(initialEmail = '') {
 
         if (!response.ok || !data.success) {
           throw new Error(data.error || 'Failed to send sign-in link')
+        }
+
+        if (straightBoardSignup && typeof data.straightBoardRedirect === 'string') {
+          window.location.assign(data.straightBoardRedirect)
+          return
         }
 
         console.log('✅ Sign-in link sent successfully')
