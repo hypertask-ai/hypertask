@@ -49,6 +49,29 @@ export function shouldPreserveNativeInboxTab(
   return activeElement?.closest('[data-inbox-draft-control="true"]') != null;
 }
 
+export type InboxOpeningPosition = {
+  index: number;
+  resumes: boolean;
+};
+
+export function resolveInboxOpeningPosition({
+  split,
+  projectId,
+  lastIndex,
+}: {
+  split?: string | null;
+  projectId?: string | number | null;
+  lastIndex?: number | null;
+}): InboxOpeningPosition {
+  const lastRow =
+    typeof lastIndex === "number" && Number.isFinite(lastIndex)
+      ? Math.max(0, Math.trunc(lastIndex))
+      : 0;
+  const resumes = Boolean(split || projectId) && lastRow > 0;
+
+  return { index: resumes ? lastRow : 0, resumes };
+}
+
 export function jumpToInboxBoundary(
   items: InboxBoundaryItem[],
   toEnd: boolean,

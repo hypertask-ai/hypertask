@@ -101,7 +101,10 @@ import {
 } from "@/lib/inboxSync/optimistic";
 import { canWarmPreviousBoardFromInbox } from "@/lib/inboxSync/warmPreviousBoard";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
-import { shouldPreserveNativeInboxTab } from "@/lib/inboxKeyboardNavigation";
+import {
+  resolveInboxOpeningPosition,
+  shouldPreserveNativeInboxTab,
+} from "@/lib/inboxKeyboardNavigation";
 import { getInitialInboxSplitIndex } from "@/lib/inboxSplitSettings";
 
 const Inbox = ({
@@ -150,6 +153,13 @@ const Inbox = ({
   const searchParams = useSearchParams();
   const preselectedProject = queryParams?.projectId;
   const preselectedSplit = queryParams?.split;
+  const [inboxOpening] = useState(() =>
+    resolveInboxOpeningPosition({
+      split: preselectedSplit,
+      projectId: preselectedProject,
+      lastIndex: globalFocus.currIdx,
+    }),
+  );
   const notificationsQuery = useGetNotifications(currentUser.id);
   useWarmProjectsAllQuery({
     user: currentUser,
@@ -274,7 +284,7 @@ const Inbox = ({
   const [_notifications, setNotifications] = useState<INotification[] | undefined>(() => inboxDocument?.data.payload.structuredData.data[inboxDocument.selection.split ?? 0]);
   const [_selectedInbox, setSelectedInbox] = useState<INotification | null | undefined>(() => inboxDocument?.data.payload.structuredData.data[inboxDocument.selection.split ?? 0]?.[0]);
   const [initialIndexReset, setInitialIndexReset] = useState<number>(
-    globalFocus.currIdx ?? 0,
+    inboxOpening.index,
   );
   const classNamesToReturnFrom = [
     "modal-open",
@@ -951,6 +961,7 @@ const Inbox = ({
                     }
                     _notifications={notification}
                     initialFocus={initialIndexReset}
+                    resumesPosition={inboxOpening.resumes}
                     markAsDone={markAsDone}
                     starTaskUpdateInCache={starTaskUpdateInCache}
                     appShellRail={appShellRailOn}
