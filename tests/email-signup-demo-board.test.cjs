@@ -305,6 +305,26 @@ test('the bugfix flag defaults to Everyone when no database row exists', async (
   assert.equal(result.aliases['@/lib/flags'].defaultFeatureFlagMode(flagKey), 'EVERYONE')
 })
 
+test('funnel-probe-signup cron accepts deployment CRON_SECRET', async () => {
+  const prev = process.env.CRON_SECRET
+  process.env.CRON_SECRET = 'cron-gate-secret'
+  try {
+    const route = load('src/app/api/cron/funnel-probe-signup/route.ts', {
+      '@/lib/flags': { FEATURE_FLAG_OWNER_USER_ID: 6, isFeatureEnabled: async () => true },
+    })
+    const url = 'https://app.hypertask.ai/api/cron/funnel-probe-signup'
+    assert.equal((await route.GET(new NextRequest(url))).status, 401)
+    const ok = await route.GET(new NextRequest(url, { headers: { authorization: 'Bearer cron-gate-secret' } }))
+    assert.equal(ok.status, 200)
+    const body = await ok.json()
+    assert.equal(body.ok, true)
+    assert.equal(body.runner, 'github-actions')
+  } finally {
+    if (prev === undefined) delete process.env.CRON_SECRET
+    else process.env.CRON_SECRET = prev
+  }
+})
+
 test('funnel-probe-inbox accepts deployment CRON_SECRET', async () => {
   const prev = process.env.CRON_SECRET
   process.env.CRON_SECRET = 'inbox-route-secret'
