@@ -408,6 +408,10 @@ export const DesktopAttachment = ({
             <SendMessageButton
               label="Send"
               textButton
+              shortcut={{
+                text: "Send",
+                keyCombination: presentInInbox ? [ctrlCmd, "SHIFT", "Enter"] : [ctrlCmd, "Enter"],
+              }}
               mobile={false}
               disabled={!canSend || Boolean(isRecording)}
               onClick={() => sendOnClick && sendOnClick()}

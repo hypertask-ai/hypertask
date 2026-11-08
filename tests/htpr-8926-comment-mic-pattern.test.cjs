@@ -7,6 +7,7 @@ const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const flagKey = "htpr-8926-comment-mic-pattern";
 const icon = () => React.createElement("svg");
+const tooltips = [];
 const cn = (...values) => values.filter(Boolean).join(" ");
 
 function render({ enabled, mode = "create-comment", canSend = false, isRecording = false, inInbox = false }) {
@@ -17,7 +18,7 @@ function render({ enabled, mode = "create-comment", canSend = false, isRecording
     "@/utils/undoActions/helperFuncs": { cn },
     "lucide-react": { Check: icon, Paperclip: icon, PencilSparkles: icon, Trash2: icon, Send: icon },
     "../Tooltip": { default: () => null },
-    "../Common/Tooltip": { default: () => null },
+    "../Common/Tooltip": { default: (props) => { tooltips.push(props); return null; } },
     "../Common/SendArrow": { SendArrow: icon },
     "@/components/Common/SendArrow": { SendArrow: icon },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
@@ -98,4 +99,15 @@ test("description editor gets the white mic and no Send", () => {
   assert.equal(micProps[0].primaryMic, true);
   assert.equal(micProps[0].compactListeningPill, true);
   assert.equal(sendButtons(doc).length, 0);
+});
+
+test("comment Send tooltip shows the comment shortcut, not the AI chat Enter", () => {
+  tooltips.length = 0;
+  render({ enabled: true, canSend: true });
+  const send = tooltips.find((tip) => tip.text === "Send");
+  assert.ok(send, "comment Send tooltip is set");
+  assert.deepEqual(send.keyCombination, ["CTRL", "Enter"]);
+  tooltips.length = 0;
+  render({ enabled: true, canSend: true, inInbox: true });
+  assert.deepEqual(tooltips.find((tip) => tip.text === "Send").keyCombination, ["CTRL", "SHIFT", "Enter"]);
 });
