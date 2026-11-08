@@ -72,8 +72,8 @@ query($owner: String!, $name: String!, $after: String) {
       nodes {
         number isCrossRepository headRefOid
         commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 30) { nodes { author { login } url body commit { oid } comments(first: 50) { nodes { body author { login } replyTo { id } } } } }
-        comments(last: 50) { nodes { author { login } url body } }
+        reviews(last: 30) { nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } } } } }
+        comments(last: 100) { nodes { author { login } url body } }
       }
     }
   }
@@ -97,7 +97,7 @@ async function run({ github, context, core }) {
       headOid: node.headRefOid,
       reviews: node.reviews.nodes.map(review => ({
         author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid,
-        comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => comment.body ?? ''),
+        comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => comment.body ?? '').concat(review.comments.pageInfo.hasNextPage ? ['Further comments were not read.'] : []),
       })),
       comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
     });
