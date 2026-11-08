@@ -1,4 +1,4 @@
-const { emailStraightBoardStubs } = require('./helpers/stub-map.cjs')
+const { straightBoardRouteStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -49,7 +49,7 @@ function harness({ redisFailure = false, existing = false } = {}) {
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
   const aliases = {
-    ...emailStraightBoardStubs,
+    ...straightBoardRouteStubs,
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
     '@/lib/flags': { isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify' || key === 'htpr-7553-email-straight-board') return false; calls.flags.push([key, id]); return true } },
     '@/lib/prisma': {
