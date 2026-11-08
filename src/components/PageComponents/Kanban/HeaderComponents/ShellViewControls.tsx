@@ -1,6 +1,5 @@
 'use client'
 
-import Tooltip from "@/components/Common/Tooltip"
 import { MobileViewContext } from "@/lib/contexts/mobileContext"
 import { useRecoilState, useSetRecoilState, useRecoilValue } from "@/lib/state"
 import { CommandMode } from "@/models/enums"
@@ -22,6 +21,7 @@ import SearchFilter from "./SearchFilter"
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
 import type { TableGroupBy } from "@/lib/table-view/tableGroupByTag"
+import { ViewControlButton } from "./ViewControlButton"
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
   const isMbl = useContext(MobileViewContext)
@@ -74,7 +74,8 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
           </span>
         )}
       </ViewControlButton>
-      {tableGroupByTagEnabled && boardLayout === "table" && (
+      {tableGroupByTagEnabled ? (
+        boardLayout === "table" ? (
         <>
           <ViewControlButton
             label="Group table"
@@ -101,7 +102,8 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
             />
           )}
         </>
-      )}
+        ) : null
+      ) : null}
       {project.timeTrackingEnabled && (
         <ViewControlButton
           label="Show only tasks with a running timer"
@@ -131,46 +133,6 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
         <MoreHorizontal size={18} strokeWidth={1.75} />
       </ViewControlButton>
     </div>
-  )
-}
-
-export const ViewControlButton = ({
-  active = false,
-  children,
-  keyCombination = [],
-  label,
-  tooltipText = label,
-  onClick,
-  tooltipLeft,
-  expanded,
-  className = "",
-}: {
-  active?: boolean
-  children: React.ReactNode
-  keyCombination?: (string | null)[]
-  label: string
-  tooltipText?: string
-  onClick: () => void
-  tooltipLeft: number
-  expanded?: boolean
-  className?: string
-}) => {
-  return (
-  <button
-    type="button"
-    aria-label={label}
-    aria-expanded={expanded}
-    onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? "text-view-control-active hover:text-view-control-active-hover" : "text-text-light-gray hover:text-white-black"} ${className}`}
-  >
-    {children}
-    <Tooltip
-      text={tooltipText}
-      left={tooltipLeft}
-      bottom={-34}
-      keyCombination={keyCombination}
-    />
-  </button>
   )
 }
 
