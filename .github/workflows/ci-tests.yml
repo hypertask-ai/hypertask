@@ -203,11 +203,15 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
 
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Generate Prisma client
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        run: npx prisma generate
 
       - name: Agent scope debt needs a recorded approval
         if: github.event_name == 'pull_request'
@@ -370,11 +374,20 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
 
       - name: Install dependencies
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Generate Prisma client and flag index
+        if: needs.ci-prepare.outputs.run_tests == 'true'
+        # A restored node_modules cache can carry an old generated client. Regenerate
+        # here, before any TypeScript cache restores, so incremental tsc never pairs
+        # fresh source with stale Prisma types (HYCI-179).
+        run: |
+          npx prisma generate
+          node scripts/generate-flag-index.mjs
 
       - name: Restore ESLint cache
         if: needs.ci-prepare.outputs.run_tests == 'true'
@@ -402,15 +415,17 @@ jobs:
         if: needs.ci-prepare.outputs.run_tests == 'true'
         id: restore-tsc-cache
         # A stale tsbuildinfo is safe: tsc validates it against file hashes and
-        # falls back to a full check when they differ. Generated route types move
-        # with it and are reused only when their own input digest still matches.
+        # falls back to a full check when they differ. The fingerprint also
+        # includes Prisma inputs so a schema change never restores another era's
+        # incremental state. Generated route types move with it and are reused
+        # only when their own input digest still matches.
         # HTPR-8234: PRs cache under their own `tsc-pr-` namespace so a repeat push
         # reuses the branch's own state instead of a production one that has moved.
         # Production never restores a `tsc-pr-` key: only trusted pushes may feed
         # the production check, the same rule the ESLint cache follows.
         env:
           TSC_CACHE_NAMESPACE: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'prod' }}
-          TSC_CACHE_FINGERPRINT: ${{ hashFiles('package-lock.json', 'tsconfig.json') }}
+          TSC_CACHE_FINGERPRINT: ${{ hashFiles('package-lock.json', 'tsconfig.json', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -422,15 +437,6 @@ jobs:
           restore-keys: |
             tsc-${{ env.TSC_CACHE_NAMESPACE }}-${{ runner.os }}-${{ env.TSC_CACHE_FINGERPRINT }}-
             tsc-prod-${{ runner.os }}-${{ env.TSC_CACHE_FINGERPRINT }}-
-
-      - name: Generate Prisma client and flag index
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        # npm prelint hooks rebuild the flag index themselves. Building it once
-        # here leaves every lane reading the same file instead of three lanes
-        # writing it at the same time.
-        run: |
-          npx prisma generate
-          node scripts/generate-flag-index.mjs
 
       # Every static gate below reads the checkout or the caches and nothing
       # produced by another gate, so none of them waits for another. Run one
@@ -655,7 +661,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
 
       - name: Install dependencies
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
@@ -783,7 +789,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
 
       - name: Install dependencies
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
@@ -1019,7 +1025,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
@@ -1240,7 +1246,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
 
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
@@ -1498,7 +1504,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
 
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
@@ -1730,7 +1736,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
 
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
@@ -1970,7 +1976,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
 
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
