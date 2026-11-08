@@ -7,8 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { scheduleBackfillAiLabel } from "@/lib/ai/labelClassifier";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
+import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
   buildSmartSplitBoardFilters,
@@ -281,9 +280,8 @@ const createSmartSplit = async (
       select: { id: true, value: true, ai_prompt: true, projectId: true },
     });
     const base = projectView.default_view;
-    const tableGroupByTagEnabled = await isFeatureEnabled(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG, userId);
     const inheritedTableGroupBy =
-      base.table_group_by === "tag" && !tableGroupByTagEnabled ? "column" : base.table_group_by;
+      (await gatedTableGroupByForViewWrite(base.table_group_by, userId)) ?? "column";
     const view = await tx.view.create({
       data: {
         id: splitId,

@@ -27,7 +27,7 @@ test("buildTableSectionsGroupedByTag duplicates multi-tag tasks and groups untag
       { label: { id: "l2", value: "Alpha" } },
     ],
   } as ITask;
-  const taskC = { id: 3, taskLabels: [] } as ITask;
+  const taskC = { id: 3, taskLabels: [] } as unknown as ITask;
   const sections = buildTableSectionsGroupedByTag([
     { section_title: "Backlog", items: [taskA, taskB, taskC] },
   ]);

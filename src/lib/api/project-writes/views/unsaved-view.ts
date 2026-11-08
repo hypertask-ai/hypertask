@@ -14,8 +14,7 @@ import {
   canUseViewAsTabBase,
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
+import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import {
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
@@ -23,7 +22,6 @@ import {
   resolveBoardLayoutRequest,
   resolveShowArchivedRequest,
   sanitizeBoardLayout,
-  sanitizeTableGroupBy,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -69,19 +67,12 @@ const route = taskWriteRoute({
       table_sort_column,
       table_sort_direction
     );
-    const tableGroupByTagEnabled = await isFeatureEnabled(
-      HTPR_8630_TABLE_GROUP_BY_TAG_FLAG,
-      userId,
-    );
     let sanitizedTableGroupBy = Object.prototype.hasOwnProperty.call(
       req.body,
       "table_group_by",
     )
-      ? sanitizeTableGroupBy(table_group_by)
+      ? await gatedTableGroupByForViewWrite(table_group_by, userId)
       : undefined;
-    if (sanitizedTableGroupBy === "tag" && !tableGroupByTagEnabled) {
-      sanitizedTableGroupBy = "column";
-    }
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
