@@ -186,6 +186,7 @@ import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import ChatWindowStackMount from "../AI_CHAT/ChatWindowStackMount";
@@ -453,6 +454,7 @@ export default function GlobalProvider({
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
+  const straightBoardEmailSignup = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
   const [sidebarRequested, setSidebarRequested] = useState(false);
   const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
@@ -1304,7 +1306,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      <StraightBoardEmailConfirmBanner />
+      {straightBoardEmailSignup && <StraightBoardEmailConfirmBanner />}
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}
