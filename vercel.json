@@ -60,6 +60,10 @@
     {
       "path": "/api/cron/funnel-probe-signup",
       "schedule": "15 6 * * *"
+    },
+    {
+      "path": "/api/cron/abandoned-work",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

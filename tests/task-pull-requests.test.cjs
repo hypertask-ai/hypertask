@@ -618,6 +618,7 @@ test("webhook does not return a fallback task after a concurrent global link win
             return { id: 36202 };
           },
         },
+        $executeRaw: async () => 0,
         $queryRaw: async () => [],
         user: { findUnique: async () => null },
       }),
