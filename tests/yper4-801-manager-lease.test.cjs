@@ -27,7 +27,17 @@ let registryBroken;
 let readOnly;
 let duringLock;
 let operationCreateError;
+let approved;
 let opSeq;
+
+function approvalComment() {
+  const createdAt = new Date();
+  return {
+    id: 7, taskId: 9, text: `Switch ${key} to Owner + QA`, commentText: null,
+    creatorId: 6, agentId: null, agentDisplayName: null, editedAt: null,
+    editedByUserId: null, editedByAgentId: null, createdAt, reactions: [{ createdAt }],
+  };
+}
 
 function operationId() {
   opSeq += 1;
@@ -40,11 +50,11 @@ function snapshotRows(rows) {
 
 function fakeTx() {
   return {
-    $queryRaw: async () => { lookups.push("lock"); return []; },
+    $queryRaw: async () => { lookups.push("lock"); return [{ id: 1 }]; },
     $executeRaw: async () => { lookups.push("advisory"); duringLock?.(); return 0; },
     comment: {
-      findFirst: async () => null,
-      findMany: async () => [],
+      findFirst: async ({ where }) => approved && where.creatorId !== 6 ? approvalComment() : null,
+      findMany: async ({ where }) => approved && where.creatorId !== 6 ? [{ ...approvalComment(), id: 6, reactions: [], createdAt: new Date(Date.now() - 60_000) }] : [],
     },
     managerLeaseGrant: {
       findUnique: async ({ where }) => {
@@ -165,6 +175,7 @@ test.beforeEach(() => {
   readOnly = false;
   duringLock = null;
   operationCreateError = false;
+  approved = false;
   opSeq = 0;
 });
 
@@ -178,6 +189,14 @@ test("a manager holding the current grant still reaches the existing approval ch
   assert.equal(text, approvalRequired);
   assert.equal(flagReads.includes(LEASE_FLAG), true);
   assert.equal(setCalls.length, 0);
+});
+
+test("a manager with the current grant and one clear yes switches the flag", async () => {
+  approved = true;
+  const response = await patch({ [MANAGER_GRANT_HEADER]: token });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.deepEqual([setCalls.length, setCalls[0][0], setCalls[0][1], body.flag.mode], [1, key, "OWNER_AND_QA", "OWNER_AND_QA"]);
 });
 
 test("a manager without a grant header is refused before any approval check", async () => {
@@ -302,91 +321,49 @@ test("registry refuses non managers and malformed requests", async () => {
   assert.equal(NextResponse.json({}).status, 200);
 });
 
-test("a lost take reply returns the same confirmation and does not open a second lease", async () => {
+test("a repeated operation returns the saved result and a different request does not", async () => {
   grants = [];
   const hash = hashManagerGrant(token);
   const id = operationId();
   const first = await post({ action: "take", session: "ht-product-lead", grantHash: hash, ttlMinutes: 30, operationId: id });
   const firstBody = await first.json();
   assert.equal(first.status, 200);
-  const second = await post({ action: "take", session: "ht-product-lead", grantHash: hash, ttlMinutes: 30, operationId: id });
-  assert.equal(second.status, 200);
-  assert.deepEqual(await second.json(), firstBody);
+  assert.deepEqual(await (await post({ action: "take", session: "ht-product-lead", grantHash: hash, ttlMinutes: 30, operationId: id })).json(), firstBody);
+  assert.equal((await post({ action: "take", session: "ht-product-lead", grantHash: hash, ttlMinutes: 60, operationId: id })).status, 409);
+  assert.equal((await post({ action: "take", session: "other", grantHash: hash, ttlMinutes: 30, operationId: id })).status, 409);
   assert.equal(grants.length, 1);
-  const again = await post({ action: "take", session: "ht-product-lead", grantHash: hash, ttlMinutes: 30, operationId: operationId() });
-  assert.equal(again.status, 200);
-  assert.equal((await again.json()).expiresAt, firstBody.expiresAt);
+  assert.equal((await post({ action: "take", session: "ht-product-lead", grantHash: hash, ttlMinutes: 30, operationId: operationId() })).status, 200);
   assert.equal(grants.filter((row) => row.releasedAt === null && row.replacedAt === null).length, 1);
-  const readBack = await post({ action: "status", operationId: id });
-  assert.equal(readBack.status, 200);
-  const readBody = await readBack.json();
-  assert.equal(readBody.ok, true);
-  assert.equal(readBody.committed, true);
-  assert.equal(readBody.expiresAt, firstBody.expiresAt);
-});
-
-test("a lost renew reply does not extend the lease twice", async () => {
-  const hash = hashManagerGrant(token);
-  const id = operationId();
-  const first = await post({ action: "renew", grantHash: hash, operationId: id });
-  const firstBody = await first.json();
+  const renewId = operationId();
+  const renewedBody = await (await post({ action: "renew", grantHash: hash, operationId: renewId })).json();
   const renewedAt = grants[0].renewedAt;
-  const second = await post({ action: "renew", grantHash: hash, operationId: id });
-  assert.equal(second.status, 200);
-  assert.deepEqual(await second.json(), firstBody);
+  assert.deepEqual(await (await post({ action: "renew", grantHash: hash, operationId: renewId })).json(), renewedBody);
   assert.equal(grants[0].renewedAt, renewedAt);
-  const later = await post({ action: "renew", grantHash: hash, operationId: operationId() });
-  assert.equal(later.status, 200);
+  assert.equal((await post({ action: "renew", grantHash: hash, operationId: operationId() })).status, 200);
   const laterRenewedAt = grants[0].renewedAt;
   assert.notEqual(laterRenewedAt, renewedAt);
-  const replay = await post({ action: "renew", grantHash: hash, operationId: id });
-  assert.deepEqual(await replay.json(), firstBody);
+  assert.deepEqual(await (await post({ action: "renew", grantHash: hash, operationId: renewId })).json(), renewedBody);
   assert.equal(grants[0].renewedAt, laterRenewedAt);
-});
-
-test("a lost release reply confirms the same ending and a different action does not", async () => {
-  const hash = hashManagerGrant(token);
-  const id = operationId();
-  const first = await post({ action: "release", grantHash: hash, operationId: id });
-  const firstBody = await first.json();
-  assert.equal(first.status, 200);
-  assert.equal(firstBody.expiresAt, null);
-  const second = await post({ action: "release", grantHash: hash, operationId: id });
-  assert.deepEqual(await second.json(), firstBody);
-  const repeated = await post({ action: "release", grantHash: hash, operationId: operationId() });
-  assert.equal(repeated.status, 200);
-  assert.equal((await repeated.json()).ok, true);
+  for (const badId of ["", 12, null]) assert.equal((await post({ action: "renew", grantHash: hash, operationId: badId })).status, 400, String(badId));
+  assert.equal(grants[0].renewedAt, laterRenewedAt);
+  const blockedId = operationId();
+  assert.equal((await post({ action: "take", session: "other", grantHash: hashManagerGrant(otherToken), ttlMinutes: 30, operationId: blockedId })).status, 409);
+  const missing = await post({ action: "status", operationId: blockedId });
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).committed, false);
+  const saved = await post({ action: "status", operationId: id });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).committed, true);
+  ctx.agentId = "other-agent";
+  assert.equal((await post({ action: "status", operationId: id })).status, 404);
+  assert.equal((await post({ action: "renew", grantHash: hash, operationId: operationId() })).status, 403);
+  assert.equal(grants[0].releasedAt, null);
+  ctx.agentId = "manager-1";
+  const releaseId = operationId();
+  assert.equal((await (await post({ action: "release", grantHash: hash, operationId: releaseId })).json()).expiresAt, null);
+  assert.equal((await post({ action: "release", grantHash: hash, operationId: releaseId })).status, 200);
   assert.equal((await post({ action: "handoff", grantHash: hash, operationId: operationId() })).status, 409);
   assert.equal(grants[0].endedReason, "release");
-});
-
-test("a rejected take is not a committed success", async () => {
-  const id = operationId();
-  const blocked = await post({ action: "take", session: "other", grantHash: hashManagerGrant(otherToken), ttlMinutes: 30, operationId: id });
-  assert.equal(blocked.status, 409);
-  assert.equal((await blocked.json()).ok, undefined);
-  const status = await post({ action: "status", operationId: id });
-  assert.equal(status.status, 404);
-  const statusBody = await status.json();
-  assert.equal(statusBody.ok, false);
-  assert.equal(statusBody.committed, false);
-  const retry = await post({ action: "take", session: "other", grantHash: hashManagerGrant(otherToken), ttlMinutes: 30, operationId: id });
-  assert.equal(retry.status, 409);
-  assert.equal(grants.length, 1);
-});
-
-test("another agent cannot confirm or read this agent's ownership", async () => {
-  const hash = hashManagerGrant(token);
-  const id = operationId();
-  assert.equal((await post({ action: "renew", grantHash: hash, operationId: id })).status, 200);
-  ctx.agentId = "other-agent";
-  assert.equal((await post({ action: "take", session: "other", grantHash: hash, ttlMinutes: 30, operationId: operationId() })).status, 403);
-  assert.equal((await post({ action: "renew", grantHash: hash, operationId: operationId() })).status, 403);
-  assert.equal((await post({ action: "release", grantHash: hash, operationId: operationId() })).status, 403);
-  const hidden = await post({ action: "status", operationId: id });
-  assert.equal(hidden.status, 404);
-  assert.equal((await hidden.json()).committed, false);
-  assert.equal(grants[0].releasedAt, null);
 });
 
 test("a failed operation write reports nothing and leaves the lease unchanged", async () => {

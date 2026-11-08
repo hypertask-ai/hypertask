@@ -89,6 +89,10 @@ export async function applyManagerLeaseAction(
     throw new ManagerLeaseError("grantHash must be 64 hex characters", 400);
   }
   const grantHash = input.grantHash;
+  const ttl = input.ttlMinutes;
+  if (input.action === "take" && (!input.session || input.session.length > 100 || !Number.isInteger(ttl) || (ttl as number) < 1 || (ttl as number) > MANAGER_LEASE_MAX_TTL_MINUTES)) {
+    throw new ManagerLeaseError("take needs session, grantHash (64 hex) and ttlMinutes (1 to 240)", 400);
+  }
   if (input.operationId) {
     const prior = await tx.managerLeaseOperation.findUnique({
       where: { agentId_operationId: { agentId: input.agentId, operationId: input.operationId } },
@@ -97,15 +101,15 @@ export async function applyManagerLeaseAction(
       if (prior.action !== input.action || prior.grantHash !== grantHash) {
         throw new ManagerLeaseError("operation id already confirmed a different change", 409);
       }
+      if (input.action === "take") {
+        const taken = await tx.managerLeaseGrant.findUnique({ where: { tokenHash: grantHash } });
+        if (!taken || taken.session !== input.session || taken.ttlMinutes !== ttl) throw new ManagerLeaseError("operation id already confirmed a different change", 409);
+      }
       return { expiresAt: prior.expiresAt };
     }
   }
 
   if (input.action === "take") {
-    const ttl = input.ttlMinutes;
-    if (!input.session || input.session.length > 100 || !Number.isInteger(ttl) || (ttl as number) < 1 || (ttl as number) > MANAGER_LEASE_MAX_TTL_MINUTES) {
-      throw new ManagerLeaseError("take needs session, grantHash (64 hex) and ttlMinutes (1 to 240)", 400);
-    }
     const same = await tx.managerLeaseGrant.findUnique({ where: { tokenHash: grantHash } });
     if (same) {
       if (same.agentId !== input.agentId || !live(same, now)) throw denied();
@@ -123,7 +127,7 @@ export async function applyManagerLeaseAction(
     });
     const expiresAt = new Date(now.getTime() + (ttl as number) * 60_000);
     await tx.managerLeaseGrant.create({
-      data: { agentId: input.agentId, session: input.session, tokenHash: grantHash, ttlMinutes: ttl as number, expiresAt },
+      data: { agentId: input.agentId, session: input.session as string, tokenHash: grantHash, ttlMinutes: ttl as number, expiresAt },
     });
     if (input.operationId) await remember(tx, { agentId: input.agentId, operationId: input.operationId, action: input.action, grantHash, expiresAt });
     return { expiresAt };

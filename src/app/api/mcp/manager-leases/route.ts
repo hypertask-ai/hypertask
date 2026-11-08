@@ -50,7 +50,13 @@ export async function POST(request: NextRequest) {
       } else if (Object.prototype.hasOwnProperty.call(body, "grant")) {
         return noStore({ error: "grant must be the take receipt" }, 400);
       }
-      const operationId = typeof body.operationId === "string" && body.operationId ? body.operationId : undefined;
+      let operationId: string | undefined;
+      if (Object.prototype.hasOwnProperty.call(body, "operationId")) {
+        if (typeof body.operationId !== "string" || !/^[A-Za-z0-9_-]{16,64}$/.test(body.operationId)) {
+          return noStore({ error: "operationId must be 16 to 64 url-safe characters" }, 400);
+        }
+        operationId = body.operationId;
+      }
       if (body.action === "status") {
         const found = await prisma.$transaction((tx) => readManagerLeaseOperation(tx, {
           agentId: ctx.agentId as string,
