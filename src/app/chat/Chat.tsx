@@ -605,6 +605,14 @@ export default function Chat({ initialSessionId }: ChatProps) {
     }
   };
 
+  const switchToDocked = () => {
+    setChatMounted(true);
+    setAiChatExplicitOpenAt(Date.now());
+    setShowAIChat(true);
+    setAiChatAutoOpenSuppressed(false);
+
+    router.replace(returnPath);
+  };
   const shortcuts = useChatShortcuts({
     enabled: sharedShortcutsEnabled,
     onNewChat: handleStartNewSession,
@@ -614,15 +622,8 @@ export default function Chat({ initialSessionId }: ChatProps) {
       window.history.replaceState(null, "", buildFullScreenChatPath(returnPath, id));
     },
     onSearch: () => { setSearchIndex(0); searchRef.current?.focus(); },
+    onExpand: switchToDocked,
   });
-  const switchToDocked = () => {
-    setChatMounted(true);
-    setAiChatExplicitOpenAt(Date.now());
-    setShowAIChat(true);
-    setAiChatAutoOpenSuppressed(false);
-
-    router.replace(returnPath);
-  };
 
   return (
     <main ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "fullscreen" : undefined} onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined} tabIndex={shortcuts.enabled ? -1 : undefined} className="flex h-SVH-full min-h-0 w-full overflow-hidden bg-ai-chat text-white-black">
