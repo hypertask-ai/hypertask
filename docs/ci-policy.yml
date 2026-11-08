@@ -23,7 +23,7 @@ topology:
     reviewer: chatgpt-codex-connector
     workflow: .github/workflows/codex-review-gate.yml
     script: .github/scripts/codex-review-gate.cjs
-    signals: [review_with_no_p0_p1_badge, no_major_issues_comment, thumbs_up_reaction]
+    signals: [review_with_no_p0_p1_badge, completed_summary_for_exact_head_with_no_findings]
     runs_on: ubuntu-latest
     dedicated_runners: []
   production_branch: production
