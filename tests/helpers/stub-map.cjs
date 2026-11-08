@@ -5,14 +5,17 @@ function enforcementFor(guard) {
   }
 }
 
+const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
+
 function withStubs(base = {}, extra = {}) {
   const guard = base['@/lib/agents/writing']
   if (guard && !base['@/lib/agents/writingEnforcement']) {
     base = { ...base, '@/lib/agents/writingEnforcement': enforcementFor(guard) }
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base,
-    get: (_target, request) => request in extra ? extra[request] : base[request],
+    has: (_target, request) => request in extra || request in base || request in plainLanguageTicketStubs,
+    get: (_target, request) =>
+      request in extra ? extra[request] : request in base ? base[request] : plainLanguageTicketStubs[request],
   });
 }
 

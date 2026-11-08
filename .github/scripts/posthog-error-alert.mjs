@@ -1,6 +1,11 @@
 import { emergencyRollback } from "./emergency-rollback.mjs";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { plainSummary, plainTitle } from "../../src/lib/errors/plainIncident.mjs";
+import { plainSummary } from "../../src/lib/errors/plainIncident.mjs";
+import {
+  plainLanguageIncidentFields,
+  plainLanguageIncidentTitle,
+  renderPlainLanguageTicketDescription,
+} from "../../src/lib/tickets/plainLanguageTicket.mjs";
 
 function requiredConfig(name) {
   const value = process.env[name]?.trim();
@@ -167,11 +172,13 @@ export function mcpHeaders(token, idempotencyKey) {
 }
 
 function incidentTitle(alert) {
-  return plainTitle({ url: alert.url, message: alert.message, source: alert.source });
+  return plainLanguageIncidentTitle(alert);
 }
 
 export function incidentDescription(alert) {
+  const block = renderPlainLanguageTicketDescription(plainLanguageIncidentFields(alert));
   return (
+    block +
     `<p><strong>${escapeHtml(alert.user_impact || plainSummary({ url: alert.url, message: alert.message, source: alert.source }))}</strong></p>` +
     `<ul>` +
     `<li>Severity: ${escapeHtml(alert.severity)}. ${escapeHtml(alert.severity_reason)}</li>` +
