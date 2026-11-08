@@ -7,16 +7,6 @@ export default {
   kind: "feature",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-08",
-  description:
-    "Holds batch spend until collection, charges each team for its search embeddings, turns native web search off on our keys, and keeps a long call's hold alive until the real cost settles.",
-  releaseRisk: {
-    risk: "new",
-    highRisk: "money",
-    reason:
-      "Changes which AI calls are allowed to spend Hypertask money and how that spend is held against a team's monthly cap.",
-    harmEvidence: {
-      harm: "charge",
-      scenario: "A capped team could be charged for a batch, an embedding, or a long call above the allowance that was held.",
-    },
-  },
+  description: "Holds batch, embedding, and long-call spend against the team cap, and turns native web search off on our keys.",
+  releaseRisk: { risk: "new", highRisk: "money", reason: "Changes which AI calls can spend Hypertask money and how that spend is held against a team cap.", harmEvidence: { harm: "charge", scenario: "A capped team could be charged for a batch, an embedding, or a long call above the allowance that was held." } },
 } as const satisfies FeatureFlagDefinition;
