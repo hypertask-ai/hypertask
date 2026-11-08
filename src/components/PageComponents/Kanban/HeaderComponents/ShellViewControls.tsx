@@ -136,4 +136,6 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   )
 }
 
+export { ViewControlButton } from "./ViewControlButton"
+
 export default ShellViewControls

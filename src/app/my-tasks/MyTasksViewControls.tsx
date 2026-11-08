@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
-import { ViewControlButton } from "@/components/PageComponents/Kanban/HeaderComponents/ViewControlButton";
+import { ViewControlButton } from "@/components/PageComponents/Kanban/HeaderComponents/ShellViewControls";
 import MyTasksInvolvementPicker from "./MyTasksInvolvementPicker";
 import MyTasksGroupPicker from "./MyTasksGroupPicker";
 import MyTasksSortPicker from "./MyTasksSortPicker";
