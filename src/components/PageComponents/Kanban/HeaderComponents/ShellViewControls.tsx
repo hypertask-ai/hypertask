@@ -21,7 +21,6 @@ import { SaveView } from "./SaveViewHeaderKanban"
 import SearchFilter from "./SearchFilter"
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag"
 import type { TableGroupBy } from "@/lib/table-view/tableGroupByTag"
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
@@ -31,7 +30,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const setShowCommands = useSetRecoilState(showCommandsAtom)
   const [runningOnly, setRunningOnly] = useRecoilState(kanbanRunningOnlyAtom)
   const boardLayout = useRecoilValue(boardLayoutAtom)
-  const tableGroupByTagEnabled = useFlag(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG)
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag")
   const { setTableGroupByViewAndReturn } = useKanbanViews(project)
   const [groupOpen, setGroupOpen] = useState(false)
   const { timers: runningTimers } = useBoardRunningTimers(project.id)
