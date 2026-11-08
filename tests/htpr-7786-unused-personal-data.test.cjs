@@ -92,4 +92,36 @@ test("htpr-7786-log-email-ok", () => {
   for (const file of activityWriters) {
     assert.equal(activityDataAssignsMetadata(read(file)), false, file);
   }
+
+  const helper = read("src/utils/controllers/logs/quietPersonalLog.ts");
+  const flagAt = helper.indexOf("await isFeatureEnabled");
+  const tryAt = helper.lastIndexOf("try", flagAt);
+  const catchAt = helper.indexOf("catch", flagAt);
+  assert.ok(tryAt >= 0 && tryAt < flagAt && catchAt > flagAt);
+
+  const reminder = read("src/pages/api/queues/inboxReminder.ts");
+  const deniedAt = reminder.indexOf("status(401)");
+  const logAt = reminder.indexOf("await logPersonal");
+  assert.ok(deniedAt >= 0 && logAt > deniedAt);
+
+  const schema = read("src/prisma/schema.prisma");
+  assert.match(schema, /accountLogin\s+String/);
+  assert.match(schema, /model Events \{/);
+  assert.match(schema, /utmData\s+Json\?/);
+  assert.match(schema, /responseBody\s+String\?/);
+});
+
+test("htpr-7786-email-scan-bounded", () => {
+  const cycle = { note: "ada@example.com" };
+  cycle.self = cycle;
+  assert.deepEqual(emailsIn(cycle), ["ada@example.com"]);
+
+  let deep = { note: "hidden@example.com" };
+  for (let level = 0; level < 40; level += 1) deep = { child: deep };
+  assert.deepEqual(emailsIn(deep), []);
+  assert.deepEqual(emailsIn({ note: "ada@example.com", child: deep }), ["ada@example.com"]);
+
+  const wide = {};
+  for (let index = 0; index < 500; index += 1) wide["k" + index] = "bob@example.com";
+  assert.deepEqual(emailsIn(wide), ["bob@example.com"]);
 });

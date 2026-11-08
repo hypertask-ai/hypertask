@@ -11,9 +11,23 @@ export async function logPersonal(
   raw?: unknown,
 ) {
   const actor = typeof userId === "number" ? userId : FEATURE_FLAG_OWNER_USER_ID;
-  if (await isFeatureEnabled(HTPR_7786_QUIET_PERSONAL_LOGS_FLAG, actor)) {
-    logRecord(label, ids, raw);
-    return;
+  let quiet = true;
+  try {
+    quiet = await isFeatureEnabled(HTPR_7786_QUIET_PERSONAL_LOGS_FLAG, actor);
+  } catch {
+    quiet = true;
   }
-  if (raw !== undefined) console.log(label, raw);
+  try {
+    if (quiet) {
+      logRecord(label, ids, raw);
+      return;
+    }
+    if (raw !== undefined) console.log(label, raw);
+  } catch {
+    try {
+      console.log(label, ids);
+    } catch {
+      return;
+    }
+  }
 }

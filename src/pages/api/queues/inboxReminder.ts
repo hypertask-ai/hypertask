@@ -24,16 +24,17 @@ export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const reminderBody = req.body ?? {}
-  await logPersonal(null, "inboxReminder", {
-    taskId: reminderBody.taskId ?? null,
-    userId: reminderBody.userId ?? null,
-    outcome: "received",
-  }, reminderBody)
   const session = await getSessionUser(
     new Headers(req.headers as Record<string, string>)
   );
   if (!session) return res.status(401).json({ message: "Unauthorized" });
+
+  const reminderBody = req.body ?? {}
+  await logPersonal(session.userId, "inboxReminder", {
+    taskId: reminderBody.taskId ?? null,
+    userId: session.userId,
+    outcome: "received",
+  }, reminderBody)
 
   const {taskId, userId: bodyUserId, projectId, remindAt, reminderOption, remindTask } = req.body;
   if (!taskId || !projectId || !remindAt) return res.status(400).json({message:"Missing Required Information"})

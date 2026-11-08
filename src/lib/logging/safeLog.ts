@@ -45,11 +45,21 @@ function emailsInString(text: string): string[] {
   return found
 }
 
+const MAX_EMAIL_SCAN_DEPTH = 8
+const MAX_EMAIL_SCAN_NODES = 200
+
 export function emailsIn(value: unknown): string[] {
   const found: string[] = []
   const seen = new Set<string>()
   const seenObjects = new WeakSet<object>()
-  const walk = (item: unknown) => {
+  const stack: Array<{ item: unknown; depth: number }> = [{ item: value, depth: 0 }]
+  let nodes = 0
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current) break
+    nodes += 1
+    if (nodes > MAX_EMAIL_SCAN_NODES) break
+    const item = current.item
     if (typeof item === "string") {
       for (const match of emailsInString(item)) {
         const key = match.toLowerCase()
@@ -57,15 +67,17 @@ export function emailsIn(value: unknown): string[] {
         seen.add(key)
         found.push(match)
       }
-      return
+      continue
     }
-    if (typeof item !== "object" || item === null) return
-    if (seenObjects.has(item)) return
+    if (typeof item !== "object" || item === null) continue
+    if (seenObjects.has(item)) continue
     seenObjects.add(item)
+    if (current.depth >= MAX_EMAIL_SCAN_DEPTH) continue
     const entries = Array.isArray(item) ? item : Object.values(item)
-    for (const entry of entries) walk(entry)
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      stack.push({ item: entries[index], depth: current.depth + 1 })
+    }
   }
-  walk(value)
   return found
 }
 
