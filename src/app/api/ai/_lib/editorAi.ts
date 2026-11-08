@@ -13,7 +13,6 @@ import { searchComments, searchTasks, type TurbopufferCommentRow, type Turbopuff
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
-import { teamOwner } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7394_REMAINING_AI_SPEND_FLAG } from "@/lib/flags/definitions/htpr-7394-remaining-ai-spend";
 import { nativeWebSearchAllowed } from "@/lib/ai/spend/remainingSpend";
@@ -32,10 +31,9 @@ import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardR
 import prisma from "@/lib/prisma";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
-async function nativeSearchForSelection(provider: string, apiKey: unknown, teamId?: string | null) {
+async function nativeSearchForSelection(provider: string, apiKey: unknown, userId?: number | null) {
   const customerPays = Boolean(typeof apiKey === "string" && apiKey && !isOurGatewayKey(apiKey));
-  const owner = teamId ? await teamOwner(teamId).catch(() => null) : null;
-  if (owner && await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, owner.userId)) {
+  if (userId && await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, userId).catch(() => false)) {
     return nativeWebSearchAllowed(provider, customerPays, true);
   }
   return nativeWebSearchAllowed(provider, customerPays, false);
@@ -855,7 +853,7 @@ export async function selectTaskWriterModel(args: {
       feature: args.feature ?? "task-writer",
       tags,
       modelOption: selection.modelOption,
-      includeNativeWebSearch: await nativeSearchForSelection(selection.provider, byokApiKey, teamContext.teamId),
+      includeNativeWebSearch: await nativeSearchForSelection(selection.provider, byokApiKey, args.userId),
     }
   );
   const selected = {

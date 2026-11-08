@@ -1156,7 +1156,7 @@ async function embedRowsForWrite<T extends { searchText: string; projectId?: num
       else written.push(...group.map((row, index) => ({ ...row, vector: vectors[index] })));
     } catch (error) {
       console.error(`${context} embedding error, upserting without vectors:`, error);
-      if (route === "current" || (typeof route !== "string" && route.mode === "current")) return { rows, hasVectors: false };
+      if (typeof route !== "string" && route.mode === "current") return { rows, hasVectors: false };
       written.push(...group);
     }
   }
