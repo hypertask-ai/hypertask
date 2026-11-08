@@ -7,6 +7,8 @@ import { randomUUID } from "node:crypto";
 
 import { scheduleBackfillAiLabel } from "@/lib/ai/labelClassifier";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
   buildSmartSplitBoardFilters,
@@ -279,6 +281,9 @@ const createSmartSplit = async (
       select: { id: true, value: true, ai_prompt: true, projectId: true },
     });
     const base = projectView.default_view;
+    const tableGroupByTagEnabled = await isFeatureEnabled(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG, userId);
+    const inheritedTableGroupBy =
+      base.table_group_by === "tag" && !tableGroupByTagEnabled ? "column" : base.table_group_by;
     const view = await tx.view.create({
       data: {
         id: splitId,
@@ -301,7 +306,7 @@ const createSmartSplit = async (
         board_show_archived: base.board_show_archived,
         table_sort_column: base.table_sort_column,
         table_sort_direction: base.table_sort_direction,
-        table_group_by: base.table_group_by,
+        table_group_by: inheritedTableGroupBy,
         board_layout: base.board_layout,
         lastUsedAt: new Date(),
       },

@@ -8,10 +8,12 @@ import { ISection } from "@/models/model";
 import { TCreate_view_body } from "@/models/Views/model";
 import getProjectView, { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
 import {
   getBoardLayoutRequestUpdate,
   sanitizeBoardLayout,
-  sanitizeTableGroupByForWrite,
+  sanitizeTableGroupBy,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -113,10 +115,13 @@ const route = taskWriteRoute({
         view_settings.table_sort_column,
         view_settings.table_sort_direction
       );
-      const sanitizedTableGroupBy = await sanitizeTableGroupByForWrite(
-        userId,
-        view_settings.table_group_by,
-      );
+      let sanitizedTableGroupBy = sanitizeTableGroupBy(view_settings.table_group_by);
+      if (
+        sanitizedTableGroupBy === "tag" &&
+        !await isFeatureEnabled(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG, userId)
+      ) {
+        sanitizedTableGroupBy = "column";
+      }
       const sanitizedBoardFilters = sanitizeBoardFilters(
         view_settings.board_filters
       );

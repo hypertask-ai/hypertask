@@ -10,9 +10,11 @@ import {
 } from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
 import {
   sanitizeBoardLayout,
-  sanitizeTableGroupByForWrite,
+  sanitizeTableGroupBy,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -137,12 +139,16 @@ const route = taskWriteRoute({
         view_settings.table_sort_column,
         view_settings.table_sort_direction
       );
-      const sanitizedTableGroupBy = Object.prototype.hasOwnProperty.call(
-        view_settings ?? {},
-        "table_group_by",
-      )
-        ? await sanitizeTableGroupByForWrite(userId, view_settings.table_group_by)
-        : undefined;
+      let sanitizedTableGroupBy: ReturnType<typeof sanitizeTableGroupBy> | undefined =
+        Object.prototype.hasOwnProperty.call(view_settings ?? {}, "table_group_by")
+          ? sanitizeTableGroupBy(view_settings.table_group_by)
+          : undefined;
+      if (
+        sanitizedTableGroupBy === "tag" &&
+        !await isFeatureEnabled(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG, userId)
+      ) {
+        sanitizedTableGroupBy = "column";
+      }
       const sanitizedBoardFilters = sanitizeBoardFilters(view_settings.board_filters);
       const updatedView = await mutateView(
         sanitizedBoardFilters,

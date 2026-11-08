@@ -23,8 +23,6 @@ import {
   sanitizeTableGroupBy,
   type TableGroupBy,
 } from "@/components/PageComponents/Kanban/TableView/tableGroupByTag";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
 
 
 export const defaultBoardSortingSettings: TBoardSortingViewMode = "Manual"
@@ -650,15 +648,6 @@ export const effectiveTableGroupBy = (
     value: string | null | undefined,
 ): TableGroupBy =>
     sanitizeTableGroupBy(value) ?? "column";
-
-export const sanitizeTableGroupByForWrite = async (
-    userId: number,
-    value: unknown,
-): Promise<TableGroupBy | null> => {
-    const sanitized = sanitizeTableGroupBy(value);
-    if (sanitized !== "tag") return sanitized;
-    return (await isFeatureEnabled(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG, userId)) ? "tag" : "column";
-};
 
 export const getActiveTableGroupByFromProject = (
     project?: IProject | null,
