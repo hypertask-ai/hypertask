@@ -3,6 +3,7 @@ import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/
 import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
+import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import {
   useCallback,
@@ -121,6 +122,7 @@ const Commands = (props: Props) => {
   const removeImageGeneration = useFlag(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG);
   const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
+  const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -741,8 +743,9 @@ const Commands = (props: Props) => {
     return () => document.removeEventListener("keydown", switchTab, true);
   }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
 
+  const integratedTabs = integratedTabsFlag && newTaskWindow && !isMobile && !isDemo && !isInteractive;
   const modeSwitch = !isDemo && !isInteractive ? (
-    <div className="absolute -top-12 left-0 flex w-full justify-center">
+    <div className={integratedTabs ? "flex w-full border-b border-light-black-border-1 p-2" : "absolute -top-12 left-0 flex w-full justify-center"}>
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
           { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
@@ -755,7 +758,7 @@ const Commands = (props: Props) => {
         ariaLabel="Commands mode"
         disabled={writing}
         buttonClassName="rounded-[4px]"
-        className={`flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
+        className={integratedTabs ? "flex-none" : `flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
       />
     </div>
   ) : null;
@@ -854,8 +857,9 @@ const Commands = (props: Props) => {
           />
         )}
 
-        {modeSwitch}
+        {!integratedTabs && modeSwitch}
         <ModalBody className="  p-0 rounded-[5px]">
+          {integratedTabs && isCompose && modeSwitch}
           {compose}
           {!isCompose && <>
           <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
@@ -880,6 +884,7 @@ const Commands = (props: Props) => {
                {...(composeEnabled ? { onBlur: undefined } : {})}
             />
           </div>
+          {integratedTabs && modeSwitch}
           {commandGroups}
           <ModalHintBar />
           <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
