@@ -5,7 +5,7 @@ export const HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG =
 
 export default {
   key: HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG,
-  kind: "internal",
+  kind: "improvement",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-07",
   description:
