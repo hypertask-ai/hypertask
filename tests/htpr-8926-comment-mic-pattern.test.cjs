@@ -108,3 +108,12 @@ test("comment Send tooltip shows the comment shortcut, not the AI chat Enter", (
   render({ enabled: true, inInbox: true });
   assert.deepEqual(tooltips.find((tip) => tip.text === "Send").keyCombination, ["CTRL", "SHIFT", "Enter"]);
 });
+
+test("description editor shows ai, paperclip, white mic, then trash", () => {
+  const { doc } = render({ enabled: true, mode: "read-edit-description" });
+  const right = doc.querySelector(".ml-auto");
+  const children = [...right.children];
+  const micIndex = children.findIndex((child) => child.hasAttribute("data-mic"));
+  assert.equal(micIndex, children.length - 2);
+  assert.equal(right.querySelectorAll('[class*="order-"]').length, 0);
+});

@@ -327,8 +327,8 @@ export const DesktopAttachment = ({
   hideComposerDictation?: boolean;
   dictationCoordinator?: DictationCoordinator;
 }) => {
-  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const micPatternFlag = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const isApple = useDeviceContext();
   const ctrlCmd = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
@@ -398,11 +398,11 @@ export const DesktopAttachment = ({
             id={mode + "-audio-button"}
             toggleRecording={toggleRecording!}
             dictationCoordinator={dictationCoordinator}
-            {...(micPattern ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, ariaLabel: "Start dictation", wrapperClassName: "order-1" } : {})}
+            {...(micPattern ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, ariaLabel: "Start dictation" } : {})}
           />
         )}
         {micPatternFlag && commentMode && (
-          <span className="order-2">
+          <span>
             <SendMessageButton
               label="Send"
               textButton
