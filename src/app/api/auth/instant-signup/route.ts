@@ -10,6 +10,10 @@ import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constant
 import { sendEmail } from '@/lib/email/sendEmail'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { SESSION_COOKIE } from '@/lib/auth/session'
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7294_DAILY_FUNNEL_PROBE_FLAG } from '@/lib/flags/definitions/htpr-7294-daily-funnel-probe'
+import { storeProbeVerificationLink } from '@/lib/funnelProbe/inbox'
+import { isProbeRecipientEmail } from '@/lib/funnelProbe/inbox'
 
 const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
 
@@ -90,6 +94,14 @@ async function sendVerificationEmail(to: string, link: string) {
           </div>
         `,
   })
+
+  if (
+    isProbeRecipientEmail(to) &&
+    (await isFeatureEnabled(HTPR_7294_DAILY_FUNNEL_PROBE_FLAG, FEATURE_FLAG_OWNER_USER_ID))
+  ) {
+    const runId = to.split('@')[0] ?? 'probe'
+    await storeProbeVerificationLink(to, runId, link)
+  }
 
   console.log('✅ Verification email sent via Resend')
 }
