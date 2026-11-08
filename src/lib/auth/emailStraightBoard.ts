@@ -78,8 +78,10 @@ export async function sessionEmailUnverified(userId: number) {
 }
 
 export async function blockUnverifiedStraightBoardInvite(userId: number) {
-  if (!(await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, userId))) return false;
-  return sessionEmailUnverified(userId);
+  if (!(await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, userId).catch(() => false))) {
+    return false;
+  }
+  return sessionEmailUnverified(userId).catch(() => false);
 }
 
 export function isPlausibleSignupEmail(normalizedEmail: string) {

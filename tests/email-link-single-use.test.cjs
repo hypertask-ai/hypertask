@@ -33,7 +33,8 @@ function loadTs(relativePath, aliases = {}) {
     '@/lib/flags/keys': require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts'),
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
     '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
-  }, aliases)
+    ...aliases,
+  })
 
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: {
