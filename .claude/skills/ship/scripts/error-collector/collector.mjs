@@ -1,21 +1,16 @@
 #!/usr/bin/env node
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { promises as fs, readFileSync, existsSync } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import { withDeadline, timeLeft, bounded } from './io.mjs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { correlate, incidentOf, redact, relatedTicket, taskIncident } from './incident.mjs';
+import { renderPlainLanguageTicketDescription } from './ticketDescription.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const templateModule = pathToFileURL(
-  existsSync(join(HERE, 'plainLanguageTicket.mjs'))
-    ? join(HERE, 'plainLanguageTicket.mjs')
-    : join(HERE, '../../../../../src/lib/tickets/plainLanguageTicket.mjs'),
-);
-const { renderPlainLanguageTicketDescription } = await import(templateModule);
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
@@ -572,12 +567,7 @@ async function install(env) {
   await fs.mkdir(join(home, '.local/state/error-collector'), { recursive: true, mode: 0o700 });
   if (HERE !== target) {
     for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
-    const templateSrc = join(HERE, '../../../../../src/lib/tickets/plainLanguageTicket.mjs');
-    const incidentSrc = join(HERE, '../../../../../src/lib/errors/plainIncident.mjs');
-    const errorsDir = join(home, '.local/lib/hypertask/errors');
-    await fs.mkdir(errorsDir, { recursive: true });
-    await fs.copyFile(templateSrc, join(target, 'plainLanguageTicket.mjs'));
-    await fs.copyFile(incidentSrc, join(errorsDir, 'plainIncident.mjs'));
+    await fs.copyFile(join(HERE, 'ticketDescription.mjs'), join(target, 'ticketDescription.mjs'));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }
   const checker = join(HERE, HERE === target ? '' : '..', 'user-unit-check');
