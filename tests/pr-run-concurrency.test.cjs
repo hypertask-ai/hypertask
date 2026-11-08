@@ -41,10 +41,10 @@ test('the guard fails on a workflow that lost its concurrency block', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'pr-concurrency-'));
   assert.deepEqual(check(directory), []);
   writeFileSync(
-    path.join(directory, 'ci-tests.yml'),
+    path.join(directory, 'browser-smoke.yml'),
     readFileSync(path.join(WORKFLOWS, 'ci-tests.yml'), 'utf8').replace(/^concurrency:\n(?: {2,}.*\n)+/m, ''),
   );
-  assert.deepEqual(check(directory), ['ci-tests: no concurrency block']);
+  assert.deepEqual(check(directory), ['browser-smoke: no concurrency block']);
 });
 
 test('the guard ignores workflows that never see a second push', () => {
