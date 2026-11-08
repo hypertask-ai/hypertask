@@ -13,7 +13,6 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/keys";
 
 type PersonalOptions = {
     canSaveCurrent: boolean;
@@ -101,7 +100,7 @@ const SaveViewModal: React.FC<TProps> = (props) => {
 
 const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
     const { updateView, resetView, saveAsDefaultHandler} = useKanbanViews(project)
-    const tableGroupByTagEnabled = useFlag(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG)
+    const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag")
     const queryClient = useQueryClient()
     const getExplicitBoardLayout = () => savedBoardLayoutFromExplicitSurface(
         typeof window === "undefined"
