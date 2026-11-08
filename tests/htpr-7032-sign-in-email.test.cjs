@@ -75,6 +75,7 @@ function harness(t, { existingUser = null, modes = {} } = {}) {
     '@/lib/agentRuns/model': {},
   })
   const { POST } = loadTs('src/app/api/auth/send-email-link/route.ts', {
+    ...emailStraightBoardStubs,
     '@/lib/prisma': { default: prisma, __esModule: true },
     '@/lib/flags': flags,
     '@/lib/services/verificationCodeService': loadTs('src/lib/services/verificationCodeService.ts', {

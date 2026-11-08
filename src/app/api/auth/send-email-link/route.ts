@@ -12,12 +12,12 @@ import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board'
 import {
   finishStraightBoardEmailSignup,
   isPlausibleSignupEmail,
   sendSignupVerificationEmail,
   sessionEmailUnverified,
+  straightBoardSignupRequesterAllowed,
 } from '@/lib/auth/emailStraightBoard'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
 
     if (resendEmailVerification && existingUser && session?.userId === existingUser.id) {
       if (
-        (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, session.userId)) &&
+        (await straightBoardSignupRequesterAllowed(session.userId)) &&
         (await sessionEmailUnverified(existingUser.id))
       ) {
         try {
@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
     if (
       !existingUser &&
       session &&
-      (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, session.userId))
+      (await straightBoardSignupRequesterAllowed(session.userId))
     ) {
       const finished = await finishStraightBoardEmailSignup(
         request,

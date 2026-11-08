@@ -8,14 +8,14 @@ function enforcementFor(guard) {
 const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
 
 const emailStraightBoardStubs = {
-  "@/lib/flags/definitions/htpr-7553-email-straight-board": {
-    HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG: "htpr-7553-email-straight-board",
-  },
+  "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+  "@/lib/flags/definitions/htpr-7553-email-straight-board": { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG: "htpr-7553-email-straight-board" },
   "@/lib/auth/emailStraightBoard": {
     finishStraightBoardEmailSignup: async () => ({ ok: false }),
     sendSignupVerificationEmail: async () => {},
     clearStraightBoardSignupCookie: () => {},
     blockUnverifiedStraightBoardInvite: async () => false,
+    straightBoardSignupRequesterAllowed: async () => false,
     sessionEmailUnverified: async () => false,
     isPlausibleSignupEmail: () => true,
     STRAIGHT_BOARD_SIGNUP_COOKIE: "ht_straight_board_signup",
@@ -28,16 +28,8 @@ function withStubs(base = {}, extra = {}) {
     base = { ...base, '@/lib/agents/writingEnforcement': enforcementFor(guard) }
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) =>
-      request in extra || request in base || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
-    get: (_target, request) =>
-      request in extra
-        ? extra[request]
-        : request in base
-          ? base[request]
-          : request in emailStraightBoardStubs
-            ? emailStraightBoardStubs[request]
-            : plainLanguageTicketStubs[request],
+    has: (_target, request) => request in extra || request in base || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
+    get: (_target, request) => (request in extra ? extra[request] : request in base ? base[request] : request in emailStraightBoardStubs ? emailStraightBoardStubs[request] : plainLanguageTicketStubs[request]),
   });
 }
 

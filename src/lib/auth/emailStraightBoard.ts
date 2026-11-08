@@ -22,6 +22,7 @@ import jwt from "jsonwebtoken";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import type { IUser } from "@/models/model";
+import { isGuestUser } from "@/lib/demo/guest";
 
 export const STRAIGHT_BOARD_SIGNUP_COOKIE = "ht_straight_board_signup";
 
@@ -75,6 +76,15 @@ export async function sessionEmailUnverified(userId: number) {
   });
   if (!user) return false;
   return !(user.emailVerified || user.UserSetting?.isVerified);
+}
+
+export async function straightBoardSignupRequesterAllowed(requestingUserId: number) {
+  if (!(await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, requestingUserId).catch(() => false))) return false;
+  const requester = await (await import("@/lib/prisma")).default.user.findUnique({
+    where: { id: requestingUserId },
+    select: { uid: true },
+  });
+  return !isGuestUser(requester);
 }
 
 export async function blockUnverifiedStraightBoardInvite(userId: number) {
