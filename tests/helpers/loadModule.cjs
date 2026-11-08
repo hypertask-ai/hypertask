@@ -4,6 +4,7 @@ const { createRequire } = require("node:module");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "../..");
 const requireRoot = createRequire(path.join(root, "package.json"));
+const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
 
 function loadModule(file, stubs = {}) {
   const cache = new Map();
@@ -27,6 +28,7 @@ function loadModule(file, stubs = {}) {
           const stub = stubs[specifier];
           return stub && Object.hasOwn(stub, "default") ? { __esModule: true, ...stub } : stub;
         }
+        if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
         if (!specifier.startsWith("@/") && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return localRequire(specifier);
         const base = specifier.startsWith("@/") ? path.join(root, "src", specifier.slice(2)) : path.resolve(path.dirname(filename), specifier);
         const target = [base, ...[".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", "/index.ts", "/index.tsx", "/index.js", "/index.mjs"].map(ext => base + ext)]

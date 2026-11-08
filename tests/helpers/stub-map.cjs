@@ -12,10 +12,10 @@ function withStubs(base = {}, extra = {}) {
   if (guard && !base['@/lib/agents/writingEnforcement']) {
     base = { ...base, '@/lib/agents/writingEnforcement': enforcementFor(guard) }
   }
-  base = { ...plainLanguageTicketStubs, ...base }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base,
-    get: (_target, request) => request in extra ? extra[request] : base[request],
+    has: (_target, request) => request in extra || request in base || request in plainLanguageTicketStubs,
+    get: (_target, request) =>
+      request in extra ? extra[request] : request in base ? base[request] : plainLanguageTicketStubs[request],
   });
 }
 

@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
+const plainLanguageTicketStubs = require("./helpers/plain-language-ticket-stubs.cjs");
 
 function load(file, mocks = {}) {
   const cache = new Map();
@@ -11,6 +12,7 @@ function load(file, mocks = {}) {
       const mock = mocks[specifier];
       return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
     }
+    if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
     if (specifier === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (specifier === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {}, assertTicketRoom: async () => {} };
     if (specifier === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
