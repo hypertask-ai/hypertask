@@ -18,6 +18,11 @@ on:
 
 concurrency:
   group: ci-tests-${{ github.event.pull_request.number || github.sha }}
+  # HYCI-182: without queue: max, a burst of synchronize events while a run is
+  # cancelling can drop the newest head entirely (PR 3023 stopped at f22583a).
+  # Keep cancel-in-progress so only the latest revision runs; queue every event
+  # so the newest push is never the one that never starts.
+  queue: max
   # Superseded PR runs are waste, but every production run must finish its full
   # test report and warning path.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
