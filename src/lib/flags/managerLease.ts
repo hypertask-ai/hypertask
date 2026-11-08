@@ -113,6 +113,7 @@ export async function applyManagerLeaseAction(
     const same = await tx.managerLeaseGrant.findUnique({ where: { tokenHash: grantHash } });
     if (same) {
       if (same.agentId !== input.agentId || !live(same, now)) throw denied();
+      if (same.session !== input.session || same.ttlMinutes !== ttl) throw new ManagerLeaseError("take does not match the current lease", 409);
       if (input.operationId) await remember(tx, { agentId: input.agentId, operationId: input.operationId, action: input.action, grantHash, expiresAt: same.expiresAt });
       return { expiresAt: same.expiresAt };
     }

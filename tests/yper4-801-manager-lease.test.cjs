@@ -333,6 +333,7 @@ test("a repeated operation returns the saved result and a different request does
   assert.equal((await post({ action: "take", session: "other", grantHash: hash, ttlMinutes: 30, operationId: id })).status, 409);
   assert.equal(grants.length, 1);
   assert.equal((await post({ action: "take", session: "ht-product-lead", grantHash: hash, ttlMinutes: 30, operationId: operationId() })).status, 200);
+  assert.equal((await post({ action: "take", session: "ht-product-lead", grantHash: hash, ttlMinutes: 45, operationId: operationId() })).status, 409);
   assert.equal(grants.filter((row) => row.releasedAt === null && row.replacedAt === null).length, 1);
   const renewId = operationId();
   const renewedBody = await (await post({ action: "renew", grantHash: hash, operationId: renewId })).json();
