@@ -57,7 +57,7 @@ function openLane({ laneEnabled = false, activities = [] } = {}) {
       agentScopeEnforced: () => false,
       recordAgentBoardScopeMiss: () => {},
     },
-    "@/lib/mcp/tasks/agentMutationFence": { lockTaskTeamScope: async () => {} },
+    "@/lib/mcp/tasks/agentMutationFence": { lockAgentMutationFence: async () => {}, lockTaskTeamScope: async () => {} },
     "@/lib/realtime/server": {
       AGENT_CHAT_EVENT: "agent-chat:changed",
       broadcast: async () => {},
