@@ -7,8 +7,8 @@ import {
   broadcastTaskChange,
 } from "@/lib/realtime/server";
 import generateRank from "@/utils/generateRank";
+import { lookupBoardForGithubRepository } from "@/lib/github/boardRepositoryRouting";
 import {
-  boardForGithubRepository,
   isAuthorizedPullRequestAuthor,
   parseGithubPullRequestUrl,
   type PullRequestLifecycle,
@@ -43,6 +43,7 @@ interface GithubPullRequestPayload {
     title: string;
     body: string | null;
     html_url: string;
+    author_association: string;
     merged: boolean;
     state: string;
     updated_at: string;
@@ -416,11 +417,12 @@ export async function POST(request: NextRequest) {
       | GithubPullRequestPayload
       | GithubCheckSuitePayload;
     const repositoryFullName = payload.repository.full_name;
-    const boardId = boardForGithubRepository({
+    const routing = await lookupBoardForGithubRepository({
       fullName: repositoryFullName,
       isPrivate: payload.repository?.private,
       isFork: payload.repository?.fork,
     });
+    const boardId = routing?.boardId ?? null;
     const repository = repositoryParts(repositoryFullName);
     if (!boardId || !repository) {
       return NextResponse.json({
@@ -579,7 +581,14 @@ export async function POST(request: NextRequest) {
     }
 
     const authorId = pullRequest.user.id;
-    if (!isAuthorizedPullRequestAuthor(boardId, authorId)) {
+    if (
+      !isAuthorizedPullRequestAuthor(
+        boardId,
+        authorId,
+        routing?.mapping,
+        pullRequest.author_association,
+      )
+    ) {
       console.log(
         `[GitHub webhook] Unauthorized PR author: board=${boardId} repo=${repositoryFullName} pr=${pullRequest.number} authorId=${authorId}`,
       );
