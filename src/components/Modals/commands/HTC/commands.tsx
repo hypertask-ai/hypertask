@@ -4,6 +4,7 @@ import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
 import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
+import { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG } from "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import {
   useCallback,
@@ -123,6 +124,7 @@ const Commands = (props: Props) => {
   const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
   const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
+  const tabsOnTopFlag = useFlag(HTPR_8943_CTRLK_TABS_ON_TOP_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -859,7 +861,7 @@ const Commands = (props: Props) => {
 
         {!(integratedTabsFlag && integratedTabs) && modeSwitch}
         <ModalBody className="  p-0 rounded-[5px]">
-          {integratedTabsFlag && integratedTabs && isCompose && modeSwitch}
+          {integratedTabsFlag && integratedTabs && (isCompose || tabsOnTopFlag) && modeSwitch}
           {compose}
           {!isCompose && <>
           <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
@@ -884,7 +886,7 @@ const Commands = (props: Props) => {
                {...(composeEnabled ? { onBlur: undefined } : {})}
             />
           </div>
-          {integratedTabsFlag && integratedTabs && modeSwitch}
+          {integratedTabsFlag && integratedTabs && !tabsOnTopFlag && modeSwitch}
           {commandGroups}
           <ModalHintBar />
           <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
