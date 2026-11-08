@@ -522,7 +522,8 @@ async function trySmartLabelBatch(
     const teamId = tasks[0]?.project.teamId;
     if (!teamId) return false;
     const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: teamId });
-    if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey), await teamPlanAllowanceEnabled(teamId), await remainingSpendPathEnabled(teamId))) return false;
+    const holdsOn = typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(teamId).catch(() => false);
+    if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey), await teamPlanAllowanceEnabled(teamId), holdsOn)) return false;
     const model = gatewayCatalogModelSlug("anthropic/claude-haiku-5.5");
     if (!batchEligibleModel(model)) return false;
     await submitSmartLabelBatch({

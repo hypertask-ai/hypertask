@@ -17,5 +17,5 @@ test("remaining spend hold rules", () => {
   assert.equal(result.status, 0, result.stderr);
   console.log(result.stdout.trim());
   const held = `${read("src/lib/ai/batch/submitBatch.ts")}\n${read("src/lib/ai/batch/collectBatches.ts")}\n${read("src/app/api/ai/_lib/editorAi.ts")}`;
-  assert.match(held, /await holdPlanBatch[\s\S]*startGatewayBatch\(args\.gatewayKey[\s\S]*await settleHeldBatch[\s\S]*applySlackBatch[\s\S]*isFeatureEnabled\(HTPR_7394_REMAINING_AI_SPEND_FLAG/);
+  assert.match(held, /await holdPlanBatch[\s\S]*startGatewayBatch\(args\.gatewayKey[\s\S]*await settleHeldBatch[\s\S]*applySlackBatch[\s\S]*isFeatureEnabled\("htpr-7394-remaining-ai-spend"/);
 });
