@@ -62,7 +62,7 @@ def run(output):
 
         exceptions.write_text('[]\n')
         route.write_bytes((FIXTURES / 'real-route.ts.fixture').read_bytes() + (FIXTURES / 'parse-error.ts.fixture').read_bytes())
-        invoke('agent-entry-parse-error', 2, 'Inventory parser errors:')
+        invoke('agent-entry-parse-error', 1, 'Inventory parser errors:')
 
         route.write_bytes((FIXTURES / 'real-route.ts.fixture').read_bytes())
         new_path = 'src/app/api/brand-new-agent-query/route.ts'
