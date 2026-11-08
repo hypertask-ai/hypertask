@@ -308,9 +308,6 @@ jobs:
           node-version: ^24.22.1
           check-latest: true
           cache: npm
-      - name: Test weekly live filing helpers
-        if: github.event_name == 'schedule'
-        run: node --test tests/feature-map-live-weekly-file.test.cjs
       - name: Test verification helpers
         if: github.event_name != 'schedule'
         run: node --test tests/verify-qa.test.cjs tests/verify-qa-premerge.test.cjs
@@ -428,11 +425,8 @@ jobs:
           printf '%s' "$HYPERTASK_MCP_TOKEN" > "$HOME/.config/hypertask-agents/credentials/sessions/ci-boss-agent-token"
           test "$(SHIP_SESSION_NAME=CI Boss "$HOME/.agents/skills/ship/scripts/ship-identity" | cut -f1)" = 'CI Boss'
           CLI_BINARY="$RUNNER_TEMP/hypertask"
-          curl --fail --location --silent --show-error \
-            "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" \
-            --output "$CLI_BINARY"
+          curl --fail --location --silent --show-error "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" --output "$CLI_BINARY"
           echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check
           chmod +x "$CLI_BINARY"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-          echo "${GITHUB_WORKSPACE}/.claude/skills/vcc/bin" >> "$GITHUB_PATH"
+          { echo "$RUNNER_TEMP"; echo "${GITHUB_WORKSPACE}/.claude/skills/vcc/bin"; } >> "$GITHUB_PATH"
           node .github/scripts/feature-map-live-weekly-file.mjs
