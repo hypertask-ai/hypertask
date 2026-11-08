@@ -6,7 +6,11 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const migrationName = "20261021200000_board_github_connections";
+const credentialMigrationName = "20261023033247_github_app_credential";
 const migration = read(`src/prisma/migrations/${migrationName}/migration.sql`);
+const credentialMigration = read(
+  `src/prisma/migrations/${credentialMigrationName}/migration.sql`,
+);
 const schema = read("src/prisma/schema.prisma");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
@@ -112,6 +116,21 @@ test("installed PR link origin is durable while existing rows keep a null origin
   assert.match(model("TaskPullRequest"), /githubLinkOrigin\s+GithubPullRequestLinkOrigin\?\s*\n/);
   assert.match(migration, /ALTER TABLE "TaskPullRequest" ADD COLUMN "githubLinkOrigin" "GithubPullRequestLinkOrigin";/);
   assert.doesNotMatch(migration, /UPDATE "TaskPullRequest"|ALTER COLUMN|DROP\b|RENAME\b/);
+});
+
+test("encrypted GitHub App credentials store ciphertext and allow one active row", () => {
+  assert.ok(credentialMigrationName > migrationName);
+  assert.match(credentialMigration, /CREATE TABLE "GithubAppCredential"/);
+  assert.match(credentialMigration, /"clientSecret" TEXT NOT NULL/);
+  assert.match(credentialMigration, /"privateKey" TEXT NOT NULL/);
+  assert.match(credentialMigration, /"webhookSecret" TEXT NOT NULL/);
+  assert.match(
+    credentialMigration,
+    /CREATE UNIQUE INDEX "GithubAppCredential_single_active_key"/,
+  );
+  const credentialModel = model("GithubAppCredential");
+  assert.match(credentialModel, /clientSecret\s+String/);
+  assert.match(credentialModel, /revokedAt\s+DateTime\?/);
 });
 
 test("webhook receipts deduplicate delivery IDs and business events across senders", () => {

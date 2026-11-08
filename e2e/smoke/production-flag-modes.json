@@ -136,7 +136,7 @@
     "htpr-7512-attach-keeps-comment": "EVERYONE",
     "htpr-7513-writer-project-labels": "EVERYONE",
     "htpr-7514-inline-agent-images": "EVERYONE",
-    "htpr-7515-connect-github-per-board": "OWNER_ONLY",
+    "htpr-7515-connect-github-per-board": "OWNER_AND_QA",
     "htpr-7518-agent-sidebar-chats": "EVERYONE",
     "htpr-7519-login-guided-start": "EVERYONE",
     "htpr-7529-mcp-act-as-agent": "OWNER_AND_QA",

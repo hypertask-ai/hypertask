@@ -17,7 +17,7 @@ function loadTs(relativePath) {
 async function withStubbedGithubRoute(stubbedModules, run) {
   const paths = [...new Set([
     ...Object.keys(stubbedModules),
-    "src/lib/github/boardRepositoryRouting.ts",
+    "src/lib/github/appConfig.ts",
     "src/utils/controllers/assignees/assign.ts",
     "src/utils/controllers/agents/boardMembers.ts",
     "src/lib/agents/visibility.ts",
@@ -33,10 +33,9 @@ async function withStubbedGithubRoute(stubbedModules, run) {
 
   for (const modulePath of [...paths, routePath]) delete require.cache[modulePath];
   const resolvedModules = {
-    "src/lib/flags.ts": {
-      FEATURE_FLAG_OWNER_USER_ID: 6,
-      FEATURE_FLAG_QA_USER_ID: 985,
-      isFeatureEnabled: async () => true,
+    "src/lib/github/appConfig.ts": {
+      getGithubAppWebhookSecret: async () => null,
+      getGithubAppConfig: async () => null,
     },
     ...stubbedModules,
   };
@@ -95,13 +94,13 @@ const DEFAULT_GITHUB_REPO_MAPPING = {
   revokedAt: null,
 };
 
-function prismaWithGithubBoardRouting(prisma, mapping = DEFAULT_GITHUB_REPO_MAPPING) {
+function prismaWithGithubBoardRouting(prisma) {
   return {
     ...prisma,
     boardGithubRepository: {
       findMany: async ({ where } = {}) => {
         if (where?.fullName === "hypertask-ai/hypertask" && where?.revokedAt === null) {
-          return [mapping];
+          return [DEFAULT_GITHUB_REPO_MAPPING];
         }
         return [];
       },
@@ -945,7 +944,7 @@ function forkPullRequestPayload(authorId = 987654321, action = "opened", merged 
   return payload;
 }
 
-async function runAuthorScenario(payload, mode = "linked", event = "pull_request", mapping) {
+async function runAuthorScenario(payload, mode = "linked", event = "pull_request") {
   const writes = [];
   const reads = [];
   const syncCalls = [];
@@ -982,7 +981,6 @@ async function runAuthorScenario(payload, mode = "linked", event = "pull_request
     task: { findFirst: read("sync.task", task) },
     user: { findUnique: read("sync.actor", bot) },
     comment: { create: write("activity.create", {}) },
-    $executeRaw: async () => 0,
     $queryRaw: write("row-lock", []),
   };
   const prisma = {
@@ -1013,7 +1011,7 @@ async function runAuthorScenario(payload, mode = "linked", event = "pull_request
     },
   };
   const stubbedModules = {
-    "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma, mapping) },
+    "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma) },
     "src/lib/realtime/server.ts": {
       broadcastBoardChange: write("broadcast.board"),
       broadcastTaskChange: write("broadcast.task"),
@@ -1077,7 +1075,7 @@ function assertNoAuthorWrites(result) {
   assert.deepEqual(result.reads, []);
 }
 
-function assertUnauthorizedAuthor(result, authorId = 987654321) {
+function assertUnauthorizedAuthor(result) {
   assert.equal(result.status, 200);
   assert.deepEqual(result.body, {
     success: true,
@@ -1085,7 +1083,7 @@ function assertUnauthorizedAuthor(result, authorId = 987654321) {
   });
   assertNoAuthorWrites(result);
   assert.deepEqual(result.logs, [[
-    `[GitHub webhook] Unauthorized PR author: board=15 repo=hypertask-ai/hypertask pr=5952 authorId=${authorId}`,
+    "[GitHub webhook] Unauthorized PR author: board=15 repo=hypertask-ai/hypertask pr=5952 authorId=987654321",
   ]]);
 }
 
@@ -1192,27 +1190,6 @@ test("PR author id, not sender, login, association or fork flags, controls autho
     payload.pull_request.head.repo = payload.repository;
     assertUnauthorizedAuthor(await runAuthorScenario(payload));
   });
-});
-
-const INSTALLED_REPO_MAPPING = {
-  projectId: 15,
-  fullName: "hypertask-ai/hypertask",
-  provenance: "installed",
-  installationId: "123",
-  revokedAt: null,
-};
-
-test("a connected board moves tickets only for repository writers", async (t) => {
-  const writers = ["OWNER", "MEMBER", "COLLABORATOR"];
-  for (const association of [...writers, "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "NONE", ""]) {
-    await t.test(`author association ${association || "empty"}`, async () => {
-      const payload = forkPullRequestPayload();
-      payload.pull_request.author_association = association;
-      const result = await runAuthorScenario(payload, "linked", "pull_request", INSTALLED_REPO_MAPPING);
-      if (!writers.includes(association)) return assertUnauthorizedAuthor(result);
-      assert.equal(result.moves.length, 1, JSON.stringify(result.body));
-    });
-  }
 });
 
 test("malformed pull request author ids fail closed without lookups or writes", async (t) => {

@@ -160,7 +160,11 @@ const redis = {
 };
 
 const response = load("src/lib/googleCalendar/response.ts", {});
-const appConfig = load("src/lib/github/appConfig.ts", {});
+const credentialCipher = load("src/lib/github/appCredentialCipher.ts", {});
+const appConfig = load("src/lib/github/appConfig.ts", {
+  "@/lib/prisma": { githubAppCredential: { findFirst: async () => null } },
+  "./appCredentialCipher": credentialCipher,
+});
 const oauthState = load("src/lib/github/oauthState.ts", { "@/lib/redis": redis });
 const userApi = load("src/lib/github/userApi.ts", { "@/lib/googleCalendar/response": response });
 const isProjectAdmin = load("src/utils/controllers/projects/isProjectAdmin.ts", { "@/lib/prisma": prisma });
@@ -192,12 +196,22 @@ const routeLib = load("src/app/api/github/_lib.ts", {
   "@/lib/flags/definitions/htpr-7515-connect-github-per-board": flagDefinition,
   "@/lib/github/oauthState": oauthState,
 });
+const flagStubs = {
+  "@/lib/flags": {
+    isFeatureEnabled: async (key, userId) => {
+      world.flagKeys.push({ key, userId });
+      return world.flagOn;
+    },
+  },
+  "@/lib/flags/definitions/htpr-7515-connect-github-per-board": flagDefinition,
+};
 const shared = {
   "next/server": nextServer,
   "@/app/api/github/_lib": routeLib,
   "@/lib/github/appConfig": appConfig,
   "@/lib/github/installAuthority": installAuthority,
   "@/lib/github/oauthState": oauthState,
+  ...flagStubs,
 };
 const installRoute = load("src/app/api/github/install/route.ts", {
   ...shared,
