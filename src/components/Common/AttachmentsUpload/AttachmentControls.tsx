@@ -327,13 +327,13 @@ export const DesktopAttachment = ({
   hideComposerDictation?: boolean;
   dictationCoordinator?: DictationCoordinator;
 }) => {
+  const micPatternEnabled = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
-  const micPatternFlag = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
   const isApple = useDeviceContext();
   const ctrlCmd = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
   const commentMode = mode === "create-comment" || mode === "read-edit-comments";
-  const micPattern = micPatternFlag && (commentMode || mode === "read-edit-description");
+  const micPattern = micPatternEnabled && (commentMode || mode === "read-edit-description");
 
   return (
     <div
@@ -398,11 +398,11 @@ export const DesktopAttachment = ({
             id={mode + "-audio-button"}
             toggleRecording={toggleRecording!}
             dictationCoordinator={dictationCoordinator}
-            {...(micPattern ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, ariaLabel: "Start dictation", wrapperClassName: "order-1" } : {})}
+            {...(micPattern ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, ariaLabel: "Start dictation" } : {})}
           />
         )}
-        {micPatternFlag && commentMode && (
-          <span className="order-2">
+        {micPatternEnabled && commentMode && (
+          <span>
             <SendMessageButton
               label="Send"
               textButton
@@ -492,7 +492,7 @@ export const BottomButtons = ({
   altOptions,
   status,
 }: IBottomButtonProps) => {
-  const micPatternFlag = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
+  const micPatternEnabled = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
   const commentMode = mode === "create-comment" || mode === "read-edit-comments";
   const spanClassName =
     "text-content text-icon-dark-gray hover:text-white-black  cursor-pointer font-semibold relative group whitespace-nowrap";
@@ -628,7 +628,7 @@ export const BottomButtons = ({
         ) : (
           <></>
         )}
-        {micPatternFlag && commentMode ? null : <span
+        {micPatternEnabled && commentMode ? null : <span
           onClick={() => sendOnClick && sendOnClick()}
           className={spanClassName}
         >
