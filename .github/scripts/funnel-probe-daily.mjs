@@ -41,23 +41,34 @@ async function pollInbox(email, attempts = 12) {
 }
 
 async function postReport(passed) {
-  if (!REPORT_TOKEN) return;
+  if (!REPORT_TOKEN) return true;
   const lines = steps.map((s) => `<li><p>${s.ok ? "PASS" : "FAIL"}: ${s.step} — ${s.detail}</p></li>`).join("");
   const body = `<p><strong>${passed ? "PASS" : "FAIL"}: daily funnel probe signup</strong></p><ul>${lines}</ul>`;
-  await fetch(`${BASE}/api/mcp/comments`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${REPORT_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      ticket_number: PARENT_TICKET,
-      project_id: MARK_PROJECT_ID,
-      text: body,
-      content_type: "html",
-    }),
-    signal: AbortSignal.timeout(30_000),
-  }).catch(() => {});
+  try {
+    const response = await fetch(`${BASE}/api/mcp/comments`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${REPORT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ticket_number: PARENT_TICKET,
+        project_id: MARK_PROJECT_ID,
+        text: body,
+        content_type: "html",
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) {
+      record("mark-164 report", false, `HTTP ${response.status}`);
+      return false;
+    }
+    record("mark-164 report", true, "posted");
+    return true;
+  } catch (error) {
+    record("mark-164 report", false, error?.message || String(error));
+    return false;
+  }
 }
 
 async function main() {
@@ -79,8 +90,9 @@ async function main() {
   record("verification inbox", Boolean(verifyUrl), verifyUrl ? "link ready" : "no link after polling");
 
   if (!verifyUrl) {
-    await postReport(false);
+    const reported = await postReport(false);
     process.exitCode = 1;
+    if (REPORT_TOKEN && !reported) process.exitCode = 1;
     return;
   }
 
@@ -88,16 +100,21 @@ async function main() {
   const page = await browser.newPage();
   try {
     await page.goto(verifyUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-    await page.waitForTimeout(3000);
-    const url = page.url();
-    record("email verify navigation", !url.includes("/login"), url);
+    let verified = false;
+    try {
+      await page.getByText("successfully verified", { exact: false }).waitFor({ timeout: 120_000 });
+      verified = true;
+    } catch {
+      verified = false;
+    }
+    record("email verify navigation", verified, page.url());
   } finally {
     await browser.close();
   }
 
   const passed = steps.every((s) => s.ok);
-  await postReport(passed);
-  if (!passed) process.exitCode = 1;
+  const reported = await postReport(passed);
+  if (!passed || (REPORT_TOKEN && !reported)) process.exitCode = 1;
 }
 
 main().catch(async (error) => {
