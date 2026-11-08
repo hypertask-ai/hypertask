@@ -12,7 +12,7 @@ import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, typ
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7394_REMAINING_AI_SPEND_FLAG } from "@/lib/flags/definitions/htpr-7394-remaining-ai-spend";
 import { nativeWebSearchAllowed } from "@/lib/ai/spend/remainingSpend";
@@ -32,11 +32,12 @@ import prisma from "@/lib/prisma";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
 async function nativeSearchForSelection(provider: string, apiKey: unknown, userId?: number | null) {
-  const customerPays = Boolean(typeof apiKey === "string" && apiKey && !isOurGatewayKey(apiKey));
-  if (userId && await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, userId).catch(() => false)) {
-    return nativeWebSearchAllowed(provider, customerPays, true);
-  }
-  return nativeWebSearchAllowed(provider, customerPays, false);
+  const key = typeof apiKey === "string" ? apiKey.trim() : "";
+  const ours = [process.env.AI_GATEWAY_API_KEY, process.env.DEMO_AI_GATEWAY_API_KEY, process.env.TURBOPUFFER_EMBEDDINGS_API_KEY, ...(key.startsWith("vck_") ? ["GATEWAY_KEY_HYPERTASK", "GATEWAY_KEY_INNE", "GATEWAY_KEY_VETSAK", "GATEWAY_KEY_BAYBELLA", "GATEWAY_KEY_RODRIGO", "GATEWAY_KEY_D2LAW", "GATEWAY_KEY_PERRY", "GATEWAY_KEY_PUROLOGIX", "GATEWAY_KEY_KVWULP", "GATEWAY_KEY_ALLOCATOR", "GATEWAY_KEY_VALENTIN"].map((name) => process.env[name]) : [])].some((value) => value?.trim() === key);
+  let on = false;
+  try { if (typeof isFeatureEnabled === "function" && userId && await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, userId)) on = true; } catch { on = false; }
+  if (typeof nativeWebSearchAllowed !== "function") return provider === "claude" || provider === "openai";
+  return nativeWebSearchAllowed(provider, Boolean(key) && !ours, on);
 }
 
 export const SSE_HEADERS = {
