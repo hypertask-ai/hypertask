@@ -27,14 +27,29 @@ test.beforeAll(() => {
 })
 
 test.beforeEach(async ({ page }) => {
-  page.on('request', async (request) => {
-    const url = new URL(request.url())
-    if (url.pathname === '/api/agent-sidebar-chats' || url.pathname.startsWith('/api/agent-chat/')) {
-      const headers = await request.allHeaders()
-      console.log(`[sidebar request] ${request.method()} ${url.pathname}${url.search} project=${headers['x-hypertask-sidebar-project'] ?? 'none'} urlOrigin=${url.origin} origin=${headers.origin ?? 'none'} host=${headers.host ?? 'none'}`)
+  page.on('request', (request) => {
+    try {
+      const url = new URL(request.url())
+      if (url.pathname === '/api/agent-sidebar-chats' || url.pathname.startsWith('/api/agent-chat/')) {
+        const headers = request.headers()
+        console.log(`[sidebar request] ${request.method()} ${url.pathname}${url.search} project=${headers['x-hypertask-sidebar-project'] ?? 'none'} urlOrigin=${url.origin} origin=${headers.origin ?? 'none'} host=${headers.host ?? 'none'}`)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes('Test ended')) throw error
     }
   })
-  page.on('response', async (response) => {
+  page.on('response', (response) => {
+    void readSidebarResponse(response)
+  })
+  page.on('pageerror', (error) => console.log(`[sidebar pageerror] ${error.message}`))
+  page.on('requestfailed', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/agent')) console.log(`[sidebar requestfailed] ${request.method()} ${new URL(request.url()).pathname} ${request.failure()?.errorText}`)
+  })
+})
+
+async function readSidebarResponse(response: Response) {
+  try {
     const url = new URL(response.url())
     if (url.pathname.startsWith('/api/') && response.status() >= 500) {
       console.log(`[sidebar apierror] ${response.request().method()} ${url.pathname} status=${response.status()}`)
@@ -46,12 +61,11 @@ test.beforeEach(async ({ page }) => {
       sidebarFlag: body?.flags?.[FLAG], agents: body?.agents?.map((agent: { id: string; sessionId: string }) => ({ id: agent.id, sessionId: agent.sessionId })),
       messages: body?.messages?.length,
     })}`)
-  })
-  page.on('pageerror', (error) => console.log(`[sidebar pageerror] ${error.message}`))
-  page.on('requestfailed', (request) => {
-    if (new URL(request.url()).pathname.startsWith('/api/agent')) console.log(`[sidebar requestfailed] ${request.method()} ${new URL(request.url()).pathname} ${request.failure()?.errorText}`)
-  })
-})
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes('Test ended')) console.log(`[sidebar response] unread ${message}`)
+  }
+}
 
 async function heartbeat(request: APIRequestContext, agent: Agent) {
   let sequence = Date.now()
