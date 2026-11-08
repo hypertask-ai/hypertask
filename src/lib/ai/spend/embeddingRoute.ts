@@ -16,16 +16,16 @@ async function routeForTeam(teamId: string): Promise<Route> {
     getTeamGatewayFunding({ trustedTeamId: teamId }).catch(() => undefined),
   ]);
   const ownKey = [openai, gateway].find((key) => typeof key === "string" && key.trim() && !isOurGatewayKey(key));
-  const canCharge = Boolean(funding && funding.source !== "customer");
-  let overCap = !canCharge;
-  if (canCharge && funding) {
-    const policy = await resolveTeamAllowancePolicy(teamId, funding.source);
-    const snapshot = policy.mode === "plan" ? await teamAllowanceSnapshot(teamId, policy.monthlyUsd, policy, { userId: 0, gatewayApiKey: funding.apiKey, fundingSource: funding.source }).catch(() => null) : null;
+  const source = funding && funding.source !== "customer" ? funding.source : undefined;
+  let overCap = !source;
+  if (source && funding) {
+    const policy = await resolveTeamAllowancePolicy(teamId, source);
+    const snapshot = policy.mode === "plan" ? await teamAllowanceSnapshot(teamId, policy.monthlyUsd, policy, { userId: 0, gatewayApiKey: funding.apiKey, fundingSource: source }).catch(() => null) : null;
     overCap = policy.mode !== "plan" || !snapshot || snapshot.usedUsd >= snapshot.allowanceUsd;
   }
-  const mode = embeddingDecision({ spendPathOn: true, plan, hasOwnKey: Boolean(ownKey), overCap, canCharge });
+  const mode = embeddingDecision({ spendPathOn: true, plan, hasOwnKey: Boolean(ownKey), overCap, canCharge: Boolean(source) });
   if (mode === "customer-key" && ownKey) return { mode, httpKey: ownKey };
-  if (mode === "vector" && funding && funding.source !== "customer") return { mode, allowanceKey: funding.apiKey, fundingSource: funding.source };
+  if (mode === "vector" && source && funding) return { mode, allowanceKey: funding.apiKey, fundingSource: source };
   return { mode: mode === "vector" ? "keyword" : mode };
 }
 

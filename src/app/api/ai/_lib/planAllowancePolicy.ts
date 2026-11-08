@@ -24,7 +24,7 @@ const owners = new Map<string, { userId: number; uid?: string; expiresAt: number
 const seatSnapshots = new Map<string, { seats: number; month: string; expiresAt: number }>();
 const seatHighWaters = new Map<string, { month: string; observedSeats: number; highWater: number; expiresAt: number }>();
 
-export async function teamOwner(teamId: string): Promise<{ userId: number; uid?: string; expiresAt: number }> {
+async function teamOwner(teamId: string): Promise<{ userId: number; uid?: string; expiresAt: number }> {
   const cached = owners.get(teamId);
   if (cached && cached.expiresAt > Date.now()) return cached;
   const team = await prisma.team.findUnique({
