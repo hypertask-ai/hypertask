@@ -169,18 +169,7 @@ export async function POST(request: NextRequest) {
       console.log('🔐 Login token - preserving existing verification status')
     }
 
-    await logPersonal(userData!.id, '✅ User updated successfully (email link):', {
-      id: userData!.id,
-      email: userData!.email,
-      outcome: 'signed-in',
-    }, {
-      id: userData!.id,
-      email: userData!.email,
-      onboardingTutorialStatus: (userData as any).UserSetting?.onboardingTutorialStatus,
-      onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus,
-      trialStatus: (userData as any).UserSetting?.trialStatus,
-      displayName: userData!.displayName,
-    })
+    await logPersonal(userData!.id, '✅ User updated successfully (email link):', { id: userData!.id, email: userData!.email, outcome: 'signed-in', }, { id: userData!.id, email: userData!.email, onboardingTutorialStatus: (userData as any).UserSetting?.onboardingTutorialStatus, onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus, trialStatus: (userData as any).UserSetting?.trialStatus, displayName: userData!.displayName, })
 
     let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {

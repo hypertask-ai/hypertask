@@ -57,11 +57,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       createTaskFromComment,
       agentId: requestedAgentId,
     } = body;
-    await logPersonal(session.userId, "creating task", {
-      projectId: Number(requestedProjectId) || null,
-      actorId: session.userId,
-      outcome: "started",
-    }, body);
+    await logPersonal(session.userId, "creating task", { projectId: Number(requestedProjectId) || null, actorId: session.userId, outcome: "started", }, body);
     if (
       requestedUserId != null &&
       Number(requestedUserId) !== session.userId

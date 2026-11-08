@@ -26,11 +26,7 @@ export default async function checkoutsSessionHandler(
     if (!team) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    await logPersonal(session.userId, "cancelSubscription", {
-      userId: session.userId,
-      teamId: team.id,
-      outcome: "received",
-    }, req.body)
+    await logPersonal(session.userId, "cancelSubscription", { userId: session.userId, teamId: team.id, outcome: "received", }, req.body)
    
     try {
         const monthlySubscription = await stripe.subscriptions.list({

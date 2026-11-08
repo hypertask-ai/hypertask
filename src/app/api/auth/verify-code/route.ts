@@ -169,17 +169,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await logPersonal(userData!.id, '✅ User updated successfully:', {
-      id: userData!.id,
-      email: userData!.email,
-      outcome: 'signed-in',
-    }, {
-      id: userData!.id,
-      email: userData!.email,
-      onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus,
-      trialStatus: (userData as any).UserSetting?.trialStatus,
-      displayName: userData!.displayName,
-    })
+    await logPersonal(userData!.id, '✅ User updated successfully:', { id: userData!.id, email: userData!.email, outcome: 'signed-in', }, { id: userData!.id, email: userData!.email, onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus, trialStatus: (userData as any).UserSetting?.trialStatus, displayName: userData!.displayName, })
 
     let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {

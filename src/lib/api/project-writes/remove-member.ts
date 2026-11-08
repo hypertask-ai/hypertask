@@ -12,12 +12,7 @@ const route = taskWriteRoute({
     const req = { body };
     try {
       const { userId, projectId } = req.body;
-      await logPersonal(session.userId, "remove member", {
-        projectId: projectId ?? null,
-        memberId: userId ?? null,
-        actorId: session.userId,
-        outcome: "received",
-      }, req.body);
+      await logPersonal(session.userId, "remove member", { projectId: projectId ?? null, memberId: userId ?? null, actorId: session.userId, outcome: "received", }, req.body);
       if (!userId || !projectId) {
         return NextResponse.json({ message: "Missing required information" }, { status: 400 });
       }

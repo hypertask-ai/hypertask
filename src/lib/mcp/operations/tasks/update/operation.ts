@@ -46,11 +46,7 @@ export async function POST(request: NextRequest) {
   if (!parsedBody.ok) return parsedBody.response
   const requestBody = parsedBody.body
   const taskIds = requestBody.task_id
-  await logPersonal(ctx.user.id, '[MCP Update Task] request', {
-    actorId: ctx.user.id,
-    taskId: Array.isArray(taskIds) ? taskIds : taskIds ?? null,
-    outcome: 'received',
-  }, requestBody)
+  await logPersonal(ctx.user.id, '[MCP Update Task] request', { actorId: ctx.user.id, taskId: Array.isArray(taskIds) ? taskIds : taskIds ?? null, outcome: 'received', }, requestBody)
 
   if (
     requestBody.dry_run !== undefined &&

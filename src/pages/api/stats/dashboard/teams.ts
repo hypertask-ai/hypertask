@@ -54,14 +54,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
           
           
             const rows = Array.isArray(result) ? result : []
-            await logPersonal(session.userId, "dashboard teams", {
-              count: rows.length,
-              teamIds: rows.flatMap((row) => {
-                if (!row || typeof row !== "object" || !("team_id" in row)) return []
-                const id = (row as { team_id: unknown }).team_id
-                return typeof id === "string" || typeof id === "number" ? [id] : []
-              }),
-            }, result)
+            await logPersonal(session.userId, "dashboard teams", { count: rows.length, teamIds: rows.flatMap((row) => { if (!row || typeof row !== "object" || !("team_id" in row)) return []; const id = (row as { team_id: unknown }).team_id; return typeof id === "string" || typeof id === "number" ? [id] : []; }), }, result)
             return res.status(200).send(json(result))
 
         } catch (error) {

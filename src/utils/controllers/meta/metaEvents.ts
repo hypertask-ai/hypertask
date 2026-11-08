@@ -42,11 +42,7 @@ export async function sendMetaCAPIEvent(
       },
     },
   ];
-  await logPersonal(null, "sendMetaCAPIEvent", {
-    eventId: eventsData[0]?.event_id ?? null,
-    eventType: eventsData[0]?.event_name ?? null,
-    count: eventsData.length,
-  }, eventsData);
+  await logPersonal(null, "sendMetaCAPIEvent", { eventId: eventsData[0]?.event_id ?? null, eventType: eventsData[0]?.event_name ?? null, count: eventsData.length, }, eventsData);
 
   const options = {
     method: "POST",

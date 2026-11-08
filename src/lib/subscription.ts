@@ -41,11 +41,7 @@ export async function getUpcomingInvoice(
       "GET",
       `/v1/invoices/upcoming?customer=${encodeURIComponent(customerId)}`
     )) as Stripe.Response<UpcomingInvoice>;
-    await logPersonal(null, "upcoming invoice", {
-      invoiceId: recordId(upcomingInvoice?.id),
-      customerId: recordId(upcomingInvoice?.customer),
-      outcome: "retrieved",
-    }, upcomingInvoice);
+    await logPersonal(null, "upcoming invoice", { invoiceId: recordId(upcomingInvoice?.id), customerId: recordId(upcomingInvoice?.customer), outcome: "retrieved", }, upcomingInvoice);
     return upcomingInvoice;
   } catch (error) {
     return null;
@@ -184,11 +180,7 @@ export async function checkSubscriptionPlan(sessionId: string) {
       const subscription = await stripe.subscriptions.retrieve(
         session.subscription
       );
-      await logPersonal(null, "checkSubscriptionPlan", {
-        sessionId,
-        subscriptionId: recordId(session.subscription),
-        outcome: "retrieved",
-      }, session);
+      await logPersonal(null, "checkSubscriptionPlan", { sessionId, subscriptionId: recordId(session.subscription), outcome: "retrieved", }, session);
       return subscription;
     }
     return undefined
@@ -201,19 +193,12 @@ export async function checkSubscriptionPlan(sessionId: string) {
 export async function checkTrialSuccess(sessionId: string) {
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    await logPersonal(null, "checkTrialSuccess session", {
-      sessionId: recordId(session?.id),
-      customerId: recordId(session?.customer),
-      outcome: "retrieved",
-    }, session);
+    await logPersonal(null, "checkTrialSuccess session", { sessionId: recordId(session?.id), customerId: recordId(session?.customer), outcome: "retrieved", }, session);
     const customer = (await stripe.customers.retrieve(
       session?.customer as string
     )) as Stripe.Customer;
 
-    await logPersonal(null, "checkTrialSuccess customer", {
-      customerId: recordId(customer?.id),
-      outcome: "retrieved",
-    }, customer);
+    await logPersonal(null, "checkTrialSuccess customer", { customerId: recordId(customer?.id), outcome: "retrieved", }, customer);
     return customer.id;
   } catch (error: any) {
     console.log("🚀 ~ checkTrialSuccess ~ error:", error);
@@ -298,11 +283,7 @@ export async function createInvoiceAndPay(
       collection_method: "charge_automatically",
       description: `Billed for ${interval}ly subscription`,
     });
-    await logPersonal(null, "createInvoiceAndPay invoice", {
-      invoiceId: recordId(invoice?.id),
-      customerId: recordId(invoice?.customer),
-      outcome: "created",
-    }, invoice);
+    await logPersonal(null, "createInvoiceAndPay invoice", { invoiceId: recordId(invoice?.id), customerId: recordId(invoice?.customer), outcome: "created", }, invoice);
 
     const amountToCharge =
       interval === "month"
@@ -334,10 +315,7 @@ export async function createInvoiceAndPay(
     const payment = await stripe.invoices.pay(invoice.id, {
       payment_method: paymentMethods.data[0].id,
     });
-    await logPersonal(null, "createInvoiceAndPay payment", {
-      paymentId: recordId(payment?.id),
-      outcome: recordId(payment?.status) ?? "unknown",
-    }, payment);
+    await logPersonal(null, "createInvoiceAndPay payment", { paymentId: recordId(payment?.id), outcome: recordId(payment?.status) ?? "unknown", }, payment);
     if (payment.status === "paid") {
       return "SEATED";
     }

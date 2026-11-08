@@ -265,10 +265,7 @@ export const sendDataOnlyFcm = async (
       deliveryResolved = true;
     } catch (error) {
       if (isUnregisteredTokenError(error)) {
-        await logPersonal(device.userId ?? null, "sendDataOnlyFcm dropping unregistered device token", {
-          deviceId: device.id ?? null,
-          userId: device.userId ?? null,
-        }, device.firebaseId);
+        await logPersonal(device.userId ?? null, "sendDataOnlyFcm dropping unregistered device token", { deviceId: device.id ?? null, userId: device.userId ?? null, }, device.firebaseId);
         await removeDeadDeviceToken(device.firebaseId);
         deliveryResolved = true;
       } else {
@@ -291,9 +288,7 @@ export const sendDataOnlyFcm = async (
 const removeDeadDeviceToken = async (firebaseId: string) => {
   try {
     await prisma.subscribedDevices.deleteMany({ where: { firebaseId } });
-    await logPersonal(null, "removed dead device", {
-      outcome: "removed",
-    }, firebaseId);
+    await logPersonal(null, "removed dead device", { outcome: "removed", }, firebaseId);
   } catch {
     console.log("dead token cleanup failed", { outcome: "failed" });
   }
@@ -343,10 +338,7 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
     const validDevices = props.devices.filter(device => allowedUserIds.has(device.userId));
 
     for (const device of validDevices){
-        await logPersonal(device.userId, "sendDataNewCommentFCM device", {
-            deviceId: device.id,
-            userId: device.userId,
-        }, device.firebaseId)
+        await logPersonal(device.userId, "sendDataNewCommentFCM device", { deviceId: device.id, userId: device.userId, }, device.firebaseId)
         
         if (!device.sendNotifications) {
             continue;

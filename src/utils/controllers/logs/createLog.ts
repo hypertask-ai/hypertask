@@ -18,11 +18,7 @@ const createLog = async (data: CreateLogInput): Promise<any> => {
 
                 }
             })
-            await logPersonal(data.LoggedById ?? null, "createLog", {
-                logId: allLogs.id,
-                type: String(data.type),
-                status: String(data.status),
-            }, data.log)
+            await logPersonal(data.LoggedById ?? null, "createLog", { logId: allLogs.id, type: String(data.type), status: String(data.status), }, data.log)
 
             if (data.LoggedById && (data.log === "cli_token_exchange" || data.log.startsWith("mcp_connected"))) {
                 const userId = data.LoggedById;

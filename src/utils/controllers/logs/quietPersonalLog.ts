@@ -12,22 +12,9 @@ export async function logPersonal(
 ) {
   const actor = typeof userId === "number" ? userId : FEATURE_FLAG_OWNER_USER_ID;
   let quiet = true;
+  try { quiet = await isFeatureEnabled(HTPR_7786_QUIET_PERSONAL_LOGS_FLAG, actor); } catch { quiet = true; }
   try {
-    quiet = await isFeatureEnabled(HTPR_7786_QUIET_PERSONAL_LOGS_FLAG, actor);
-  } catch {
-    quiet = true;
-  }
-  try {
-    if (quiet) {
-      logRecord(label, ids, raw);
-      return;
-    }
+    if (quiet) { logRecord(label, ids, raw); return; }
     if (raw !== undefined) console.log(label, raw);
-  } catch {
-    try {
-      console.log(label, ids);
-    } catch {
-      return;
-    }
-  }
+  } catch { try { console.log(label, ids); } catch { return; } }
 }

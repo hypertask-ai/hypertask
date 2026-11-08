@@ -18,10 +18,7 @@ export async function GET(request: NextRequest) {
       where: { id: parseInt(userId) },
       include: { UserSetting: true },
     })
-    await logPersonal(user?.id ?? null, 'check-verification user', {
-      userId: user?.id ?? null,
-      email: user?.email ?? null,
-    }, user)
+    await logPersonal(user?.id ?? null, 'check-verification user', { userId: user?.id ?? null, email: user?.email ?? null, }, user)
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'User not found' },

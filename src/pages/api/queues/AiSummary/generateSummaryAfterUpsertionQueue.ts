@@ -75,10 +75,7 @@ export const generateSummariesByTeamIdHandler = async(teamId:string)=>{
 
 
 async function generateBatchSummaries(tasksBatch:ITaskLocal[]) {
-    await logPersonal(null, "processBatch", {
-        count: tasksBatch.length,
-        taskIds: tasksBatch.map((task) => task.id),
-    }, tasksBatch)
+    await logPersonal(null, "processBatch", { count: tasksBatch.length, taskIds: tasksBatch.map((task) => task.id), }, tasksBatch)
     try {
         for (const x of tasksBatch){
             const result = await generateAndStoreTaskSummary(x.id);

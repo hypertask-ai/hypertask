@@ -55,10 +55,7 @@ const completeOnboardingFirstStep = async (
       googleAccount.id
     );
 
-    await logPersonal(exist_user.id, "onboarding stripe customer", {
-      customerId: recordId(customer?.id),
-      outcome: "ready",
-    }, customer);
+    await logPersonal(exist_user.id, "onboarding stripe customer", { customerId: recordId(customer?.id), outcome: "ready", }, customer);
     console.log("++++++++++++++++++++++++");
 
     console.log("-------- Creating a team ----------");

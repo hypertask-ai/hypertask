@@ -12,10 +12,7 @@ const postRoute = taskWriteRoute({
   operation: async (body, session) => {
     const { firebaseId, newStatus } = body;
     if (!firebaseId ) return notificationWriteJson({message:"Missing Required Data"}, 304)
-    await logPersonal(session.userId, "push status", {
-        userId: session.userId,
-        outcome: "update",
-    }, { firebaseId })
+    await logPersonal(session.userId, "push status", { userId: session.userId, outcome: "update", }, { firebaseId })
 
     const deviceStatus = await prisma.subscribedDevices.updateMany({
         where:{

@@ -1,24 +1,10 @@
 export type LogId = string | number | boolean | null | Array<string | number | null>
 
-function isLocalChar(char: string): boolean {
+function cls(char: string, digits: boolean, extra: string): boolean {
   const code = char.charCodeAt(0)
-  if (code >= 48 && code <= 57) return true
-  if (code >= 65 && code <= 90) return true
-  if (code >= 97 && code <= 122) return true
-  return char === "." || char === "_" || char === "%" || char === "+" || char === "-"
-}
-
-function isDomainChar(char: string): boolean {
-  const code = char.charCodeAt(0)
-  if (code >= 48 && code <= 57) return true
-  if (code >= 65 && code <= 90) return true
-  if (code >= 97 && code <= 122) return true
-  return char === "." || char === "-"
-}
-
-function isLetter(char: string): boolean {
-  const code = char.charCodeAt(0)
-  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+  if (digits && code >= 48 && code <= 57) return true
+  if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) return true
+  return extra.includes(char)
 }
 
 function emailsInString(text: string): string[] {
@@ -28,15 +14,15 @@ function emailsInString(text: string): string[] {
     const at = text.indexOf("@", cursor)
     if (at < 0) break
     let start = at
-    while (start > 0 && isLocalChar(text[start - 1])) start -= 1
+    while (start > 0 && cls(text[start - 1], true, "._%+-")) start -= 1
     let end = at + 1
-    while (end < text.length && isDomainChar(text[end])) end += 1
+    while (end < text.length && cls(text[end], true, ".-")) end += 1
     const domain = text.slice(at + 1, end)
     const dot = domain.lastIndexOf(".")
     const host = dot >= 0 ? domain.slice(0, dot) : ""
     const suffix = dot >= 0 ? domain.slice(dot + 1) : ""
     let suffixOk = suffix.length >= 2
-    for (const char of suffix) if (!isLetter(char)) suffixOk = false
+    for (const char of suffix) if (!cls(char, false, "")) suffixOk = false
     if (start < at && host.length > 0 && !host.startsWith(".") && !host.endsWith(".") && suffixOk) {
       found.push(text.slice(start, end))
     }
@@ -45,21 +31,14 @@ function emailsInString(text: string): string[] {
   return found
 }
 
-const MAX_EMAIL_SCAN_DEPTH = 8
-const MAX_EMAIL_SCAN_NODES = 200
-
 export function emailsIn(value: unknown): string[] {
   const found: string[] = []
   const seen = new Set<string>()
   const seenObjects = new WeakSet<object>()
-  const stack: Array<{ item: unknown; depth: number }> = [{ item: value, depth: 0 }]
   let nodes = 0
-  while (stack.length > 0) {
-    const current = stack.pop()
-    if (!current) break
+  const walk = (item: unknown, depth: number) => {
     nodes += 1
-    if (nodes > MAX_EMAIL_SCAN_NODES) break
-    const item = current.item
+    if (nodes > 200 || depth > 8) return
     if (typeof item === "string") {
       for (const match of emailsInString(item)) {
         const key = match.toLowerCase()
@@ -67,17 +46,13 @@ export function emailsIn(value: unknown): string[] {
         seen.add(key)
         found.push(match)
       }
-      continue
+      return
     }
-    if (typeof item !== "object" || item === null) continue
-    if (seenObjects.has(item)) continue
+    if (typeof item !== "object" || item === null || seenObjects.has(item)) return
     seenObjects.add(item)
-    if (current.depth >= MAX_EMAIL_SCAN_DEPTH) continue
-    const entries = Array.isArray(item) ? item : Object.values(item)
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      stack.push({ item: entries[index], depth: current.depth + 1 })
-    }
+    for (const entry of Array.isArray(item) ? item : Object.values(item)) walk(entry, depth + 1)
   }
+  walk(value, 0)
   return found
 }
 
@@ -90,11 +65,7 @@ export function recordId(value: unknown): string | null {
   return null
 }
 
-export function logRecord(
-  label: string,
-  ids: Record<string, LogId>,
-  emailSource?: unknown,
-) {
+export function logRecord(label: string, ids: Record<string, LogId>, emailSource?: unknown) {
   const payload: Record<string, unknown> = { ...ids }
   if (emailSource !== undefined) {
     const emails = emailsIn(emailSource)

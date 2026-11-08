@@ -36,11 +36,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
             const boardAgents = boardAgentMembers
                 .filter((m) => m.agent != null)
                 .map((m) => m.agent!)
-            await logPersonal(user.id, "membersGetAll members", {
-                count: members.length,
-                memberIds: members.map((member) => member.id),
-                userIds: members.map((member) => member.userId),
-            }, members)
+            await logPersonal(user.id, "membersGetAll members", { count: members.length, memberIds: members.map((member) => member.id), userIds: members.map((member) => member.userId), }, members)
             let team_members:any[]=[];
             const invites = await prisma.invite.findMany({
                 where:{
@@ -98,18 +94,12 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                         user:true,
                     },
                 })
-                await logPersonal(user.id, "membersGetAll team_members", {
-                    count: team_members.length,
-                    memberIds: team_members.map((member) => member.id),
-                }, team_members)
+                await logPersonal(user.id, "membersGetAll team_members", { count: team_members.length, memberIds: team_members.map((member) => member.id), }, team_members)
 
                 console.log("🚀 ~ membersGetAll ~ project?.ownerId!==teamOwner.id:", project?.ownerId)
                 if (teamOwner&&teamOwner?.id !== user.id && !members.map(m=>m.userId).includes(teamOwner?.id) && project?.ownerId!==teamOwner.id ) {
                     team_members.push({ id: -1, user: teamOwner });
-                    await logPersonal(user.id, "membersGetAll team_members", {
-                        count: team_members.length,
-                        memberIds: team_members.map((member) => member.id),
-                    }, team_members)
+                    await logPersonal(user.id, "membersGetAll team_members", { count: team_members.length, memberIds: team_members.map((member) => member.id), }, team_members)
                    }
 
             }
