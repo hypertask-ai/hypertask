@@ -54,13 +54,7 @@ test("browser errors say browser, not server", async () => {
 
 test("ticket template block must open the description", async () => {
   const mod = await import("../src/lib/tickets/plainLanguageTicket.mjs");
-  const html = mod.renderPlainLanguageTicketDescription({
-    whatWrongOrWanted: "Checkout failed.",
-    whoItAffects: "testers",
-    recommendedCourseAndWhy: "Fix checkout. Why: users cannot pay.",
-    whatValentinMustDecide: "nothing",
-    howToUndo: "revert",
-  });
+  const html = mod.renderPlainLanguageTicketDescription({ whatWrongOrWanted: "Checkout failed.", whoItAffects: "testers", recommendedCourseAndWhy: "Fix checkout.", whatValentinMustDecide: "nothing", howToUndo: "revert" });
   assert.equal(mod.hasPlainLanguageTicketBlock(html), true);
   assert.equal(mod.hasPlainLanguageTicketBlock(`<p>intro</p>${html}`), false);
 });
