@@ -299,7 +299,7 @@ create_project() {
   case "${words[*]}" in "task create"|"tasks create") printf '%s' "$project" ;; esac
 }
 filing_gate() {
-  case "$(create_project "$@")" in 11514) ;; *) return 0 ;; esac
+  case "$(create_project "$@")" in 11514|4060) ;; *) return 0 ;; esac  # 4060 is archived: filing-gate refuses it
   [ -x "$FILING_GATE" ] || { printf 'vcc: task create refused: filing-gate missing at %s; run house-rules-sync\n' "$FILING_GATE" >&2; exit 5; }
   "$FILING_GATE" --who "$IDENTITY" -- "$@"
 }
