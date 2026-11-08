@@ -271,9 +271,6 @@ import {
 } from "@/lib/boardStartup/mobileControls";
 import { shouldEnableSecondaryStartup } from "@/lib/boardStartup/secondaryRequests";
 
-const STRAIGHT_BOARD_CONFIRM_EXCLUDED =
-  "/login,/onboarding,/verify-email,/invite,/share,/unauthorized".split(",");
-
 function StraightBoardConfirmStrip({
   pathname,
   currentUser,
@@ -285,7 +282,7 @@ function StraightBoardConfirmStrip({
   if (!flagOn) return null;
   if (!currentUser || isGuestUser(currentUser)) return null;
   if (currentUser.UserSetting?.isVerified ?? true) return null;
-  if (pathname && STRAIGHT_BOARD_CONFIRM_EXCLUDED.some((p) => pathname.startsWith(p))) return null;
+  if (pathname && ["/login","/onboarding","/verify-email","/invite","/share","/unauthorized"].some((p) => pathname.startsWith(p))) return null;
   return (
     <div className="w-full bg-blue-600/20 border-b border-blue-500/40 px-4 py-3 text-center text-content text-white-black z-[120]" role="status">
       Please confirm your email
