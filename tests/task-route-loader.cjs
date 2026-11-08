@@ -18,7 +18,7 @@ function load(file, mocks = {}) {
     const base = specifier.startsWith("@/")
       ? path.join(root, "src", specifier.slice(2))
       : path.resolve(directory, specifier);
-    const filename = [base, `${base}.ts`, `${base}.cjs`].find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+    const filename = [base, `${base}.ts`, `${base}.cjs`, `${base}.mjs`].find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
     if (/src[\\/]lib[\\/]flags[\\/](?:keys|definitions|definitions[\\/]index\.generated)\.ts$/.test(filename ?? "")) {
       return require("./helpers/flag-files.cjs").load(filename);
     }

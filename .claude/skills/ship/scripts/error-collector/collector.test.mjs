@@ -999,7 +999,9 @@ check('install', 'units mirror precedent, installer copies modules/noise and fak
   const target = join(h.home, '.local/lib/hypertask/error-collector');
   for (const name of ['collector.mjs', 'noise.json', 'sources/fixture.mjs']) assert.deepEqual(readFileSync(join(target, name)), readFileSync(join(HERE, name)));
   const templateSrc = join(HERE, '../../../../../src/lib/tickets/plainLanguageTicket.mjs');
+  const incidentSrc = join(HERE, '../../../../../src/lib/errors/plainIncident.mjs');
   assert.deepEqual(readFileSync(join(target, 'plainLanguageTicket.mjs')), readFileSync(templateSrc));
+  assert.deepEqual(readFileSync(join(h.home, '.local/lib/hypertask/errors/plainIncident.mjs')), readFileSync(incidentSrc));
   assert.equal(statSync(join(target, 'collector.mjs')).mode & 0o777, 0o755);
   for (const suffix of ['service', 'timer']) assert.deepEqual(readFileSync(join(h.home, `.config/systemd/user/error-collector.${suffix}`)), readFileSync(join(HERE, `../error-collector.${suffix}`)));
   assert.deepEqual(h.calls().filter(c => c.name === 'systemctl').map(c => c.args), [['--user', 'daemon-reload'], ['--user', 'enable', '--now', 'error-collector.timer']]);

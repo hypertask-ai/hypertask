@@ -14,7 +14,7 @@ const templateModule = pathToFileURL(
   existsSync(join(HERE, 'plainLanguageTicket.mjs'))
     ? join(HERE, 'plainLanguageTicket.mjs')
     : join(HERE, '../../../../../src/lib/tickets/plainLanguageTicket.mjs'),
-).href;
+);
 const { renderPlainLanguageTicketDescription } = await import(templateModule);
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
 const HOUR = 3600000;
@@ -572,10 +572,12 @@ async function install(env) {
   await fs.mkdir(join(home, '.local/state/error-collector'), { recursive: true, mode: 0o700 });
   if (HERE !== target) {
     for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
-    await fs.copyFile(
-      join(HERE, '../../../../../src/lib/tickets/plainLanguageTicket.mjs'),
-      join(target, 'plainLanguageTicket.mjs'),
-    );
+    const templateSrc = join(HERE, '../../../../../src/lib/tickets/plainLanguageTicket.mjs');
+    const incidentSrc = join(HERE, '../../../../../src/lib/errors/plainIncident.mjs');
+    const errorsDir = join(home, '.local/lib/hypertask/errors');
+    await fs.mkdir(errorsDir, { recursive: true });
+    await fs.copyFile(templateSrc, join(target, 'plainLanguageTicket.mjs'));
+    await fs.copyFile(incidentSrc, join(errorsDir, 'plainIncident.mjs'));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }
   const checker = join(HERE, HERE === target ? '' : '..', 'user-unit-check');
