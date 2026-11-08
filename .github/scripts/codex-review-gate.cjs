@@ -18,12 +18,27 @@ function priorityOf(body) {
 
 const blocks = body => (priorityOf(body) ?? 0) <= 1;
 
-const OWNER_QA_VISUAL_RELEASE_COMPLAINT = new RegExp(
-  String.raw`\b(?:must|should|needs to)\b[\s\S]{0,160}\b(?:EVERYONE|Everyone)\b[\s\S]{0,160}\b(?:defaultMode|default mode|Owner\s*\+\s*QA|OWNER_AND_QA)\b|` +
-  String.raw`\b(?:Default|Set)\b[\s\S]{0,120}\b(?:to\s+)?(?:EVERYONE|Everyone)\b[\s\S]{0,160}\b(?:defaultMode|default mode|Owner\s*\+\s*QA|OWNER_AND_QA)\b|` +
-  String.raw`\bOwner\s*\+\s*QA\b[\s\S]{0,120}\b(?:should be|must be|needs to be)\b[\s\S]{0,80}\bEveryone\b`,
-  'i',
-);
+const WIDEN_DEFAULT_MODE_PATTERNS = [
+  /\bdefaultMode\s+(?:should|must|needs to)\s+(?:be\s+)?["']?EVERYONE\b/i,
+  /\bdefault\s+mode\s+(?:should|must|needs to)\s+(?:be\s+)?EVERYONE\b/i,
+  /\b(?:Set|Default)\s+defaultMode\s+to\s+EVERYONE\b/i,
+  /\b(?:Default|Set)\s+(?:the\s+)?(?:feature\s+)?flag\s+to\s+Everyone\b/i,
+  /\b(?:Default|Set)\s+(?:this\s+)?visible\s+UI[\s\S]{0,80}\b(?:to\s+)?Everyone\b/i,
+];
+
+function ownerQaVisualReleaseOnlyFinding(body) {
+  const text = String(body ?? '');
+  if (!WIDEN_DEFAULT_MODE_PATTERNS.some(pattern => pattern.test(text))) return false;
+  const demandsEveryoneDefault = /\bdefaultMode\s+(?:should|must|needs to)\s+(?:be\s+)?["']?EVERYONE\b/i.test(text)
+    || /\b(?:Set|Default)\s+defaultMode\s+to\s+EVERYONE\b/i.test(text);
+  if (/\b(?:authorization|auth|security)\s+fix\b/i.test(text) && /\bbefore\b[\s\S]{0,160}\bEveryone\b/i.test(text) && !demandsEveryoneDefault) {
+    return false;
+  }
+  if (/\bOWNER_AND_QA\b[\s\S]{0,120}\b(?:is\s+not|isn't)\s+protection\b/i.test(text) && !demandsEveryoneDefault) {
+    return false;
+  }
+  return true;
+}
 
 function featureFlagGatePassed(contexts) {
   const entry = (contexts ?? []).find(c => c.context === 'feature-flag-gate');
@@ -31,7 +46,7 @@ function featureFlagGatePassed(contexts) {
 }
 
 function waivedOwnerQaVisualReleaseFinding(body, contexts) {
-  return featureFlagGatePassed(contexts) && OWNER_QA_VISUAL_RELEASE_COMPLAINT.test(String(body ?? ''));
+  return featureFlagGatePassed(contexts) && ownerQaVisualReleaseOnlyFinding(body);
 }
 
 function codeReviewStateFor(comments, headOid) {
@@ -159,5 +174,6 @@ module.exports = {
   codeReviewStateFor,
   run,
   featureFlagGatePassed,
+  ownerQaVisualReleaseOnlyFinding,
   waivedOwnerQaVisualReleaseFinding,
 };

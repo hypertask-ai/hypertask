@@ -57,6 +57,16 @@ test('imperative widen-to-Everyone complaints are waived when feature-flag-gate 
   assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
 });
 
+test('direct defaultMode should be EVERYONE complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode should be EVERYONE for this visible UI.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
+test('security findings that mention Everyone rollout context stay blocking when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) The authorization fix must happen before exposing this route to Everyone; defaultMode: OWNER_AND_QA is not protection.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'failure');
+});
+
 test('P1 flag-default complaints still fail without feature-flag-gate success', () => {
   const finding = '![P1 Badge](https://example.test/p1) defaultMode must be "EVERYONE" for this visible change.';
   assert.equal(stateOf({ reviews: [review([finding])] }), 'failure');
