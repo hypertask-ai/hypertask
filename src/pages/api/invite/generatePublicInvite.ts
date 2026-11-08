@@ -9,6 +9,7 @@ import { getProjectViewInclude } from '@/utils/controllers/projects/getAll';
 import { getViewFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFunctions';
 import { getSessionUser } from '@/lib/auth/getSessionUser';
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard';
+import { blockUnverifiedStraightBoardInvite } from '@/lib/auth/emailStraightBoard';
 
 
 
@@ -40,6 +41,11 @@ export default  async function handler(
     else if (req.method==="POST"){
         const session = await getSessionUser(new Headers(req.headers as Record<string, string>))
         if (!session) return res.status(401).json({message:"Unauthorized"})
+
+        const cookieHeader = typeof req.headers.cookie === "string" ? req.headers.cookie : null;
+        if (await blockUnverifiedStraightBoardInvite(session.userId, cookieHeader)) {
+          return res.status(403).json({ message: "Please confirm your email before inviting people." });
+        }
 
         const {projectId} = req.body
         if (!projectId) return res.status(400).json({message:"Missing required information"})

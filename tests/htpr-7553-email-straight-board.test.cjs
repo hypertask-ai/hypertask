@@ -55,7 +55,7 @@ test("send-email-link returns boardRedirect for new email when rollout is on", a
       bindSignupCodeContext: async () => {},
     },
     "@/lib/auth/emailStraightBoard": {
-      isEmailStraightBoardRolloutActive: async () => true,
+      straightBoardSignupAllowed: async () => true,
       finishStraightBoardEmailSignup: async () => {
         calls.straight += 1;
         return {
@@ -86,9 +86,9 @@ test("send-email-link returns boardRedirect for new email when rollout is on", a
   assert.equal(calls.link, 0);
 });
 
-test("Please confirm your email banner copy is wired in the client banner", () => {
+test("Please confirm your email banner copy is wired in NotificationPromoteBanner", () => {
   const src = fs.readFileSync(
-    path.join(root, "src/components/Global/EmailConfirmBanner.tsx"),
+    path.join(root, "src/components/Global/NotificationPromoteBanner.tsx"),
     "utf8",
   );
   assert.match(src, /Please confirm your email/);

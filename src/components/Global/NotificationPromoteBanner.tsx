@@ -7,6 +7,9 @@ import { usePathname } from "next/navigation";
 import { useContext, useEffect, useRef, useState } from "react";
 
 import useFcmToken from "@/hooks/General/useFcmToken";
+import { useResendVerificationEmail } from "@/hooks/useResendVerificationEmail";
+import { STRAIGHT_BOARD_SIGNUP_COOKIE } from "@/lib/auth/emailStraightBoard";
+import { isGuestUser } from "@/lib/demo/guest";
 import { slimUserForCookie } from "@/lib/auth/slimUserCookie";
 import { changePushNotificationStatus } from "@/utils/api/global/pushNotifications";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -64,7 +67,58 @@ const readSessionDismissed = () => {
   }
 };
 
+function StraightBoardEmailConfirmBanner() {
+  const pathname = usePathname();
+  const currentUser = useRecoilValue(currentUserAtom);
+  const [dismissed, setDismissed] = useState(false);
+  const { isResending, handleResend } = useResendVerificationEmail();
+
+  if (!currentUser || isGuestUser(currentUser) || dismissed) return null;
+  const verified = currentUser.UserSetting?.isVerified ?? true;
+  if (verified) return null;
+  if (
+    typeof document === "undefined" ||
+    !document.cookie.includes(`${STRAIGHT_BOARD_SIGNUP_COOKIE}=1`)
+  ) {
+    return null;
+  }
+  if (
+    pathname?.startsWith("/login") ||
+    pathname?.startsWith("/onboarding") ||
+    pathname?.startsWith("/verify-email")
+  ) {
+    return null;
+  }
+
+  const email = currentUser.email ?? "";
+  return (
+    <div
+      role="status"
+      className="w-full border-b border-blue-500/40 bg-blue-600/20 px-3 py-2 text-center text-content text-white-black"
+    >
+      Please confirm your email{email ? ` (${email})` : ""}.{" "}
+      <button
+        type="button"
+        className="underline text-blue-300 hover:text-blue-200 disabled:opacity-50"
+        disabled={isResending || !email}
+        onClick={() => handleResend(email)}
+      >
+        {isResending ? "Sending…" : "Resend"}
+      </button>{" "}
+      <button
+        type="button"
+        className="ml-2 text-meta text-text-light-gray hover:text-white-black"
+        aria-label="Dismiss"
+        onClick={() => setDismissed(true)}
+      >
+        <X aria-hidden className="inline" size={16} />
+      </button>
+    </div>
+  );
+}
+
 const NotificationPromoteBanner = () => {
+  const emailConfirm = <StraightBoardEmailConfirmBanner />;
   const pathname = usePathname();
   const mbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !mbl;
@@ -222,16 +276,18 @@ const NotificationPromoteBanner = () => {
     }
   };
 
-  if (!shouldRender) return null;
-
   const pushDenied = fcmData.permissionStatus === "denied";
   const copy =
     preference.stage === 1
       ? "Turn on notifications so tasks and mentions reach you."
       : "Without notifications it's much harder for your team to reach you.";
 
+  if (!shouldRender) return emailConfirm;
+
   return (
-    <div
+    <>
+      {emailConfirm}
+      <div
       ref={bannerRef}
       role="region"
       aria-label="Enable notifications"
@@ -286,7 +342,8 @@ const NotificationPromoteBanner = () => {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 

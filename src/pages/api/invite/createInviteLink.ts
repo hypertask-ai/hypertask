@@ -14,10 +14,7 @@ import { sendEmailNotification } from "@/utils/controllers/notifications/sendNot
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
-import {
-  sessionEmailUnverified,
-  userHasEmailStraightBoard,
-} from "@/lib/auth/emailStraightBoard";
+import { blockUnverifiedStraightBoardInvite } from "@/lib/auth/emailStraightBoard";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -48,10 +45,8 @@ const handler: NextApiHandler = async (
     }
     if (access !== "ok") return res.status(403).json({ message: "Forbidden" });
 
-    if (
-      (await userHasEmailStraightBoard(session.userId)) &&
-      (await sessionEmailUnverified(session.userId))
-    ) {
+    const cookieHeader = typeof req.headers.cookie === "string" ? req.headers.cookie : null;
+    if (await blockUnverifiedStraightBoardInvite(session.userId, cookieHeader)) {
       return res
         .status(403)
         .json({ message: "Please confirm your email before inviting people." });

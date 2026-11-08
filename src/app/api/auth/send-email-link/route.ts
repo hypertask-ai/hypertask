@@ -12,9 +12,12 @@ import {
   isFeatureEnabled,
 } from '@/lib/flags'
 import {
+  blockUnverifiedStraightBoardInvite,
   finishStraightBoardEmailSignup,
-  isEmailStraightBoardRolloutActive,
+  hasStraightBoardSignupCookie,
   sendSignupVerificationEmail,
+  sessionEmailUnverified,
+  straightBoardSignupAllowed,
 } from '@/lib/auth/emailStraightBoard'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
@@ -172,7 +175,7 @@ function buildSignInLinkWithUTM(
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, utmData, inviteData, returnTo: rawReturnTo, signupContext } = await request.json()
+    const { email, utmData, inviteData, returnTo: rawReturnTo, signupContext, resendEmailVerification } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -209,9 +212,23 @@ export async function POST(request: NextRequest) {
         : {}
 
     if (
-      !existingUser &&
-      (await isEmailStraightBoardRolloutActive())
+      existingUser &&
+      resendEmailVerification &&
+      hasStraightBoardSignupCookie(request.headers.get("cookie")) &&
+      (await sessionEmailUnverified(existingUser.id))
     ) {
+      const utm =
+        utmData && typeof utmData === "object"
+          ? (utmData as Record<string, string | undefined>)
+          : {};
+      await sendSignupVerificationEmail(request, normalizedEmail, utm);
+      return NextResponse.json({
+        success: true,
+        message: "Verification email sent! Please check your inbox.",
+      });
+    }
+
+    if (!existingUser && (await straightBoardSignupAllowed(request))) {
       const finished = await finishStraightBoardEmailSignup(
         request,
         normalizedEmail,

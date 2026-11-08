@@ -3,14 +3,12 @@ import { useEffect, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 import { usePathname } from "next/navigation";
 import { isGuestUser } from "@/lib/demo/guest";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
+import { STRAIGHT_BOARD_SIGNUP_COOKIE } from "@/lib/auth/emailStraightBoard";
 
 const useEmailVerificationModal = () => {
     const [showEmailVerificationModal, setShowEmailVerificationModal] = useState(false);
     const [currentUser, ___] = useRecoilState(currentUserAtom)
     const pathname = usePathname()
-    const straightBoardOn = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG)
   useEffect(() => {
     if (currentUser && isGuestUser(currentUser)) {
       setShowEmailVerificationModal(false);
@@ -34,13 +32,17 @@ const useEmailVerificationModal = () => {
         (path) => pathname === path || pathname?.startsWith(path)
       );
       
-      if (!isVerified && !isExcludedPath && !straightBoardOn) {
+      const straightBoardPending =
+        typeof document !== "undefined" &&
+        document.cookie.includes(`${STRAIGHT_BOARD_SIGNUP_COOKIE}=1`);
+
+      if (!isVerified && !isExcludedPath && !straightBoardPending) {
         setShowEmailVerificationModal(true);
       } else {
         setShowEmailVerificationModal(false);
       }
     }
-  }, [currentUser, pathname, straightBoardOn]);
+  }, [currentUser, pathname]);
 
   return {
     showEmailVerificationModal,

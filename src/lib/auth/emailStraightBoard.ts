@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import authConfig from "@/lib/configs/auth.config";
-import {
-  FEATURE_FLAG_OWNER_USER_ID,
-  isFeatureEnabled,
-} from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -26,6 +24,8 @@ import { sendEmail } from "@/lib/email/sendEmail";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import type { IUser } from "@/models/model";
 
+export const STRAIGHT_BOARD_SIGNUP_COOKIE = "ht_straight_board_signup";
+
 const JWT_ISSUER = process.env.JWT_ISSUER || "hypertask";
 const JWT_VERIFICATION_AUDIENCE =
   process.env.JWT_VERIFICATION_AUDIENCE || "email-verification";
@@ -37,13 +37,12 @@ function verificationJwtSecret() {
 }
 
 function createVerificationToken(email: string) {
-  const token = jwt.sign({ sub: email }, verificationJwtSecret(), {
+  return jwt.sign({ sub: email }, verificationJwtSecret(), {
     expiresIn: "30m",
     issuer: JWT_ISSUER,
     audience: JWT_VERIFICATION_AUDIENCE,
     jwtid: crypto.randomUUID(),
   });
-  return token;
 }
 
 export async function sendSignupVerificationEmail(
@@ -51,8 +50,7 @@ export async function sendSignupVerificationEmail(
   to: string,
   utmData: Record<string, string | undefined> = {},
 ) {
-  const base = `${getRequestBaseUrl(request)}/verify-email`;
-  const url = new URL(base);
+  const url = new URL(`${getRequestBaseUrl(request)}/verify-email`);
   url.searchParams.set("token", createVerificationToken(to));
   for (const [key, value] of Object.entries(utmData)) {
     if (value) url.searchParams.set(key, value);
@@ -70,15 +68,32 @@ export async function sendSignupVerificationEmail(
   });
 }
 
-export async function isEmailStraightBoardRolloutActive() {
-  return isFeatureEnabled(
-    HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG,
-    FEATURE_FLAG_OWNER_USER_ID,
-  );
+export async function straightBoardSignupAllowed(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
+  if (!session) return false;
+  return isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, session.userId);
 }
 
-export async function userHasEmailStraightBoard(userId: number) {
-  return isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, userId);
+export function hasStraightBoardSignupCookie(cookieHeader: string | null) {
+  return Boolean(cookieHeader?.includes(`${STRAIGHT_BOARD_SIGNUP_COOKIE}=1`));
+}
+
+export async function sessionEmailUnverified(userId: number) {
+  const prisma = (await import("@/lib/prisma")).default;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { emailVerified: true, UserSetting: { select: { isVerified: true } } },
+  });
+  if (!user) return false;
+  return !(user.emailVerified || user.UserSetting?.isVerified);
+}
+
+export async function blockUnverifiedStraightBoardInvite(
+  userId: number,
+  cookieHeader: string | null,
+) {
+  if (!hasStraightBoardSignupCookie(cookieHeader)) return false;
+  return sessionEmailUnverified(userId);
 }
 
 function boardRedirectPath(
@@ -89,6 +104,14 @@ function boardRedirectPath(
   if (projectId) return `/project?id=${projectId}`;
   return authConfig.redirect.afterLogin;
 }
+
+const straightBoardCookieOptions = {
+  httpOnly: false,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  maxAge: 60 * 60 * 24 * 14,
+  path: "/",
+};
 
 export async function finishStraightBoardEmailSignup(
   request: NextRequest,
@@ -115,11 +138,7 @@ export async function finishStraightBoardEmailSignup(
     return {
       ok: false as const,
       response: NextResponse.json(
-        {
-          success: false,
-          error: "Failed to create user account",
-          code: "USER_CREATION_FAILED",
-        },
+        { success: false, error: "Failed to create user account", code: "USER_CREATION_FAILED" },
         { status: userUpdateResult.status === 200 ? 500 : userUpdateResult.status },
       ),
     };
@@ -157,26 +176,24 @@ export async function finishStraightBoardEmailSignup(
     boardRedirect: redirectPath,
   });
 
-  response.cookies.set(
-    "nookies_user",
-    JSON.stringify(slimUserForCookie(userData)),
-    {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 600 * 60 * 24 * 7,
-      path: "/",
-    },
-  );
+  response.cookies.set("nookies_user", JSON.stringify(slimUserForCookie(userData)), {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 600 * 60 * 24 * 7,
+    path: "/",
+  });
   response.cookies.set(
     SESSION_COOKIE,
     signSession({ id: userData.id, email: userData.email }, SESSION_TTL_SECONDS),
     sessionCookieOptions(SESSION_TTL_SECONDS),
   );
+  response.cookies.set(STRAIGHT_BOARD_SIGNUP_COOKIE, "1", straightBoardCookieOptions);
   clearBetterAuthSessionCookies(response);
   seedResponseThemeCookie(request, response);
 
-  const boardId = welcomeProjectId ?? (typeof loginBoard === "object" && loginBoard ? loginBoard.id : undefined);
+  const boardId =
+    welcomeProjectId ?? (typeof loginBoard === "object" && loginBoard ? loginBoard.id : undefined);
   if (boardId) {
     response.cookies.set("previousBoard", `project-${boardId}|&|`, {
       httpOnly: false,
@@ -190,12 +207,6 @@ export async function finishStraightBoardEmailSignup(
   return { ok: true as const, response, userId: userData.id };
 }
 
-export async function sessionEmailUnverified(userId: number) {
-  const prisma = (await import("@/lib/prisma")).default;
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { emailVerified: true, UserSetting: { select: { isVerified: true } } },
-  });
-  if (!user?.email) return false;
-  return !(user.emailVerified || user.UserSetting?.isVerified);
+export function clearStraightBoardSignupCookie(response: NextResponse) {
+  response.cookies.set(STRAIGHT_BOARD_SIGNUP_COOKIE, "", { ...straightBoardCookieOptions, maxAge: 0 });
 }

@@ -121,10 +121,6 @@ const NotificationPromoteBanner = dynamic(
   () => import("../Global/NotificationPromoteBanner"),
   { ssr: false },
 );
-const EmailConfirmBanner = dynamic(
-  () => import("../Global/EmailConfirmBanner"),
-  { ssr: false },
-);
 const CookieConsentBanner = dynamic(
   () => import("../Global/CookieConsentBanner"),
   { ssr: false },
@@ -1307,8 +1303,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      {!mbl && <EmailConfirmBanner />}
-      {!mbl && <NotificationPromoteBanner />}
+      <NotificationPromoteBanner />
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}
       {showGuestLogin === true && (
