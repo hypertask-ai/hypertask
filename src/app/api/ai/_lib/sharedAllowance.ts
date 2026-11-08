@@ -1180,10 +1180,7 @@ export function createSharedAllowanceMiddleware(args: {
           stream: new ReadableStream({
             async pull(controller) {
               try {
-                if (!settled && Date.now() - renewedAt >= LIVE_HOLD_RENEW_MS) {
-                  renewedAt = Date.now();
-                  await renewLiveReservation(reservation).catch(() => undefined);
-                }
+                if (!settled && Date.now() - renewedAt >= LIVE_HOLD_RENEW_MS) { renewedAt = Date.now(); await renewLiveReservation(reservation).catch(() => undefined); }
                 const item = await reader.read();
                 if (item.done) {
                   await release("eof", undefined, !hasOutput);
@@ -1495,10 +1492,8 @@ export async function settlePlanAllowance(reservation: PlanAllowanceReservation,
 }
 
 const RENEW_HOLD_SCRIPT = `local n=0 for i=1,#KEYS do n=n+redis.call("ZADD",KEYS[i],"XX","CH",ARGV[1],ARGV[2]) end return n`;
-const LIVE_HOLD_RENEW_MS = 4 * 60 * 1000;
-
+const LIVE_HOLD_RENEW_MS = 240_000;
 export async function renewLiveReservation(reservation: { id: string; reservationsKey?: string; scopes?: { scopes: Array<{ reservationsKey: string }> } }): Promise<boolean> {
   const keys = [...new Set([...(reservation.scopes?.scopes.map((scope) => scope.reservationsKey) ?? []), ...(reservation.reservationsKey ? [reservation.reservationsKey] : [])])];
-  if (keys.length === 0) return false;
-  return Number(await (await getRedis()).eval(RENEW_HOLD_SCRIPT, keys.length, ...keys, String(Date.now() + RESERVATION_TTL_MS), reservation.id)) > 0;
+  return keys.length > 0 && Number(await (await getRedis()).eval(RENEW_HOLD_SCRIPT, keys.length, ...keys, String(Date.now() + RESERVATION_TTL_MS), reservation.id)) > 0;
 }

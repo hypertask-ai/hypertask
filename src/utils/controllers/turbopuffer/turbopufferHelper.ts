@@ -4,7 +4,6 @@ import { TextNode } from "node-html-parser";
 
 import prisma from "@/lib/prisma";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
-import { embeddingSpendMode, withSpendCharge } from "@/lib/ai/spend/embeddingRoute";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   parseTicketSearchQuery,
@@ -1141,6 +1140,7 @@ async function embedRowsForWrite<T extends { searchText: string; projectId?: num
   for (const row of rows) buckets.set(row.teamId || `project:${row.projectId ?? ""}`, [...(buckets.get(row.teamId || `project:${row.projectId ?? ""}`) ?? []), row]);
   const written: Array<T & { vector?: number[] }> = [];
   for (const group of buckets.values()) {
+    const { embeddingSpendMode, withSpendCharge } = await import("@/lib/ai/spend/embeddingRoute");
     const route = await embeddingSpendMode(group.flatMap((row) => row.projectId ? [row.projectId] : []), group.find((row) => row.teamId)?.teamId);
     if (route === "mixed-keyword" || (typeof route !== "string" && route.mode === "keyword")) {
       written.push(...group);
@@ -1164,13 +1164,14 @@ async function embedRowsForWrite<T extends { searchText: string; projectId?: num
 }
 
 async function embedQueryForSearch(query: string, context: string, projectIds: number[] = []): Promise<number[] | null> {
+  const { embeddingSpendMode, withSpendCharge } = await import("@/lib/ai/spend/embeddingRoute");
   const route = projectIds.length ? await embeddingSpendMode(projectIds).catch(() => ({ mode: "current" as const })) : { mode: "current" as const };
   if (route === "mixed-keyword" || route.mode === "keyword") return null;
   try {
     const key = route.mode === "customer-key" ? route.httpKey : undefined;
-    const embed = () => key ? embedInputs([toEmbeddingInput(query)], key).then((rows) => rows[0] ?? null) : embedText(query);
-    if (route.mode === "vector" && route.teamId) return await withSpendCharge(route, route.teamId, [query], embed);
-    return await embed();
+    const run = () => key ? embedInputs([toEmbeddingInput(query)], key).then((rows) => rows[0] ?? null) : embedText(query);
+    if (route.mode === "vector" && route.teamId) return await withSpendCharge(route, route.teamId, [query], run);
+    return await run();
   } catch (error) {
     console.error(`${context} embedding error, using BM25 only:`, error);
     return null;
