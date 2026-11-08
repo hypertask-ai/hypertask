@@ -21,6 +21,7 @@ function quietPersonalLogStub() {
 function enforcementFor(guard) {
   return {
     agentWritingPolicyEnabled: async () => true,
+    peopleCommentWholeCheckEnabled: async () => false,
     enforceAgentWriting: async (_userId, ...writing) => guard.assertAgentWriting(...writing),
   }
 }
