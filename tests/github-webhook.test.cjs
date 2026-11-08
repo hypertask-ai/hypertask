@@ -17,6 +17,7 @@ function loadTs(relativePath) {
 async function withStubbedGithubRoute(stubbedModules, run) {
   const paths = [...new Set([
     ...Object.keys(stubbedModules),
+    "src/lib/github/appConfig.ts",
     "src/utils/controllers/assignees/assign.ts",
     "src/utils/controllers/agents/boardMembers.ts",
     "src/lib/agents/visibility.ts",
@@ -31,7 +32,14 @@ async function withStubbedGithubRoute(stubbedModules, run) {
   );
 
   for (const modulePath of [...paths, routePath]) delete require.cache[modulePath];
-  for (const [relativePath, exports] of Object.entries(stubbedModules)) {
+  const resolvedModules = {
+    "src/lib/github/appConfig.ts": {
+      getGithubAppWebhookSecret: async () => null,
+      getGithubAppConfig: async () => null,
+    },
+    ...stubbedModules,
+  };
+  for (const [relativePath, exports] of Object.entries(resolvedModules)) {
     const modulePath = path.join(root, relativePath);
     require.cache[modulePath] = {
       id: modulePath,

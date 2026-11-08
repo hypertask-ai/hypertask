@@ -11,6 +11,7 @@ const schema = read("src/prisma/schema.prisma");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
   fsCache: false,
+  alias: { "@": path.join(root, "src") },
 });
 const { resolveLegacyBoardGithubRepository } = jiti(
   path.join(root, "src/lib/github/boardConnections.ts"),
