@@ -261,6 +261,7 @@ test("unresolved shared row labels fail rather than silently dropping a setting"
 });
 
 const gatedCommands = [
+  { keys: ["settingsApiKeysAlwaysUseThisKey"], flag: "alwaysUseThisKeyEnabled", dependency: "hiddenAlwaysUseCommandKey", file: "ApiKeysSection.tsx", uiFlag: "alwaysUseThisKey" },
   { keys: ["settingsApiKeysBasetenApiKey"], flag: "basetenByokEnabled", dependency: "hiddenBasetenCommandKey", file: "ApiKeysSection.tsx", uiFlag: "basetenEnabled" },
   { keys: ["settingsApiKeysXaiApiKey", "settingsAiModelsXai"], flag: "grokGemini4Enabled", dependency: "hiddenXaiCommandKeys", file: "ApiKeysSection.tsx", uiFlag: "grokGemini4Enabled" },
   { keys: ["settingsGithub"], flag: "githubConnectEnabled", dependency: "hiddenGithubCommandKey", file: "GitHubSection.tsx", uiFlag: "enabled" },

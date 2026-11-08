@@ -13,8 +13,8 @@ const config = (kind = 'setup') => ({
   telegramToken: 'telegram-fixture', telegramChat: 'fixture',
   now: new Date('2026-10-09T10:00:00Z'), runUrl: 'https://github.com/test/repo/actions/runs/42',
 });
-function harness({ existing = false, reserveFailure = false, lookupFailure = false, telegramFailure = false } = {}) {
-  const calls = [], variables = new Map();
+function harness({ existing = false, reserveFailure = false, lookupFailure = false, telegramFailure = false, incidents = [], incidentFailure = false } = {}) {
+  const calls = [], variables = new Map(), notes = new Map();
   const fetch = async (url, options = {}) => {
     calls.push({ url, options });
     let status = 200, body = {};
@@ -25,21 +25,35 @@ function harness({ existing = false, reserveFailure = false, lookupFailure = fal
         body = { value: variables.get(name) };
       } else if (reserveFailure) status = 503;
       else { const data = JSON.parse(options.body); variables.set(data.name, data.value); }
+    } else if (url.includes('/api/mcp/tasks?project_id=15')) {
+      if (incidentFailure) status = 503;
+      else body = { tasks: incidents };
     } else if (url.includes('/api/mcp/tasks?')) {
       body = { tasks: existing ? [{ id: 42, title: existing }] : [] };
     } else if (url.endsWith('/api/mcp/tasks/create')) {
-      body = { task: { id: 42 } };
-      existing = JSON.parse(options.body).title;
+      const data = JSON.parse(options.body);
+      if (data.project_id === 15) {
+        incidents.push({ id: 77, title: data.title, sectionIsDone: false });
+        body = { task: { id: 77 } };
+      } else {
+        body = { task: { id: 42 } };
+        existing = data.title;
+      }
     } else if (url.endsWith('/api/mcp/projects/11514/labels')) body = { labels: [{ id: 'ci', name: 'CI' }, { id: 'hyci', name: 'Hypertask CI' }] };
-    else if (url.includes('/agent-activity?')) body = { activities: [] };
-    else if (url.endsWith('/api/mcp/agents/runs')) body = { run: { id: 'run-42' } };
-    else if (url.endsWith('/activities')) body = { success: true };
+    else if (url.endsWith('/api/mcp/projects/15/labels')) body = { labels: [{ id: 'inc', name: 'incident' }, { id: 'hard', name: 'brain-hard' }] };
+    else if (url.includes('/agent-activity?')) body = { activities: (notes.get(url.match(/tasks\/(\d+)\//)[1]) ?? []).map((text) => ({ text })) };
+    else if (url.endsWith('/api/mcp/agents/runs')) body = { run: { id: `run-${JSON.parse(options.body).taskId}` } };
+    else if (url.endsWith('/activities')) {
+      const id = url.match(/runs\/run-(\d+)\//)[1];
+      notes.set(id, [...(notes.get(id) ?? []), JSON.parse(options.body).text]);
+      body = { success: true };
+    }
     else if (url.endsWith('/api/mcp/comments')) body = { success: true };
     else if (url.startsWith('https://api.telegram.org/')) body = { ok: !telegramFailure };
     else assert.fail(`Unexpected request ${url}`);
     return { ok: status >= 200 && status < 300, status, json: async () => body };
   };
-  return { calls, fetch, variables };
+  return { calls, fetch, variables, incidents, notes };
 }
 
 test('unrunnable smoke creates one infra ticket, never Telegram, and updates it next day', async () => {
@@ -204,4 +218,142 @@ test('setup retries failed activity without reserving the day', async () => {
   assert.equal(h.calls.filter((c) => c.url.includes('/actions/variables') && c.options.method).length, 0);
   assert.equal(await reportProductionAlert(config(), fetch), 'ticket');
   assert.equal(h.calls.filter((c) => c.url.endsWith('/tasks/create')).length, 1);
+});
+
+const incidentCalls = (h) => h.calls.filter((c) => c.url.includes('/api/mcp/') && /project_id=15|projects\/15|tasks\/77|tasks\/create|agents\/runs/.test(c.url));
+const telegramCalls = (h) => h.calls.filter((c) => new URL(c.url).origin === 'https://api.telegram.org');
+const incidentConfig = (kind, cause, extra = {}) => ({ ...config(kind), cause, message: 'Production health failed', ...extra });
+
+test('a live failure files one urgent incident ticket and still sends Telegram', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const { assertAgentWriting } = loadModule('src/lib/agents/writing.ts');
+  const h = harness();
+  assert.equal(await reportProductionAlert(incidentConfig('live', 'health-failure'), h.fetch), 'telegram');
+  assert.equal(telegramCalls(h).length, 1);
+  const creations = h.calls.filter((c) => c.url.endsWith('/tasks/create'));
+  assert.equal(creations.length, 1);
+  const payload = JSON.parse(creations[0].options.body);
+  assert.equal(payload.project_id, 15);
+  assert.equal(payload.title, '[INCIDENT] Live health checks failed on app.hypertask.ai');
+  assert.equal(payload.priority, 'urgent');
+  assert.deepEqual(payload.labels, ['inc', 'hard']);
+  assert.match(payload.description, /seen at 2026-10-09 10:00 UTC/);
+  assert.match(payload.description, /A guarded rollback was requested\./);
+  assert.match(payload.description, /href="https:\/\/github\.com\/test\/repo\/actions\/runs\/42"/);
+  assert.doesNotThrow(() => assertAgentWriting('agent', { title: payload.title, description: payload.description }, {}, { create: true, houseRules: true }));
+  assert.equal(creations[0].options.headers.Authorization, 'Bearer agent-fixture');
+  const note = [...h.notes.get('77')][0];
+  assert.match(note, /Production health failed\nhttps:\/\/github\.com\/test\/repo\/actions\/runs\/42/);
+});
+
+test('every live cause and a failed rollback produce a plain accepted title and body', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const { assertAgentWriting } = loadModule('src/lib/agents/writing.ts');
+  const cases = [
+    ['live', 'health-failure', 'Live health checks failed', 'Production health failed'],
+    ['live', 'smoke-failure', 'Live smoke test failed', 'Smoke failed'],
+    ['live', 'api-reachability', 'Live API is unreachable', 'API down'],
+    ['rollback', 'rollback', 'Automatic rollback ran', 'Production rollback: requested. Freeze: set'],
+    ['rollback', 'rollback', 'Automatic rollback failed', 'Production rollback: failed. Freeze: FAILED'],
+  ];
+  for (const [kind, cause, what, message] of cases) {
+    const h = harness();
+    await reportProductionAlert(incidentConfig(kind, cause, { message }), h.fetch);
+    const payload = JSON.parse(h.calls.find((c) => c.url.endsWith('/tasks/create')).options.body);
+    assert.equal(payload.title, `[INCIDENT] ${what} on app.hypertask.ai`);
+    assert.doesNotThrow(() => assertAgentWriting('agent', payload, {}, { create: true, houseRules: true }));
+  }
+});
+
+test('an open incident ticket gets a note instead of a second ticket, even on a duplicate Telegram day', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness();
+  await reportProductionAlert(incidentConfig('live', 'health-failure'), h.fetch);
+  const next = incidentConfig('live', 'smoke-failure', { message: 'Smoke failed', runUrl: 'https://github.com/test/repo/actions/runs/43' });
+  assert.equal(await reportProductionAlert(next, h.fetch), 'telegram');
+  assert.equal(await reportProductionAlert({ ...next, runUrl: 'https://github.com/test/repo/actions/runs/44' }, h.fetch), 'duplicate');
+  assert.equal(h.calls.filter((c) => c.url.endsWith('/tasks/create')).length, 1);
+  const notes = h.notes.get('77');
+  assert.equal(notes.length, 3);
+  assert.match(notes[1], /runs\/43/);
+  assert.match(notes[2], /runs\/44/);
+  const searches = h.calls.filter((c) => c.url.includes('project_id=15'));
+  assert.ok(searches.every((c) => c.url.includes('status=Normal') && c.url.includes('labels=inc')));
+});
+
+test('a rerun of the same failing run does not repeat the note', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness();
+  await reportProductionAlert(incidentConfig('live', 'health-failure'), h.fetch);
+  await reportProductionAlert(incidentConfig('live', 'health-failure'), h.fetch);
+  assert.equal(h.calls.filter((c) => c.url.endsWith('/tasks/create')).length, 1);
+  assert.equal(h.notes.get('77').length, 1);
+});
+
+test('an incident ticket in a Done column does not count as open', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness({ incidents: [{ id: 5, title: '[INCIDENT] Live health checks failed on app.hypertask.ai', sectionIsDone: true }] });
+  await reportProductionAlert(incidentConfig('live', 'health-failure'), h.fetch);
+  assert.equal(h.calls.filter((c) => c.url.endsWith('/tasks/create')).length, 1);
+  assert.equal(h.notes.get('5'), undefined);
+});
+
+test('a title match wins over another open incident ticket', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness({ incidents: [
+    { id: 5, title: '[INCIDENT] Live API is unreachable on app.hypertask.ai', sectionIsDone: false },
+    { id: 6, title: '[INCIDENT] Live health checks failed on app.hypertask.ai', sectionIsDone: false },
+  ] });
+  await reportProductionAlert(incidentConfig('live', 'health-failure'), h.fetch);
+  assert.equal(h.calls.filter((c) => c.url.endsWith('/tasks/create')).length, 0);
+  assert.equal(h.notes.get('6').length, 1);
+  assert.equal(h.notes.get('5'), undefined);
+});
+
+test('a ticket failure never blocks Telegram and still fails the step with a safe reason', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness({ incidentFailure: true });
+  await assert.rejects(reportProductionAlert(incidentConfig('live', 'health-failure'), h.fetch), (error) => {
+    assert.match(error.message, /Incident GET \/tasks failed \(HTTP 503\)/);
+    assert.doesNotMatch(error.message, /agent-fixture/);
+    return true;
+  });
+  assert.equal(telegramCalls(h).length, 1);
+  assert.equal(h.variables.size, 1);
+});
+
+test('a Telegram failure still files the incident ticket', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness({ telegramFailure: true });
+  await assert.rejects(reportProductionAlert(incidentConfig('live', 'health-failure'), h.fetch), /Telegram delivery failed/);
+  assert.equal(h.calls.filter((c) => c.url.endsWith('/tasks/create')).length, 1);
+});
+
+test('a retry after a failed ticket write files it even though Telegram already went out', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness();
+  let fail = true;
+  const fetch = async (url, options) => {
+    if (url.endsWith('/tasks/create') && fail) { fail = false; return { ok: false, status: 503, json: async () => ({}) }; }
+    return h.fetch(url, options);
+  };
+  await assert.rejects(reportProductionAlert(incidentConfig('live', 'health-failure'), fetch), /Incident POST \/tasks\/create failed/);
+  assert.equal(await reportProductionAlert(incidentConfig('live', 'health-failure'), fetch), 'duplicate');
+  assert.equal(h.incidents.length, 1);
+  assert.equal(telegramCalls(h).length, 1);
+});
+
+test('without agent credentials a live failure is Telegram only', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness();
+  assert.equal(await reportProductionAlert(incidentConfig('live', 'health-failure', { mcpToken: '' }), h.fetch), 'telegram');
+  assert.equal(incidentCalls(h).length, 0);
+  assert.equal(telegramCalls(h).length, 1);
+});
+
+test('setup alerts never touch the incident board', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness();
+  await reportProductionAlert(config('setup'), h.fetch);
+  assert.equal(h.calls.filter((c) => c.url.includes('project_id=15') || c.url.includes('projects/15')).length, 0);
 });

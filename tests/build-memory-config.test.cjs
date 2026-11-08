@@ -74,6 +74,14 @@ test("production build heap cap leaves half the build machine for native memory"
       "or the parent Next process, native webpack memory and the page worker run the container out of memory " +
       "(YPER4-957)",
   );
+  const MEASURED_HEAP_MB = 4096;
+  assert.equal(
+    Number(cap[1]),
+    MEASURED_HEAP_MB,
+    `heap cap ${cap[1]} MB must be ${MEASURED_HEAP_MB}: ` +
+      "3584 MB still aborted inside V8 on 2026-11-07 with a 3080 MB live set and no SIGKILL (HYCI-184, dpl_9tg62h9sytSJHF5iEJKQeftXk7o2). " +
+      "4096 MB is half of the 8192 MiB machine.",
+  );
 });
 
 test("production build names the builder the heap cap bounds", () => {

@@ -33,7 +33,7 @@ print(markers[sys.argv[1]])
     approval = p / 'approvals'
     approval.mkdir(mode=0o700)
     env = dict(os.environ, HOME=str(home), UNLAZY_APPROVAL_DIR=str(approval), CALLS=str(p/'calls'))
-    for key in ['CLAUDE_CODE_SESSION_ID', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'UNLAZY_SCOPE']:
+    for key in ['CLAUDE_CODE_SESSION_ID', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CURSOR_CONVERSATION_ID', 'UNLAZY_SCOPE']:
         env.pop(key, None)
     repo = p / 'repo with spaces'
     repo.mkdir()
@@ -87,6 +87,14 @@ print(markers[sys.argv[1]])
     r = run('HYFA-13', CODEX_SESSION_ID='codexses-full', CODEX_THREAD_ID='ignoredC-full')
     assert r.returncode == 0 and len(ids(ledger('codexses-full'))) == 16
     print('ok Codex session/thread fallback and precedence')
+
+    cursor = '65c3c599-c659-4667-aab1-27da8e8beb12'
+    r = run('HYFA-14', CURSOR_CONVERSATION_ID=cursor)
+    assert r.returncode == 0 and len(ids(ledger(cursor))) == 8, r.stderr
+    assert (ledger(cursor).parent/'session').read_text() == cursor+'\n'
+    r = run('HYFA-15', CURSOR_CONVERSATION_ID=cursor, CLAUDE_CODE_SESSION_ID='ignoredA-full')
+    assert r.returncode == 0 and len(ids(ledger('ignoredA-full'))) == 8, r.stderr
+    print('ok Cursor conversation id fallback and precedence')
 
     before = file.read_text()
     count = len(calls())

@@ -2,6 +2,7 @@ import { useThemeVisibility } from "@/hooks/useThemeVisibility";
 import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
 import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
+import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import {
   useCallback,
@@ -64,6 +65,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
@@ -118,6 +120,7 @@ const Commands = (props: Props) => {
   } = props;
   const removeImageGeneration = useFlag(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG);
   const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
+  const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -208,6 +211,9 @@ const Commands = (props: Props) => {
   const basetenByokEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
   let hiddenBasetenCommandKey: string | undefined;
   if (!basetenByokEnabled) hiddenBasetenCommandKey = "settingsApiKeysBasetenApiKey";
+  const alwaysUseThisKeyEnabled = useFlag(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG);
+  let hiddenAlwaysUseCommandKey: string | undefined;
+  if (!alwaysUseThisKeyEnabled) hiddenAlwaysUseCommandKey = "settingsApiKeysAlwaysUseThisKey";
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   let hiddenXaiCommandKeys = "";
   if (!grokGemini4Enabled) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai";
@@ -264,6 +270,7 @@ const Commands = (props: Props) => {
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
             command.key !== hiddenBasetenCommandKey &&
+            command.key !== hiddenAlwaysUseCommandKey &&
             !hiddenXaiCommandKeys.split(" ").includes(command.key) &&
             command.key !== hiddenGithubCommandKey &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
@@ -419,6 +426,7 @@ const Commands = (props: Props) => {
     hiddenGithubCommandKey,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
+    hiddenAlwaysUseCommandKey,
     hiddenXaiCommandKeys,
     autoTaskDescriptionsEnabled,
     currentProject,
@@ -738,7 +746,9 @@ const Commands = (props: Props) => {
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
           { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
-          { id: "compose", className: "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <><span className="flex items-center gap-2"><Sparkles size={18} strokeWidth={1.75} aria-hidden />New Task</span><Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> },
+          plusComposerEnabled
+            ? { id: "compose", label: <>New Task<Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> }
+            : { id: "compose", className: "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <><span className="flex items-center gap-2"><Sparkles size={18} strokeWidth={1.75} aria-hidden />New Task</span><Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> },
         ] : [{ id: "search", label: "Search" }, { id: "compose", label: "Compose" }]}
         activeId={isCompose ? "compose" : "search"}
         onSelect={(paletteTab) => setShowCommands((previous) => ({ ...previous, paletteTab: paletteTab as "search" | "compose" }))}

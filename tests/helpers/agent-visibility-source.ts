@@ -118,6 +118,15 @@ export async function assertAgentVisibilitySources() {
     /mapTaskAssignee\(row, ctx\.user\.id, task\.projectId\)/,
   );
   assert.match(assignRoute, /mapped \? \[\{ \.\.\.mapped, userId: row\.userId \}\] : \[\]/);
+  assert.match(assignRoute, /isAgentOnBoard\(task\.projectId, targetAgentId\)/);
+  assert.match(
+    assignRoute,
+    /\.\.\.boardAgentVisibilityWhere\(ctx\.user\.id\)/,
+  );
+  assert.doesNotMatch(
+    assignRoute,
+    /where: \{ id: targetAgentId, userId: ctx\.user\.id \}/,
+  );
   for (const ownerSurface of [
     agentRoute,
     activityRoute,

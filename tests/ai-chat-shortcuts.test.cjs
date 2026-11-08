@@ -54,7 +54,8 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     selectSession: (id) => { actions.push(`select:${id}`); context.currentSession = sessions.find((session) => session.id === id); },
     handleAttachmentClick: () => actions.push("attach"), handleAddContext: () => actions.push("mention"),
     handleCancelStream: () => actions.push("stop"), deleteSession: async (id) => actions.push(`delete:${id}`),
-    mentionFlag: false, isSidebarMode: true, toggleSidebarMode: () => actions.push("expand"),
+    mentionFlag: false, isSidebarMode: true, toggleSidebarMode: () => actions.push("toggle-sidebar"),
+    setAiChatAutoOpenSuppressed: () => actions.push("unsuppress"),
   };
   const { createAiChatKeyboard } = load("src/hooks/MultiPages/AIChat/aiChatKeyboard.ts", {
     "@/lib/constants/keyboard-handler": { KeyCodes: { ENTER: 13, ESCAPE: 27, Q: 81, U: 85, D: 68 } },
@@ -88,8 +89,22 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     "@/components/Modals/OptionPicker": { default: "OptionPicker" },
     "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { aiMentionList: "mentions" } },
     "@/lib/skills/slashSkills": { SLASH_MENU_DOM_ID: "slash-menu" },
+    "next/navigation": { useRouter: () => ({ push: (path) => actions.push(`navigate:${path}`) }) },
+    "@/lib/aiChatDisplayMode": {
+      buildFullScreenChatPath: (returnPath, sessionId) =>
+        `${sessionId ? `/chat/${sessionId}` : "/chat"}?return_to=${encodeURIComponent(returnPath)}`,
+    },
   });
-  const render = () => { index = 0; hook = useChatShortcuts({ enabled, active }); hook.surfaceRef(root); return hook; };
+  const render = () => {
+    index = 0;
+    hook = useChatShortcuts({
+      enabled,
+      active,
+      onExpand: surface === "fullscreen" ? () => { actions.push("exit-fullscreen"); } : undefined,
+    });
+    hook.surfaceRef(root);
+    return hook;
+  };
   render();
   root.querySelector("[data-ai-chat-composer]").addEventListener("keydown", (event) => context.tiptapKeydown(event));
   root.addEventListener("keydown", (nativeEvent) => {
@@ -121,10 +136,19 @@ for (const surface of ["fullscreen", "sidebar", "floating"]) {
       for (const [key, modifiers, expected] of [
         ["b", { ctrlKey: true, shiftKey: true }, "scope"], ["m", { ctrlKey: true, shiftKey: true }, "model"],
         ["u", { ctrlKey: true }, "attach"], ["d", { ctrlKey: true, shiftKey: true }, "mic"],
-        ["2", { altKey: true }, "mention"], ["e", { ctrlKey: true, shiftKey: true }, "expand"], ["Enter", {}, "send"], ["Enter", { ctrlKey: true }, "send"],
+        ["2", { altKey: true }, "mention"], ["Enter", {}, "send"], ["Enter", { ctrlKey: true }, "send"],
       ]) {
         assert.equal(f.press(key, modifiers).defaultPrevented, true);
         assert.equal(f.actions.at(-1), expected);
+      }
+      const expandEvent = f.press("e", { ctrlKey: true, shiftKey: true });
+      assert.equal(expandEvent.defaultPrevented, true);
+      if (surface === "fullscreen") {
+        assert.equal(f.actions.at(-1), "exit-fullscreen");
+      } else {
+        assert.match(f.actions.at(-1), /^navigate:\/chat/);
+        assert.ok(f.actions.includes("restore"));
+        assert.ok(f.actions.includes("unsuppress"));
       }
       f.context.isTyping = true;
       assert.equal(f.press("Escape").defaultPrevented, true);

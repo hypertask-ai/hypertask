@@ -284,6 +284,26 @@ HT_TOKEN="$(cat "$TOKEN_FILE")"
 [ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
 export HT_TOKEN
 completion_move "$@"
+FILING_GATE=${VCC_FILING_GATE:-$HOME/.local/share/house-rules/skills/hypertask-triage/scripts/filing-gate}
+create_project() {
+  local words=() project=''
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project=${2:-}; shift ;;
+      --project=*) project=${1#--project=} ;;
+      -*) ;;
+      *) [ "${#words[@]}" -ge 2 ] || words+=("$1") ;;
+    esac
+    shift
+  done
+  case "${words[*]}" in "task create"|"tasks create") printf '%s' "$project" ;; esac
+}
+filing_gate() {
+  case "$(create_project "$@")" in 11514|4060) ;; *) return 0 ;; esac
+  [ -x "$FILING_GATE" ] || { printf 'vcc: task create refused: filing-gate missing at %s; run house-rules-sync\n' "$FILING_GATE" >&2; exit 5; }
+  "$FILING_GATE" --who "$IDENTITY" -- "$@"
+}
+if [ "${1:-}" != activity ]; then filing_gate "$@"; fi
 review_refuse() {
   printf 'vcc: Valentin Review needs one plain Question comment first: a "What this is:" paragraph, then "Question: <strong>yes/no question?</strong>", "My recommendation:", "Why:", "Yes:" and "No:". Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5

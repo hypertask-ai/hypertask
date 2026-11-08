@@ -40,6 +40,10 @@ TITLE_RE="^($PREFIXES)-[0-9]+ \\[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FE
 
 fail() { echo "FAIL: $*"; exit 1; }
 
+ship_session_id() {
+  printf '%s' "${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-${CURSOR_CONVERSATION_ID:-}}}}"
+}
+
 check_ticket() {
   hypertask tasks get "$1" --json 2>/dev/null | jq -e '.success == true and (.tasks | length) > 0' >/dev/null \
     || fail "ticket $1 not found on the board"
@@ -47,7 +51,7 @@ check_ticket() {
 }
 
 deeper_gate_runnable() {
-  local f id=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
+  local f id; id=$(ship_session_id)
   [[ ${id:0:8} =~ ^[A-Za-z0-9._-]{1,8}$ ]] || return 1
   for f in "$PWD/.unlazy/s-${id:0:8}"/gates/*.md; do
     [ -f "$f" ] || continue
@@ -76,7 +80,7 @@ check_deeper() {
   deeper_gate_runnable "$id"
   case $? in
     0) ;;
-    1) fail "deeper needs this session's id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID) to find its scope" ;;
+    1) fail "deeper needs this session's id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID, CODEX_THREAD_ID or CURSOR_CONVERSATION_ID) to find its scope" ;;
     *) fail "$id has no gate with CHECK: and EXPECT: in this session's $PWD/.unlazy/s-<id>/gates/*.md; a manual note does not count" ;;
   esac
   echo "deeper ok"
@@ -209,7 +213,7 @@ pr_row() {
 }
 
 check_branch() {
-  local session=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}} record
+  local session record; session=$(ship_session_id)
   [[ ${2:-} =~ ^[A-Za-z0-9._/-]+$ ]] || fail "usage: ship-check branch <T> <branch|none>"
   [[ $session =~ ^[A-Za-z0-9_-]+$ ]] || fail "cleanup needs this session's full id"
   record="$EVID/$1/cleanup/$session"
@@ -903,7 +907,7 @@ cleaned_branch_checks() {
 }
 
 check_cleaned() {
-  local b repo=${SHIP_CHECKOUT:-} session=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}} record
+  local b repo=${SHIP_CHECKOUT:-} session record; session=$(ship_session_id)
   [[ $session =~ ^[A-Za-z0-9_-]+$ ]] || fail "cleanup needs this session's full id"
   record="$EVID/$1/cleanup/$session"
   [ -s "$record" ] || fail "record this session's branches first: ship-check branch $1 <branch>, or none if you created none"

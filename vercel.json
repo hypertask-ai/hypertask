@@ -56,6 +56,14 @@
     {
       "path": "/api/cron/agent-board-access-requests",
       "schedule": "37 * * * *"
+    },
+    {
+      "path": "/api/cron/funnel-probe-signup",
+      "schedule": "15 6 * * *"
+    },
+    {
+      "path": "/api/cron/abandoned-work",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

@@ -1,0 +1,47 @@
+name: Codex review gate
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created, edited]
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+  checks: write
+
+jobs:
+  gate:
+    concurrency:
+      group: codex-review-gate
+      queue: max
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        github.event.comment.user.login == 'chatgpt-codex-connector[bot]') ||
+      (github.event_name != 'issue_comment' &&
+        (github.event.review.user.login == 'chatgpt-codex-connector[bot]' ||
+         github.event.comment.user.login == 'chatgpt-codex-connector[bot]'))
+    name: Set ai-review from the Codex review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - if: hashFiles('.github/scripts/codex-review-gate.cjs') != ''
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const run = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/codex-review-gate.cjs`).run;
+            await run({ github, context, core });

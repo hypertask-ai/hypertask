@@ -7,6 +7,7 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const file = path.join(root, "src/lib/mcp/operations/tasks/create/operation.ts");
+const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 
 function loadPost({ flagOn, knownLabelIds }) {
   const source = fs.readFileSync(file, "utf8");
@@ -83,9 +84,10 @@ function loadPost({ flagOn, knownLabelIds }) {
   Module._load = function (request, parent, isMain) {
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
     if (request in stubs) return stubs[request];
-    if (request.startsWith("@/lib/flags/definitions/")) {
+    if (request.startsWith("@/lib/flags/definitions/htpr-7121")) {
       return { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG: "htpr-7121-mcp-not-found-detail" };
     }
+    if (request.startsWith("@/")) return jiti(path.join(root, "src", request.slice(2)));
     return originalLoad.call(this, request, parent, isMain);
   };
   try {

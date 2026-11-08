@@ -1,6 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
-import { resolveAiFallbackCredential, getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getByokOrTeamGatewayApiKeyForModelOption, resolveForcedTeamKey, ForcedTeamKeyError } from "@/app/api/ai/_lib/byokKeys";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
 import { getAiModelOptionById, isHaiku55Model, resolveHaikuModelId } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
@@ -123,6 +123,19 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
 
       },
       onError: async ({ error }) => {
+        const forcedLookup = { trustedTeamId: gatewayTags.teamId, projectId: usageProjectId, userId: dbUser.id, agentId: actingAgent?.id };
+        try {
+          const forced = typeof resolveForcedTeamKey === "function" ? await resolveForcedTeamKey(forcedLookup) : null;
+          if (forced) {
+            await handleModelError(new ForcedTeamKeyError(forced.provider));
+            return;
+          }
+        } catch (lookupError) {
+          if (lookupError instanceof ForcedTeamKeyError) {
+            await handleModelError(lookupError);
+            return;
+          }
+        }
         if (
           attempt === 0 &&
           !state.cancelled &&

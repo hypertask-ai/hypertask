@@ -14,6 +14,7 @@ import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiS
 import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import prisma from "@/lib/prisma";
 import { getOpenAiOnlyDefaultContext } from "@/app/api/ai/_lib/byokKeys";
+import { isOwnKeyOnlySettings } from "@/lib/ai/forcedTeamKey";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 class ProviderSettingsError extends Error {}
@@ -89,6 +90,7 @@ const handler: NextApiHandler = async (
     return res.status(200).json({
       defaultModelContext: { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute },
       gdprSafeMode: isGdprSafeModeEnabled(lookup.settings),
+      ownKeyOnly: isOwnKeyOnlySettings(lookup.settings),
       providers: providerRows(lookup.settings),
     });
   }

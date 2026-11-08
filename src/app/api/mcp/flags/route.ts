@@ -22,6 +22,8 @@ import {
 } from "@/lib/flags";
 import { HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7727-plain-yes-flag-approval";
 import { HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG } from "@/lib/flags/definitions/htpr-8339-template-switch-question";
+import { YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG } from "@/lib/flags/definitions/yper4-801-manager-lease-flag-switch";
+import { isManagerClassAgentName, MANAGER_GRANT_HEADER, requireCurrentManagerGrant } from "@/lib/flags/managerLease";
 import { authorize } from "@/lib/flags/agentAuthorization";
 import { lockCommentReactions } from "@/lib/mcp/comments/reactionLock";
 import prisma from "@/lib/prisma";
@@ -113,6 +115,9 @@ export async function PATCH(request: NextRequest) {
       where: { id: ctx.agentId as string },
       select: { displayName: true },
     });
+    const requiresManagerGrant = isManagerClassAgentName(agent.displayName)
+      && await isFeatureEnabled(YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG, ctx.user.id);
+    const managerGrant = request.headers.get(MANAGER_GRANT_HEADER);
     const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
@@ -120,6 +125,9 @@ export async function PATCH(request: NextRequest) {
       reason: usesFailure ? `live-qa-failed:${body.failure}` : source as string,
       source: "api",
     }, async (tx) => {
+      if (requiresManagerGrant) {
+        await requireCurrentManagerGrant(tx, { agentId: ctx.agentId as string, grant: managerGrant });
+      }
       if (usesFailure) {
         const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
         if (!stored && !(FEATURE_FLAG_KEYS as readonly string[]).includes(body.key as string)) return;

@@ -180,3 +180,77 @@ Both confirmed kills are the same signature as the 4 cap: `SIGKILL` with no "Rea
 The build script now sets `NEXT_WEBPACK_PARALLELISM=1`: one module build at a time, so the native side of the compile no longer adds a second SWC transform's AST on top of the first. `tests/build-memory-config.test.cjs` fails if the cap goes above 1 or is dropped. The expected cost is build wall-clock only. The margin is real but not unlimited: green builds measured 11 min 40 s to 17 min 42 s at the 2 cap, and if serialising the compile roughly doubles its share the build lands in the low thirties, still inside the 45 minute timeout. A build that does time out fails differently from these (a cancelled or timed-out deployment, not `SIGKILL` 117 s in), so the two are told apart from the deployment status.
 
 If one module build at a time still reports `out_of_memory`, the same ceiling is being reached from a single module and the remaining lever without money is the heap cap below. After that the compiler needs more than an 8 GB machine, which is the paid Enhanced Build Machine and Valentin's decision.
+
+## Heap cap 3072 MB (2026-11-07, HYCI-177)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/177
+
+Parallelism was already 1. Four production deployments in a row were still killed the same way. The last green deployment was `bfd983c551` (`dpl_47MRwndU1miPr2qUxUDRm8aPLo6h`, 8192 MiB, 6m 32s). The first red one was `62545b20f2`, the merge of pull request 3044 (`dpl_GLxbLvxn5sV2YiHX8CJoDWUw7z1x`). The same kill then hit `ad8563f804`, `c15c1aa1d7` and `4b88cc8821` (`dpl_6UGLqqvaf3r6FmYBanTMxF3RNrRC`).
+
+The failing log names the phase and rules out a V8 heap overflow:
+
+```
+✓ webpackBuildWorker
+✓ webpackMemoryOptimizations
+  Creating an optimized production build ...
+Next.js build worker exited with code: null and signal: SIGKILL
+• At least one "Out of Memory" ("OOM") event was detected during the build.
+```
+
+The kill lands about 130 seconds into the compile. There is no "Reached heap limit". The 4096 MB cap was still in the build script, so the worker could hold a 4 GB heap on an 8 GB machine while native SWC memory sat outside that cap. Pull request 3044 added no dependency and no build setting. It is the straw. The tree diff from the last green commit is about 1555 lines.
+
+The build script then set `--max-old-space-size=3072`. `NEXT_WEBPACK_PARALLELISM` stayed 1 and the builder stayed `--webpack`. The guard test rejected a cap above 3072. The written next step, if a build then said "Reached heap limit", was the paid Enhanced Build Machine. A silent SIGKILL at 3072 would have been the same decision.
+
+That heap-limit case arrived the same day. HYCI-184 measured it and raised the cap to 3584 MB instead of buying a larger machine. See the next section.
+
+## Heap cap 3584 MB (2026-11-07, HYCI-184)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/184
+
+The last green production deployment was `87a3b06a` (deployment 7627067597). The next production deployments failed while the build script still set `--max-old-space-size=3072`:
+
+| Commit | Deployment | Log |
+| --- | --- | --- |
+| `2d07cb81ac` (first bad, merge of pull request 3038) | 7627757510 | `dpl_3nFWTzD4yPtksDH8sEtT6HKY6wDe` |
+| `e41b16ad95` | 7627883408 | `dpl_J6DZH8eFqGiaSUdoKRuf5dr66TzA` |
+| `c33489117f` | 7627998823 | GitHub recorded failure |
+
+The first two logs die in "Creating an optimized production build" with:
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+```
+
+Mark-compact had reduced the live set to about 2783 MB, and the worker was still running when V8 aborted. That is the 3072 MB heap cap, not the SIGKILL from HYCI-177. The build machine is still the standard 8192 MiB machine. Pull request 3038 changed 177 lines of flag defaults and added no dependency. The tree was already on the ceiling.
+
+The build script then set `--max-old-space-size=3584`. That is 512 MB under the 4096 MB cap that SIGKILL'd the machine, and under half of 8192 MiB. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
+
+That cap was not enough. Deployment 7628217481 (`51fcc525`, `dpl_9tg62h9sytSJHF5iEJKQeftXk7o2`) died in the same phase:
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+```
+
+Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. The cap is now 4096 MB, half the machine. A SIGKILL or another heap abort at 4096 MB is the paid Enhanced Build Machine, which is Valentin's decision.
+
+## Live-within-10-min incident (2026-11-07, HYCI-180)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/180
+
+Fleet-watch opened this when only 87 percent of 31 Hypertask merges in the last 24 hours reached production within 10 minutes of merge. The miss count was four merges stuck on failed production builds, not slow checks. The live KPI is merge time to the earliest successful Production deployment on GitHub (`ci_perf.live_samples` in poteto-2-advisor).
+
+The stuck merges line up with the heap-cap regression in the HYCI-177 note above: `3072` MB aborted inside V8 on pull requests 3038, 3037 and 3051; `3584` MB still aborted on pull request 3063 (`dpl_9tg62h9sytSJHF5iEJKQeftXk7o2`). HYCI-184 restored `4096` MB in pull request 3065 (`76c0433c59`).
+
+Measured from the live cache at 2026-11-08 UTC, after the `76c0433` merge:
+
+| Fact | Value |
+| --- | --- |
+| Production deployments on the merge commit or later | 7 |
+| Failed or errored | 1 (`a8c78f2`, superseded before the fix landed) |
+| Merged app pull requests after the fix (excluding the fix commit) | 5 |
+| Live within 10 minutes | 5 of 5 (100 percent) |
+| Median merge to live | 6.6 minutes |
+| Slowest after the fix | 7.6 minutes (pull request 3062) |
+| Fix commit pull request 3065 | 10.1 minutes to live |
+
+The fix is live on `production`. The ticket closes when the CI performance page shows at least 90 percent live-within-10-min for three consecutive London days, not on this document alone.

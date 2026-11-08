@@ -418,6 +418,7 @@ check('tickets', 'negative control rejects a known-group data-loss mutation', ()
   writeFileSync(join(directory, 'io.mjs'), readFileSync(join(HERE, 'io.mjs')));
   writeFileSync(join(directory, 'noise.json'), readFileSync(join(HERE, 'noise.json')));
   writeFileSync(join(directory, 'incident.mjs'), readFileSync(join(HERE, 'incident.mjs')));
+  writeFileSync(join(directory, 'ticketDescription.mjs'), readFileSync(join(HERE, 'ticketDescription.mjs')));
   const mutant = await import(pathToFileURL(join(directory, 'collector.mjs')));
   h.events([event()]); await mutant.collect({ env: h.env, now: NOW, sources: [fixture] });
   h.events([event({ ts: new Date(NOW + HOUR).toISOString() })]);
@@ -479,7 +480,7 @@ check('reporting', 'noise alert threshold plans exactly one ticket above the lim
     if (count > 50) {
       assert.match(planned.stdout, /SSL configuration warning repeated 51 times in one hour/);
       assert.match(planned.stdout, /warning on stderr/);
-      assert.match(planned.stdout, /Fix it at the source/);
+      assert.match(planned.stdout, /Fix the noisy warning at the source/);
       assert.match(planned.stdout, /\/route\/0, \/route\/1/);
     }
     assert.equal(existsSync(h.statePath), false);
@@ -998,6 +999,7 @@ check('install', 'units mirror precedent, installer copies modules/noise and fak
   const result = h.cli('--install'); assert.equal(result.status, 0, result.stderr);
   const target = join(h.home, '.local/lib/hypertask/error-collector');
   for (const name of ['collector.mjs', 'noise.json', 'sources/fixture.mjs']) assert.deepEqual(readFileSync(join(target, name)), readFileSync(join(HERE, name)));
+  assert.deepEqual(readFileSync(join(target, 'ticketDescription.mjs')), readFileSync(join(HERE, 'ticketDescription.mjs')));
   assert.equal(statSync(join(target, 'collector.mjs')).mode & 0o777, 0o755);
   for (const suffix of ['service', 'timer']) assert.deepEqual(readFileSync(join(h.home, `.config/systemd/user/error-collector.${suffix}`)), readFileSync(join(HERE, `../error-collector.${suffix}`)));
   assert.deepEqual(h.calls().filter(c => c.name === 'systemctl').map(c => c.args), [['--user', 'daemon-reload'], ['--user', 'enable', '--now', 'error-collector.timer']]);
