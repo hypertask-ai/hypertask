@@ -56,5 +56,6 @@ export const test = base.extend({
     page.goBack = (options) => settleAfter(page, () => goBack(options))
     page.goForward = (options) => settleAfter(page, () => goForward(options))
     await provide(page)
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
   },
 })
