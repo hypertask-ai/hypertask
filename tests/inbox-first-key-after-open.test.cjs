@@ -176,7 +176,20 @@ test("unusable saved indexes fall back to the top", () => {
 
 test("the inbox page hands the resolved opening position to its split", () => {
   assert.match(inboxSource, /resolveInboxOpeningPosition\(/);
-  assert.match(inboxSource, /resumesPosition=\{inboxOpening\.resumes\}/);
+  assert.match(inboxSource, /inboxFirstRow\s*\?/);
+  assert.match(inboxSource, /resumesPosition=\{inboxOpening\.resumes && inboxTab === openingTab\}/);
   assert.match(splitSource, /resumesPosition\?: boolean/);
   assert.match(splitSource, /keyboardNavigationStarted/);
+});
+
+test("the new first-row behaviour ships behind its own bugfix flag", () => {
+  const { default: flag } = jiti(
+    path.join(root, "src/lib/flags/definitions/htpr-8868-inbox-first-row.ts"),
+  );
+  assert.equal(flag.key, "htpr-8868-inbox-first-row");
+  assert.equal(flag.kind, "bugfix");
+  assert.equal(flag.defaultMode, "EVERYONE");
+  assert.equal(flag.releaseRisk.risk, "small");
+  assert.match(splitSource, /HTPR_8868_INBOX_FIRST_ROW_FLAG/);
+  assert.match(inboxSource, /HTPR_8868_INBOX_FIRST_ROW_FLAG/);
 });

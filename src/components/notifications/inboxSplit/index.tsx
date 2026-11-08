@@ -4,6 +4,7 @@ import { AgentBoardAccessDecision } from "../NotificationRow";
 
 import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
+import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
 import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
 import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-8083-inbox-boundaries";
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
@@ -181,7 +182,7 @@ const InboxSplit = ({
     string | null
   >(null);
   const [keyboardNavigationStarted, setKeyboardNavigationStarted] =
-    useState(resumesPosition);
+    useState(resumesPosition || !inboxFirstRow);
   const { goToProjectShortcut } = useProjectQuery();
   const { updateInView } = useUpdateInView({
     value,
@@ -197,6 +198,7 @@ const InboxSplit = ({
   const boardAccessDecisions = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
   const boardAccessDecisionCard = boardAccessDecisions ? <AgentBoardAccessDecision /> : null;
   const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
+  const inboxFirstRow = useFlag(HTPR_8868_INBOX_FIRST_ROW_FLAG);
   const tabScopedSelection = useFlag(HTPR_8148_INBOX_TAB_SELECTION_FLAG);
   const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
@@ -312,7 +314,7 @@ const InboxSplit = ({
         row.item.notificationIndex === globalFocus.currIdx,
     )?.key ?? null;
   const selectedKeyboardRow =
-    activeKeyboardRowKey === null && !resumesPosition
+    inboxFirstRow && activeKeyboardRowKey === null && !resumesPosition
       ? keyboardRows[0] ?? null
       : reconcileInboxKeyboardRow(
           keyboardRows,
