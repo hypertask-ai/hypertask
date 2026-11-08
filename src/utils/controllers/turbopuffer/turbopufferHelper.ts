@@ -4,6 +4,12 @@ import { TextNode } from "node-html-parser";
 
 import prisma from "@/lib/prisma";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
+import { SharedAiAllowanceExceededError } from "@/app/api/ai/_lib/sharedAllowance";
+import {
+  embeddingRouteForTeam,
+  searchRouteForProjects,
+  withEmbeddingCharge,
+} from "@/lib/ai/spend/embeddingRoute";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   parseTicketSearchQuery,
@@ -543,12 +549,12 @@ export async function upsertTaskRowsToTurbopuffer(
 ) {
   if (rows.length === 0) return;
 
-  const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
+  const { rows: rowsWithVectors, skipWrite } = await embedRowsForWrite(
     rows,
     "turbopuffer task upsert"
   );
 
-  if (!hasVectors) {
+  if (skipWrite) {
     console.error(
       `turbopuffer task upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
@@ -602,12 +608,12 @@ export async function upsertCommentRowsToTurbopuffer(
 ) {
   if (rows.length === 0) return;
 
-  const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
+  const { rows: rowsWithVectors, skipWrite } = await embedRowsForWrite(
     rows,
     "turbopuffer comment upsert"
   );
 
-  if (!hasVectors) {
+  if (skipWrite) {
     console.error(
       `turbopuffer comment upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
@@ -645,12 +651,12 @@ export async function upsertPageRowsToTurbopuffer(
 ) {
   if (rows.length === 0) return;
 
-  const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
+  const { rows: rowsWithVectors, skipWrite } = await embedRowsForWrite(
     rows,
     "turbopuffer page upsert"
   );
 
-  if (!hasVectors) {
+  if (skipWrite) {
     console.error(
       `turbopuffer page upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
@@ -755,12 +761,12 @@ export async function upsertCustomInstructionFileRowsToTurbopuffer(
 ) {
   if (rows.length === 0) return;
 
-  const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
+  const { rows: rowsWithVectors, skipWrite } = await embedRowsForWrite(
     rows,
     "turbopuffer custom instruction file upsert"
   );
 
-  if (!hasVectors) {
+  if (skipWrite) {
     console.error(
       `turbopuffer custom instruction file upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
@@ -819,9 +825,12 @@ export async function searchTasks({
     status
   );
 
-  const queryVector = keywordOnly
-    ? null
-    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks");
+  const queryVector = await queryVectorForProjects(
+    rankQuery,
+    projectIds.length ? projectIds : projectId ? [projectId] : [],
+    "turbopuffer searchTasks",
+    keywordOnly,
+  );
 
   if (queryVector) {
     try {
@@ -890,9 +899,12 @@ export async function searchComments({
     status ? ["taskStatus", "Eq", status] : null,
   ]);
 
-  const queryVector = keywordOnly
-    ? null
-    : await embedQueryForSearch(query, "turbopuffer searchComments");
+  const queryVector = await queryVectorForProjects(
+    query,
+    projectIds,
+    "turbopuffer searchComments",
+    keywordOnly,
+  );
 
   if (queryVector) {
     try {
@@ -950,9 +962,12 @@ export async function searchCustomInstructionFiles({
     projectId,
     includeBoardMemory
   );
-  const queryVector = keywordOnly
-    ? null
-    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles");
+  const queryVector = await queryVectorForProjects(
+    query,
+    [projectId],
+    "turbopuffer searchCustomInstructionFiles",
+    keywordOnly,
+  );
 
   if (queryVector) {
     try {
@@ -1132,25 +1147,123 @@ async function ensureNamespaceSchema(
   });
 }
 
-async function embedRowsForWrite<T extends { searchText: string }>(
+async function groupEmbeddingRows<T extends { projectId?: number; teamId?: string }>(rows: T[]) {
+  const projectIds = [...new Set(rows.flatMap((row) => (row.teamId || !row.projectId ? [] : [row.projectId])))];
+  const projects = projectIds.length
+    ? await prisma.project.findMany({
+      where: { id: { in: projectIds } },
+      select: { id: true, teamId: true },
+    })
+    : [];
+  const teamByProject = new Map(projects.map((project) => [project.id, project.teamId]));
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const teamId = row.teamId || (row.projectId ? teamByProject.get(row.projectId) : null) || "";
+    const group = groups.get(teamId) ?? [];
+    group.push(row);
+    groups.set(teamId, group);
+  }
+  return [...groups.entries()].map(([teamId, groupRows]) => ({
+    teamId: teamId || null,
+    rows: groupRows,
+  }));
+}
+
+async function embedRowsForWrite<T extends { searchText: string; projectId?: number; teamId?: string }>(
   rows: T[],
   context: string
-): Promise<{ rows: Array<TurbopufferVectorRow<T>>; hasVectors: boolean }> {
+): Promise<{ rows: Array<T & { vector?: number[] }>; skipWrite: boolean }> {
+  const routed = await Promise.all((await groupEmbeddingRows(rows)).map(async (group) => ({
+    group,
+    route: group.teamId
+      ? await embeddingRouteForTeam(group.teamId).catch(() => ({ mode: "current" as const }))
+      : { mode: "current" as const },
+  })));
+  if (routed.every((item) => item.route.mode === "current")) {
+    try {
+      const embeddings = await embedTexts(rows.map((row) => row.searchText));
+      return {
+        rows: rows.map((row, index) => ({ ...row, vector: embeddings[index] })),
+        skipWrite: false,
+      };
+    } catch (error) {
+      console.error(`${context} embedding error, upserting without vectors:`, error);
+      return { rows, skipWrite: true };
+    }
+  }
+
+  const written: Array<T & { vector?: number[] }> = [];
+  for (const item of routed) {
+    if (item.route.mode === "keyword") {
+      written.push(...item.group.rows);
+      continue;
+    }
+    if (item.route.mode === "current") {
+      try {
+        const embeddings = await embedTexts(item.group.rows.map((row) => row.searchText));
+        written.push(...item.group.rows.map((row, index) => ({ ...row, vector: embeddings[index] })));
+      } catch (error) {
+        console.error(`${context} embedding error, upserting without vectors:`, error);
+      }
+      continue;
+    }
+    const httpKey = item.route.mode === "customer-key"
+      ? item.route.httpKey
+      : process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
+    if (!httpKey || !item.group.teamId) {
+      written.push(...item.group.rows);
+      continue;
+    }
+    try {
+      const texts = item.group.rows.map((row) => row.searchText);
+      const embeddings = item.route.mode === "vector" && item.route.allowanceKey && item.route.fundingSource
+        ? await withEmbeddingCharge({
+          teamId: item.group.teamId,
+          texts,
+          allowanceKey: item.route.allowanceKey,
+          fundingSource: item.route.fundingSource,
+        }, () => embedInputs(texts.map(toEmbeddingInput), httpKey))
+        : await embedInputs(texts.map(toEmbeddingInput), httpKey);
+      written.push(...item.group.rows.map((row, index) => ({ ...row, vector: embeddings[index] })));
+    } catch (error) {
+      if (!(error instanceof SharedAiAllowanceExceededError)) {
+        console.error(`${context} embedding error, upserting without vectors:`, error);
+      }
+      written.push(...item.group.rows);
+    }
+  }
+  if (written.length === 0) return { rows, skipWrite: true };
+  return { rows: written, skipWrite: false };
+}
+
+async function queryVectorForProjects(
+  query: string,
+  projectIds: number[],
+  context: string,
+  keywordOnly: boolean,
+): Promise<number[] | null> {
+  if (keywordOnly) return null;
+  const route = await searchRouteForProjects(projectIds).catch(() => ({ kind: "current" as const }));
+  if (route.kind === "keyword") return null;
+  if (route.kind === "current") return embedQueryForSearch(query, context);
+  const httpKey = route.kind === "customer-key" ? route.httpKey : process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
+  if (!httpKey) return null;
   try {
-    const embeddings = await embedTexts(rows.map((row) => row.searchText));
-    return {
-      rows: rows.map((row, index) => ({
-        ...row,
-        vector: embeddings[index],
-      })),
-      hasVectors: true,
-    };
+    const embed = () => embedInputs([toEmbeddingInput(query)], httpKey);
+    const vectors = route.kind === "vector"
+      ? await withEmbeddingCharge({
+        teamId: route.teamId,
+        texts: [query],
+        allowanceKey: route.allowanceKey,
+        fundingSource: route.fundingSource,
+      }, embed)
+      : await embed();
+    return vectors[0] ?? null;
   } catch (error) {
-    console.error(
-      `${context} embedding error, upserting without vectors:`,
-      error
-    );
-    return { rows, hasVectors: false };
+    if (!(error instanceof SharedAiAllowanceExceededError)) {
+      console.error(`${context} embedding error, using BM25 only:`, error);
+    }
+    return null;
   }
 }
 
