@@ -18,9 +18,8 @@ on:
 
 concurrency:
   group: ci-tests-${{ github.event.pull_request.number || github.sha }}
-  # Superseded PR runs are waste, but every production run must finish its full
-  # test report and warning path.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  queue: max
+  cancel-in-progress: false
 
 # One knob for the Test step. YPER4-554 (HT Product Lead, 2026-10-24) capped it
 # at 2 because 3 or more count-split shards queued other pulls. YPER4-777 broke
@@ -84,9 +83,8 @@ jobs:
     # review-first `full-ci` label (owner, 2026-08-26) left ci-tests SKIPPED
     # until the label arrived, and GitHub's ruleset counts SKIPPED as passing:
     # PRs 782, 798 and 799 went live that way, and 782 broke the suite. Every
-    # non-draft PR now runs the gate on code/lifecycle events; superseded runs are
-    # cancelled by the concurrency group above, so only the newest one costs
-    # runner time. A job-level skip is never used here, because a skipped run
+    # non-draft PR now runs the gate on code/lifecycle events. A job-level
+    # skip is never used here, because a skipped run
     # newer than a failed one would read as passing again.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest

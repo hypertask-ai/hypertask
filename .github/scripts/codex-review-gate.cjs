@@ -144,14 +144,41 @@ async function run({ github, context, core }) {
 
     const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
     const existing = new Map((head.status?.contexts ?? []).map(entry => [entry.context, entry]));
+    const detailsUrl = result.evidence || `${context.serverUrl}/${owner}/${repo}/pull/${node.number}`;
+    const checkConclusion = { success: 'success', failure: 'failure' }[result.state] ?? null;
+    let latestCheckByName = new Map();
+    if (checkConclusion) {
+      const headCheckRuns = await github.paginate(github.rest.checks.listForRef, {
+        owner, repo, ref: node.headRefOid, per_page: 100,
+      });
+      for (const check of headCheckRuns) {
+        if (!CONTEXTS.includes(check.name)) continue;
+        const prior = latestCheckByName.get(check.name);
+        if (!prior || Date.parse(check.started_at) > Date.parse(prior.started_at)) {
+          latestCheckByName.set(check.name, check);
+        }
+      }
+    }
     for (const statusContext of CONTEXTS) {
       const previous = existing.get(statusContext);
       const unchanged = previous && previous.state.toLowerCase() === result.state && previous.description === description;
-      if (previous && (result.state === 'pending' || unchanged)) continue;
-      await github.rest.repos.createCommitStatus({
-        owner, repo, sha: node.headRefOid, state: result.state, context: statusContext, description,
-        target_url: result.evidence || `${context.serverUrl}/${owner}/${repo}/pull/${node.number}`,
-      });
+      if (!previous || !(result.state === 'pending' || unchanged)) {
+        await github.rest.repos.createCommitStatus({
+          owner, repo, sha: node.headRefOid, state: result.state, context: statusContext, description,
+          target_url: detailsUrl,
+        });
+      }
+      if (checkConclusion) {
+        const existingCheck = latestCheckByName.get(statusContext);
+        const checkOk = existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion;
+        if (!checkOk) {
+          await github.rest.checks.create({
+            owner, repo, name: statusContext, head_sha: node.headRefOid, status: 'completed',
+            conclusion: checkConclusion, details_url: detailsUrl,
+            output: { title: statusContext, summary: description },
+          });
+        }
+      }
     }
 
     const marker = `reviewed-commit: ${node.headRefOid}`;
