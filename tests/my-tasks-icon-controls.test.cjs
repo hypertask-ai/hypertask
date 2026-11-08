@@ -68,7 +68,7 @@ function load(file) {
 }
 const Controls = load(controlsFile).default;
 const Tabs = load(tabsFile).default;
-const { ViewControlButton } = load(shellFile);
+const { ViewControlButton } = load(viewControlButtonFile);
 const { SplitTitle } = load(splitFile);
 const { DEFAULT_MY_TASKS_VIEW_CONFIG } = load("src/models/MyTasksView.ts");
 const { DEFAULT_MY_TASKS_TABLE_COLUMNS } = load("src/utils/helperFunctions/Views/TableColumnsHelperFunctions.ts");
