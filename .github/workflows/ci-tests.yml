@@ -2359,7 +2359,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('base/package-lock.json', 'base/package.json', 'base/.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('base/package-lock.json', 'base/package.json', 'base/.npmrc', 'base/src/prisma/schema.prisma', 'base/prisma.config.ts') }}
       - name: Stage base node_modules
         if: steps.restore-base-node-modules.outputs.cache-hit == 'true'
         run: mv node_modules base/node_modules
@@ -2369,7 +2369,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('head/package-lock.json', 'head/package.json', 'head/.npmrc') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('head/package-lock.json', 'head/package.json', 'head/.npmrc', 'head/src/prisma/schema.prisma', 'head/prisma.config.ts') }}
       - name: Stage head node_modules
         if: steps.restore-head-node-modules.outputs.cache-hit == 'true'
         run: mv node_modules head/node_modules
