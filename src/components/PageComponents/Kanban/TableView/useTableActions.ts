@@ -11,7 +11,7 @@ import { toggleTaskTimer } from "@/hooks/Task Detail/useTimeTracking";
 import toast from "react-hot-toast";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-8625-board-inbox-archive";
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/keys";
 import globalAPIHandlers from "@/utils/api/global";
 import { canDropTableRow, parseTableRowDragData } from "./tableRowDrag";
 import type { TableViewProps } from "./tableViewShared";

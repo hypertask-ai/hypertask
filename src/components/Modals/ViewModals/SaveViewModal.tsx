@@ -13,7 +13,7 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/keys";
 
 type PersonalOptions = {
     canSaveCurrent: boolean;

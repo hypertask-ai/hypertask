@@ -21,7 +21,7 @@ import { SaveView } from "./SaveViewHeaderKanban"
 import SearchFilter from "./SearchFilter"
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag"
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/keys"
 import type { TableGroupBy } from "@/lib/table-view/tableGroupByTag"
 
 const ShellViewControls = ({ project }: { project: IProject }) => {

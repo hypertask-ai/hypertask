@@ -9,7 +9,7 @@ import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
 import { getSortComparator, Row, SECTION_CAP, isTaskRow } from "./tableViewShared";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/keys";
 import { dedupeTasksForFlatTableSort, sectionsUseTagGrouping } from "@/lib/table-view/tableGroupByTag";
 
 type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableMyTasksBulkSelection"> &

@@ -21,7 +21,7 @@ import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
-import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/keys";
 import { buildTableSectionsGroupedByTag } from "@/lib/table-view/tableGroupByTag";
 import { getActiveTableGroupByFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
