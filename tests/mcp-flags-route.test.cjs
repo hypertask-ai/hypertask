@@ -619,6 +619,128 @@ test("PATCH refuses the lead in-chat record naming its own switch when the quote
   await assertRefused(approvalRequired, "OFF");
 });
 
+function quoteBlockRecord(inner = "yes, ship it", tail = "") {
+  const day = new Date().toISOString().slice(0, 10);
+  chatRecord(`<p>Valentin said in chat (${day}):</p><blockquote><p>${inner}</p></blockquote>${tail}`);
+}
+
+test("PATCH accepts a chat approval inside a quote block", async () => {
+  quoteBlockRecord();
+  await assertAllowed("chat-record");
+});
+
+test("PATCH accepts a quote-block chat record that names its switch", async () => {
+  quoteBlockRecord("yes, ship it", `<p>Switch ${key} to Off</p>`);
+  ticketComments = [];
+  await assertAllowed("chat-record", key, "OFF", [123]);
+});
+
+test("PATCH accepts quote-block batch switches", async () => {
+  quoteBlockRecord("yes, ship it", `<p>Switch ${key} to Only me?</p><p>Switch other-flag to Owner + QA!</p>`);
+  ticketComments = [];
+  await assertAllowed("chat-record", key, "OWNER_ONLY", [123]);
+  await assertAllowed("chat-record", "other-flag", "OWNER_AND_QA", [123]);
+});
+
+test("PATCH accepts a quote-block off order only when the mode is Off", async () => {
+  quoteBlockRecord("turn it off", `<p>Switch ${key} to Off</p>`);
+  ticketComments = [];
+  await assertAllowed("chat-record", key, "OFF", [123]);
+});
+
+test("PATCH refuses a conditional off order in a quote block", async () => {
+  quoteBlockRecord("turn it off but only after QA", `<p>Switch ${key} to Off</p>`);
+  ticketComments = [ticketComment(100, `Question: Switch ${key} to Off?`)];
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH refuses an off order that is only provided QA passes", async () => {
+  quoteBlockRecord("turn it off provided QA passes", `<p>Switch ${key} to Off</p>`);
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH refuses a conditional off quote that uses an earlier Off question", async () => {
+  quoteBlockRecord("turn it off provided QA passes");
+  ticketComments = [ticketComment(100, `Question: Switch ${key} to Off?`)];
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH accepts a punctuated bare off quote that uses an earlier Off question", async () => {
+  quoteBlockRecord("turn it off!");
+  ticketComments = [ticketComment(100, `Question: Switch ${key} to Off?`)];
+  await assertAllowed("chat-record", key, "OFF", [100]);
+});
+
+test("PATCH refuses an off order that waits until QA passes", async () => {
+  quoteBlockRecord("turn it off when QA passes", `<p>Switch ${key} to Off</p>`);
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH refuses a deferred off order whose switch sits in a template", async () => {
+  templateQuestionFlagOn = true;
+  quoteBlockRecord(`turn it off after QA. What this is: a flag. Question: Switch ${key} to Off? My recommendation: Yes.`);
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH refuses a quote-block off order for Everyone", async () => {
+  quoteBlockRecord("turn it off");
+  await assertRefused();
+});
+
+test("PATCH refuses a nested quote block", async () => {
+  const day = new Date().toISOString().slice(0, 10);
+  chatRecord(`<p>Valentin said in chat (${day}):</p><blockquote><blockquote><p>yes, ship it</p></blockquote></blockquote>`);
+  await assertRefused();
+});
+
+test("PATCH refuses chat words that are not inside the quote block", async () => {
+  const day = new Date().toISOString().slice(0, 10);
+  chatRecord(`<p>Valentin said in chat (${day}): yes, ship it</p>`);
+  await assertRefused();
+});
+
+test("PATCH refuses a conditional quote-block approval", async () => {
+  quoteBlockRecord("yes, but only if tests pass");
+  await assertRefused();
+});
+
+test("PATCH refuses a quote-block approval from a runner", async () => {
+  quoteBlockRecord("turn it off", `<p>Switch ${key} to Off</p>`);
+  approvalComment.agentId = "runner-3";
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH refuses an edited quote-block approval", async () => {
+  quoteBlockRecord();
+  approvalComment.editedAt = new Date();
+  await assertRefused();
+});
+
+test("PATCH refuses a stale quote-block date", async () => {
+  chatRecord('<p>Valentin said in chat (2020-01-01):</p><blockquote><p>yes, ship it</p></blockquote>');
+  await assertRefused();
+});
+
+test("PATCH refuses a quote-block yes for a different mode", async () => {
+  quoteBlockRecord();
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH refuses a quote-block chat record with unrelated trailing text", async () => {
+  quoteBlockRecord("yes, ship it", "<p>Thanks</p>");
+  await assertRefused();
+});
+
+test("PATCH with plain-yes flag off refuses a quote-block chat record", async () => {
+  plainYesFlagOn = false;
+  quoteBlockRecord();
+  await assertRefused();
+});
+
 for (const kind of ["ticket-yes", "chat-record", "thumbs-up"]) {
   test(`PATCH with plain-yes flag off ${kind === "thumbs-up" ? "accepts" : "refuses"} ${kind}`, async () => {
     plainYesFlagOn = false;
