@@ -8,19 +8,15 @@ topology:
   # The 2026-08-30 org switch to public hypertask-ai/hypertask retired the app
   # repo's self-hosted Contabo lanes (owner decision recorded 2026-09-02 in the
   # CI contract). The only self-hosted runners on the Contabo host belong to
-  # the private reviewer and analytics repositories; app workflows cannot
+  # the private analytics repository; app workflows cannot
   # schedule them.
   additional_runner_hosts: false
   vpn_for_runner_compute: false
   review_lane:
-    # The Luna/Claude review workflow lives in the private reviewer repository
-    # and runs on that repo's own self-hosted runner. It is not an app-repo lane.
-    label: ai-review
-    repository: valentinyeo/hypertask-reviewer
-    dedicated_runners: [contabo-1]
-    os_user: htreviewrunner
-    # contabo-2 is not currently registered; the live CI alerting treats a single
-    # offline review lane as an incident rather than a capacity change.
+    reviewer: chatgpt-codex-connector
+    workflow: .github/workflows/codex-review-gate.yml
+    runs_on: ubuntu-latest
+    dedicated_runners: []
   production_branch: production
   # An administrator applied this setting through GitHub's repository API on
   # 2026-09-08. workflow_run loads its workflow file from the default branch,
@@ -554,37 +550,13 @@ policies:
     non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-lane]
     prefer_queue_over_oom: true
   review:
-    # The reviewer repository owns provider order, models, and failover; this
-    # contract records only the policy-level guarantees.
-    engine: valentinyeo/hypertask-reviewer (reviewer/scripts/ai-review.mjs on its default branch)
-    subscription_first_failover: true
-    structured_output: strict-json-schema
-    fail_closed_on: [quota, authentication, unavailable_binary, timeout, empty_response, malformed_response]
-    valid_verdict_stops_failover: true
     required_check_name: ai-review
     legacy_check_name: claude-review
-    private_repository_publication: commit-status
-    completion_trigger: application-automerge-workflow-dispatch
-    completion_fallback_sweep_minutes: 5
-    trusted_base_workflow: true
+    status_writer: .github/workflows/codex-review-gate.yml
     execute_pull_request_code: false
     exact_head_commit_required: true
-    newest_compatibility_check_wins: true
     approve_passes: true
     concerns_fail_closed: true
-    malformed_or_provider_error_fails_closed: true
-    dispatch_broker:
-      os_user: reviewdispatch
-      discovery: systemd-timer
-      discovery_interval_seconds: 30
-      validates: [open_pr, production_base, same_repository_head, exact_head_sha]
-      maximum_automatic_dispatches_per_head: 2
-      dispatch_propagation_grace_minutes: 5
-      reconciliation: [latest_ai_or_claude_review_commit_status, private_workflow_run_state]
-    private_run_name_contract: "Review hypertasks PR #{pr} @ {head_sha}"
-    general_runner_os_user_can_invoke_subscription_wrappers: false
-    general_runner_os_user_can_invoke_dispatch_broker: false
-    stale_private_temp_cleanup_minutes: 60
     producer_hold_requires_independent_release_session: true
   deploys:
     merge_to_production_deploys_via_vercel: true
@@ -813,13 +785,11 @@ agent_rules:
   - "App CI runs on GitHub-hosted ubuntu-latest runners; do not re-register self-hosted app runners or add a VPN runner or extra host without a recorded decision."
   - "Never expose AI_REVIEW_GATEWAY_KEY to pull request code."
   - "Never store subscription credentials in the repository or expose them to jobs that execute pull request code."
-  - "Require a current-commit APPROVE verdict; a comment existing is not enough."
+  - "Require an exact-head Codex review with no P0 or P1 finding before ai-review turns green; a comment existing is not enough."
   - "Keep DeepSeek-produced PRs on hold until an independent trusted release session accepts them."
-  - "Keep contabo-1 registered only to valentinyeo/hypertask-reviewer under htreviewrunner; application PR workflows must not be able to schedule it."
-  - "The reviewer repository owns the review provider order, models, and failover; do not duplicate them here."
-  - "Keep remote workflow actions pinned to the exact SHAs in .github/actions/action-archive-cache-manifest.txt; the host-level action archive cache serves the self-hosted review and analytics lanes only."
+  - "Keep remote workflow actions pinned to the exact SHAs in .github/actions/action-archive-cache-manifest.txt; the host-level action archive cache serves the analytics lane only."
   - "Use per-job temporary directories on shared runner hosts; never use fixed /tmp filenames for workflow state."
-  - "The live CI page must alert when the review or analytics runner lane is offline."
+  - "The live CI page must alert when the analytics runner lane is offline."
 
 production_revert_proposal:
   workflow: .github/workflows/production-revert-pr.yml
