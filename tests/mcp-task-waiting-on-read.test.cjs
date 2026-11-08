@@ -7,7 +7,7 @@ const mappers = load("src/lib/mcp/tasks/mappers.ts", {
   "@/lib/tasks/sameBoardRelations": { stripForeignTaskRelations: (task) => task },
   "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
   "@/lib/mcp/agents": { mapVisibleMcpAgent: () => undefined, mcpVisibleAgentSelect: () => ({}) },
-  "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}) },
+  "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}), isAgentVisibleToUser: () => true },
   "@/lib/staleness": { taskStaleness: () => ({ stale: false }) },
   "@/lib/pullRequests/githubPullRequests": { derivePullRequestDisplayState: () => "open" },
 });

@@ -260,15 +260,15 @@ function waitingOnForReader<T extends {
 }
 
 function waitingFieldsForReader(
-    task: Parameters<typeof waitingOnForReader>[0],
+    task: Parameters<typeof mapTaskWaitingOn>[0] & Parameters<typeof waitingOnForReader>[0],
     userId: number,
     agentWaitingEnabled: boolean,
 ) {
     const reader = waitingOnForReader(task, userId);
-    if (!agentWaitingEnabled) {
+    if (!agentWaitingEnabled && reader.waitingOnAgentId) {
         return mapTaskWaitingOn({
-            waitingOnUserId: reader.waitingOnUserId,
-            waitingOnSetAt: reader.waitingOnSetAt,
+            waitingOnUserId: task.waitingOnUserId,
+            waitingOnSetAt: task.waitingOnSetAt,
         });
     }
     return mapTaskWaitingOn(reader);
