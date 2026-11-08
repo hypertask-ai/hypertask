@@ -1,0 +1,65 @@
+name: Codex review gate
+
+# Codex's built-in GitHub code review (the chatgpt-codex-connector bot) is the
+# AI review for this repository. It posts a standard pull request review on
+# every push, with one inline comment per finding and a P0 or P1 badge on each.
+# This workflow reads that review for the PR's current head commit and sets the
+# required `ai-review` commit status (and its legacy twin `claude-review`):
+# success when Codex reviewed the head and raised no P0 or P1 finding, failure
+# when it raised one, pending otherwise. Only GITHUB_TOKEN is used. The logic
+# lives in .github/scripts/codex-review-gate.cjs, loaded from the production
+# branch; no PR code is checked out or run.
+#
+# Reactions do not fire workflow events, so the schedule is also what notices a
+# thumbs-up and what catches any event GitHub drops.
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created, edited]
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to evaluate (blank = every open PR)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: codex-review-gate
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    # Skip noise without spending a runner: only Codex's own events, ordinary
+    # comments on issues, and everything non-event (schedule, manual).
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        github.event.comment.user.login == 'chatgpt-codex-connector[bot]') ||
+      (github.event_name != 'issue_comment' &&
+        (github.event.review.user.login == 'chatgpt-codex-connector[bot]' ||
+         github.event.comment.user.login == 'chatgpt-codex-connector[bot]'))
+    name: Set ai-review from the Codex review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const run = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/codex-review-gate.cjs`).run;
+            await run({ github, context, core });

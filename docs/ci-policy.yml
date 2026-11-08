@@ -1,5 +1,5 @@
 version: 15
-last_updated: 2026-11-02
+last_updated: 2026-11-08
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -8,19 +8,24 @@ topology:
   # The 2026-08-30 org switch to public hypertask-ai/hypertask retired the app
   # repo's self-hosted Contabo lanes (owner decision recorded 2026-09-02 in the
   # CI contract). The only self-hosted runners on the Contabo host belong to
-  # the private reviewer and analytics repositories; app workflows cannot
+  # the private analytics repository; app workflows cannot
   # schedule them.
   additional_runner_hosts: false
   vpn_for_runner_compute: false
   review_lane:
-    # The Luna/Claude review workflow lives in the private reviewer repository
-    # and runs on that repo's own self-hosted runner. It is not an app-repo lane.
+    # 2026-11-08: AI review is Codex's built-in GitHub code review (bot
+    # chatgpt-codex-connector, Automatic review on every push). The
+    # codex-review-gate workflow, on ubuntu-latest with the built-in workflow
+    # token, turns its review of the head commit into the ai-review status
+    # (and its legacy twin claude-review). The self-hosted reviewer and its
+    # dispatcher timer are retired; no review work runs on the shared server.
     label: ai-review
-    repository: valentinyeo/hypertask-reviewer
-    dedicated_runners: [contabo-1]
-    os_user: htreviewrunner
-    # contabo-2 is not currently registered; the live CI alerting treats a single
-    # offline review lane as an incident rather than a capacity change.
+    reviewer: chatgpt-codex-connector
+    workflow: .github/workflows/codex-review-gate.yml
+    script: .github/scripts/codex-review-gate.cjs
+    signals: [review_with_no_p0_p1_badge, no_major_issues_comment, thumbs_up_reaction]
+    runs_on: ubuntu-latest
+    dedicated_runners: []
   production_branch: production
   # An administrator applied this setting through GitHub's repository API on
   # 2026-09-08. workflow_run loads its workflow file from the default branch,
