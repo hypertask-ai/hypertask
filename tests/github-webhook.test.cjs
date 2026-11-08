@@ -145,7 +145,7 @@ test("verifyGithubSignature accepts a valid signature and rejects everything els
 
 test("the GitHub webhook rejects a configured pull request event without its payload", async () => {
   const stubbedModules = {
-    "src/lib/prisma.ts": { default: {} },
+    "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting({}) },
     "src/lib/realtime/server.ts": {
       broadcastBoardChange: async () => {},
       broadcastTaskChange: async () => {},
@@ -172,27 +172,6 @@ test("the GitHub webhook rejects a configured pull request event without its pay
       default: async () => ({ status: 200, json: {} }),
     },
   };
-  const paths = Object.keys(stubbedModules).map((relativePath) =>
-    path.join(root, relativePath),
-  );
-  const routePath = path.join(root, "src/app/api/webhooks/github/route.ts");
-  const previous = new Map(
-    [...paths, routePath].map((modulePath) => [
-      modulePath,
-      require.cache[modulePath],
-    ]),
-  );
-  for (const modulePath of [...paths, routePath]) delete require.cache[modulePath];
-  for (const [relativePath, exports] of Object.entries(stubbedModules)) {
-    const modulePath = path.join(root, relativePath);
-    require.cache[modulePath] = {
-      id: modulePath,
-      filename: modulePath,
-      loaded: true,
-      exports,
-    };
-  }
-
   const previousSecret = process.env.GITHUB_WEBHOOK_SECRET;
   process.env.GITHUB_WEBHOOK_SECRET = "webhook-test-secret";
   const rawBody = JSON.stringify({
@@ -210,29 +189,26 @@ test("the GitHub webhook rejects a configured pull request event without its pay
       .digest("hex");
 
   try {
-    const { POST } = loadTs("src/app/api/webhooks/github/route.ts");
-    const response = await POST({
-      text: async () => rawBody,
-      headers: {
-        get: (name) =>
-          ({
-            "x-hub-signature-256": signature,
-            "x-github-event": "pull_request",
-          })[name] ?? null,
-      },
-    });
-    assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), {
-      success: false,
-      error: "Invalid pull request payload",
+    await withStubbedGithubRoute(stubbedModules, async ({ POST }) => {
+      const response = await POST({
+        text: async () => rawBody,
+        headers: {
+          get: (name) =>
+            ({
+              "x-hub-signature-256": signature,
+              "x-github-event": "pull_request",
+            })[name] ?? null,
+        },
+      });
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), {
+        success: false,
+        error: "Invalid pull request payload",
+      });
     });
   } finally {
     if (previousSecret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;
     else process.env.GITHUB_WEBHOOK_SECRET = previousSecret;
-    for (const [modulePath, cachedModule] of previous) {
-      if (cachedModule) require.cache[modulePath] = cachedModule;
-      else delete require.cache[modulePath];
-    }
   }
 });
 
