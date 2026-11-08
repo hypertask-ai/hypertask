@@ -54,7 +54,7 @@ function fixture({ resumes, focusedIndex = 0, count = 6 }) {
     keyboardRows,
     inboxKeyboardFocus: true,
     inboxFirstRow: true,
-    keyboardNavigationStarted: resumes,
+    keyboardNavigationStarted: { current: resumes },
     selectedKeyboardNotificationIndex: null,
     selectedKeyboardRow: keyboardRows[focusedIndex],
     bulkHandleKeyDown: () => {},
@@ -73,9 +73,6 @@ function fixture({ resumes, focusedIndex = 0, count = 6 }) {
     prefetchInboxTaskDetail: () => {},
     setTimeout: () => 1,
     setGlobalFocus: () => {},
-    setKeyboardNavigationStarted: (started) => {
-      context.keyboardNavigationStarted = started === undefined ? true : started;
-    },
     setActiveKeyboardRowKey: (key) => {
       context.selectedKeyboardRow = keyboardRows.find((row) => row.key === key);
     },
@@ -89,14 +86,15 @@ function fixture({ resumes, focusedIndex = 0, count = 6 }) {
   const file = path.join(scratch, `first-key-${resumes}-${count}-${focusedIndex}.ts`);
   fs.writeFileSync(file, script);
   const render = loadModule(file);
+  const bound = render(context);
   return {
     context,
     keys,
     async press(keyCode) {
-      await render(context).press({ keyCode, preventDefault() {} });
+      await bound.press({ keyCode, preventDefault() {} });
     },
     hover(index) {
-      render(context).hover(index, { movementX: 1, movementY: 0 });
+      bound.hover(index, { movementX: 1, movementY: 0 });
     },
   };
 }
