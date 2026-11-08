@@ -6,7 +6,7 @@ export const HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG =
 export default {
   key: HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG,
   kind: "improvement",
-  defaultMode: "OWNER_AND_QA",
+  defaultMode: "EVERYONE",
   shippedOn: "2026-11-07",
   description:
     "Agent ticket creates on internal boards and moves into Valentin Review require the plain-language recommendation block from docs/ticket-template.md.",

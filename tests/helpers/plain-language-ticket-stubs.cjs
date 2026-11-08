@@ -1,5 +1,4 @@
 module.exports = {
-  "@/lib/flags": { isFeatureEnabled: async () => false },
   "@/lib/tickets/plainLanguageTicketEnforcement": {
     PlainLanguageTicketError: class PlainLanguageTicketError extends Error {},
     hasPlainLanguageTicketBlock: () => true,
