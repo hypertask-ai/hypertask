@@ -78,6 +78,28 @@ function mergedPullRequestPayload() {
   };
 }
 
+const DEFAULT_GITHUB_REPO_MAPPING = {
+  projectId: 15,
+  fullName: "hypertask-ai/hypertask",
+  provenance: "legacy",
+  installationId: null,
+  revokedAt: null,
+};
+
+function prismaWithGithubBoardRouting(prisma) {
+  return {
+    ...prisma,
+    boardGithubRepository: {
+      findMany: async ({ where } = {}) => {
+        if (where?.fullName === "hypertask-ai/hypertask" && where?.revokedAt === null) {
+          return [DEFAULT_GITHUB_REPO_MAPPING];
+        }
+        return [];
+      },
+    },
+  };
+}
+
 function signedGithubRequest(payload, secret, event = "pull_request") {
   const rawBody = JSON.stringify(payload);
   const signature =
@@ -214,7 +236,7 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
   async function runScenario(prisma, syncResult, moveStatus = 200) {
     const moves = [];
     const stubbedModules = {
-      "src/lib/prisma.ts": { default: prisma },
+      "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma) },
       "src/lib/realtime/server.ts": {
         broadcastBoardChange: async () => {},
         broadcastTaskChange: async () => {},
@@ -510,7 +532,7 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
       ? { linked: 0, updated: 0, taskIds: [] }
       : { linked: 1, updated: 1, taskIds: [task.id] };
     const stubbedModules = {
-      "src/lib/prisma.ts": { default: prisma },
+      "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma) },
       "src/lib/realtime/server.ts": {
         broadcastBoardChange: async () => {},
         broadcastTaskChange: async (taskId) => taskEvents.push(taskId),
@@ -1005,7 +1027,7 @@ async function runAuthorScenario(payload, mode = "linked", event = "pull_request
     },
   };
   const stubbedModules = {
-    "src/lib/prisma.ts": { default: prisma },
+    "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma) },
     "src/lib/realtime/server.ts": {
       broadcastBoardChange: write("broadcast.board"),
       broadcastTaskChange: write("broadcast.task"),

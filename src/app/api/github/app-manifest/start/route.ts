@@ -6,8 +6,6 @@ import { noStore } from "@/app/api/github/_lib";
 import { manifestCookie, requireGithubAppManifestOwner } from "@/app/api/github/app-manifest/_lib";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { hasGithubAppCredential } from "@/lib/github/appConfig";
 import { createGithubAppManifestState, githubAppManifest } from "@/lib/github/appManifest";
 
@@ -24,9 +22,6 @@ function escapeAttribute(value: string): string {
 export async function GET(request: NextRequest) {
   const owner = await requireGithubAppManifestOwner(request);
   if (typeof owner !== "number") return owner;
-  if (!await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, owner)) {
-    return noStore({ error: "not_found" }, 404);
-  }
   try {
     if (await hasGithubAppCredential()) return noStore({ error: "already_registered" }, 409);
     const limited = await checkRestRateLimit(owner, "write");
