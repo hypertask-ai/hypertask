@@ -7,9 +7,6 @@ import { usePathname } from "next/navigation";
 import { useContext, useEffect, useRef, useState } from "react";
 
 import useFcmToken from "@/hooks/General/useFcmToken";
-import { useFlag } from "@/hooks/useFlag";
-import { isGuestUser } from "@/lib/demo/guest";
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
 import { slimUserForCookie } from "@/lib/auth/slimUserCookie";
 import { changePushNotificationStatus } from "@/utils/api/global/pushNotifications";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -294,24 +291,3 @@ const NotificationPromoteBanner = () => {
 };
 
 export default NotificationPromoteBanner;
-
-const STRAIGHT_BOARD_CONFIRM_EXCLUDED = "/login,/onboarding,/verify-email,/invite,/share,/unauthorized".split(",");
-
-export function StraightBoardEmailConfirmBanner() {
-  const pathname = usePathname();
-  const currentUser = useRecoilValue(currentUserAtom);
-  const flagOn = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
-  const [dismissed, setDismissed] = useState(false);
-  useEffect(() => { setDismissed(false); }, [currentUser?.id]);
-  if (!flagOn || !currentUser || isGuestUser(currentUser) || dismissed) return null;
-  if (currentUser.UserSetting?.isVerified ?? true) return null;
-  if (STRAIGHT_BOARD_CONFIRM_EXCLUDED.some((p) => pathname?.startsWith(p))) return null;
-  return (
-    <div className="w-full bg-blue-600/20 border-b border-blue-500/40 px-4 py-3 flex items-center justify-center gap-3 text-content text-white-black z-[120]" role="status">
-      <span>Please confirm your email</span>
-      <button type="button" className="p-1 hover:bg-white/10 rounded" aria-label="Dismiss" onClick={() => setDismissed(true)}>
-        <X className="w-4 h-4" />
-      </button>
-    </div>
-  );
-}

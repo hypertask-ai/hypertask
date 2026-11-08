@@ -121,7 +121,6 @@ const NotificationPromoteBanner = dynamic(
   () => import("../Global/NotificationPromoteBanner"),
   { ssr: false },
 );
-const StraightBoardEmailConfirmBanner = dynamic(() => import("../Global/NotificationPromoteBanner").then((m) => ({ default: m.StraightBoardEmailConfirmBanner })), { ssr: false });
 const CookieConsentBanner = dynamic(
   () => import("../Global/CookieConsentBanner"),
   { ssr: false },
@@ -187,6 +186,7 @@ import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
+import { isGuestUser } from "@/lib/demo/guest";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import ChatWindowStackMount from "../AI_CHAT/ChatWindowStackMount";
@@ -1306,7 +1306,16 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      {straightBoardEmailSignup && <StraightBoardEmailConfirmBanner />}
+      {straightBoardEmailSignup &&
+        currentUser &&
+        !isGuestUser(currentUser) &&
+        !(currentUser.UserSetting?.isVerified ?? true) &&
+        pathname &&
+        !"/login,/onboarding,/verify-email,/invite,/share,/unauthorized".split(",").some((p) => pathname.startsWith(p)) && (
+          <div className="w-full bg-blue-600/20 border-b border-blue-500/40 px-4 py-3 text-center text-content text-white-black z-[120]" role="status">
+            Please confirm your email
+          </div>
+        )}
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}

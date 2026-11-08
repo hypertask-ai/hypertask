@@ -8,6 +8,7 @@ import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { sendEmail } from '@/lib/email/sendEmail'
 import prisma from '@/lib/prisma'
+import { findUserByEmail } from '@/utils/controllers/users/findUserByEmail'
 import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   isFeatureEnabled,
@@ -213,10 +214,8 @@ export async function POST(request: NextRequest) {
 
     const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
 
-    const existingUser = await prisma.user.findFirst({
-      where: { email: normalizedEmail },
-      select: { id: true },
-    })
+    const matchedUser = await findUserByEmail(normalizedEmail)
+    const existingUser = matchedUser ? { id: matchedUser.id as number } : null
 
     const utmParams =
       utmData && typeof utmData === 'object'
