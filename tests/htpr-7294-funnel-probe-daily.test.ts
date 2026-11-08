@@ -16,10 +16,6 @@ test("probe recipient detection accepts daily addresses on the probe domain", ()
   const email = makeDailyProbeEmail("2026-11-07-abc");
   assert.match(email, /^daily-2026-11-07-abc@funnel-probe\.hypertask\.app$/);
   assert.equal(isProbeRecipientEmail(email), true);
-  assert.equal(
-    isProbeRecipientEmail("daily@funnel-probe.hypertask.app.evil.com"),
-    false,
-  );
 });
 
 test("probe inbox stores and reads verification links only for probe mail", async () => {

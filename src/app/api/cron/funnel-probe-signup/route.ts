@@ -19,10 +19,5 @@ export async function GET(request: NextRequest) {
   if (!(await isFeatureEnabled(HTPR_7294_DAILY_FUNNEL_PROBE_FLAG, null))) {
     return NextResponse.json({ ok: false, disabled: true }, { status: 404 });
   }
-  return NextResponse.json({
-    ok: true,
-    runner: "github-actions",
-    workflow: "funnel-probe-daily.yml",
-    note: "The browser walk runs on GitHub Actions; this cron is the Vercel schedule anchor.",
-  });
+  return NextResponse.json({ ok: true, runner: "github-actions", workflow: "funnel-probe-daily.yml" });
 }
