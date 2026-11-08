@@ -382,9 +382,9 @@ jobs:
 
       - name: Generate Prisma client and flag index
         if: needs.ci-prepare.outputs.run_tests == 'true'
-        # A restored node_modules cache can carry an old generated client. Regenerate
-        # here, before any TypeScript cache restores, so incremental tsc never pairs
-        # fresh source with stale Prisma types (HYCI-179).
+        # npm prelint hooks rebuild the flag index themselves. Building it once
+        # here leaves every lane reading the same file instead of three lanes
+        # writing it at the same time.
         run: |
           npx prisma generate
           node scripts/generate-flag-index.mjs
@@ -415,10 +415,8 @@ jobs:
         if: needs.ci-prepare.outputs.run_tests == 'true'
         id: restore-tsc-cache
         # A stale tsbuildinfo is safe: tsc validates it against file hashes and
-        # falls back to a full check when they differ. The fingerprint also
-        # includes Prisma inputs so a schema change never restores another era's
-        # incremental state. Generated route types move with it and are reused
-        # only when their own input digest still matches.
+        # falls back to a full check when they differ. Generated route types move
+        # with it and are reused only when their own input digest still matches.
         # HTPR-8234: PRs cache under their own `tsc-pr-` namespace so a repeat push
         # reuses the branch's own state instead of a production one that has moved.
         # Production never restores a `tsc-pr-` key: only trusted pushes may feed
