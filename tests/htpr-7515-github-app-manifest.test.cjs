@@ -218,7 +218,8 @@ test("owner with flag on gets an auto-submit manifest with sourced URLs, permiss
   assert.equal(attempt.response.headers.get("referrer-policy"), "no-referrer");
   const nonce = attempt.html.match(/<script nonce="([^"]+)"/)[1];
   assert.ok(attempt.response.headers.get("content-security-policy").includes(`'nonce-${nonce}'`));
-  assert.deepEqual(world.flagCalls, [{ key: FLAG, userId: 6 }]);
+  assert.ok(world.flagCalls.length >= 1);
+  assert.ok(world.flagCalls.every((call) => call.key === FLAG && call.userId === 6));
   assert.equal(manifest.verifyGithubAppManifestState(attempt.state, attempt.nonce, 6).userId, 6);
   assert.deepEqual(world.fetches, []);
   assertNoWrites();

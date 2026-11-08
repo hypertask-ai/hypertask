@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { GITHUB_SETTINGS_PATH, noStore } from "@/app/api/github/_lib";
 import { manifestCookie, requireGithubAppManifestOwner } from "@/app/api/github/app-manifest/_lib";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import prisma from "@/lib/prisma";
 import { clearGithubAppConfigCache, hasGithubAppCredential } from "@/lib/github/appConfig";
 import {
@@ -18,6 +20,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const owner = await requireGithubAppManifestOwner(request);
   if (typeof owner !== "number") return owner;
+  if (!await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, owner)) {
+    return noStore({ error: "not_found" }, 404);
+  }
   try {
     const state = verifyGithubAppManifestState(
       request.nextUrl.searchParams.get("state"),
