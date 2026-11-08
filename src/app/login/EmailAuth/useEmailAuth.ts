@@ -376,7 +376,7 @@ export function useEmailAuth(initialEmail = '') {
 
         const response = await fetch('/api/auth/send-email-link', {
           method: 'POST',
-          credentials: 'include',
+          ...(emailStraightBoardFlag ? { credentials: 'include' as const } : {}),
           headers: {
             'Content-Type': 'application/json',
           },
