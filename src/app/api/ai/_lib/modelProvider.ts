@@ -120,26 +120,20 @@ export function registerManagedGatewayKey(apiKey: string) {
 
 export function gatewayFundingSourceForApiKey(
   apiKey: string,
-  declared?: GatewayFundingSource,
 ): GatewayFundingSource {
   const normalized = apiKey.trim();
   if (normalized === defaultGatewayApiKey()) return "shared";
   if (managedGatewayKeys.has(normalized)) return "managed";
-  if (declared) return declared;
   return "customer";
 }
 
 const allowanceFundedModels = new WeakMap<object, number>();
 
-function gatewayLanguageModel(
-  modelSlug: string,
-  gatewayApiKey: string,
-  declared?: GatewayFundingSource,
-) {
+function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
   const model = createGateway({ apiKey: gatewayApiKey })(
     gatewayCatalogModelSlug(modelSlug),
   );
-  const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey, declared);
+  const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   if (fundingSource === "customer") return model;
   const allowanceUsd =
     fundingSource === "shared"
@@ -163,15 +157,11 @@ function gatewayLanguageModel(
   return funded;
 }
 
-function gatewayImageModel(
-  modelSlug: string,
-  gatewayApiKey: string,
-  declared?: GatewayFundingSource,
-) {
+function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
   const model = createGateway({ apiKey: gatewayApiKey }).imageModel(
     gatewayCatalogModelSlug(modelSlug),
   );
-  const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey, declared);
+  const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   return fundingSource !== "customer"
     ? wrapImageModel({
         model,
@@ -683,16 +673,12 @@ export function resolveAiModel(
   );
 }
 
-export function resolveGatewayModel(
-  modelSlug: string,
-  gatewayApiKey?: string,
-  fundingSource?: GatewayFundingSource,
-): LanguageModel {
+export function resolveGatewayModel(modelSlug: string, gatewayApiKey?: string): LanguageModel {
   return traceLanguageModel(
-    resolveUntracedGatewayModel(modelSlug, gatewayApiKey, fundingSource),
+    resolveUntracedGatewayModel(modelSlug, gatewayApiKey),
     "gateway",
     isHaiku45Model(modelSlug)
-      ? () => resolveGatewayModel(resolveHaikuModelId(modelSlug, true), gatewayApiKey, fundingSource)
+      ? () => resolveGatewayModel(resolveHaikuModelId(modelSlug, true), gatewayApiKey)
       : undefined,
   );
 }
@@ -725,7 +711,6 @@ export function aiUsageProviderForCredential(
 function resolveUntracedGatewayModel(
   modelSlug: string,
   gatewayApiKey?: string,
-  fundingSource?: GatewayFundingSource,
 ): LanguageModel {
   if (process.env.HT_PREMERGE_AI_STUB === "1" || process.env.HT_PREMERGE_QUEUE_STUB === "1") {
     const { createPremergeLanguageModel } = require("./premergeModel") as typeof import("./premergeModel");
@@ -737,7 +722,7 @@ function resolveUntracedGatewayModel(
     ? gatewayApiKey?.trim()
     : undefined;
   if (teamKey) {
-    return gatewayLanguageModel(modelSlug, teamKey, fundingSource);
+    return gatewayLanguageModel(modelSlug, teamKey);
   }
 
   throw new AiGatewayKeyRequiredError(
@@ -748,13 +733,12 @@ function resolveUntracedGatewayModel(
 export function resolveGatewayImageModel(
   modelSlug: string,
   gatewayApiKey?: string,
-  fundingSource?: GatewayFundingSource,
 ): ImageModel {
   const teamKey = isVercelAiGatewayKey(gatewayApiKey)
     ? gatewayApiKey?.trim()
     : undefined;
   if (teamKey) {
-    return gatewayImageModel(modelSlug, teamKey, fundingSource);
+    return gatewayImageModel(modelSlug, teamKey);
   }
 
   throw new AiGatewayKeyRequiredError(

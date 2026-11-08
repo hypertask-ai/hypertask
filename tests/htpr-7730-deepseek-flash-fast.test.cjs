@@ -150,7 +150,7 @@ test("Fast credentials preserve customer gateway keys and replace direct keys wi
   keyLookups.length = 0;
   deepseekKey = "vck_deepseek_slot";
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, lookup), deepseekKey);
-  assert.deepEqual(keyLookups, ["deepseek"]);
+  assert.deepEqual(keyLookups, ["deepseek", "gateway", "managed_gateway"]);
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), deepseekKey);
   agentKey = "vck_agent_deepseek";
   assert.equal(await getByokOrTeamGatewayApiKeyForModelOption(option, flags, lookup), agentKey);

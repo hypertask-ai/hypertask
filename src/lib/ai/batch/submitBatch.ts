@@ -16,18 +16,23 @@ export async function submitBatch(args: {
   items: Record<string, unknown>;
   claim?: (tx: Prisma.TransactionClient, batchId: string) => Promise<string[]>;
 }): Promise<string | null> {
-  const { assertBatchWithinTeamCap } = await import("@/app/api/ai/_lib/batchCap");
-  await assertBatchWithinTeamCap({
-    teamId: args.teamId,
-    userId: args.userId,
-    gatewayKey: args.gatewayKey,
+  const { bindBatchHold, releaseUnboundBatchHold, reserveBatchWithinTeamCap, settleBatchHold } = await import("@/app/api/ai/_lib/batchCap");
+  const reservation = await reserveBatchWithinTeamCap({
+    teamId: args.teamId, userId: args.userId, gatewayKey: args.gatewayKey, model: args.model, requests: args.requests,
   });
-  const gatewayBatchId = await startGatewayBatch(
-    args.gatewayKey,
-    args.requests,
-    batchIdempotencyKey(args.kind, args.teamId, args.requests),
-  );
-  return prisma.$transaction(async (tx) => {
+  let gatewayBatchId: string;
+  try {
+    gatewayBatchId = await startGatewayBatch(
+      args.gatewayKey,
+      args.requests,
+      batchIdempotencyKey(args.kind, args.teamId, args.requests),
+    );
+    await bindBatchHold(gatewayBatchId, reservation);
+  } catch (error) {
+    await releaseUnboundBatchHold(reservation);
+    throw error;
+  }
+  const created = await prisma.$transaction(async (tx) => {
     const existing = await tx.aiBatch.findUnique({ where: { gatewayBatchId }, select: { id: true } });
     if (existing) return existing.id;
     const id = randomUUID();
@@ -46,5 +51,10 @@ export async function submitBatch(args: {
       },
     });
     return id;
+  }).catch(async (error) => {
+    await settleBatchHold(gatewayBatchId, 0);
+    throw error;
   });
+  if (!created) await settleBatchHold(gatewayBatchId, 0);
+  return created;
 }

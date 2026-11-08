@@ -530,6 +530,7 @@ export async function getTeamGatewayFunding(
           }
           continue;
         }
+        if (owned) continue;
         await retireLegacyDuplicates(await resolveLookupTeamId(lookup), duplicates);
         return { apiKey: stored, source: "customer" };
       }
@@ -620,9 +621,29 @@ export async function getByokOrTeamGatewayApiKey(
 
   if (provider === "openrouter" || provider === "custom") return undefined;
 
-  if (isVercelAiGatewayKey(byokApiKey)) return byokApiKey;
+  if (isVercelAiGatewayKey(byokApiKey)) {
+    const classified = await classifiedLegacyGatewayKey(byokApiKey, lookup);
+    if (classified) return classified;
+  }
 
   return getTeamGatewayApiKey(lookup);
+}
+
+async function classifiedLegacyGatewayKey(apiKey: string, lookup?: ByokLookupContext) {
+  const funding = await getTeamGatewayFunding(lookup);
+  if (funding?.apiKey === apiKey) return funding.apiKey;
+  let enabled = false;
+  const managed = await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, lookup, {
+    includeDisabled: true,
+    onResolved: (row) => { enabled = row.enabled; },
+  });
+  if (managed === apiKey) {
+    if (!enabled) return undefined;
+    registerManagedGatewayKey(apiKey);
+    return apiKey;
+  }
+  if (isPlatformManagedGatewayKey(apiKey)) registerManagedGatewayKey(apiKey);
+  return apiKey;
 }
 
 export async function getByokOrTeamGatewayApiKeyForModelOption(
