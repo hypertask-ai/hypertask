@@ -11,8 +11,10 @@ import prisma from '@/lib/prisma'
 import { findUserByEmail } from '@/utils/controllers/users/findUserByEmail'
 import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
+  HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/keys'
 import {
   finishStraightBoardEmailSignup,
   isPlausibleSignupEmail,
@@ -226,7 +228,9 @@ export async function POST(request: NextRequest) {
 
     const session = await getSessionUser(request.headers)
     const straightBoardSignup =
-      session && (await straightBoardSignupRequesterAllowed(session.userId))
+      session &&
+      (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, session.userId).catch(() => false)) &&
+      (await straightBoardSignupRequesterAllowed(session.userId))
 
     if (straightBoardSignup && !existingUser) {
       const matchedUser = await findUserByEmail(normalizedEmail)

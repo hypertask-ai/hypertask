@@ -278,8 +278,6 @@ function StraightBoardConfirmStrip({
   pathname: string | null;
   currentUser: { email?: string | null; UserSetting?: { isVerified?: boolean | null } | null } | null;
 }) {
-  const flagOn = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
-  if (!flagOn) return null;
   if (!currentUser || isGuestUser(currentUser)) return null;
   if (currentUser.UserSetting?.isVerified ?? true) return null;
   if (pathname && ["/login","/onboarding","/verify-email","/invite","/share","/unauthorized"].some((p) => pathname.startsWith(p))) return null;
@@ -1324,7 +1322,9 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />
+      {useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG) && (
+        <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />
+      )}
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}
