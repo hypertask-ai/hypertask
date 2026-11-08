@@ -12,6 +12,7 @@ export function SendMessageButton({
   textOnMobile = false,
   label,
   textButton = false,
+  shortcut,
   onClick,
 }: {
   disabled: boolean;
@@ -21,6 +22,7 @@ export function SendMessageButton({
   textOnMobile?: boolean;
   label?: string;
   textButton?: boolean;
+  shortcut?: { text: string; keyCombination: string[] };
   onClick: () => void;
 }) {
   const sendTooltip =
@@ -29,6 +31,9 @@ export function SendMessageButton({
     ...sendTooltip,
     keyCombination: [...(sendTooltip.keyCombination ?? [])],
   };
+  if (shortcut) {
+    tooltipProps = { ...tooltipProps, ...shortcut };
+  }
   if (isByokBlocked) {
     tooltipProps = {
       text: "Enable API keys first",
