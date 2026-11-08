@@ -47,15 +47,15 @@ def fixture():
         task(12, 'Open bug two', 'Bugs', '2026-10-13T01:00:00Z', labels=['Bug', 'P3']),
         task(13, 'Held by three', 'Done', '2026-10-13T03:00:00Z', assignee='Runner 3'),
     ]
-    tasks4060 = [
-        task(1, '[INFRA] Plumbing', 'Done', '2026-10-13T02:00:00Z', pid=4060),
-        task(2, 'No tag plumbing', 'Done', '2026-10-12T10:00:00Z', pid=4060),
-        task(3, 'Infra in flight', 'In Progress', '2026-10-13T07:30:00Z', pid=4060, assignee='Runner 1'),
+    tasks11514 = [
+        task(1, '[INFRA] Plumbing', 'Done', '2026-10-13T02:00:00Z', pid=11514),
+        task(2, 'No tag plumbing', 'Done', '2026-10-12T10:00:00Z', pid=11514),
+        task(3, 'Infra in flight', 'In Progress', '2026-10-13T07:30:00Z', pid=11514, assignee='Runner 1'),
     ]
     claim = lambda at: {'ok': True, 'data': [{'text': '<p><strong>Claimed.</strong> Session working it now.</p>', 'createdAt': at}]}
     return {
         'now': NOW,
-        'boards': {15: {'ok': True, 'data': tasks15}, 4060: {'ok': True, 'data': tasks4060}},
+        'boards': {15: {'ok': True, 'data': tasks15}, 11514: {'ok': True, 'data': tasks11514}},
         'comments': {
             1001: claim('2026-10-13T05:00:00Z'),   # done 06:00 -> 60 min
             1002: claim('2026-10-13T04:00:00Z'),   # done 07:00 -> 180 min
@@ -90,7 +90,7 @@ class RenderTests(unittest.TestCase):
         self.assertNotIn(EM, Path(__file__).read_text().replace('chr(0x2014)', ''))
 
     def test_every_ticket_and_pr_is_a_link_with_full_title(self):
-        for t in self.data['boards'][15]['data'] + self.data['boards'][4060]['data']:
+        for t in self.data['boards'][15]['data'] + self.data['boards'][11514]['data']:
             if t['section'] in ('Done', 'Valentin Review', 'UX Sign-off', 'In Progress', 'Bugs'):
                 if t['section'] == 'Done' and t['updatedAt'] < '2026-10-12T22:00:00Z':
                     continue
@@ -169,9 +169,9 @@ class RenderTests(unittest.TestCase):
         self.assertIn('Production error tickets', self.page)
         self.assertIn('not exception occurrences', self.page)
         self.assertIn('Claude weekly usage', self.page)
-        self.data['boards'][4060] = {'ok': False, 'error': 'boom'}
+        self.data['boards'][11514] = {'ok': False, 'error': 'boom'}
         page = ds.render(self.data)
-        self.assertIn('Board 4060: <span class="na">not available</span>', page)
+        self.assertIn('Board 11514: <span class="na">not available</span>', page)
         self.assertIn('Waiting for a yes', page)
 
     def test_responsive_and_theme_markers(self):
@@ -208,7 +208,7 @@ class FailureTests(unittest.TestCase):
             out = Path(tmp) / 'out.html'
             out.write_text(ds.render(fixture()))
             orig = ds.collect
-            ds.collect = lambda now: {'now': now, 'boards': {15: {'ok': False, 'error': 'down'}, 4060: {'ok': False, 'error': 'down'}}}
+            ds.collect = lambda now: {'now': now, 'boards': {15: {'ok': False, 'error': 'down'}, 11514: {'ok': False, 'error': 'down'}}}
             try:
                 code = ds.main(['--out', str(out)])
             finally:
@@ -280,7 +280,7 @@ class RangeTests(unittest.TestCase):
             task(7, 'At now, excluded', 'Done', '2026-10-13T08:00:00Z'),
             task(8, 'Older than history', 'Done', '2026-09-28T07:00:00Z'),
         ]
-        data['boards'][4060]['data'] = []
+        data['boards'][11514]['data'] = []
         data['prs'] = {r: {'ok': True, 'data': []} for r in ds.REPOS}
         data['prs'][ds.REPOS[0]]['data'] = [
             dict(number=i, title='PR ' + str(i), url='https://github.com/hypertask-ai/hypertask/pull/' + str(i), mergedAt=at)

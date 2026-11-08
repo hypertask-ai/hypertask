@@ -5,7 +5,7 @@ description: "Last /ship step: three parallel reviewers read this session's tran
 
 # Reflect
 
-Source: pstack 0.15.9 by Lauren Tan, https://github.com/cursor/plugins/tree/main/pstack, `skills/reflect/SKILL.md` and `references/`. MIT License, Copyright (c) 2026 Lauren Tan. Changed for Claude Code and Hypertask runners (YPER4-599): transcript paths, helpers through the token ladder, repo-only edits through a PR, approval by HT Product Lead, backlog on board 4060.
+Source: pstack 0.15.9 by Lauren Tan, https://github.com/cursor/plugins/tree/main/pstack, `skills/reflect/SKILL.md` and `references/`. MIT License, Copyright (c) 2026 Lauren Tan. Changed for Claude Code and Hypertask runners (YPER4-599): transcript paths, helpers through the token ladder, repo-only edits through a PR, approval by HT Product Lead, backlog on board 11514.
 
 Mine the current session for durable learnings, then route them into skill edits.
 
@@ -45,9 +45,9 @@ For any Accepted row a lint rule, script, hook, test or `ship-check` would enfor
 
 - Record the full Accepted / Rejected / Backlog list in the completed ticket's agent activity through `vcc activity add`. Do not send a session message or wait for a lead response. Never auto-apply: a skill edit changes every future runner.
 - Edit only skills in this repo under `.claude/skills/` (and `.claude/agents/`). Never global files (`~/.claude`, `~/.agents`, another repo); name those as Backlog instead.
-- Accepted findings become their own tickets and normal reviewed PRs: search duplicates first, then one YPER4 ticket on board 4060 via `vcc` and /ship from Claim to Clean up. Keep protected review and merge approvals on that ticket. Do not reflect again on it.
+- Accepted findings become their own tickets and normal reviewed PRs: search duplicates first, then one HYCI ticket on board 11514 via `vcc` and /ship from Claim to Clean up. Keep protected review and merge approvals on that ticket. Do not reflect again on it.
 - A new skill or a skill description change follows the same PR, with its row in `.claude/skills/INDEX.md`.
-- Backlog: one YPER4 ticket per item via `vcc`, after a title search shows no open ticket for it. Do not start work on it.
+- Backlog: one HYCI ticket per item via `vcc`, after a title search shows no open ticket for it. Do not start work on it.
 
 ### 6. Report
 

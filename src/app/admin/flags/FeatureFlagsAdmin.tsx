@@ -337,7 +337,7 @@ export default function FeatureFlagsAdmin({
             )}
             <div className="overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
           {rows.map((flag) => {
-            const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
+            const ticket = /^(htpr|yper4|hyci)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
             const releaseRisk = FEATURE_FLAG_RELEASE_RISKS[flag.key];
             const daysWaiting = flagDaysWaiting(flag);
             const related = relatedFeatureFlags(flag, flags.data?.flags ?? []);
@@ -361,7 +361,7 @@ export default function FeatureFlagsAdmin({
                     </p>
                     {ticket && (
                       <a
-                        href={`https://app.hypertask.ai/detail/project-${ticket[1] === "htpr" ? 15 : 4060}/${ticket[2]}`}
+                        href={`https://app.hypertask.ai/detail/project-${ticket[1] === "htpr" ? 15 : ticket[1] === "hyci" ? 11514 : 4060}/${ticket[2]}`}
                         className="mt-1 inline-block text-content text-text-light-gray underline-offset-2 hover:underline focus-visible:underline"
                       >
                         {ticket[1].toUpperCase()}-{ticket[2]}

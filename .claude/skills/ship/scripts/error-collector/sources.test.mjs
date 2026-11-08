@@ -108,7 +108,7 @@ console.log(JSON.stringify(args[1] === 'list' ? (args[args.indexOf('--repo') + 1
   assert.equal(docs[0].stack, 'https://github.com/hypertask-ai/docs/actions/runs/100');
   assert.equal(events.find(event => event.message === 'Deploy failed: Build').stack, 'https://github.com/hypertask-ai/hypertask/actions/runs/100');
   assert.notEqual(fingerprint(github.name, docs[0].message), fingerprint(github.name, 'Build and Deploy failed: Build'));
-  assert.ok(events.every(event => event.board === 4060));
+  assert.ok(events.every(event => event.board === 11514));
   const calls = readFileSync(join(home, 'gh-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(calls.filter(args => args[1] === 'view').length, 4);
   for (const [repo, branch] of [['hypertask-ai/hypertask', 'production'], ['hypertask-ai/docs', 'main']]) {
@@ -141,7 +141,7 @@ test('Cloudflare recorded Worker exceptions only, no HTTP/DNS traffic tickets; w
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0].count, 3);
   assert.equal(parsed[0].route, 'ht-slack');
-  assert.equal(parsed[0].board, 4060);
+  assert.equal(parsed[0].board, 11514);
   const calls = mockHTTP([[200, { success: true, result: [{ id: 'account', name: 'Hypertask' }, { id: 'other', name: 'Other' }] }], [200, fixtures.cloudflare], [200, fixtures.cloudflare]]);
   await workers.fetch(context);
   assert.match(calls[1].body.query, /workersInvocationsAdaptive\(limit: 10000/);
@@ -227,7 +227,7 @@ test('sanitized recorded provider responses parse offline for every source', () 
   assert.ok(!action.message.includes('unknown failing job'));
   const logs = journal.parseJournal(recorded.journal.map(row => JSON.stringify(row)).join('\n'));
   assert.ok(logs.length > 0);
-  assert.ok(logs.every(event => event.board === 4060 && event.count > 0));
+  assert.ok(logs.every(event => event.board === 11514 && event.count > 0));
   assert.deepEqual(workers.parseWorkers(recorded.cloudflare, until), []);
   const exceptions = posthog.parseExceptions(recorded.posthog);
   assert.equal(exceptions.reduce((sum, event) => sum + event.count, 0), 2);
@@ -267,7 +267,7 @@ test('R4: Vercel live timeout and SSE route go to infra only', () => {
   const row = { message: timeout.message, requestPath: timeout.route, timestamp: timeout.ts };
   const rows = [row, { ...row, message: 'other failure', requestPath: '/sse' }, { ...row, message: 'other failure', requestPath: '/mcp' }, { ...row, message: 'other failure', requestPath: '/sse-other' }];
   assert.match(vercel.messageParts(rows[0].message).message, /Vercel Runtime Timeout Error/);
-  assert.deepEqual(vercel.parseEvents(rows).map(event => event.board), [4060, 4060, 15, 15]);
+  assert.deepEqual(vercel.parseEvents(rows).map(event => event.board), [11514, 11514, 15, 15]);
 });
 
 test('YPER4-358: dead outgoing board and agent webhooks go to infra, other webhook text stays on 15', () => {
@@ -279,7 +279,7 @@ test('YPER4-358: dead outgoing board and agent webhooks go to infra, other webho
     'GitHub webhook [board-webhook] delivery failed',
   ];
   const events = vercel.parseEvents(messages.map(message => ({ ...row, message })));
-  assert.deepEqual(events.map(event => event.board), [4060, 4060, 4060, 15]);
+  assert.deepEqual(events.map(event => event.board), [11514, 11514, 11514, 15]);
   assert.equal(events[0].message, messages[0]);
 });
 
@@ -287,7 +287,7 @@ test('YPER4-359: email event prefix routes to email/infra, embedded text stays o
   const row = { requestPath: '/api/webhooks/resend-events', timestamp: until };
   const messages = ['[email-event] email.bounced (Permanent, General)', 'other [email-event] text'];
   const events = vercel.parseEvents(messages.map(message => ({ ...row, message })));
-  assert.deepEqual(events.map(event => [event.service, event.board]), [['email', 4060], ['vercel', 15]]);
+  assert.deepEqual(events.map(event => [event.service, event.board]), [['email', 11514], ['vercel', 15]]);
   assert.deepEqual(events.map(event => event.message), messages);
 });
 
@@ -383,7 +383,7 @@ test('Neon bounded HTTPS function reads, thresholds, stable query message and gr
   const event = first.events[0];
   assert.equal(event.message, 'slow query: SELECT id FROM sample_tasks WHERE id = $1');
   assert.equal(event.service, 'neon');
-  assert.equal(event.board, 4060);
+  assert.equal(event.board, 11514);
   assert.equal(event.ts, until);
   assert.equal(event.count, 1);
   assert.match(event.stack, /calls: 9007199254740993\nmean_ms: 1600\nmax_ms: 4200\ntotal_ms: 16000/);
@@ -450,7 +450,7 @@ test('Neon first reading is a baseline; exact bigint deltas and rollback thresho
   neonHTTP({ slow: { rows: [] }, counters });
   const second = await neon.fetch({ ...context, cursor: first.cursor });
   assert.deepEqual(second.events.map(event => [event.message, event.count]), [['database deadlocks increased', 2], ['database conflicts increased', 3]]);
-  assert.ok(second.events.every(event => event.service === 'neon' && event.board === 4060 && event.ts === until));
+  assert.ok(second.events.every(event => event.service === 'neon' && event.board === 11514 && event.ts === until));
   assert.match(second.events[0].stack, /delta: 2/);
   counters.rows[0].xact_rollback = '601';
   neonHTTP({ slow: { rows: [] }, counters });
@@ -503,7 +503,7 @@ test('YPER4-360: realtime reads production warning/error logs, pages and dedupes
   assert.equal(calls[0].body.limit, 500);
   assert.equal(calls[1].body.cursor, 'realtime-page-2');
   assert.equal(events.length, 2);
-  assert.ok(events.every(event => event.service === 'realtime' && event.board === 4060 && event.count === 1));
+  assert.ok(events.every(event => event.service === 'realtime' && event.board === 11514 && event.count === 1));
   assert.deepEqual(events.map(event => event.route), ['/api/tasks/single', '/api/mcp/tasks/update']);
   assert.equal(events[0].ts, realtimeFixture.page.events[0].timestamp);
   assert.match(events[0].stack, /^at trigger/);
@@ -533,7 +533,7 @@ test('YPER4-402: realtime collects console.warn broadcast failures, which Vercel
   assert.match(calls[0].body.filter, /\blevel:warn\b/);
   assert.doesNotMatch(calls[0].body.filter, /level:warning/);
   assert.deepEqual(events.map(event => event.message.split(' Error')[0]), ['[feature-flags] realtime broadcast failed', '[agent-run] Agent Chat activity broadcast failed']);
-  assert.ok(events.every(event => event.service === 'realtime' && event.board === 4060));
+  assert.ok(events.every(event => event.service === 'realtime' && event.board === 11514));
 });
 
 test('YPER4-360: realtime query failures/incomplete pages fail closed without exposing provider bodies', async () => {
@@ -555,7 +555,7 @@ test('YPER4-360: realtime collector groups normalized failures once and keeps it
   assert.equal(state.sources.realtime, until);
   assert.equal(state.days['2026-10-14'].realtime.errors, 2);
   assert.equal(Object.keys(state.pending).length, 1);
-  assert.equal(Object.values(state.pending)[0].board, 4060);
+  assert.equal(Object.values(state.pending)[0].board, 11514);
   assert.equal(Object.values(state.pending)[0].count, 2);
   mockHTTP([[503, {}]]);
   assert.equal(await collect({ env: collectorEnv, now: Date.parse(until) + 1000, sources: [realtime] }), 1);

@@ -815,23 +815,23 @@ class WatcherTests(unittest.TestCase):
 
     def test_force_fail_and_bug_project_override_only_response_checks(self):
         for step in ('initialize', 'tools/list', 'list-boards', 'get-task', 'list-labels'):
-            _, tick = self.h.run('--force-fail', step, '--bug-project', '4060', '--dry-run')
+            _, tick = self.h.run('--force-fail', step, '--bug-project', '11514', '--dry-run')
             self.assertFalse(tick['ok'])
             self.assertEqual([c['step'] for c in tick['calls'] if not c['ok']], [step])
             planned = json.loads(self.h.outputs[-1].splitlines()[0])
-            self.assertEqual(planned['would_file']['project'], 4060)
+            self.assertEqual(planned['would_file']['project'], 11514)
             self.assertIsNone(planned['would_file']['section'])
             self.assertEqual(planned['would_send']['target'], 'ht-product-lead')
         self.assertEqual(self.h.records('commands.jsonl'), [])
         self.assertFalse((self.h.home / '.local/state/mcp-contract-watch/state.json').exists())
-        self.h.run('--force-fail', 'tools/list', '--bug-project', '4060')
+        self.h.run('--force-fail', 'tools/list', '--bug-project', '11514')
         creates = [c for c in self.h.records('commands.jsonl') if c['name'] == 'vcc' and c['args'][1] == 'create']
-        self.assertEqual(creates[0]['args'][creates[0]['args'].index('--project') + 1], '4060')
-        self.assertEqual(self.h.state(drill=True)['bug_project'], 4060)
+        self.assertEqual(creates[0]['args'][creates[0]['args'].index('--project') + 1], '11514')
+        self.assertEqual(self.h.state(drill=True)['bug_project'], 11514)
         self.assertTrue(creates[0]['args'][creates[0]['args'].index('--title') + 1].startswith('[TEST] '))
         alert = self.h.records('alerts.jsonl')[0]['text']
         self.assertTrue(alert.startswith('TEST DRILL, not a real outage.'))
-        self.assertIn('Bug filed: https://app.hypertask.ai/detail/project-4060/100', alert)
+        self.assertIn('Bug filed: https://app.hypertask.ai/detail/project-11514/100', alert)
         self.assert_secret_free()
 
     def test_incident_label_only_after_two_failing_checks_in_a_row(self):
@@ -938,9 +938,9 @@ class WatcherTests(unittest.TestCase):
         other = Harness()
         try:
             other.fixture['mode'] = '500'
-            other.run('--bug-project', '4060')
-            other.run('--bug-project', '4060')
-            other.run('--bug-project', '4060', '--dry-run')
+            other.run('--bug-project', '11514')
+            other.run('--bug-project', '11514')
+            other.run('--bug-project', '11514', '--dry-run')
             self.assertEqual(json.loads(other.outputs[-1].splitlines()[0])['would_file']['labels'], [])
             self.assertIsNone(other.records('bugs.json')[0]['labels'])
         finally:
@@ -1003,7 +1003,7 @@ class WatcherTests(unittest.TestCase):
 if MODE == '--dry-run-proof':
     harness = Harness()
     try:
-        result, tick = harness.run('--dry-run', '--force-fail', 'tools/list', '--bug-project', '4060')
+        result, tick = harness.run('--dry-run', '--force-fail', 'tools/list', '--bug-project', '11514')
         assert result.returncode == 1 and not tick['ok']
         assert harness.records('commands.jsonl') == []
         assert not (harness.home / '.local/state/mcp-contract-watch/state.json').exists()

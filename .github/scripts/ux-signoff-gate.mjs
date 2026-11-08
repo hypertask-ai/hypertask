@@ -640,7 +640,7 @@ export function evaluate({ title, author, files, comments = [], parentComments =
 
 export function ticketUrl(title, runUrl) {
   const ticket = ticketFromTitle(title);
-  const project = { HTPR: 15, YPER4: 4060, HYCI: 11514 }[ticket?.prefix];
+  const project = { HTPR: 15, HYCI: 11514 }[ticket?.prefix];
   return project ? `https://app.hypertask.ai/detail/project-${project}/${ticket.number}` : runUrl;
 }
 

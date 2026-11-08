@@ -26,7 +26,7 @@ just skips every write test — see "Write journeys" below.
   runs; a dedup-store failure keeps evidence in the summary instead of risking
   duplicate delivery.
 - `HYPERTASK_MCP_TOKEN` (existing agent ticket mechanism): creates or updates
-  one monitoring ticket per setup cause on board 4060, at most once daily.
+  one monitoring ticket per setup cause on board 11514, at most once daily.
   Failure to record a ticket remains a job annotation and summary.
 - The workflow pins `SMOKE_BOARD_PATH` to `/project?id=6121&surface=board`
   and `SMOKE_TASK_PATH` to `/detail/project-6121/1`: the existing private

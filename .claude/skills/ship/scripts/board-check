@@ -57,7 +57,7 @@ for col in 'AI Review' QA 'In Progress'; do
   jq '{tasks: .}' "$work/$col.rows" > "$work/$col"
 done
 jq -s '[.[].tasks[]]' "$work/AI Review" "$work/QA" "$work/In Progress" > "$work/tasks"
-jq -sr '[.[1][] | .title | capture("^(?<ticket>(HTPR|HYFA|YPER4)-[0-9]+)( |$)") | .ticket] + [.[0][].ticketNumber]
+jq -sr '[.[1][] | .title | capture("^(?<ticket>(HTPR|HYFA|HYCI|YPER4)-[0-9]+)( |$)") | .ticket] + [.[0][].ticketNumber]
   | reduce .[] as $ticket ([]; if index($ticket) then . else . + [$ticket] end) | .[]' "$work/tasks" "$work/prs" > "$work/tickets"
 total=$(wc -l < "$work/tickets")
 inspected=0
@@ -248,7 +248,7 @@ wait_reads
 
 while IFS= read -r pr; do
   title=$(jq -r .title <<< "$pr")
-  ticket='-'; [[ $title =~ ^((HTPR|HYFA|YPER4)-[0-9]+)([[:space:]]|$) ]] && ticket=${BASH_REMATCH[1]}
+  ticket='-'; [[ $title =~ ^((HTPR|HYFA|HYCI|YPER4)-[0-9]+)([[:space:]]|$) ]] && ticket=${BASH_REMATCH[1]}
   [ "$ticket" = '-' ] || ticket=$(canonical "$ticket")
   stamp=$(seconds "$(jq -r '.commits.nodes[0].commit.committedDate // ""' <<< "$pr")")
   if [ "$ticket" != '-' ]; then

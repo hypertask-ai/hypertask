@@ -82,7 +82,7 @@ Entry points: installed `runner-pickup run <n>` (queue only),
 The recovery epoch is recorded only after successfully lifting a real freeze;
 see `docs/ci.md`. Never invent a shared epoch to make a real ticket eligible.
 
-For live proof, use disposable Fleet Infra fixtures assigned only to this
+For live proof, use disposable Fleet CI & Infra fixtures assigned only to this
 runner, clearly marked as synthetic. Give both a same-runner freeze-block
 comment and the Agent Blocked section. Use an isolated `RUNNER_INBOX_DIR`,
 record the synthetic lift there, then post a newer block on the control.

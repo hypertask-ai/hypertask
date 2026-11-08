@@ -202,7 +202,7 @@ for content in [
     '<body><script type="text/plain">' + link + '</script></body>',
     '<body><template>' + link + '</template></body>',
     '<body>' + link.replace('project-15/255', 'project-15/999') + '</body>',
-    '<body>' + link.replace('project-15', 'project-4060') + '</body>',
+    '<body>' + link.replace('project-15', 'project-11514') + '</body>',
     '<body><div hidden>' + link + '</div></body>',
     '<style>.hidden{display:none}</style><body><div class="hidden">' + link + '</div></body>',
     '<body><div style="visibility:hidden">' + link + '</div></body>',
@@ -248,7 +248,7 @@ assert not events(log, "vcc") and not events(log, "npx")
 ok("HTPR-7724 redo-shaped header link and sourceTicket/themes record pass through upload stubs")
 record.write_text(json.dumps(styles))
 other = home / "YPER4-255/index.html"
-other.write_text(valid_page.replace("project-15", "project-4060"))
+other.write_text(valid_page.replace("project-15", "project-11514"))
 other.with_name("live-styles.json").write_text(json.dumps(styles))
 p, log = invoke("publish", "YPER4-255", "--no-comment", fail=True, PROJECT_ID="99")
 assert "https://app.hypertask.ai/detail/project-99/255" in p.stderr
@@ -262,14 +262,14 @@ ok("publish --no-comment sends waiting and uploads only")
 
 full_publish()
 ok("publish verifies identical authenticated GET, attaches PNG and posts one escaped comment before board 15 move")
-full_publish("YPER4-255", move=False, PROJECT_ID="4060", SECTIONS='["Todo"]')
+full_publish("YPER4-255", move=False, PROJECT_ID="11514", SECTIONS='["Todo"]')
 ok("other board without UX Sign-off does not move")
-full_publish("YPER4-255", PROJECT_ID="4060")
+full_publish("YPER4-255", PROJECT_ID="11514")
 ok("other board with a confirmed UX Sign-off section moves")
 full_publish(move=False, SECTIONS="[]")
 ok("board 15 with known absent section does not move")
 full_publish(FAIL_SECTIONS="1")
-full_publish("YPER4-255", move=False, PROJECT_ID="4060", FAIL_SECTIONS="1")
+full_publish("YPER4-255", move=False, PROJECT_ID="11514", FAIL_SECTIONS="1")
 ok("unknown sections fall back to a move only on board 15")
 
 (home / "HTPR-255/index.html").write_text("unreviewed local edit")

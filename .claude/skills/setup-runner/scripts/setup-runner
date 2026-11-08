@@ -81,7 +81,7 @@ token=$CREDS/runner-$n-agent-token
 tmp=
 trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
 if [ ! -e "$token" ] && [ ! -L "$token" ]; then
-  response=$(hypertask agents create --name "Runner $n" --project 15 --project 4060 --json 2>/dev/null) || fail 'agent creation failed (output withheld to protect tokens)'
+  response=$(hypertask agents create --name "Runner $n" --project 15 --project 11514 --json 2>/dev/null) || fail 'agent creation failed (output withheld to protect tokens)'
   tmp=$(mktemp "$CREDS/.runner-$n-token.XXXXXX")
   if ! jq -er '.token | select(type == "string" and length > 0 and (test("\\s") | not))' <<<"$response" >"$tmp" 2>/dev/null; then
     fail 'agent creation did not return a valid token'
@@ -102,8 +102,8 @@ fi
 ln -sfn "../runner-$n-agent-token" "$link"
 
 # CLI errors may echo credentials, so show only our own failure messages.
-ticket=$(hypertask --json --token "$(cat "$token")" tasks get YPER4-159 2>/dev/null) || fail 'login verification failed (output withheld to protect tokens)'
-jq -e '.success == true and any(.tasks[]; .ticketNumber == "YPER4-159")' <<<"$ticket" >/dev/null 2>&1 || fail 'login verification did not return YPER4-159'
+ticket=$(hypertask --json --token "$(cat "$token")" tasks get HYCI-188 2>/dev/null) || fail 'login verification failed (output withheld to protect tokens)'
+jq -e '.success == true and any(.tasks[]; .ticketNumber == "HYCI-188")' <<<"$ticket" >/dev/null 2>&1 || fail 'login verification did not return HYCI-188'
 if [ "$name" = "RUNNER $n" ]; then
   identity=$("$(dirname "$SELF")/../../ship/scripts/ship-identity") || fail 'identity verification failed'
   [ "$identity" = "RUNNER $n"$'\t'"$link" ] || fail 'ship-identity does not match the runner credential'

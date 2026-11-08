@@ -7,7 +7,7 @@ Written from the HTPR-7574 live QA runs (PRs 1835 and 1847).
 - Open **Agents** at `/agents`, or board command center → **Manage agents**. The command navigates to `/agents`, not the legacy modal.
 - Pick an owned agent at `/agents/<id-or-slug>` and expand **Board access**.
 - Board desktop: **Invite team members → Invite to Board (share)**. Phone: **Commands → Invite people** opens the same picker.
-- QA is user 985, state `~/.config/hypertask-videos/storageState-qa.json`, owned QA Sandbox 7049 at `/project?id=7049`, team `08f79efd-770e-4e32-9728-65e6d29ec893`. Never navigate to or mutate boards 15/4060 or use Valentin's account. Lists may contain other boards; that is not permission to visit them.
+- QA is user 985, state `~/.config/hypertask-videos/storageState-qa.json`, owned QA Sandbox 7049 at `/project?id=7049`, team `08f79efd-770e-4e32-9728-65e6d29ec893`. Never navigate to or mutate boards 15/11514 or use Valentin's account. Lists may contain other boards; that is not permission to visit them.
 
 ## How to drive it
 

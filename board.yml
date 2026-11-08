@@ -18,5 +18,5 @@ roles:
 columns:
   - board_id: 15
     title: Agent Blocked (Infra)
-  - board_id: 4060
+  - board_id: 11514
     title: Agent Blocked

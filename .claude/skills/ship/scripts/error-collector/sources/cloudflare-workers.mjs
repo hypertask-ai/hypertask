@@ -6,7 +6,7 @@ export function parseWorkers(data, until) {
   if (data.errors?.length || !Array.isArray(data.data?.viewer?.accounts) || data.data.viewer.accounts.length !== 1) throw new Error('Cloudflare analytics unavailable');
   const rows = data.data.viewer.accounts[0].current;
   if (!Array.isArray(rows) || rows.length >= 10000) throw new Error('Cloudflare analytics incomplete');
-  return rows.filter(row => row.sum.errors > 0).map(row => ({ service: name, board: 4060, message: `${row.dimensions.scriptName}: Worker execution errors`, route: row.dimensions.scriptName, stack: 'Adaptive analytics counts may be sampled/estimated; not HTTP response errors.', ts: until, count: row.sum.errors }));
+  return rows.filter(row => row.sum.errors > 0).map(row => ({ service: name, board: 11514, message: `${row.dimensions.scriptName}: Worker execution errors`, route: row.dimensions.scriptName, stack: 'Adaptive analytics counts may be sampled/estimated; not HTTP response errors.', ts: until, count: row.sum.errors }));
 }
 
 export async function fetch({ since, until, env }) {

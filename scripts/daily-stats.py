@@ -36,7 +36,7 @@ PUBLISH_PATH = INSTALL_DIR / 'out/daily-stats.html'
 UNIT_DIR = HOME / '.config/systemd/user'
 TOKEN_STATUS = HOME / '.local/state/token-ladder/status.json'
 
-BOARDS = {15: 'Hypertask Product', 4060: 'Agents & Infra'}
+BOARDS = {15: 'Hypertask Product', 11514: 'Fleet CI & Infra'}
 REPOS = ['hypertask-ai/hypertask', 'hypertask-ai/cli', 'hypertask-ai/agent-fleet']
 APP = 'https://app.hypertask.ai'
 WAITING_COLUMNS = ['Valentin Review', 'UX Sign-off']
@@ -116,7 +116,7 @@ def classify(t):
         return 'improvement'
     if 'BUG' in names:
         return 'bug'
-    if t.get('projectId') == 4060:
+    if t.get('projectId') == 11514:
         return 'infra'
     return 'other'
 
@@ -632,7 +632,7 @@ def sec_vital(config, snapshot):
     out.extend(tile(config[key] if config[key] is not None else 'n/a', label + ' (now)')
                for key, label in [('waiting', 'Waiting on Valentin'), ('runners', 'Active runners')])
     out.append('</div><p class="muted">Done: current Done tickets by last change (not a transition log). '
-               'New bugs: ticket creation on boards 15 and 4060. Production errors: board 15 tickets labeled Error Log (or the older prod-error), '
+               'New bugs: ticket creation on boards 15 and 11514. Production errors: board 15 tickets labeled Error Log (or the older prod-error), '
                'by creation time, not exception occurrences. PRs: GitHub mergedAt across the three repos below. '
                'n/a means a source or complete previous period is unavailable.</p></section>')
     return ''.join(out)

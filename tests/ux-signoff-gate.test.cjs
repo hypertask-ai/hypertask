@@ -1332,7 +1332,7 @@ test('ticket title is strict; unknown project links fall back to the workflow ru
   }
   const { ticketUrl } = await gate;
   assert.equal(ticketUrl(title, 'run'), 'https://app.hypertask.ai/detail/project-15/7072');
-  assert.equal(ticketUrl('YPER4-254 [INFRA] Gate', 'run'), 'https://app.hypertask.ai/detail/project-4060/254');
+  assert.equal(ticketUrl('YPER4-254 [INFRA] Gate', 'run'), 'run');
   assert.equal(ticketUrl('HYCI-75 [INFRA] Gate', 'run'), 'https://app.hypertask.ai/detail/project-11514/75');
   assert.equal(ticketUrl('HYFA-1 [FEATURE] UI', 'run'), 'run');
   assert.equal(ticketUrl('unknown', 'run'), 'run');

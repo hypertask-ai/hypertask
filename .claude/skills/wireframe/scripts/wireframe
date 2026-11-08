@@ -216,7 +216,7 @@ def main():
         f = BASE / "base-kit.html" if base else HOME / t / "index.html"
         if cmd == "publish" and not f.is_file():
             raise SystemExit(f"local file missing: {f}; run: wireframe new {t}")
-        title, turl, project_id = ("Base kit: full app", "https://app.hypertask.ai/detail/project-4060/255", 4060) if base else ticket_info(t)
+        title, turl, project_id = ("Base kit: full app", "https://app.hypertask.ai/detail/project-4060/255", 11514) if base else ticket_info(t)
         if cmd == "publish" and not base:
             publish_guard(f, turl)
         sh = share()

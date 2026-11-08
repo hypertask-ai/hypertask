@@ -121,7 +121,7 @@ export async function loadSources(names) {
 }
 
 function validate(event) {
-  if (!event || (event.ticket != null && typeof event.ticket !== 'boolean') || ![15, 4060].includes(event.board) || typeof event.service !== 'string' || !/^[A-Za-z][A-Za-z0-9 ._-]{0,79}$/.test(event.service) || ['__proto__', 'constructor', 'prototype'].includes(event.service) || typeof event.message !== 'string' || (event.route != null && typeof event.route !== 'string') || (event.stack != null && typeof event.stack !== 'string') || !Number.isFinite(Date.parse(event.ts)) || !Number.isSafeInteger(event.count ?? 1) || (event.count ?? 1) < 1) throw new Error('invalid event');
+  if (!event || (event.ticket != null && typeof event.ticket !== 'boolean') || ![15, 11514].includes(event.board) || typeof event.service !== 'string' || !/^[A-Za-z][A-Za-z0-9 ._-]{0,79}$/.test(event.service) || ['__proto__', 'constructor', 'prototype'].includes(event.service) || typeof event.message !== 'string' || (event.route != null && typeof event.route !== 'string') || (event.stack != null && typeof event.stack !== 'string') || !Number.isFinite(Date.parse(event.ts)) || !Number.isSafeInteger(event.count ?? 1) || (event.count ?? 1) < 1) throw new Error('invalid event');
   return { ...event, ts: iso(Date.parse(event.ts)), count: event.count ?? 1, route: event.route ?? '', stack: event.stack ?? '' };
 }
 
@@ -213,9 +213,9 @@ export function findRelatedIncident(group, env) {
 }
 
 function intake(env) {
-  const value = payload(command('ht', ['GET', '/mcp/projects/4060/sections'], env));
+  const value = payload(command('ht', ['GET', '/mcp/projects/11514/sections'], env));
   if (!Array.isArray(value.sections)) throw new Error('invalid sections');
-  const active = value.sections.filter(section => section.projectId === 4060 && !section.deleted && section.isDone !== true && Number.isSafeInteger(section.id));
+  const active = value.sections.filter(section => section.projectId === 11514 && !section.deleted && section.isDone !== true && Number.isSafeInteger(section.id));
   const section = active.find(section => /^backlog$/i.test(section.section_title)) ?? active.find(section => /^(to[ -]?do|todo)$/i.test(section.section_title));
   if (!section) throw new Error('no intake section');
   return String(section.id);

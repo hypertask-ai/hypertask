@@ -29,14 +29,14 @@ task() { # ticket section agent project
       assignees:[{id:6, agent:{id:"x", displayName:$a}}]}'
 }
 write_tasks() { printf '{"success":true,"total":%s,"tasks":[%s]}\n' "$#" "$(IFS=,; echo "$*")" > "$FAKE_TASKS"; }
-write_tasks "$(task YPER4-300 Todo 'Runner 3' 4060)" "$(task YPER4-301 'In Progress' 'Runner 3' 4060)" "$(task HTPR-400 Todo 'Runner 4' 15)" "$(task HTPR-401 Done 'Runner 3' 15)" "$(task YPER4-302 Backlog 'Runner 3' 4060)"
+write_tasks "$(task YPER4-300 Todo 'Runner 3' 11514)" "$(task YPER4-301 'In Progress' 'Runner 3' 11514)" "$(task HTPR-400 Todo 'Runner 4' 15)" "$(task HTPR-401 Done 'Runner 3' 15)" "$(task YPER4-302 Backlog 'Runner 3' 11514)"
 inbox=$RUNNER_INBOX_DIR/runner-3.json
 activity() { grep -c '|activity add' "$FAKE_LOG" 2>/dev/null || true; }
 
 # Tick 1: only this runner's unclaimed tickets are queued, no activity line yet.
 "$SCRIPT" run 3 2>/dev/null
 eq "queues unclaimed tickets of this runner only" "$(jq -r '[.items[].ticket]|sort|join(",")' "$inbox")" "YPER4-300,YPER4-302"
-eq "item carries the full URL" "$(jq -r '.items[]|select(.ticket=="YPER4-300").url' "$inbox")" "https://app.hypertask.ai/detail/project-4060/300"
+eq "item carries the full URL" "$(jq -r '.items[]|select(.ticket=="YPER4-300").url' "$inbox")" "https://app.hypertask.ai/detail/project-11514/300"
 eq "identity used for the read" "$(head -1 "$FAKE_LOG")" "RUNNER 3|task list --assigned-to me --status Normal --sort updatedAt:desc --limit 100 --offset 0 --json"
 eq "no activity line on first sight" "$(activity)" "0"
 eq "exactly one board read per tick" "$(grep -c '|task list' "$FAKE_LOG")" "1"
@@ -48,7 +48,7 @@ grep -q 'activity add YPER4-300 Queued for Runner 3' "$FAKE_LOG" && ok "activity
 eq "idempotent: no extra activity lines" "$(activity)" "2"
 eq "idempotent: no duplicate items" "$(jq '.items|length' "$inbox")" "2"
 # A claimed ticket leaves the inbox.
-write_tasks "$(task YPER4-300 'In Progress' 'Runner 3' 4060)" "$(task YPER4-302 Backlog 'Runner 3' 4060)"
+write_tasks "$(task YPER4-300 'In Progress' 'Runner 3' 11514)" "$(task YPER4-302 Backlog 'Runner 3' 11514)"
 "$SCRIPT" run 3 2>/dev/null
 eq "claimed ticket dropped" "$(jq -r '[.items[].ticket]|join(",")' "$inbox")" "YPER4-302"
 
@@ -112,7 +112,7 @@ printf -- '- [ ] G1: open work\n  CHECK: true\nABANDON: G1 waiting for Valentin\
 out=$(hook 'RUNNER 3' "$pl")
 eq "idle runner: blocks with the full title and URL" "$(jq -r .decision <<<"$out")" "block"
 case "$(jq -r .reason <<<"$out")" in
-  "New ticket assigned to you on the board: Title of YPER4-302 https://app.hypertask.ai/detail/project-4060/302. Run /ship YPER4-302.") ok "reason text";;
+  "New ticket assigned to you on the board: Title of YPER4-302 https://app.hypertask.ai/detail/project-11514/302. Run /ship YPER4-302.") ok "reason text";;
   *) bad "reason text: $(jq -r .reason <<<"$out")";;
 esac
 eq "delivered once: second stop is silent" "$(hook 'RUNNER 3' "$pl")" ""

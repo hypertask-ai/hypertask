@@ -22,10 +22,10 @@ args = sys.argv[1:]
 secret = 'fixture-only-bearer-value'
 mode = os.environ.get('FAKE_MODE', '')
 if args[:2] == ['agents', 'create']:
-    assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '4060', '--json']
+    assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '11514', '--json']
     call = ['create', args[3]]
 else:
-    assert args == ['--json', '--token', secret, 'tasks', 'get', 'YPER4-159']
+    assert args == ['--json', '--token', secret, 'tasks', 'get', 'HYCI-188']
     call = ['read', 'verified token']
 with open(os.environ['CALLS'], 'a') as f:
     f.write(json.dumps(call) + '\\n')
@@ -41,7 +41,7 @@ if call[0] == 'create':
     else:
         print(json.dumps({'token': '' if mode == 'empty-token' else secret}))
 else:
-    print(json.dumps({'success': True, 'tasks': [{'ticketNumber': 'HTPR-1' if mode == 'wrong-ticket' else 'YPER4-159'}]}))
+    print(json.dumps({'success': True, 'tasks': [{'ticketNumber': 'HTPR-1' if mode == 'wrong-ticket' else 'HYCI-188'}]}))
 ''')
     cli.chmod(0o755)
     base_env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'])

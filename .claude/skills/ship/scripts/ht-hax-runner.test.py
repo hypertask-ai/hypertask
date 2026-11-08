@@ -233,10 +233,10 @@ exec /bin/sleep 0.01
         user_turn = '{"type":"user_turn","elapsed_ms":1}'
         for final_line, cooldown, recovery, trailing in [
             ('RUNNER DONE YPER4-1 Done', 30, False, ''),
-            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done', 30, False, ''),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-11514/1 Done', 30, False, ''),
             ('RUNNER DONE YPER4-1 Agent Blocked', 30, False, user_turn),
             ('RUNNER DONE YPER4-776 Done', 30, False, user_turn),
-            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30, False, user_turn),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-11514/776 Done', 30, False, user_turn),
             ('• RUNNER IDLE no free tickets', 900, False, user_turn),
             ('RUNNER DONE YPER4-776 Done', 30, True, user_turn),
         ]:
@@ -277,7 +277,7 @@ exec /bin/sleep 0.01
                 self.assertIn('recovery drain 8', events)
                 if final_line in [
                     'RUNNER DONE YPER4-1 Done',
-                    'RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done',
+                    'RUNNER DONE https://app.hypertask.ai/detail/project-11514/1 Done',
                 ]:
                     self.assertIn('recovery ack 8 YPER4-1', events)
                     self.assertLess(events.index('final-phase'), events.index('recovery ack 8 YPER4-1'))

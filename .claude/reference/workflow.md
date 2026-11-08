@@ -28,7 +28,7 @@ Every access or security fix adds a "still allowed" test next to its "now refuse
 ## Repository Workflow
 
 - Branch from `origin/production` in your own worktree. Target `production`; `main` is frozen rollback history. Never base work on or push to archived `hypertask-ai/hypertasks`.
-- One ticket, one PR. Recover an existing PR instead of duplicating it. Titles use a real HTPR, HYFA, or YPER4 ticket and an accepted type. Leave auto-merge off.
+- One ticket, one PR. Recover an existing PR instead of duplicating it. Titles use a real HTPR, HYFA, HYCI, or YPER4 ticket and an accepted type. Leave auto-merge off.
 - Inspect existing worktree changes before committing. Never stash, discard, reset, or revert another session's work.
 - Merge only after required checks pass on the current head. Resolve conflicts before diagnosing checks. Protected Agent Kit changes require Chief Of Staff review and merge; see /ship.
 - Production is Vercel `hypertasks-prod`, deploying `production` to `app.hypertask.ai`. Require successful deployment for the merge SHA, then live QA.
