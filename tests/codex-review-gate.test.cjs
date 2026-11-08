@@ -3,91 +3,46 @@ const test = require('node:test');
 const { evaluate, priorityOf, blocks, isCodex } = require('../.github/scripts/codex-review-gate.cjs');
 
 const head = 'a'.repeat(40);
-const older = 'b'.repeat(40);
-const committedDate = '2026-11-08T01:00:00Z';
 const bot = 'chatgpt-codex-connector[bot]';
-const badge = level => `**<sub><sub>![P${level} Badge](https://img.shields.io/badge/P${level}-orange?style=flat)</sub></sub>  Title**\n\nDetails.`;
-const pr = (overrides = {}) => ({
-  headOid: head,
-  committedDate,
-  reviews: [],
-  comments: [],
-  thumbsUp: async () => [],
-  ...overrides,
-});
-const review = (comments, extra = {}) => ({ author: bot, commit: head, body: 'Codex Review: Here are some suggestions.', url: 'https://github.com/o/r/pull/1#pullrequestreview-1', comments, ...extra });
+const badge = level => `![P${level} Badge](https://img.shields.io/badge/P${level}-orange) Title`;
+const pr = extra => ({ headOid: head, committedDate: '2026-11-08T01:00:00Z', reviews: [], comments: [], thumbsUp: async () => [], ...extra });
+const review = (comments, extra) => ({ author: bot, commit: head, body: 'Codex Review', url: 'https://example.test/r/1', comments, ...extra });
+const states = async extra => (await evaluate(pr(extra))).state;
 
-test('a Codex review of the head with a P1 finding fails the gate', async () => {
-  const result = await evaluate(pr({ reviews: [review([badge(1)])] }));
-  assert.equal(result.state, 'failure');
-  assert.match(result.description, /worst P1/);
+test('P1 finding on the head fails, P0 is named as worst', async () => {
+  assert.equal(await states({ reviews: [review([badge(1)])] }), 'failure');
+  assert.match((await evaluate(pr({ reviews: [review([badge(1), badge(0)])] }))).description, /worst P0/);
 });
 
-test('P0 outranks P1 in the description', async () => {
-  const result = await evaluate(pr({ reviews: [review([badge(1), badge(0)])] }));
-  assert.match(result.description, /worst P0/);
+test('a finding with no badge fails closed', async () => {
+  assert.match((await evaluate(pr({ reviews: [review(['Rename this.'])] }))).description, /unrated/);
 });
 
-test('a finding with no priority badge fails closed', async () => {
-  const result = await evaluate(pr({ reviews: [review(['Please rename this.'])] }));
-  assert.equal(result.state, 'failure');
-  assert.match(result.description, /unrated/);
+test('P2-only findings and findingless reviews pass', async () => {
+  assert.equal(await states({ reviews: [review([badge(2)])] }), 'success');
+  assert.equal(await states({ reviews: [review([])] }), 'success');
 });
 
-test('a Codex review of the head with only lower-priority findings passes', async () => {
-  const result = await evaluate(pr({ reviews: [review([badge(2)])] }));
-  assert.equal(result.state, 'success');
-  assert.equal(result.evidence, 'https://github.com/o/r/pull/1#pullrequestreview-1');
+test('reviews of an older commit or by someone else are ignored', async () => {
+  assert.equal(await states({ reviews: [review([badge(1)], { commit: 'b'.repeat(40) })] }), 'pending');
+  assert.equal(await states({ reviews: [review([], { author: 'someone' })] }), 'pending');
 });
 
-test('a Codex review with no inline findings passes', async () => {
-  assert.equal((await evaluate(pr({ reviews: [review([])] }))).state, 'success');
+test('a Codex no-issues comment counts only after the head commit', async () => {
+  const comment = createdAt => [{ author: bot, body: "Didn't find any major issues.", createdAt }];
+  assert.equal(await states({ comments: comment('2026-11-08T01:05:00Z') }), 'success');
+  assert.equal(await states({ comments: comment('2026-11-08T00:30:00Z') }), 'pending');
 });
 
-test('a review of an older commit says nothing about the current head', async () => {
-  const result = await evaluate(pr({ reviews: [review([badge(1)], { commit: older })] }));
-  assert.equal(result.state, 'pending');
+test('a Codex thumbs-up counts only after the head commit', async () => {
+  assert.equal(await states({ thumbsUp: async () => [new Date('2026-11-08T01:02:00Z')] }), 'success');
+  assert.equal(await states({ thumbsUp: async () => [new Date('2026-11-08T00:59:00Z')] }), 'pending');
+  assert.equal(await states({}), 'pending');
 });
 
-test('a review by someone other than Codex is ignored', async () => {
-  const result = await evaluate(pr({ reviews: [review([], { author: 'someone' })] }));
-  assert.equal(result.state, 'pending');
-});
-
-test('a no-issues comment from Codex after the head commit passes', async () => {
-  const comments = [{ author: bot, body: "Codex Review: Didn't find any major issues. Nice work!", createdAt: '2026-11-08T01:05:00Z' }];
-  assert.equal((await evaluate(pr({ comments }))).state, 'success');
-});
-
-test('a no-issues comment from before the head commit does not count', async () => {
-  const comments = [{ author: bot, body: "Didn't find any major issues.", createdAt: '2026-11-08T00:30:00Z' }];
-  assert.equal((await evaluate(pr({ comments }))).state, 'pending');
-});
-
-test('a thumbs-up from Codex after the head commit passes', async () => {
-  const result = await evaluate(pr({ thumbsUp: async () => [new Date('2026-11-08T01:02:00Z')] }));
-  assert.equal(result.state, 'success');
-});
-
-test('a thumbs-up from before the head commit does not count', async () => {
-  const result = await evaluate(pr({ thumbsUp: async () => [new Date('2026-11-08T00:59:00Z')] }));
-  assert.equal(result.state, 'pending');
-});
-
-test('no Codex signal at all stays pending', async () => {
-  assert.equal((await evaluate(pr())).state, 'pending');
-});
-
-test('badge parsing finds the highest priority and treats a badge-free body as unrated', () => {
+test('badge parsing and bot login matching', () => {
   assert.equal(priorityOf(badge(2)), 2);
   assert.equal(priorityOf('plain'), null);
-  assert.equal(blocks(badge(2)), false);
-  assert.equal(blocks(badge(1)), true);
-  assert.equal(blocks('plain'), true);
-});
-
-test('the bot login matches with or without the bot suffix', () => {
-  assert.ok(isCodex('chatgpt-codex-connector'));
-  assert.ok(isCodex(bot));
-  assert.ok(!isCodex('hypertask-ai-review'));
+  assert.deepEqual([badge(2), badge(1), 'plain'].map(blocks), [false, true, true]);
+  assert.ok(isCodex('chatgpt-codex-connector') && isCodex(bot) && !isCodex('hypertask-ai-review'));
 });

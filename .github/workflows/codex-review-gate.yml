@@ -1,17 +1,10 @@
 name: Codex review gate
 
-# Codex's built-in GitHub code review (the chatgpt-codex-connector bot) is the
-# AI review for this repository. It posts a standard pull request review on
-# every push, with one inline comment per finding and a P0 or P1 badge on each.
-# This workflow reads that review for the PR's current head commit and sets the
-# required `ai-review` commit status (and its legacy twin `claude-review`):
-# success when Codex reviewed the head and raised no P0 or P1 finding, failure
-# when it raised one, pending otherwise. Only GITHUB_TOKEN is used. The logic
-# lives in .github/scripts/codex-review-gate.cjs, loaded from the production
-# branch; no PR code is checked out or run.
-#
-# Reactions do not fire workflow events, so the schedule is also what notices a
-# thumbs-up and what catches any event GitHub drops.
+# Reads Codex's built-in GitHub review (the chatgpt-codex-connector bot) for each
+# PR head and sets the required `ai-review` status (and its twin `claude-review`):
+# success with no P0/P1 finding, failure with one, pending otherwise. Logic is in
+# .github/scripts/codex-review-gate.cjs, loaded from production; no PR code runs.
+# Reactions fire no events, so the schedule also catches thumbs-ups and drops.
 on:
   pull_request_review:
     types: [submitted]
@@ -35,13 +28,10 @@ permissions:
 
 jobs:
   gate:
-    # One lane per PR, queued and never cancelled: a cancelled run would show on
-    # the PR head as a failed check and stop auto-merge from touching it.
+    # One lane per PR, queued, never cancelled (a cancelled run shows as failed).
     concurrency:
       group: codex-review-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr || 'sweep' }}
       queue: max
-    # Skip noise without spending a runner: only Codex's own events, ordinary
-    # comments on issues, and everything non-event (schedule, manual).
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
@@ -59,8 +49,7 @@ jobs:
           fetch-depth: 1
           sparse-checkout: .github/scripts
           persist-credentials: false
-      # The gate PR itself runs this file before the script exists on production;
-      # the status then simply stays pending and fails closed.
+      # Before this file lands on production the script is absent: skip, stay pending.
       - if: hashFiles('.github/scripts/codex-review-gate.cjs') != ''
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
