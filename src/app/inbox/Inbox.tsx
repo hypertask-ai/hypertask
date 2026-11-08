@@ -105,6 +105,7 @@ import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDoc
 import {
   resolveInboxOpeningPosition,
   shouldPreserveNativeInboxTab,
+  shouldResumeInboxRow,
 } from "@/lib/inboxKeyboardNavigation";
 import { getInitialInboxSplitIndex } from "@/lib/inboxSplitSettings";
 
@@ -967,7 +968,11 @@ const Inbox = ({
                     }
                     _notifications={notification}
                     initialFocus={initialIndexReset}
-                    resumesPosition={inboxOpening.resumes && inboxTab === openingTab}
+                    resumesPosition={shouldResumeInboxRow({
+                      resumes: inboxOpening.resumes,
+                      openingTab,
+                      currentTab: inboxTab,
+                    })}
                     markAsDone={markAsDone}
                     starTaskUpdateInCache={starTaskUpdateInCache}
                     appShellRail={appShellRailOn}

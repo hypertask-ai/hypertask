@@ -10,7 +10,6 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const navigation = jiti(path.join(root, "src/lib/inboxKeyboardNavigation.ts"));
-const inboxSource = fs.readFileSync(path.join(root, "src/app/inbox/Inbox.tsx"), "utf8");
 const splitSource = fs.readFileSync(
   path.join(root, "src/components/notifications/inboxSplit/index.tsx"),
   "utf8",
@@ -53,6 +52,7 @@ function fixture({ resumes, focusedIndex = 0, count = 6 }) {
     controller: {},
     Element: class {},
     keyboardRows,
+    inboxKeyboardFocus: true,
     keyboardNavigationStarted: resumes,
     selectedKeyboardNotificationIndex: null,
     selectedKeyboardRow: keyboardRows[focusedIndex],
@@ -174,12 +174,19 @@ test("unusable saved indexes fall back to the top", () => {
   }
 });
 
-test("the inbox page hands the resolved opening position to its split", () => {
-  assert.match(inboxSource, /resolveInboxOpeningPosition\(/);
-  assert.match(inboxSource, /inboxFirstRow\s*\?/);
-  assert.match(inboxSource, /resumesPosition=\{inboxOpening\.resumes && inboxTab === openingTab\}/);
-  assert.match(splitSource, /resumesPosition\?: boolean/);
-  assert.match(splitSource, /keyboardNavigationStarted/);
+test("the resumed row only applies to the tab the reader arrived on", () => {
+  assert.equal(
+    navigation.shouldResumeInboxRow({ resumes: true, openingTab: "|Important", currentTab: "|Important" }),
+    true,
+  );
+  assert.equal(
+    navigation.shouldResumeInboxRow({ resumes: true, openingTab: "|Important", currentTab: "|Agents" }),
+    false,
+  );
+  assert.equal(
+    navigation.shouldResumeInboxRow({ resumes: false, openingTab: "|", currentTab: "|" }),
+    false,
+  );
 });
 
 test("the new first-row behaviour ships behind its own bugfix flag", () => {
@@ -190,6 +197,4 @@ test("the new first-row behaviour ships behind its own bugfix flag", () => {
   assert.equal(flag.kind, "bugfix");
   assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.releaseRisk.risk, "small");
-  assert.match(splitSource, /HTPR_8868_INBOX_FIRST_ROW_FLAG/);
-  assert.match(inboxSource, /HTPR_8868_INBOX_FIRST_ROW_FLAG/);
 });

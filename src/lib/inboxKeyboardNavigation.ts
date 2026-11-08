@@ -72,6 +72,18 @@ export function resolveInboxOpeningPosition({
   return { index: resumes ? lastRow : 0, resumes };
 }
 
+export function shouldResumeInboxRow({
+  resumes,
+  openingTab,
+  currentTab,
+}: {
+  resumes: boolean;
+  openingTab: string;
+  currentTab: string;
+}): boolean {
+  return resumes && openingTab === currentTab;
+}
+
 export function jumpToInboxBoundary(
   items: InboxBoundaryItem[],
   toEnd: boolean,
