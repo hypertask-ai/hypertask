@@ -9,7 +9,6 @@ import {
 import generateRank from "@/utils/generateRank";
 import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
-import { getGithubAppWebhookSecret } from "@/lib/github/appConfig";
 import { lookupBoardForGithubRepository } from "@/lib/github/boardRepositoryRouting";
 import {
   isAuthorizedPullRequestAuthor,
@@ -385,12 +384,11 @@ function escapeHtml(value: string): string {
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
-    const signatureHeader = request.headers.get("x-hub-signature-256");
-    const legacySecret = process.env.GITHUB_WEBHOOK_SECRET;
-    const appWebhookSecret = await getGithubAppWebhookSecret();
-    const signatureIsValid =
-      verifyGithubSignature(rawBody, signatureHeader, legacySecret) ||
-      verifyGithubSignature(rawBody, signatureHeader, appWebhookSecret ?? undefined);
+    const signatureIsValid = verifyGithubSignature(
+      rawBody,
+      request.headers.get("x-hub-signature-256"),
+      process.env.GITHUB_WEBHOOK_SECRET,
+    );
 
     if (!signatureIsValid) {
       return NextResponse.json(

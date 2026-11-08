@@ -8,8 +8,6 @@ import {
   redirectWithAttempt,
   refusePrincipal,
 } from "@/app/api/github/_lib";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { getGithubAppConfig } from "@/lib/github/appConfig";
 import { findBoardGithubAdmin } from "@/lib/github/installAuthority";
 import {
@@ -29,11 +27,8 @@ const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 export async function GET(request: NextRequest) {
   const principal = await getGithubConnectPrincipal(request);
   if (principal.status !== "allowed") return refusePrincipal(principal);
-  if (!await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, principal.userId)) {
-    return refusePrincipal({ status: "disabled" });
-  }
 
-  const config = await getGithubAppConfig();
+  const config = getGithubAppConfig();
   if (!config) return finishAttempt(request, null, { error: "not_configured" });
 
   const params = request.nextUrl.searchParams;

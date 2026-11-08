@@ -579,6 +579,18 @@ model ManagerLeaseGrant {
   @@index([agentId, expiresAt])
 }
 
+model ManagerLeaseOperation {
+  id          Int       @id @default(autoincrement())
+  agentId     String
+  operationId String    @db.VarChar(64)
+  action      String    @db.VarChar(20)
+  grantHash   String    @db.VarChar(64)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([agentId, operationId])
+}
+
 model FigmaConnection {
   userId                Int      @id
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1350,24 +1362,6 @@ enum GithubRepositoryProvenance {
 
 enum GithubPullRequestLinkOrigin {
   installed
-}
-
-model GithubAppCredential {
-  id              String    @id @default(uuid())
-  appId           String    @db.VarChar(32)
-  slug            String    @db.VarChar(100)
-  clientId        String    @db.VarChar(256)
-  ownerLogin      String    @db.VarChar(100)
-  htmlUrl         String    @db.VarChar(256)
-  clientSecret    String    @db.Text
-  privateKey      String    @db.Text
-  webhookSecret   String    @db.Text
-  stateSecret     String    @db.Text
-  createdByUserId Int
-  createdAt       DateTime  @default(now())
-  revokedAt       DateTime?
-
-  @@index([revokedAt])
 }
 
 model GithubInstallation {

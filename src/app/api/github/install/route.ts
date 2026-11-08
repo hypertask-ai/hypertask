@@ -8,8 +8,6 @@ import {
   refusePrincipal,
 } from "@/app/api/github/_lib";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { getGithubAppConfig } from "@/lib/github/appConfig";
 import { findBoardGithubAdmin } from "@/lib/github/installAuthority";
 import { createGithubInstallAttempt } from "@/lib/github/oauthState";
@@ -44,11 +42,8 @@ export async function POST(request: NextRequest) {
 
   const projectId = await readProjectId(request);
   if (projectId === null) return noStore({ error: "A board projectId is required" }, 400);
-  if (!await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, principal.userId)) {
-    return refusePrincipal({ status: "disabled" });
-  }
 
-  const config = await getGithubAppConfig();
+  const config = getGithubAppConfig();
   if (!config) return noStore({ error: "GitHub is not configured" }, 503);
 
   const admin = await findBoardGithubAdmin(principal.userId, projectId);

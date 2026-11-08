@@ -84,7 +84,6 @@ const operations: OperationDefinition[] = [
   { pattern: /^\/mcp\/projects\/([^\/]+)\/instructions$/, params: ["projectId"], methods: ["GET","PUT"], load: () => import('./projects/[projectId]/instructions/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/manifest$/, params: ["projectId"], methods: ["GET"], load: () => import('./projects/[projectId]/manifest/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/playbook$/, params: ["projectId"], methods: ["GET","PUT"], load: () => import('./projects/[projectId]/playbook/operation') },
-  { pattern: /^\/mcp\/projects\/([^\/]+)\/github$/, params: ["projectId"], methods: ["GET","PUT"], load: () => import('./projects/[projectId]/github/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/sections$/, params: ["projectId"], methods: ["POST","GET"], load: () => import('./projects/[projectId]/sections/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/members$/, params: ["projectId"], methods: ["GET","POST"], load: () => import('./projects/[projectId]/members/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/labels$/, params: ["projectId"], methods: ["GET","POST"], load: () => import('./projects/[projectId]/labels/operation') },
