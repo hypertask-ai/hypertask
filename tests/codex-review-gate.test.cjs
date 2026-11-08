@@ -39,6 +39,13 @@ test('a completed Codex summary with no findings passes only for the exact head'
   assert.equal(stateOf({ comments: [stateComment({ ...clean, commit_sha: head }, { author: 'someone' })] }), 'pending');
 });
 
+test('a completed summary with resolved findings passes and unresolved findings fail', () => {
+  const resolved = { status: 'completed', has_any_findings: true, has_unresolved_findings: false };
+  assert.equal(stateOf({ comments: [stateComment({ ...resolved, commit_sha: head })] }), 'success');
+  const open = { status: 'completed', has_any_findings: true, has_unresolved_findings: true };
+  assert.equal(stateOf({ comments: [stateComment({ ...open, commit_sha: head })] }), 'failure');
+});
+
 test('a running or findings summary stays pending without a review', () => {
   assert.equal(stateOf({ comments: [stateComment({ commit_sha: head, status: 'running', has_any_findings: null })] }), 'pending');
   assert.equal(stateOf({ comments: [stateComment({ commit_sha: head, status: 'completed', has_any_findings: true })] }), 'pending');
