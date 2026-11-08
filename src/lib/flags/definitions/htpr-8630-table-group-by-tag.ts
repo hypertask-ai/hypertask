@@ -6,6 +6,7 @@ export default {
   key: HTPR_8630_TABLE_GROUP_BY_TAG_FLAG,
   kind: "feature",
   defaultMode: "EVERYONE",
+  shippedOn: "2026-11-08",
   description: "Table view can group rows by board column or by tag.",
   releaseRisk: {
     risk: "small",

@@ -17,13 +17,13 @@ test("sanitizeTableGroupBy accepts column and tag", () => {
 test("buildTableSectionsGroupedByTag duplicates multi-tag tasks and groups untagged last", () => {
   const taskA = {
     id: 1,
-    taskLabels: [{ labelId: "l1", label: { value: "Beta" } }],
+    taskLabels: [{ label: { id: "l1", value: "Beta" } }],
   };
   const taskB = {
     id: 2,
     taskLabels: [
-      { labelId: "l1", label: { value: "Beta" } },
-      { labelId: "l2", label: { value: "Alpha" } },
+      { label: { id: "l1", value: "Beta" } },
+      { label: { id: "l2", value: "Alpha" } },
     ],
   };
   const taskC = { id: 3, taskLabels: [] };

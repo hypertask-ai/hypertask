@@ -92,7 +92,16 @@ export function useTableActions(context: Context) {
     async (task: ITask, index: number) => {
       setSelectedIndex(index);
       updateActiveItemAndItemInView(task);
-      setTasksPlayList(rows.filter(isTaskRow).map(({ task }) => ({ projectId: task.projectId, uniqueIndex: task.uniqueIndex })));
+      const seenPlaylist = new Set<string>();
+      const playlist: { projectId: number; uniqueIndex: number }[] = [];
+      for (const row of rows) {
+        if (!isTaskRow(row)) continue;
+        const key = `${row.task.projectId}:${row.task.uniqueIndex}`;
+        if (seenPlaylist.has(key)) continue;
+        seenPlaylist.add(key);
+        playlist.push({ projectId: row.task.projectId, uniqueIndex: row.task.uniqueIndex });
+      }
+      setTasksPlayList(playlist);
       navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
     },
     [navigateToTask, rows, setTasksPlayList, updateActiveItemAndItemInView]

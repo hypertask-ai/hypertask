@@ -35,7 +35,7 @@ export function buildTableSectionsGroupedByTag(sections: ISection[]): ISection[]
       }
       const seenForTask = new Set<string>();
       for (const taskLabel of labels) {
-        const labelId = taskLabel.labelId;
+        const labelId = taskLabel.label?.id ?? taskLabel.labelId;
         if (!labelId || seenForTask.has(labelId)) continue;
         seenForTask.add(labelId);
         const title = taskLabel.label?.value?.trim() || labelId;
