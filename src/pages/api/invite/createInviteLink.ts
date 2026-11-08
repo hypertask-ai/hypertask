@@ -14,6 +14,10 @@ import { sendEmailNotification } from "@/utils/controllers/notifications/sendNot
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
+import {
+  sessionEmailUnverified,
+  userHasEmailStraightBoard,
+} from "@/lib/auth/emailStraightBoard";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -43,6 +47,15 @@ const handler: NextApiHandler = async (
       return res.status(404).json({ message: "Project not found" });
     }
     if (access !== "ok") return res.status(403).json({ message: "Forbidden" });
+
+    if (
+      (await userHasEmailStraightBoard(session.userId)) &&
+      (await sessionEmailUnverified(session.userId))
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Please confirm your email before inviting people." });
+    }
 
     const result = await addMemberController(session.userId, parsedProjectId, emails);
     res.status(result?.status).json(result?.json)

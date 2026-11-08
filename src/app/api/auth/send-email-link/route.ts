@@ -11,6 +11,12 @@ import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
+import {
+  finishStraightBoardEmailSignup,
+  isEmailStraightBoardRolloutActive,
+  sendSignupVerificationEmail,
+} from '@/lib/auth/emailStraightBoard'
+import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
@@ -191,10 +197,38 @@ export async function POST(request: NextRequest) {
     }
 
     const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
+
+    const existingUser = await prisma.user.findFirst({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    })
+
+    const utmParams =
+      utmData && typeof utmData === 'object'
+        ? (utmData as Record<string, string | undefined>)
+        : {}
+
+    if (
+      !existingUser &&
+      (await isEmailStraightBoardRolloutActive())
+    ) {
+      const finished = await finishStraightBoardEmailSignup(
+        request,
+        normalizedEmail,
+        signupContextId,
+        signupAttributionFromHeaders(request.headers, 'email', utmParams.utm_source),
+      )
+      if (!finished.ok) return finished.response
+      try {
+        await sendSignupVerificationEmail(request, normalizedEmail, utmParams)
+      } catch (emailError) {
+        console.error('Failed to send straight-board verification email:', emailError)
+      }
+      return finished.response
+    }
+
     const token = createEmailLoginToken(normalizedEmail, signupContextId)
     const verificationCode = generateVerificationCode()
-    
-    const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
     
     const safeReturnTo = parseSafeReturnTo(
       typeof rawReturnTo === 'string' ? rawReturnTo : null
@@ -212,10 +246,6 @@ export async function POST(request: NextRequest) {
     await VerificationCodeService.storeCode(verificationCode, normalizedEmail, CODE_EXPIRY_MINUTES)
     if (signupContextId) await bindSignupCodeContext(normalizedEmail, verificationCode, signupContextId)
 
-    const existingUser = await prisma.user.findFirst({
-      where: { email: normalizedEmail },
-      select: { id: true },
-    })
     const recipientId = existingUser?.id ?? 0
     const correctExpiry = await isFeatureEnabled(HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, recipientId)
     const firstTime = !existingUser

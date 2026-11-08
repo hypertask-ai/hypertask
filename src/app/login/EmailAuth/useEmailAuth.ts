@@ -395,6 +395,11 @@ export function useEmailAuth(initialEmail = '') {
           throw new Error(data.error || 'Failed to send sign-in link')
         }
 
+        if (typeof data.boardRedirect === 'string' && data.boardRedirect) {
+          window.location.assign(data.boardRedirect)
+          return
+        }
+
         console.log('✅ Sign-in link sent successfully')
 
         if (process.env.NODE_ENV === 'development' && data.devLink) {

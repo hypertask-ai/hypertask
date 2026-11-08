@@ -3,11 +3,14 @@ import { useEffect, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 import { usePathname } from "next/navigation";
 import { isGuestUser } from "@/lib/demo/guest";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
 
 const useEmailVerificationModal = () => {
     const [showEmailVerificationModal, setShowEmailVerificationModal] = useState(false);
     const [currentUser, ___] = useRecoilState(currentUserAtom)
     const pathname = usePathname()
+    const straightBoardOn = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG)
   useEffect(() => {
     if (currentUser && isGuestUser(currentUser)) {
       setShowEmailVerificationModal(false);
@@ -31,13 +34,13 @@ const useEmailVerificationModal = () => {
         (path) => pathname === path || pathname?.startsWith(path)
       );
       
-      if (!isVerified && !isExcludedPath ) {
+      if (!isVerified && !isExcludedPath && !straightBoardOn) {
         setShowEmailVerificationModal(true);
       } else {
         setShowEmailVerificationModal(false);
       }
     }
-  }, [currentUser, pathname]);
+  }, [currentUser, pathname, straightBoardOn]);
 
   return {
     showEmailVerificationModal,
