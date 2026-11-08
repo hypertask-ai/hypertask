@@ -176,7 +176,7 @@ function buildSignInLinkWithUTM(
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, utmData, inviteData, returnTo: rawReturnTo, signupContext, resendEmailVerification } = await request.json()
+    const { email, utmData, inviteData, returnTo: rawReturnTo, signupContext } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
