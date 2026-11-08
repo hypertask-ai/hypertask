@@ -1,5 +1,5 @@
 import type { ISection, ITask } from "@/models/model";
-import type { TableCreateTaskSection, TableSectionIdentifier } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
+import type { TableCreateTaskSection } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
 
 export type TableGroupBy = "column" | "tag";
 
@@ -14,8 +14,6 @@ export const sanitizeTableGroupBy = (value: unknown): TableGroupBy | null =>
   typeof value === "string" && TABLE_GROUP_BY_VALUES.has(value as TableGroupBy)
     ? (value as TableGroupBy)
     : null;
-
-export const tableGroupSectionId = (labelId: string) => `tag:${labelId}`;
 
 export function buildTableSectionsGroupedByTag(sections: ISection[]): TableTagGroupedSection[] {
   const groups = new Map<string, { title: string; items: ITask[] }>();
@@ -42,7 +40,7 @@ export function buildTableSectionsGroupedByTag(sections: ISection[]): TableTagGr
         if (!labelId || seenForTask.has(labelId)) continue;
         seenForTask.add(labelId);
         const title = taskLabel.label?.value?.trim() || labelId;
-        pushTask(tableGroupSectionId(labelId), title, task);
+        pushTask(`tag:${labelId}`, title, task);
       }
     }
   }
@@ -61,20 +59,3 @@ export function buildTableSectionsGroupedByTag(sections: ISection[]): TableTagGr
     items: group.items,
   }));
 }
-
-export function dedupeTasksForFlatTableSort(tasks: ITask[]): ITask[] {
-  const seen = new Set<number>();
-  const next: ITask[] = [];
-  for (const task of tasks) {
-    if (seen.has(task.id)) continue;
-    seen.add(task.id);
-    next.push(task);
-  }
-  return next;
-}
-
-export const sectionsUseTagGrouping = (sections: readonly TableCreateTaskSection[]) =>
-  sections.some((section) => {
-    const id: TableSectionIdentifier | null | undefined = section.sectionId ?? section.id;
-    return typeof id === "string" && id.startsWith("tag:");
-  });

@@ -9,7 +9,6 @@ import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
 import { getSortComparator, Row, SECTION_CAP, isTaskRow } from "./tableViewShared";
 import { useFlag } from "@/hooks/useFlag";
-import { dedupeTasksForFlatTableSort, sectionsUseTagGrouping } from "@/lib/table-view/tableGroupByTag";
 
 type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableState>, "sortState" | "customFieldBySortColumnRef" | "sectionOrderBySid" | "timeTotals" | "timeNow" | "sections" | "expanded" | "myTasksBulk" | "setExcludedTaskIds" | "persistedActiveItem" | "showArchivedOnBoard" | "isApple" | "myTasksSnoozeEnabled" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setExpanded">;
@@ -57,9 +56,19 @@ export function useTableRows(context: Context) {
         });
 
       if (flattenSort) {
-        const allTasks = tableGroupByTagEnabled && sectionsUseTagGrouping(sections)
-          ? dedupeTasksForFlatTableSort(sections.flatMap((section) => section.items || []))
-          : sections.flatMap((section) => section.items || []);
+        const flatTasks = sections.flatMap((section) => section.items || []);
+        const tagGrouped = tableGroupByTagEnabled && sections.some((section) => {
+          const id = section.sectionId ?? section.id;
+          return typeof id === "string" && id.startsWith("tag:");
+        });
+        const allTasks = tagGrouped ? (() => {
+          const seen = new Set<number>();
+          return flatTasks.filter((task) => {
+            if (seen.has(task.id)) return false;
+            seen.add(task.id);
+            return true;
+          });
+        })() : flatTasks;
         return sortTasks(allTasks).map((task) => ({
           type: "task" as const,
           task,
