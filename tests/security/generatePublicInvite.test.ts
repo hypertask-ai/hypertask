@@ -117,9 +117,15 @@ async function demo() {
   const originalTransaction = prismaMock.$transaction
   const originalIntentCreateMany = prismaMock.analyticsIntent.createMany
   const originalIntentUpdateMany = prismaMock.analyticsIntent.updateMany
+  const originalUserFindUnique = prismaMock.user.findUnique
 
   try {
     prismaMock.$transaction = async (callback: (tx: any) => Promise<unknown>) => callback(prismaMock)
+    prismaMock.user.findUnique = async () => ({
+      uid: 'email_verified_owner',
+      emailVerified: true,
+      UserSetting: { isVerified: true },
+    })
     prismaMock.analyticsIntent.createMany = async () => ({ count: 1 })
     prismaMock.analyticsIntent.updateMany = async () => ({ count: 0 })
     prismaMock.project.findUnique = async () => {
@@ -390,6 +396,7 @@ async function demo() {
     prismaMock.$transaction = originalTransaction
     prismaMock.analyticsIntent.createMany = originalIntentCreateMany
     prismaMock.analyticsIntent.updateMany = originalIntentUpdateMany
+    prismaMock.user.findUnique = originalUserFindUnique
   }
 }
 

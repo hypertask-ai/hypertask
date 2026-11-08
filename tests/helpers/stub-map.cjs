@@ -57,12 +57,11 @@ function withStubs(base = {}, extra = {}) {
     defaults[QUIET_PERSONAL_LOG] = quietPersonalLogStub()
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base || request in defaults || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
+    has: (_target, request) => request in extra || request in base || request in defaults || request in plainLanguageTicketStubs,
     get: (_target, request) =>
       request in extra ? extra[request]
       : request in base ? base[request]
       : request in defaults ? defaults[request]
-      : request in emailStraightBoardStubs ? emailStraightBoardStubs[request]
       : plainLanguageTicketStubs[request],
   });
 }

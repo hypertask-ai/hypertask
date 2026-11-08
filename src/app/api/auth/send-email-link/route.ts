@@ -20,6 +20,13 @@ import {
 } from '@/lib/auth/emailStraightBoard'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
+function looksLikeEmail(value: string) {
+  const at = value.indexOf('@')
+  if (at <= 0 || at !== value.lastIndexOf('@')) return false
+  const domain = value.slice(at + 1)
+  return domain.length > 2 && domain[0] !== '.' && domain.includes('.') && domain[domain.length - 1] !== '.' && !/\s/.test(value)
+}
+
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
 const LINK_EXPIRY_MINUTES = 15
@@ -186,7 +193,7 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = email.trim().toLowerCase()
     console.log('📧 Generating email link and code for:', normalizedEmail)
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    if (!looksLikeEmail(normalizedEmail)) {
       return NextResponse.json({ success: false, error: 'Please enter a valid email address.' }, { status: 400 })
     }
 
