@@ -55,13 +55,15 @@ jobs:
         id: gitleaks
         if: always() && github.event_name == 'pull_request' && steps.scan-range.outcome == 'success'
         run: |
-          curl -sSfL --retry 5 --retry-all-errors --retry-delay 10 https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz gitleaks
+          gh release download v8.24.3 -R gitleaks/gitleaks -p 'gitleaks_*_linux_x64.tar.gz' -D .
+          tar -xzf gitleaks_8.24.3_linux_x64.tar.gz gitleaks
           ./gitleaks detect --no-banner --source . --redact --log-opts "${SCAN_BASE:+$SCAN_BASE..}$SCAN_HEAD"
       - name: Run trufflehog
         id: trufflehog
         if: always() && github.event_name == 'pull_request' && steps.scan-range.outcome == 'success'
         run: |
-          curl -sSfL --retry 5 --retry-all-errors --retry-delay 10 https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.0/trufflehog_3.97.0_linux_amd64.tar.gz | tar -xz trufflehog
+          gh release download v3.97.0 -R trufflesecurity/trufflehog -p 'trufflehog_*_linux_amd64.tar.gz' -D .
+          tar -xzf trufflehog_3.97.0_linux_amd64.tar.gz trufflehog
           # --json keeps values out of the plain log; only the key type and place are printed.
           set +e
           ./trufflehog git "file://$PWD" --branch "$SCAN_HEAD" ${SCAN_BASE:+--since-commit "$SCAN_BASE"} \
