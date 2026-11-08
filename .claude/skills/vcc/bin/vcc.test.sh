@@ -854,5 +854,7 @@ allowed bash "$vcc" task create --project 15 --labels brain-light --title FULLBO
 run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
 [ "$status" = 5 ] && [[ $(< "$T/err") == *'filing-gate missing'*'house-rules-sync'* ]] || fail "missing filing-gate did not refuse: $status $(< "$T/err")"
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title T
+allowed env VCC_FILING_GATE=/missing bash "$vcc" task update X-1 --project 4060 --description 'please create this'
+allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title 'Board 4060 create note'
 printf 'ok Fleet CI and Fleet Infra creates go through filing-gate\n'
 printf 'vcc helper guard tests passed\n' 

@@ -284,11 +284,22 @@ HT_TOKEN="$(cat "$TOKEN_FILE")"
 [ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
 export HT_TOKEN
 completion_move "$@"
-# Fleet CI and Fleet Infra file nothing twice and nothing past the backlog cap (house rules, 2026-11-08).
 FILING_GATE=${VCC_FILING_GATE:-$HOME/.local/share/house-rules/skills/hypertask-triage/scripts/filing-gate}
+create_project() {
+  local words=() project=''
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project=${2:-}; shift ;;
+      --project=*) project=${1#--project=} ;;
+      -*) ;;
+      *) [ "${#words[@]}" -ge 2 ] || words+=("$1") ;;
+    esac
+    shift
+  done
+  case "${words[*]}" in "task create"|"tasks create") printf '%s' "$project" ;; esac
+}
 filing_gate() {
-  case " $* " in *' create '*) ;; *) return 0 ;; esac
-  case " $* " in *' 11514 '*|*' 4060 '*|*'--project=11514 '*|*'--project=4060 '*) ;; *) return 0 ;; esac
+  case "$(create_project "$@")" in 11514|4060) ;; *) return 0 ;; esac
   [ -x "$FILING_GATE" ] || { printf 'vcc: task create refused: filing-gate missing at %s; run house-rules-sync\n' "$FILING_GATE" >&2; exit 5; }
   "$FILING_GATE" --who "$IDENTITY" -- "$@"
 }
