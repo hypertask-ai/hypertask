@@ -138,7 +138,7 @@ function description(group, fp) {
     ? renderPlainLanguageTicketDescription({
         whatWrongOrWanted: `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times; warning on stderr.`,
         whoItAffects: "internal only",
-        recommendedCourseAndWhy: "Fix the warning at the source. Why: stderr spam hides real incidents.",
+        recommendedCourseAndWhy: "Fix the noisy warning at the source. Why: stderr spam hides real incidents.",
         whatValentinMustDecide: "nothing",
         howToUndo: "revert the change that introduced the warning",
       })
