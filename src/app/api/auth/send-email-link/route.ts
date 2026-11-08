@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo'
+import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { sendEmail } from '@/lib/email/sendEmail'
 import prisma from '@/lib/prisma'
@@ -11,6 +12,7 @@ import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board'
 import {
   finishStraightBoardEmailSignup,
   hasStraightBoardSignupCookie,
@@ -227,7 +229,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (!existingUser && (await straightBoardSignupAllowed(request))) {
+    const rolloutTester = (await getSessionUser(request.headers))
+    const straightBoardOn =
+      rolloutTester &&
+      (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, rolloutTester.userId));
+
+    if (!existingUser && straightBoardOn && (await straightBoardSignupAllowed(request))) {
       const finished = await finishStraightBoardEmailSignup(
         request,
         normalizedEmail,

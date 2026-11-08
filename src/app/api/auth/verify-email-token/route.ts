@@ -20,6 +20,8 @@ import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { consumeEmailLinkToken } from '@/lib/auth/emailLinkToken'
 import { clearStraightBoardSignupCookie } from '@/lib/auth/emailStraightBoard'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
