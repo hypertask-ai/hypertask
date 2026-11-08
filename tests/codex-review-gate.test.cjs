@@ -57,6 +57,11 @@ test('P1 flag-default complaints still fail without feature-flag-gate success', 
   assert.equal(stateOf({ reviews: [review([finding])] }), 'failure');
 });
 
+test('P1 findings that demand OWNER_AND_QA stay blocking when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode is "EVERYONE", but this customer-email flag should be OWNER_AND_QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'failure');
+});
+
 test('badge parsing and bot login matching', () => {
   assert.equal(priorityOf(badge(2)), 2);
   assert.equal(priorityOf('plain'), null);

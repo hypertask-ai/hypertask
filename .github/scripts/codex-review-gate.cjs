@@ -19,7 +19,6 @@ function priorityOf(body) {
 const blocks = body => (priorityOf(body) ?? 0) <= 1;
 
 const OWNER_QA_VISUAL_RELEASE_COMPLAINT = new RegExp(
-  String.raw`\b(?:defaultMode|default mode)\b[\s\S]{0,240}\b(?:EVERYONE|Everyone)\b|` +
   String.raw`\b(?:must|should|needs to)\b[\s\S]{0,160}\b(?:EVERYONE|Everyone)\b[\s\S]{0,160}\b(?:defaultMode|default mode|Owner\s*\+\s*QA|OWNER_AND_QA)\b|` +
   String.raw`\bOwner\s*\+\s*QA\b[\s\S]{0,120}\b(?:should be|must be|needs to be)\b[\s\S]{0,80}\bEveryone\b`,
   'i',
