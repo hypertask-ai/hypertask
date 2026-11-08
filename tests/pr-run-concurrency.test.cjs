@@ -14,15 +14,9 @@ test('every pull request push cancels its superseded run', () => {
   assert.deepEqual(check(WORKFLOWS), []);
 });
 
-test('ci-tests queues every synchronize without cancelling pending runs', () => {
-  const ci = workflow('ci-tests');
-  assert.equal(ci.concurrency.queue, 'max');
-  assert.equal(ci.concurrency['cancel-in-progress'], false);
-});
-
 test('only the listed gates skip cancellation, and each cites its ticket', () => {
   assert.deepEqual([...EXCEPTIONS.keys()],
-    ['feature-flag-gate', 'ux-signoff-gate', 'pr-guards-trusted', 'dependabot-lane', 'ci-tests']);
+    ['feature-flag-gate', 'ux-signoff-gate', 'pr-guards-trusted', 'dependabot-lane']);
   for (const [name, reason] of EXCEPTIONS) {
     assert.equal(workflow(name).concurrency.queue, 'max', `${name} keeps a slot for every pending event`);
     assert.equal(workflow(name).concurrency['cancel-in-progress'], false);
@@ -41,10 +35,10 @@ test('the guard fails on a workflow that lost its concurrency block', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'pr-concurrency-'));
   assert.deepEqual(check(directory), []);
   writeFileSync(
-    path.join(directory, 'browser-smoke.yml'),
+    path.join(directory, 'ci-tests.yml'),
     readFileSync(path.join(WORKFLOWS, 'ci-tests.yml'), 'utf8').replace(/^concurrency:\n(?: {2,}.*\n)+/m, ''),
   );
-  assert.deepEqual(check(directory), ['browser-smoke: no concurrency block']);
+  assert.deepEqual(check(directory), ['ci-tests: no concurrency block']);
 });
 
 test('the guard ignores workflows that never see a second push', () => {

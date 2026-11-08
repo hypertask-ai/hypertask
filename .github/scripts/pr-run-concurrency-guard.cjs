@@ -14,7 +14,6 @@ const EXCEPTIONS = new Map([
   ['ux-signoff-gate', 'shared production line with queue: max; cancelling leaves the signoff status unresolved (YPER4-707)'],
   ['pr-guards-trusted', 'publishes the required pr-title status with queue: max; a cancelled evaluation leaves it pending (HYCI-29)'],
   ['dependabot-lane', 'files the upgrade ticket in the same run as the lane label, so a superseded run could leave a bump labelled but unowned; one shared group serialises the sweep against the PR events (HYCI-107)'],
-  ['ci-tests', 'publishes the required ci-tests status with queue: max; cancel-in-progress together with queue: max is invalid and dropped synchronize events (HYCI-182)'],
 ]);
 
 const PUSH_EVENTS = ['pull_request', 'pull_request_target'];
