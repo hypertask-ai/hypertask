@@ -1,10 +1,5 @@
 name: Codex review gate
 
-# Reads Codex's built-in GitHub review (the chatgpt-codex-connector bot) for each
-# PR head and sets the required `ai-review` status (and its twin `claude-review`):
-# success with no P0/P1 finding, failure with one, pending otherwise. Logic is in
-# .github/scripts/codex-review-gate.cjs, loaded from production; no PR code runs.
-# Reactions fire no events, so the schedule also catches thumbs-ups and drops.
 on:
   pull_request_review:
     types: [submitted]
@@ -28,7 +23,6 @@ permissions:
 
 jobs:
   gate:
-    # One lane per PR, queued, never cancelled (a cancelled run shows as failed).
     concurrency:
       group: codex-review-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr || 'sweep' }}
       queue: max
@@ -49,7 +43,6 @@ jobs:
           fetch-depth: 1
           sparse-checkout: .github/scripts
           persist-credentials: false
-      # Before this file lands on production the script is absent: skip, stay pending.
       - if: hashFiles('.github/scripts/codex-review-gate.cjs') != ''
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
