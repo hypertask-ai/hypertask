@@ -859,7 +859,7 @@ const Commands = (props: Props) => {
 
         {!(integratedTabsFlag && integratedTabs) && modeSwitch}
         <ModalBody className="  p-0 rounded-[5px]">
-          {integratedTabsFlag && integratedTabs && isCompose && modeSwitch}
+          {integratedTabsFlag && integratedTabs && modeSwitch}
           {compose}
           {!isCompose && <>
           <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
@@ -884,7 +884,6 @@ const Commands = (props: Props) => {
                {...(composeEnabled ? { onBlur: undefined } : {})}
             />
           </div>
-          {integratedTabsFlag && integratedTabs && modeSwitch}
           {commandGroups}
           <ModalHintBar />
           <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
