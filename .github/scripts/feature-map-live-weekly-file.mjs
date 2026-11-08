@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -47,26 +48,30 @@ export function buildDescription({ week, counts, sha, runUrl, artifactUrl }) {
   return lines.join('\n')
 }
 
-async function api(token, route, options = {}, idempotency = '', fetchImpl = fetch) {
-  const response = await fetchImpl(`https://app.hypertask.ai/api/mcp${route}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(idempotency ? { 'Idempotency-Key': idempotency } : {}),
-    },
+function runBoardJson(binary, args, { execImpl = execFileSync, env = process.env } = {}) {
+  const output = execImpl(binary, [...args, '--json'], {
+    encoding: 'utf8',
+    env,
+    timeout: 60_000,
+    maxBuffer: 8 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
-  if (!response.ok) {
-    let code = ''
-    try { code = (await response.json()).code || '' } catch {}
-    throw new Error(`MCP ${options.method || 'GET'} ${route.split('?')[0]} failed (HTTP ${response.status}${code ? `, ${code}` : ''})`)
-  }
-  try { return await response.json() } catch { throw new Error(`MCP ${route} returned invalid JSON`) }
+  const payload = JSON.parse(output)
+  if (payload.success === false) throw new Error(`Board CLI ${binary} ${args.slice(0, 2).join(' ')} failed`)
+  return payload
 }
 
-export async function findOpenWeeklyTicket(token, title, fetchImpl = fetch) {
+export function boardRead(args, options = {}) {
+  return runBoardJson('hypertask', args, options)
+}
+
+export function boardWrite(args, options = {}) {
+  return runBoardJson('vcc', args, options)
+}
+
+export async function findOpenWeeklyTicket(title, options = {}) {
   for (const status of ['Normal', 'Archive', 'Deleted']) {
-    const search = await api(token, `/tasks?project_id=11514&status=${status}&search=${encodeURIComponent(title)}&limit=100`, {}, `feature-map-live-search-${status}`, fetchImpl)
+    const search = boardRead(['task', 'list', '--project', '11514', '--status', status, '--search', title], options)
     if (!Array.isArray(search.tasks)) throw new Error('Weekly live ticket search returned no task list')
     const existing = search.tasks.find((task) => task.title === title && task.section !== 'Done')
     if (existing) return existing
@@ -74,60 +79,66 @@ export async function findOpenWeeklyTicket(token, title, fetchImpl = fetch) {
   return null
 }
 
-export async function fileWeeklyLiveResult({
-  token,
-  evidenceDir = 'verify-qa',
-  runUrl = '',
-  artifactUrl = '',
-  week = isoWeek(),
-  fetchImpl = fetch,
-}) {
-  if (!token) throw new Error('HYPERTASK_MCP_TOKEN is missing')
+async function loadEvidence(evidenceDir) {
   let result = {}
   try {
     result = JSON.parse(await readFile(path.join(evidenceDir, 'result.json'), 'utf8'))
   } catch {
     try { result = JSON.parse(await readFile(path.join(evidenceDir, 'run.json'), 'utf8')) } catch {}
   }
+  if (!result.sha) {
+    try {
+      const run = JSON.parse(await readFile(path.join(evidenceDir, 'run.json'), 'utf8'))
+      if (run.sha) result.sha = run.sha
+    } catch {}
+  }
+  return result
+}
+
+export async function fileWeeklyLiveResult({
+  evidenceDir = 'verify-qa',
+  runUrl = '',
+  artifactUrl = '',
+  week = isoWeek(),
+  execImpl = execFileSync,
+  env = process.env,
+} = {}) {
+  const cli = { execImpl, env }
+  const result = await loadEvidence(evidenceDir)
   const counts = countSteps(result)
   const title = weeklyLiveTitle(week)
   const activity = buildActivity({ week, runUrl, artifactUrl, counts, sha: result.sha })
-  let ticket = await findOpenWeeklyTicket(token, title, fetchImpl)
+  let ticket = await findOpenWeeklyTicket(title, cli)
   if (!ticket) {
-    const page = await api(token, '/projects/11514/labels', {}, 'feature-map-live-labels', fetchImpl)
-    const labels = ['CI', 'Hypertask CI', 'brain-light'].map((name) => page.labels?.find((label) => label.name === name)?.id)
-    if (labels.some((id) => !id)) throw new Error('Fleet CI labels are unavailable')
     const description = buildDescription({ week, counts, sha: result.sha, runUrl, artifactUrl })
-    const created = await api(token, '/tasks/create', {
-      method: 'POST',
-      body: JSON.stringify({ project_id: 11514, title, description, labels }),
-    }, `feature-map-live-create-${week}`, fetchImpl)
-    ticket = created.task
+    const created = boardWrite([
+      'task', 'create',
+      '--project', '11514',
+      '--title', title,
+      '--description', description,
+      '--labels', 'CI,Hypertask CI,brain-light',
+    ], cli)
+    ticket = created.task || created.tasks?.[0]
   }
   if (!Number.isSafeInteger(ticket?.id) || ticket.id < 1) throw new Error('Weekly live ticket returned no task id')
+  const ticketRef = ticket.ticketNumber || `HYCI-${ticket.uniqueIndex}`
   const marker = `feature-map-live-weekly ${week}`
-  const log = await api(token, `/tasks/${ticket.id}/agent-activity?limit=50`, {}, `feature-map-live-log-${week}`, fetchImpl)
-  if (!Array.isArray(log.activities)) throw new Error('Weekly live activity search returned no list')
-  if (log.activities.some((row) => row.text?.includes(marker))) {
+  const log = boardWrite(['activity', 'list', ticketRef], cli)
+  const rows = log.activities || log.comments || []
+  if (!Array.isArray(rows)) throw new Error('Weekly live activity search returned no list')
+  if (rows.some((row) => (row.text || row.body || '').includes(marker))) {
     return { ticketId: ticket.id, uniqueIndex: ticket.uniqueIndex, duplicate: true, counts }
   }
-  const opened = await api(token, '/agents/runs', { method: 'POST', body: JSON.stringify({ taskId: ticket.id, source: 'runtime' }) }, `feature-map-live-run-${week}`, fetchImpl)
-  if (typeof opened.run?.id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(opened.run.id)) throw new Error('Weekly live activity returned no run id')
-  await api(token, `/agents/runs/${opened.run.id}/activities`, {
-    method: 'POST',
-    body: JSON.stringify({ type: 'thought', text: `${marker}\n${activity}` }),
-  }, `feature-map-live-activity-${week}`, fetchImpl)
+  boardWrite(['activity', 'add', ticketRef, '--text', `${marker}\n${activity}`], cli)
   return { ticketId: ticket.id, uniqueIndex: ticket.uniqueIndex, duplicate: false, counts }
 }
 
 async function main() {
-  const token = process.env.HYPERTASK_MCP_TOKEN
   const server = process.env.GITHUB_SERVER_URL
   const repo = process.env.GITHUB_REPOSITORY
   const runId = process.env.GITHUB_RUN_ID
   const runUrl = server && repo && runId ? `${server}/${repo}/actions/runs/${runId}` : ''
   const outcome = await fileWeeklyLiveResult({
-    token,
     runUrl,
     artifactUrl: process.env.FEATURE_MAP_LIVE_ARTIFACT_URL || '',
     week: process.env.FEATURE_MAP_LIVE_WEEK || isoWeek(),

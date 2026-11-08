@@ -4,7 +4,6 @@ const {
   isoWeek,
   weeklyLiveTitle,
   countSteps,
-  buildActivity,
   findOpenWeeklyTicket,
   fileWeeklyLiveResult,
 } = require('../.github/scripts/feature-map-live-weekly-file.mjs')
@@ -25,53 +24,77 @@ test('weekly title is stable per ISO week', () => {
   assert.equal(weeklyLiveTitle(week), `Weekly feature-map live ${week}`)
 })
 
-test('findOpenWeeklyTicket matches exact title', async () => {
-  const calls = []
-  const fetchImpl = async (url) => {
-    calls.push(url)
-    if (url.includes('status=Normal')) {
-      return { ok: true, json: async () => ({ tasks: [{ id: 1, title: weeklyLiveTitle('2026-W45'), uniqueIndex: 99, section: 'Backlog' }] }) }
-    }
-    return { ok: true, json: async () => ({ tasks: [] }) }
+function boardExec(rows) {
+  return (binary, args) => {
+    const route = args.filter((a) => a !== '--json')
+    const hit = rows.find((row) => row.when(binary, route))
+    if (!hit) throw new Error(`unexpected ${binary} ${route.join(' ')}`)
+    return JSON.stringify(hit.body)
   }
-  const ticket = await findOpenWeeklyTicket('token', weeklyLiveTitle('2026-W45'), fetchImpl)
+}
+
+test('findOpenWeeklyTicket matches exact title', async () => {
+  const title = weeklyLiveTitle('2026-W45')
+  const execImpl = boardExec([
+    {
+      when: (binary, route) => binary === 'hypertask' && route.includes('Normal'),
+      body: { success: true, tasks: [{ id: 1, title, uniqueIndex: 99, section: 'Backlog' }] },
+    },
+    {
+      when: (binary, route) => binary === 'hypertask' && route.includes('Archive'),
+      body: { success: true, tasks: [] },
+    },
+    {
+      when: (binary, route) => binary === 'hypertask' && route.includes('Deleted'),
+      body: { success: true, tasks: [] },
+    },
+  ])
+  const ticket = await findOpenWeeklyTicket(title, { execImpl })
   assert.equal(ticket.uniqueIndex, 99)
-  assert.ok(calls[0].includes('project_id=11514'))
 })
 
 test('fileWeeklyLiveResult creates then dedupes activity', async () => {
   let created = false
-  const fetchImpl = async (url, options = {}) => {
-    if (url.includes('/tasks?')) return { ok: true, json: async () => ({ tasks: [] }) }
-    if (url.endsWith('/labels')) return { ok: true, json: async () => ({ labels: [{ id: 'ci', name: 'CI' }, { id: 'hyci', name: 'Hypertask CI' }, { id: 'brain', name: 'brain-light' }] }) }
-    if (url.endsWith('/tasks/create')) {
-      created = true
-      return { ok: true, json: async () => ({ task: { id: 42, uniqueIndex: 205 } }) }
+  const title = weeklyLiveTitle('2026-W45')
+  const execImpl = (binary, args) => {
+    const route = args.filter((a) => a !== '--json')
+    if (binary === 'hypertask' && route[0] === 'task' && route[1] === 'list') {
+      return JSON.stringify({ success: true, tasks: created ? [{ id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205', section: 'Backlog' }] : [] })
     }
-    if (url.includes('/agent-activity')) return { ok: true, json: async () => ({ activities: [] }) }
-    if (url.endsWith('/agents/runs') && options.method === 'POST') return { ok: true, json: async () => ({ run: { id: 'run-1' } }) }
-    if (url.includes('/activities')) return { ok: true, json: async () => ({}) }
-    throw new Error(`unexpected ${url}`)
+    if (binary === 'vcc' && route[0] === 'task' && route[1] === 'create') {
+      created = true
+      return JSON.stringify({ success: true, task: { id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205', section: 'Backlog' } })
+    }
+    if (binary === 'vcc' && route[0] === 'activity' && route[1] === 'list') {
+      return JSON.stringify({ success: true, activities: [] })
+    }
+    if (binary === 'vcc' && route[0] === 'activity' && route[1] === 'add') {
+      return JSON.stringify({ success: true })
+    }
+    throw new Error(`unexpected ${binary} ${route.join(' ')}`)
   }
   const first = await fileWeeklyLiveResult({
-    token: 'tok',
     week: '2026-W45',
     evidenceDir: '/missing',
-    fetchImpl,
+    execImpl,
   })
   assert.equal(created, true)
   assert.equal(first.duplicate, false)
   assert.equal(first.counts.total, 0)
 
   const second = await fileWeeklyLiveResult({
-    token: 'tok',
     week: '2026-W45',
     evidenceDir: '/missing',
-    fetchImpl: async (url) => {
-      if (url.includes('/tasks?')) return { ok: true, json: async () => ({ tasks: [{ id: 42, title: weeklyLiveTitle('2026-W45'), uniqueIndex: 205, section: 'Backlog' }] }) }
-      if (url.includes('/agent-activity')) return { ok: true, json: async () => ({ activities: [{ text: 'feature-map-live-weekly 2026-W45\nPass: 0' }] }) }
-      throw new Error(`unexpected ${url}`)
-    },
+    execImpl: boardExec([
+      {
+        when: (binary, route) => binary === 'hypertask' && route[0] === 'task',
+        body: { success: true, tasks: [{ id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205', section: 'Backlog' }] },
+      },
+      {
+        when: (binary, route) => binary === 'vcc' && route[0] === 'activity' && route[1] === 'list',
+        body: { success: true, activities: [{ text: 'feature-map-live-weekly 2026-W45\nPass: 0' }] },
+      },
+    ]),
   })
   assert.equal(second.duplicate, true)
 })

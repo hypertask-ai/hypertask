@@ -417,4 +417,20 @@ jobs:
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           FEATURE_MAP_LIVE_ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
-        run: node .github/scripts/feature-map-live-weekly-file.mjs
+          SHIP_SESSION_NAME: CI Boss
+          TRUSTED_CLI_BINARY_VERSION: "0.2.15"
+          TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.config/hypertask-agents/credentials/sessions"
+          printf '%s' "$HYPERTASK_MCP_TOKEN" > "$HOME/.config/hypertask-agents/credentials/sessions/ci-boss-agent-token"
+          CLI_BINARY="$RUNNER_TEMP/hypertask"
+          curl --fail --location --silent --show-error \
+            "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" \
+            --output "$CLI_BINARY"
+          echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check
+          chmod +x "$CLI_BINARY"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          echo "${GITHUB_WORKSPACE}/.claude/skills/vcc/bin" >> "$GITHUB_PATH"
+          node .github/scripts/feature-map-live-weekly-file.mjs
