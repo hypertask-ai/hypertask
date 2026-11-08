@@ -40,6 +40,7 @@ function fixture(count, enabled = true) {
     inboxKeyboardFocus: enabled, globalIndex: 0,
     value: 0, index: 0, isApple: false, controller: {},
     keyboardRows, selectedKeyboardRow: keyboardRows[0], selectedKeyboardNotificationIndex: 0,
+    keyboardNavigationStarted: true, setKeyboardNavigationStarted: () => {}, inboxFirstRow: true,
     bulkHandleKeyDown: () => {}, returnIfModalOrInputActive: () => false,
     showCommands: { show: false }, classNamesToReturnFrom: [],
     document: { activeElement: {} }, Element: class {},
