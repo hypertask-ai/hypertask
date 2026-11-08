@@ -7,7 +7,7 @@ import { parseSafeReturnTo, POST_LOGIN_REDIRECT_STORAGE_KEY } from '@/lib/auth/s
 import { getSignupContextInput } from '@/lib/analytics/signupIdentityClient'
 import { authClient } from '@/lib/auth/betterAuthClient'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board'
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/keys'
 
 export type EmailAuthStep = 'form' | 'link-sent' | 'signing-in' | 'code-input'
 

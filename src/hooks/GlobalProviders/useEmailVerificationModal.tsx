@@ -4,7 +4,7 @@ import { useRecoilState } from "@/lib/state";
 import { usePathname } from "next/navigation";
 import { isGuestUser } from "@/lib/demo/guest";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/keys";
 
 const useEmailVerificationModal = () => {
     const straightBoardOn = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);

@@ -214,8 +214,10 @@ export async function POST(request: NextRequest) {
 
     const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
 
-    const matchedUser = await findUserByEmail(normalizedEmail)
-    const existingUser = matchedUser ? { id: matchedUser.id as number } : null
+    let existingUser = await prisma.user.findFirst({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    })
 
     const utmParams =
       utmData && typeof utmData === 'object'
@@ -223,11 +225,17 @@ export async function POST(request: NextRequest) {
         : {}
 
     const session = await getSessionUser(request.headers)
+    const straightBoardSignup =
+      session && (await straightBoardSignupRequesterAllowed(session.userId))
+
+    if (straightBoardSignup && !existingUser) {
+      const matchedUser = await findUserByEmail(normalizedEmail)
+      existingUser = matchedUser ? { id: matchedUser.id as number } : null
+    }
 
     if (
       !existingUser &&
-      session &&
-      (await straightBoardSignupRequesterAllowed(session.userId))
+      straightBoardSignup
     ) {
       const finished = await finishStraightBoardEmailSignup(
         request,

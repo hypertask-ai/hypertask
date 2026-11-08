@@ -185,7 +185,7 @@ import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/keys";
 import { isGuestUser } from "@/lib/demo/guest";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
@@ -270,6 +270,28 @@ import {
   shouldShowMobileBoardControls,
 } from "@/lib/boardStartup/mobileControls";
 import { shouldEnableSecondaryStartup } from "@/lib/boardStartup/secondaryRequests";
+
+const STRAIGHT_BOARD_CONFIRM_EXCLUDED =
+  "/login,/onboarding,/verify-email,/invite,/share,/unauthorized".split(",");
+
+function StraightBoardConfirmStrip({
+  pathname,
+  currentUser,
+}: {
+  pathname: string | null;
+  currentUser: { email?: string | null; UserSetting?: { isVerified?: boolean | null } | null } | null;
+}) {
+  const flagOn = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
+  if (!flagOn) return null;
+  if (!currentUser || isGuestUser(currentUser)) return null;
+  if (currentUser.UserSetting?.isVerified ?? true) return null;
+  if (pathname && STRAIGHT_BOARD_CONFIRM_EXCLUDED.some((p) => pathname.startsWith(p))) return null;
+  return (
+    <div className="w-full bg-blue-600/20 border-b border-blue-500/40 px-4 py-3 text-center text-content text-white-black z-[120]" role="status">
+      Please confirm your email
+    </div>
+  );
+}
 
 const preventEscapeOnCommandModes: CommandMode[] = [
   CommandMode.AICustomInstruction,
@@ -454,7 +476,6 @@ export default function GlobalProvider({
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
-  const straightBoardEmailSignup = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
   const [sidebarRequested, setSidebarRequested] = useState(false);
   const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
@@ -1306,16 +1327,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      {straightBoardEmailSignup &&
-        currentUser &&
-        !isGuestUser(currentUser) &&
-        !(currentUser.UserSetting?.isVerified ?? true) &&
-        pathname &&
-        !"/login,/onboarding,/verify-email,/invite,/share,/unauthorized".split(",").some((p) => pathname.startsWith(p)) && (
-          <div className="w-full bg-blue-600/20 border-b border-blue-500/40 px-4 py-3 text-center text-content text-white-black z-[120]" role="status">
-            Please confirm your email
-          </div>
-        )}
+      <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}
