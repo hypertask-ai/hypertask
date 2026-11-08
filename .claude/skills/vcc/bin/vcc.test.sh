@@ -68,6 +68,16 @@ esac
 STUB
 chmod +x "$T/bin/blocker-review"
 export VCC_BLOCKER_REVIEW="$T/bin/blocker-review"
+cat > "$T/bin/filing-gate" <<'STUB'
+#!/usr/bin/env bash
+printf 'filing-gate %s\n' "$*" >> "$VCC_TEST_TRACE"
+case " $* " in
+  *FULLBOARD*) printf 'vcc: not filed. Fleet Infra (4060) is full\n' >&2; exit 5 ;;
+  *SAMETITLE*) printf 'vcc: not filed. The same problem is already open\n' >&2; exit 6 ;;
+esac
+STUB
+chmod +x "$T/bin/filing-gate"
+export VCC_FILING_GATE="$T/bin/filing-gate"
 
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -827,4 +837,22 @@ allowed bash "$vcc" --project 15 --json tasks create --labels brain-extra-hard -
 allowed bash "$vcc" task create --help
 allowed bash "$vcc" task update X-1 --title 'No brain label needed on update'
 printf 'ok task create needs exactly one brain label\n'
+filing_refused() {
+  local code=$1 message=$2
+  shift 2
+  run bash "$vcc" "$@"
+  [ "$status" = "$code" ] || fail "expected filing-gate exit $code, got $status: $*"
+  [[ $(< "$T/err") == *"$message"* ]] || fail "wrong filing-gate message: $(< "$T/err")"
+  ! grep -q '^hypertask ' "$VCC_TEST_TRACE" && [[ $(< "$T/out") != stub:* ]] || fail "filing-gate refusal reached the CLI: $*"
+}
+filing_refused 5 'is full' task create --project 4060 --labels Infra,brain-light --title FULLBOARD
+filing_refused 6 'already open' --json tasks create --project=11514 --labels CI,brain-light --title SAMETITLE
+allowed bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
+[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- task create --project 4060'* ]] || fail "filing-gate not asked on 4060: $(< "$VCC_TEST_TRACE")"
+allowed bash "$vcc" task create --project 15 --labels brain-light --title FULLBOARD
+[[ $(< "$VCC_TEST_TRACE") != *filing-gate* ]] || fail 'filing-gate asked for board 15'
+run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
+[ "$status" = 5 ] && [[ $(< "$T/err") == *'filing-gate missing'*'house-rules-sync'* ]] || fail "missing filing-gate did not refuse: $status $(< "$T/err")"
+allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title T
+printf 'ok Fleet CI and Fleet Infra creates go through filing-gate\n'
 printf 'vcc helper guard tests passed\n' 
