@@ -196,12 +196,22 @@ const routeLib = load("src/app/api/github/_lib.ts", {
   "@/lib/flags/definitions/htpr-7515-connect-github-per-board": flagDefinition,
   "@/lib/github/oauthState": oauthState,
 });
+const flagStubs = {
+  "@/lib/flags": {
+    isFeatureEnabled: async (key, userId) => {
+      world.flagKeys.push({ key, userId });
+      return world.flagOn;
+    },
+  },
+  "@/lib/flags/definitions/htpr-7515-connect-github-per-board": flagDefinition,
+};
 const shared = {
   "next/server": nextServer,
   "@/app/api/github/_lib": routeLib,
   "@/lib/github/appConfig": appConfig,
   "@/lib/github/installAuthority": installAuthority,
   "@/lib/github/oauthState": oauthState,
+  ...flagStubs,
 };
 const installRoute = load("src/app/api/github/install/route.ts", {
   ...shared,

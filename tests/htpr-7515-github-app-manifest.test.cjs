@@ -3,8 +3,8 @@ const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const ts = require("typescript");
 const nextServer = require("next/server");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const ORIGIN = "https://app.hypertask.ai";
@@ -22,19 +22,6 @@ const APP_ENV = {
 };
 const ENV_NAMES = [...Object.keys(APP_ENV), "BYOK_CIPHER_SECRET", "GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_WEBHOOK_SECRET"];
 const world = {};
-
-function load(file, stubs = {}) {
-  const javascript = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
-    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function("module", "exports", "require", javascript)(mod, mod.exports, (name) => {
-    if (name in stubs) return stubs[name];
-    if (name.startsWith("node:")) return require(name);
-    throw new Error(`Unexpected import in ${file}: ${name}`);
-  });
-  return mod.exports;
-}
 
 const prisma = {
   githubAppCredential: {
@@ -94,11 +81,19 @@ const routeLib = load("src/app/api/github/_lib.ts", {
   "@/lib/flags/definitions/htpr-7515-connect-github-per-board": { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG: FLAG },
   "@/lib/github/oauthState": {},
 });
+const flagStubs = {
+  "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+    world.flagCalls.push({ key, userId });
+    return world.flagOn;
+  } },
+  "@/lib/flags/definitions/htpr-7515-connect-github-per-board": { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG: FLAG },
+};
 const manifestLib = load("src/app/api/github/app-manifest/_lib.ts", {
   "next/server": nextServer,
   "@/app/api/github/_lib": routeLib,
   "@/lib/auth/ownerOrQaIds": load("src/lib/auth/ownerOrQaIds.ts"),
   "@/lib/github/appManifest": manifest,
+  ...flagStubs,
 });
 const shared = {
   "next/server": nextServer,
@@ -107,6 +102,7 @@ const shared = {
   "@/lib/auth/requestBaseUrl": { getRequestBaseUrl: () => ORIGIN },
   "@/lib/github/appConfig": appConfig,
   "@/lib/github/appManifest": manifest,
+  ...flagStubs,
 };
 const startRoute = load("src/app/api/github/app-manifest/start/route.ts", {
   ...shared,
