@@ -17,6 +17,8 @@ jobs:
       public-secrets: ${{ steps.public-secrets.outcome }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - if: github.event_name == 'pull_request'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
