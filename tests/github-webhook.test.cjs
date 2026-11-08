@@ -17,6 +17,7 @@ function loadTs(relativePath) {
 async function withStubbedGithubRoute(stubbedModules, run) {
   const paths = [...new Set([
     ...Object.keys(stubbedModules),
+    "src/lib/github/boardRepositoryRouting.ts",
     "src/utils/controllers/assignees/assign.ts",
     "src/utils/controllers/agents/boardMembers.ts",
     "src/lib/agents/visibility.ts",
@@ -31,7 +32,15 @@ async function withStubbedGithubRoute(stubbedModules, run) {
   );
 
   for (const modulePath of [...paths, routePath]) delete require.cache[modulePath];
-  for (const [relativePath, exports] of Object.entries(stubbedModules)) {
+  const resolvedModules = {
+    "src/lib/flags.ts": {
+      FEATURE_FLAG_OWNER_USER_ID: 6,
+      FEATURE_FLAG_QA_USER_ID: 985,
+      isFeatureEnabled: async () => true,
+    },
+    ...stubbedModules,
+  };
+  for (const [relativePath, exports] of Object.entries(resolvedModules)) {
     const modulePath = path.join(root, relativePath);
     require.cache[modulePath] = {
       id: modulePath,
@@ -78,6 +87,28 @@ function mergedPullRequestPayload() {
   };
 }
 
+const DEFAULT_GITHUB_REPO_MAPPING = {
+  projectId: 15,
+  fullName: "hypertask-ai/hypertask",
+  provenance: "legacy",
+  installationId: null,
+  revokedAt: null,
+};
+
+function prismaWithGithubBoardRouting(prisma, mapping = DEFAULT_GITHUB_REPO_MAPPING) {
+  return {
+    ...prisma,
+    boardGithubRepository: {
+      findMany: async ({ where } = {}) => {
+        if (where?.fullName === "hypertask-ai/hypertask" && where?.revokedAt === null) {
+          return [mapping];
+        }
+        return [];
+      },
+    },
+  };
+}
+
 function signedGithubRequest(payload, secret, event = "pull_request") {
   const rawBody = JSON.stringify(payload);
   const signature =
@@ -115,7 +146,7 @@ test("verifyGithubSignature accepts a valid signature and rejects everything els
 
 test("the GitHub webhook rejects a configured pull request event without its payload", async () => {
   const stubbedModules = {
-    "src/lib/prisma.ts": { default: {} },
+    "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting({}) },
     "src/lib/realtime/server.ts": {
       broadcastBoardChange: async () => {},
       broadcastTaskChange: async () => {},
@@ -142,27 +173,6 @@ test("the GitHub webhook rejects a configured pull request event without its pay
       default: async () => ({ status: 200, json: {} }),
     },
   };
-  const paths = Object.keys(stubbedModules).map((relativePath) =>
-    path.join(root, relativePath),
-  );
-  const routePath = path.join(root, "src/app/api/webhooks/github/route.ts");
-  const previous = new Map(
-    [...paths, routePath].map((modulePath) => [
-      modulePath,
-      require.cache[modulePath],
-    ]),
-  );
-  for (const modulePath of [...paths, routePath]) delete require.cache[modulePath];
-  for (const [relativePath, exports] of Object.entries(stubbedModules)) {
-    const modulePath = path.join(root, relativePath);
-    require.cache[modulePath] = {
-      id: modulePath,
-      filename: modulePath,
-      loaded: true,
-      exports,
-    };
-  }
-
   const previousSecret = process.env.GITHUB_WEBHOOK_SECRET;
   process.env.GITHUB_WEBHOOK_SECRET = "webhook-test-secret";
   const rawBody = JSON.stringify({
@@ -180,29 +190,26 @@ test("the GitHub webhook rejects a configured pull request event without its pay
       .digest("hex");
 
   try {
-    const { POST } = loadTs("src/app/api/webhooks/github/route.ts");
-    const response = await POST({
-      text: async () => rawBody,
-      headers: {
-        get: (name) =>
-          ({
-            "x-hub-signature-256": signature,
-            "x-github-event": "pull_request",
-          })[name] ?? null,
-      },
-    });
-    assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), {
-      success: false,
-      error: "Invalid pull request payload",
+    await withStubbedGithubRoute(stubbedModules, async ({ POST }) => {
+      const response = await POST({
+        text: async () => rawBody,
+        headers: {
+          get: (name) =>
+            ({
+              "x-hub-signature-256": signature,
+              "x-github-event": "pull_request",
+            })[name] ?? null,
+        },
+      });
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), {
+        success: false,
+        error: "Invalid pull request payload",
+      });
     });
   } finally {
     if (previousSecret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;
     else process.env.GITHUB_WEBHOOK_SECRET = previousSecret;
-    for (const [modulePath, cachedModule] of previous) {
-      if (cachedModule) require.cache[modulePath] = cachedModule;
-      else delete require.cache[modulePath];
-    }
   }
 });
 
@@ -214,7 +221,7 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
   async function runScenario(prisma, syncResult, moveStatus = 200) {
     const moves = [];
     const stubbedModules = {
-      "src/lib/prisma.ts": { default: prisma },
+      "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma) },
       "src/lib/realtime/server.ts": {
         broadcastBoardChange: async () => {},
         broadcastTaskChange: async () => {},
@@ -510,7 +517,7 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
       ? { linked: 0, updated: 0, taskIds: [] }
       : { linked: 1, updated: 1, taskIds: [task.id] };
     const stubbedModules = {
-      "src/lib/prisma.ts": { default: prisma },
+      "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma) },
       "src/lib/realtime/server.ts": {
         broadcastBoardChange: async () => {},
         broadcastTaskChange: async (taskId) => taskEvents.push(taskId),
@@ -938,7 +945,7 @@ function forkPullRequestPayload(authorId = 987654321, action = "opened", merged 
   return payload;
 }
 
-async function runAuthorScenario(payload, mode = "linked", event = "pull_request") {
+async function runAuthorScenario(payload, mode = "linked", event = "pull_request", mapping) {
   const writes = [];
   const reads = [];
   const syncCalls = [];
@@ -1006,7 +1013,7 @@ async function runAuthorScenario(payload, mode = "linked", event = "pull_request
     },
   };
   const stubbedModules = {
-    "src/lib/prisma.ts": { default: prisma },
+    "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma, mapping) },
     "src/lib/realtime/server.ts": {
       broadcastBoardChange: write("broadcast.board"),
       broadcastTaskChange: write("broadcast.task"),
@@ -1070,7 +1077,7 @@ function assertNoAuthorWrites(result) {
   assert.deepEqual(result.reads, []);
 }
 
-function assertUnauthorizedAuthor(result) {
+function assertUnauthorizedAuthor(result, authorId = 987654321) {
   assert.equal(result.status, 200);
   assert.deepEqual(result.body, {
     success: true,
@@ -1078,7 +1085,7 @@ function assertUnauthorizedAuthor(result) {
   });
   assertNoAuthorWrites(result);
   assert.deepEqual(result.logs, [[
-    "[GitHub webhook] Unauthorized PR author: board=15 repo=hypertask-ai/hypertask pr=5952 authorId=987654321",
+    `[GitHub webhook] Unauthorized PR author: board=15 repo=hypertask-ai/hypertask pr=5952 authorId=${authorId}`,
   ]]);
 }
 
@@ -1185,6 +1192,27 @@ test("PR author id, not sender, login, association or fork flags, controls autho
     payload.pull_request.head.repo = payload.repository;
     assertUnauthorizedAuthor(await runAuthorScenario(payload));
   });
+});
+
+const INSTALLED_REPO_MAPPING = {
+  projectId: 15,
+  fullName: "hypertask-ai/hypertask",
+  provenance: "installed",
+  installationId: "123",
+  revokedAt: null,
+};
+
+test("a connected board moves tickets only for repository writers", async (t) => {
+  const writers = ["OWNER", "MEMBER", "COLLABORATOR"];
+  for (const association of [...writers, "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "NONE", ""]) {
+    await t.test(`author association ${association || "empty"}`, async () => {
+      const payload = forkPullRequestPayload();
+      payload.pull_request.author_association = association;
+      const result = await runAuthorScenario(payload, "linked", "pull_request", INSTALLED_REPO_MAPPING);
+      if (!writers.includes(association)) return assertUnauthorizedAuthor(result);
+      assert.equal(result.moves.length, 1, JSON.stringify(result.body));
+    });
+  }
 });
 
 test("malformed pull request author ids fail closed without lookups or writes", async (t) => {

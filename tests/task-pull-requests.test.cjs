@@ -10,12 +10,14 @@ const jiti = require("jiti")(__filename, {
 });
 
 const {
-  boardForGithubRepository,
   checkStateFromSuites,
   derivePullRequestDisplayState,
   isStaleCheckSuiteObservation,
   parseGithubPullRequestUrl,
 } = jiti(path.join(root, "src/lib/pullRequests/githubPullRequests.ts"));
+const { resolveBoardGithubRepository } = jiti(
+  path.join(root, "src/lib/github/boardConnections.ts"),
+);
 const {
   fetchGithubPullRequest,
   linkTaskPullRequest,
@@ -111,36 +113,60 @@ test("check suite observations reset per pull request head", () => {
 });
 
 test("GitHub webhook repository policy cannot target another board", () => {
+  const legacyBoard15 = [
+    "hypertask-ai/android",
+    "hypertask-ai/app-releases",
+    "hypertask-ai/cli",
+    "hypertask-ai/docs",
+    "hypertask-ai/hypertask",
+    "hypertask-ai/skills",
+  ].map((fullName) => ({
+    projectId: 15,
+    fullName,
+    provenance: "legacy",
+    installationId: null,
+    revokedAt: null,
+  }));
   const publicRepository = (fullName) => ({
     fullName,
     isPrivate: false,
     isFork: false,
   });
   assert.equal(
-    boardForGithubRepository(publicRepository("hypertask-ai/hypertask")),
+    resolveBoardGithubRepository(publicRepository("hypertask-ai/hypertask"), legacyBoard15),
     15,
   );
   assert.equal(
-    boardForGithubRepository(publicRepository("HYPERTASK-AI/CLI")),
+    resolveBoardGithubRepository(publicRepository("HYPERTASK-AI/CLI"), legacyBoard15),
     15,
   );
   assert.equal(
-    boardForGithubRepository(publicRepository("fork-owner/hypertask")),
+    resolveBoardGithubRepository(publicRepository("fork-owner/hypertask"), legacyBoard15),
     null,
   );
   assert.equal(
-    boardForGithubRepository({
+    resolveBoardGithubRepository({
       ...publicRepository("hypertask-ai/hypertask"),
       isPrivate: true,
-    }),
+    }, legacyBoard15),
     null,
   );
   assert.equal(
-    boardForGithubRepository({
+    resolveBoardGithubRepository({
       ...publicRepository("hypertask-ai/hypertask"),
       isFork: true,
-    }),
+    }, legacyBoard15),
     null,
+  );
+  assert.equal(
+    resolveBoardGithubRepository(publicRepository("hypertask-ai/hypertask"), [{
+      projectId: 7049,
+      fullName: "hypertask-ai/hypertask",
+      provenance: "installed",
+      installationId: "123",
+      revokedAt: null,
+    }]),
+    7049,
   );
 });
 
