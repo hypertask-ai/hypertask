@@ -1,3 +1,23 @@
+const QUIET_PERSONAL_LOG = "@/utils/controllers/logs/quietPersonalLog"
+
+function recordId(value) {
+  if (typeof value === "string" || typeof value === "number") return String(value)
+  if (value && typeof value === "object" && "id" in value) {
+    const id = value.id
+    if (typeof id === "string" || typeof id === "number") return String(id)
+  }
+  return null
+}
+
+function quietPersonalLogStub() {
+  return {
+    recordId,
+    logPersonal: async (_userId, label, _ids, raw) => {
+      if (raw !== undefined) console.log(label, raw)
+    },
+  }
+}
+
 function enforcementFor(guard) {
   return {
     agentWritingPolicyEnabled: async () => true,
@@ -5,15 +25,25 @@ function enforcementFor(guard) {
   }
 }
 
+const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
+
 function withStubs(base = {}, extra = {}) {
   const guard = base['@/lib/agents/writing']
   if (guard && !base['@/lib/agents/writingEnforcement']) {
     base = { ...base, '@/lib/agents/writingEnforcement': enforcementFor(guard) }
   }
+  const defaults = Object.create(null)
+  if (!(QUIET_PERSONAL_LOG in base) && !(QUIET_PERSONAL_LOG in extra)) {
+    defaults[QUIET_PERSONAL_LOG] = quietPersonalLogStub()
+  }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base,
-    get: (_target, request) => request in extra ? extra[request] : base[request],
+    has: (_target, request) => request in extra || request in base || request in defaults || request in plainLanguageTicketStubs,
+    get: (_target, request) =>
+      request in extra ? extra[request]
+      : request in base ? base[request]
+      : request in defaults ? defaults[request]
+      : plainLanguageTicketStubs[request],
   });
 }
 
-module.exports = { withStubs, enforcementFor };
+module.exports = { withStubs, enforcementFor, quietPersonalLogStub };

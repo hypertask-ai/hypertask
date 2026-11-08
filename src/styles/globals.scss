@@ -967,7 +967,7 @@ svg.lucide.fill-current {
   }
 }
 
-.graphite-2 [data-kanban-cleanup] {
+[data-kanban-cleanup] {
   &,
   [id^="tasks-list-"] > [id^="task-"],
   .kanban-task-card,
@@ -975,7 +975,9 @@ svg.lucide.fill-current {
   [data-kanban-task-skeleton] > div {
     border-radius: 4px;
   }
+}
 
+.graphite-2 [data-kanban-cleanup] {
   [data-kanban-cleanup-scroll],
   [id^="tasks-list-"] {
     scrollbar-width: auto;

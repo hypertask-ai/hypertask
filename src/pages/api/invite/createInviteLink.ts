@@ -8,6 +8,7 @@ import { CreateLogInput, IMember, IViewType } from "@/models/model";
 import createLog from "@/utils/controllers/logs/createLog";
 
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { sendEmailNotification } from "@/utils/controllers/notifications/sendNotification";
@@ -239,7 +240,7 @@ export const createNotification = async (
   const invitedUser = await prisma.user.findFirst({
     where: { email: email },
   });
-  console.log("🚀 ~ createNotification ~ invitedUser:", invitedUser);
+  await logPersonal(invitedUser?.id ?? null, "createNotification invitedUser", { userId: invitedUser?.id ?? null, email: invitedUser?.email ?? null, }, invitedUser);
   if (!invitedUser) return false;
 
   const notification = await prisma.notification.create({

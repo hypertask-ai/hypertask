@@ -1,5 +1,6 @@
 import { setTimeout } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { renderPlainLanguageTicketDescription } from "../../src/lib/tickets/plainLanguageTicket.mjs";
 
 const APP = "https://app.hypertask.ai";
 export const FAILURE_TITLE = "[INFRA] PostHog error-to-ticket monitoring failed";
@@ -28,7 +29,16 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env.HYP
     existing = page.tasks.find((task) => task.title === FAILURE_TITLE);
     if (existing) break;
   }
-  const text = `<p><strong>The PostHog error-to-ticket safety net failed.</strong> New production errors may not reach the Bugs board. Check the workflow log and restore the pipeline.</p><p><a href="${runUrl}">Failed workflow run ${runId}</a></p>`;
+  const text =
+    renderPlainLanguageTicketDescription({
+      whatWrongOrWanted: "The PostHog error-to-ticket safety net failed.",
+      whoItAffects: "internal only; production errors may not reach the Bugs board until this is fixed",
+      recommendedCourseAndWhy:
+        "Read the workflow log, restore credentials or the receiver, and rerun the monitor. Why: without it, new server errors stay invisible on the board.",
+      whatValentinMustDecide: "nothing",
+      howToUndo: "close this ticket when the monitor is green again",
+    }) +
+    `<p><a href="${runUrl}">Failed workflow run ${runId}</a></p>`;
   if (existing) {
     const projects = await api(fetchImpl, token, "/projects?limit=100");
     const sections = projects.projects?.find((item) => Number(item.id) === 4060)?.sections;

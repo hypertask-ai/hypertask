@@ -62,7 +62,6 @@ export class AuthService {
       console.log(`✅ User updated successfully (${source}):`, {
         id: userData.id,
         email: userData.email,
-        displayName: userData.displayName,
         onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus,
         trialStatus: (userData as any).UserSetting?.trialStatus,
         isNewUser: userUpdateResult.res.isNewUser

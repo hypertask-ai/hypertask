@@ -51,7 +51,7 @@ function updateHarness(initial = {}, parents = []) {
     task: { findUnique: async () => ({ ...state }) }, project: { findFirst: async () => ({ id: 10 }) },
     $transaction: async (callback) => { calls.transactions++; return callback(tx); },
   };
-  const stubs = {
+  let stubs = {
     "@/lib/tasks/sameBoardRelations": relations,
     "@/utils/controllers/tasks/parentTaskAccess": parentAccess,
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -79,6 +79,7 @@ function updateHarness(initial = {}, parents = []) {
     "@/lib/mcp/tasks/agentDoneLifecycle": { assertAgentMayLeaveDone: noop, AgentDoneLifecycleDeniedError: class extends Error {} },
     "@/lib/cycleService": { assertCycleAssignable: noop, CycleAssignmentError: class extends Error {} },
   };
+  stubs = withStubs({}, stubs);
   const controller = load("src/utils/controllers/tasks/single.ts", stubs);
   return { calls, controller, update: (patch, options = {}, agentId = null) => controller.updateTaskSingle({ id: 101, ...patch }, { id: 7 }, agentId, { skipAutoAssign: true, skipRecurrence: true, ...options }) };
 }

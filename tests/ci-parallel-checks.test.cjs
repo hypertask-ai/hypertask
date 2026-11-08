@@ -91,8 +91,13 @@ function assertParallelChecks(ci) {
   }
 
   const generated = checks.steps.findIndex((step) => step.name === "Generate Prisma client and flag index");
+  const restoreTypescript = checks.steps.findIndex((step) => step.name === "Restore TypeScript cache");
   assert.ok(generated >= 0, "the generated sources are built before the lanes");
   assert.ok(generated < checks.steps.indexOf(launcher), "generated sources exist before any lane reads them");
+  assert.ok(
+    restoreTypescript < 0 || generated < restoreTypescript,
+    "Prisma client is fresh before the TypeScript cache restores",
+  );
   assert.match(launcher.run, /node scripts\/generate-flag-index\.mjs/, "the typescript lane rebuilds the flag index it reads");
   const saves = checks.steps.filter((step) => step.uses?.startsWith("actions/cache/save@"));
   assert.equal(saves.length, 3);

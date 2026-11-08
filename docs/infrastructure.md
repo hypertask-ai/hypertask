@@ -83,10 +83,6 @@ not re-register one without a recorded decision.
 
 The Contabo-UK VPS (80.190.82.74) still hosts the **private** lanes:
 
-- `ai-review`: `contabo-1` is registered only to `valentinyeo/hypertask-reviewer`
-  and runs as `htreviewrunner`. Application PR jobs cannot schedule it or invoke
-  its subscription wrappers (the low-privilege `ghrunner` account is not used by
-  app jobs at all anymore).
 - The analytics publisher runs its own `analytics-ci-fast-1` review runner.
 - The shared root-owned action archive cache at `/opt/github-actions/action-archive-cache`
   accelerates only those self-hosted lanes; hosted app runners download actions normally.
@@ -98,10 +94,7 @@ check treats an `x-vercel-mitigated: challenge` response as INCONCLUSIVE (Telegr
 warning, no rollback) — never weaken that guard, a challenged curl proves nothing
 about the app.
 
-AI review and `claude-mention` are also self-hosted. A validated local broker dispatches AI review to the private reviewer repository, which fails over subscription-first
-between its configured backends (the reviewer repository owns the provider order and models). Its
-job checks out only the trusted `production` reviewer implementation and never executes PR code.
-`claude-mention` still uses `CLAUDE_CODE_OAUTH_TOKEN`. External/fork PRs are excluded from review.
+AI review is Codex's built-in GitHub code review, turned into the `ai-review` status by the GitHub-hosted Codex review gate workflow; the self-hosted reviewer is retired. `claude-mention` still uses `CLAUDE_CODE_OAUTH_TOKEN`. External/fork PRs are excluded from review.
 
 ### Database migrations are NOT applied by the deploy
 

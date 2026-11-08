@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { correlate, incidentOf, redact, relatedTicket, taskIncident } from './incident.mjs';
+import { renderPlainLanguageTicketDescription } from './ticketDescription.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
@@ -133,12 +134,27 @@ function merge(group, event) {
 }
 
 function description(group, fp) {
+  const block = group.noiseRule
+    ? renderPlainLanguageTicketDescription({
+        whatWrongOrWanted: `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times; warning on stderr.`,
+        whoItAffects: "internal only",
+        recommendedCourseAndWhy: "Fix the noisy warning at the source. Why: stderr spam hides real incidents.",
+        whatValentinMustDecide: "nothing",
+        howToUndo: "revert the change that introduced the warning",
+      })
+    : renderPlainLanguageTicketDescription({
+        whatWrongOrWanted: `${group.service} failed: ${group.normalized}.`,
+        whoItAffects: "see routes and counts below",
+        recommendedCourseAndWhy: "Trace the stack and fix the root cause. Why: repeated hits in the window.",
+        whatValentinMustDecide: "nothing; a runner will investigate",
+        howToUndo: "revert the breaking deploy or patch the handler",
+      });
   if (group.noiseRule) {
     const fields = [ ['Service', group.service], ['Warning', group.normalized], ['Occurrences in one hour', group.hourlyCount], ['Hour ending', group.hourLastSeen], ['Routes', group.routes.join(', ')], ['Redacted sample', group.message] ];
-    return `<p><strong>${html(group.service)} emitted ${html(group.normalized)} ${group.hourlyCount} times within one hour.</strong></p><p>This is a warning on stderr, not a thrown product error. Fix it at the source rather than hiding the warning.</p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
+    return block + `<ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
   }
   const fields = [ ['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message] ];
-  return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
+  return block + `<ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
 }
 
 function search(fp, board, env, incident) {
@@ -549,6 +565,7 @@ async function install(env) {
   await fs.mkdir(join(home, '.local/state/error-collector'), { recursive: true, mode: 0o700 });
   if (HERE !== target) {
     for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
+    await fs.copyFile(join(HERE, 'ticketDescription.mjs'), join(target, 'ticketDescription.mjs'));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }
   const checker = join(HERE, HERE === target ? '' : '..', 'user-unit-check');

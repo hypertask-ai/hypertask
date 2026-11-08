@@ -1,6 +1,7 @@
 import { FCMDeviceInfo } from "@/models/model";
 import type { Message } from "firebase-admin/messaging";
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { filterTaskReadersNow } from "@/lib/access/canReadTaskNow";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
 import { NotificationType } from "@prisma/client";
@@ -264,9 +265,7 @@ export const sendDataOnlyFcm = async (
       deliveryResolved = true;
     } catch (error) {
       if (isUnregisteredTokenError(error)) {
-        console.log(
-          `🚀 ~ sendDataOnlyFcm ~ dropping unregistered device token ${device.firebaseId.slice(0, 12)}`
-        );
+        await logPersonal(device.userId ?? null, "sendDataOnlyFcm dropping unregistered device token", { deviceId: device.id ?? null, userId: device.userId ?? null, }, device.firebaseId);
         await removeDeadDeviceToken(device.firebaseId);
         deliveryResolved = true;
       } else {
@@ -289,9 +288,9 @@ export const sendDataOnlyFcm = async (
 const removeDeadDeviceToken = async (firebaseId: string) => {
   try {
     await prisma.subscribedDevices.deleteMany({ where: { firebaseId } });
-    console.log("🚀 ~ removed dead device token", firebaseId.slice(0, 12));
-  } catch (cleanupError) {
-    console.log("🚀 ~ dead token cleanup failed:", cleanupError);
+    await logPersonal(null, "removed dead device", { outcome: "removed", }, firebaseId);
+  } catch {
+    console.log("dead token cleanup failed", { outcome: "failed" });
   }
 };
 
@@ -339,7 +338,7 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
     const validDevices = props.devices.filter(device => allowedUserIds.has(device.userId));
 
     for (const device of validDevices){
-        console.log("🚀 ~ sendDataNewCommentFCM ~ device:", device.firebaseId)
+        await logPersonal(device.userId, "sendDataNewCommentFCM device", { deviceId: device.id, userId: device.userId, }, device.firebaseId)
         
         if (!device.sendNotifications) {
             continue;

@@ -579,6 +579,18 @@ model ManagerLeaseGrant {
   @@index([agentId, expiresAt])
 }
 
+model ManagerLeaseOperation {
+  id          Int       @id @default(autoincrement())
+  agentId     String
+  operationId String    @db.VarChar(64)
+  action      String    @db.VarChar(20)
+  grantHash   String    @db.VarChar(64)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([agentId, operationId])
+}
+
 model FigmaConnection {
   userId                Int      @id
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -288,6 +288,7 @@ function loadCreateGlobal(stubs) {
     if (real.has(request)) return require(request);
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
+    if (request === "@/utils/controllers/logs/quietPersonalLog") return require("./helpers/stub-map.cjs").quietPersonalLogStub();
     assert.ok(request in stubs, `Unexpected dependency: ${request}`);
     return stubs[request];
   });

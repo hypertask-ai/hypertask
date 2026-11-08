@@ -11,12 +11,10 @@ const schema = read("src/prisma/schema.prisma");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
   fsCache: false,
+  alias: { "@": path.join(root, "src") },
 });
-const { resolveLegacyBoardGithubRepository } = jiti(
+const { resolveBoardGithubRepository } = jiti(
   path.join(root, "src/lib/github/boardConnections.ts"),
-);
-const { boardForGithubRepository } = jiti(
-  path.join(root, "src/lib/pullRequests/githubPullRequests.ts"),
 );
 
 function model(name) {
@@ -50,15 +48,6 @@ const publicRepository = (fullName) => ({
   isPrivate: false,
   isFork: false,
 });
-
-function currentlyRoutedRepositoryNames() {
-  const source = read("src/lib/pullRequests/githubPullRequests.ts");
-  const match = source.match(
-    /const BOARD_15_GITHUB_REPOSITORIES = new Set\(\[([\s\S]*?)\]\);/,
-  );
-  assert.ok(match, "missing current routing allowlist");
-  return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
-}
 
 function assertIdempotentLegacySeed(sql) {
   const seed = legacySeed(sql);
@@ -159,32 +148,26 @@ test("board 15 seed is retry-safe, skips a missing board and never resurrects re
   assert.throws(() => legacySeed(""));
 });
 
-test("legacy resolver still allows exactly every currently routed repo on board 15", () => {
-  const currentNames = currentlyRoutedRepositoryNames();
-  assert.ok(currentNames.length > 0);
-  assert.deepEqual(seededRepositoryNames(migration).sort(), currentNames.sort());
-  assert.equal(new Set(legacyMappings.map((mapping) => mapping.fullName)).size, currentNames.length);
-  for (const fullName of currentNames) {
+test("board routing still allows exactly every seeded repo on board 15", () => {
+  assert.doesNotMatch(read("src/lib/pullRequests/githubPullRequests.ts"), /BOARD_15_GITHUB_REPOSITORIES/);
+  const seededNames = seededRepositoryNames(migration);
+  assert.ok(seededNames.length > 0);
+  assert.equal(new Set(legacyMappings.map((mapping) => mapping.fullName)).size, seededNames.length);
+  for (const fullName of seededNames) {
     for (const variant of [fullName, fullName.toUpperCase()]) {
-      const repository = publicRepository(variant);
-      const mapping = resolveLegacyBoardGithubRepository(repository, legacyMappings);
-      assert.ok(mapping, variant);
-      assert.equal(mapping.projectId, boardForGithubRepository(repository), variant);
-      assert.equal(mapping.fullName, fullName);
+      assert.equal(resolveBoardGithubRepository(publicRepository(variant), legacyMappings), 15, variant);
     }
   }
 });
 
-test("legacy resolver now refuses unknown repositories beside the known-allowed parity control", () => {
+test("board routing refuses unknown repositories beside the known-allowed parity control", () => {
   for (const fullName of ["unknown-owner/hypertask", "hypertask-ai/unknown", "hypertask-ai/hypertask/extra", "", " hypertask-ai/cli"]) {
-    const repository = publicRepository(fullName);
-    assert.equal(boardForGithubRepository(repository), null, fullName);
-    assert.equal(resolveLegacyBoardGithubRepository(repository, legacyMappings), null, fullName);
+    assert.equal(resolveBoardGithubRepository(publicRepository(fullName), legacyMappings), null, fullName);
   }
-  assert.equal(resolveLegacyBoardGithubRepository(publicRepository(legacyMappings[0].fullName), []), null);
+  assert.equal(resolveBoardGithubRepository(publicRepository(legacyMappings[0].fullName), []), null);
 });
 
-test("legacy resolver preserves the public, non-fork boundary and rejects missing metadata", () => {
+test("board routing preserves the public, non-fork boundary and rejects missing metadata", () => {
   const repository = publicRepository(legacyMappings[0].fullName);
   for (const input of [
     { ...repository, isPrivate: true },
@@ -196,24 +179,40 @@ test("legacy resolver preserves the public, non-fork boundary and rejects missin
     { ...repository, fullName: 15 },
     {},
   ]) {
-    assert.equal(resolveLegacyBoardGithubRepository(input, legacyMappings), null);
-    assert.equal(boardForGithubRepository(input), null);
+    assert.equal(resolveBoardGithubRepository(input, legacyMappings), null);
   }
 });
 
-test("legacy resolver refuses revoked, installed, foreign-board and ambiguous mappings without mutation", () => {
+test("board routing refuses revoked, mislabelled, foreign-board and ambiguous mappings without mutation", () => {
   const mapping = legacyMappings[0];
   const repository = publicRepository(mapping.fullName);
   const original = structuredClone(legacyMappings);
   for (const change of [
     { revokedAt: new Date("2026-10-21T00:00:00Z") },
-    { provenance: "installed", installationId: "123" },
     { installationId: "123" },
     { projectId: 16 },
   ]) {
-    assert.equal(resolveLegacyBoardGithubRepository(repository, [{ ...mapping, ...change }]), null);
+    assert.equal(resolveBoardGithubRepository(repository, [{ ...mapping, ...change }]), null);
   }
-  assert.equal(resolveLegacyBoardGithubRepository(repository, [mapping, { ...mapping, projectId: 16 }]), null);
-  assert.equal(resolveLegacyBoardGithubRepository(repository, [mapping, { ...mapping, revokedAt: new Date() }]), mapping);
+  assert.equal(resolveBoardGithubRepository(repository, [mapping, { ...mapping, projectId: 16 }]), null);
+  assert.equal(resolveBoardGithubRepository(repository, [mapping, { ...mapping, revokedAt: new Date() }]), 15);
   assert.deepEqual(legacyMappings, original);
+});
+
+test("a connected board routes its own repositories and refuses a repo shared by two boards", () => {
+  const installed = {
+    projectId: 8423,
+    fullName: "inne/private-repo",
+    provenance: "installed",
+    installationId: "123",
+    revokedAt: null,
+  };
+  const route = (overrides, mappings = [installed]) => resolveBoardGithubRepository(
+    { fullName: "INNE/Private-Repo", isPrivate: false, isFork: false, ...overrides },
+    mappings,
+  );
+  assert.equal(route({}), 8423);
+  assert.equal(route({ isPrivate: true }), 8423);
+  assert.equal(route({ isFork: true }), null);
+  assert.equal(route({}, [installed, { ...installed, projectId: 7049 }]), null);
 });

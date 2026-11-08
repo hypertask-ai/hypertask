@@ -58,7 +58,7 @@ async function fixture(t, enabled = true, mobileSidebar = false, pendingPanel = 
     "@/lib/agents/chatDrafts": { readDraft: noop, writeDraft: noop },
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: noop, setNativeSidebarChat: noop },
     "@/utils/api/ai_chat/aiChatHelpers": { AI_Chat_API: {} },
-    "next/navigation": { useSearchParams: () => new URLSearchParams() },
+    "next/navigation": { useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push() {}, replace() {} }) },
     "@tanstack/react-query": { useQueryClient: noop },
     "./MessageList": { MessageList: noop },
     "./WelcomeScreen": { WelcomeScreen: noop },

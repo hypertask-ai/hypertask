@@ -650,6 +650,7 @@ test('the red after that rerun files one urgent fixer ticket naming the smoke te
   await tick({ dir, api, now: Date.parse('2026-10-22T12:03:00Z') / 1000 });
   const create = api.writes.find(a => a[1] === 'create');
   assert.ok(create.includes('urgent'));
+  assert.ok(create.includes('Incident,brain-medium'));
   assert.match(create[create.indexOf('--title') + 1], /layout baseline: ticket from board card/);
   assert.match(create[create.indexOf('--description') + 1],
     /layout baseline: ticket from board card \[Desktop\]: Test timeout of 50000ms exceeded/);
