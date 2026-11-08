@@ -239,7 +239,7 @@ Ticket: https://app.hypertask.ai/detail/project-11514/180
 
 Fleet-watch opened this when only 87 percent of 31 Hypertask merges in the last 24 hours reached production within 10 minutes of merge. The miss count was four merges stuck on failed production builds, not slow checks. The live KPI is merge time to the earliest successful Production deployment on GitHub (`ci_perf.live_samples` in poteto-2-advisor).
 
-The stuck merges line up with the heap-cap regression in the HYCI-177 note above: `3072` MB aborted inside V8 on pull requests 3038, 3037 and 3050; `3584` MB still aborted on pull request 3063 (`dpl_9tg62h9sytSJHF5iEJKQeftXk7o2`). HYCI-184 restored `4096` MB in pull request 3065 (`76c0433c59`).
+The stuck merges line up with the heap-cap regression in the HYCI-177 note above: `3072` MB aborted inside V8 on pull requests 3038, 3037 and 3051; `3584` MB still aborted on pull request 3063 (`dpl_9tg62h9sytSJHF5iEJKQeftXk7o2`). HYCI-184 restored `4096` MB in pull request 3065 (`76c0433c59`).
 
 Measured from the live cache at 2026-11-08 UTC, after the `76c0433` merge:
 
@@ -247,9 +247,10 @@ Measured from the live cache at 2026-11-08 UTC, after the `76c0433` merge:
 | --- | --- |
 | Production deployments on the merge commit or later | 7 |
 | Failed or errored | 1 (`a8c78f2`, superseded before the fix landed) |
-| Merged app pull requests after the fix | 6 |
-| Live within 10 minutes | 5 of 6 (83 percent) |
+| Merged app pull requests after the fix (excluding the fix commit) | 5 |
+| Live within 10 minutes | 5 of 5 (100 percent) |
 | Median merge to live | 6.6 minutes |
-| Slowest after the fix | 10.1 minutes (pull request 3065, the fix commit itself) |
+| Slowest after the fix | 7.6 minutes (pull request 3062) |
+| Fix commit pull request 3065 | 10.1 minutes to live |
 
 The fix is live on `production`. The ticket closes when the CI performance page shows at least 90 percent live-within-10-min for three consecutive London days, not on this document alone.
