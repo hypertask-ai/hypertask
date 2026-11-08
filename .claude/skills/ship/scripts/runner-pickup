@@ -254,7 +254,7 @@ recover_blocks() {
     return $?
   fi
   candidates=$(jq -r --arg name "Runner $n" --argjson lift "$lift" '.tasks[]
-    | select(.projectId == 15 or .projectId == 4060)
+    | select(.projectId == 15 or .projectId == 11514)
     | select(any(.assignees[]?; .agent.displayName == $name))
     | select(.section | test("^(Agent Blocked( \\(Infra\\))?|Blocked)$"))
     | select(.blockerCommentId == null)
@@ -376,7 +376,7 @@ run_tick() {
   fi
   cand=$(jq -c --arg name "Runner $n" --arg skip "$SKIP" --arg cutoff "$cutoff" '
     [.tasks[] | select(any(.assignees[]?; (.agent.displayName // "" | ascii_downcase) == ($name | ascii_downcase)))
-      | select(.projectId == 15 or .projectId == 4060)
+      | select(.projectId == 15 or .projectId == 11514)
       | select((.status // "") as $s | ["Done", "Archive", "Archived", "Flag: Everyone", "Flag: Only Me + QA"] | index($s) | not)
       | select((.section // "") as $s | ["Done", "Archive", "Archived", "Flag: Everyone", "Flag: Only Me + QA"] | index($s) | not)
       | select(.resumeAfterFreeze or ((.section // "") | test($skip) | not))

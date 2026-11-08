@@ -84,7 +84,7 @@ for item in data['previous']:
     if ticket in tasks and assigned(tasks[ticket]) and tasks[ticket].get('section') not in terminal and tasks[ticket].get('status') not in terminal:
         mine.setdefault(ticket, {'held': [SHARED], 'current': SHARED, 'pending': contested([SHARED], other)})
 for ticket, task in tasks.items():
-    if task.get('projectId') in (15, 4060) and assigned(task) and task.get('status') not in terminal and task.get('section') in ('In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review'):
+    if task.get('projectId') in (15, 11514) and assigned(task) and task.get('status') not in terminal and task.get('section') in ('In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review'):
         import_task(ticket)
 
 for ticket, lease in mine.items():
