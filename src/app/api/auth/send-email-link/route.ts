@@ -16,7 +16,6 @@ import {
   finishStraightBoardEmailSignup,
   isPlausibleSignupEmail,
   sendSignupVerificationEmail,
-  sessionEmailUnverified,
   straightBoardSignupRequesterAllowed,
 } from '@/lib/auth/emailStraightBoard'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
@@ -181,7 +180,6 @@ export async function POST(request: NextRequest) {
       inviteData,
       returnTo: rawReturnTo,
       signupContext,
-      resendEmailVerification,
     } = await request.json()
 
     if (!email || typeof email !== 'string') {
@@ -226,27 +224,6 @@ export async function POST(request: NextRequest) {
         : {}
 
     const session = await getSessionUser(request.headers)
-
-    if (resendEmailVerification && existingUser && session?.userId === existingUser.id) {
-      if (
-        (await straightBoardSignupRequesterAllowed(session.userId)) &&
-        (await sessionEmailUnverified(existingUser.id))
-      ) {
-        try {
-          await sendSignupVerificationEmail(request, normalizedEmail, utmParams)
-        } catch (emailError) {
-          console.error('Failed to resend straight-board verification email:', emailError)
-          return NextResponse.json(
-            { success: false, error: 'Failed to send verification email' },
-            { status: 500 },
-          )
-        }
-        return NextResponse.json({
-          success: true,
-          message: 'Verification email sent! Please check your inbox.',
-        })
-      }
-    }
 
     if (
       !existingUser &&
