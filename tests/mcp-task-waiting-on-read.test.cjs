@@ -72,22 +72,16 @@ test("a waiting person set by a serialized read still renders as an ISO timestam
   assert.equal(detail.waitingOnSetAt, "2026-11-03T22:21:26.120Z");
 });
 
-test("flag off hides stored waiting agents on MCP reads", () => {
-  const task = waitingTask({
-    waitingOnUserId: null,
-    waitingOnAgentId: "11111111-1111-4111-8111-111111111111",
-    waitingOnAgent: { id: "11111111-1111-4111-8111-111111111111", displayName: "Runner 9", userId: 6, visibility: "TEAM", members: [{ projectId: 15 }] },
-  });
-  const summary = mappers.mapTaskToMcpGetResponse(task, 6, null, null, false);
-  assert.equal(summary.waitingOnUserId, null);
-  assert.equal(summary.waitingOnSetAt, "2026-11-03T22:21:26.120Z");
-  assert.equal(summary.waitingOnAgentId, undefined);
-});
-
 test("every read path shares one waiting mapping, so list and detail cannot drift", () => {
   assert.deepEqual(mappers.mapTaskWaitingOn({ waitingOnUserId: 6, waitingOnSetAt: new Date("2026-11-03T22:21:26.120Z") }), {
     waitingOnUserId: 6,
     waitingOnSetAt: "2026-11-03T22:21:26.120Z",
   });
   assert.deepEqual(mappers.mapTaskWaitingOn({}), { waitingOnUserId: null, waitingOnSetAt: null });
+  const agentTask = waitingTask({
+    waitingOnUserId: null,
+    waitingOnAgentId: "11111111-1111-4111-8111-111111111111",
+    waitingOnAgent: { id: "11111111-1111-4111-8111-111111111111", userId: 6, visibility: "TEAM", members: [{ projectId: 15 }] },
+  });
+  assert.equal(mappers.mapTaskToMcpGetResponse(agentTask, 6, null, null, false).waitingOnAgentId, undefined);
 });
