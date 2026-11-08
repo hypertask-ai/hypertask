@@ -71,7 +71,6 @@ const Screens: TOption[] = [
 ]
 type TScreen = "SaveThisView" | "SaveForTeam" | "SaveForMe"
 const SaveViewModal: React.FC<TProps> = (props) => {
-    const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag")
     if (props.personal) {
         const personal = props.personal;
         const personalScreens: TOption[] = [
@@ -96,12 +95,11 @@ const SaveViewModal: React.FC<TProps> = (props) => {
                 props.toggle();
             }} />;
     }
-    return tableGroupByTagEnabled
-        ? <BoardSaveViewModal toggle={props.toggle} project={props.project} persistTableGroupBy />
-        : <BoardSaveViewModal toggle={props.toggle} project={props.project} />;
+    return <BoardSaveViewModal toggle={props.toggle} project={props.project} />;
 };
 
-const BoardSaveViewModal = ({ toggle, project, persistTableGroupBy = false }: BoardProps & { persistTableGroupBy?: boolean }) => {
+const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
+    const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag")
     const { updateView, resetView, saveAsDefaultHandler} = useKanbanViews(project)
     const queryClient = useQueryClient()
     const getExplicitBoardLayout = () => savedBoardLayoutFromExplicitSurface(
@@ -131,7 +129,7 @@ const BoardSaveViewModal = ({ toggle, project, persistTableGroupBy = false }: Bo
             board_show_archived: getActiveShowArchivedOverrideFromProject(sourceProject),
             table_sort_column: activeTableSort?.column ?? null,
             table_sort_direction: activeTableSort?.direction ?? null,
-            table_group_by: persistTableGroupBy
+            table_group_by: tableGroupByTagEnabled
                 ? getActiveTableGroupByFromProject(sourceProject)
                 : "column",
             board_layout: getExplicitBoardLayout() ?? getActiveBoardLayoutPreferenceFromProject(sourceProject),

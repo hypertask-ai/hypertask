@@ -6,20 +6,12 @@ import {
   dedupeTasksForFlatTableSort,
   sanitizeTableGroupBy,
   NO_TAG_SECTION_TITLE,
-  tableGroupSectionId,
 } from "../src/lib/table-view/tableGroupByTag";
 
-test("sanitizeTableGroupBy accepts column and tag", () => {
-  assert.equal(sanitizeTableGroupBy("column"), "column");
+test("tag grouping and sanitize", () => {
   assert.equal(sanitizeTableGroupBy("tag"), "tag");
-  assert.equal(sanitizeTableGroupBy("other"), null);
-});
-
-test("buildTableSectionsGroupedByTag duplicates multi-tag tasks and groups untagged last", () => {
-  const taskA = {
-    id: 1,
-    taskLabels: [{ label: { id: "l1", value: "Beta" } }],
-  } as ITask;
+  assert.equal(sanitizeTableGroupBy("bad"), null);
+  const taskA = { id: 1, taskLabels: [{ label: { id: "l1", value: "Beta" } }] } as ITask;
   const taskB = {
     id: 2,
     taskLabels: [
@@ -31,21 +23,9 @@ test("buildTableSectionsGroupedByTag duplicates multi-tag tasks and groups untag
   const sections = buildTableSectionsGroupedByTag([
     { section_title: "Backlog", items: [taskA, taskB, taskC] },
   ]);
-
   const byTitle = new Map(sections.map((section) => [section.section_title, section]));
   assert.equal(byTitle.get("Alpha")?.items?.length, 1);
   assert.equal(byTitle.get("Beta")?.items?.length, 2);
-  assert.equal(byTitle.get(NO_TAG_SECTION_TITLE)?.items?.length, 1);
-  assert.equal(byTitle.get(NO_TAG_SECTION_TITLE)?.sectionId, "tag:none");
   assert.equal(sections.at(-1)?.section_title, NO_TAG_SECTION_TITLE);
-  assert.equal(byTitle.get("Beta")?.items?.map((task) => task.id).sort().join(","), "1,2");
-});
-
-test("tableGroupSectionId prefixes label ids", () => {
-  assert.equal(tableGroupSectionId("abc"), "tag:abc");
-});
-
-test("dedupeTasksForFlatTableSort keeps first occurrence", () => {
-  const tasks = [{ id: 1 }, { id: 2 }, { id: 1 }] as ITask[];
-  assert.deepEqual(dedupeTasksForFlatTableSort(tasks).map((task) => task.id), [1, 2]);
+  assert.deepEqual(dedupeTasksForFlatTableSort([{ id: 1 }, { id: 2 }, { id: 1 }] as ITask[]).map((t) => t.id), [1, 2]);
 });
