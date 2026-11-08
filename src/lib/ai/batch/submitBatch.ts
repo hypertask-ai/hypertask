@@ -16,6 +16,12 @@ export async function submitBatch(args: {
   items: Record<string, unknown>;
   claim?: (tx: Prisma.TransactionClient, batchId: string) => Promise<string[]>;
 }): Promise<string | null> {
+  const { assertBatchWithinTeamCap } = await import("@/app/api/ai/_lib/batchCap");
+  await assertBatchWithinTeamCap({
+    teamId: args.teamId,
+    userId: args.userId,
+    gatewayKey: args.gatewayKey,
+  });
   const gatewayBatchId = await startGatewayBatch(
     args.gatewayKey,
     args.requests,

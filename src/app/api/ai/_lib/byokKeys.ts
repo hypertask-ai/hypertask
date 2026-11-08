@@ -123,7 +123,10 @@ async function resolveLookupTeamId(lookup?: ByokLookupContext) {
 async function resolveTeamByokSecret(
   provider: TByokProviderKey | typeof MANAGED_TEAM_GATEWAY_PROVIDER,
   lookup?: ByokLookupContext,
-  options?: { includeDisabled?: boolean; onResolved?: (row: { id: string; updatedAt: Date }) => void }
+  options?: {
+    includeDisabled?: boolean;
+    onResolved?: (row: { id: string; updatedAt: Date; enabled: boolean; ciphertext: string | null }) => void;
+  }
 ) {
   const teamId = await resolveLookupTeamId(lookup);
   if (!teamId) return undefined;
@@ -404,35 +407,67 @@ export async function getByokApiKeyForProvider(
   return undefined;
 }
 
+const LEGACY_GATEWAY_PROVIDERS = ["gateway", "openai", "claude"] as const;
+
+const PLATFORM_GATEWAY_ENV_NAMES = [
+  "GATEWAY_KEY_HYPERTASK",
+  "GATEWAY_KEY_INNE",
+  "GATEWAY_KEY_VETSAK",
+  "GATEWAY_KEY_BAYBELLA",
+  "GATEWAY_KEY_RODRIGO",
+  "GATEWAY_KEY_D2LAW",
+  "GATEWAY_KEY_PERRY",
+  "GATEWAY_KEY_PUROLOGIX",
+  "GATEWAY_KEY_KVWULP",
+  "GATEWAY_KEY_ALLOCATOR",
+  "GATEWAY_KEY_VALENTIN",
+] as const;
+
+function isPlatformManagedGatewayKey(apiKey: string): boolean {
+  const normalized = apiKey.trim();
+  if (!normalized.startsWith("vck_")) return false;
+  return PLATFORM_GATEWAY_ENV_NAMES.some((name) => process.env[name]?.trim() === normalized);
+}
+
+type GatewayKeyProvenance = { managedKeyId: string; managedKeyUpdatedAt: string };
+
+function provenanceFromRow(row: { id: string; updatedAt: Date }): GatewayKeyProvenance | undefined {
+  if (!row.id || !row.updatedAt) return undefined;
+  return { managedKeyId: row.id, managedKeyUpdatedAt: row.updatedAt.toISOString() };
+}
+
+function withProvenance(
+  funding: TeamGatewayFunding,
+  provenance: GatewayKeyProvenance | undefined,
+  includeProvenance: boolean | undefined,
+): TeamGatewayFunding {
+  return includeProvenance && provenance ? { ...funding, ...provenance } : funding;
+}
+
+async function retireLegacyDuplicates(
+  teamId: string | null | undefined,
+  duplicates: Array<{ id: string; ciphertext: string }>,
+) {
+  if (!teamId || duplicates.length === 0) return;
+  try {
+    await prisma.teamByokApiKey.deleteMany({
+      where: {
+        teamId,
+        provider: { in: [...LEGACY_GATEWAY_PROVIDERS] },
+        OR: duplicates.map((row) => ({ id: row.id, ciphertext: row.ciphertext })),
+      },
+    });
+  } catch {
+    return;
+  }
+}
+
 export async function getTeamGatewayApiKeyForProvider(
   provider: ModelProviderId,
   lookup?: ByokLookupContext
 ) {
-  const plan = await resolveLookupPlan(lookup);
-  if (!plan) return undefined;
-
-  if (plan !== "Free") {
-    const gatewayKey = await resolveTeamByokApiKey("gateway", lookup);
-    if (isVercelAiGatewayKey(gatewayKey)) return gatewayKey;
-
-    const providerGatewayKey = await resolveTeamByokApiKey(provider, lookup);
-    if (isVercelAiGatewayKey(providerGatewayKey)) return providerGatewayKey;
-  }
-
-  if (plan === "Free" || plan === "BYOK") {
-    return getSharedIncludedAllowanceGatewayKey(plan);
-  }
-
-  const managedGatewayKey = await resolveTeamByokSecret(
-    MANAGED_TEAM_GATEWAY_PROVIDER,
-    lookup
-  );
-  if (isVercelAiGatewayKey(managedGatewayKey)) {
-    registerManagedGatewayKey(managedGatewayKey);
-    return managedGatewayKey;
-  }
-
-  return undefined;
+  if (provider === "openrouter" || provider === "custom") return undefined;
+  return (await getTeamGatewayFunding(lookup))?.apiKey;
 }
 
 export async function getTeamGatewayFunding(
@@ -450,21 +485,71 @@ export async function getTeamGatewayFunding(
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
 
+  let managedLoaded = false;
+  let managedEnabled = false;
+  let managedKey: string | undefined;
+  let managedProvenance: GatewayKeyProvenance | undefined;
+  const loadManaged = async () => {
+    if (managedLoaded) return;
+    managedLoaded = true;
+    const secret = await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, lookup, {
+      includeDisabled: true,
+      onResolved: (row) => {
+        managedEnabled = row.enabled;
+        managedProvenance = provenanceFromRow(row);
+      },
+    });
+    managedKey = isVercelAiGatewayKey(secret) ? secret : undefined;
+  };
+
   if (plan !== "Free") {
-    const gatewayKey = await resolveTeamByokApiKey("gateway", lookup);
-    if (isVercelAiGatewayKey(gatewayKey)) {
-      return { apiKey: gatewayKey, source: "customer" };
+    const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
+    const duplicates: Array<{ id: string; ciphertext: string }> = [];
+    let owned: TeamGatewayFunding | undefined;
+    for (const provider of LEGACY_GATEWAY_PROVIDERS) {
+      let rowId = "";
+      let rowCiphertext = "";
+      let rowProvenance: GatewayKeyProvenance | undefined;
+      const stored = await resolveTeamByokSecret(provider, lookup, {
+        onResolved: (row) => {
+          rowId = row.id;
+          rowCiphertext = row.ciphertext?.trim() ?? "";
+          rowProvenance = provenanceFromRow(row);
+        },
+      });
+      if (!isVercelAiGatewayKey(stored)) continue;
+      const shared = Boolean(sharedKey && stored === sharedKey);
+      const platform = isPlatformManagedGatewayKey(stored);
+      if (!shared && !platform) {
+        await loadManaged();
+        if (managedKey !== undefined && stored === managedKey) {
+          if (managedEnabled && rowId && rowCiphertext) duplicates.push({ id: rowId, ciphertext: rowCiphertext });
+          if (!managedEnabled) continue;
+          if (!owned) {
+            owned = withProvenance(managedFunding(managedKey), managedProvenance, options?.includeProvenance);
+          }
+          continue;
+        }
+        if (owned) continue;
+        await retireLegacyDuplicates(await resolveLookupTeamId(lookup), duplicates);
+        return { apiKey: stored, source: "customer" };
+      }
+      await loadManaged();
+      if (managedEnabled && managedKey) {
+        if (stored === managedKey && rowId && rowCiphertext) duplicates.push({ id: rowId, ciphertext: rowCiphertext });
+        if (!owned) {
+          owned = withProvenance(managedFunding(managedKey), managedProvenance, options?.includeProvenance);
+        }
+        continue;
+      }
+      if (!owned) {
+        owned = shared
+          ? { apiKey: stored, source: "shared" }
+          : withProvenance(managedFunding(stored), rowProvenance, options?.includeProvenance);
+      }
     }
-
-    const openAiGatewayKey = await resolveTeamByokApiKey("openai", lookup);
-    if (isVercelAiGatewayKey(openAiGatewayKey)) {
-      return { apiKey: openAiGatewayKey, source: "customer" };
-    }
-
-    const claudeGatewayKey = await resolveTeamByokApiKey("claude", lookup);
-    if (isVercelAiGatewayKey(claudeGatewayKey)) {
-      return { apiKey: claudeGatewayKey, source: "customer" };
-    }
+    await retireLegacyDuplicates(await resolveLookupTeamId(lookup), duplicates);
+    if (owned) return owned;
   }
 
   if (plan === "Free" || plan === "BYOK") {
@@ -472,16 +557,9 @@ export async function getTeamGatewayFunding(
     return apiKey ? { apiKey, source: "shared" } : undefined;
   }
 
-  let metadata: { managedKeyId: string; managedKeyUpdatedAt: string } | undefined;
-  const managedGatewayKey = await resolveTeamByokSecret(
-    MANAGED_TEAM_GATEWAY_PROVIDER,
-    lookup,
-    options?.includeProvenance ? { onResolved: (row) => {
-      metadata = { managedKeyId: row.id, managedKeyUpdatedAt: row.updatedAt.toISOString() };
-    } } : undefined,
-  );
-  if (isVercelAiGatewayKey(managedGatewayKey)) {
-    return { ...managedFunding(managedGatewayKey), ...metadata };
+  await loadManaged();
+  if (managedEnabled && managedKey) {
+    return withProvenance(managedFunding(managedKey), managedProvenance, options?.includeProvenance);
   }
 
   return undefined;
@@ -543,7 +621,15 @@ export async function getByokOrTeamGatewayApiKey(
 
   if (provider === "openrouter" || provider === "custom") return undefined;
 
-  if (isVercelAiGatewayKey(byokApiKey)) return byokApiKey;
+  if (isVercelAiGatewayKey(byokApiKey)) {
+    const fromFlag = flags?.some((flag) => String(flag.provider ?? "").trim().toLowerCase() === provider && flag.enabled && String(flag.ciphertext ?? "").trim());
+    if (isPlatformManagedGatewayKey(byokApiKey)) registerManagedGatewayKey(byokApiKey);
+    if (!fromFlag) {
+      const funding = await getTeamGatewayFunding(lookup);
+      if (funding?.apiKey === byokApiKey) return funding.apiKey;
+    }
+    return byokApiKey;
+  }
 
   return getTeamGatewayApiKey(lookup);
 }
