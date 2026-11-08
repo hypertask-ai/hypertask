@@ -115,3 +115,81 @@ test('plan failures reach each selected family member', async () => {
   assert.deepEqual(result.failedIds, [3, 1, 2]);
   assert.ok(result.issues.every(issue => issue.message.includes('Upgrade to move more tickets')));
 });
+
+test('board moves accept 500 selections and stop 501 before sending', async () => {
+  const { loader, mount, React } = require('./helpers/htpr-7260-ui.cjs');
+  for (const count of [500, 501]) {
+    const ui = mount();
+    const requests = [];
+    const errors = [];
+    let selection;
+    const loadUI = loader({
+      '@/hooks/useFlag': { useFlag: () => true },
+      '@/lib/state': { useSetRecoilState: () => () => {}, useRecoilValue: () => null },
+      '@/store': {},
+      '@/utils/helperFunctions/helperFunctions': { returnIfModalOrInputActive: () => false },
+      '@/lib/boardSync/reconcileActiveBoardQuery': { reconcileActiveBoardQuery: async () => {} },
+      'react-hot-toast': { default: { error: message => errors.push(message), success: () => {} } },
+      'axios': { default: { post: async (url, body) => {
+        requests.push({ url, body });
+        return { data: { movedIds: body.ids, failedIds: [], issues: [] } };
+      } } },
+    });
+    const { KanbanBulkSelectionProvider, useKanbanBulkSelection } = loadUI('src/lib/contexts/Kanban/BulkSelectionContext.tsx');
+    function Probe() { selection = useKanbanBulkSelection(); return null; }
+    const items = Array.from({ length: count }, (_, i) => ({ id: i + 1, sectionId: 10, projectId: 10 }));
+    const noop = async () => {};
+    try {
+      ui.render(React.createElement(KanbanBulkSelectionProvider, { items, onArchiveTask: noop,
+        onArchiveUndo: noop, onMoveTask: noop, onAssignTask: noop, onLabelTask: noop }, React.createElement(Probe)));
+      React.act(() => selection.selectAll());
+      await React.act(async () => selection.moveSelectedToBoard(20, 30));
+      if (count === 500) {
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].body.ids.length, 500);
+        assert.equal(selection.selectedCount, 0);
+        assert.deepEqual(errors, []);
+      } else {
+        assert.equal(requests.length, 0);
+        assert.equal(selection.selectedCount, 501);
+        assert.match(errors[0], /at most 500/);
+      }
+    } finally { ui.close(); }
+  }
+});
+
+test('an open bulk board picker never moves the focused ticket after selection disappears', async () => {
+  const { loader, mount, React } = require('./helpers/htpr-7260-ui.cjs');
+  const ui = mount();
+  const requests = [];
+  const bulkMoves = [];
+  let submit;
+  let closed = 0;
+  const boards = [];
+  const block = ({ children }) => React.createElement('div', null, children);
+  const loadUI = loader({
+    '@/components/Common/CommonModalComponents': { ModalContainerCustom: block, ModalHeaderComp: () => null, ModalInput: () => null },
+    '@/hooks/MultiPages/useGetAllProjectsMinimal': { useGetAllProjectsMinimal: () => ({ data: boards, isLoading: false }) },
+    '@/hooks/General/useHandleMouse': { default: () => ({ elRef: { current: null } }) },
+    '@/store': { inViewObjectAtom: 'inView', lastUsedBoardsAtom: 'history' },
+    '@/lib/state': { useRecoilState: () => [{ taskId: 999, taskProjectId: 10 }, () => {}], useRecoilValue: () => ({}) },
+    '@/utils/helperFunctions/multiPages': { returnActiveOrDefaultColumnSections: () => [] },
+    '@/lib/constants/APIRouteConstants': { moveTaskToDifferentBoardAPI: '/single-move' },
+    '@/hooks/useFlag': { useFlag: () => true },
+    '@/lib/flags/keys': {},
+    'next/navigation': { usePathname: () => '/', useRouter: () => ({}) },
+    formik: { useFormik: options => { submit = options.onSubmit; return { values: { projectId: 20, sectionId: 30 } }; } },
+    reactstrap: { ModalBody: block },
+    axios: { default: { post: async (...args) => { requests.push(args); } } },
+  });
+  const { default: Picker } = loadUI('src/components/Modals/MoveTaskToBoard/index.tsx');
+  const closeHTC = () => { closed++; };
+  try {
+    ui.render(React.createElement(Picker, { closeHTC, onBulkMove: async (...args) => bulkMoves.push(args), bulkSourceProjectId: 10 }));
+    ui.render(React.createElement(Picker, { closeHTC }));
+    await React.act(async () => { submit({ projectId: 20, sectionId: 30 }); });
+    assert.deepEqual(requests, []);
+    assert.deepEqual(bulkMoves, []);
+    assert.equal(closed, 1);
+  } finally { ui.close(); }
+});
