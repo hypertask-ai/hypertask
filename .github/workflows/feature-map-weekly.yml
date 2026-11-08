@@ -12,6 +12,9 @@ on:
       - '.claude/skills/verify-qa/reference/feature-map/**'
       - '.claude/skills/verify-qa/reference/ops-map/**'
       - '.github/workflows/feature-map-weekly.yml'
+      - '.github/workflows/visual-regression.yml'
+      - '.github/scripts/feature-map-live-weekly-file.mjs'
+      - 'tests/feature-map-live-weekly-file.test.cjs'
 
 permissions:
   contents: read

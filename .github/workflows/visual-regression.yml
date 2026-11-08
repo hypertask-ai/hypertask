@@ -7,6 +7,8 @@ run-name: ${{ inputs.journey || 'visual' }} @ ${{ inputs.head || github.head_ref
 on:
   push:
     branches: [production]
+  schedule:
+    - cron: '5 4 * * 1'
   workflow_dispatch:
     inputs:
       base:
@@ -236,12 +238,19 @@ jobs:
 
   verify-qa:
     name: verify-qa
-    if: github.event_name == 'workflow_dispatch' && inputs.journey != '' && inputs.journey != 'visual'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.journey != '' && inputs.journey != 'visual')
+      || github.event_name == 'schedule'
+    concurrency:
+      group: ${{ github.event_name == 'schedule' && 'feature-map-live-weekly' || 'verify-qa' }}
+      cancel-in-progress: ${{ github.event_name != 'schedule' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
       packages: read
+    env:
+      VERIFY_QA_JOURNEY: ${{ github.event_name == 'schedule' && 'inbox-cycle' || inputs.journey }}
     services:
       postgres:
         image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
@@ -290,7 +299,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ inputs.head }}
+          ref: ${{ github.event_name == 'schedule' && 'production' || inputs.head }}
           persist-credentials: false
       - name: Initialize evidence
         run: mkdir -p verify-qa
@@ -299,7 +308,11 @@ jobs:
           node-version: ^24.22.1
           check-latest: true
           cache: npm
+      - name: Test weekly live filing helpers
+        if: github.event_name == 'schedule'
+        run: node --test tests/feature-map-live-weekly-file.test.cjs
       - name: Test verification helpers
+        if: github.event_name != 'schedule'
         run: node --test tests/verify-qa.test.cjs tests/verify-qa-premerge.test.cjs
       - name: Install dependencies and Chromium
         run: |
@@ -366,7 +379,6 @@ jobs:
           exit 1
       - name: Launch, doctor, drive, and tear down
         env:
-          VERIFY_QA_JOURNEY: ${{ inputs.journey }}
           VERIFY_QA_BASE: http://127.0.0.1:3100
           VERIFY_QA_STATE_FILE: e2e/smoke/.state/smoke-state.json
           VERIFY_QA_FIXTURE: e2e/smoke/.state/inbox-cycle-fixture.json
@@ -383,7 +395,6 @@ jobs:
         if: always()
         env:
           VERIFY_QA_JOB_STATUS: ${{ job.status }}
-          VERIFY_QA_JOURNEY: ${{ inputs.journey }}
           VERIFY_QA_STATE_FILE: e2e/smoke/.state/smoke-state.json
         run: node scripts/verify-qa-run.mjs --summary
       - name: Upload verification evidence
@@ -401,3 +412,9 @@ jobs:
           ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
         run: |
           printf '\nEvidence artifact: %s\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: File fleet-board weekly result
+        if: always() && github.event_name == 'schedule'
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          FEATURE_MAP_LIVE_ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
+        run: node .github/scripts/feature-map-live-weekly-file.mjs

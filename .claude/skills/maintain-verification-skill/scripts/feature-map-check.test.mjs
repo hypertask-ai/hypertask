@@ -343,9 +343,11 @@ test('filing is once per ISO week under RUNNER 8 with exact CLI contract', t => 
   ok(f.run('--pages', 'area-00.md'));
   const calls = readFileSync(path.join(f.home, 'vcc-calls'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].slice(0, 4), ['task', 'create', '--project', '4060']);
-  assert.match(calls[0][5], /^Feature map drift \d{4}-W\d{2}: 1 pages$/);
-  assert.equal(calls[0][6], '--description-file');
+  assert.deepEqual(calls[0].slice(0, 4), ['task', 'create', '--project', '11514']);
+  assert.equal(calls[0][4], '--labels');
+  assert.equal(calls[0][5], 'CI,Hypertask CI,brain-light');
+  assert.match(calls[0][7], /^Feature map drift \d{4}-W\d{2}: 1 pages$/);
+  assert.equal(calls[0][8], '--description-file');
   assert.deepEqual(calls[0].slice(-2), ['--priority', 'medium']);
   assert.equal(readdirSync(f.state).filter(name => name.startsWith('filed-')).length, 1);
 });
