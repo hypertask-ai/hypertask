@@ -68,7 +68,6 @@ import {
   isInternalAgentTicketBoard,
   PlainLanguageTicketError,
 } from "@/lib/tickets/plainLanguageTicket.mjs";
-import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } from "@/lib/flags/definitions/htpr-7933-plain-language-ticket-template";
 
 type UpdateTaskSingleOptions = {
@@ -418,7 +417,7 @@ export async function updateTaskSingle(
           isInternalAgentTicketBoard(targetProject) &&
           updateData.section === "Valentin Review"
         ) {
-          if (await isFeatureEnabled(HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG, currentUser.id)) {
+          if (await (await import("@/lib/flags")).isFeatureEnabled(HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG, currentUser.id)) {
             const descriptionHtml =
               typeof requestedMutation.description === "string"
                 ? requestedMutation.description

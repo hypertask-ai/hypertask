@@ -219,9 +219,8 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
     "@/lib/mcp/tasks/agentDoneLifecycle": { assertAgentMayLeaveDone: noop, AgentDoneLifecycleDeniedError: class extends Error {} },
     "@/lib/cycleService": { CycleAssignmentError: class extends Error {} },
     "@/utils/controllers/notifications/broadcastInboxForTask": { broadcastInboxForTask: noop },
-    "@/lib/flags": { isFeatureEnabled: async () => false },
   };
-  stubs = withStubs({}, stubs);
+  stubs = withStubs({ "@/lib/flags": { isFeatureEnabled: async () => false } }, stubs);
   const single = load("src/utils/controllers/tasks/single.ts", stubs);
   const mover = load("src/utils/controllers/tasks/moveToDifferentBoard.ts", {
     "@/lib/prisma": stubs["@/lib/prisma"], "@prisma/client": client,
