@@ -86,15 +86,25 @@ function fixture({ resumes, focusedIndex = 0, count = 6 }) {
   const file = path.join(scratch, `first-key-${resumes}-${count}-${focusedIndex}.ts`);
   fs.writeFileSync(file, script);
   const render = loadModule(file);
-  const bound = render(context);
+  const selectedKey = () => context.selectedKeyboardRow?.key ?? null;
+  let bound = null;
+  let boundKey = null;
+  const listener = () => {
+    if (bound === null || boundKey !== selectedKey()) {
+      boundKey = selectedKey();
+      bound = render(context);
+    }
+    return bound;
+  };
   return {
     context,
     keys,
+    keyboardNavigationRef: context.keyboardNavigationStarted,
     async press(keyCode) {
-      await bound.press({ keyCode, preventDefault() {} });
+      await listener().press({ keyCode, preventDefault() {} });
     },
     hover(index) {
-      bound.hover(index, { movementX: 1, movementY: 0 });
+      listener().hover(index, { movementX: 1, movementY: 0 });
     },
   };
 }
@@ -113,6 +123,17 @@ test("J then follows the displayed order from the first row", async () => {
     visited.push(f.context.selectedKeyboardRow.key);
   }
   assert.deepEqual(visited, f.keys);
+});
+
+test("the started state survives the listener rebinding to the new row", async () => {
+  const f = fixture({ resumes: false });
+  await f.press(74);
+  assert.equal(f.keyboardNavigationRef.current, true);
+  await f.press(74);
+  assert.equal(f.context.selectedKeyboardRow.key, f.keys[1]);
+  assert.equal(f.keyboardNavigationRef.current, true);
+  await f.press(74);
+  assert.equal(f.context.selectedKeyboardRow.key, f.keys[2]);
 });
 
 test("the first K after opening the inbox also stays on the first row", async () => {
