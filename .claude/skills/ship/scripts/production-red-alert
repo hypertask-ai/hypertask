@@ -280,7 +280,7 @@ async function apply(p, state, api, persist) {
     a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, runAttempt: p.run.run_attempt || 1, runStartedAt: p.run.run_started_at || p.run.created_at, fixer: p.fixer, files: p.failures.map(f => f.file) };
     persist();
     const result = json(api.write(['task', 'create', '--project', '4060', '--section', 'In Progress',
-      '--title', p.title, '--description', p.description, '--priority', 'urgent', '--json']));
+      '--title', p.title, '--description', p.description, '--priority', 'urgent', '--labels', 'Incident,brain-medium', '--json']));
     if (result.success !== true) throw new Error('Create returned no success receipt; reconcile saved intent');
     a.ticket = result.task?.ticketNumber || result.tasks?.[0]?.ticketNumber;
     if (!/^YPER4-\d+$/.test(a.ticket || '')) throw new Error('Create returned no alert ticket reference; reconcile saved intent');
