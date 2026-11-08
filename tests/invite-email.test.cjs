@@ -52,6 +52,7 @@ stub("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: ({ cur
 stub("src/utils/helperFunctions/Views/ViewsHelperFunctions.ts", { getViewFromProject: () => undefined });
 stub("src/lib/demo/guestGuard.ts", { isGuestRequest: async () => false });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 7 }) });
+stub("src/lib/auth/unverifiedEmailAccount.ts", { unverifiedEmailAccount: async () => "allowed" });
 stub("src/utils/controllers/getMemberAndOwnerForBoard.ts", { default: async () => boardMemberIds });
 stub("src/pages/api/invite/cancelInvite.ts", { cancelInvite: async (...args) => { cancelled.push(args); } });
 stub("src/lib/telemetry/inviteAnalytics.ts", { enqueueInviteSent: async () => null, enqueueMemberJoined: async () => null });

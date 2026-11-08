@@ -15,6 +15,7 @@ import { sendEmailNotification } from "@/utils/controllers/notifications/sendNot
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
+import { unverifiedEmailAccount } from "@/lib/auth/unverifiedEmailAccount";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -68,6 +69,7 @@ export const addMemberController = async (
   emails: string[],
   actingAgentId?: string | null,
 ) => {
+  if ((await unverifiedEmailAccount(userId)) !== "allowed") return { status: 403, json: { message: "Please confirm your email before inviting people." } };
   try {
     const currentProject = await prisma.project.findFirst({
       where: {

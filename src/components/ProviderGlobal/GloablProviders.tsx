@@ -185,6 +185,8 @@ import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/keys";
+import { isGuestUser } from "@/lib/demo/guest";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import ChatWindowStackMount from "../AI_CHAT/ChatWindowStackMount";
@@ -268,6 +270,28 @@ import {
   shouldShowMobileBoardControls,
 } from "@/lib/boardStartup/mobileControls";
 import { shouldEnableSecondaryStartup } from "@/lib/boardStartup/secondaryRequests";
+
+type StraightBoardAccount = { email?: string | null; uid?: string | null; straightBoardSignup?: boolean; UserSetting?: { isVerified?: boolean | null } | null };
+
+const isStraightBoardAccount = (user: StraightBoardAccount | null) =>
+  Boolean(user && (user.straightBoardSignup || String(user.uid ?? "").startsWith("email_sb_")));
+
+function StraightBoardConfirmStrip({
+  pathname,
+  currentUser,
+}: {
+  pathname: string | null;
+  currentUser: StraightBoardAccount | null;
+}) {
+  if (!currentUser || isGuestUser(currentUser) || !isStraightBoardAccount(currentUser)) return null;
+  if (currentUser.UserSetting?.isVerified ?? true) return null;
+  if (pathname && ["/login","/onboarding","/verify-email","/invite","/share","/unauthorized"].some((p) => pathname.startsWith(p))) return null;
+  return (
+    <div className="z-sticky w-full border-b border-light-black-border-1 bg-containerBackground px-4 py-3 text-center text-content text-white-black" role="status">
+      <span className="text-hypertasks-green">Please confirm your email</span>
+    </div>
+  );
+}
 
 const preventEscapeOnCommandModes: CommandMode[] = [
   CommandMode.AICustomInstruction,
@@ -623,6 +647,10 @@ export default function GlobalProvider({
 
   const { showEmailVerificationModal, setShowEmailVerificationModal } =
     useEmailVerificationModal();
+  const straightBoardSignup = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
+  const enrolledStraightBoard =
+    isStraightBoardAccount(currentUser as StraightBoardAccount | null) && !isGuestUser(currentUser);
+  const emailVerificationBlocking = showEmailVerificationModal && !enrolledStraightBoard;
 
   const navigateFromGlobalGShortcut = useCallback(
     async (action: GlobalGShortcutAction) => {
@@ -674,7 +702,7 @@ export default function GlobalProvider({
   const globalGShortcutIgnoreRef = useRef(false);
   globalGShortcutIgnoreRef.current =
     showTrialModal ||
-    showEmailVerificationModal ||
+    emailVerificationBlocking ||
     !areGlobalShortcutsEnabled(pathname);
 
   useEffect(() => {
@@ -708,12 +736,12 @@ export default function GlobalProvider({
     isApple,
     pathname,
     showTrialModal,
-    showEmailVerificationModal,
+    emailVerificationBlocking,
     toggleShowCommands,
   );
 
   const handleKeyPress = async (e: KeyboardEvent) => {
-    if (showTrialModal || showEmailVerificationModal) return;
+    if (showTrialModal || emailVerificationBlocking) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
     if (isFavoriteBoardShortcut(e, isApple)) {
@@ -1274,7 +1302,7 @@ export default function GlobalProvider({
         />
       )}
 
-      {showEmailVerificationModal && currentUser && (
+      {emailVerificationBlocking && currentUser && (
         <EmailVerificationModal
           currentUser={currentUser}
           onVerified={() => {
@@ -1303,6 +1331,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
+      {(straightBoardSignup || enrolledStraightBoard) && <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />}
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}

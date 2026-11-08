@@ -1,3 +1,4 @@
+const { straightBoardRouteStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -48,8 +49,9 @@ function harness({ redisFailure = false, existing = false } = {}) {
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
   const aliases = {
+    ...straightBoardRouteStubs,
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
-    '@/lib/flags': { isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return true } },
+    '@/lib/flags': { isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify' || key === 'htpr-7553-email-straight-board') return false; calls.flags.push([key, id]); return true } },
     '@/lib/prisma': {
       user: { create: async () => { accountExists = true; return user }, findFirst: async () => accountExists ? user : null, findUnique: async () => user, update: async () => user },
       googleAccount: { findFirst: async () => null },
@@ -592,7 +594,10 @@ test('email browser starts always prepare legacy payloads without consulting cli
       global.fetch = async (url, options) => { payloads.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ success: true }) } }
       const hook = loader({
         react: { useState: (value) => [value, () => {}], useEffect: () => {}, useRef: (current) => ({ current }) },
-        '@/hooks/useFlag': { useFlag: () => { throw new Error('logged-out flags are unavailable') } },
+        '@/hooks/useFlag': { useFlag: (key) => {
+          if (key === 'htpr-7553-email-straight-board') return false
+          throw new Error('logged-out flags are unavailable')
+        } },
         '@/hooks/General/useAuth': { useAuth: () => ({ loginWithEmail: () => {} }) },
         '@/hooks/General/useUTMs': { useUTM: () => ({ getUTMData: () => ({}) }) },
         'next/navigation': { useSearchParams: () => new URLSearchParams() },
@@ -809,7 +814,10 @@ test('logged-out account recovery always includes awaited signup context in inst
     global.fetch = async (url, options) => { resolveSent({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ success: true }) } }
     const hook = loader({
       react: { useState: (value) => [value, () => {}], useEffect: (effect) => effects.push(effect), useRef: (current) => ({ current }) },
-      '@/hooks/useFlag': { useFlag: () => { throw new Error('logged-out flags are unavailable') } },
+      '@/hooks/useFlag': { useFlag: (key) => {
+        if (key === 'htpr-7553-email-straight-board') return false
+        throw new Error('logged-out flags are unavailable')
+      } },
       '@/hooks/General/useAuth': { useAuth: () => ({ loginWithEmail: () => {} }) },
       '@/hooks/General/useUTMs': { useUTM: () => ({ getUTMData: () => ({}) }) },
       'next/navigation': { useSearchParams: () => new URLSearchParams() },

@@ -175,6 +175,7 @@ export function activationHarness() {
     "@/utils/controllers/projects/getAll": { getProjectViewInclude: () => ({}) },
     "@/utils/controllers/notifications/sendNotification": { sendEmailNotification: async () => true },
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
+    "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed" },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 123 }) },
     "@/utils/controllers/getMemberAndOwnerForBoard": { default: async () => [123] },
     "@/lib/auth/session": { verifySession: () => ({ id: 50 }) },

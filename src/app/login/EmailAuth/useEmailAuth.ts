@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation'
 import { parseSafeReturnTo, POST_LOGIN_REDIRECT_STORAGE_KEY } from '@/lib/auth/safeReturnTo'
 import { getSignupContextInput } from '@/lib/analytics/signupIdentityClient'
 import { authClient } from '@/lib/auth/betterAuthClient'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/keys'
 
 export type EmailAuthStep = 'form' | 'link-sent' | 'signing-in' | 'code-input'
 
@@ -35,6 +37,8 @@ const PROCESSED_TOKEN_KEY = 'email_token_processed'
 
 export function useEmailAuth(initialEmail = '') {
   const isBetterAuthEnabled = process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL === '1'
+  const straightBoardSignup = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG)
+  const betterAuthEmail = isBetterAuthEnabled && !straightBoardSignup
   const [email, setEmail] = useState(initialEmail)
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState<{[key: string]: string}>({})
@@ -131,7 +135,7 @@ export function useEmailAuth(initialEmail = '') {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (isBetterAuthEnabled) return
+    if (betterAuthEmail) return
 
     const urlParams = new URLSearchParams(window.location.search)
     if (urlParams.get('authError') !== 'account_not_found') return
@@ -276,7 +280,7 @@ export function useEmailAuth(initialEmail = '') {
     try {
       console.log('🧪 AB Test Variant:', abTestVariant)
 
-      if (isBetterAuthEnabled) {
+      if (betterAuthEmail) {
         const { error } = await authClient.signIn.emailOtp({
           email,
           otp: verificationCode,
@@ -352,7 +356,7 @@ export function useEmailAuth(initialEmail = '') {
     
     try {
       console.log('📧 Sending custom sign-in link to:', email)
-      if (isBetterAuthEnabled) {
+      if (betterAuthEmail) {
         sessionStorage.setItem('ht_pending_ba_email', email)
         const { error } = await authClient.signIn.magicLink({
           email,
@@ -395,6 +399,11 @@ export function useEmailAuth(initialEmail = '') {
           throw new Error(data.error || 'Failed to send sign-in link')
         }
 
+        if (typeof data.straightBoardRedirect === 'string') {
+          window.location.assign(data.straightBoardRedirect)
+          return
+        }
+
         console.log('✅ Sign-in link sent successfully')
 
         if (process.env.NODE_ENV === 'development' && data.devLink) {
@@ -431,7 +440,7 @@ export function useEmailAuth(initialEmail = '') {
     setErrors({})
     
     try {
-      if (isBetterAuthEnabled) {
+      if (betterAuthEmail) {
         sessionStorage.setItem('ht_pending_ba_email', email)
         const { error } = await authClient.signIn.magicLink({
           email,
@@ -485,7 +494,7 @@ export function useEmailAuth(initialEmail = '') {
   }
 
   const enterCodeManually = async () => {
-    if (!isBetterAuthEnabled) {
+    if (!betterAuthEmail) {
       setStep('code-input')
       return
     }
