@@ -34,12 +34,12 @@ test("every assignment activity snapshot preserves the user profile photo", () =
   );
   assert.match(
     taskDetailLoadSource,
-    /const assignmentActivityWithCurrentAvatars = Prisma\.sql`[\s\S]*fromUser,user,photoURL[\s\S]*toUser,user,photoURL[\s\S]*`;/
+    /const assignmentActivityWithCurrentAvatars = \(userId: number, projectId: Prisma\.Sql\) => Prisma\.sql`[\s\S]*fromUser,user,photoURL[\s\S]*toUser,user,photoURL[\s\S]*`;/
   );
   assert.equal(
     (
       taskDetailLoadSource.match(
-        /\$\{assignmentActivityWithCurrentAvatars\} AS activity/g
+        /\$\{assignmentActivityWithCurrentAvatars\([^)]*\)\} AS activity/g
       ) || []
     ).length,
     2

@@ -83,7 +83,11 @@ function fixture({ flagOn = true, rows = [], tasks = [blockedTask], accessible =
   const mocks = {
     "@/lib/prisma": { default: db },
     "@/lib/flags": { isFeatureEnabled: async requested => requested === key && flagOn },
-    "@/lib/flags/keys": {},
+    "@/lib/flags/keys": {
+      HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG: key,
+      HTPR_8090_ASSIGNEE_INBOX_FLAG: "htpr-8090-assignee-inbox",
+      HTPR_8917_AGENT_WAITING_PERSON_FLAG: "htpr-8917-agent-waiting-person",
+    },
     "@/lib/auth/agentScope": { agentScopeEnforced: () => false },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId }) },
     "@/lib/api/task-writes/route": { taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request) },
