@@ -3,7 +3,7 @@ import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-
 import {
   sanitizeTableGroupBy,
   type TableGroupBy,
-} from "@/components/PageComponents/Kanban/TableView/tableGroupByTag";
+} from "@/lib/table-view/tableGroupByTag";
 
 export async function gatedTableGroupByForViewWrite(
   value: unknown,

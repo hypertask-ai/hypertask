@@ -12,6 +12,8 @@ import useHandleKeydownBasic from "@/hooks/General/useHandleKeydownBasic";
 import toast from "react-hot-toast";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
 
 type PersonalOptions = {
     canSaveCurrent: boolean;
@@ -99,6 +101,7 @@ const SaveViewModal: React.FC<TProps> = (props) => {
 
 const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
     const { updateView, resetView, saveAsDefaultHandler} = useKanbanViews(project)
+    const tableGroupByTagEnabled = useFlag(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG)
     const queryClient = useQueryClient()
     const getExplicitBoardLayout = () => savedBoardLayoutFromExplicitSurface(
         typeof window === "undefined"
@@ -127,7 +130,9 @@ const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
             board_show_archived: getActiveShowArchivedOverrideFromProject(sourceProject),
             table_sort_column: activeTableSort?.column ?? null,
             table_sort_direction: activeTableSort?.direction ?? null,
-            table_group_by: getActiveTableGroupByFromProject(sourceProject),
+            table_group_by: tableGroupByTagEnabled
+                ? getActiveTableGroupByFromProject(sourceProject)
+                : "column",
             board_layout: getExplicitBoardLayout() ?? getActiveBoardLayoutPreferenceFromProject(sourceProject),
         },
         userId: currentUser?.id ?? 0,

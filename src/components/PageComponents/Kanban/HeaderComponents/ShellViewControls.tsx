@@ -22,7 +22,7 @@ import SearchFilter from "./SearchFilter"
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
 import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag"
-import type { TableGroupBy } from "@/components/PageComponents/Kanban/TableView/tableGroupByTag"
+import type { TableGroupBy } from "@/lib/table-view/tableGroupByTag"
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
   const isMbl = useContext(MobileViewContext)

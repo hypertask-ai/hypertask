@@ -7,7 +7,7 @@ import {
   sanitizeTableGroupBy,
   NO_TAG_SECTION_TITLE,
   tableGroupSectionId,
-} from "../src/components/PageComponents/Kanban/TableView/tableGroupByTag";
+} from "../src/lib/table-view/tableGroupByTag";
 
 test("sanitizeTableGroupBy accepts column and tag", () => {
   assert.equal(sanitizeTableGroupBy("column"), "column");

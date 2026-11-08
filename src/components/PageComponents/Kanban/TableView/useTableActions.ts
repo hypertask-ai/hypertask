@@ -11,6 +11,7 @@ import { toggleTaskTimer } from "@/hooks/Task Detail/useTimeTracking";
 import toast from "react-hot-toast";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-8625-board-inbox-archive";
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag";
 import globalAPIHandlers from "@/utils/api/global";
 import { canDropTableRow, parseTableRowDragData } from "./tableRowDrag";
 import type { TableViewProps } from "./tableViewShared";
@@ -24,6 +25,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
 
 export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
+  const tableGroupByTagEnabled = useFlag(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG);
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
   _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
@@ -92,15 +94,20 @@ export function useTableActions(context: Context) {
     async (task: ITask, index: number) => {
       setSelectedIndex(index);
       updateActiveItemAndItemInView(task);
-      const seenPlaylist = new Set<string>();
-      const playlist: { projectId: number; uniqueIndex: number }[] = [];
-      for (const row of rows) {
-        if (!isTaskRow(row)) continue;
-        const key = `${row.task.projectId}:${row.task.uniqueIndex}`;
-        if (seenPlaylist.has(key)) continue;
-        seenPlaylist.add(key);
-        playlist.push({ projectId: row.task.projectId, uniqueIndex: row.task.uniqueIndex });
-      }
+      const playlist = tableGroupByTagEnabled
+        ? (() => {
+            const seenPlaylist = new Set<string>();
+            const next: { projectId: number; uniqueIndex: number }[] = [];
+            for (const row of rows) {
+              if (!isTaskRow(row)) continue;
+              const key = `${row.task.projectId}:${row.task.uniqueIndex}`;
+              if (seenPlaylist.has(key)) continue;
+              seenPlaylist.add(key);
+              next.push({ projectId: row.task.projectId, uniqueIndex: row.task.uniqueIndex });
+            }
+            return next;
+          })()
+        : rows.filter(isTaskRow).map(({ task }) => ({ projectId: task.projectId, uniqueIndex: task.uniqueIndex }));
       setTasksPlayList(playlist);
       navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
     },

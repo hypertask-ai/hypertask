@@ -22,7 +22,7 @@ import { syncSectionAutoAssignFromCanonical } from "@/lib/sectionAutoAssign";
 import {
   sanitizeTableGroupBy,
   type TableGroupBy,
-} from "@/components/PageComponents/Kanban/TableView/tableGroupByTag";
+} from "@/lib/table-view/tableGroupByTag";
 
 
 export const defaultBoardSortingSettings: TBoardSortingViewMode = "Manual"

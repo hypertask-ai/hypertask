@@ -1,6 +1,6 @@
 import type { ISection, ITask } from "@/models/model";
 
-import type { TableCreateTaskSection, TableSectionIdentifier } from "./tableCreateTask";
+import type { TableCreateTaskSection, TableSectionIdentifier } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
 
 export type TableGroupBy = "column" | "tag";
 
