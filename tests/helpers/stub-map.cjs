@@ -9,6 +9,7 @@ const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
 
 const emailStraightBoardStubs = {
   "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+  "@/lib/telemetry/signupAnalytics": { signupAttributionFromHeaders: () => ({}) },
   "@/lib/flags/definitions/htpr-7553-email-straight-board": { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG: "htpr-7553-email-straight-board" },
   "@/lib/auth/emailStraightBoard": {
     finishStraightBoardEmailSignup: async () => ({ ok: false }),
