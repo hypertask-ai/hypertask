@@ -104,6 +104,9 @@ function makeHarness(redis = makeRedis()) {
     } },
     '@/lib/auth/safeReturnTo': loadTs('src/lib/auth/safeReturnTo.ts'),
     '@/lib/email/sendEmail': { sendEmail: async (args) => { calls.emails.push(args) } },
+    '@/lib/flags/definitions/htpr-7294-daily-funnel-probe': { HTPR_7294_DAILY_FUNNEL_PROBE_FLAG: 'htpr-7294-daily-funnel-probe' },
+    '@/lib/funnelProbe/inbox': { storeProbeVerificationLink: async () => {} },
+    '@/lib/funnelProbe/probeEmail': { isProbeRecipientEmail: () => false },
   }
   if (fs.existsSync(path.join(root, 'src/lib/auth/emailLinkToken.ts'))) {
     aliases['@/lib/auth/emailLinkToken'] = loadTs('src/lib/auth/emailLinkToken.ts', {
