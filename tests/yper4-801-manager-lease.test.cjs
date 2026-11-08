@@ -33,7 +33,7 @@ let opSeq;
 function approvalComment() {
   const createdAt = new Date();
   return {
-    id: 7, taskId: 9, text: `Switch ${key} to Owner + QA`, commentText: null,
+    id: 7, taskId: 9, text: `Question: Switch ${key} to Owner + QA?`, commentText: null,
     creatorId: 6, agentId: null, agentDisplayName: null, editedAt: null,
     editedByUserId: null, editedByAgentId: null, createdAt, reactions: [{ createdAt }],
   };
@@ -195,7 +195,7 @@ test("a manager with the current grant and one clear yes switches the flag", asy
   approved = true;
   const response = await patch({ [MANAGER_GRANT_HEADER]: token });
   const body = await response.json();
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 200, JSON.stringify(body));
   assert.deepEqual([setCalls.length, setCalls[0][0], setCalls[0][1], body.flag.mode], [1, key, "OWNER_AND_QA", "OWNER_AND_QA"]);
 });
 
