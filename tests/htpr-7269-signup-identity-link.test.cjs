@@ -49,6 +49,7 @@ function harness({ redisFailure = false, existing = false } = {}) {
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
   const aliases = {
+    ...emailStraightBoardStubs,
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
     '@/lib/flags': { isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return true } },
     '@/lib/prisma': {
