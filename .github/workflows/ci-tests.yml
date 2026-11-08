@@ -83,8 +83,7 @@ jobs:
     # review-first `full-ci` label (owner, 2026-08-26) left ci-tests SKIPPED
     # until the label arrived, and GitHub's ruleset counts SKIPPED as passing:
     # PRs 782, 798 and 799 went live that way, and 782 broke the suite. Every
-    # non-draft PR now runs the gate on code/lifecycle events; superseded runs
-    # queue behind earlier pending runs instead of cancelling them. A job-level
+    # non-draft PR now runs the gate on code/lifecycle events. A job-level
     # skip is never used here, because a skipped run
     # newer than a failed one would read as passing again.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
