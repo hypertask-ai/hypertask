@@ -7,7 +7,6 @@ import { parseSafeReturnTo, POST_LOGIN_REDIRECT_STORAGE_KEY } from '@/lib/auth/s
 import { getSignupContextInput } from '@/lib/analytics/signupIdentityClient'
 import { authClient } from '@/lib/auth/betterAuthClient'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board'
 
 export type EmailAuthStep = 'form' | 'link-sent' | 'signing-in' | 'code-input'
 
@@ -47,7 +46,7 @@ export function useEmailAuth(initialEmail = '') {
   const [isProcessingToken, setIsProcessingToken] = useState(false)
   const searchParams = useSearchParams()
   const { loginWithEmail } = useAuth()
-  const emailStraightBoardFlag = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG)
+  const emailStraightBoardFlag = useFlag('htpr-7553-email-straight-board')
   const accountRecoveryStartedRef = useRef(false)
   const conditionalPasskeyStartedRef = useRef(false)
 

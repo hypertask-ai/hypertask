@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board';
 
 interface UseResendVerificationEmailReturn {
   isResending: boolean;
@@ -26,7 +25,7 @@ export const useResendVerificationEmail = (): UseResendVerificationEmailReturn =
     try {
       const response = await axios.post('/api/auth/send-email-link', {
         email,
-        resendEmailVerification: true,
+        ...(straightBoardFlag ? { resendEmailVerification: true } : {}),
       });
 
       if (response.data.success) {
