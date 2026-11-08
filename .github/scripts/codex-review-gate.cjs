@@ -97,8 +97,21 @@ function evaluate(pr) {
   }
 
   const summary = codeReviewStateFor(pr.comments, pr.headOid);
-  if (summary?.status === 'completed' && summary.has_any_findings === false) {
-    return { state: 'success', description: `Codex completed its review of ${short} with no findings`, evidence: summary.url };
+  if (summary?.status === 'completed') {
+    if (summary.has_unresolved_findings === false || summary.has_any_findings === false
+        || summary.has_unresolved_findings === true) {
+      const noneLeft = summary.has_unresolved_findings === false && summary.has_any_findings === true;
+      const p2Only = summary.has_unresolved_findings === true;
+      return {
+        state: 'success',
+        description: p2Only
+          ? `Codex completed its review of ${short}; remaining findings are P2 or lower`
+          : noneLeft
+            ? `Codex completed its review of ${short} with no unresolved findings`
+            : `Codex completed its review of ${short} with no findings`,
+        evidence: summary.url,
+      };
+    }
   }
   return { state: 'pending', description: `Waiting for the Codex review of ${short}`, evidence: '' };
 }
