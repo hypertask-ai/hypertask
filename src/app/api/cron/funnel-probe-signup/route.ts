@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
-import { isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7294_DAILY_FUNNEL_PROBE_FLAG } from "@/lib/flags/definitions/htpr-7294-daily-funnel-probe";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (!(await isFeatureEnabled(HTPR_7294_DAILY_FUNNEL_PROBE_FLAG, null))) {
+  if (!(await isFeatureEnabled(HTPR_7294_DAILY_FUNNEL_PROBE_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
     return NextResponse.json({ ok: false, disabled: true }, { status: 404 });
   }
   return NextResponse.json({ ok: true, runner: "github-actions", workflow: "funnel-probe-daily.yml" });
