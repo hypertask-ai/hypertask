@@ -14,8 +14,6 @@ import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customIn
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7394_REMAINING_AI_SPEND_FLAG } from "@/lib/flags/definitions/htpr-7394-remaining-ai-spend";
-import { nativeWebSearchAllowed } from "@/lib/ai/spend/remainingSpend";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
@@ -35,9 +33,9 @@ async function nativeSearchForSelection(provider: string, apiKey: unknown, userI
   const key = typeof apiKey === "string" ? apiKey.trim() : "";
   const ours = [process.env.AI_GATEWAY_API_KEY, process.env.DEMO_AI_GATEWAY_API_KEY, process.env.TURBOPUFFER_EMBEDDINGS_API_KEY, ...(key.startsWith("vck_") ? ["GATEWAY_KEY_HYPERTASK", "GATEWAY_KEY_INNE", "GATEWAY_KEY_VETSAK", "GATEWAY_KEY_BAYBELLA", "GATEWAY_KEY_RODRIGO", "GATEWAY_KEY_D2LAW", "GATEWAY_KEY_PERRY", "GATEWAY_KEY_PUROLOGIX", "GATEWAY_KEY_KVWULP", "GATEWAY_KEY_ALLOCATOR", "GATEWAY_KEY_VALENTIN"].map((name) => process.env[name]) : [])].some((value) => value?.trim() === key);
   let on = false;
-  try { if (typeof isFeatureEnabled === "function" && userId && await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, userId)) on = true; } catch { on = false; }
-  if (typeof nativeWebSearchAllowed !== "function") return provider === "claude" || provider === "openai";
-  return nativeWebSearchAllowed(provider, Boolean(key) && !ours, on);
+  try { if (typeof isFeatureEnabled === "function" && userId && await isFeatureEnabled("htpr-7394-remaining-ai-spend", userId)) on = true; } catch { on = false; }
+  const pays = Boolean(key) && !ours;
+  return (provider === "claude" || provider === "openai") && !(on && !pays);
 }
 
 export const SSE_HEADERS = {
