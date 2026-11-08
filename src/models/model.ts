@@ -370,6 +370,7 @@ export interface IView {
   board_show_archived?: boolean | null;
   table_sort_column?: string | null;
   table_sort_direction?: string | null;
+  table_group_by?: string | null;
   board_layout?: "Board" | "Table" | null;
   ViewLastUsed: IView_Last_Used[];
 }

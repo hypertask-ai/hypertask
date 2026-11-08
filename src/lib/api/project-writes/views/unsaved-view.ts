@@ -21,6 +21,7 @@ import {
   resolveBoardLayoutRequest,
   resolveShowArchivedRequest,
   sanitizeBoardLayout,
+  sanitizeTableGroupBy,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -51,6 +52,7 @@ const route = taskWriteRoute({
       board_staleness,
       table_sort_column,
       table_sort_direction,
+      table_group_by,
       baseViewId,
     } = req.body;
     const hasBaseViewId = Object.prototype.hasOwnProperty.call(
@@ -65,6 +67,12 @@ const route = taskWriteRoute({
       table_sort_column,
       table_sort_direction
     );
+    const sanitizedTableGroupBy = Object.prototype.hasOwnProperty.call(
+      req.body,
+      "table_group_by",
+    )
+      ? sanitizeTableGroupBy(table_group_by)
+      : undefined;
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
@@ -94,6 +102,7 @@ const route = taskWriteRoute({
       board_show_archived: null,
       table_sort_column: null,
       table_sort_direction: null,
+      table_group_by: null,
       board_layout: null,
     };
     try {
@@ -182,6 +191,7 @@ const route = taskWriteRoute({
         board_show_archived: resolvedShowArchived,
         table_sort_column: sanitizedTableSort.column,
         table_sort_direction: sanitizedTableSort.direction,
+        table_group_by: sanitizedTableGroupBy ?? null,
         board_layout: resolvedBoardLayout,
       };
 
@@ -205,6 +215,7 @@ const route = taskWriteRoute({
               board_show_archived: baseView.board_show_archived,
               table_sort_column: baseView.table_sort_column,
               table_sort_direction: baseView.table_sort_direction,
+              table_group_by: baseView.table_group_by,
               board_layout: sanitizeBoardLayout(baseView.board_layout),
             }
           : superDefault;
@@ -246,6 +257,7 @@ const route = taskWriteRoute({
             board_show_archived: resolvedShowArchived,
             table_sort_column: sanitizedTableSort.column,
             table_sort_direction: sanitizedTableSort.direction,
+            table_group_by: sanitizedTableGroupBy ?? null,
             board_layout: resolvedBoardLayout,
             visibility: "Private",
           },
@@ -341,6 +353,7 @@ const route = taskWriteRoute({
               board_show_archived: comparisonView.board_show_archived,
               table_sort_column: comparisonView.table_sort_column,
               table_sort_direction: comparisonView.table_sort_direction,
+              table_group_by: comparisonView.table_group_by,
               board_layout: sanitizeBoardLayout(comparisonView.board_layout),
             };
 
@@ -376,6 +389,7 @@ const route = taskWriteRoute({
                 board_show_archived: resolvedShowArchived,
                 table_sort_column: sanitizedTableSort.column,
                 table_sort_direction: sanitizedTableSort.direction,
+                table_group_by: sanitizedTableGroupBy ?? null,
                 board_layout: resolvedBoardLayout,
               },
             }));

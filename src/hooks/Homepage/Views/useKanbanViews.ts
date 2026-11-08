@@ -39,6 +39,7 @@ import {
   getActiveSortingStackFromProject,
   getActiveSubtaskSettingFromProject,
   getActiveTableSortFromProject,
+  getActiveTableGroupByFromProject,
   getViewFromProject,
   getProjectForViewMutation,
   enqueueBoardViewMutation,
@@ -242,6 +243,7 @@ const useKanbanViews = (project: IProject | null) => {
     board_show_archived: getActiveShowArchivedOverrideFromProject(queuedProject),
     table_sort_column: getActiveTableSortFromProject(queuedProject)?.column ?? null,
     table_sort_direction: getActiveTableSortFromProject(queuedProject)?.direction ?? null,
+    table_group_by: getActiveTableGroupByFromProject(queuedProject),
     board_layout: boardLayoutForRequest(queuedProject),
     ...overrides,
   });
@@ -406,6 +408,16 @@ const useKanbanViews = (project: IProject | null) => {
     (queuedProject) => buildUnsavedBody(queuedProject, {
       table_sort_column: tableSort?.column ?? null,
       table_sort_direction: tableSort?.direction ?? null,
+    }),
+    project,
+  );
+
+  const setTableGroupByViewAndReturn = async (
+    project: IProject,
+    tableGroupBy: ReturnType<typeof getActiveTableGroupByFromProject>,
+  ) => apiHandler(
+    (queuedProject) => buildUnsavedBody(queuedProject, {
+      table_group_by: tableGroupBy,
     }),
     project,
   );
@@ -577,6 +589,7 @@ const useKanbanViews = (project: IProject | null) => {
     hasUserSelectedView,
     setBoardSortingViewAndReturn,
     setTableSortViewAndReturn,
+    setTableGroupByViewAndReturn,
     saveFilterAPI,
     setBoardColumnsViewAPI,
     switchViewHandler,

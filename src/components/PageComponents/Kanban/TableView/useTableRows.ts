@@ -8,6 +8,7 @@ import { visibleTasksFromRows } from "@/lib/myTasksBulkSelection";
 import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
 import { getSortComparator, Row, SECTION_CAP, isTaskRow } from "./tableViewShared";
+import { dedupeTasksForFlatTableSort, sectionsUseTagGrouping } from "./tableGroupByTag";
 
 type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableState>, "sortState" | "customFieldBySortColumnRef" | "sectionOrderBySid" | "timeTotals" | "timeNow" | "sections" | "expanded" | "myTasksBulk" | "setExcludedTaskIds" | "persistedActiveItem" | "showArchivedOnBoard" | "isApple" | "myTasksSnoozeEnabled" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setExpanded">;
@@ -54,7 +55,9 @@ export function useTableRows(context: Context) {
         });
 
       if (flattenSort) {
-        const allTasks = sections.flatMap((section) => section.items || []);
+        const allTasks = sectionsUseTagGrouping(sections)
+          ? dedupeTasksForFlatTableSort(sections.flatMap((section) => section.items || []))
+          : sections.flatMap((section) => section.items || []);
         return sortTasks(allTasks).map((task) => ({
           type: "task" as const,
           task,

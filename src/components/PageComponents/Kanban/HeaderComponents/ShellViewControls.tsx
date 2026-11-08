@@ -2,21 +2,30 @@
 
 import Tooltip from "@/components/Common/Tooltip"
 import { MobileViewContext } from "@/lib/contexts/mobileContext"
-import { useRecoilState, useSetRecoilState } from "@/lib/state"
+import { useRecoilState, useSetRecoilState, useRecoilValue } from "@/lib/state"
 import { CommandMode } from "@/models/enums"
 import { IProject } from "@/models/model"
-import { kanbanRunningOnlyAtom, showCommandsAtom } from "@/store"
+import { boardLayoutAtom, kanbanRunningOnlyAtom, showCommandsAtom } from "@/store"
 import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking"
 import {
   getActiveFiltersFromProject,
   getActiveSortingModeFromProject,
   getActiveSortingStackFromProject,
+  getActiveTableGroupByFromProject,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
-import { ArrowUpDown, Funnel, MoreHorizontal, Timer } from "lucide-react"
-import { useContext } from "react"
+import { ArrowUpDown, Funnel, Layers, MoreHorizontal, Timer } from "lucide-react"
+import { lazy, Suspense, useContext, useState } from "react"
 import { useKanbanModalStatesContext } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext"
 import { SaveView } from "./SaveViewHeaderKanban"
 import SearchFilter from "./SearchFilter"
+import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
+import { useFlag } from "@/hooks/useFlag"
+import { HTPR_8630_TABLE_GROUP_BY_TAG_FLAG } from "@/lib/flags/definitions/htpr-8630-table-group-by-tag"
+import type { TableGroupBy } from "@/components/PageComponents/Kanban/TableView/tableGroupByTag"
+
+const TableBoardGroupPicker = lazy(
+  () => import("@/components/PageComponents/Kanban/HeaderComponents/TableBoardGroupPicker"),
+)
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
   const isMbl = useContext(MobileViewContext)
@@ -24,7 +33,12 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
     useKanbanModalStatesContext()
   const setShowCommands = useSetRecoilState(showCommandsAtom)
   const [runningOnly, setRunningOnly] = useRecoilState(kanbanRunningOnlyAtom)
+  const boardLayout = useRecoilValue(boardLayoutAtom)
+  const tableGroupByTagEnabled = useFlag(HTPR_8630_TABLE_GROUP_BY_TAG_FLAG)
+  const { setTableGroupByViewAndReturn } = useKanbanViews(project)
+  const [groupOpen, setGroupOpen] = useState(false)
   const { timers: runningTimers } = useBoardRunningTimers(project.id)
+  const tableGroupBy = getActiveTableGroupByFromProject(project)
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
   const hasActiveSort = getActiveSortingModeFromProject(project) !== "Manual"
@@ -64,6 +78,31 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
           </span>
         )}
       </ViewControlButton>
+      {tableGroupByTagEnabled && boardLayout === "table" && (
+        <>
+          <ViewControlButton
+            label="Group table"
+            tooltipText={`Group: ${tableGroupBy === "tag" ? "Tag" : "Column"}`}
+            tooltipLeft={-88}
+            active={tableGroupBy === "tag"}
+            onClick={() => setGroupOpen(true)}
+          >
+            <Layers size={18} strokeWidth={1.75} />
+          </ViewControlButton>
+          {groupOpen && (
+            <Suspense fallback={null}>
+              <TableBoardGroupPicker
+                groupBy={tableGroupBy}
+                onClose={() => setGroupOpen(false)}
+                onChange={(next: TableGroupBy) => {
+                  setGroupOpen(false)
+                  void setTableGroupByViewAndReturn(project, next)
+                }}
+              />
+            </Suspense>
+          )}
+        </>
+      )}
       {project.timeTrackingEnabled && (
         <ViewControlButton
           label="Show only tasks with a running timer"

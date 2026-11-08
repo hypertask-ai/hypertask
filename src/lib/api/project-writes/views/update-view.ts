@@ -10,7 +10,11 @@ import {
 } from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { sanitizeBoardLayout, sanitizeTableSort } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import {
+  sanitizeBoardLayout,
+  sanitizeTableGroupBy,
+  sanitizeTableSort,
+} from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   assertViewIsNotManagedSmartSplit,
   ManagedSmartSplitMutationError,
@@ -133,6 +137,12 @@ const route = taskWriteRoute({
         view_settings.table_sort_column,
         view_settings.table_sort_direction
       );
+      const sanitizedTableGroupBy = Object.prototype.hasOwnProperty.call(
+        view_settings ?? {},
+        "table_group_by",
+      )
+        ? sanitizeTableGroupBy(view_settings.table_group_by)
+        : undefined;
       const sanitizedBoardFilters = sanitizeBoardFilters(view_settings.board_filters);
       const updatedView = await mutateView(
         sanitizedBoardFilters,
@@ -160,6 +170,9 @@ const route = taskWriteRoute({
                 : { board_show_archived: view_settings.board_show_archived ?? null }),
               table_sort_column: sanitizedTableSort.column,
               table_sort_direction: sanitizedTableSort.direction,
+              ...(sanitizedTableGroupBy === undefined
+                ? {}
+                : { table_group_by: sanitizedTableGroupBy }),
               ...(hasBoardLayout
                 ? { board_layout: sanitizeBoardLayout(view_settings.board_layout) }
                 : {}),
