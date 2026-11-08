@@ -13,6 +13,9 @@ const jiti = require("jiti")(__filename, {
   },
 });
 const entitlementPolicy = jiti(path.join(root, "src/utils/controllers/stripe/webhook/subscriptionEntitlement.ts"));
+const { clearStoredSubscriptionEntitlement: clearEntitlement } = jiti(
+  path.join(root, "src/lib/clearStoredSubscriptionEntitlement.ts"),
+);
 const { storePlanIdForTeam } = jiti(path.join(root, "src/app/api/ai/_lib/planGate.ts"));
 const controllerSource = fs.readFileSync(
   path.join(
@@ -56,6 +59,10 @@ function loadController(prisma, options = {}) {
       convertTimestampToDate: (timestamp) => new Date(timestamp * 1000),
     },
     "./subscriptionEntitlement": entitlementPolicy,
+    "@/lib/clearStoredSubscriptionEntitlement": {
+      clearStoredSubscriptionEntitlement: (teamId, subscriptionId, status) =>
+        clearEntitlement(teamId, subscriptionId, status, prisma),
+    },
   };
   const mod = { exports: {} };
   new Function("module", "exports", "require", controllerJavascript)(
