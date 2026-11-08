@@ -14,6 +14,8 @@ import {
 } from '@/lib/mcp/tasks/updateTask'
 import type { TaskDetail } from '@/lib/mcp/tasks/types'
 import prisma from '@/lib/prisma'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { IUser } from '@/models/model'
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard'
@@ -163,10 +165,11 @@ async function handleBatchGet(
     include: taskMcpGetInclude(ctx.user.id, ctx.agentId, ctx.teamScope),
   })
 
+  const agentWaitingEnabled = await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, ctx.user.id).catch(() => false)
   const tasksById = new Map(
     tasks.map((task) => [
       task.id,
-      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope),
+      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope, agentWaitingEnabled),
     ])
   )
 

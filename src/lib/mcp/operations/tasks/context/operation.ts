@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_8896_SKIP_TAKEN_WORK_FLAG } from '@/lib/flags/definitions/htpr-8896-skip-taken-work';
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person';
 import { loadTaskAgentActivities, mapRelatedTaskContext, relatedTaskContextSelect } from '@/lib/mcp/tasks/relatedTaskContext';
 import { extractPrLinks } from '@/lib/mcp/tasks/extractPrLinks';
 import {
@@ -221,7 +222,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope);
+    const agentWaitingEnabled = await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, ctx.user.id).catch(() => false);
+    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope, agentWaitingEnabled);
     const comments = recentComments.reverse().map((comment) => {
       const agent = mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
       const agentDisplayName = resolvePublicAgentDisplayName({

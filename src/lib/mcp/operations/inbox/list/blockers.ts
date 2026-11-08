@@ -6,6 +6,7 @@ import { HTPR_8200_BLOCKER_LIST_FLAG } from '@/lib/flags/definitions/htpr-8200-b
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
+import { accessibleAgentWhere } from '@/lib/agents/visibility'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 
 const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -39,6 +40,20 @@ export async function getBlockers(request: NextRequest, ctx: McpAuthContext) {
       (states.length && !['waiting', 'answered', 'no-question'].includes(states[0])) ||
       projects.some((id) => id === null)) {
     return NextResponse.json({ success: false, error: 'Invalid waiting_on, projectId, project, or state.' }, { status: 400 })
+  }
+  if (agentUuid) {
+    const visibleAgent = await prisma.agent.findFirst({
+      where: {
+        id: agentUuid,
+        revokedAt: null,
+        archivedAt: null,
+        ...accessibleAgentWhere(ctx.user.id),
+      },
+      select: { id: true },
+    })
+    if (!visibleAgent) {
+      return NextResponse.json({ success: false, error: 'Invalid waiting_on, projectId, project, or state.' }, { status: 400 })
+    }
   }
   const personId = target ?? ctx.user.id
   const answerAgentId = agentUuid ?? (mine && agentList ? ctx.agentId : null)

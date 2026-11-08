@@ -259,6 +259,21 @@ function waitingOnForReader<T extends {
     return { ...task, waitingOnAgentId: null, waitingOnAgent: null };
 }
 
+function waitingFieldsForReader(
+    task: Parameters<typeof waitingOnForReader>[0],
+    userId: number,
+    agentWaitingEnabled: boolean,
+) {
+    const reader = waitingOnForReader(task, userId);
+    if (!agentWaitingEnabled) {
+        return mapTaskWaitingOn({
+            waitingOnUserId: reader.waitingOnUserId,
+            waitingOnSetAt: reader.waitingOnSetAt,
+        });
+    }
+    return mapTaskWaitingOn(reader);
+}
+
 export function mapTaskWaitingOn(task: {
     waitingOnUserId?: number | null;
     waitingOnSetAt?: Date | string | null;
@@ -283,7 +298,13 @@ export function mapTaskWaitingOn(task: {
     };
 }
 
-export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
+export function mapTaskToMcpGetResponse(
+    task: any,
+    userId: number,
+    agentId?: string | null,
+    teamScope?: AgentTokenTeamScope | null,
+    agentWaitingEnabled = true,
+) {
     recordAgentBoardScopeMiss(task.projectId);
     task = stripForeignTaskRelations(task);
     const subTasks = Array.isArray(task.subTasks)
@@ -311,7 +332,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: str
         section: task.section,
         sectionId: task.sectionId || undefined,
         blockerCommentId: task.blockerCommentId ?? null,
-        ...mapTaskWaitingOn(waitingOnForReader(task, userId)),
+        ...waitingFieldsForReader(task, userId, agentWaitingEnabled),
         description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
@@ -403,7 +424,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: str
     return agent ? { ...withAssigneeCount, agent } : withAssigneeCount;
 }
 
-export function mapTaskToDetail(task: any, userId: number): TaskDetail {
+export function mapTaskToDetail(task: any, userId: number, agentWaitingEnabled = true): TaskDetail {
     recordAgentBoardScopeMiss(task.projectId);
     const descriptionContent = mapTaskDescriptionContent(task);
     const taskAgent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
@@ -417,7 +438,7 @@ export function mapTaskToDetail(task: any, userId: number): TaskDetail {
         section: task.section,
         sectionId: task.sectionId || 0,
         blockerCommentId: task.blockerCommentId ?? null,
-        ...mapTaskWaitingOn(waitingOnForReader(task, userId)),
+        ...waitingFieldsForReader(task, userId, agentWaitingEnabled),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         projectId: task.projectId,

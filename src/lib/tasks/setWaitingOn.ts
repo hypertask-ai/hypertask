@@ -9,6 +9,7 @@ import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-772
 import { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG } from "@/lib/flags/definitions/htpr-8205-agent-clear-blocker";
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import { actingAgentSelect } from "@/lib/agents/activityAttribution";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 
 const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -81,6 +82,7 @@ export async function setTaskWaitingOn({
         id: waitingAgentId,
         revokedAt: null,
         archivedAt: null,
+        ...boardAgentVisibilityWhere(currentUser.id),
         members: { some: { projectId: task.projectId, status: "Accepted" } },
       },
       select: { id: true, displayName: true, userId: true },

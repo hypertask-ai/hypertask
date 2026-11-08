@@ -44,7 +44,7 @@ function fixture(options = {}) {
     } },
     user: { findUnique: async ({ where }) => where.id === 7 ? owner : { displayName: "Member" } },
     agent: {
-      findFirst: async ({ where }) => where.id === "11111111-1111-4111-8111-111111111111" && !options.agentMissing
+      findFirst: async ({ where }) => where.id === "11111111-1111-4111-8111-111111111111" && !options.agentMissing && !options.agentInvisible
         ? { id: where.id, displayName: "Runner 9", userId: 6 }
         : null,
       findUnique: async () => null,
@@ -410,6 +410,14 @@ test("agent waiting flag off refuses an agent id before a write", async () => {
   assert.deepEqual(await response.json(), { success: false, error: "Agent waiting person is not enabled" });
   assert.deepEqual(f.writes, []);
   assert.deepEqual(f.access, []);
+});
+
+test("agent waiting flag on rejects a private agent the caller cannot see", async () => {
+  const f = fixture({ agentWaitingFlag: true, agentInvisible: true });
+  const response = await f.post({ taskId: 42, agentId: runner9 });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { success: false, error: "Agent is not a member of this project." });
+  assert.deepEqual(f.writes, []);
 });
 
 test("agent waiting flag on stores the agent, clears the person, and names the agent", async () => {
