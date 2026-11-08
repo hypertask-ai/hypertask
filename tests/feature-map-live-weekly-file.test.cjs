@@ -29,6 +29,7 @@ function boardExec(rows) {
     const route = args.filter((a) => a !== '--json')
     const hit = rows.find((row) => row.when(binary, route))
     if (!hit) throw new Error(`unexpected ${binary} ${route.join(' ')}`)
+    if (typeof hit.body === 'string') return hit.body
     return JSON.stringify(hit.body)
   }
 }
@@ -66,10 +67,10 @@ test('fileWeeklyLiveResult creates then dedupes activity', async () => {
       return JSON.stringify({ success: true, task: { id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205', section: 'Backlog' } })
     }
     if (binary === 'vcc' && route[0] === 'activity' && route[1] === 'list') {
-      return JSON.stringify({ success: true, activities: [] })
+      return ''
     }
     if (binary === 'vcc' && route[0] === 'activity' && route[1] === 'add') {
-      return JSON.stringify({ success: true })
+      return 'activity-1'
     }
     throw new Error(`unexpected ${binary} ${route.join(' ')}`)
   }
@@ -82,6 +83,7 @@ test('fileWeeklyLiveResult creates then dedupes activity', async () => {
   assert.equal(first.duplicate, false)
   assert.equal(first.counts.total, 0)
 
+  const priorNote = 'feature-map-live-weekly 2026-W45 feature-map-live-weekly 2026-W45 Pass: 0 Fail: 0 Verdict: FAIL SHA: unknown'
   const second = await fileWeeklyLiveResult({
     week: '2026-W45',
     evidenceDir: '/missing',
@@ -92,7 +94,7 @@ test('fileWeeklyLiveResult creates then dedupes activity', async () => {
       },
       {
         when: (binary, route) => binary === 'vcc' && route[0] === 'activity' && route[1] === 'list',
-        body: { success: true, activities: [{ text: 'feature-map-live-weekly 2026-W45\nPass: 0' }] },
+        body: `2026-11-08T00:00:00.000Z\tCI Boss\t${priorNote}`,
       },
     ]),
   })

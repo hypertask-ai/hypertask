@@ -98,7 +98,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   });
   for (const [event, journey, group, cancel, visual, verify] of [
     ["push", "", "visual-regression-push-sha", false, true, false],
-    ["schedule", "", "visual-regression-push-sha", true, false, true],
+    ["schedule", "", "feature-map-live-weekly", false, false, true],
     ["workflow_dispatch", "", "visual-regression-push-sha", true, true, false],
     ["workflow_dispatch", "visual", "visual-regression-push-sha", true, true, false],
     ["workflow_dispatch", "inbox-cycle", "verify-qa", false, false, true],

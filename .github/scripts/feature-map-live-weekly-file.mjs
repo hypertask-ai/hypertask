@@ -48,25 +48,54 @@ export function buildDescription({ week, counts, sha, runUrl, artifactUrl }) {
   return lines.join('\n')
 }
 
-function runBoardJson(binary, args, { execImpl = execFileSync, env = process.env } = {}) {
-  const output = execImpl(binary, [...args, '--json'], {
+function runCli(binary, args, { execImpl = execFileSync, env = process.env, json = true } = {}) {
+  const cliArgs = json ? [...args, '--json'] : args
+  const output = execImpl(binary, cliArgs, {
     encoding: 'utf8',
     env,
     timeout: 60_000,
     maxBuffer: 8 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+  if (!json) return output
   const payload = JSON.parse(output)
   if (payload.success === false) throw new Error(`Board CLI ${binary} ${args.slice(0, 2).join(' ')} failed`)
   return payload
 }
 
 export function boardRead(args, options = {}) {
-  return runBoardJson('hypertask', args, options)
+  return runCli('hypertask', args, options)
 }
 
 export function boardWrite(args, options = {}) {
-  return runBoardJson('vcc', args, options)
+  return runCli('vcc', args, options)
+}
+
+function normalizeActivityText(text) {
+  return (text || '').replace(/\s+/g, ' ').trim()
+}
+
+function parseActivityList(output) {
+  return output
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => {
+      const tab = line.indexOf('\t')
+      if (tab === -1) return { text: line }
+      const next = line.indexOf('\t', tab + 1)
+      if (next === -1) return { text: line.slice(tab + 1) }
+      return { text: line.slice(next + 1) }
+    })
+}
+
+function boardActivityList(ticketRef, options = {}) {
+  const output = runCli('vcc', ['activity', 'list', ticketRef], { ...options, json: false })
+  return parseActivityList(output)
+}
+
+function boardActivityAdd(ticketRef, text, options = {}) {
+  runCli('vcc', ['activity', 'add', ticketRef, '--text', text], { ...options, json: false })
 }
 
 export async function findOpenWeeklyTicket(title, options = {}) {
@@ -123,13 +152,14 @@ export async function fileWeeklyLiveResult({
   if (!Number.isSafeInteger(ticket?.id) || ticket.id < 1) throw new Error('Weekly live ticket returned no task id')
   const ticketRef = ticket.ticketNumber || `HYCI-${ticket.uniqueIndex}`
   const marker = `feature-map-live-weekly ${week}`
-  const log = boardWrite(['activity', 'list', ticketRef], cli)
-  const rows = log.activities || log.comments || []
-  if (!Array.isArray(rows)) throw new Error('Weekly live activity search returned no list')
-  if (rows.some((row) => (row.text || row.body || '').includes(marker))) {
+  const note = `${marker}\n${activity}`
+  const rows = boardActivityList(ticketRef, cli)
+  const normalizedNote = normalizeActivityText(note)
+  const prior = rows.find((row) => (row.text || '').includes(marker))
+  if (prior && normalizeActivityText(prior.text) === normalizedNote) {
     return { ticketId: ticket.id, uniqueIndex: ticket.uniqueIndex, duplicate: true, counts }
   }
-  boardWrite(['activity', 'add', ticketRef, '--text', `${marker}\n${activity}`], cli)
+  boardActivityAdd(ticketRef, note, cli)
   return { ticketId: ticket.id, uniqueIndex: ticket.uniqueIndex, duplicate: false, counts }
 }
 
