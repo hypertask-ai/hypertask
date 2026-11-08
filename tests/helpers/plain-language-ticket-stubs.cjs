@@ -6,7 +6,9 @@ const stub = {
   plainLanguageTicketRefusalMessage: () => "",
 };
 module.exports = {
-  "@/lib/flags": { isFeatureEnabled: async () => false },
+  "@/lib/flags": {
+    isFeatureEnabled: async (key) => key !== "htpr-7933-plain-language-ticket-template",
+  },
   "@/lib/tickets/plainLanguageTicket.mjs": stub,
   "@/lib/tickets/plainLanguageTicket": stub,
   "@/lib/tickets/plainLanguageTicketEnforcement": stub,

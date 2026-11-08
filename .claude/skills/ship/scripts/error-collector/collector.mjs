@@ -136,7 +136,7 @@ function merge(group, event) {
 function description(group, fp) {
   const block = group.noiseRule
     ? renderPlainLanguageTicketDescription({
-        whatWrongOrWanted: `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour on stderr.`,
+        whatWrongOrWanted: `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times; warning on stderr.`,
         whoItAffects: "internal only",
         recommendedCourseAndWhy: "Fix the warning at the source. Why: stderr spam hides real incidents.",
         whatValentinMustDecide: "nothing",
