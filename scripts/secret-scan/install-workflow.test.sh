@@ -39,10 +39,8 @@ echo 'ok - every PR reports secret-scan, only default-branch pushes scan, and on
 for TEST_VISIBILITY in PRIVATE INTERNAL; do
   export TEST_VISIBILITY
   sh "$src/install-workflow" "$TEST_CHECKOUT"
-  grep -qxF '    runs-on: [self-hosted, ci-fast]' "$out"
-  sed 's/^    runs-on: \[self-hosted, ci-fast\]$/    runs-on: ubuntu-latest/' "$out" > "$tmp/normalized"
-  cmp "$src/gitleaks.yml" "$tmp/normalized"
-  echo "ok - $TEST_VISIBILITY changes only runs-on"
+  cmp "$src/gitleaks.yml" "$out"
+  echo "ok - $TEST_VISIBILITY is byte-identical and uses ubuntu-latest"
 done
 
 TEST_VISIBILITY=PUBLIC; export TEST_VISIBILITY
