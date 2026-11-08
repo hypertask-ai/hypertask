@@ -19,6 +19,7 @@ import {
   sendSignupVerificationEmail,
 } from '@/lib/auth/emailStraightBoard'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
+import { unverifiedEmailAccount } from '@/lib/auth/unverifiedEmailAccount'
 
 function looksLikeEmail(value: string) {
   const at = value.indexOf('@')
@@ -223,9 +224,24 @@ export async function POST(request: NextRequest) {
 
     const session = await getSessionUser(request.headers)
     const signupRequesterId = session?.userId ?? 0
+    const inviteCarried =
+      Boolean(inviteData) &&
+      typeof inviteData === 'object' &&
+      ['project', 'key', 'projectId'].some((name) =>
+        Boolean((inviteData as Record<string, unknown>)[name]),
+      )
+
+    if (existingUser && (await unverifiedEmailAccount(existingUser.id)) === 'blocked') {
+      try {
+        await sendSignupVerificationEmail(request, normalizedEmail, utmParams)
+      } catch (emailError) {
+        console.error('Failed to resend straight-board verification email:', emailError)
+      }
+    }
 
     if (
       !existingUser &&
+      !inviteCarried &&
       (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, signupRequesterId))
     ) {
       const knownEmail = await findUserByEmail(normalizedEmail)
