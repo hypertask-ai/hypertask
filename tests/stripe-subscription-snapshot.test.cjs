@@ -17,13 +17,17 @@ let stripeWrites;
 let failSave;
 let recordedStatus;
 const prisma = {
-  team: { findUnique: async () => team },
+  $transaction: async (run) => run(prisma),
+  team: {
+    findUnique: async () => team,
+    updateMany: async () => ({ count: 1 }),
+  },
   subscriptionPlan: {
     findFirst: async () => ({ ...team.subscriptionPlan[0], subscriptionObject: saved, team: { stripe_customer_id: "cus", activeSubscriptionPlanId: "sub" } }),
     updateMany: async ({ where, data }) => {
       if (failSave) throw new Error("database unavailable");
       assert.equal(where.subscriptionId, "sub");
-      assert.equal(where.teamId, "team");
+      if (where.teamId !== undefined) assert.equal(where.teamId, "team");
       writes++;
       if (data.subscriptionStatus) recordedStatus = data.subscriptionStatus;
       if (data.subscriptionObject) saved = data.subscriptionObject;
@@ -49,7 +53,7 @@ const refresh = (...args) => load(path.join(root, "src/lib/stripeSubscriptionSna
 test.beforeEach(() => {
   saved = { id: "sub", items: { data: [{ id: "si", quantity: 1, price: { id: "price_yearly" } }] } };
   live = { id: "sub", customer: "cus", status: "active", items: { data: [{ id: "si", quantity: 2, price: { id: "price_yearly" } }] } };
-  team = { totalSeats: 2, activeSubscriptionPlanId: "sub", activeSubscriptionPlanItemId: "si", compedUntil: null,
+  team = { totalSeats: 2, stripe_customer_id: "cus", activeSubscriptionPlanId: "sub", activeSubscriptionPlanItemId: "si", compedUntil: null,
     subscriptionPlan: [{ id: "row", teamId: "team", subscriptionId: "sub", subscriptionItemId: "si", subscriptionStatus: "active", priceId: "price_yearly", subscriptionObject: saved }] };
   writes = 0; stripeWrites = 0; failSave = false; recordedStatus = null;
 });
@@ -104,7 +108,7 @@ test("a canceled Stripe subscription is recorded locally and is not charged", as
   assert.equal(writes, 0);
   assert.equal(stripeWrites, 0);
   assert.equal(saved.items.data[0].quantity, 1);
-  assert.equal(await billing.syncSeatBillingOnJoin("team", undefined, passthrough), "OK");
+  assert.equal(await billing.syncSeatBillingOnJoin("team", undefined, passthrough), "SKIPPED");
   assert.equal(recordedStatus, "canceled");
   assert.equal(stripeWrites, 0);
   assert.equal(saved.items.data[0].quantity, 1);
