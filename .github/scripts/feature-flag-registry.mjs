@@ -253,10 +253,10 @@ export function parseFlagFile(source, path) {
   }
   if (fields.has("releaseRisk")) {
     const risk = fields.get("releaseRisk");
-    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length < 2 || risk.properties.length > 4 || risk.properties.some((entry) =>
+    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length < 2 || risk.properties.length > 5 || risk.properties.some((entry) =>
       !typescript.isPropertyAssignment(entry) || !(typescript.isIdentifier(entry.name) || typescript.isStringLiteral(entry.name)))) fail("releaseRisk needs literal risk and reason fields");
     const values = new Map(risk.properties.map((entry) => [entry.name.text, unwrapExpr(entry.initializer)]));
-    if (values.size !== risk.properties.length || [...values.keys()].some((name) => !["risk", "reason", "highRisk", "ownerRequest"].includes(name))) fail("releaseRisk needs literal risk, reason and optional highRisk and ownerRequest fields");
+    if (values.size !== risk.properties.length || [...values.keys()].some((name) => !["risk", "reason", "highRisk", "harmEvidence", "ownerRequest"].includes(name))) fail("releaseRisk needs literal risk, reason and optional highRisk, harmEvidence and ownerRequest fields");
     const level = values.get("risk"), reason = values.get("reason");
     if (!level || !typescript.isStringLiteral(level) || !["none", "small", "new"].includes(level.text) ||
         !reason || !typescript.isStringLiteral(reason) || !reason.text.trim() || /[\r\n\u2014]/.test(reason.text)) fail("releaseRisk needs risk none, small or new and a nonempty one-line reason");
@@ -265,6 +265,17 @@ export function parseFlagFile(source, path) {
       const highRisk = values.get("highRisk");
       if (!typescript.isStringLiteral(highRisk) || !["money", "access", "data-deletion", "customer-email"].includes(highRisk.text)) fail("releaseRisk.highRisk must be money, access, data-deletion or customer-email");
       definition.releaseRisk.highRisk = highRisk.text;
+    }
+    if (values.has("harmEvidence")) {
+      const evidence = values.get("harmEvidence");
+      if (!typescript.isObjectLiteralExpression(evidence) || evidence.properties.length !== 2 || evidence.properties.some((entry) =>
+        !typescript.isPropertyAssignment(entry) || !(typescript.isIdentifier(entry.name) || typescript.isStringLiteral(entry.name)))) fail("releaseRisk.harmEvidence needs literal harm and scenario fields");
+      const fields = new Map(evidence.properties.map((entry) => [entry.name.text, unwrapExpr(entry.initializer)]));
+      const harm = fields.get("harm"), scenario = fields.get("scenario");
+      const allowed = { money: ["charge"], access: ["private-data-exposure", "auth-bypass"], "data-deletion": ["permanent-deletion"], "customer-email": ["customer-email"] };
+      if (fields.size !== 2 || !harm || !typescript.isStringLiteral(harm) || !allowed[definition.releaseRisk.highRisk]?.includes(harm.text) ||
+          !scenario || !typescript.isStringLiteral(scenario) || !scenario.text.trim() || /[\r\n]/.test(scenario.text)) fail("releaseRisk.harmEvidence needs a matching lasting harm and a nonblank one-line scenario");
+      definition.releaseRisk.harmEvidence = { harm: harm.text, scenario: scenario.text };
     }
     if (values.has("ownerRequest")) {
       const ownerRequest = values.get("ownerRequest");
