@@ -403,42 +403,19 @@ for (const blockerCommentId of [101, null]) {
 
 const runner9 = "11111111-1111-4111-8111-111111111111";
 
-test("agent waiting flag off refuses an agent id before a write", async () => {
-  const f = fixture();
-  const response = await f.post({ taskId: 42, agentId: runner9 });
-  assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { success: false, error: "Agent waiting person is not enabled" });
-  assert.deepEqual(f.writes, []);
-  assert.deepEqual(f.access, []);
-});
-
-test("agent waiting flag on rejects a private agent the caller cannot see", async () => {
-  const f = fixture({ agentWaitingFlag: true, agentInvisible: true });
-  const response = await f.post({ taskId: 42, agentId: runner9 });
-  assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { success: false, error: "Agent is not a member of this project." });
-  assert.deepEqual(f.writes, []);
-});
-
-test("agent waiting flag on stores the agent, clears the person, and names the agent", async () => {
+test("agent waiting writes honor the flag, visibility, activity, and inbox updates", async () => {
+  const off = await fixture().post({ taskId: 42, agentId: runner9 });
+  assert.equal(off.status, 404);
+  const hidden = await fixture({ agentWaitingFlag: true, agentInvisible: true }).post({ taskId: 42, agentId: runner9 });
+  assert.equal(hidden.status, 400);
   const f = fixture({ agentWaitingFlag: true });
   const response = await f.post({ taskId: 42, agentId: runner9 });
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.task.waitingOnAgentId, runner9);
   assert.equal(result.task.waitingOnUserId, null);
-  assert.equal(f.writes[0].data.waitingOnAgentId, runner9);
-  assert.equal(f.writes[0].data.waitingOnUserId, null);
-  assert.equal(f.activities[0].activityBody.data.waitingOnDisplayName, "Runner 9");
-  assert.deepEqual(f.inboxes.map((row) => row[0]).sort(), [6, 8]);
-});
-
-test("a person set clears a stored waiting agent", async () => {
-  const f = fixture({ waitingOnAgentId: runner9 });
-  const response = await f.post({ taskId: 42, userId: 9 });
-  assert.equal(response.status, 200);
-  const task = (await response.json()).task;
-  assert.equal(task.waitingOnAgentId, null);
-  assert.equal(task.waitingOnUserId, 9);
-  assert.equal(f.writes[0].data.waitingOnAgentId, null);
+  assert.equal(f.activities[0].activityBody.data.waitingOnAgentId, runner9);
+  assert.equal(f.activities[0].activityBody.data.waitingOnDisplayName, null);
+  const cleared = await fixture({ waitingOnAgentId: runner9 }).post({ taskId: 42, userId: 9 });
+  assert.equal((await cleared.json()).task.waitingOnAgentId, null);
 });

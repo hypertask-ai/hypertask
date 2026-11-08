@@ -128,7 +128,17 @@ const publicCommentAgent = Prisma.sql`
   ) END
 `;
 
-const assignmentActivityWithCurrentAvatars = Prisma.sql`
+const waitingActivityAgentVisible = (userId: number, projectId: Prisma.Sql) => Prisma.sql`
+  (waiting_activity_agent.id IS NOT NULL AND (
+    waiting_activity_agent."userId" = ${userId}
+    OR (
+      waiting_activity_agent.visibility = 'TEAM'::"AgentVisibility"
+      AND (${hasAccessibleAgentProject(userId, projectId)})
+    )
+  ))
+`;
+
+const assignmentActivityWithCurrentAvatars = (userId: number, projectId: Prisma.Sql) => Prisma.sql`
   CASE
     WHEN c.activity->>'type' = 'TaskAssigned' THEN
       jsonb_set(
@@ -140,6 +150,15 @@ const assignmentActivityWithCurrentAvatars = Prisma.sql`
         ),
         '{data,toUser,user,photoURL}',
         COALESCE(to_jsonb(activity_to_user."photoURL"), 'null'::jsonb),
+        true
+      )
+    WHEN c.activity->>'type' = 'TaskWaitingOn' AND (c.activity #>> '{data,waitingOnAgentId}') IS NOT NULL THEN
+      jsonb_set(
+        c.activity,
+        '{data,waitingOnDisplayName}',
+        CASE WHEN ${waitingActivityAgentVisible(userId, projectId)}
+          THEN COALESCE(to_jsonb(NULLIF(BTRIM(waiting_activity_agent."displayName"), '')), 'null'::jsonb)
+          ELSE 'null'::jsonb END,
         true
       )
     ELSE c.activity
@@ -535,7 +554,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw<IComment[]>`
     WITH base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-        ${assignmentActivityWithCurrentAvatars} AS activity,
+        ${assignmentActivityWithCurrentAvatars(userId, Prisma.sql`comment_task."projectId"`)} AS activity,
         c."seen",
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
@@ -557,6 +576,8 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
       LEFT JOIN "User" activity_to_user ON activity_to_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
           THEN (c.activity #>> '{data,toUser,userId}')::int END
+      LEFT JOIN "Agent" waiting_activity_agent
+        ON waiting_activity_agent.id = (c.activity #>> '{data,waitingOnAgentId}')::uuid
       WHERE c."taskId" = ${taskId}
     ),
     reaction_groups AS (
@@ -673,7 +694,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     task_row AS (SELECT id AS "taskId", "projectId" FROM authorized_task),
     base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-        ${assignmentActivityWithCurrentAvatars} AS activity,
+        ${assignmentActivityWithCurrentAvatars(userId, Prisma.sql`comment_task."projectId"`)} AS activity,
         c."seen",
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'

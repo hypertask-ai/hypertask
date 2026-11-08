@@ -9,7 +9,6 @@ import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-772
 import { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG } from "@/lib/flags/definitions/htpr-8205-agent-clear-blocker";
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import { actingAgentSelect } from "@/lib/agents/activityAttribution";
-import { mapVisibleMcpAgent } from "@/lib/mcp/agents";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 
@@ -86,13 +85,7 @@ export async function setTaskWaitingOn({
         ...boardAgentVisibilityWhere(currentUser.id),
         members: { some: { projectId: task.projectId, status: "Accepted" } },
       },
-      select: {
-        id: true,
-        displayName: true,
-        userId: true,
-        visibility: true,
-        members: { where: { projectId: task.projectId }, select: { projectId: true } },
-      },
+      select: { id: true, displayName: true, userId: true },
     });
     if (!waitingAgent) {
       return { status: 400, body: { message: "Agent is not a member of this project." } };
@@ -162,9 +155,8 @@ export async function setTaskWaitingOn({
       fromUserId: currentUser.id,
       fromUser: currentUser,
       ...(actingAgent ? { fromAgent: actingAgent } : {}),
-      waitingOnDisplayName: (waitingAgent
-        ? mapVisibleMcpAgent(waitingAgent, currentUser.id, task.projectId)?.displayName
-        : waitingOnUser?.displayName) ?? null,
+      ...(waitingAgent ? { waitingOnAgentId: waitingAgent.id } : {}),
+      waitingOnDisplayName: waitingOnUser?.displayName ?? null,
       ...(clearsBlocker ? { blockerCleared: true, reason: clearReason } : {}),
     },
   };

@@ -240,38 +240,6 @@ export function taskMcpGetInclude(userId: number, agentId?: string | null, teamS
     };
 }
 
-function waitingOnForReader<T extends {
-    projectId?: number;
-    waitingOnAgentId?: string | null;
-    waitingOnAgent?: {
-        userId?: number;
-        visibility?: "PRIVATE" | "TEAM";
-        members?: readonly { projectId: number }[];
-    } | null;
-}>(task: T, userId: number): T {
-    const agent = task.waitingOnAgent;
-    if (!agent || agent.userId == null || agent.visibility == null || task.projectId == null) return task;
-    if (isAgentVisibleToUser({
-        userId: agent.userId,
-        visibility: agent.visibility,
-        members: agent.members ?? [],
-    }, userId, task.projectId)) return task;
-    return { ...task, waitingOnAgentId: null, waitingOnAgent: null };
-}
-
-function waitingFieldsForReader(
-    task: Parameters<typeof mapTaskWaitingOn>[0] & Parameters<typeof waitingOnForReader>[0],
-    userId: number,
-    agentWaitingEnabled: boolean,
-) {
-    const reader = waitingOnForReader(task, userId);
-    return mapTaskWaitingOn(
-        !agentWaitingEnabled && reader.waitingOnAgentId
-            ? { waitingOnUserId: task.waitingOnUserId, waitingOnSetAt: task.waitingOnSetAt }
-            : reader,
-    );
-}
-
 export function mapTaskWaitingOn(task: {
     waitingOnUserId?: number | null;
     waitingOnSetAt?: Date | string | null;
@@ -330,7 +298,14 @@ export function mapTaskToMcpGetResponse(
         section: task.section,
         sectionId: task.sectionId || undefined,
         blockerCommentId: task.blockerCommentId ?? null,
-        ...waitingFieldsForReader(task, userId, agentWaitingEnabled),
+        ...mapTaskWaitingOn(
+            agentWaitingEnabled
+                && task.waitingOnAgentId
+                && task.waitingOnAgent
+                && isAgentVisibleToUser(task.waitingOnAgent, userId, task.projectId)
+                ? task
+                : { waitingOnUserId: task.waitingOnUserId, waitingOnSetAt: task.waitingOnSetAt },
+        ),
         description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
@@ -436,7 +411,14 @@ export function mapTaskToDetail(task: any, userId: number, agentWaitingEnabled =
         section: task.section,
         sectionId: task.sectionId || 0,
         blockerCommentId: task.blockerCommentId ?? null,
-        ...waitingFieldsForReader(task, userId, agentWaitingEnabled),
+        ...mapTaskWaitingOn(
+            agentWaitingEnabled
+                && task.waitingOnAgentId
+                && task.waitingOnAgent
+                && isAgentVisibleToUser(task.waitingOnAgent, userId, task.projectId)
+                ? task
+                : { waitingOnUserId: task.waitingOnUserId, waitingOnSetAt: task.waitingOnSetAt },
+        ),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         projectId: task.projectId,

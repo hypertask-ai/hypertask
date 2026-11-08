@@ -24,8 +24,7 @@ import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tas
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
-
-const HTPR_8917_AGENT_WAITING_PERSON_FLAG = 'htpr-8917-agent-waiting-person';
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person';
 const FULL_COMMENT_LIMIT = 20;
 const SUMMARY_COMMENT_LIMIT = 3;
 const PR_LINK_SCAN_LIMIT = 200;

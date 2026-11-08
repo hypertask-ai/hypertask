@@ -25,6 +25,7 @@ import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG, HTPR_8738_PICKER_SKIPS_PARKED_FLAG } from '@/lib/flags/keys'
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person'
 import {
   ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
@@ -46,8 +47,9 @@ import { isDoneColumn } from '@/lib/doneColumns'
 import { columnRole } from '@/lib/mcp/boards/columnRole'
 import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inboxZero'
 
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person'
+
 const HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG = 'htpr-8742-attachment-download-hint'
-const HTPR_8917_AGENT_WAITING_PERSON_FLAG = 'htpr-8917-agent-waiting-person'
 
 export function attachmentDownloadHint(taskId: number, attachmentId: number) {
   return `GET /api/mcp/tasks/attachments?task_id=${taskId}&attachment_id=${attachmentId} with the same bearer token. fileSource is not an agent download.`
