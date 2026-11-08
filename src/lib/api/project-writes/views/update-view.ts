@@ -10,7 +10,7 @@ import {
 } from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { gatedTableGroupByForViewWrite } from "@/lib/table-view/tableGroupByTag";
+import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import {
   sanitizeBoardLayout,
   sanitizeTableSort,

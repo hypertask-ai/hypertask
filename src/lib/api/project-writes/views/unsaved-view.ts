@@ -14,7 +14,7 @@ import {
   canUseViewAsTabBase,
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
-import { gatedTableGroupByForViewWrite } from "@/lib/table-view/tableGroupByTag";
+import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import {
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
