@@ -1,118 +1,64 @@
 import { getTeamGatewayFunding, isOurGatewayKey, resolveTeamByokApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { remainingSpendPathEnabled, resolveTeamAllowancePolicy } from "@/app/api/ai/_lib/planAllowancePolicy";
-import { reservePlanAllowance, settlePlanAllowance, teamAllowanceSnapshot } from "@/app/api/ai/_lib/sharedAllowance";
+import { reservePlanAllowance, settlePlanAllowance, teamAllowanceSnapshot, SharedAiAllowanceExceededError } from "@/app/api/ai/_lib/sharedAllowance";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import prisma from "@/lib/prisma";
 import { embeddingCostUsd, embeddingDecision, upperBoundTokens, type EmbeddingDecision } from "@/lib/ai/spend/remainingSpend";
 
-export type EmbeddingRoute = {
-  mode: EmbeddingDecision;
-  httpKey?: string;
-  allowanceKey?: string;
-  fundingSource?: "shared" | "managed";
-};
+type Route = { mode: EmbeddingDecision; httpKey?: string; allowanceKey?: string; fundingSource?: "shared" | "managed" };
 
-export async function embeddingRouteForTeam(teamId: string): Promise<EmbeddingRoute> {
-  const spendPathOn = await remainingSpendPathEnabled(teamId).catch(() => false);
-  if (!spendPathOn) return { mode: "current" };
-
-  const plan = await storePlanIdForProject(null, teamId).catch(() => null);
-  const openai = await resolveTeamByokApiKey("openai", { trustedTeamId: teamId }).catch(() => undefined);
-  const gateway = await resolveTeamByokApiKey("gateway", { trustedTeamId: teamId }).catch(() => undefined);
+async function routeForTeam(teamId: string): Promise<Route> {
+  if (!await remainingSpendPathEnabled(teamId).catch(() => false)) return { mode: "current" };
+  const [plan, openai, gateway, funding] = await Promise.all([
+    storePlanIdForProject(null, teamId).catch(() => null),
+    resolveTeamByokApiKey("openai", { trustedTeamId: teamId }).catch(() => undefined),
+    resolveTeamByokApiKey("gateway", { trustedTeamId: teamId }).catch(() => undefined),
+    getTeamGatewayFunding({ trustedTeamId: teamId }).catch(() => undefined),
+  ]);
   const ownKey = [openai, gateway].find((key) => typeof key === "string" && key.trim() && !isOurGatewayKey(key));
-  const funding = await getTeamGatewayFunding({ trustedTeamId: teamId }).catch(() => undefined);
   const canCharge = Boolean(funding && funding.source !== "customer");
   let overCap = !canCharge;
   if (canCharge && funding) {
     const policy = await resolveTeamAllowancePolicy(teamId, funding.source);
-    if (policy.mode !== "plan") {
-      overCap = true;
-    } else {
-      const snapshot = await teamAllowanceSnapshot(teamId, policy.monthlyUsd, policy, {
-        userId: 0,
-        gatewayApiKey: funding.apiKey,
-        fundingSource: funding.source,
-      }).catch(() => null);
-      overCap = !snapshot || snapshot.usedUsd >= snapshot.allowanceUsd;
-    }
+    const snapshot = policy.mode === "plan" ? await teamAllowanceSnapshot(teamId, policy.monthlyUsd, policy, { userId: 0, gatewayApiKey: funding.apiKey, fundingSource: funding.source }).catch(() => null) : null;
+    overCap = policy.mode !== "plan" || !snapshot || snapshot.usedUsd >= snapshot.allowanceUsd;
   }
-
-  const mode = embeddingDecision({
-    spendPathOn: true,
-    plan,
-    hasOwnKey: Boolean(ownKey),
-    overCap,
-    canCharge,
-  });
+  const mode = embeddingDecision({ spendPathOn: true, plan, hasOwnKey: Boolean(ownKey), overCap, canCharge });
   if (mode === "customer-key" && ownKey) return { mode, httpKey: ownKey };
-  if (mode === "vector" && funding && funding.source !== "customer") {
-    return {
-      mode,
-      allowanceKey: funding.apiKey,
-      fundingSource: funding.source,
-    };
-  }
-  if (mode === "vector") return { mode: "keyword" };
-  return { mode };
+  if (mode === "vector" && funding && funding.source !== "customer") return { mode, allowanceKey: funding.apiKey, fundingSource: funding.source };
+  return { mode: mode === "vector" ? "keyword" : mode };
 }
 
-export type SearchEmbeddingRoute =
-  | { kind: "current" }
-  | { kind: "keyword" }
-  | { kind: "vector"; teamId: string; allowanceKey: string; fundingSource: "shared" | "managed" }
-  | { kind: "customer-key"; httpKey: string };
-
-export async function searchRouteForProjects(projectIds: number[]): Promise<SearchEmbeddingRoute> {
-  const ids = [...new Set(projectIds.filter((id) => Number.isInteger(id)))];
-  if (ids.length === 0) return { kind: "current" };
-  const projects = await prisma.project.findMany({
-    where: { id: { in: ids } },
-    select: { teamId: true },
-  });
-  const teamIds = [...new Set(projects.map((project) => project.teamId).filter((id): id is string => Boolean(id)))];
-  if (teamIds.length !== 1) {
-    if (teamIds.length === 0) return { kind: "current" };
-    const routes = await Promise.all(teamIds.map((id) => embeddingRouteForTeam(id)));
-    return routes.some((route) => route.mode !== "current") ? { kind: "keyword" } : { kind: "current" };
-  }
-  const route = await embeddingRouteForTeam(teamIds[0]);
-  if (route.mode === "current") return { kind: "current" };
-  if (route.mode === "customer-key" && route.httpKey) return { kind: "customer-key", httpKey: route.httpKey };
-  if (route.mode === "vector" && route.allowanceKey && route.fundingSource) {
-    return {
-      kind: "vector",
-      teamId: teamIds[0],
-      allowanceKey: route.allowanceKey,
-      fundingSource: route.fundingSource,
-    };
-  }
-  return { kind: "keyword" };
-}
-
-export async function withEmbeddingCharge<T>(
-  args: { teamId: string; texts: string[]; allowanceKey: string; fundingSource: "shared" | "managed" },
-  work: () => Promise<T>,
-): Promise<T> {
-  const policy = await resolveTeamAllowancePolicy(args.teamId, args.fundingSource);
+async function charge<T>(teamId: string, texts: string[], key: string, source: "shared" | "managed", work: () => Promise<T>) {
+  const policy = await resolveTeamAllowancePolicy(teamId, source);
   if (policy.mode !== "plan") return work();
-  const usd = args.texts.reduce((sum, text) => sum + embeddingCostUsd(upperBoundTokens(text)), 0);
-  const micro = Math.max(1, Math.ceil(usd * 1_000_000));
-  const reservation = await reservePlanAllowance({
-    teamId: args.teamId,
-    policy,
-    gatewayApiKey: args.allowanceKey,
-    fundingSource: args.fundingSource,
-    amountUsd: micro / 1_000_000,
-    amountMicroUsd: micro,
-    lane: "visible",
-    userId: 0,
-  });
-  try {
-    const result = await work();
-    await settlePlanAllowance(reservation, micro / 1_000_000, "finish");
-    return result;
-  } catch (error) {
-    await settlePlanAllowance(reservation, 0, "error").catch(() => undefined);
-    throw error;
+  const micro = Math.max(1, Math.ceil(texts.reduce((sum, text) => sum + embeddingCostUsd(upperBoundTokens(text)), 0) * 1_000_000));
+  const reservation = await reservePlanAllowance({ teamId, policy, gatewayApiKey: key, fundingSource: source, amountUsd: micro / 1_000_000, amountMicroUsd: micro, lane: "visible", userId: 0 });
+  try { const result = await work(); await settlePlanAllowance(reservation, micro / 1_000_000, "finish"); return result; }
+  catch (error) { await settlePlanAllowance(reservation, 0, "error").catch(() => undefined); throw error; }
+}
+
+async function teamIds(projectIds: number[]) {
+  const ids = [...new Set(projectIds.filter((id) => Number.isInteger(id)))];
+  if (ids.length === 0) return [];
+  const projects = await prisma.project.findMany({ where: { id: { in: ids } }, select: { teamId: true } });
+  return [...new Set(projects.map((project) => project.teamId).filter((id): id is string => Boolean(id)))];
+}
+
+export async function embeddingSpendMode(projectIds: number[], teamId?: string | null): Promise<(Route & { teamId?: string }) | "mixed-keyword"> {
+  const ids = teamId ? [teamId] : await teamIds(projectIds);
+  if (ids.length !== 1) {
+    if (ids.length === 0) return { mode: "current" };
+    const routes = await Promise.all(ids.map((id) => routeForTeam(id)));
+    return routes.some((route) => route.mode !== "current") ? "mixed-keyword" : { mode: "current" };
   }
+  return { ...(await routeForTeam(ids[0])), teamId: ids[0] };
+}
+
+export async function withSpendCharge<T>(route: Route, teamId: string, texts: string[], work: () => Promise<T>) {
+  if (route.mode === "vector" && route.allowanceKey && route.fundingSource) {
+    try { return await charge(teamId, texts, route.allowanceKey, route.fundingSource, work); }
+    catch (error) { if (error instanceof SharedAiAllowanceExceededError) return null; throw error; }
+  }
+  return work();
 }

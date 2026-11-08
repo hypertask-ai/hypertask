@@ -13,7 +13,9 @@ import { searchComments, searchTasks, type TurbopufferCommentRow, type Turbopuff
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
-import { remainingSpendPathEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
+import { teamOwner } from "@/app/api/ai/_lib/planAllowancePolicy";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7394_REMAINING_AI_SPEND_FLAG } from "@/lib/flags/definitions/htpr-7394-remaining-ai-spend";
 import { nativeWebSearchAllowed } from "@/lib/ai/spend/remainingSpend";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
@@ -32,6 +34,15 @@ import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardR
 
 import prisma from "@/lib/prisma";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
+
+async function nativeSearchForSelection(provider: string, apiKey: unknown, teamId?: string | null) {
+  const customerPays = Boolean(typeof apiKey === "string" && apiKey && !isOurGatewayKey(apiKey));
+  const owner = teamId ? await teamOwner(teamId).catch(() => null) : null;
+  if (owner && await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, owner.userId)) {
+    return nativeWebSearchAllowed(provider, customerPays, true);
+  }
+  return nativeWebSearchAllowed(provider, customerPays, false);
+}
 
 export const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -860,11 +871,7 @@ export async function selectTaskWriterModel(args: {
       feature: args.feature ?? "task-writer",
       tags,
       modelOption: selection.modelOption,
-      includeNativeWebSearch: nativeWebSearchAllowed(
-        selection.provider,
-        Boolean(byokApiKey && !isOurGatewayKey(byokApiKey)),
-        Boolean(teamContext.teamId) && await remainingSpendPathEnabled(teamContext.teamId!),
-      ),
+      includeNativeWebSearch: await nativeSearchForSelection(selection.provider, byokApiKey, teamContext.teamId),
     }
   );
   const selected = {
