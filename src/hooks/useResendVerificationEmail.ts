@@ -23,7 +23,6 @@ export const useResendVerificationEmail = (): UseResendVerificationEmailReturn =
     try {
       const response = await axios.post('/api/auth/send-email-link', {
         email,
-        resendEmailVerification: true,
       });
 
       if (response.data.success) {

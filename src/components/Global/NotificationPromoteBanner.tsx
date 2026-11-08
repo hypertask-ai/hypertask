@@ -7,9 +7,6 @@ import { usePathname } from "next/navigation";
 import { useContext, useEffect, useRef, useState } from "react";
 
 import useFcmToken from "@/hooks/General/useFcmToken";
-import { useFlag } from "@/hooks/useFlag";
-import { useResendVerificationEmail } from "@/hooks/useResendVerificationEmail";
-import { isGuestUser } from "@/lib/demo/guest";
 import { slimUserForCookie } from "@/lib/auth/slimUserCookie";
 import { changePushNotificationStatus } from "@/utils/api/global/pushNotifications";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -294,61 +291,3 @@ const NotificationPromoteBanner = () => {
 };
 
 export default NotificationPromoteBanner;
-
-const EMAIL_CONFIRM_EXCLUDED = [
-  "/login",
-  "/onboarding",
-  "/verify-email",
-  "/invite",
-  "/share",
-  "/unauthorized",
-];
-
-export function StraightBoardEmailConfirmBanner() {
-  const pathname = usePathname();
-  const currentUser = useRecoilValue(currentUserAtom);
-  const flagOn = useFlag("htpr-7553-email-straight-board");
-  const [dismissed, setDismissed] = useState(false);
-  const { isResending, handleResend } = useResendVerificationEmail();
-
-  useEffect(() => {
-    setDismissed(false);
-  }, [currentUser?.id]);
-
-  if (!flagOn || !currentUser || isGuestUser(currentUser)) return null;
-  const verified = currentUser.UserSetting?.isVerified ?? true;
-  if (verified || dismissed) return null;
-  if (EMAIL_CONFIRM_EXCLUDED.some((p) => pathname === p || pathname?.startsWith(p))) {
-    return null;
-  }
-
-  const email = currentUser.email ?? "";
-
-  return (
-    <div
-      className="w-full bg-blue-600/20 border-b border-blue-500/40 px-4 py-3 flex items-center justify-center gap-3 text-content text-white-black z-[120]"
-      role="status"
-    >
-      <span className="text-center">
-        Please confirm your email
-        {email ? ` (${email})` : ""}.
-      </span>
-      <button
-        type="button"
-        className="underline text-blue-300 hover:text-blue-200 disabled:opacity-50"
-        disabled={isResending || !email}
-        onClick={() => handleResend(email)}
-      >
-        {isResending ? "Sending…" : "Resend"}
-      </button>
-      <button
-        type="button"
-        className="ml-2 p-1 hover:bg-white/10 rounded"
-        aria-label="Dismiss"
-        onClick={() => setDismissed(true)}
-      >
-        <X className="w-4 h-4" />
-      </button>
-    </div>
-  );
-}

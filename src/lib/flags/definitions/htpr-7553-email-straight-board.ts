@@ -5,7 +5,7 @@ export const HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG = "htpr-7553-email-straight-boa
 export default {
   key: HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG,
   kind: "feature",
-  defaultMode: "OWNER_ONLY",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-08",
   releaseRisk: {
     risk: "new",
