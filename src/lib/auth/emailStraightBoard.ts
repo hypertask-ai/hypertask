@@ -170,11 +170,8 @@ export async function finishStraightBoardEmailSignup(
   );
   const redirectPath = boardRedirectPath(loginBoard, welcomeProjectId);
 
-  const response = NextResponse.json({
-    success: true,
-    message: "Account created successfully! Please check your email to verify your account.",
-    boardRedirect: redirectPath,
-  });
+  const redirectUrl = new URL(redirectPath, getRequestBaseUrl(request));
+  const response = NextResponse.redirect(redirectUrl);
 
   response.cookies.set("nookies_user", JSON.stringify(slimUserForCookie(userData)), {
     httpOnly: false,

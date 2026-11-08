@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation'
 import { parseSafeReturnTo, POST_LOGIN_REDIRECT_STORAGE_KEY } from '@/lib/auth/safeReturnTo'
 import { getSignupContextInput } from '@/lib/analytics/signupIdentityClient'
 import { authClient } from '@/lib/auth/betterAuthClient'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board'
 
 export type EmailAuthStep = 'form' | 'link-sent' | 'signing-in' | 'code-input'
 
@@ -45,6 +47,7 @@ export function useEmailAuth(initialEmail = '') {
   const [isProcessingToken, setIsProcessingToken] = useState(false)
   const searchParams = useSearchParams()
   const { loginWithEmail } = useAuth()
+  const emailStraightBoardFlag = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG)
   const accountRecoveryStartedRef = useRef(false)
   const conditionalPasskeyStartedRef = useRef(false)
 
@@ -373,6 +376,8 @@ export function useEmailAuth(initialEmail = '') {
 
         const response = await fetch('/api/auth/send-email-link', {
           method: 'POST',
+          redirect: 'manual',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
           },
@@ -388,6 +393,17 @@ export function useEmailAuth(initialEmail = '') {
             ...(safeReturnTo ? { returnTo: safeReturnTo } : {}),
           }),
         })
+
+        if (
+          emailStraightBoardFlag &&
+          (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400))
+        ) {
+          const location = response.headers.get('Location')
+          if (location) {
+            window.location.assign(location)
+            return
+          }
+        }
 
         const data = await response.json()
 
