@@ -24,7 +24,7 @@ permissions:
 jobs:
   gate:
     concurrency:
-      group: codex-review-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr || 'sweep' }}
+      group: codex-review-gate
       queue: max
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
