@@ -72,7 +72,7 @@ query($owner: String!, $name: String!, $after: String) {
       nodes {
         number isCrossRepository headRefOid
         commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 30) { nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } } } } }
+        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } } } } }
         comments(last: 100) { nodes { author { login } url body } }
       }
     }
@@ -92,7 +92,7 @@ async function run({ github, context, core }) {
 
   for (const node of nodes.filter(node => !only || node.number === only)) {
     const head = node.commits.nodes[0]?.commit;
-    if (node.isCrossRepository || head?.oid !== node.headRefOid) continue;
+    if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
     const result = evaluate({
       headOid: node.headRefOid,
       reviews: node.reviews.nodes.map(review => ({
