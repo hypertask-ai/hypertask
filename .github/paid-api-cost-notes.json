@@ -84,6 +84,16 @@
     "reason": "HTPR-8250 links one task to its parent through Hypertask's own same-origin add-parent route. The refactor only moves the listed option lookup; the request, payload and route are the ones that already shipped, so no provider, retry or token budget is added.",
     "source": "https://app.hypertask.ai/detail/project-15/8250"
   },
+  "src/lib/contexts/Kanban/BulkSelectionContext.tsx:7d16835058a53d15770f1b910c32d02541e6f55fecbcc6a970107e8f8d4e89d1": {
+    "maxUsdPerDay": 0,
+    "reason": "The browser sends selected tasks to Hypertask's own same-origin bulk-move-board API; this call has no third-party API charge.",
+    "source": "https://app.hypertask.ai/detail/project-15/8737"
+  },
+  "src/lib/contexts/Kanban/BulkSelectionContext.tsx:f3674c8615f24685280d686182c0eb898a780fd28735c7d75799b7fbd532482c": {
+    "maxUsdPerDay": 0,
+    "reason": "axios.isAxiosError only inspects an error locally; it makes no network request or paid API call.",
+    "source": "https://axios-http.com/docs/handling_errors"
+  },
   "src/lib/slack/api.ts:358f54578c5f4b9f87252011a8fcb3513c6b94b60e70fa98c555a6aeaa09567c": {
     "maxUsdPerDay": 0,
     "reason": "HTPR-8276 keeps the existing single Slack chat.postMessage call per new board-15 feedback ticket; only its notification fallback text now carries the line instead of the words 'Hypertask response'. Slack Web API calls are not billed per call.",

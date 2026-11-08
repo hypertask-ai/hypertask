@@ -9,6 +9,10 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
+import axios from "axios";
+import { useQueryClient } from "@tanstack/react-query";
+import { HTPR_8737_BULK_MOVE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8737-bulk-move-board";
+import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 import { CommandMode } from "@/models/enums";
 import { IAgent, ILabel, ISection, ITask, IUser } from "@/models/model";
@@ -16,7 +20,7 @@ import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { activeItemAtom, showCommandsAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
-import { getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
+import { BULK_MOVE_BOARD_LIMIT, getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
 
@@ -44,6 +48,8 @@ interface KanbanBulkSelectionContextValue {
   openBulkCommand: (mode?: CommandMode) => void;
   archiveSelected: () => Promise<void>;
   moveSelected: (section: ISection) => Promise<void>;
+  moveSelectedToBoard: (projectId: number, sectionId: number) => Promise<void>;
+  bulkMoveBoardEnabled: boolean;
   assignSelected: (assignee: Assignee, intent?: AssigneeIntent) => Promise<void>;
   labelSelected: (label: ILabel) => Promise<void>;
   handleBulkKeyDown: (
@@ -80,6 +86,8 @@ export const KanbanBulkSelectionProvider = ({
   onLabelTask,
 }: KanbanBulkSelectionProviderProps) => {
   const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
+  const bulkMoveBoardEnabled = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
+  const queryClient = useQueryClient();
   const focusedTaskId = useRecoilValue(activeItemAtom);
   const latestTaskIdRef = useRef<number | null>(null);
   useEffect(() => {
@@ -255,6 +263,46 @@ export const KanbanBulkSelectionProvider = ({
     [onMoveTask, runTaskOperation, selectedTasks.length],
   );
 
+  const moveSelectedToBoard = useCallback(async (projectId: number, sectionId: number) => {
+    if (!bulkMoveBoardEnabled || isProcessing || selectedTasks.length === 0) return;
+    const snapshot = selectedTasks;
+    if (snapshot.length > BULK_MOVE_BOARD_LIMIT) {
+      toast.error(`Select at most ${BULK_MOVE_BOARD_LIMIT} tasks to move to another board.`);
+      return;
+    }
+    const sourceProjectId = snapshot[0]?.projectId;
+    if (!sourceProjectId || snapshot.some((task) => task.projectId !== sourceProjectId)) return;
+    setIsProcessing(true);
+    try {
+      const { data } = await axios.post<{ movedIds: number[]; failedIds: number[]; issues: { id: number; message: string }[] }>("/api/tasks/bulk-move-board", {
+        ids: snapshot.map((task) => task.id), sourceProjectId, projectId, sectionId,
+      });
+      const failed = new Set(data.failedIds);
+      setSelectedIds(failed);
+      setFailedIds(failed);
+      if (data.issues.length) {
+        toast.error(data.issues.map(({ id, message }) => `${snapshot.find((task) => task.id === id)?.ticketNumber || id}: ${message}`).join("\n"));
+      } else {
+        toast.success(`${data.movedIds.length} tasks moved`);
+      }
+    } catch (error) {
+      const failed = new Set(snapshot.map((task) => task.id));
+      setSelectedIds(failed);
+      setFailedIds(failed);
+      const message = axios.isAxiosError(error) && typeof error.response?.data?.message === "string" ? error.response.data.message : "Could not confirm move. Check both boards before retrying.";
+      toast.error(message);
+    } finally {
+      try {
+        await Promise.all([
+          reconcileActiveBoardQuery(queryClient, sourceProjectId),
+          queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "boardTasks" && query.queryKey[2] === projectId }),
+        ]);
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+  }, [bulkMoveBoardEnabled, isProcessing, queryClient, selectedTasks]);
+
   const assignSelected = useCallback(
     (assignee: Assignee, intent: AssigneeIntent = "assign") =>
       runTaskOperation(
@@ -414,6 +462,8 @@ export const KanbanBulkSelectionProvider = ({
       openBulkCommand,
       archiveSelected,
       moveSelected,
+      moveSelectedToBoard,
+      bulkMoveBoardEnabled,
       assignSelected,
       labelSelected,
       handleBulkKeyDown,
@@ -421,6 +471,8 @@ export const KanbanBulkSelectionProvider = ({
     [
       archiveSelected,
       assignSelected,
+      bulkMoveBoardEnabled,
+      moveSelectedToBoard,
       clearSelection,
       failedIds,
       handleBulkKeyDown,

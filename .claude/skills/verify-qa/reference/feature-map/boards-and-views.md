@@ -14,6 +14,20 @@ from the sidebar is the `switch-boards` journey.
 switch views, then switch to a second board and back, since the bugs below
 cluster around what happens on that second switch, not the first load.
 
+## Bulk move between boards
+
+With HTPR-8737 enabled for Owner + QA, use two writable boards. On the
+source board, select three tickets, including a parent and its child. Open
+Ctrl+K, choose **Move selected tasks to board**, then pick the target board
+and an active column. Check all three leave the source. Reload the source
+and check they remain absent. Open the target and reload it; check all three
+are in the chosen column and the child still belongs to its parent.
+
+Repeat with a ticket the actor cannot move and one they can. Check the failed
+ticket stays selected and is named in the error. Reload both boards and check
+only the permitted move persisted. As a user without the flag or write access,
+check the bulk endpoint refuses the request and neither board changes.
+
 ## What usually breaks
 
 - Board switching leaving stale state behind ([HTPR-6627](https://app.hypertask.ai/detail/project-15/6627), "make shallow
