@@ -3,11 +3,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { chromium } from "playwright";
 
 const BASE = "https://app.hypertask.ai";
-const CRON_SECRET = process.env.FUNNEL_PROBE_CRON_SECRET || process.env.CRON_SECRET || "";
+const INBOX_SECRET = process.env.CRON_SECRET || "";
 const REPORT_TOKEN = process.env.HYPERTASK_MCP_TOKEN || "";
 const PARENT_TICKET = process.env.FUNNEL_PROBE_PARENT_TICKET || "MARK-164";
-const MARK_PROJECT_ID = 2108;
-
 const steps = [];
 
 function record(step, ok, detail) {
@@ -20,22 +18,18 @@ function dailyEmail() {
   return `daily-${day}-${suffix}@funnel-probe.hypertask.app`;
 }
 
-async function pollInbox(email, attempts = 12) {
-  for (let i = 0; i < attempts; i++) {
-    const response = await fetch(
-      `${BASE}/api/ops/funnel-probe-inbox?email=${encodeURIComponent(email)}`,
-      {
-        headers: { Authorization: `Bearer ${CRON_SECRET}` },
-        signal: AbortSignal.timeout(20_000),
-      },
-    );
-    if (response.status === 404) {
-      await new Promise((r) => setTimeout(r, 5_000));
-      continue;
-    }
-    const data = await response.json();
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function pollInbox(email) {
+  for (let i = 0; i < 12; i++) {
+    const response = await fetch(`${BASE}/api/ops/funnel-probe-inbox?email=${encodeURIComponent(email)}`, {
+      headers: { Authorization: `Bearer ${INBOX_SECRET}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (response.status === 404) { await wait(5_000); continue; }
+    const data = await response.json().catch(() => ({}));
     if (data?.found && data.entry?.verificationUrl) return data.entry.verificationUrl;
-    await new Promise((r) => setTimeout(r, 5_000));
+    await wait(5_000);
   }
   return null;
 }
@@ -47,22 +41,11 @@ async function postReport(passed) {
   try {
     const response = await fetch(`${BASE}/api/mcp/comments`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${REPORT_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ticket_number: PARENT_TICKET,
-        project_id: MARK_PROJECT_ID,
-        text: body,
-        content_type: "html",
-      }),
+      headers: { Authorization: `Bearer ${REPORT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket_number: PARENT_TICKET, project_id: 2108, text: body, content_type: "html" }),
       signal: AbortSignal.timeout(30_000),
     });
-    if (!response.ok) {
-      record("mark-164 report", false, `HTTP ${response.status}`);
-      return false;
-    }
+    if (!response.ok) { record("mark-164 report", false, `HTTP ${response.status}`); return false; }
     record("mark-164 report", true, "posted");
     return true;
   } catch (error) {
@@ -71,12 +54,15 @@ async function postReport(passed) {
   }
 }
 
-async function main() {
-  if (!CRON_SECRET) throw new Error("FUNNEL_PROBE_CRON_SECRET or CRON_SECRET is required");
+async function finish(passed) {
+  const reported = await postReport(passed);
+  if (!passed || (REPORT_TOKEN && !reported)) process.exitCode = 1;
+}
 
+async function main() {
+  if (!INBOX_SECRET) throw new Error("CRON_SECRET is required");
   const email = dailyEmail();
   record("new probe identity", true, email.split("@")[0]);
-
   const signup = await fetch(`${BASE}/api/auth/instant-signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -85,40 +71,23 @@ async function main() {
   });
   const signupBody = await signup.json().catch(() => ({}));
   record("instant signup", signup.ok && signupBody.success !== false, signupBody.error || signup.status);
-
   const verifyUrl = await pollInbox(email);
   record("verification inbox", Boolean(verifyUrl), verifyUrl ? "link ready" : "no link after polling");
-
-  if (!verifyUrl) {
-    const reported = await postReport(false);
-    process.exitCode = 1;
-    if (REPORT_TOKEN && !reported) process.exitCode = 1;
-    return;
-  }
-
+  if (!verifyUrl) return finish(false);
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  let verified = false;
   try {
     await page.goto(verifyUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-    let verified = false;
-    try {
-      await page.getByText("successfully verified", { exact: false }).waitFor({ timeout: 120_000 });
-      verified = true;
-    } catch {
-      verified = false;
-    }
-    record("email verify navigation", verified, page.url());
-  } finally {
-    await browser.close();
-  }
-
-  const passed = steps.every((s) => s.ok);
-  const reported = await postReport(passed);
-  if (!passed || (REPORT_TOKEN && !reported)) process.exitCode = 1;
+    await page.getByText("successfully verified", { exact: false }).waitFor({ timeout: 120_000 });
+    verified = true;
+  } catch { verified = false; }
+  finally { await browser.close(); }
+  record("email verify navigation", verified, page.url());
+  return finish(steps.every((s) => s.ok));
 }
 
 main().catch(async (error) => {
   record("runner", false, error.message || error);
-  await postReport(false);
-  process.exitCode = 1;
+  await finish(false);
 });

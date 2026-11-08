@@ -5,6 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
 const { NextRequest } = require('next/server')
+const { load } = require('./task-route-loader.cjs')
 
 const root = path.resolve(__dirname, '..')
 const flagKey = 'htpr-7029-keep-demo-board-on-email-signup'
@@ -150,7 +151,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
     '@/lib/flags/definitions/htpr-7294-daily-funnel-probe': { HTPR_7294_DAILY_FUNNEL_PROBE_FLAG: 'htpr-7294-daily-funnel-probe' },
     '@/lib/funnelProbe/inbox': { storeProbeVerificationLink: async () => {} },
-    '@/lib/funnelProbe/probeEmail': { isProbeRecipientEmail: () => false },
+    '@/lib/funnelProbe/inbox': { isProbeRecipientEmail: () => false, storeProbeVerificationLink: async () => {} },
   }
   aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
@@ -302,4 +303,24 @@ test('the bugfix flag defaults to Everyone when no database row exists', async (
   assert.equal(result.projects[0].ownerId, userId)
   assert.equal(result.calls.provision.length, 0)
   assert.equal(result.aliases['@/lib/flags'].defaultFeatureFlagMode(flagKey), 'EVERYONE')
+})
+
+test('funnel-probe-inbox accepts deployment CRON_SECRET', async () => {
+  const prev = process.env.CRON_SECRET
+  process.env.CRON_SECRET = 'inbox-route-secret'
+  const email = 'daily-x@funnel-probe.hypertask.app'
+  try {
+    const route = load('src/app/api/ops/funnel-probe-inbox/route.ts', {
+      '@/lib/flags': { FEATURE_FLAG_OWNER_USER_ID: 6, isFeatureEnabled: async () => true },
+      '@/lib/funnelProbe/inbox': { readProbeInbox: async (to) => (to === email ? { runId: 'x' } : null) },
+    })
+    const url = `https://app.hypertask.ai/api/ops/funnel-probe-inbox?email=${encodeURIComponent(email)}`
+    assert.equal((await route.GET(new NextRequest(url))).status, 401)
+    const ok = await route.GET(new NextRequest(url, { headers: { authorization: 'Bearer inbox-route-secret' } }))
+    assert.equal(ok.status, 200)
+    assert.equal((await ok.json()).found, true)
+  } finally {
+    if (prev === undefined) delete process.env.CRON_SECRET
+    else process.env.CRON_SECRET = prev
+  }
 })

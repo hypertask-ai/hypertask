@@ -4,7 +4,7 @@ import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7294_DAILY_FUNNEL_PROBE_FLAG } from "@/lib/flags/definitions/htpr-7294-daily-funnel-probe";
 import { readProbeInbox } from "@/lib/funnelProbe/inbox";
-import { isProbeRecipientEmail } from "@/lib/funnelProbe/probeEmail";
+import { isProbeRecipientEmail } from "@/lib/funnelProbe/inbox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

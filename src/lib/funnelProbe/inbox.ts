@@ -1,6 +1,6 @@
 import { getRedis } from "@/lib/redis";
-import { isProbeRecipientEmail } from "@/lib/funnelProbe/probeEmail";
 
+const PROBE_MAIL_DOMAIN = "funnel-probe.hypertask.app";
 const INBOX_PREFIX = "funnel-probe:inbox:";
 const INBOX_TTL_SECONDS = 48 * 60 * 60;
 
@@ -10,6 +10,20 @@ export type ProbeInboxEntry = {
   verificationUrl: string;
   storedAt: string;
 };
+
+function emailDomain(email: string): string {
+  return email.trim().toLowerCase().slice(email.lastIndexOf("@") + 1);
+}
+
+export function isProbeRecipientEmail(email: string): boolean {
+  const domain = emailDomain(email);
+  return domain === PROBE_MAIL_DOMAIN || domain.endsWith(`.${PROBE_MAIL_DOMAIN}`);
+}
+
+export function makeDailyProbeEmail(runId: string): string {
+  const safe = runId.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 48);
+  return `daily-${safe}@funnel-probe.hypertask.app`;
+}
 
 function inboxKey(normalizedEmail: string): string {
   return `${INBOX_PREFIX}${normalizedEmail}`;
@@ -29,17 +43,10 @@ export async function storeProbeVerificationLink(
     verificationUrl,
     storedAt: new Date().toISOString(),
   };
-  await redis.set(
-    inboxKey(normalized),
-    JSON.stringify(entry),
-    "EX",
-    INBOX_TTL_SECONDS,
-  );
+  await redis.set(inboxKey(normalized), JSON.stringify(entry), "EX", INBOX_TTL_SECONDS);
 }
 
-export async function readProbeInbox(
-  email: string,
-): Promise<ProbeInboxEntry | null> {
+export async function readProbeInbox(email: string): Promise<ProbeInboxEntry | null> {
   const normalized = email.trim().toLowerCase();
   if (!isProbeRecipientEmail(normalized)) return null;
   const redis = await getRedis();
@@ -47,26 +54,8 @@ export async function readProbeInbox(
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as ProbeInboxEntry;
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      typeof parsed.verificationUrl === "string"
-    ) {
-      return parsed;
-    }
+    return typeof parsed?.verificationUrl === "string" ? parsed : null;
   } catch {
     return null;
   }
-  return null;
-}
-
-export function redactProbeInboxForAlert(
-  entry: ProbeInboxEntry | null,
-): { runId: string; step: string; hasVerificationLink: boolean } | null {
-  if (!entry) return null;
-  return {
-    runId: entry.runId,
-    step: entry.step,
-    hasVerificationLink: Boolean(entry.verificationUrl),
-  };
 }

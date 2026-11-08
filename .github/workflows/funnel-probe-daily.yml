@@ -31,7 +31,6 @@ jobs:
 
       - name: Run daily isolated signup probe
         env:
-          FUNNEL_PROBE_CRON_SECRET: ${{ secrets.FUNNEL_PROBE_CRON_SECRET }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
         run: node .github/scripts/funnel-probe-daily.mjs
