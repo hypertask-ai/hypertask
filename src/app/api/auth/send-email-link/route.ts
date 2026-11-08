@@ -15,9 +15,7 @@ import {
 import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board'
 import {
   finishStraightBoardEmailSignup,
-  hasStraightBoardSignupCookie,
   sendSignupVerificationEmail,
-  sessionEmailUnverified,
   straightBoardSignupAllowed,
 } from '@/lib/auth/emailStraightBoard'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
@@ -212,10 +210,10 @@ export async function POST(request: NextRequest) {
         ? (utmData as Record<string, string | undefined>)
         : {}
 
-    const rolloutTester = (await getSessionUser(request.headers))
-    const straightBoardOn =
-      rolloutTester &&
-      (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, rolloutTester.userId));
+    const rolloutTester = await getSessionUser(request.headers)
+    const straightBoardOn = rolloutTester
+      ? await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, rolloutTester.userId)
+      : false
 
     if (!existingUser && straightBoardOn && (await straightBoardSignupAllowed(request))) {
       const finished = await finishStraightBoardEmailSignup(
