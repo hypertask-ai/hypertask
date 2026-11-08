@@ -12,5 +12,9 @@ export default {
     risk: "new",
     highRisk: "access",
     reason: "Grants GitHub repository access and binds it to team boards; stays at Owner and QA until independent QA passes.",
+    harmEvidence: {
+      harm: "private-data-exposure",
+      scenario: "A private repository could be linked to the wrong board and expose pull request metadata to another team.",
+    },
   },
 } as const satisfies FeatureFlagDefinition;
