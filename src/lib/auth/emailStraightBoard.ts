@@ -15,6 +15,7 @@ import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import type { IUser } from "@/models/model";
 import { STRAIGHT_BOARD_UID_PREFIX } from "@/lib/auth/unverifiedEmailAccount";
 
+const signupCookieOptions = { httpOnly: false, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, maxAge: 600 * 60 * 24 * 7, path: "/" };
 const JWT_ISSUER = process.env.JWT_ISSUER || "hypertask";
 const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || "email-verification";
 
@@ -116,13 +117,7 @@ export async function finishStraightBoardEmailSignup(
 
   const response = NextResponse.json({ success: true, straightBoardRedirect: redirectPath });
 
-  response.cookies.set("nookies_user", JSON.stringify({ ...slimUserForCookie(userData), straightBoardSignup: true }), {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 600 * 60 * 24 * 7,
-    path: "/",
-  });
+  response.cookies.set("nookies_user", JSON.stringify({ ...slimUserForCookie(userData), straightBoardSignup: true }), signupCookieOptions);
   response.cookies.set(
     SESSION_COOKIE,
     signSession({ id: userData.id, email: userData.email }, SESSION_TTL_SECONDS),
@@ -132,13 +127,7 @@ export async function finishStraightBoardEmailSignup(
 
   const boardId = welcomeProjectId ?? (typeof loginBoard === "object" && loginBoard ? loginBoard.id : undefined);
   if (boardId) {
-    response.cookies.set("previousBoard", `project-${boardId}|&|`, {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 600 * 60 * 24 * 7,
-      path: "/",
-    });
+    response.cookies.set("previousBoard", `project-${boardId}|&|`, signupCookieOptions);
   }
 
   return { ok: true as const, response, userId: userData.id };

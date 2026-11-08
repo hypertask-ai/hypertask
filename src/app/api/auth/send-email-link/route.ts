@@ -215,10 +215,7 @@ export async function POST(request: NextRequest) {
       select: { id: true },
     })
 
-    const utmParams =
-      utmData && typeof utmData === 'object'
-        ? (utmData as Record<string, string | undefined>)
-        : {}
+    const utmParams = utmData && typeof utmData === 'object' ? (utmData as Record<string, string | undefined>) : {}
 
     const session = await getSessionUser(request.headers)
     const signupRequesterId = session?.userId ?? 0

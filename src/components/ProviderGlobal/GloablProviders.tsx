@@ -650,8 +650,7 @@ export default function GlobalProvider({
   const straightBoardSignup = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
   const enrolledStraightBoard =
     isStraightBoardAccount(currentUser as StraightBoardAccount | null) && !isGuestUser(currentUser);
-  const emailVerificationBlocking =
-    showEmailVerificationModal && !enrolledStraightBoard;
+  const emailVerificationBlocking = showEmailVerificationModal && !enrolledStraightBoard;
 
   const navigateFromGlobalGShortcut = useCallback(
     async (action: GlobalGShortcutAction) => {
