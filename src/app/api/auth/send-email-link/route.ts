@@ -212,23 +212,6 @@ export async function POST(request: NextRequest) {
         ? (utmData as Record<string, string | undefined>)
         : {}
 
-    if (
-      existingUser &&
-      resendEmailVerification &&
-      hasStraightBoardSignupCookie(request.headers.get("cookie")) &&
-      (await sessionEmailUnverified(existingUser.id))
-    ) {
-      const utm =
-        utmData && typeof utmData === "object"
-          ? (utmData as Record<string, string | undefined>)
-          : {};
-      await sendSignupVerificationEmail(request, normalizedEmail, utm);
-      return NextResponse.json({
-        success: true,
-        message: "Verification email sent! Please check your inbox.",
-      });
-    }
-
     const rolloutTester = (await getSessionUser(request.headers))
     const straightBoardOn =
       rolloutTester &&
