@@ -198,9 +198,7 @@ export function activationHarness() {
     "@/lib/auth/emailStraightBoard": {
       blockUnverifiedStraightBoardInvite: async () => false,
       clearStraightBoardSignupCookie: () => {},
-      hasStraightBoardSignupCookie: () => false,
       sessionEmailUnverified: async () => false,
-      straightBoardSignupAllowed: async () => false,
       isPlausibleSignupEmail: () => true,
     },
   };

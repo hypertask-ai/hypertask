@@ -1,5 +1,16 @@
 const { withStubs } = require('./helpers/stub-map.cjs')
-const emailStraightBoardRouteStubs = require('./helpers/email-straight-board-route-stubs.cjs')
+const straightBoardRouteStubs = {
+  '@/lib/auth/getSessionUser': { getSessionUser: async () => null },
+  '@/lib/flags/definitions/htpr-7553-email-straight-board': { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG: 'htpr-7553-email-straight-board' },
+  '@/lib/auth/emailStraightBoard': {
+    finishStraightBoardEmailSignup: async () => ({ ok: false }),
+    sendSignupVerificationEmail: async () => {},
+    clearStraightBoardSignupCookie: () => {},
+    blockUnverifiedStraightBoardInvite: async () => false,
+    sessionEmailUnverified: async () => false,
+    isPlausibleSignupEmail: () => true,
+  },
+}
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -18,7 +29,7 @@ process.env.RESEND_API_KEY = 'email-link-test-key'
 process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = '0'
 
 function loadTs(relativePath, aliases = {}) {
-  aliases = withStubs(emailStraightBoardRouteStubs(), {
+  aliases = withStubs(straightBoardRouteStubs, {
     '@/lib/flags/keys': require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts'),
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
     '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
@@ -79,7 +90,7 @@ function makeHarness(redis = makeRedis()) {
     return { status: 200, res: { user, isNewUser: false } }
   }
   const aliases = {
-    ...emailStraightBoardRouteStubs(),
+    ...straightBoardRouteStubs,
     '@/lib/prisma': prisma,
     '@/lib/flags': {
       HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',

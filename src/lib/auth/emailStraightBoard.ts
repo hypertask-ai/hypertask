@@ -3,7 +3,6 @@ import crypto from "crypto";
 import authConfig from "@/lib/configs/auth.config";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7553-email-straight-board";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -66,16 +65,6 @@ export async function sendSignupVerificationEmail(
     subject: "Verify your email - Hypertask",
     html: `<p><a href="${link}">Verify your email</a></p>`,
   });
-}
-
-export async function straightBoardSignupAllowed(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
-  if (!session) return false;
-  return isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, session.userId);
-}
-
-export function hasStraightBoardSignupCookie(cookieHeader: string | null) {
-  return Boolean(cookieHeader?.includes(`${STRAIGHT_BOARD_SIGNUP_COOKIE}=1`));
 }
 
 export async function sessionEmailUnverified(userId: number) {

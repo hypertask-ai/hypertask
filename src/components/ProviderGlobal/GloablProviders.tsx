@@ -121,8 +121,11 @@ const NotificationPromoteBanner = dynamic(
   () => import("../Global/NotificationPromoteBanner"),
   { ssr: false },
 );
-const EmailConfirmBanner = dynamic(
-  () => import("../Global/EmailConfirmBanner"),
+const StraightBoardEmailConfirmBanner = dynamic(
+  () =>
+    import("../Global/NotificationPromoteBanner").then((mod) => ({
+      default: mod.StraightBoardEmailConfirmBanner,
+    })),
   { ssr: false },
 );
 const CookieConsentBanner = dynamic(
@@ -1307,7 +1310,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      <EmailConfirmBanner />
+      <StraightBoardEmailConfirmBanner />
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}
