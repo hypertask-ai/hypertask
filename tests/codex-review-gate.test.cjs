@@ -45,6 +45,18 @@ test('a running or findings summary stays pending without a review', () => {
   assert.equal(stateOf({}), 'pending');
 });
 
+const flagGatePass = [{ context: 'feature-flag-gate', state: 'success' }];
+
+test('P1 flag-default complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode should be "EVERYONE" for new UI, not Owner + QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
+test('P1 flag-default complaints still fail without feature-flag-gate success', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode must be "EVERYONE" for this visible change.';
+  assert.equal(stateOf({ reviews: [review([finding])] }), 'failure');
+});
+
 test('badge parsing and bot login matching', () => {
   assert.equal(priorityOf(badge(2)), 2);
   assert.equal(priorityOf('plain'), null);

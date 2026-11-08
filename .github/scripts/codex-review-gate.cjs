@@ -18,6 +18,22 @@ function priorityOf(body) {
 
 const blocks = body => (priorityOf(body) ?? 0) <= 1;
 
+const OWNER_QA_VISUAL_RELEASE_COMPLAINT = new RegExp(
+  String.raw`\b(?:defaultMode|default mode)\b[\s\S]{0,240}\b(?:EVERYONE|Everyone)\b|` +
+  String.raw`\b(?:must|should|needs to)\b[\s\S]{0,160}\b(?:EVERYONE|Everyone)\b[\s\S]{0,160}\b(?:defaultMode|default mode|Owner\s*\+\s*QA|OWNER_AND_QA)\b|` +
+  String.raw`\bOwner\s*\+\s*QA\b[\s\S]{0,120}\b(?:should be|must be|needs to be)\b[\s\S]{0,80}\bEveryone\b`,
+  'i',
+);
+
+function featureFlagGatePassed(contexts) {
+  const entry = (contexts ?? []).find(c => c.context === 'feature-flag-gate');
+  return entry && String(entry.state).toLowerCase() === 'success';
+}
+
+function waivedOwnerQaVisualReleaseFinding(body, contexts) {
+  return featureFlagGatePassed(contexts) && OWNER_QA_VISUAL_RELEASE_COMPLAINT.test(String(body ?? ''));
+}
+
 function codeReviewStateFor(comments, headOid) {
   for (const comment of [...comments].reverse()) {
     if (!isCodex(comment.author)) continue;
@@ -37,9 +53,10 @@ function evaluate(pr) {
   const short = pr.headOid.slice(0, 7);
   const reviews = pr.reviews.filter(review => isCodex(review.author) && review.commit === pr.headOid);
 
-  const blocking = reviews.flatMap(review => review.comments.length
+  const rawBlocking = reviews.flatMap(review => review.comments.length
     ? review.comments.filter(blocks)
     : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : []);
+  const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   if (blocking.length) {
     const levels = blocking.map(priorityOf);
     const worst = levels.includes(0) ? 'P0' : levels.includes(1) ? 'P1' : 'unrated';
@@ -47,6 +64,13 @@ function evaluate(pr) {
       state: 'failure',
       description: `Codex review of ${short} raised ${blocking.length} finding(s), worst ${worst}`,
       evidence: reviews.find(review => review.url)?.url ?? '',
+    };
+  }
+  if (rawBlocking.length) {
+    return {
+      state: 'success',
+      description: `Codex reviewed ${short}; feature-flag gate allowed Owner + QA release`,
+      evidence: reviews.findLast(review => review.url)?.url ?? '',
     };
   }
   if (reviews.length) {
@@ -95,6 +119,7 @@ async function run({ github, context, core }) {
     if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
     const result = evaluate({
       headOid: node.headRefOid,
+      statusContexts: head?.status?.contexts ?? [],
       reviews: node.reviews.nodes.map(review => ({
         author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid,
         comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => comment.body ?? '').concat(review.comments.pageInfo.hasNextPage ? ['Further comments were not read.'] : []),
@@ -126,4 +151,13 @@ async function run({ github, context, core }) {
   }
 }
 
-module.exports = { evaluate, priorityOf, blocks, isCodex, codeReviewStateFor, run };
+module.exports = {
+  evaluate,
+  priorityOf,
+  blocks,
+  isCodex,
+  codeReviewStateFor,
+  run,
+  featureFlagGatePassed,
+  waivedOwnerQaVisualReleaseFinding,
+};
