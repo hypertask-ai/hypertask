@@ -694,7 +694,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     task_row AS (SELECT id AS "taskId", "projectId" FROM authorized_task),
     base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-        ${assignmentActivityWithCurrentAvatars(userId, Prisma.sql`comment_task."projectId"`)} AS activity,
+        ${assignmentActivityWithCurrentAvatars(userId, Prisma.sql`ti."projectId"`)} AS activity,
         c."seen",
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
@@ -716,6 +716,8 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
       LEFT JOIN "User" activity_to_user ON activity_to_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
           THEN (c.activity #>> '{data,toUser,userId}')::int END
+      LEFT JOIN "Agent" waiting_activity_agent
+        ON waiting_activity_agent.id = (c.activity #>> '{data,waitingOnAgentId}')::uuid
     ),
     reaction_groups AS (
       SELECT r."commentId", r."emoji", r."unified",
