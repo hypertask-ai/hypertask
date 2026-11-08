@@ -88,12 +88,12 @@ QUEUE_MAX=20  # queue brake: above this many open non-draft app PRs (CI, Fleet I
 
 # Infra first (Valentin, 2026-10-27: "infrastructure fixes always go first, in code, not prose"). After the open-PR and
 # unfinished-merged-work holds, a NEW app (non-YPER4, non-HYCI) claim is refused while more than QUEUE_MAX non-draft PRs are open
-# or while board 4060 Backlog has a free ticket (no assignee at all, not "do not touch"). Reads every page.
+# or while board 11514 (Fleet CI & Infra) Backlog has a free ticket (no assignee at all, not "do not touch"). Reads every page.
 # A ticket that already has an open PR is adoption, not new work, and is never braked.
 infra_free() {
   local page offset=0 total count found=""
   while :; do
-    page=$(${SHIP_CLAIM_HYPERTASK:-hypertask} tasks list --project 4060 --status Normal --limit 100 --offset "$offset" --json) || return 1
+    page=$(${SHIP_CLAIM_HYPERTASK:-hypertask} tasks list --project 11514 --status Normal --limit 100 --offset "$offset" --json) || return 1
     jq -e '.success == true and (.tasks | type == "array") and all(.tasks[];
       (.ticketNumber | type == "string") and (.section | type == "string"))' <<<"$page" >/dev/null || return 1
     total=$(jq '.total // (.tasks | length)' <<<"$page"); count=$(jq '.tasks | length' <<<"$page")
@@ -137,7 +137,7 @@ hold_check() {
       then "RESUME" else ($m | map("https://github.com/hypertask-ai/hypertask/pull/\(.number)") | join(" ")) end' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
   [ "$HELD" != RESUME ] || return 0
-  for board in 15 4060; do
+  for board in 15 11514; do
     offset=0; expected_total=''; seen=''
     while :; do
       page=$(${SHIP_CLAIM_HYPERTASK:-hypertask} tasks list --project "$board" --status Normal --limit 100 --offset "$offset" --json) \
@@ -183,7 +183,7 @@ hold_check() {
     done
   done
   # A parked ticket (fleet/park: back in its home column and unassigned, or in Valentin Review) no longer holds its runner,
-  # even though its PR is still open. A PR whose ticket is not on boards 15 and 4060, or has no ticket in its title, still holds.
+  # even though its PR is still open. A PR whose ticket is not on boards 15 and 11514, or has no ticket in its title, still holds.
   if [ -n "$HELD" ]; then
     HELD=$(jq -r --arg n "$rn" --arg known "$known" --arg mine "$mine" '
       ($known | split("\n")) as $k | ($mine | split("\n")) as $m
@@ -221,7 +221,7 @@ hold_check() {
   fi
   [ -z "${SHIP_CLAIM_PICKED:-}" ] || return 0
   free=$(infra_free) \
-    || { echo "ship-claim: HOLD. Cannot read board 4060 to check infra first, so no app claim for RUNNER $rn." >&2; return 4; }
+    || { echo "ship-claim: HOLD. Cannot read board 11514 to check infra first, so no app claim for RUNNER $rn." >&2; return 4; }
   if [ -n "$free" ]; then
     echo "ship-claim: HOLD. infra first: free Fleet Infra tickets wait ($free). Do NOT claim $t; claim one of those."
     return 4
@@ -244,8 +244,8 @@ fi
 T=${1:-}
 [[ $T =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4|HYCI-NNNN> [\"<resume command>\"]" >&2; exit 2; }
 # The board a ticket lives on, so a refusal can name it. HYCI is the CI board (11514), owned by CI Boss.
-case "$T" in HTPR-*|HYFA-*) TICKET_BOARD=15 ;; YPER4-*) TICKET_BOARD=4060 ;; HYCI-*) TICKET_BOARD=11514 ;; *) TICKET_BOARD='' ;; esac
-ticket_board_name() { case "$1" in 15) echo "Hypertask" ;; 4060) echo "Fleet Infra" ;; 11514) echo "Hypertask CI" ;; *) echo "its own" ;; esac; }
+case "$T" in HTPR-*|HYFA-*) TICKET_BOARD=15 ;; YPER4-*|HYCI-*) TICKET_BOARD=11514 ;; *) TICKET_BOARD='' ;; esac
+ticket_board_name() { case "$1" in 15) echo "Hypertask" ;; 11514) echo "Fleet CI & Infra" ;; *) echo "its own" ;; esac; }
 ticket_board_owner() { case "$1" in 11514) echo "CI Boss" ;; *) echo "its owner" ;; esac; }
 VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}; HT_API=${SHIP_CLAIM_HT:-ht}
 SID=${CLAUDE_CODE_SESSION_ID:-}
@@ -369,7 +369,7 @@ case "$res" in
     if jq -e --arg rid "$RID" '[.comments[], .activities[]?] | any(.[];
       (.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed.") and (contains($rid) | not))' "$W" >/dev/null; then
       project=$(jq -r '.tasks[0] | .projectId // .boardId // empty' "$MERGED" 2>/dev/null)
-      case "$T" in HTPR-*) project=${project:-15} ;; YPER4-*) project=${project:-4060} ;; esac
+      case "$T" in HTPR-*) project=${project:-15} ;; YPER4-*|HYCI-*) project=${project:-11514} ;; esac
       questions=$(jq -r --arg project "$project" --arg number "${T#*-}" '
         .comments | sort_by(.createdAt, .id) | .[]
         | ((.text // .commentText // "") | gsub("<[^>]*>"; " ") | gsub("[[:space:]]+"; " ")) as $text
