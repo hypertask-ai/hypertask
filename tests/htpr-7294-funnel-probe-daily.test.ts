@@ -49,16 +49,9 @@ test("probe inbox stores and reads verification links only for probe mail", asyn
   assert.equal(await readProbeInbox("not-probe@hypertask.ai"), null);
 });
 
-test("funnel probe cron route is registered in vercel.json", () => {
-  assert.ok(
-    vercel.crons.some((cron) => cron.path === "/api/cron/funnel-probe-signup"),
-  );
-});
-
-test("the daily funnel probe flag is registered with owner-only rollout", () => {
-  const def = activationHarness().load(
-    "src/lib/flags/definitions/htpr-7294-daily-funnel-probe.ts",
-  ).default;
+test("funnel probe cron and flag are registered", () => {
+  assert.ok(vercel.crons.some((cron) => cron.path === "/api/cron/funnel-probe-signup"));
+  const def = activationHarness().load("src/lib/flags/definitions/htpr-7294-daily-funnel-probe.ts").default;
   assert.equal(def.key, "htpr-7294-daily-funnel-probe");
   assert.equal(def.defaultMode, "OWNER_AND_QA");
 });
