@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { scheduleBackfillAiLabel } from "@/lib/ai/labelClassifier";
 import prisma from "@/lib/prisma";
-import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
+import { gatedTableGroupByForViewWrite } from "@/lib/table-view/tableGroupByTag";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
   buildSmartSplitBoardFilters,

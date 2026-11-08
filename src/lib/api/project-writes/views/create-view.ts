@@ -8,7 +8,7 @@ import { ISection } from "@/models/model";
 import { TCreate_view_body } from "@/models/Views/model";
 import getProjectView, { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
+import { gatedTableGroupByForViewWrite } from "@/lib/table-view/tableGroupByTag";
 import {
   getBoardLayoutRequestUpdate,
   sanitizeBoardLayout,

@@ -1,5 +1,5 @@
 import type { ISection, ITask } from "@/models/model";
-
+import { isFeatureEnabled } from "@/lib/flags";
 import type { TableCreateTaskSection, TableSectionIdentifier } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
 
 export type TableGroupBy = "column" | "tag";
@@ -74,11 +74,20 @@ export function dedupeTasksForFlatTableSort(tasks: ITask[]): ITask[] {
   return next;
 }
 
-export function sectionsUseTagGrouping(
-  sections: readonly TableCreateTaskSection[],
-): boolean {
-  return sections.some((section) => {
+export const sectionsUseTagGrouping = (sections: readonly TableCreateTaskSection[]) =>
+  sections.some((section) => {
     const id: TableSectionIdentifier | null | undefined = section.sectionId ?? section.id;
     return typeof id === "string" && id.startsWith("tag:");
   });
+
+export async function gatedTableGroupByForViewWrite(
+  value: unknown,
+  userId: number,
+): Promise<TableGroupBy | null> {
+  const sanitized = sanitizeTableGroupBy(value);
+  if (!sanitized) return sanitized;
+  if (sanitized === "tag" && !(await isFeatureEnabled("htpr-8630-table-group-by-tag", userId))) {
+    return "column";
+  }
+  return sanitized;
 }
