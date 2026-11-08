@@ -425,15 +425,11 @@ export async function updateTaskSingle(
                 : currentState.description_?.content ?? currentState.description ?? "";
             if (!hasPlainLanguageTicketBlock(descriptionHtml)) {
               const newestAgentComment = await tx.comment.findFirst({
-                where: {
-                  taskId: newTask.id,
-                  OR: [{ agentId: { not: null } }, { agentDisplayName: { not: null } }],
-                },
+                where: { taskId: newTask.id, OR: [{ agentId: { not: null } }, { agentDisplayName: { not: null } }] },
                 orderBy: [{ createdAt: "desc" }, { id: "desc" }],
                 select: { text: true, commentText: true },
               });
-              const commentHtml =
-                newestAgentComment?.commentText ?? newestAgentComment?.text ?? "";
+              const commentHtml = newestAgentComment?.commentText ?? newestAgentComment?.text ?? "";
               if (!hasPlainLanguageTicketBlock(commentHtml)) {
                 throw new PlainLanguageTicketError([]);
               }
