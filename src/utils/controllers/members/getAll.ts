@@ -1,6 +1,7 @@
 
 
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
@@ -35,7 +36,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
             const boardAgents = boardAgentMembers
                 .filter((m) => m.agent != null)
                 .map((m) => m.agent!)
-            console.log("🚀 ~ membersGetAll ~ members:", members)
+            await logPersonal(user.id, "membersGetAll members", { count: members.length, memberIds: members.map((member) => member.id), userIds: members.map((member) => member.userId), }, members)
             let team_members:any[]=[];
             const invites = await prisma.invite.findMany({
                 where:{
@@ -60,7 +61,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                 }})
                 console.log("🚀 ~ membersGetAll ~ project:", project)
                 const teamOwner = await prisma.user.findUnique({where:{id:team?.googleAccount.userId}})
-                console.log("🚀 ~ membersGetAll ~ teamOwner:", teamOwner)
+                await logPersonal(user.id, "membersGetAll teamOwner", { userId: teamOwner?.id ?? null }, teamOwner)
                 
                 
                 team_members = await prisma.member_Team.findMany({
@@ -93,12 +94,12 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                         user:true,
                     },
                 })
-                console.log("🚀 ~ membersGetAll ~ team_members:", team_members)
+                await logPersonal(user.id, "membersGetAll team_members", { count: team_members.length, memberIds: team_members.map((member) => member.id), }, team_members)
 
                 console.log("🚀 ~ membersGetAll ~ project?.ownerId!==teamOwner.id:", project?.ownerId)
                 if (teamOwner&&teamOwner?.id !== user.id && !members.map(m=>m.userId).includes(teamOwner?.id) && project?.ownerId!==teamOwner.id ) {
                     team_members.push({ id: -1, user: teamOwner });
-                    console.log("🚀 ~ membersGetAll ~ team_members:", team_members)
+                    await logPersonal(user.id, "membersGetAll team_members", { count: team_members.length, memberIds: team_members.map((member) => member.id), }, team_members)
                    }
 
             }

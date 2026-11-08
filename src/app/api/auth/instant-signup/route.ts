@@ -229,7 +229,11 @@ export async function POST(request: NextRequest) {
     }
 
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
-    console.log('📊 UTM Data for instant signup:', utmParams)
+    if (await isFeatureEnabled("htpr-7786-quiet-personal-logs", userData?.id ?? FEATURE_FLAG_OWNER_USER_ID)) {
+      console.log('instant signup', { userId: userData?.id ?? null, outcome: 'created' })
+    } else {
+      console.log('instant signup', utmParams)
+    }
 
     const verificationToken = createVerificationToken(normalizedEmail)
 

@@ -167,6 +167,7 @@ export function activationHarness() {
       };
     } },
     "@/utils/controllers/logs/createLog": { default: noop },
+    "@/utils/controllers/logs/quietPersonalLog": nativeRequire("./stub-map.cjs").quietPersonalLogStub(),
     "@/lib/projectPrefix": { normalizeProjectPrefix: (value: any) => value, suggestProjectPrefix: () => "BOARD" },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { buildDefaultTitle: () => "Board", getViewFromProject: () => undefined },
     "@/utils/helperFunctions/Views/FilterHelperFunctions": { defaultFilterSettings: {} },
@@ -213,7 +214,7 @@ export function activationHarness() {
         return mocked;
       }
       if (key.startsWith("@/")) {
-        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/flags/approvalWords", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/funnelProbe/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
+        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/flags/approvalWords", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/funnelProbe/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride", "@/lib/logging/"];
         if (!allowed.some((prefix) => key.startsWith(prefix))) throw Error(`Unmocked dependency ${key}`);
         return load(`src/${key.slice(2)}.ts`);
       }
