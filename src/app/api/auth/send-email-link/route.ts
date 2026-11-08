@@ -12,7 +12,6 @@ import {
   isFeatureEnabled,
 } from '@/lib/flags'
 import {
-  blockUnverifiedStraightBoardInvite,
   finishStraightBoardEmailSignup,
   hasStraightBoardSignupCookie,
   sendSignupVerificationEmail,
