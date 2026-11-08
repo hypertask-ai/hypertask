@@ -12,7 +12,7 @@ import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfun
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import {
   sanitizeBoardLayout,
-  sanitizeTableGroupBy,
+  sanitizeTableGroupByForWrite,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -141,7 +141,7 @@ const route = taskWriteRoute({
         view_settings ?? {},
         "table_group_by",
       )
-        ? sanitizeTableGroupBy(view_settings.table_group_by)
+        ? await sanitizeTableGroupByForWrite(userId, view_settings.table_group_by)
         : undefined;
       const sanitizedBoardFilters = sanitizeBoardFilters(view_settings.board_filters);
       const updatedView = await mutateView(

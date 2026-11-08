@@ -11,7 +11,7 @@ import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterS
 import {
   getBoardLayoutRequestUpdate,
   sanitizeBoardLayout,
-  sanitizeTableGroupBy,
+  sanitizeTableGroupByForWrite,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -113,7 +113,10 @@ const route = taskWriteRoute({
         view_settings.table_sort_column,
         view_settings.table_sort_direction
       );
-      const sanitizedTableGroupBy = sanitizeTableGroupBy(view_settings.table_group_by);
+      const sanitizedTableGroupBy = await sanitizeTableGroupByForWrite(
+        userId,
+        view_settings.table_group_by,
+      );
       const sanitizedBoardFilters = sanitizeBoardFilters(
         view_settings.board_filters
       );

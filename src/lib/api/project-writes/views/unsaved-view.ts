@@ -21,7 +21,7 @@ import {
   resolveBoardLayoutRequest,
   resolveShowArchivedRequest,
   sanitizeBoardLayout,
-  sanitizeTableGroupBy,
+  sanitizeTableGroupByForWrite,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -71,7 +71,7 @@ const route = taskWriteRoute({
       req.body,
       "table_group_by",
     )
-      ? sanitizeTableGroupBy(table_group_by)
+      ? await sanitizeTableGroupByForWrite(userId, table_group_by)
       : undefined;
     const project = await prisma.project.findFirst({
       where: {
