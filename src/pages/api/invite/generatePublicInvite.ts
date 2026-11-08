@@ -10,8 +10,6 @@ import { getViewFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFun
 import { getSessionUser } from '@/lib/auth/getSessionUser';
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard';
 import { blockUnverifiedStraightBoardInvite } from '@/lib/auth/emailStraightBoard';
-import { isFeatureEnabled } from '@/lib/flags';
-import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board';
 
 
 
@@ -44,11 +42,7 @@ export default  async function handler(
         const session = await getSessionUser(new Headers(req.headers as Record<string, string>))
         if (!session) return res.status(401).json({message:"Unauthorized"})
 
-        const cookieHeader = typeof req.headers.cookie === "string" ? req.headers.cookie : null;
-        if (
-          (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, session.userId)) &&
-          (await blockUnverifiedStraightBoardInvite(session.userId, cookieHeader))
-        ) {
+        if (await blockUnverifiedStraightBoardInvite(session.userId)) {
           return res.status(403).json({ message: "Please confirm your email before inviting people." });
         }
 

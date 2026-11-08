@@ -88,12 +88,13 @@ export async function sessionEmailUnverified(userId: number) {
   return !(user.emailVerified || user.UserSetting?.isVerified);
 }
 
-export async function blockUnverifiedStraightBoardInvite(
-  userId: number,
-  cookieHeader: string | null,
-) {
-  if (!hasStraightBoardSignupCookie(cookieHeader)) return false;
+export async function blockUnverifiedStraightBoardInvite(userId: number) {
+  if (!(await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, userId))) return false;
   return sessionEmailUnverified(userId);
+}
+
+export function isPlausibleSignupEmail(normalizedEmail: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
 }
 
 function boardRedirectPath(
@@ -170,8 +171,10 @@ export async function finishStraightBoardEmailSignup(
   );
   const redirectPath = boardRedirectPath(loginBoard, welcomeProjectId);
 
-  const redirectUrl = new URL(redirectPath, getRequestBaseUrl(request));
-  const response = NextResponse.redirect(redirectUrl);
+  const response = NextResponse.json({
+    success: true,
+    straightBoardRedirect: redirectPath,
+  });
 
   response.cookies.set("nookies_user", JSON.stringify(slimUserForCookie(userData)), {
     httpOnly: false,

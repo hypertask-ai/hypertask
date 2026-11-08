@@ -376,7 +376,6 @@ export function useEmailAuth(initialEmail = '') {
 
         const response = await fetch('/api/auth/send-email-link', {
           method: 'POST',
-          redirect: 'manual',
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
@@ -394,21 +393,15 @@ export function useEmailAuth(initialEmail = '') {
           }),
         })
 
-        if (
-          emailStraightBoardFlag &&
-          (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400))
-        ) {
-          const location = response.headers.get('Location')
-          if (location) {
-            window.location.assign(location)
-            return
-          }
-        }
-
         const data = await response.json()
 
         if (!response.ok || !data.success) {
           throw new Error(data.error || 'Failed to send sign-in link')
+        }
+
+        if (emailStraightBoardFlag && typeof data.straightBoardRedirect === 'string') {
+          window.location.assign(data.straightBoardRedirect)
+          return
         }
 
         console.log('✅ Sign-in link sent successfully')

@@ -1,4 +1,5 @@
 const { withStubs } = require('./helpers/stub-map.cjs')
+const emailStraightBoardRouteStubs = require('./helpers/email-straight-board-route-stubs.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -9,7 +10,7 @@ const { NextRequest } = require('next/server')
 const root = path.resolve(__dirname, '..')
 
 function loadTypescriptModule(relativePath, aliases = {}) {
-  aliases = withStubs({
+  aliases = withStubs(emailStraightBoardRouteStubs(), {
     '@/lib/flags/keys': require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts'),
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
   }, aliases)

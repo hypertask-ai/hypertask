@@ -6,6 +6,7 @@ const ts = require('typescript')
 const jwt = require('jsonwebtoken')
 const { NextRequest } = require('next/server')
 
+const emailStraightBoardRouteStubs = require('./helpers/email-straight-board-route-stubs.cjs')
 const root = path.resolve(__dirname, '..')
 const testSecret = 'htpr-7032-unit-test-signing-key'
 
@@ -74,6 +75,9 @@ function harness(t, { existingUser = null, modes = {} } = {}) {
     '@/lib/agentRuns/model': {},
   })
   const { POST } = loadTs('src/app/api/auth/send-email-link/route.ts', {
+    ...emailStraightBoardRouteStubs({
+      '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
+    }),
     '@/lib/prisma': { default: prisma, __esModule: true },
     '@/lib/flags': flags,
     '@/lib/services/verificationCodeService': loadTs('src/lib/services/verificationCodeService.ts', {

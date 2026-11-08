@@ -15,7 +15,9 @@ import {
 import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board'
 import {
   finishStraightBoardEmailSignup,
+  isPlausibleSignupEmail,
   sendSignupVerificationEmail,
+  sessionEmailUnverified,
 } from '@/lib/auth/emailStraightBoard'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
@@ -173,7 +175,14 @@ function buildSignInLinkWithUTM(
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, utmData, inviteData, returnTo: rawReturnTo, signupContext } = await request.json()
+    const {
+      email,
+      utmData,
+      inviteData,
+      returnTo: rawReturnTo,
+      signupContext,
+      resendEmailVerification,
+    } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -184,6 +193,13 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.trim().toLowerCase()
     console.log('📧 Generating email link and code for:', normalizedEmail)
+
+    if (!isPlausibleSignupEmail(normalizedEmail)) {
+      return NextResponse.json(
+        { success: false, error: 'Please enter a valid email address.' },
+        { status: 400 },
+      )
+    }
 
     const rateLimitCheck = VerificationCodeService.isRateLimited(normalizedEmail)
     if (rateLimitCheck.limited) {
@@ -209,12 +225,33 @@ export async function POST(request: NextRequest) {
         ? (utmData as Record<string, string | undefined>)
         : {}
 
-    const rolloutTester = await getSessionUser(request.headers)
+    const session = await getSessionUser(request.headers)
+
+    if (resendEmailVerification && existingUser && session?.userId === existingUser.id) {
+      if (
+        (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, session.userId)) &&
+        (await sessionEmailUnverified(existingUser.id))
+      ) {
+        try {
+          await sendSignupVerificationEmail(request, normalizedEmail, utmParams)
+        } catch (emailError) {
+          console.error('Failed to resend straight-board verification email:', emailError)
+          return NextResponse.json(
+            { success: false, error: 'Failed to send verification email' },
+            { status: 500 },
+          )
+        }
+        return NextResponse.json({
+          success: true,
+          message: 'Verification email sent! Please check your inbox.',
+        })
+      }
+    }
 
     if (
       !existingUser &&
-      rolloutTester &&
-      (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, rolloutTester.userId))
+      session &&
+      (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, session.userId))
     ) {
       const finished = await finishStraightBoardEmailSignup(
         request,

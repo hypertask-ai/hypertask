@@ -197,9 +197,11 @@ export function activationHarness() {
     "@/lib/tickets/plainLanguageTicket.mjs": { PlainLanguageTicketError: class PlainLanguageTicketError extends Error {}, hasPlainLanguageTicketBlock: () => true, assertPlainLanguageTicketBlock: () => {}, isInternalAgentTicketBoard: () => false, plainLanguageTicketRefusalMessage: () => "" },
     "@/lib/auth/emailStraightBoard": {
       blockUnverifiedStraightBoardInvite: async () => false,
+      clearStraightBoardSignupCookie: () => {},
       hasStraightBoardSignupCookie: () => false,
       sessionEmailUnverified: async () => false,
       straightBoardSignupAllowed: async () => false,
+      isPlausibleSignupEmail: () => true,
     },
   };
   const cache = new Map<string, any>();
