@@ -83,16 +83,22 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   const scope = source(".github/scripts/visual-change-scope.cjs");
   for (const pattern of ["src/app/**", "src/components/**", "src/hooks/**", "src/styles/**", "styles/**", "**/*.css", "tailwind.config.*", "public/**", "e2e/visual/**", "scripts/seed-browser-smoke.mjs", "scripts/visual-regression-ci.mjs", ".github/workflows/visual-regression.yml"]) assert.ok(scope.includes(`'${pattern}'`), pattern);
   for (const pattern of ["src/app/api/**", "**/*.md"]) assert.ok(scope.includes(`'${pattern}'`), pattern);
-  const job = yaml.load(workflow).jobs["visual-regression"];
-  assert.deepEqual(job.permissions, { contents: "read", packages: "read" });
-  assert.doesNotMatch(workflow, /secrets\.|: write|workflow_run|pull_request_target/);
   const parsed = yaml.load(workflow);
+  const job = parsed.jobs["visual-regression"];
+  assert.deepEqual(job.permissions, { contents: "read", packages: "read" });
+  const visualRegressionOnly = yaml.dump({ jobs: { "visual-regression": job } });
+  assert.doesNotMatch(visualRegressionOnly, /secrets\.|: write|workflow_run|pull_request_target/);
+  assert.doesNotMatch(workflow, /workflow_run|pull_request_target/);
+  assert.deepEqual(parsed.on.schedule.map(entry => entry.cron), ["5 4 * * 1"]);
+  const weeklyFiling = parsed.jobs["verify-qa"].steps.find(step => step.name === "File fleet-board weekly result");
+  assert.equal(weeklyFiling.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_MCP_TOKEN }}");
   const evaluate = (expression, event, journey) => vm.runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), {
     github: { event_name: event, event: { pull_request: { number: event === "pull_request" ? 19 : null, draft: false } }, ref: "refs/heads/production", sha: "push-sha" },
     inputs: { journey }, format: (template, value) => template.replace("{0}", value),
   });
   for (const [event, journey, group, cancel, visual, verify] of [
     ["push", "", "visual-regression-push-sha", false, true, false],
+    ["schedule", "", "visual-regression-push-sha", true, false, true],
     ["workflow_dispatch", "", "visual-regression-push-sha", true, true, false],
     ["workflow_dispatch", "visual", "visual-regression-push-sha", true, true, false],
     ["workflow_dispatch", "inbox-cycle", "verify-qa", false, false, true],
