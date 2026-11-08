@@ -27,8 +27,7 @@ import { isGuestUser } from "@/lib/demo/guest";
 export const STRAIGHT_BOARD_SIGNUP_COOKIE = "ht_straight_board_signup";
 
 const JWT_ISSUER = process.env.JWT_ISSUER || "hypertask";
-const JWT_VERIFICATION_AUDIENCE =
-  process.env.JWT_VERIFICATION_AUDIENCE || "email-verification";
+const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || "email-verification";
 
 function verificationJwtSecret() {
   const jwtSecret = process.env.JWT_SECRET;
@@ -107,13 +106,7 @@ function boardRedirectPath(
   return authConfig.redirect.afterLogin;
 }
 
-const straightBoardCookieOptions = {
-  httpOnly: false,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  maxAge: 60 * 60 * 24 * 14,
-  path: "/",
-};
+const straightBoardCookieOptions = { httpOnly: false, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, maxAge: 60 * 60 * 24 * 14, path: "/" };
 
 export async function finishStraightBoardEmailSignup(
   request: NextRequest,

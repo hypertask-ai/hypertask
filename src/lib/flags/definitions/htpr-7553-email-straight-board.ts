@@ -9,18 +9,10 @@ export default {
   shippedOn: "2026-11-08",
   releaseRisk: {
     risk: "new",
-    reason: "A brand-new email can open a session and land on its board before the inbox confirms the address.",
+    reason: "New email can land on a board before inbox confirmation.",
     highRisk: "access",
-    harmEvidence: {
-      harm: "auth-bypass",
-      scenario: "An unverified email could reach the board and invite others before confirming ownership of the address.",
-    },
-    ownerRequest: {
-      quote:
-        "this one goes behind a feature flag that is only on for me at first pls. Don't release to everyone right away.",
-      ticketUrl: "https://app.hypertask.ai/detail/project-15/7511",
-    },
+    harmEvidence: { harm: "auth-bypass", scenario: "Unverified email could invite others before confirming the address." },
+    ownerRequest: { quote: "only on for me at first", ticketUrl: "https://app.hypertask.ai/detail/project-15/7511" },
   },
-  description:
-    "New email sign-up lands on the board at once with a confirm-email banner; known emails still use the login code.",
+  description: "New email lands on the board with a confirm banner; known emails keep the login code.",
 } as const satisfies FeatureFlagDefinition;
