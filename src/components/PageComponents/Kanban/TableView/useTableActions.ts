@@ -24,7 +24,6 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
 
 export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
-  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
   _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
@@ -93,7 +92,10 @@ export function useTableActions(context: Context) {
     async (task: ITask, index: number) => {
       setSelectedIndex(index);
       updateActiveItemAndItemInView(task);
-      const playlist = tableGroupByTagEnabled
+      const tagGrouped = rows.some(
+        (row) => isTaskRow(row) && typeof row.sid === "string" && row.sid.startsWith("tag:"),
+      );
+      const playlist = tagGrouped
         ? (() => {
             const seenPlaylist = new Set<string>();
             const next: { projectId: number; uniqueIndex: number }[] = [];
@@ -110,7 +112,7 @@ export function useTableActions(context: Context) {
       setTasksPlayList(playlist);
       navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
     },
-    [navigateToTask, rows, setTasksPlayList, updateActiveItemAndItemInView]
+    [navigateToTask, rows, setTasksPlayList, setSelectedIndex, updateActiveItemAndItemInView]
   );
   const handleMouseEnter = useCallback(
     (index: number) => {
