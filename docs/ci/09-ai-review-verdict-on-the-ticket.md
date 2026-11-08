@@ -1,5 +1,7 @@
 ## AI review verdict on the ticket (YPER4-675)
 
+_Note (2026-11-08): this mirror matches only comments by `hypertask-ai-review`, the retired self-hosted reviewer. The Codex review gate posts as `github-actions[bot]`, so the mirror no longer fires. Mirroring Codex verdicts to tickets is a separate follow-up._
+
 [AI review verdict to ticket](../.github/workflows/ai-review-mirror.yml) copies
 the current GitHub AI Review verdict onto the ticket named by the branch, so the
 review reaches the ticket agent activity and not only the pull request. It

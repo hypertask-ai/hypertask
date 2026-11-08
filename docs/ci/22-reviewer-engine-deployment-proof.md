@@ -1,5 +1,7 @@
 ## Reviewer engine deployment proof
 
+_Historical (2026-11-08): the self-hosted reviewer is retired and AI review is Codex's built-in GitHub review. This proof applies only if `hypertask-ai/reviewer` is ever released again; see the Review gate section._
+
 For `hypertask-ai/reviewer` on `main`, with `SHIP_DEPLOY=none`, `ship-check deployed`
 requires a recorded `live-proof` in the ticket's evidence folder:
 

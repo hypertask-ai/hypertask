@@ -346,6 +346,8 @@ settings, runners, or required checks.
 
 ## AI review verdict on the ticket (YPER4-675)
 
+_Note (2026-11-08): this mirror matches only comments by `hypertask-ai-review`, the retired self-hosted reviewer. The Codex review gate posts as `github-actions[bot]`, so the mirror no longer fires. Mirroring Codex verdicts to tickets is a separate follow-up._
+
 [AI review verdict to ticket](../.github/workflows/ai-review-mirror.yml) copies
 the current GitHub AI Review verdict onto the ticket named by the branch, so the
 review reaches the ticket agent activity and not only the pull request. It
@@ -703,6 +705,8 @@ The manifest at [`.github/actions/action-archive-cache-manifest.txt`](../.github
 The private reviewer workflow is commit-pinned separately in `valentinyeo/hypertask-reviewer`; its checkout and setup-node SHAs must remain present in this shared manifest.
 
 ## Reviewer engine deployment proof
+
+_Historical (2026-11-08): the self-hosted reviewer is retired and AI review is Codex's built-in GitHub review. This proof applies only if `hypertask-ai/reviewer` is ever released again; see the Review gate section._
 
 For `hypertask-ai/reviewer` on `main`, with `SHIP_DEPLOY=none`, `ship-check deployed`
 requires a recorded `live-proof` in the ticket's evidence folder:

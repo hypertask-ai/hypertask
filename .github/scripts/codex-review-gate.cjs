@@ -10,14 +10,20 @@ const CODEX_LOGIN = 'chatgpt-codex-connector';
 const CONTEXTS = ['ai-review', 'claude-review'];
 const STATUS_DESCRIPTION_LIMIT = 140;
 const NO_ISSUES_COMMENT = /didn['’]t find any major issues|no major issues/i;
-const BADGE = /\bP([0-9])\b/g;
+// Codex renders a badge as ![P1 Badge](https://img.shields.io/badge/P1-orange);
+// a bracketed [P1] title also appears. The bare form is the fallback for any
+// other rendering, and a body with no match at all counts as unrated.
+const BADGES = [/\bP([0-9]) Badge/g, /badge\/P([0-9])-/g, /\[P([0-9])\]/g, /\bP([0-9])\b/g];
 
 const isCodex = login => String(login ?? '').replace(/\[bot\]$/, '') === CODEX_LOGIN;
 
 // Highest priority badge in a finding, or null when it carries none.
 function priorityOf(body) {
-  const levels = [...String(body ?? '').matchAll(BADGE)].map(match => Number(match[1]));
-  return levels.length ? Math.min(...levels) : null;
+  for (const pattern of BADGES) {
+    const levels = [...String(body ?? '').matchAll(pattern)].map(match => Number(match[1]));
+    if (levels.length) return Math.min(...levels);
+  }
+  return null;
 }
 
 // A finding blocks unless it names a badge below P1. A finding with no badge

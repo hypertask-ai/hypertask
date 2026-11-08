@@ -33,12 +33,13 @@ permissions:
   pull-requests: write
   statuses: write
 
-concurrency:
-  group: codex-review-gate
-  cancel-in-progress: false
-
 jobs:
   gate:
+    # One lane per PR, queued and never cancelled: a cancelled run would show on
+    # the PR head as a failed check and stop auto-merge from touching it.
+    concurrency:
+      group: codex-review-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr || 'sweep' }}
+      queue: max
     # Skip noise without spending a runner: only Codex's own events, ordinary
     # comments on issues, and everything non-event (schedule, manual).
     if: >-
@@ -58,7 +59,10 @@ jobs:
           fetch-depth: 1
           sparse-checkout: .github/scripts
           persist-credentials: false
-      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+      # The gate PR itself runs this file before the script exists on production;
+      # the status then simply stays pending and fails closed.
+      - if: hashFiles('.github/scripts/codex-review-gate.cjs') != ''
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
             const run = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/codex-review-gate.cjs`).run;
