@@ -100,6 +100,9 @@ async function load(root) {
   try {
     const state = JSON.parse(await fs.readFile(join(root, 'state.json'), 'utf8'));
     if (state.version !== 1 || !state.sources || !state.fingerprints || !state.pending || !state.days || !state.summaries || !state.activities || !Array.isArray(state.created)) throw new Error('invalid state');
+    // Board 4060 was folded into 11514 and archived; records stored before that still name it.
+    const records = [state.fingerprints, state.pending, state.stale ?? {}].flatMap(Object.values).concat(Object.values(state.noiseWindows ?? {}).flat());
+    for (const record of records) if (record?.board === 4060) record.board = 11514;
     return state;
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;

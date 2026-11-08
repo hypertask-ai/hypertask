@@ -224,6 +224,18 @@ for (const [kind, hidden] of [['long-value', longValue], ['email', 'person@examp
   assert.equal(h.state().fingerprints[raw].total, 2);
 }));
 
+check('tickets', 'records stored for the archived board 4060 file on 11514', () => withHarness(async h => {
+  const message = 'Deploy hook failed';
+  const fp = fingerprint('github-actions', message, '');
+  h.seed({ version: 1, sources: {}, fingerprints: {}, pending: { [fp]: { board: 4060, service: 'github-actions', normalized: normalize(message), message, stack: '', routes: [''], count: 1, firstSeen: new Date(NOW - 1000).toISOString(), lastSeen: new Date(NOW - 1000).toISOString() } }, days: {}, summaries: {}, activities: {}, created: [] });
+  h.events([event({ service: 'github-actions', board: 11514, route: '', message, stack: '' })]);
+  h.config({ sections: [{ id: 2, section_title: 'Backlog', projectId: 11514, deleted: false }] });
+  await h.run();
+  const args = creates(h)[0].args;
+  assert.equal(args[args.indexOf('--project') + 1], '11514');
+  assert.equal(h.state().fingerprints[fp].board, 11514);
+}));
+
 check('tickets', 'a ticket already filed under a parked group\'s old fingerprint is adopted, not filed again', () => withHarness(async h => {
   const message = '2026-10-15T01:46:59.060Z ERROR [Better Auth]: Invalid origin: https://[redacted].vercel.app';
   const old = '8e2912a350500b38';
