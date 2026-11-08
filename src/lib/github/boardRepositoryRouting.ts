@@ -1,22 +1,9 @@
-import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import prisma from "@/lib/prisma";
 
 import {
   resolveBoardGithubRepository,
   type BoardGithubRepositoryMapping,
 } from "./boardConnections";
-
-const ROLLOUT_USER_IDS = [FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID];
-
-async function installedConnectionsEnabled(): Promise<boolean> {
-  for (const userId of ROLLOUT_USER_IDS) {
-    if (await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, userId)) {
-      return true;
-    }
-  }
-  return false;
-}
 
 export async function lookupBoardForGithubRepository(repository: {
   fullName?: unknown;
@@ -47,10 +34,6 @@ export async function lookupBoardForGithubRepository(repository: {
       row.projectId === boardId,
   );
   if (!mapping) return null;
-
-  if (mapping.provenance === "installed" && !(await installedConnectionsEnabled())) {
-    return null;
-  }
 
   return { boardId, mapping };
 }

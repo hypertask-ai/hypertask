@@ -7,6 +7,8 @@ import {
   broadcastTaskChange,
 } from "@/lib/realtime/server";
 import generateRank from "@/utils/generateRank";
+import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { lookupBoardForGithubRepository } from "@/lib/github/boardRepositoryRouting";
 import {
   isAuthorizedPullRequestAuthor,
@@ -422,6 +424,16 @@ export async function POST(request: NextRequest) {
       isPrivate: payload.repository?.private,
       isFork: payload.repository?.fork,
     });
+    if (
+      routing?.mapping.provenance === "installed" &&
+      !(await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, FEATURE_FLAG_OWNER_USER_ID)) &&
+      !(await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, FEATURE_FLAG_QA_USER_ID))
+    ) {
+      return NextResponse.json({
+        success: true,
+        ignored: "Board GitHub connection is not enabled",
+      });
+    }
     const boardId = routing?.boardId ?? null;
     const repository = repositoryParts(repositoryFullName);
     if (!boardId || !repository) {
