@@ -76,6 +76,11 @@ export type SeatBillingSerializer = <T>(
 
 const STRIPE_UPDATE_TIMEOUT_MS = 15_000;
 
+function terminalStatusSynced(value: unknown) {
+  return !!value && typeof value === "object" &&
+    typeof (value as { statusSynced?: unknown }).statusSynced === "string";
+}
+
 const productionAdapter: SeatBillingAdapter = {
   findTeam: (teamId) =>
     prisma.team.findUnique({
@@ -325,11 +330,14 @@ async function syncSeatBilling(
     );
     const currentItemId = item.id;
     const currentQuantity = item.quantity ?? 0;
+    const refreshed = await adapter.refreshSubscriptionSnapshot?.(
+      teamId, activePlan.subscriptionId, assertHeld,
+    );
+    if (terminalStatusSynced(refreshed)) return "OK";
     if (
       desiredQuantity === currentQuantity ||
       (!exact && desiredQuantity < currentQuantity)
     ) {
-      await adapter.refreshSubscriptionSnapshot?.(teamId, activePlan.subscriptionId, assertHeld);
       return "OK";
     }
 

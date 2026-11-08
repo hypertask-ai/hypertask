@@ -15,6 +15,7 @@ let team;
 let writes;
 let stripeWrites;
 let failSave;
+let recordedStatus;
 const prisma = {
   team: { findUnique: async () => team },
   subscriptionPlan: {
@@ -24,7 +25,8 @@ const prisma = {
       assert.equal(where.subscriptionId, "sub");
       assert.equal(where.teamId, "team");
       writes++;
-      saved = data.subscriptionObject;
+      if (data.subscriptionStatus) recordedStatus = data.subscriptionStatus;
+      if (data.subscriptionObject) saved = data.subscriptionObject;
       return { count: 1 };
     },
   },
@@ -49,7 +51,7 @@ test.beforeEach(() => {
   live = { id: "sub", customer: "cus", status: "active", items: { data: [{ id: "si", quantity: 2, price: { id: "price_yearly" } }] } };
   team = { totalSeats: 2, activeSubscriptionPlanId: "sub", activeSubscriptionPlanItemId: "si", compedUntil: null,
     subscriptionPlan: [{ id: "row", teamId: "team", subscriptionId: "sub", subscriptionItemId: "si", subscriptionStatus: "active", priceId: "price_yearly", subscriptionObject: saved }] };
-  writes = 0; stripeWrites = 0; failSave = false;
+  writes = 0; stripeWrites = 0; failSave = false; recordedStatus = null;
 });
 
 test("a yearly snapshot showing one seat is refreshed to Stripe's two even when billing needs no change", async () => {
@@ -84,15 +86,29 @@ test("one-off resync previews without writes, applies on request and preserves p
   assert.equal(stripeWrites, 0);
 });
 
-for (const mismatch of ["customer", "id", "status", "item"]) {
+for (const mismatch of ["customer", "id", "item"]) {
   test(`resync refuses mismatched Stripe ${mismatch}`, async () => {
     if (mismatch === "item") live.items.data[0].id = "foreign_item";
-    else live[mismatch] = mismatch === "status" ? "canceled" : "foreign";
+    else live[mismatch] = "foreign";
     await assert.rejects(refresh("team", "sub", () => {}, true));
     assert.equal(saved.items.data[0].quantity, 1);
     assert.equal(writes, 0);
   });
 }
+
+test("a canceled Stripe subscription is recorded locally and is not charged", async () => {
+  live.status = "canceled";
+  team.totalSeats = 9;
+  const preview = await refresh("team", "sub", () => {}, false);
+  assert.equal(preview.statusSynced, "canceled");
+  assert.equal(writes, 0);
+  assert.equal(stripeWrites, 0);
+  assert.equal(saved.items.data[0].quantity, 1);
+  assert.equal(await billing.syncSeatBillingOnJoin("team", undefined, passthrough), "OK");
+  assert.equal(recordedStatus, "canceled");
+  assert.equal(stripeWrites, 0);
+  assert.equal(saved.items.data[0].quantity, 1);
+});
 
 test("bulk resync refuses seat decreases while normal reconciliation can refresh them", async () => {
   saved.items.data[0].quantity = 3;
