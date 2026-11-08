@@ -20,12 +20,11 @@ concurrency:
   group: ci-tests-${{ github.event.pull_request.number || github.sha }}
   # HYCI-182: without queue: max, a burst of synchronize events while a run is
   # cancelling can drop the newest head entirely (PR 3023 stopped at f22583a).
-  # Keep cancel-in-progress so only the latest revision runs; queue every event
-  # so the newest push is never the one that never starts.
+  # GitHub rejects queue: max together with cancel-in-progress, so every pending
+  # synchronize keeps a slot and superseded PR runs finish instead of cancelling.
   queue: max
-  # Superseded PR runs are waste, but every production run must finish its full
-  # test report and warning path.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Production pushes still must finish their full test report and warning path.
+  cancel-in-progress: false
 
 # One knob for the Test step. YPER4-554 (HT Product Lead, 2026-10-24) capped it
 # at 2 because 3 or more count-split shards queued other pulls. YPER4-777 broke

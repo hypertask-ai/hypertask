@@ -14,15 +14,15 @@ test('every pull request push cancels its superseded run', () => {
   assert.deepEqual(check(WORKFLOWS), []);
 });
 
-test('ci-tests queues every synchronize while still cancelling superseded runs', () => {
+test('ci-tests queues every synchronize without cancelling pending runs', () => {
   const ci = workflow('ci-tests');
   assert.equal(ci.concurrency.queue, 'max');
-  assert.equal(ci.concurrency['cancel-in-progress'], "${{ github.event_name == 'pull_request' }}");
+  assert.equal(ci.concurrency['cancel-in-progress'], false);
 });
 
 test('only the listed gates skip cancellation, and each cites its ticket', () => {
   assert.deepEqual([...EXCEPTIONS.keys()],
-    ['feature-flag-gate', 'ux-signoff-gate', 'pr-guards-trusted', 'dependabot-lane']);
+    ['feature-flag-gate', 'ux-signoff-gate', 'pr-guards-trusted', 'dependabot-lane', 'ci-tests']);
   for (const [name, reason] of EXCEPTIONS) {
     assert.equal(workflow(name).concurrency.queue, 'max', `${name} keeps a slot for every pending event`);
     assert.equal(workflow(name).concurrency['cancel-in-progress'], false);
