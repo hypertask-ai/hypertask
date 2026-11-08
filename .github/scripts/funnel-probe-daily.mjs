@@ -61,6 +61,18 @@ async function finish(passed) {
 async function main() {
   if (!INBOX_SECRET) throw new Error("CRON_SECRET is required");
   if (!REPORT_TOKEN) throw new Error("HYPERTASK_MCP_TOKEN is required");
+  const gate = await fetch(`${BASE}/api/cron/funnel-probe-signup`, {
+    headers: { Authorization: `Bearer ${INBOX_SECRET}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (gate.status === 404) {
+    const disabled = await gate.json().catch(() => ({}));
+    if (disabled?.disabled) process.exit(0);
+  }
+  if (!gate.ok) {
+    record("probe gate", false, `HTTP ${gate.status}`);
+    return finish(false);
+  }
   const email = dailyEmail();
   record("new probe identity", true, email.split("@")[0]);
   const signup = await fetch(`${BASE}/api/auth/instant-signup`, {
