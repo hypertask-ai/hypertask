@@ -53,7 +53,7 @@ function fixture({ enabled = true, draft = false, empty = false } = {}) {
     KeyCodes: { G: 71, T: 84, D: 68, U: 85 },
     activeSplitRef: { current: active }, jumpToInboxBoundary: navigation.jumpToInboxBoundary,
     setActiveKeyboardRowKey: key => focus.push(key),
-    setKeyboardNavigationStarted: () => {},
+    setKeyboardNavigationStarted: () => {}, inboxFirstRow: true,
     setGlobalFocus: update => indexes.push(update({ currIdx: 1 }).currIdx),
   };
   const script = `${declaration("focusKeyboardRow")}\n${declaration("handleKeyDown")}\nglobalThis.handle = handleKeyDown;`;

@@ -182,7 +182,7 @@ const InboxSplit = ({
     string | null
   >(null);
   const [keyboardNavigationStarted, setKeyboardNavigationStarted] =
-    useState(resumesPosition || !inboxFirstRow);
+    useState(resumesPosition);
   const { goToProjectShortcut } = useProjectQuery();
   const { updateInView } = useUpdateInView({
     value,
@@ -639,7 +639,7 @@ const InboxSplit = ({
       openTask("audio");
     else if (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN) {
       e.preventDefault();
-      if (keyboardNavigationStarted) {
+      if (keyboardNavigationStarted || !inboxFirstRow) {
         const targetRow = getAdjacentInboxKeyboardRow(
           keyboardRows,
           selectedKeyboardRow?.key ?? null,
@@ -657,7 +657,7 @@ const InboxSplit = ({
       !cmdControl
     ) {
       e.preventDefault();
-      if (keyboardNavigationStarted) {
+      if (keyboardNavigationStarted || !inboxFirstRow) {
         const targetRow = getAdjacentInboxKeyboardRow(
           keyboardRows,
           selectedKeyboardRow?.key ?? null,

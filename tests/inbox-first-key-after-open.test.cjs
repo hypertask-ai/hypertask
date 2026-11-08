@@ -53,6 +53,7 @@ function fixture({ resumes, focusedIndex = 0, count = 6 }) {
     Element: class {},
     keyboardRows,
     inboxKeyboardFocus: true,
+    inboxFirstRow: true,
     keyboardNavigationStarted: resumes,
     selectedKeyboardNotificationIndex: null,
     selectedKeyboardRow: keyboardRows[focusedIndex],
