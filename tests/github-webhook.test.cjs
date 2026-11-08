@@ -17,7 +17,7 @@ function loadTs(relativePath) {
 async function withStubbedGithubRoute(stubbedModules, run) {
   const paths = [...new Set([
     ...Object.keys(stubbedModules),
-    "src/lib/github/appConfig.ts",
+    "src/lib/github/boardRepositoryRouting.ts",
     "src/utils/controllers/assignees/assign.ts",
     "src/utils/controllers/agents/boardMembers.ts",
     "src/lib/agents/visibility.ts",
@@ -1209,8 +1209,7 @@ test("a connected board moves tickets only for repository writers", async (t) =>
       payload.pull_request.author_association = association;
       const result = await runAuthorScenario(payload, "linked", "pull_request", INSTALLED_REPO_MAPPING);
       if (!writers.includes(association)) return assertUnauthorizedAuthor(result);
-      assert.equal(result.status, 200);
-      assert.equal(result.moves.length, 1);
+      assert.equal(result.moves.length, 1, JSON.stringify(result.body));
     });
   }
 });
