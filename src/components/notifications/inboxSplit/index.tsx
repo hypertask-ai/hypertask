@@ -181,8 +181,7 @@ const InboxSplit = ({
   const [activeKeyboardRowKey, setActiveKeyboardRowKey] = useState<
     string | null
   >(null);
-  const [keyboardNavigationStarted, setKeyboardNavigationStarted] =
-    useState(resumesPosition);
+  const keyboardNavigationStarted = useRef(resumesPosition);
   const { goToProjectShortcut } = useProjectQuery();
   const { updateInView } = useUpdateInView({
     value,
@@ -334,7 +333,7 @@ const InboxSplit = ({
     direction?: -1 | 1 | "boundary",
   ) => {
     setActiveKeyboardRowKey(row.key);
-    setKeyboardNavigationStarted(true);
+    keyboardNavigationStarted.current = true;
     if (row.item.kind === "notification") {
       const notificationIndex = row.item.notificationIndex;
       setGlobalFocus((previous) => ({
@@ -639,7 +638,7 @@ const InboxSplit = ({
       openTask("audio");
     else if (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN) {
       e.preventDefault();
-      if (keyboardNavigationStarted || !inboxFirstRow) {
+      if (keyboardNavigationStarted.current || !inboxFirstRow) {
         const targetRow = getAdjacentInboxKeyboardRow(
           keyboardRows,
           selectedKeyboardRow?.key ?? null,
@@ -657,7 +656,7 @@ const InboxSplit = ({
       !cmdControl
     ) {
       e.preventDefault();
-      if (keyboardNavigationStarted || !inboxFirstRow) {
+      if (keyboardNavigationStarted.current || !inboxFirstRow) {
         const targetRow = getAdjacentInboxKeyboardRow(
           keyboardRows,
           selectedKeyboardRow?.key ?? null,
@@ -757,7 +756,7 @@ const InboxSplit = ({
         row.item.notificationIndex === index,
     );
     if (hoveredRow) {
-      setKeyboardNavigationStarted(true);
+      keyboardNavigationStarted.current = true;
       setActiveKeyboardRowKey(hoveredRow.key);
     }
     clearPrefetchHoverTimeout();
