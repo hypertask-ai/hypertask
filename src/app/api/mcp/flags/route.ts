@@ -255,11 +255,10 @@ export async function PATCH(request: NextRequest) {
         }
         if (/^[\s\p{P}]*$/u.test(chatTail)) chatTail = "";
         if (kind === "chat-record" && chatSwitchText) {
-          const parsed = parseSwitchQuestion(chatSwitchText, false);
-          if (parsed && classifyAnswer(chatQuote) !== "yes" && !isBareOffOrder(chatQuote)) {
+          if (classifyAnswer(chatQuote) !== "yes" && !isBareOffOrder(chatQuote)) {
             throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
           }
-          switches = parsed;
+          switches = parseSwitchQuestion(chatSwitchText, false);
           if (!switches && chatTail) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         }
         if (kind !== "chat-record" || !switches) {

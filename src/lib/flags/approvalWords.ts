@@ -79,7 +79,7 @@ export function isOffOrder(text: string): boolean {
 }
 
 export function isBareOffOrder(quote: string): boolean {
-  return BARE_OFF.test(quote);
+  return BARE_OFF.test(quote.trim().replace(/[^\p{L}\p{N}]+$/u, ""));
 }
 
 const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;

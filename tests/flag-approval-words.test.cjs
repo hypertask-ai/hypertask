@@ -49,6 +49,7 @@ test("a quote block after the chat header is the approval and adjacent prose is 
   assert.equal(isOffOrder("turn it off after QA"), false);
   assert.equal(isOffOrder("turn it off when QA passes"), false);
   assert.equal(isBareOffOrder("turn it off"), true);
+  assert.equal(isBareOffOrder("turn it off!"), true);
   assert.equal(isBareOffOrder("turn it off provided QA passes"), false);
   assert.equal(parseSwitchQuestion(`${conditional.quote} ${conditional.tail}`), null);
   assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><p>yes, ship it</p>'), null);

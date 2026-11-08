@@ -660,6 +660,18 @@ test("PATCH refuses an off order that is only provided QA passes", async () => {
   await assertRefused(approvalRequired, "OFF");
 });
 
+test("PATCH refuses a conditional off quote that uses an earlier Off question", async () => {
+  quoteBlockRecord("turn it off provided QA passes");
+  ticketComments = [ticketComment(100, `Question: Switch ${key} to Off?`)];
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH accepts a punctuated bare off quote that uses an earlier Off question", async () => {
+  quoteBlockRecord("turn it off!");
+  ticketComments = [ticketComment(100, `Question: Switch ${key} to Off?`)];
+  await assertAllowed("chat-record", key, "OFF", [100]);
+});
+
 test("PATCH refuses an off order that waits until QA passes", async () => {
   quoteBlockRecord("turn it off when QA passes", `<p>Switch ${key} to Off</p>`);
   ticketComments = [];
