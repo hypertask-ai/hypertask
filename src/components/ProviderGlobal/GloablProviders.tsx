@@ -271,14 +271,19 @@ import {
 } from "@/lib/boardStartup/mobileControls";
 import { shouldEnableSecondaryStartup } from "@/lib/boardStartup/secondaryRequests";
 
+type StraightBoardAccount = { email?: string | null; uid?: string | null; straightBoardSignup?: boolean; UserSetting?: { isVerified?: boolean | null } | null };
+
+const isStraightBoardAccount = (user: StraightBoardAccount | null) =>
+  Boolean(user && (user.straightBoardSignup || String(user.uid ?? "").startsWith("email_sb_")));
+
 function StraightBoardConfirmStrip({
   pathname,
   currentUser,
 }: {
   pathname: string | null;
-  currentUser: { email?: string | null; uid?: string | null; straightBoardSignup?: boolean; UserSetting?: { isVerified?: boolean | null } | null } | null;
+  currentUser: StraightBoardAccount | null;
 }) {
-  if (!currentUser || isGuestUser(currentUser) || !currentUser.straightBoardSignup) return null;
+  if (!currentUser || isGuestUser(currentUser) || !isStraightBoardAccount(currentUser)) return null;
   if (currentUser.UserSetting?.isVerified ?? true) return null;
   if (pathname && ["/login","/onboarding","/verify-email","/invite","/share","/unauthorized"].some((p) => pathname.startsWith(p))) return null;
   return (
@@ -644,7 +649,7 @@ export default function GlobalProvider({
     useEmailVerificationModal();
   const straightBoardSignup = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
   const enrolledStraightBoard =
-    Boolean(currentUser?.straightBoardSignup) && !isGuestUser(currentUser);
+    isStraightBoardAccount(currentUser as StraightBoardAccount | null) && !isGuestUser(currentUser);
   const emailVerificationBlocking =
     showEmailVerificationModal && !enrolledStraightBoard;
 

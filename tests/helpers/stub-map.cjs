@@ -28,27 +28,20 @@ function enforcementFor(guard) {
 
 const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
 
+const straightBoardGuardStubs = {
+  "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed" },
+};
+
 const emailStraightBoardStubs = {
+  ...straightBoardGuardStubs,
   "@/utils/controllers/users/findUserByEmail": { findUserByEmail: async () => null },
   "@/lib/flags/definitions/htpr-7553-email-straight-board": { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG: "htpr-7553-email-straight-board" },
-  "@/lib/auth/unverifiedEmailAccount": {
-    unverifiedEmailAccount: async () => "allowed",
-  },
-  "@/lib/auth/emailStraightBoard": {
-    finishStraightBoardEmailSignup: async () => ({ ok: false }),
-    sendSignupVerificationEmail: async () => {},
-  },
+  "@/lib/auth/emailStraightBoard": { finishStraightBoardEmailSignup: async () => ({ ok: false }), sendSignupVerificationEmail: async () => {} },
 };
 
 const straightBoardRouteStubs = {
   ...emailStraightBoardStubs,
   "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
-};
-
-const straightBoardGuardStubs = {
-  "@/lib/auth/unverifiedEmailAccount": {
-    unverifiedEmailAccount: async () => "allowed",
-  },
 };
 
 function withStubs(base = {}, extra = {}) {

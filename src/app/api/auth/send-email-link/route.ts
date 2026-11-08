@@ -22,10 +22,8 @@ import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { unverifiedEmailAccount } from '@/lib/auth/unverifiedEmailAccount'
 
 function looksLikeEmail(value: string) {
-  const at = value.indexOf('@')
-  if (at <= 0 || at !== value.lastIndexOf('@')) return false
-  const domain = value.slice(at + 1)
-  return domain.length > 2 && domain[0] !== '.' && domain.includes('.') && domain[domain.length - 1] !== '.' && !/\s/.test(value)
+  const at = value.indexOf('@'), domain = value.slice(at + 1)
+  return at > 0 && at === value.lastIndexOf('@') && domain.length > 2 && domain[0] !== '.' && domain.includes('.') && !domain.endsWith('.') && !/\s/.test(value)
 }
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
@@ -224,19 +222,12 @@ export async function POST(request: NextRequest) {
 
     const session = await getSessionUser(request.headers)
     const signupRequesterId = session?.userId ?? 0
-    const inviteCarried =
-      Boolean(inviteData) &&
-      typeof inviteData === 'object' &&
-      ['project', 'key', 'projectId'].some((name) =>
-        Boolean((inviteData as Record<string, unknown>)[name]),
-      )
+    const inviteCarried = Boolean(inviteData) && typeof inviteData === 'object'
+      && ['project', 'key', 'projectId'].some((name) => Boolean((inviteData as Record<string, unknown>)[name]))
 
     if (existingUser && (await unverifiedEmailAccount(existingUser.id)) === 'blocked') {
-      try {
-        await sendSignupVerificationEmail(request, normalizedEmail, utmParams)
-      } catch (emailError) {
-        console.error('Failed to resend straight-board verification email:', emailError)
-      }
+      await sendSignupVerificationEmail(request, normalizedEmail, utmParams).catch((emailError) =>
+        console.error('Failed to resend straight-board verification email:', emailError))
     }
 
     if (
@@ -253,11 +244,8 @@ export async function POST(request: NextRequest) {
           signupAttributionFromHeaders(request.headers, 'email', utmParams.utm_source),
         )
         if (!finished.ok) return finished.response
-        try {
-          await sendSignupVerificationEmail(request, normalizedEmail, utmParams)
-        } catch (emailError) {
-          console.error('Failed to send straight-board verification email:', emailError)
-        }
+        await sendSignupVerificationEmail(request, normalizedEmail, utmParams).catch((emailError) =>
+          console.error('Failed to send straight-board verification email:', emailError))
         return finished.response
       }
     }
