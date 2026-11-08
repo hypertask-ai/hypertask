@@ -16,7 +16,7 @@ class RecoveryTests(unittest.TestCase):
         self.state = self.root / 'state'
         self.state.mkdir()
         self.tasks = {'success': True, 'total': 1, 'tasks': [{
-            'ticketNumber': 'YPER4-1', 'uniqueIndex': 1, 'projectId': 4060,
+            'ticketNumber': 'YPER4-1', 'uniqueIndex': 1, 'projectId': 11514,
             'section': 'Agent Blocked', 'title': 'Fixture',
             'sectionId': 20, 'status': 'Normal', 'blockerCommentId': None, 'createdAt': '2026-10-27T10:00:00Z',
             'updatedAt': '2026-10-28T10:00:00.000Z',
@@ -277,7 +277,7 @@ elif a[:2] != ['activity', 'add']: sys.exit(9)
             with self.subTest(change=change):
                 self.tasks['tasks'][0] = original | change
                 intent = {'ticket': 'YPER4-1', 'runner': 'Runner 6', 'lift': int(self.lift),
-                          'block': 123, 'projectId': 4060, 'sectionId': 30,
+                          'block': 123, 'projectId': 11514, 'sectionId': 30,
                           'expected_section_id': 20, 'expected_updated_at': '2026-10-28T10:00:00.000Z'}
                 (self.state / 'runner-6.recovery.json').write_text(json.dumps(intent))
                 result = self.run_command('drain', '6')
