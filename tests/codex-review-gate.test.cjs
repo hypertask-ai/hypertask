@@ -52,6 +52,11 @@ test('P1 flag-default complaints are waived when feature-flag-gate passed', () =
   assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
 });
 
+test('imperative widen-to-Everyone complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) Default this visible UI flag to Everyone while defaultMode stays OWNER_AND_QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
 test('P1 flag-default complaints still fail without feature-flag-gate success', () => {
   const finding = '![P1 Badge](https://example.test/p1) defaultMode must be "EVERYONE" for this visible change.';
   assert.equal(stateOf({ reviews: [review([finding])] }), 'failure');
