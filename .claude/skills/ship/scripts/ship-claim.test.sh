@@ -278,7 +278,7 @@ out=$(SHIP_CLAIM_GH=$D/hold-gh HOLD_OPEN='[]' SHIP_CLAIM_HYPERTASK=$D/hold-ht HO
 mk
 : > "$D/log"; out=$(FAKE_NOT_MEMBER=1 ./ship-claim HYCI-30 2>&1); rc=$?
 eq "member refusal stops the claim" "$rc" 4
-[[ $out == *'board 11514 (Hypertask CI)'* && $out == *'does not list member'* ]] \
+[[ $out == *'board 11514 (Fleet CI & Infra)'* && $out == *'does not list member'* ]] \
   && ok "refusal names the board and the missing member" || bad "unclear refusal: $out"
 [[ $out == *'ask CI Boss to add'* ]] && ok "refusal names who to ask" || bad "no person to ask: $out"
 [[ $out != *'assign failed'* ]] && ok "no bare assign failure hides the refusal" || bad "bare assign failure: $out"
