@@ -303,7 +303,6 @@ export const DesktopAttachment = ({
   isRecording,
   hideComposerDictation,
   dictationCoordinator,
-  canSend = false,
 }: {
   sendOnClick?: TSendBackAttachmentButton;
   mode: RedirectMode;
@@ -327,7 +326,6 @@ export const DesktopAttachment = ({
   isRecording?: boolean;
   hideComposerDictation?: boolean;
   dictationCoordinator?: DictationCoordinator;
-  canSend?: boolean;
 }) => {
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const micPatternFlag = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
@@ -413,7 +411,7 @@ export const DesktopAttachment = ({
                 keyCombination: presentInInbox ? [ctrlCmd, "SHIFT", "Enter"] : [ctrlCmd, "Enter"],
               }}
               mobile={false}
-              disabled={!canSend || Boolean(isRecording)}
+              disabled={Boolean(isRecording)}
               onClick={() => sendOnClick && sendOnClick()}
             />
           </span>

@@ -10,7 +10,7 @@ const icon = () => React.createElement("svg");
 const tooltips = [];
 const cn = (...values) => values.filter(Boolean).join(" ");
 
-function render({ enabled, mode = "create-comment", canSend = false, isRecording = false, inInbox = false }) {
+function render({ enabled, mode = "create-comment", isRecording = false, inInbox = false }) {
   const micProps = [];
   const { DesktopAttachment } = load("src/components/Common/AttachmentsUpload/AttachmentControls.tsx", {
     "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
@@ -41,7 +41,6 @@ function render({ enabled, mode = "create-comment", canSend = false, isRecording
       audioTiptapCallback: () => {},
       toggleRecording: () => {},
       presentInInbox: inInbox,
-      canSend,
       isRecording,
     }),
   );
@@ -58,23 +57,21 @@ test("flag off keeps today's comment controls", () => {
   assert.equal(micProps[0].compactListeningPill, undefined);
 });
 
-test("comment box gets the white mic and a plain text Send, grey until it can send", () => {
-  const empty = render({ enabled: true, canSend: false });
-  assert.equal(empty.micProps[0].primaryMic, true);
-  assert.equal(empty.micProps[0].compactListeningPill, true);
-  assert.equal(empty.micProps[0].hideDevicePicker, true);
-  const [grey] = sendButtons(empty.doc);
-  assert.ok(grey, "Send renders as a button");
-  assert.equal(grey.disabled, true);
-  assert.match(grey.className, /disabled:text-icon-dark-gray/);
-  assert.match(grey.className, /text-white-black/);
-  assert.doesNotMatch(grey.className, /bg-/);
-  const ready = render({ enabled: true, canSend: true });
-  assert.equal(sendButtons(ready.doc)[0].disabled, false);
+test("comment box gets the white mic and a plain text Send", () => {
+  const { doc, micProps } = render({ enabled: true });
+  assert.equal(micProps[0].primaryMic, true);
+  assert.equal(micProps[0].compactListeningPill, true);
+  assert.equal(micProps[0].hideDevicePicker, true);
+  const [send] = sendButtons(doc);
+  assert.ok(send, "Send renders as a button");
+  assert.equal(send.disabled, false);
+  assert.match(send.className, /disabled:text-icon-dark-gray/);
+  assert.match(send.className, /text-white-black/);
+  assert.doesNotMatch(send.className, /bg-/);
 });
 
 test("the plain Send moves next to the mic instead of staying on the left", () => {
-  const { doc } = render({ enabled: true, canSend: true });
+  const { doc } = render({ enabled: true });
   const left = doc.querySelector(".attachment-button").firstElementChild;
   assert.equal(left.textContent.includes("Send"), false);
   const right = doc.querySelector(".ml-auto");
@@ -84,18 +81,18 @@ test("the plain Send moves next to the mic instead of staying on the left", () =
 });
 
 test("Send stays off while dictating so the transcript lands first", () => {
-  const { doc } = render({ enabled: true, canSend: true, isRecording: true });
+  const { doc } = render({ enabled: true, isRecording: true });
   assert.equal(sendButtons(doc)[0].disabled, true);
 });
 
 test("editing a comment uses the same mic and Send", () => {
-  const { doc, micProps } = render({ enabled: true, mode: "read-edit-comments", canSend: true });
+  const { doc, micProps } = render({ enabled: true, mode: "read-edit-comments" });
   assert.equal(micProps[0].primaryMic, true);
   assert.equal(sendButtons(doc).length, 1);
 });
 
 test("description editor gets the white mic and no Send", () => {
-  const { doc, micProps } = render({ enabled: true, mode: "read-edit-description", canSend: true });
+  const { doc, micProps } = render({ enabled: true, mode: "read-edit-description" });
   assert.equal(micProps[0].primaryMic, true);
   assert.equal(micProps[0].compactListeningPill, true);
   assert.equal(sendButtons(doc).length, 0);
@@ -103,11 +100,11 @@ test("description editor gets the white mic and no Send", () => {
 
 test("comment Send tooltip shows the comment shortcut, not the AI chat Enter", () => {
   tooltips.length = 0;
-  render({ enabled: true, canSend: true });
+  render({ enabled: true });
   const send = tooltips.find((tip) => tip.text === "Send");
   assert.ok(send, "comment Send tooltip is set");
   assert.deepEqual(send.keyCombination, ["CTRL", "Enter"]);
   tooltips.length = 0;
-  render({ enabled: true, canSend: true, inInbox: true });
+  render({ enabled: true, inInbox: true });
   assert.deepEqual(tooltips.find((tip) => tip.text === "Send").keyCombination, ["CTRL", "SHIFT", "Enter"]);
 });
