@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7553-email-straight-board';
 
 interface UseResendVerificationEmailReturn {
   isResending: boolean;
@@ -8,6 +10,7 @@ interface UseResendVerificationEmailReturn {
 }
 
 export const useResendVerificationEmail = (): UseResendVerificationEmailReturn => {
+  const straightBoardFlag = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
   const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
 

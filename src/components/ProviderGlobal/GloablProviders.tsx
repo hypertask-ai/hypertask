@@ -1303,7 +1303,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      <NotificationPromoteBanner />
+      {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}
       {showGuestLogin === true && (

@@ -258,7 +258,12 @@ export async function POST(request: NextRequest) {
       waitUntil(maybeSendWelcomeEmail(userData!.id, { boardId: welcomeBoardId }))
       waitUntil(maybeScheduleAgentNudge(userData!.id))
 
-      if (isVerificationToken) clearStraightBoardSignupCookie(response)
+      if (
+        isVerificationToken &&
+        (await isFeatureEnabled(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG, userData!.id))
+      ) {
+        clearStraightBoardSignupCookie(response)
+      }
 
       console.log('✅ Authentication cookies set successfully (email link)')
     } catch (cookieError) {
