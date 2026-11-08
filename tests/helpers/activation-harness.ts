@@ -194,6 +194,8 @@ export function activationHarness() {
     "@/lib/syncSeatBilling": {},
     "@/utils/controllers/members/updateTrial": { updateTrial: noop },
     "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 402, body: {} }), assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {} },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/tickets/plainLanguageTicket.mjs": { PlainLanguageTicketError: class PlainLanguageTicketError extends Error {}, hasPlainLanguageTicketBlock: () => true, assertPlainLanguageTicketBlock: () => {}, isInternalAgentTicketBoard: () => false, plainLanguageTicketRefusalMessage: () => "" },
   };
   const cache = new Map<string, any>();
   function load(file: string, source?: string): any {

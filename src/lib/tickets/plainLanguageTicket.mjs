@@ -37,6 +37,19 @@ function structuredText(html) {
     .trim();
 }
 
+export class PlainLanguageTicketError extends Error {
+  constructor(missing) {
+    super(plainLanguageTicketRefusalMessage(missing));
+    this.missing = missing;
+  }
+}
+
+export function assertPlainLanguageTicketBlock(html) {
+  if (!hasPlainLanguageTicketBlock(html ?? "")) {
+    throw new PlainLanguageTicketError(missingPlainLanguageTicketLabels(html ?? ""));
+  }
+}
+
 export function hasPlainLanguageTicketBlock(html) {
   if (typeof html !== "string" || !html.trim()) return false;
   const source = structuredText(html);
@@ -92,15 +105,15 @@ export function plainLanguageIncidentFields(alert) {
   const unidentified = alert?.unidentified_hits;
   const who =
     users != null
-      ? `${users} known user(s); ${unidentified ?? "unknown"} hits without a user identity`
-      : "unknown; check PostHog for hit and user counts";
+      ? `${users} known user(s); ${unidentified ?? "unknown"} unidentified hits`
+      : "unknown; check PostHog counts";
   const count = alert?.count ?? "multiple";
   return {
     whatWrongOrWanted: plainProblem(alert?.message),
     whoItAffects: who,
-    recommendedCourseAndWhy: `A runner investigates the PostHog issue and fixes the root cause. Why: production logged this error ${count} time(s).`,
+    recommendedCourseAndWhy: `Investigate and fix the root cause. Why: ${count} production hit(s).`,
     whatValentinMustDecide: "nothing; a runner will investigate",
-    howToUndo: "read-only alert ticket; close or move to Done when fixed",
+    howToUndo: "close or move to Done when fixed",
   };
 }
 

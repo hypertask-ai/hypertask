@@ -26,9 +26,9 @@ import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/
 import { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } from '@/lib/flags/definitions/htpr-7933-plain-language-ticket-template';
 import {
   assertPlainLanguageTicketBlock,
+  isInternalAgentTicketBoard,
   PlainLanguageTicketError,
-} from '@/lib/tickets/plainLanguageTicketEnforcement';
-import { isInternalAgentTicketBoard } from '@/lib/tickets/plainLanguageTicket';
+} from '@/lib/tickets/plainLanguageTicket.mjs';
 import prisma from '@/lib/prisma';
 
 export interface CreateTaskResponse {

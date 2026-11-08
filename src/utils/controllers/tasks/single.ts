@@ -63,8 +63,11 @@ import {
   assertCycleAssignable,
   CycleAssignmentError,
 } from "@/lib/cycleService";
-import { PlainLanguageTicketError, hasPlainLanguageTicketBlock } from "@/lib/tickets/plainLanguageTicketEnforcement";
-import { isInternalAgentTicketBoard } from "@/lib/tickets/plainLanguageTicket";
+import {
+  hasPlainLanguageTicketBlock,
+  isInternalAgentTicketBoard,
+  PlainLanguageTicketError,
+} from "@/lib/tickets/plainLanguageTicket.mjs";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } from "@/lib/flags/definitions/htpr-7933-plain-language-ticket-template";
 

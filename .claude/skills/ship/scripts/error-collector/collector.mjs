@@ -5,7 +5,7 @@ import { promises as fs, readFileSync } from 'node:fs';
 import { withDeadline, timeLeft, bounded } from './io.mjs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { correlate, incidentOf, redact, relatedTicket, taskIncident } from './incident.mjs';
 import { renderPlainLanguageTicketDescription } from './ticketDescription.mjs';
@@ -136,18 +136,16 @@ function merge(group, event) {
 function description(group, fp) {
   const block = group.noiseRule
     ? renderPlainLanguageTicketDescription({
-        whatWrongOrWanted: `${group.service} emitted ${group.normalized} on stderr ${group.hourlyCount} times in one hour.`,
-        whoItAffects: "internal only; not a user-facing error unless the warning hides a real failure",
-        recommendedCourseAndWhy:
-          "Fix the noisy warning at the source instead of filtering it. Why: stderr spam hides real incidents.",
+        whatWrongOrWanted: `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour on stderr.`,
+        whoItAffects: "internal only",
+        recommendedCourseAndWhy: "Fix the warning at the source. Why: stderr spam hides real incidents.",
         whatValentinMustDecide: "nothing",
         howToUndo: "revert the change that introduced the warning",
       })
     : renderPlainLanguageTicketDescription({
         whatWrongOrWanted: `${group.service} failed: ${group.normalized}.`,
-        whoItAffects: "check routes and user hit counts in the detail below",
-        recommendedCourseAndWhy:
-          "A runner traces the sample stack and fixes the root cause. Why: this fired repeatedly in the collection window.",
+        whoItAffects: "see routes and counts below",
+        recommendedCourseAndWhy: "Trace the stack and fix the root cause. Why: repeated hits in the window.",
         whatValentinMustDecide: "nothing; a runner will investigate",
         howToUndo: "revert the breaking deploy or patch the handler",
       });
