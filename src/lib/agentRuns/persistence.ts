@@ -1,5 +1,5 @@
 import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
-import { lockAgentMutationFence, lockTaskTeamScope } from "@/lib/mcp/tasks/agentMutationFence";
+import { lockTaskTeamScope } from "@/lib/mcp/tasks/agentMutationFence";
 import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import type { AgentRun, Prisma } from "@prisma/client";
 import {
@@ -13,7 +13,7 @@ import {
 
 type AgentRunActivityTransaction = Pick<
   Prisma.TransactionClient,
-  "agentRun" | "agentRunActivity" | "project" | "task" | "chatSession" | "$queryRaw" | "$executeRaw"
+  "agentRun" | "agentRunActivity" | "project" | "task" | "chatSession" | "$queryRaw"
 >;
 
 export type AgentRunActivityPersistenceInput = AgentRunActivityInput & {
@@ -36,9 +36,6 @@ async function recordRunHeartbeat(
     access?: BoardKnowledgePrincipal;
   },
 ) {
-  if (input.context.taskId != null) {
-    await lockAgentMutationFence(tx, input.context.taskId);
-  }
   if (input.access?.teamScope != null) {
     if (input.context.taskId != null) {
       await lockTaskTeamScope(tx as Prisma.TransactionClient, input.context.taskId, input.access.userId, input.access.agentId, input.access.teamScope);

@@ -54,20 +54,14 @@ export class TaskTeamScopeError extends Error {
 }
 
 export async function lockAgentMutationFence(
-  tx: { $executeRaw: Prisma.TransactionClient["$executeRaw"] },
+  tx: Prisma.TransactionClient,
   taskId: number
 ): Promise<void> {
   await tx.$executeRaw`
-    WITH fence AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(
-        CAST(${AGENT_MUTATION_LOCK_NAMESPACE} AS integer),
-        CAST(${taskId} AS integer)
-      ) AS locked
+    SELECT pg_advisory_xact_lock(
+      CAST(${AGENT_MUTATION_LOCK_NAMESPACE} AS integer),
+      CAST(${taskId} AS integer)
     )
-    SELECT t.id
-    FROM fence
-    JOIN "Task" t ON t.id = ${taskId}
-    FOR UPDATE
   `
 }
 

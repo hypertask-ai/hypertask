@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { lockAgentMutationFence } from "@/lib/mcp/tasks/agentMutationFence";
 import { sanitizeAgentCredentials } from "@/lib/agents/publicAgent";
 import {
   checkStateFromSuites,
@@ -135,7 +134,6 @@ export async function syncPullRequestFromWebhook(
     let updated = 0;
 
     for (const taskId of taskIds) {
-      await lockAgentMutationFence(transaction, taskId);
       const identity = {
         taskId_repositoryOwner_repositoryName_number: {
           taskId,
