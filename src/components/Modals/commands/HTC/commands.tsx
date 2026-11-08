@@ -743,9 +743,9 @@ const Commands = (props: Props) => {
     return () => document.removeEventListener("keydown", switchTab, true);
   }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
 
-  const integratedTabs = integratedTabsFlag && newTaskWindow && !isMobile && !isDemo && !isInteractive;
+  const integratedTabs = newTaskWindow && !isMobile && !isDemo && !isInteractive;
   const modeSwitch = !isDemo && !isInteractive ? (
-    <div className={integratedTabs ? "flex w-full border-b border-light-black-border-1 p-2" : "absolute -top-12 left-0 flex w-full justify-center"}>
+    <div className={integratedTabsFlag && integratedTabs ? "flex w-full border-b border-light-black-border-1 p-2" : "absolute -top-12 left-0 flex w-full justify-center"}>
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
           { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
@@ -758,7 +758,7 @@ const Commands = (props: Props) => {
         ariaLabel="Commands mode"
         disabled={writing}
         buttonClassName="rounded-[4px]"
-        className={integratedTabs ? "flex-none" : `flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
+        className={integratedTabsFlag && integratedTabs ? "flex-none" : `flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
       />
     </div>
   ) : null;
@@ -857,9 +857,9 @@ const Commands = (props: Props) => {
           />
         )}
 
-        {!integratedTabs && modeSwitch}
+        {!(integratedTabsFlag && integratedTabs) && modeSwitch}
         <ModalBody className="  p-0 rounded-[5px]">
-          {integratedTabs && isCompose && modeSwitch}
+          {integratedTabsFlag && integratedTabs && isCompose && modeSwitch}
           {compose}
           {!isCompose && <>
           <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
@@ -884,7 +884,7 @@ const Commands = (props: Props) => {
                {...(composeEnabled ? { onBlur: undefined } : {})}
             />
           </div>
-          {integratedTabs && modeSwitch}
+          {integratedTabsFlag && integratedTabs && modeSwitch}
           {commandGroups}
           <ModalHintBar />
           <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
