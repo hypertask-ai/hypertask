@@ -11,6 +11,10 @@ export default {
     risk: "new",
     reason: "A brand-new email can open a session and land on its board before the inbox confirms the address.",
     highRisk: "access",
+    harmEvidence: {
+      harm: "auth-bypass",
+      scenario: "An unverified email could reach the board and invite others before confirming ownership of the address.",
+    },
     ownerRequest: {
       quote:
         "this one goes behind a feature flag that is only on for me at first pls. Don't release to everyone right away.",
