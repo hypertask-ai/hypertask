@@ -1,6 +1,26 @@
 # Boards and views
 
-## How a customer reaches it
+## Sub-features
+
+- `bulk-move-between-boards` Bulk move between boards.
+- `first-agent-connection` First agent connection.
+- `calendar-loading` Calendar loading.
+- `bulk-selection-on-the-board` Bulk selection on the board.
+- `column-limits-and-card-age` Column limits and card age.
+- `board-hygiene-report` Board hygiene report.
+- `mcp-duplicate-view-titles` MCP duplicate view titles.
+- `mcp-board-list-sorting` MCP board-list sorting.
+- `repeated-keyboard-archive-stays-in-its-column` Repeated keyboard archive stays in its column.
+- `mcp-permanent-board-deletion` MCP permanent board deletion.
+- `blocked-by-me` Blocked by me.
+- `mcp-missing-view-labels` MCP missing view labels.
+- `visible-archive-focus-order` Visible archive focus order.
+- `agent-creator-filter` Agent creator filter.
+- `empty-views-with-hidden-empty-columns` Empty views with hidden empty columns.
+- `agent-status-chips` Agent status chips.
+- `card-hover-layout` Card hover layout.
+
+## How to get to it (user POV)
 
 `https://app.hypertask.ai/detail/project-<id>` for a board (real selector:
 `.kanban-column-title`, `src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx`,
@@ -8,13 +28,13 @@ per `e2e/smoke/prod.spec.ts`), `/all-tasks` for the task list (`#users-list`),
 or the board/table/calendar view switcher inside a board. Switching boards
 from the sidebar is the `switch-boards` journey.
 
-## How to drive it
+## Driving it with agent-browser
 
 `agent-browser`, headless, `?realtime=on` on the board URL. Open a board,
 switch views, then switch to a second board and back, since the bugs below
 cluster around what happens on that second switch, not the first load.
 
-## Bulk move between boards
+### Bulk move between boards
 
 With HTPR-8737 enabled for Owner + QA, use two writable boards. On the
 source board, select three tickets, including a parent and its child. Open
@@ -28,7 +48,7 @@ ticket stays selected and is named in the error. Reload both boards and check
 only the permitted move persisted. As a user without the flag or write access,
 check the bulk endpoint refuses the request and neither board changes.
 
-## What usually breaks
+## Gotchas
 
 - Board switching leaving stale state behind ([HTPR-6627](https://app.hypertask.ai/detail/project-15/6627), "make shallow
   board switch permanent"), previously flagged behind a flag until proven
@@ -42,14 +62,14 @@ check the bulk endpoint refuses the request and neither board changes.
 - Focused card position resetting on board reload ([HTPR-6333](https://app.hypertask.ai/detail/project-15/6333), "snap board
   left when focused card still fits").
 
-## What proof to collect
+### What proof to collect
 
 Before/after screenshot of the board in its normal state, plus a **reload
 check**: after the action, reload the page and confirm the change (filter,
 column state, focused card) survived the reload, not just the live DOM. Most
 of the bugs above only showed up after a refresh or a second board switch.
 
-## First agent connection
+### First agent connection
 
 https://app.hypertask.ai/detail/project-15/7026 adds a compact Connect your agent card above the columns or table on the user's earliest active owned board (the seeded MyBoard, including after rename). The card shows for a never-connected, non-dismissed user when `htpr-7078-remove-connect-block` is false. The removal flag defaults to Everyone and suppresses this inline card. Read effective flags before running the card checks; if removed, record the inline path as unreachable rather than enabling it or failing for a missing card. Users with any previous CLI or MCP connection, or a server-persisted dismissal, do not see it.
 
@@ -57,22 +77,22 @@ On a disposable new-user fixture, confirm Claude Code, Cursor, Codex appear firs
 
 Capture waiting and connected states at 1440x900 and 390x844. Confirm only the first connection gets Your agent is connected email, naming the client with one Open your board button. The existing unique `WebhookEvent(userId, eventType)` record, with type `agent_connected_email`, durably claims one send attempt, including concurrent connects. An uncertain or failed delivery retains that claim rather than risking duplicates; it never fails agent authentication. No schema migration is required.
 
-## Calendar loading
+### Calendar loading
 
 https://app.hypertask.ai/detail/project-15/7397: Calendar is its own route (`/calendar`, rail button "Go to calendar"), so a view switch remounts the page. Behind `htpr-7397-calendar-loading-shell` (bugfix, Everyone) the hydration guard from HTPR-6664 shows the app rail and a muted "Loading calendar…" line instead of a bare full-page "Loading...". A screenshot timed by hand misses this window; install a `MutationObserver` before clicking the rail and record the rail count and position on every mutation, with an Inbox switch as the control. Also fetch the `/calendar` HTML (the server render must contain the rail) and watch the console for React hydration errors (#418, #423, #425), which is how a timezone mismatch from HTPR-6664 would come back. On a phone the server draws the rail and the client swaps to the mobile Calendar; check for no hydration errors there too. The reusable script is `~/.local/state/vcc-evidence/HTPR-7397/calendar-shell-check.mjs` (`BASE`, `STATE`, `OUT` env vars).
 
-## Bulk selection on the board
+### Bulk selection on the board
 
 https://app.hypertask.ai/detail/project-15/7260 adds board select all behind `htpr-7260-kanban-select-all`. With nothing editable focused, Ctrl/Cmd+A selects every visible card; X toggles the focused card and Shift-click selects a range inside one column. The bottom bar shows the count, Archive, Assign, Tags and Move icons (44px targets on phones), Open actions and Esc. Ctrl+K with a selection lists the "N selected tasks" group first: Move to column, Assign, Set tags, Archive, Select all on board, Select all in this column, Clear selection; no Frequently used group, and Delete board or Delete column never appear under Frequently used. Ctrl+A inside a text field must keep native text selection. Move a few cards on a disposable board and reload to prove the move saved; check the flag-off account still sees the old bar ("Open actions", "Esc to clear").
 
 https://app.hypertask.ai/detail/project-15/7263 adds phone selection behind `htpr-7263-phone-hold-select`, on for Everyone by default. Hold a card for the existing 900 ms and release within 5 px to toggle its shared selection and show the existing checkboxes and action bar. With a selection, tapping another card toggles it; after deselecting the last card, taps open details again. Hold then move beyond 5 px to drag without changing selection. Scrolling before the hold, pinch, cancellation and column dragging must not select. Desktop and flag-Off behavior stay unchanged. Verify phone jitter, scrolling, hold-release, hold-move, checkbox taps and clearing the bar on a real touch device before release.
 
-## Cleanup
+### Cleanup
 
 None if you only viewed and switched. If you changed a saved filter or view
 on the account's own board, revert it to the account's default state.
 
-## Column limits and card age
+### Column limits and card age
 
 https://app.hypertask.ai/detail/project-15/7975 is controlled by
 `htpr-7975-column-work-limits`, default Everyone. Off hides the limit
@@ -94,7 +114,7 @@ warning and hot cards retain their existing amber and red treatment.
 Check both desktop and phone in all four themes. Restore the QA board's
 original limit and staleness settings after the run.
 
-## Board hygiene report
+### Board hygiene report
 
 On a board, Ctrl+K → Manage tags → Board hygiene. Check the report on
 1440x900 and 390x844 in all four themes. Expanding the report must not
@@ -115,7 +135,7 @@ limits; `null` is unknown, not zero. Confirm other boards return 404 for outside
 Use a QA-owned scratch board for known labels and tickets. Compare label
 and view lists before and after reading. This report never repairs data.
 
-## MCP duplicate view titles
+### MCP duplicate view titles
 
 Creating a view with an existing title must return the same readable
 400 refusal, without changing the existing view or board default.
@@ -126,7 +146,7 @@ that fixture. Duplicate refusals log warnings; unexpected storage failures
 must still log errors. Local behavior coverage:
 `node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
 
-## MCP board-list sorting
+### MCP board-list sorting
 
 For https://app.hypertask.ai/detail/project-15/8017, list boards through
 `GET /api/mcp/projects` and `hypertask_projects` action `list` on `/mcp`.
@@ -139,7 +159,7 @@ sort directions must also fail before database access. These reads need
 no fixtures or cleanup. Local behavior coverage:
 `node --test tests/htpr-8017-project-list-sort.test.cjs`.
 
-## Repeated keyboard archive stays in its column
+### Repeated keyboard archive stays in its column
 
 For https://app.hypertask.ai/detail/project-15/8039, create two disposable
 columns on QA 985's sandbox (7049). Put two prefixed fixtures in Done and
@@ -152,7 +172,7 @@ navigation into AI Review must still work. Capture desktop and phone
 shots, plus the main path video. Delete only the created fixtures and
 columns afterward. Flag: `htpr-8039-archive-column-boundary` (bugfix, Everyone).
 
-## MCP permanent board deletion
+### MCP permanent board deletion
 
 For https://app.hypertask.ai/detail/project-15/8075, the released deletion
 path no longer depends on a feature flag. `POST /api/mcp/projects/archive`
@@ -168,7 +188,7 @@ On production, use only invalid IDs or an inaccessible board to verify the
 refused path, and reload an accessible board to prove it remains available.
 Do not delete or archive shared production boards. Successful destructive
 deletion is covered locally, not claimed as live verification.
-## Blocked by me
+### Blocked by me
 
 Every board includes the built-in **Blocked by me** view, including an empty
 board. Select it from the existing desktop tabs or phone view picker. It matches
@@ -182,7 +202,7 @@ Off, the view disappears and any active selection returns to the saved
 view; resetting view order must not bring it back. Delete only the fixtures
 created for this check.
 
-## MCP missing view labels
+### MCP missing view labels
 
 For https://app.hypertask.ai/detail/project-15/8094, submit a unique view
 name with an absent `filters.label_names` value through
@@ -193,7 +213,7 @@ save their filter. Expected label refusals log warnings; unexpected storage
 failures must still log errors. Local behavior coverage:
 `node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
 
-## Visible archive focus order
+### Visible archive focus order
 
 For https://app.hypertask.ai/detail/project-15/8149, use QA-owned fixtures
 in one column: fourteen matching cards, interleaved with cards hidden by
@@ -211,7 +231,7 @@ old cached-card focus path; cover both paths in targeted tests without
 switching production flags. Collect desktop and phone theme captures and
 the archive-request/focus sequence. Remove only the fixtures created.
 
-## Agent creator filter
+### Agent creator filter
 
 With `htpr-7865-agent-creator-filter` enabled, open board filters, then
 **Created by**. The existing people picker also lists active agents.
@@ -222,7 +242,7 @@ Combine Created by with Priority under ANY and ALL. Check archived rows
 and a ticket update still respect the selected creator. With the flag off,
 agent choices disappear and existing human filters restore owner matching.
 Calendar and My Tasks retain their existing creator picker.
-## Empty views with hidden empty columns
+### Empty views with hidden empty columns
 
 For https://app.hypertask.ai/detail/project-15/7807, use a QA-owned saved
 view with empty columns set to Hidden. With `htpr-7807-empty-view-columns`
@@ -234,7 +254,7 @@ setting must remain unchanged. Check desktop and phone in all four themes.
 With the flag off, the original empty-state behavior remains. Builtin views
 that exclude every section and boards with no visible columns stay unchanged.
 
-## Agent status chips
+### Agent status chips
 
 After https://app.hypertask.ai/detail/project-15/8161, agent status chips
 are permanent. `POST /api/projects/boardTasks` includes `agentStatus` for
@@ -248,6 +268,6 @@ If the QA board has no active run, record the positive chip as unreachable;
 use the null-status payload, empty chip rendering and CI's real component
 and controller tests as the closest checks.
 
-## Card hover layout
+### Card hover layout
 
 https://app.hypertask.ai/detail/project-15/8629 uses `htpr-8629-kanban-hover-layout` (bugfix, Everyone). In porcelain, AMOLED and graphite-2, compare card ID, title, parent row and notification positions before and during hover; none should move. Check plain, active and blocked cards, including column edges: the hover checkbox must not cover content or clip. Click it, use X on a focused card, and check selected and selection-mode cards retain their inset checkbox. With the flag off, confirm the former hover inset returns. Capture each theme and both flag states on an isolated fixture.
