@@ -2050,6 +2050,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         addedLinesFor(mergeBase, headSha, path, true),
         mergeBase,
       );
+      console.error('DEBUG path', path, 'key', key);
       if (key) {
         if (isServerFile(path)) hasServerGate = true;
         const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);
@@ -2057,6 +2058,10 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         if ((covered.size > 0 || isServerFile(path)) && !matchedGate) matchedGate = { key, path };
       }
     }
+    console.error('DEBUG runtimeFiles', runtimeFiles);
+    console.error('DEBUG uiFiles', uiFiles);
+    console.error('DEBUG coveredUiFiles', [...coveredUiFiles]);
+    console.error('DEBUG matchedGate', matchedGate);
     if (serverFiles.length > 0 && !hasServerGate) {
       return failure(`[${tag}] changes server behavior (${serverFiles.slice(0, 5).join(", ")}) without a ticket-specific server flag. ` +
         `Define src/lib/flags/definitions/${ticketPrefix}<name>.ts and call isFeatureEnabled from @/lib/flags ` +

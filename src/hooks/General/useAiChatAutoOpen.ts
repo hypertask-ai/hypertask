@@ -12,7 +12,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7783_REMEMBER_CHAT_FLAG } from "@/lib/flags/keys";
 import { chatNavigationKey, readChatNavigationState, writeChatNavigationState } from "@/lib/aiChat/chatNavigationState";
 import { aiChatAutoOpenPage } from "@/lib/aiChat/autoOpenPreferences";
-import { boardChatAutoOpenAllowed, guestAutoOpenAllowed } from "@/lib/aiChat/guestAutoOpen";
+import { guestAutoOpenAllowed, signedInBoardAutoOpenAllowed } from "@/lib/aiChat/guestAutoOpen";
 import { useAiChatOpenPreferences, useSyncAiChatOpenPreferences } from "./useAiChatOpenPreferences";
 
 function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | null, pageKey: string, stableDefaultView: boolean) {
@@ -57,9 +57,9 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const navigationPageKey = `${navigationKey}:${pageKey}`;
   const fullScreenReturnPage = useRef<string | null>(null);
   const manualOpen = !embeddedTicketPath && (search?.get("newTaskAi") === "1" || search?.get("welcome_ai") === "1" || search?.has("agentSidebar") === true);
-  const guestAutoOpen = guestAutoOpenAllowed({ enabled: guestAutoOpenEnabled, user, page, mobile });
-  const allowed = boardChatAutoOpenAllowed({
-    enabled: guestAutoOpenEnabled, user, page, mobile, manualChat, savedPreference: page ? values[page] : false, pinned,
+  const guestAutoOpen = guestAutoOpenEnabled && guestAutoOpenAllowed({ user, page, mobile });
+  const allowed = guestAutoOpen || signedInBoardAutoOpenAllowed({
+    manualChat, page, mobile, savedPreference: page ? values[page] : false, pinned,
   });
 
   useEffect(() => {

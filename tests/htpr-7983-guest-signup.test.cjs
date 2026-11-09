@@ -2,21 +2,15 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { loadModule } = require('./helpers/loadModule.cjs');
 
-const { guestAutoOpenAllowed, boardChatAutoOpenAllowed } = loadModule('src/lib/aiChat/guestAutoOpen.ts');
+const { guestAutoOpenAllowed, signedInBoardAutoOpenAllowed } = loadModule('src/lib/aiChat/guestAutoOpen.ts');
 const { guestSignupLandingUrl } = loadModule('src/lib/demo/guestSignupLanding.ts');
 
 const guest = { id: 900, uid: 'guest_abc' };
 const member = { id: 6, uid: 'email_abc' };
-const board = { enabled: true, user: guest, page: 'aiChatOpenBoards', mobile: false };
-const account = { ...board, user: member, manualChat: false, savedPreference: false, pinned: false };
-const guestMode = { ...board, manualChat: false, savedPreference: false, pinned: false };
+const board = { user: guest, page: 'aiChatOpenBoards', mobile: false };
 
-test('a guest free board opens the chat on desktop when the flag is on', () => {
+test('a guest free board opens the chat on desktop', () => {
   assert.equal(guestAutoOpenAllowed(board), true);
-});
-
-test('the same board keeps the chat closed when the flag is off', () => {
-  assert.equal(guestAutoOpenAllowed({ ...board, enabled: false }), false);
 });
 
 test('a signed-in account keeps its own saved chat choice', () => {
@@ -34,17 +28,15 @@ test('ticket pages and unrecorded pages never open the board chat', () => {
   assert.equal(guestAutoOpenAllowed({ ...board, page: null }), false);
 });
 
-test('manual chat mode still lets a guest free board open the chat', () => {
-  assert.equal(boardChatAutoOpenAllowed({ ...guestMode, manualChat: true }), true);
-});
-
 test('manual chat mode keeps a signed-in account closed even with a saved preference', () => {
-  assert.equal(boardChatAutoOpenAllowed({ ...account, manualChat: true, savedPreference: true }), false);
+  const signedIn = { manualChat: true, page: 'aiChatOpenBoards', mobile: false, savedPreference: true, pinned: false };
+  assert.equal(signedInBoardAutoOpenAllowed(signedIn), false);
 });
 
 test('a signed-in account still follows its own saved board preference', () => {
-  assert.equal(boardChatAutoOpenAllowed({ ...account, savedPreference: true }), true);
-  assert.equal(boardChatAutoOpenAllowed({ ...account, savedPreference: false }), false);
+  const signedIn = { manualChat: false, page: 'aiChatOpenBoards', mobile: false, pinned: false };
+  assert.equal(signedInBoardAutoOpenAllowed({ ...signedIn, savedPreference: true }), true);
+  assert.equal(signedInBoardAutoOpenAllowed({ ...signedIn, savedPreference: false }), false);
 });
 
 test('signup lands on the same board with the chat open', () => {
