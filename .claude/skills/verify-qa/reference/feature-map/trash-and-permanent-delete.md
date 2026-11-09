@@ -1,6 +1,10 @@
 # Trash and permanent delete
 
-## How a customer reaches it
+## Sub-features
+
+- `trash-and-permanent-delete` Trash and permanent delete.
+
+## How to get to it (user POV)
 
 From a board, press `G` then `#`, or run `Go to trash` in the command palette
 (`src/components/generalCommandActions.ts`). Both open
@@ -11,7 +15,7 @@ A task lands there when it is deleted: `#` on a board, Delete in the task card
 menu, or the CLI. Deleting is a 30-day move, not a removal. Pressing `#` again
 inside the trash removes it for good.
 
-## How to drive it
+## Driving it with agent-browser
 
 Headless `agent-browser` against production, with the QA account 985 state file
 `~/.config/hypertask-videos/storageState-qa.json`, on a board you own. Drive the
@@ -52,7 +56,7 @@ and only the selected row shows the two icon buttons: `Trash2` first, then
 `RotateCcw`. The confirm dialog is a command list, `Delete task` with ENTER and
 `Cancel` with ESC, so ESC closes it and leaves the row in place.
 
-## What usually breaks
+## Gotchas
 
 - Agents cannot do this at all: they may archive, not delete
   ([HTPR-8215](https://app.hypertask.ai/detail/project-15/8215),
@@ -71,7 +75,7 @@ and only the selected row shows the two icon buttons: `Trash2` first, then
 - Legacy cross-board sub-tasks are detached instead of trashed with the parent
   ([HTPR-7187](https://app.hypertask.ai/detail/project-15/7187)).
 
-## What proof to collect
+### What proof to collect
 
 Four screenshots, all on the same fixture: the board before deleting, the trash
 row with its permanent-delete date, the board after recovering, and the trash
@@ -91,7 +95,7 @@ task, `node --test tests/task-hard-delete-auth.test.cjs` the hard-delete access
 rules, and `node --test tests/htpr-7185-delete-task-undo.test.cjs` the board-side
 delete and undo.
 
-## Cleanup
+### Cleanup
 
 Permanently delete the fixture, then reload the trash and confirm the row is
 gone and no other task changed. If a delete claim is stuck, recover the task,

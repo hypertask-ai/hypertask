@@ -1,10 +1,16 @@
 # Team AI usage
 
-## How a customer reaches it
+## Sub-features
+
+- `percentage-only-allowance-copy` Percentage-only allowance copy.
+- `local-daily-usage-check` Local daily usage check.
+- `usage-attribution-htpr-7851` Usage attribution (HTPR-7851).
+
+## How to get to it (user POV)
 
 Open a team board, then Settings > Team > AI usage (`/settings/ai-usage`). The selected settings team controls the request to `/api/settings/ai-usage?teamId=...`; board admins also send `projectId`.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Use QA BYOK user 3412 and its comped team `977c0c91-c14f-47b0-b8bc-933cc751f19d`. Confirm the selected team in the actual request.
 2. Read the production report status before diagnosing a saved key. A 401 means rejected authentication; a 403 means insufficient report permissions, not proof of revocation.
@@ -13,28 +19,28 @@ Open a team board, then Settings > Team > AI usage (`/settings/ai-usage`). The s
 5. Check desktop 1440x900 and phone 390x844 in Porcelain, Graphite, AMOLED and Dia. The existing Gateway card must contain readable copy, without moving the settings shell.
 6. Off retains the generic failure. Exercise rollback and 403 fixtures in the isolated route/component tests; never flip production modes merely to manufacture coverage.
 
-## Percentage-only allowance copy
+### Percentage-only allowance copy
 
 `htpr-7919-allowance-percent` keeps the existing monthly percentage bar, reset date, projection, warning colours and at-limit recovery controls. It removes the allowance dollar line and the dollar prefix from automatic-feature usage. The trial comparison table's Pro allowance perk also stops promising a dollar value or overage price. Subscription prices and enforced allowance caps remain unchanged. The money-classified preview defaults to Owner + QA; never widen it to create a test fixture.
 
 As QA 985, compare `/settings/ai-usage` against its actual successful `/api/settings/ai-usage` response: displayed percentage and reset date must match. Reload and capture desktop and phone in every theme. Check 0%, near-limit and capped fixtures through the component regression suite; never spend a real allowance to manufacture a state. Off retains both dollar lines. The Free account can verify its actual cap but does not see the restricted preview; the comped Pro fixture's missing managed key makes its live success path unavailable until that separate issue is repaired.
 
-## What usually breaks
+## Gotchas
 
 - The UI discards the server's actionable message.
 - A report-only permissions failure is misreported as a revoked key.
 - A managed-key failure blames a customer's key.
 - Successful usage disappears or the selected team changes.
 
-## What proof to collect
+### What proof to collect
 
 Save before/after response status and safe payload, the selected team, production log statuses, reload evidence, screenshots in both viewports and all themes, and a short video. Record unavailable live success or permission fixtures as UNREACHABLE; local tests do not substitute for live proof.
 
-## Cleanup
+### Cleanup
 
 Read-only checks need no cleanup. Never reveal saved keys or authentication state. Key replacement costs money and belongs to Valentin.
 
-## Local daily usage check
+### Local daily usage check
 
 Sources: `src/lib/ai/dailyAiSpend.ts`,
 `src/app/api/cron/ai-spend/route.ts` and `vercel.json`.
@@ -65,7 +71,7 @@ Rows without pricing are not included.
 - Save actual provider funding history over the required 24-hour window before
   claiming no top-up. Local token costs do not prove funding history.
 
-## Usage attribution (HTPR-7851)
+### Usage attribution (HTPR-7851)
 
 Check the persisted feature breakdown after ordinary use, without generating paid calls solely for QA. Status updates use `status-update`; suggested replies use `suggest-reply` and retain their ticket. Native image calls use `generate-image`; demo boards use `demo-board`; search indexing uses `embeddings`; transcription uses `dictation`; key checks use `byok-test`. Failed batch items retain their terminal outcome before instant fallback.
 

@@ -1,11 +1,15 @@
 # Task writer and chip evaluation
 
-## How a customer reaches it
+## Sub-features
+
+- `short-task-writer-rollout` Short task-writer rollout.
+
+## How to get to it (user POV)
 
 GitHub Actions: Task writer live eval. No app UI changes.
 Sources: `scripts/task-writer-eval.cjs`, `.github/workflows/task-writer-eval.yml`.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Confirm the merge's Production deployment succeeded.
 2. Dispatch Task writer live eval on `production`.
@@ -13,7 +17,7 @@ Sources: `scripts/task-writer-eval.cjs`, `.github/workflows/task-writer-eval.yml
 4. Read score and cleanup artifacts, not only the job badge.
 5. Replay the committed baseline with `node scripts/task-writer-eval.cjs --verify-baseline`.
 
-## What usually breaks
+## Gotchas
 
 - Raw writer markers are saved instead of parsed descriptions.
 - A chip requests a section already present.
@@ -21,7 +25,7 @@ Sources: `scripts/task-writer-eval.cjs`, `.github/workflows/task-writer-eval.yml
 - Missing cases, transport errors or cleanup failures appear green.
 - QA credentials reach candidate code or artifact uploads.
 
-## What proof to collect
+### What proof to collect
 
 Save the successful production workflow run, its exact head SHA, scores and
 pending-ID report. Known baseline violations are measured debt, not healthy text.
@@ -29,14 +33,14 @@ The long non-A/B control must fail; finished synthetic A/B controls must pass.
 Synthetic cases contain no customer text. Historical pair provenance follows
 https://app.hypertask.ai/detail/project-15/7976#comment-314535.
 
-## Short task-writer rollout
+### Short task-writer rollout
 
 Flag `htpr-7977-short-task-writer` defaults to Everyone. QA account 985 sees it.
 Ordinary drafts stay under 240 visible words and skip experiment headings.
 A/B sections appear only when the ticket is an A/B test and board instructions
 or a matching template request that layout. Flag off keeps the previous prompt.
 
-## Cleanup
+### Cleanup
 
 Only run-created QA Sandbox 7049 tickets are soft-deleted and read back.
 A failed cleanup leaves IDs in the status artifact for recovery.
