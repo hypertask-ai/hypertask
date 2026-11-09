@@ -1,7 +1,6 @@
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
-import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { currentUserAtom, fullScreenChatScopeAtom, recentChatBoardIdsAtom } from "@/store";
@@ -39,7 +38,6 @@ export function AiChatOneComposerRow({
     handleAddContext,
     handleSendMessage,
   } = useAiChatContext();
-  const isApple = useDeviceContext();
   const plusMenu = useRef<HTMLDetailsElement>(null);
   const closePlusMenu = () => {
     if (plusMenu.current) plusMenu.current.open = false;
@@ -102,7 +100,6 @@ export function AiChatOneComposerRow({
           primaryMic
           hideDevicePicker
           stopButtonId={`${audioButtonId}-stop`}
-          hoverTooltip={{ text: "Dictate", keyCombination: [isApple ? "CMD" : "CTRL", "SHIFT", "D"] }}
         />
         {(!isTyping || !empty) && (
           <SendMessageButton
@@ -157,8 +154,8 @@ function FullScreenBoardPicker({ onRestoreFocus }: { onRestoreFocus: () => void 
   return (
     <div data-ai-chat-scope data-ai-chat-full-screen-scope className="relative inline-block min-w-0 max-w-full shrink-0 text-left">
       <ChatScopeChip
-        kind={picked ? "board" : "boards"}
-        label={picked ? picked.title ?? picked.name : "All boards"}
+        kind={scope === null ? "boards" : "board"}
+        label={picked ? picked.title ?? picked.name : scope === null ? "All boards" : `Board ${scope}`}
         isOpen={isOpen}
         aria-haspopup="dialog"
         onClick={() => setIsOpen((open) => !open)}
