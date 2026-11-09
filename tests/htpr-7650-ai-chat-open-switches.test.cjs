@@ -20,6 +20,8 @@ function load(file, mocks = {}) {
     if (name === flagFile) return { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag };
     if (name === "@/lib/flags/definitions/htpr-8038-chat-opener-ready") return { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" };
     if (name === "@/lib/flags/definitions/htpr-8088-manual-chat") return { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" };
+    if (name === "@/lib/flags/definitions/htpr-7983-free-mode-signup") return { HTPR_7983_FREE_MODE_SIGNUP_FLAG: "htpr-7983-free-mode-signup" };
+    if (name === "@/lib/demo/guest") return { isGuestUser: (user) => Boolean(user?.uid?.startsWith("guest_")) };
     if (name === policyFile) return policy;
     assert.ok(name.startsWith("react"), `Unexpected dependency ${name} in ${file}`);
     return require(name);
@@ -27,6 +29,7 @@ function load(file, mocks = {}) {
   return mod.exports;
 }
 const policy = load("src/lib/aiChat/autoOpenPreferences.ts");
+const guestAutoOpen = load("src/lib/aiChat/guestAutoOpen.ts");
 const defaults = policy.AI_CHAT_AUTO_OPEN_DEFAULTS;
 const allOff = Object.fromEntries(policy.AI_CHAT_AUTO_OPEN_KEYS.map((key) => [key, false]));
 const settings = (extra = {}) => ({ ...defaults, ...extra });
@@ -80,6 +83,7 @@ function pageHarness(values = defaults, options = {}) {
   const { useAiChatAutoOpen } = load("src/hooks/General/useAiChatAutoOpen.ts", {
     "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
     "@/lib/flags/keys": {},
+    "@/lib/aiChat/guestAutoOpen": guestAutoOpen,
     react: h.react, "@/lib/state": s.state, "@/store": atoms,
     "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8088-manual-chat" ? Boolean(options.manualChat) : key === "htpr-8052-fullscreen-chat-return" ? options.fullscreenReturn !== false : options.stabilize !== false },
     "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(query) },

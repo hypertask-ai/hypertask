@@ -5,11 +5,15 @@ import { createPortal } from "react-dom";
 import { KeyRound, X } from "lucide-react";
 import { useAuth } from "@/hooks/General/useAuth";
 import { authClient } from "@/lib/auth/betterAuthClient";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7983_FREE_MODE_SIGNUP_FLAG } from "@/lib/flags/definitions/htpr-7983-free-mode-signup";
+import { guestSignupLandingUrl } from "@/lib/demo/guestSignupLanding";
 
 type Pending = "google" | "passkey" | "email" | "code" | null;
 
 export default function GuestLoginModal({ onClose }: { onClose: () => void }) {
   const { loginWithGoogle } = useAuth();
+  const freeModeSignupEnabled = useFlag(HTPR_7983_FREE_MODE_SIGNUP_FLAG);
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -103,7 +107,8 @@ export default function GuestLoginModal({ onClose }: { onClose: () => void }) {
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Code verification failed");
       }
-      window.location.assign("/");
+      if (freeModeSignupEnabled) window.location.assign(guestSignupLandingUrl(data.redirectUrl));
+      else window.location.assign("/");
     } catch (e: any) {
       setError(e?.message || "Verification failed. Please try again.");
       setPending(null);
