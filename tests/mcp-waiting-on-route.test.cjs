@@ -95,6 +95,7 @@ function fixture(options = {}) {
       },
     },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => options.noAuth ? null : { userId: 7 } },
+    "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async (id) => (id === owner.id ? owner : { id, displayName: "Member" }) },
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => null },
   };
   mocks["@/lib/mcp/routeWrapper"] = loadRouteWrapper(mocks);
