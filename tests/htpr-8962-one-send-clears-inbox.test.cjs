@@ -46,7 +46,7 @@ function renderControls({ oneSend, mic = false, mode = "create-comment", inInbox
 }
 
 const sendButtons = doc => [...doc.querySelectorAll("button")].filter(button => button.textContent.trim() === "Send");
-const rightGroup = doc => [...doc.querySelector(".attachment-button").children].find(child => child.tagName === "DIV");
+const rightGroup = doc => [...doc.querySelector(".attachment-button").children].filter(child => child.tagName === "DIV").pop();
 
 for (const mic of [false, true]) {
   test(`flag on, mic=${mic}: one Send on the right and nothing from the left Send + button`, () => {
