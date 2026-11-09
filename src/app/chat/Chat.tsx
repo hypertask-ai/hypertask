@@ -43,7 +43,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const FULL_SCREEN_CHAT_RAIL_MIN_PX = 200;
@@ -423,6 +425,8 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
   const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
+  const oneComposerFlag = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
+  const isMbl = useContext(MobileViewContext);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -657,13 +661,15 @@ export default function Chat({ initialSessionId }: ChatProps) {
           </button>
         </div>
 
-        <div className="px-3 pb-3">
-          <FullScreenChatBoardSelector
-            sessions={railSessions}
-            scope={fullScreenChatScope}
-            onScopeChange={setFullScreenChatScope}
-          />
-        </div>
+        {(!oneComposerFlag || isMbl) && (
+          <div className="px-3 pb-3">
+            <FullScreenChatBoardSelector
+              sessions={railSessions}
+              scope={fullScreenChatScope}
+              onScopeChange={setFullScreenChatScope}
+            />
+          </div>
+        )}
 
         <div className="px-3 pb-3">
           <div className="relative">
