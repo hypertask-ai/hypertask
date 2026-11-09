@@ -17,7 +17,9 @@ import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan }
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
-import { autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 
 import { createSseErrorResponse, reportHandledChatError, errorMessage } from "@/lib/ai/chatStream/errors";
 import { ChatRequest } from "@/lib/ai/chatStream/request";
@@ -192,7 +194,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     if (usesTeamOpenAiDefault) {
       selection = selectionFromModelOption(getAiModelOptionById("gpt-6-luna", true)!);
     }
-    if (autoRequested && !usesTeamOpenAiDefault && !actingAgent?.modelOptionId && await autoModelEnabled(dbUser.id)) {
+    if (autoRequested && !usesTeamOpenAiDefault && !actingAgent?.modelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, dbUser.id)) {
       const autoPick = pickAutoModelOption({
         feature: body.aiFeature,
         settings: teamProviderSettings,
