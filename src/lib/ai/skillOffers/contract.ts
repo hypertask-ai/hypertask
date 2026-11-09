@@ -58,6 +58,17 @@ export type SkillOfferRecord = VerifiedSkillOffer & {
 
 export type SkillOfferStatus = "pending" | "drafted" | "dismissed" | "saved";
 
+export type SkillOfferCard = {
+  id: string;
+  kind: SkillOfferKind;
+  rule: string;
+  occurrences: number;
+  sessionCount: number;
+  quotes: string[];
+  draft: SkillOfferDraft | null;
+  status: SkillOfferStatus;
+};
+
 function normalizeOfferText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }

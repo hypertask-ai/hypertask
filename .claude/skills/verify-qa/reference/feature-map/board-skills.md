@@ -40,6 +40,27 @@ throwaway skill and ticket. Board skills still override personal skills
 with the same slug. MCP and CLI skill writes retain their existing
 permission and write routes.
 
+## A repeated instruction becomes a skill offer
+
+On a private QA board, sign in as user 985 and start three separate
+sidebar chats on that board. In each chat, give the same standing
+instruction in your own words five times in total, for example "put the
+ticket id next to the title, not in the body". The fifth message must be
+followed by one card under the reply: "Skill suggestion", the count of
+times you said it, the number of chats, your own quoted words, and one
+reason for skill or board memory.
+
+Dismiss with **Not now**: the card must say it will not be suggested
+again, and the next qualifying chat turn on that board must show no
+card. A second pattern must not appear in the same six hours on that
+board. Check `GET /api/ai/skill-offers?id=<id>` returns only your own
+offer, and that another account gets 403 or 404.
+
+**Draft it** must send one chat message and the usual skill draft must
+follow, with nothing saved until you approve. **Save board rule** on a
+memory suggestion must fail with a clear message while board memory is
+off, and write the rule into Settings > Board > Memory once it is on.
+
 ## What usually breaks
 
 - A skill pasted without a frontmatter header did not save

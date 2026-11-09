@@ -143,5 +143,15 @@
     "maxUsdPerDay": 2,
     "reason": "HTPR-7779 adds one gpt-6-luna classification call per person and board, at most once every 6 hours (the scan claim is a Redis NX lock), over at most 80 short chat messages clipped to 700 characters each. That is under 60k input tokens and about 900 output tokens per scan, so even 200 active people and boards a day stays around 2 USD at luna prices. The call is skipped entirely while the flag htpr-7779-skill-offers is off.",
     "source": "https://app.hypertask.ai/detail/project-15/7779"
+  },
+  "src/lib/ai/skillOffers/client.ts:519a3631722b3b46fa3828b03e901225716edc89772d760f2b603da8157d27c6": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7779 loads and updates one skill offer through Hypertask's own same-origin /api/ai/skill-offers route. No third-party paid API is called from the browser; the route's own work is noted on the detection entry.",
+    "source": "https://app.hypertask.ai/detail/project-15/7779"
+  },
+  "src/lib/ai/skillOffers/client.ts:04670b3afa2e2d340b1603948f0667ce7226400c4c3656c7751557610b4d406c": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7779 loads and updates one skill offer through Hypertask's own same-origin /api/ai/skill-offers route. No third-party paid API is called from the browser; the route's own work is noted on the detection entry.",
+    "source": "https://app.hypertask.ai/detail/project-15/7779"
   }
 }

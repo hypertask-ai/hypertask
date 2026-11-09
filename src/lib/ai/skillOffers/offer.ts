@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7779_SKILL_OFFERS_FLAG } from "@/lib/flags/definitions/htpr-7779-skill-offers";
 import prisma from "@/lib/prisma";
 
 import { skillOfferLink } from "./contract";
@@ -13,6 +15,7 @@ export async function maybeOfferRepeatedInstruction(args: {
     const projectId = args.projectId;
     const sessionId = args.sessionId;
     if (!projectId || !sessionId || args.actingAgentId) return null;
+    if (!(await isFeatureEnabled(HTPR_7779_SKILL_OFFERS_FLAG, args.userId))) return null;
     if (!(await claimSkillOfferScan(args.userId, projectId))) return null;
 
     const { detectRepeatedInstruction, loadInstructionSources } = await import("./detect");

@@ -155,6 +155,45 @@ export async function deleteBoardMemory(args: {
   });
 }
 
+export async function saveBoardMemoryRule(args: {
+  userId: number;
+  projectId: number;
+  rule: string;
+}) {
+  const project = await assertProjectAccess(args.userId, args.projectId);
+  const rule = args.rule.replace(/\s+/g, " ").trim();
+  if (!rule || rule.length > BOARD_MEMORY_MAX_FACT_LENGTH) {
+    throw new Error("That rule is too long to save as a board memory.");
+  }
+  const state = await loadBoardMemoryState(project.id);
+  if (!state.enabled) {
+    throw new Error("Board memory is off for this board. Turn it on in Settings, then save the rule.");
+  }
+  if (state.memories.length >= BOARD_MEMORY_MAX_FACTS_PER_BOARD) {
+    throw new Error("This board already has the maximum number of memory rules.");
+  }
+  const [fact] = normalizeLearnedMemoryFacts(
+    [rule],
+    state.memories.map((memory) => memory.content),
+  );
+  if (!fact) throw new Error("That rule is already saved on this board.");
+
+  return withBoardMemoryLock(project.id, async (lease) => {
+    await bumpBoardMemoryRevision(project.id);
+    await lease.assertCurrent();
+    const rows = buildCustomInstructionFileRows({
+      projectId: project.id,
+      teamId: project.teamId ?? "",
+      source: boardMemorySourceForFact(fact),
+      fileName: "Board memory",
+      fileType: BOARD_MEMORY_FILE_TYPE,
+      content: fact,
+    });
+    await writeBoardMemoryRows(rows, lease.assertCurrent);
+    return { rule: fact };
+  });
+}
+
 export async function learnBoardMemoryFromSignal(args: {
   projectId: number;
   signal: BoardMemorySignal;
