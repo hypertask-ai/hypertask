@@ -164,6 +164,7 @@ test("quiet: contact hover waits for final content on detail routes, retaining e
     "./TooltipPortal": { __esModule: true, default: pass },
     "@/hooks/useFlag": { useFlag: (key) => { if (["htpr-6950-tooltip-top-layer", "htpr-7737-agent-hover-chat", "htpr-7518-agent-sidebar-chats"].includes(key)) return false; assert.fail(`Unexpected flag: ${key}`); } },
     "@/lib/flags/definitions/htpr-7737-agent-hover-chat": { HTPR_7737_AGENT_HOVER_CHAT_FLAG: "htpr-7737-agent-hover-chat" },
+    "@/lib/flags/definitions/htpr-7873-name-hovercard-delay": { HTPR_7873_NAME_HOVERCARD_DELAY_FLAG: "htpr-7873-name-hovercard-delay" },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
     "@floating-ui/react": { useFloating: () => ({ refs: { setFloating: noop, setReference: noop, domReference: { current: null } }, context: {}, floatingStyles: {} }), useInteractions: () => ({ getFloatingProps: (props) => props }), FloatingFocusManager: pass, FloatingPortal: pass },
     "lucide-react": { Check: () => null, Copy: () => null },

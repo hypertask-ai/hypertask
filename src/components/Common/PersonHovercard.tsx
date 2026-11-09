@@ -10,6 +10,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSetRecoilState } from "@/lib/state";
 import { aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, isAiChatSidebarModeAtom, showAIChatInterfaceAtom } from "@/store";
 import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
+import { HTPR_7873_NAME_HOVERCARD_DELAY_FLAG } from "@/lib/flags/definitions/htpr-7873-name-hovercard-delay";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import {
@@ -57,6 +58,8 @@ type PersonHovercardSurfaceProps = {
   onFloatingFocusEnter?: () => void;
   onFloatingFocusLeave?: () => void;
 };
+
+export const PERSON_HOVERCARD_OPEN_DELAY_MS = 300;
 
 const PersonHovercardSurfaceContent = ({
   quiet,
@@ -274,13 +277,20 @@ const ParentPersonHovercard = ({
 }) => {
   const markerRef = useRef<HTMLSpanElement>(null);
   const closeTimerRef = useRef<number | null>(null);
+  const openTimerRef = useRef<number | null>(null);
+  const openDelay = useFlag(HTPR_7873_NAME_HOVERCARD_DELAY_FLAG) ? PERSON_HOVERCARD_OPEN_DELAY_MS : 0;
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const cancelClose = () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
   };
+  const cancelOpen = () => {
+    if (openTimerRef.current !== null) window.clearTimeout(openTimerRef.current);
+    openTimerRef.current = null;
+  };
   const scheduleClose = () => {
+    cancelOpen();
     cancelClose();
     closeTimerRef.current = window.setTimeout(() => setOpen(false), 90);
   };
@@ -297,9 +307,21 @@ const ParentPersonHovercard = ({
       cancelClose();
       setOpen(true);
     };
+    const showAfterDelay = () => {
+      if (!openDelay) {
+        show();
+        return;
+      }
+      cancelClose();
+      if (openTimerRef.current !== null) return;
+      openTimerRef.current = window.setTimeout(() => {
+        openTimerRef.current = null;
+        show();
+      }, openDelay);
+    };
     const showOnHover = (event: PointerEvent) => {
       if (!fromMouse(event)) return;
-      show();
+      showAfterDelay();
     };
     const hideOnLeave = (event: PointerEvent) => {
       if (!fromMouse(event)) return;
@@ -312,7 +334,7 @@ const ParentPersonHovercard = ({
     const showOnFocus = (event: FocusEvent) => {
       const target = event.target as Element | null;
       if (!target?.matches?.(":focus-visible")) return;
-      show();
+      showAfterDelay();
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
@@ -326,6 +348,7 @@ const ParentPersonHovercard = ({
     parent.addEventListener("keydown", dismissOnEscape);
     return () => {
       cancelClose();
+      cancelOpen();
       parent.removeEventListener("pointerenter", showOnHover);
       parent.removeEventListener("pointerleave", hideOnLeave);
       parent.removeEventListener("click", showOnTap);
@@ -333,7 +356,7 @@ const ParentPersonHovercard = ({
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [projectId, subject]);
+  }, [projectId, subject, openDelay]);
 
   useEffect(() => {
     if (!anchor) return;

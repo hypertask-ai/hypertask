@@ -1,6 +1,8 @@
 "use client";
 
-import { PersonHovercardSurface } from "@/components/Common/PersonHovercard";
+import { PERSON_HOVERCARD_OPEN_DELAY_MS, PersonHovercardSurface } from "@/components/Common/PersonHovercard";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7873_NAME_HOVERCARD_DELAY_FLAG } from "@/lib/flags/definitions/htpr-7873-name-hovercard-delay";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
@@ -35,6 +37,9 @@ const RichTextPersonHovercards = ({
 }) => {
   const rootRef = useRef<HTMLElement>(null);
   const closeTimerRef = useRef<number | null>(null);
+  const openTimerRef = useRef<number | null>(null);
+  const pendingElementRef = useRef<HTMLElement | null>(null);
+  const openDelay = useFlag(HTPR_7873_NAME_HOVERCARD_DELAY_FLAG) ? PERSON_HOVERCARD_OPEN_DELAY_MS : 0;
   const [active, setActive] = useState<{
     element: HTMLElement;
     subject: PersonHovercardSubject;
@@ -45,7 +50,13 @@ const RichTextPersonHovercards = ({
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
   };
+  const cancelOpen = () => {
+    if (openTimerRef.current !== null) window.clearTimeout(openTimerRef.current);
+    openTimerRef.current = null;
+    pendingElementRef.current = null;
+  };
   const scheduleClose = () => {
+    cancelOpen();
     cancelClose();
     closeTimerRef.current = window.setTimeout(() => setOpen(false), 90);
   };
@@ -53,8 +64,20 @@ const RichTextPersonHovercards = ({
     const mention = mentionFromTarget(target);
     if (!mention) return;
     cancelClose();
-    setActive(mention);
-    setOpen(true);
+    if (!openDelay) {
+      setActive(mention);
+      setOpen(true);
+      return;
+    }
+    if (pendingElementRef.current === mention.element) return;
+    cancelOpen();
+    pendingElementRef.current = mention.element;
+    openTimerRef.current = window.setTimeout(() => {
+      openTimerRef.current = null;
+      pendingElementRef.current = null;
+      setActive(mention);
+      setOpen(true);
+    }, openDelay);
   };
 
   useEffect(() => {
@@ -148,9 +171,12 @@ const RichTextPersonHovercards = ({
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
     };
-  }, [children, projectId]);
+  }, [children, projectId, openDelay]);
 
-  useEffect(() => () => cancelClose(), []);
+  useEffect(() => () => {
+    cancelClose();
+    cancelOpen();
+  }, []);
 
   if (!projectId) return children ?? null;
 
