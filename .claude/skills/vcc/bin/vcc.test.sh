@@ -181,6 +181,39 @@ refused launch_hax -p activity add X-1 x
 unset VCC_TEST_NESTED
 printf 'ok hax grandparent blocks activity writes\n'
 
+# The pool runner is hax -p launched by fleet/runner through timeout; it writes. A hax -p it starts is a helper.
+mkdir -p "$T/fleet"
+cat > "$T/fleet/runner" <<'STUB'
+#!/usr/bin/env bash
+ln -s "/proc/$$" "$VCC_HELPER_PROC_ROOT/$$"
+"$@"
+status=$?
+rm "$VCC_HELPER_PROC_ROOT/$$"
+exit "$status"
+STUB
+cat > "$T/haxbody" <<'STUB'
+IFS= read -r comm < "/proc/$$/comm"
+[ "$comm" = hax ] || exit 93
+ln -s "/proc/$$" "$VCC_HELPER_PROC_ROOT/$$"
+[ "${VCC_TEST_LINK_PARENT:-}" = 1 ] && ln -s "/proc/$PPID" "$VCC_HELPER_PROC_ROOT/$PPID"
+if [ "${VCC_TEST_INNER_HAX:-}" = 1 ]; then
+  VCC_TEST_INNER_HAX=0 VCC_TEST_LINK_PARENT=0 hax -p "$BASH_SOURCE" "$@"
+else
+  /bin/bash "$VCC_TEST_BIN" "$@"
+fi
+status=$?
+rm -f "$VCC_HELPER_PROC_ROOT/$$"
+[ "${VCC_TEST_LINK_PARENT:-}" = 1 ] && rm -f "$VCC_HELPER_PROC_ROOT/$PPID"
+exit "$status"
+STUB
+chmod +x "$T/fleet/runner"
+allowed env VCC_TEST_LINK_PARENT=1 "$T/fleet/runner" timeout 60 "$T/bin/hax" -p "$T/haxbody" comment add X-1 --text hi
+allowed "$T/fleet/runner" "$T/bin/hax" -p "$T/haxbody" comment add X-1 --text hi
+printf 'ok pool runner hax under fleet/runner writes\n'
+refused env VCC_TEST_LINK_PARENT=1 VCC_TEST_INNER_HAX=1 "$T/fleet/runner" timeout 60 "$T/bin/hax" -p "$T/haxbody" comment add X-1 --text hi
+refused env VCC_TEST_LINK_PARENT=1 timeout 60 "$T/bin/hax" -p "$T/haxbody" comment add X-1 --text hi
+printf 'ok helper hax under a runner or outside fleet/runner stays blocked\n'
+
 # Prompt text containing -p is not a separate helper argument.
 allowed launch_hax 'prompt containing -p' comment add X-1 --text hi
 allowed launch_hax interactive comment add X-1 --text hi
