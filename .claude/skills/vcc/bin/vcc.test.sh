@@ -181,7 +181,6 @@ refused launch_hax -p activity add X-1 x
 unset VCC_TEST_NESTED
 printf 'ok hax grandparent blocks activity writes\n'
 
-# The pool runner is hax -p launched by fleet/runner through timeout; it writes. A hax -p it starts is a helper.
 mkdir -p "$T/fleet"
 cat > "$T/fleet/runner" <<'STUB'
 #!/usr/bin/env bash
