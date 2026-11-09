@@ -1804,7 +1804,7 @@ the tool markers those languages need allowed: `yaml-language-server`,
 
 Existing debt is grandfathered by exact per-file counts in
 `.github/no-comments-baseline.json`, the same ratchet shape as the style-guide
-baseline. A file may keep the comments it already has; one more fails with
+baseline; the file is generated and never hand-edited. A file may keep the comments it already has; one more fails with
 `Comment in <file>:<line>. Remove it and name the intent in code.` A new script or
 workflow gets no allowance and fails on its first comment. Unused allowances do not
 fail, so cleaning a file is safe, and `node scripts/check-no-comments.mjs

@@ -103,7 +103,7 @@ function writeBaseline(files, root) {
     const found = disallowedComments(readFileSync(absolute, "utf8"), file);
     if (found.length) counts[key] = found.length;
   }
-  return `${JSON.stringify(counts, null, 2)}\n`;
+  return `${JSON.stringify(counts)}\n`;
 }
 
 function main(args) {
