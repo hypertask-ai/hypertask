@@ -23,7 +23,7 @@ export const resolveMoveToColumnSections = ({
       : boardSections.map((section) => ({ ...section, visibility: true }));
 
   const active = asColumns(activeColumns);
-  if (activeViewType === "Default" || !active) return base;
+  if (activeViewType === "Default" || !active || active.length === 0) return base;
 
   return base.map((section) => {
     const inActiveView = active.find((column) => column.id === section.id);

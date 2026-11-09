@@ -3,6 +3,7 @@ import { taskWriteRoute } from "@/lib/api/task-writes/route";
 import { viewWriteJson } from "./response";
 
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { ISection } from "@/models/model";
 import { TCreate_view_body } from "@/models/Views/model";
@@ -14,6 +15,8 @@ import {
   sanitizeBoardLayout,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { boardColumnsForProject } from "@/utils/controllers/section/viewHelpers";
+import { viewColumnsToWrite } from "@/utils/controllers/section/viewColumnVisibility";
 import {
   assertViewIsNotManagedSmartSplit,
   ManagedSmartSplitMutationError,
@@ -109,6 +112,7 @@ const route = taskWriteRoute({
             (orderById.get(b.id) ?? Number.MAX_SAFE_INTEGER)
         );
       }
+
       const sanitizedTableSort = sanitizeTableSort(
         view_settings.table_sort_column,
         view_settings.table_sort_direction
@@ -121,7 +125,7 @@ const route = taskWriteRoute({
 
       const currentDate = new Date();
       if (!view) {
-        view = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, (tx) => tx.view.create({
+        view = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, async (tx) => tx.view.create({
           data: {
             title,
             project_view_id: project_view.id,
@@ -130,7 +134,12 @@ const route = taskWriteRoute({
             board_sorting_order: view_settings.board_sorting_order,
             board_sorting_stack: view_settings.board_sorting_stack ?? [],
             board_filters: sanitizedBoardFilters,
-            board_columns_view: view_settings.board_columns_view,
+            board_columns_view: (viewColumnsToWrite(
+              view_settings.board_columns_view,
+              defaultColumns?.length
+                ? defaultColumns
+                : await boardColumnsForProject(projectId, tx)
+            ) ?? []) as unknown as Prisma.InputJsonValue,
             board_subtask_setting: view_settings.board_subtask_setting,
             board_empty_sections: view_settings.board_empty_sections,
             board_staleness: view_settings.board_staleness ?? null,

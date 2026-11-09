@@ -53,7 +53,10 @@ const useRenderedViews = (project: IProject | null) => {
   const savedViewTaskCounts = useMemo(() => {
     const tasks = project?.tasks ?? []
     return (orderedViews.filter((view) => !isBuiltinView(view)) as IView[]).map((view) => {
-      const columns = (view.board_columns_view as ISection[] | undefined) ?? project?.section ?? []
+      const savedColumns = view.board_columns_view as ISection[] | undefined
+      const columns = savedColumns && savedColumns.length > 0
+        ? savedColumns
+        : project?.section ?? []
       const sections = columns
         .filter((column) => column.visibility !== false)
         .map((column) => {

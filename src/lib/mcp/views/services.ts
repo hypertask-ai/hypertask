@@ -17,7 +17,7 @@ import {
     assertViewIsNotManagedSmartSplit,
     validateBoardFilterLabelReferences,
 } from '@/utils/controllers/projects/views/boardFilterWriteLock';
-import { canonicalBoardColumns, normalizeNativeBoardFilters } from './nativeBoardSettings';
+import { allBoardColumns, canonicalBoardColumns, normalizeNativeBoardFilters } from './nativeBoardSettings';
 
 export type CreateViewFilters = {
     label_names?: string[];
@@ -194,7 +194,7 @@ export async function createView(input: CreateViewInput) {
         ? sanitizeBoardFilters(await buildBoardFilters(projectId, input.filters, userId))
         : await buildValidatedNativeBoardFilters(projectId, input.board_filters);
     const boardColumns = input.visible_section_ids === undefined
-        ? undefined
+        ? await allBoardColumns(projectId)
         : await canonicalBoardColumns(projectId, input.visible_section_ids);
     const sortingMode = input.sorting_mode ?? 'Manual';
     const sortingStack = sanitizeSortingStack(input.sorting_stack, sortingMode);

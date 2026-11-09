@@ -85,8 +85,12 @@ test("no created section leaves the project untouched", () => {
 test("the board still falls back to project.section when no view exists", () => {
   const helpers = read("src/utils/helperFunctions/Views/ViewsHelperFunctions.ts");
   assert.ok(
-    helpers.includes("unsaved ?? applied ?? defaultView ?? project.section ?? []"),
+    helpers.includes("export const columnListOrBoardColumns"),
     "the fallback this fix relies on must stay in getActiveColumnsViewFromProject",
+  );
+  assert.ok(
+    helpers.includes(": (project?.section ?? []);"),
+    "an empty saved column list must fall back to the board's own columns",
   );
 });
 

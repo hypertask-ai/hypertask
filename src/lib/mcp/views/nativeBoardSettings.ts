@@ -164,3 +164,11 @@ export async function canonicalBoardColumns(projectId: number, visibleSectionIds
     visibility: visible.has(section.id),
   }));
 }
+
+export async function allBoardColumns(projectId: number) {
+  const sections = await prisma.section.findMany({
+    where: { projectId, deleted: false },
+    select: { id: true },
+  });
+  return canonicalBoardColumns(projectId, sections.map((section) => section.id));
+}
