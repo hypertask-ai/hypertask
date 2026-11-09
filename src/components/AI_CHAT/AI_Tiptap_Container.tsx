@@ -50,6 +50,8 @@ import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal"
 import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
+import { AiChatOneComposerBelowRow, AiChatOneComposerRow } from "./AiChatOneComposer";
+import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
@@ -113,6 +115,7 @@ export function AI_Tiptap_Container({
   const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
   const cleanupFlag = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const chatCleanupFlag = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
+  const oneComposerFlag = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
@@ -122,6 +125,7 @@ export function AI_Tiptap_Container({
   let hideMicrophonePicker = fullScreenCleanup;
   if (chatCleanupEnabled) hideMicrophonePicker = true;
   const isMbl = useContext(MobileViewContext);
+  const oneComposer = oneComposerFlag && !isMbl && !controlledComposer;
   const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
   const {
     tiptapKeydown,
@@ -270,7 +274,28 @@ export function AI_Tiptap_Container({
 
   let composerClassName = "!rounded-lg p-2";
   if (isMbl) composerClassName = `${chatCleanupEnabled ? "!rounded-[4px]" : "!rounded-[5px]"} px-3 pb-2 pt-3`;
-  else if (fullScreenCleanup || chatCleanupEnabled) composerClassName = "!rounded-[4px] p-2";
+  else if (oneComposer || fullScreenCleanup || chatCleanupEnabled) composerClassName = "!rounded-[4px] p-2";
+
+  const modelPicker = controlledComposer ? null : (
+    <AIModelDropDownButton
+      keyboardNavigation={sharedShortcuts}
+      shortcutHint={sharedShortcuts ? chatShortcutHint("model") : undefined}
+      onKeyboardClose={() => editor?.commands.focus("end")}
+      optionCallback={dropDownButtonAICallback}
+      aiSelected={currentAiOption}
+      modelTeamId={modelTeamId}
+      modelBilling={modelBilling}
+      currentOptions={displayAiOptions}
+      className={oneComposer ? "bottom-[110%] right-0 left-auto top-auto" : "bottom-[110%] top-auto"}
+      stackSubmenus
+      effortLabelClassName={
+        oneComposer || pathname?.startsWith("/chat") ? undefined : "hidden"
+      }
+    />
+  );
+  const scopePicker = controlledComposer ? null : (
+    <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />
+  );
 
   return (
     <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root inert={disabled || !active || undefined}
@@ -397,6 +422,15 @@ export function AI_Tiptap_Container({
             <div className="h-[21px]" />
           )}
         </div>
+        {oneComposer ? (
+          <AiChatOneComposerRow
+            active={active}
+            audioButtonId={audioButtonId}
+            empty={isEditorEmpty}
+            hasText={hasComposerText}
+            streamControl={isTyping ? <CancelStreamButton onClick={handleCancelStream} /> : null}
+          />
+        ) : (
         <AiChatComposerActionRow
           mobile={Boolean(isMbl)}
           chatCleanup={chatCleanupEnabled}
@@ -405,22 +439,8 @@ export function AI_Tiptap_Container({
           leadingControls={
             controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
-                <AIModelDropDownButton
-                  keyboardNavigation={sharedShortcuts}
-                  shortcutHint={sharedShortcuts ? chatShortcutHint("model") : undefined}
-                  onKeyboardClose={() => editor?.commands.focus("end")}
-                  optionCallback={dropDownButtonAICallback}
-                  aiSelected={currentAiOption}
-                  modelTeamId={modelTeamId}
-                  modelBilling={modelBilling}
-                  currentOptions={displayAiOptions}
-                  className={"bottom-[110%] top-auto"}
-                  stackSubmenus
-                  effortLabelClassName={
-                    pathname?.startsWith("/chat") ? undefined : "hidden"
-                  }
-                />
-                {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />}
+                {modelPicker}
+                {!pathname?.startsWith("/chat") && scopePicker}
               </>
             )
           }
@@ -550,6 +570,7 @@ export function AI_Tiptap_Container({
             ) : null
           }
         />
+        )}
         {!controlledComposer && (
           <input
             id="ai-chat-attachment-upload"
@@ -573,6 +594,14 @@ export function AI_Tiptap_Container({
           />
         )}
       </div>
+      {oneComposer && (
+        <AiChatOneComposerBelowRow
+          fullScreen={pathname?.startsWith("/chat") ?? false}
+          dockedScope={scopePicker}
+          modelPicker={modelPicker}
+          onRestoreFocus={restoreComposerFocus}
+        />
+      )}
     </div>
   );
 }
