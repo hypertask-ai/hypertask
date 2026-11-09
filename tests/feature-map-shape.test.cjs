@@ -8,14 +8,21 @@ const pages = fs.readdirSync(featureMapDir, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md")
   .map((entry) => entry.name)
   .sort();
-const requiredHeadings = [
+const legacyHeadings = [
   "How a customer reaches it",
   "How to drive it",
   "What usually breaks",
   "What proof to collect",
   "Cleanup",
 ];
-const template = `template: ${requiredHeadings.map((heading) => `## ${heading}`).join(" | ")}`;
+const pstackHeadings = [
+  "Sub-features",
+  "How to get to it (user POV)",
+  "Driving it with agent-browser",
+  "Gotchas",
+];
+const acceptedShapes = [legacyHeadings, pstackHeadings];
+const template = `template: ${acceptedShapes.map((shape) => shape.map((heading) => `## ${heading}`).join(" | ")).join(" OR ")}`;
 
 function levelTwoHeadings(markdown) {
   const headings = [];
@@ -39,19 +46,23 @@ function levelTwoHeadings(markdown) {
   return headings;
 }
 
-test("every feature-map page has the five required level-two headings in order", () => {
+function shapeFailure(page, headings, required) {
+  let previousIndex = -1;
+  for (const heading of required) {
+    const index = headings.indexOf(heading);
+    if (index === -1) return `${page}: missing heading "${heading}"`;
+    if (index <= previousIndex) return `${page}: heading "${heading}" is out of order`;
+    previousIndex = index;
+  }
+  return null;
+}
+
+test("every feature-map page uses one accepted level-two heading shape", () => {
   const failures = [];
   for (const page of pages) {
     const headings = levelTwoHeadings(fs.readFileSync(path.join(featureMapDir, page), "utf8"));
-    let previousIndex = -1;
-    for (const heading of requiredHeadings) {
-      const index = headings.indexOf(heading);
-      if (index === -1) {
-        failures.push(`${page}: missing heading "${heading}"`);
-      } else if (index <= previousIndex) {
-        failures.push(`${page}: heading "${heading}" is out of order`);
-      }
-      previousIndex = Math.max(previousIndex, index);
+    if (!acceptedShapes.some((shape) => shapeFailure(page, headings, shape) === null)) {
+      failures.push(shapeFailure(page, headings, pstackHeadings));
     }
   }
   assert.equal(failures.length, 0, `${failures.join("\n")}\n${template}`);

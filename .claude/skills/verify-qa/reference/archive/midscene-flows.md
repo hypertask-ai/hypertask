@@ -1,7 +1,10 @@
+> Archived 2026-11-09. Midscene was retired on 2026-09-15. History only; do not
+> follow this as a current recipe. Current fleet: [../verification-fleet.md](../verification-fleet.md).
+
 # Midscene E2E flow pack — retired
 
 Midscene is retired in favor of the E2B verification fleet (Valentin,
-2026-09-15). See `reference/e2b-fleet.md` for the live suite and
+2026-09-15). See [e2b-fleet.md](e2b-fleet.md) for the archived E2B notes and
 [HTPR-6484](https://app.hypertask.ai/detail/project-15/6484) for the port
 ticket (which flows below still need an E2B equivalent, plus cron removal).
 

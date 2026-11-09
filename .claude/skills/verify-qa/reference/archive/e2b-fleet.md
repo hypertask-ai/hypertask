@@ -1,7 +1,10 @@
+> Archived 2026-11-09. These E2B setup notes date from 2026-08-07 and are history,
+> not a current recipe. Current fleet: [../verification-fleet.md](../verification-fleet.md).
+
 # E2B verification fleet
 
 The one nightly QA suite for the live app (Valentin, 2026-09-15). Midscene is
-retired in favor of this; see `midscene-flows.md` for the retirement stub and
+retired in favor of this; see [midscene-flows.md](midscene-flows.md) for the retirement stub and
 [HTPR-6484](https://app.hypertask.ai/detail/project-15/6484) for the port
 ticket. Full detail: `~/projects/hypertask-verify-app/ABSTRACT.md` and
 `.claude/skills/verify-qa/reference/verification-fleet.md` in the hypertasks repo.
