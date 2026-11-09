@@ -33,13 +33,13 @@ test('HTPR-8947 Ctrl+K Search and New Task show no shortcut hints or version, th
     assert.equal(document.querySelector('[data-cmdk-version]'), null, 'no version line in Search');
     assert.doesNotMatch(document.body.textContent, /↑↓|navigate|esc close|abc1234/);
     const panel = document.querySelector('[data-build]');
-    assert.equal(panel.getAttribute('data-build'), buildId);
+    assert.equal(panel.getAttribute('data-build'), buildId.slice(0, 7));
     assert.ok(panel.contains(document.querySelector('#htc-search')), 'build id sits on the panel body');
     await clickTab('New Task');
     assert.ok(document.querySelector('[data-compose-task-writer]'), 'New Task renders');
     assert.equal(document.querySelector('[data-cmdk-version]'), null, 'no version line in New Task');
     assert.doesNotMatch(document.body.textContent, /↑↓|navigate|abc1234/);
-    assert.equal(document.querySelector('[data-build]').getAttribute('data-build'), buildId, 'build id still present in New Task');
+    assert.equal(document.querySelector('[data-build]').getAttribute('data-build'), buildId.slice(0, 7), 'build id still present in New Task');
   }));
 });
 
