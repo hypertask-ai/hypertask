@@ -1,34 +1,17 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
 const FLAG = "htpr-7868-empty-field-labels";
 const noop = () => {};
 const marker = (name) => () => React.createElement("i", { "data-part": name });
 const mobile = React.createContext(false);
 let flagOn = true;
 
-function load(relative, mocks, passthrough = ["react", "react/jsx-runtime", "date-fns"]) {
-  const source = fs.readFileSync(path.join(root, relative), "utf8");
-  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  const exports = {};
-  for (const mock of Object.values(mocks)) if (mock && typeof mock === "object" && "default" in mock) mock.__esModule = true;
-  new Function("require", "exports", js)((name) => {
-    if (passthrough.includes(name)) return require(name);
-    assert.ok(name in mocks, `Unexpected dependency in ${relative}: ${name}`);
-    return mocks[name];
-  }, exports);
-  return exports;
-}
-
-const flagModule = load("src/lib/flags/definitions/htpr-7868-empty-field-labels.ts", {});
+const flagModule = loadModule("src/lib/flags/definitions/htpr-7868-empty-field-labels.ts");
 const useFlag = { useFlag: (key) => key === FLAG && flagOn };
-const flagDefinition = { "@/lib/flags/definitions/htpr-7868-empty-field-labels": { HTPR_7868_EMPTY_FIELD_LABELS_FLAG: FLAG } };
 const sharedRows = {
   ClickableSpan: ({ title }) => React.createElement("span", { "data-empty": title }, title),
   LocalRightSideInfo: ({ title }) => React.createElement("label", null, title),
@@ -40,10 +23,8 @@ const sharedRows = {
 };
 const estimates = [{ estimate_index: 3, estimate_full_value: "Medium" }];
 
-const panel = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx", {
+const panel = loadModule("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx", {
   "@/hooks/useFlag": useFlag,
-  ...flagDefinition,
-  "@/lib/flags/definitions/htpr-8917-agent-waiting-person": { HTPR_8917_AGENT_WAITING_PERSON_FLAG: "htpr-8917-agent-waiting-person" },
   "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: true, serverTaskSeed: { updatedAt: "2026-01-01T00:00:00.000Z" } }) },
   "@/lib/contexts/mobileContext": { MobileViewContext: mobile },
   "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
@@ -79,9 +60,8 @@ const panel = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/Task
 }).default;
 
 let modalForm = {};
-const modal = load("src/components/Modals/CreateTaskGloballyModal/TaskInfoColumnGloballyCreate.tsx", {
+const modal = loadModule("src/components/Modals/CreateTaskGloballyModal/TaskInfoColumnGloballyCreate.tsx", {
   "@/hooks/useFlag": useFlag,
-  ...flagDefinition,
   "@/components/Common/Tooltip": { default: () => null },
   "@/components/PageComponents/TaskDetail/MainPageComponents": sharedRows,
   "@/lib/contexts/mobileContext": { MobileViewContext: mobile },
@@ -108,8 +88,7 @@ const modal = load("src/components/Modals/CreateTaskGloballyModal/TaskInfoColumn
   "./AssigneesTaskGlobal/AssigneesContainerCreateTaskGlobally": { default: marker("assignees") },
 }).default;
 
-const clickable = load("src/components/PageComponents/TaskDetail/MainPageComponents/index.tsx", {
-  "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
+const clickable = loadModule("src/components/PageComponents/TaskDetail/MainPageComponents/index.tsx", {
   "@/hooks/useFlag": useFlag,
   "@/components/Common/Tooltip": { default: () => null },
   "@/lib/contexts/mobileContext": { MobileViewContext: mobile },
