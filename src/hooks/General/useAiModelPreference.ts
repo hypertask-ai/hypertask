@@ -2,8 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import {
+  AUTO_MODEL_OPTION_ID,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
   isOpenAiOnlyPaidTeam,
@@ -47,6 +50,7 @@ export function useAiModelPreference(
   const boardBilling = useCurrentBoardBilling();
   const billing = billingOverride === undefined ? boardBilling : billingOverride;
   const queryClient = useQueryClient();
+  const autoModelEnabled = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
   const { data: userPreferences } = useGetUserPreferences();
   const currentTeamId =
     teamId === undefined ? currentProject?.teamId : teamId;
@@ -134,10 +138,12 @@ export function useAiModelPreference(
 
   const setAiOption = useCallback(
     (option: TAiModal) => {
+      const autoPick = autoModelEnabled && surface === "aiChat" && option.id === AUTO_MODEL_OPTION_ID;
       const validOption = getAiModelOptionById(option.id, haiku55Enabled);
-      if (!validOption) return;
+      const persistedId = autoPick ? AUTO_MODEL_OPTION_ID : validOption?.id;
+      if (!persistedId) return;
 
-      setCurrentAiOption(validOption);
+      if (validOption) setCurrentAiOption(validOption);
       if (!currentTeamId) return;
 
       void queryClient.cancelQueries(
@@ -150,7 +156,7 @@ export function useAiModelPreference(
           ...(previous ?? userPreferences),
           aiModelPreferences: mergeAiModelPreferenceUpdates(
             previous?.aiModelPreferences ?? userPreferences.aiModelPreferences,
-            { [surface]: validOption.id },
+            { [surface]: persistedId },
             currentTeamId,
           ),
         }),
@@ -158,7 +164,7 @@ export function useAiModelPreference(
 
       void axios
         .post("/api/users/preferences", {
-          aiModelPreferences: { [surface]: validOption.id },
+          aiModelPreferences: { [surface]: persistedId },
           aiModelPreferencesTeamId: currentTeamId,
         })
         .then((response) => {
@@ -176,7 +182,7 @@ export function useAiModelPreference(
           console.log("useAiModelPreference update error:", error);
         });
     },
-    [currentTeamId, haiku55Enabled, queryClient, surface, userPreferences],
+    [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, surface, userPreferences],
   );
 
   return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption };

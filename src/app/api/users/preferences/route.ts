@@ -24,6 +24,7 @@ import {
 } from "@/lib/aiModelPreferences";
 import {
   aiImageModelDefinitions,
+  AUTO_MODEL_OPTION_ID,
   getAiModelOptionById,
 } from "@/lib/aiModelOptions";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
@@ -311,7 +312,8 @@ export async function POST(request: NextRequest) {
           typeof optionId !== "string" ||
           (surface === "imageGeneration"
             ? !aiImageModelDefinitions.some((model) => model.key === optionId)
-            : !getAiModelOptionById(optionId)),
+            : !getAiModelOptionById(optionId) &&
+              !(surface === "aiChat" && optionId === AUTO_MODEL_OPTION_ID)),
       );
 
       if (invalidPreference) {

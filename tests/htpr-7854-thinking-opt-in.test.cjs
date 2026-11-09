@@ -18,6 +18,7 @@ const EXPECTED = {
   heartbeat: "none",
   "suggested-questions": "none",
   "slash-rewrite": "none",
+  "board-generation": "none",
   chat: "low",
   "hyper-mentioned": "low",
   "task-writer": "low",

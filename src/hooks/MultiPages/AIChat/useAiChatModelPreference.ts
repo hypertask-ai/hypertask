@@ -5,7 +5,14 @@ import { currentProjectAtom, currentUserAtom } from "@/store";
 import type { ITeam } from "@/models/model";
 import { deriveTeamBilling } from "@/lib/deriveCurrentBoardBilling";
 import { getLastBoardTeam } from "@/lib/lastBoardTeam";
+import { useState } from "react";
 import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
+import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
+import { AUTO_MODEL_OPTION_ID, getAiModelOptionById, toAutoModelOption } from "@/lib/aiModelOptions";
+import type { TAiModal } from "@/models/AI_Task_writer_model";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 
@@ -35,6 +42,25 @@ export function useAiChatModelPreference() {
 
   const billing = currentProject?.teamId ? boardBilling : deriveTeamBilling(team);
   const preference = useAiModelPreference("aiChat", { teamId, billing });
+  const autoFlag = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
+  const { data: userPreferences } = useGetUserPreferences();
+  const [autoOverride, setAutoOverride] = useState<boolean | null>(null);
+  const stored = getAiModelPreferenceIds(userPreferences.aiModelPreferences, "aiChat", teamId);
+  const storedPick = stored.teamScoped ?? stored.global;
+  const derivedAuto = storedPick === AUTO_MODEL_OPTION_ID ||
+    (!getAiModelOptionById(storedPick) && preference.usesPlanDefault);
+  const autoActive = autoFlag && (autoOverride ?? derivedAuto);
 
-  return { ...preference, modelTeamId: teamId, modelBilling: billing };
+  const setAiOption = (option: TAiModal) => {
+    setAutoOverride(option.id === AUTO_MODEL_OPTION_ID);
+    preference.setAiOption(option);
+  };
+
+  return {
+    ...preference,
+    currentAiOption: autoActive ? toAutoModelOption(preference.currentAiOption) : preference.currentAiOption,
+    setAiOption: autoFlag ? setAiOption : preference.setAiOption,
+    modelTeamId: teamId,
+    modelBilling: billing,
+  };
 }

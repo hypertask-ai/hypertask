@@ -17,6 +17,7 @@ import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan }
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
+import { autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 
 import { createSseErrorResponse, reportHandledChatError, errorMessage } from "@/lib/ai/chatStream/errors";
 import { ChatRequest } from "@/lib/ai/chatStream/request";
@@ -168,7 +169,8 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       : null;
     const usesTeamOpenAiDefault = Boolean(teamOpenAiOnlyContext && isOpenAiOnlyPaidTeam(teamOpenAiOnlyContext));
     const selectionLookupContext = usesTeamOpenAiDefault ? teamKeyLookupContext : keyLookupContext;
-    const requestedModel = isBrowserLunaDefaultUnqualifiedHere(body, defaultContext, storePlanId)
+    const autoRequested = isAutoRequest(body.modelOptionId);
+    const requestedModel = autoRequested || isBrowserLunaDefaultUnqualifiedHere(body, defaultContext, storePlanId)
       ? { modelOptionId: null, model: null, provider: null }
       : body;
     const modelOptionIdForTurn = resolveAgentModelPin({
@@ -189,6 +191,18 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     );
     if (usesTeamOpenAiDefault) {
       selection = selectionFromModelOption(getAiModelOptionById("gpt-6-luna", true)!);
+    }
+    if (autoRequested && !usesTeamOpenAiDefault && !actingAgent?.modelOptionId && await autoModelEnabled(dbUser.id)) {
+      const autoPick = pickAutoModelOption({
+        feature: body.aiFeature,
+        settings: teamProviderSettings,
+        plan: storePlanId,
+        byokProviderFlags: body.byokProviderFlags,
+        grokGemini4Enabled,
+        planDefault: requestDefaultModelOption,
+        stepUp: chatStepUp({ message: body.message, history: body.chat_history }),
+      });
+      if (autoPick) selection = selectionFromModelOption(autoPick);
     }
     if (body.modelFromDefault !== true && (requestedModel.modelOptionId || requestedModel.model)) {
       let provider = selection.modelOption

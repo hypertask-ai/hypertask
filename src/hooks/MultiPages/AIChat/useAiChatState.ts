@@ -21,10 +21,14 @@ import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-ma
 import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
+import { defaultAiModelOption, toAutoModelOption } from "@/lib/aiModelOptions";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
 import type { AiChatWindowScope } from "@/lib/aiChat/chatWindows";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
+
+const autoDisplayOption = toAutoModelOption(defaultAiModelOption);
 
 type BoardSessionMap = Record<number, string>;
 
@@ -152,7 +156,11 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   const streamingAssistantMessageRef = useRef<string | null>(null);
   const streamingRequestRef = useRef<string | null>(null);
   const settleSendRef = useRef<(() => void) | null>(null);
-  const [displayAiOptions] = useState<TAiModal[]>(aiOptionsWithoutOpenRouter);
+  const autoModelEnabled = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
+  const displayAiOptions = useMemo<TAiModal[]>(
+    () => autoModelEnabled ? [autoDisplayOption, ...aiOptionsWithoutOpenRouter] : aiOptionsWithoutOpenRouter,
+    [autoModelEnabled],
+  );
   const [contextList, setContextList] = useState<MentionItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<string | undefined>(undefined);
   const [showRenameChatModal, setShowRenameChatModal] =
