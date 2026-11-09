@@ -1,13 +1,17 @@
 # Server feature-flag check
 
-## How a customer reaches it
+## Sub-features
+
+- `server-feature-flag-check` Server feature-flag check.
+
+## How to get to it (user POV)
 
 Production pull requests report `feature-flag-gate`.
 The trusted production evaluator checks candidate Git blobs.
 It never executes candidate application code.
 No app screen, account or flag mode changes.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Confirm the merge's production deployment succeeded.
 2. Fetch production and run its merged evaluator CLI.
@@ -19,7 +23,7 @@ No app screen, account or flag mode changes.
 8. Read current-head CI results for the feature-gate, parser-dependency and auto-merge fixtures.
 9. Run the standard production doctor and inbox cycle after the app deployment.
 
-## What usually breaks
+## Gotchas
 
 - Server-only changes bypass the UI-only early return.
 - A client hook pretends to gate server behavior.
@@ -30,7 +34,7 @@ No app screen, account or flag mode changes.
 - A new decision token escapes owner-review routing.
 - Historical merges contaminate replay with unrelated production UI changes.
 
-## What proof to collect
+### What proof to collect
 
 Save merge/deployment metadata, first and final CLI outputs with exit codes,
 the final decision file, current-head CI verdicts, and targeted fixture output.
@@ -39,7 +43,7 @@ The check is bounded syntax evidence; review still judges complete flag coverage
 Existing title and label exemptions remain unchanged.
 No product flag is needed for this infrastructure change.
 
-## Cleanup
+### Cleanup
 
 No production settings or customer fixtures change.
 Retain sanitized evidence outside the worktree.

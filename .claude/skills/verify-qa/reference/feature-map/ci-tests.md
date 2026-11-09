@@ -1,12 +1,18 @@
 # CI tests and parallel code checks
 
-## How a customer reaches it
+## Sub-features
+
+- `ci-app-api-pool` CI App API pool.
+- `flaky-test-collector` Flaky-test collector.
+- `shared-test-harness` Shared test harness.
+
+## How to get to it (user POV)
 
 GitHub Actions: CI Tests, on production pull requests and pushes.
 Workflow: `.github/workflows/ci-tests.yml`.
 This is infrastructure; application screens do not change.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Open a normal production pull request.
 2. Read the preparation job and shard artifact.
@@ -23,7 +29,7 @@ This is infrastructure; application screens do not change.
 Never change required statuses to manufacture negative controls.
 Execute the workflow's summary shell with isolated inputs locally.
 
-## What usually breaks
+## Gotchas
 
 - Test shards accidentally depend on static checks.
 - Static failure or cancellation escapes the summary.
@@ -32,7 +38,7 @@ Execute the workflow's summary shell with isolated inputs locally.
 - A shard omits or repeats a planned test file.
 - Queue or cache differences masquerade as speedups.
 
-## What proof to collect
+### What proof to collect
 
 Save workflow run URLs, head SHAs and job/step timestamps.
 Record successful scope guard, Typecheck, both lint steps and both shards.
@@ -43,7 +49,7 @@ Separate avoided serial work from overall CI wall time.
 `tests/shard-tests.test.cjs` exercises shard partition and execution proof.
 These isolated checks do not prove hosted scheduling.
 
-## CI App API pool
+### CI App API pool
 
 Confirm CI Tests' single review precheck uses `github.token` and its
 PR-controlled workflow does not receive the App private key. For the current
@@ -54,7 +60,7 @@ prove App-pool use. Inspect published status author integrations and confirm
 required writes remain authored by GitHub Actions. After merge, repeat against
 live trusted workflows. Save run URLs, head SHAs and evidence.
 
-## Flaky-test collector
+### Flaky-test collector
 
 Run `node --test tests/detect-flaky-tests.test.cjs` for the collector's real CLI
 boundary with isolated GitHub responses. It covers old jobs, both failed shards,
@@ -68,12 +74,12 @@ Compare rerun-to-green counts against the original 29/53 baseline, keeping workf
 retries separate from named test flakes. Different sample sizes or windows do not
 prove a causal improvement. Never count missing logs as successful verification.
 
-## Cleanup
+### Cleanup
 
 No app fixtures, feature flags or production settings change.
 Keep sanitized job records outside the worktree.
 
-## Shared test harness
+### Shared test harness
 
 For changes to `tests/helpers/loadModule.cjs`, require hosted CI to execute
 `tests/test-harness.test.cjs` and every migrated caller, including indirect

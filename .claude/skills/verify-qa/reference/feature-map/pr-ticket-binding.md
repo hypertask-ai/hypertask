@@ -1,12 +1,16 @@
 # PR ticket binding
 
-## How a customer reaches it
+## Sub-features
+
+- `pr-ticket-binding` PR ticket binding.
+
+## How to get to it (user POV)
 
 A same-repository production PR uses a ticket-prefixed title. The trusted
 `pr-title` step in `.github/workflows/pr-guards-trusted.yml` saves the link in
 the ticket's existing pull request property. No runner-local file is needed.
 
-## How to drive it
+## Driving it with agent-browser
 
 After merging, dispatch PR Guards Trusted on production with input `pr_number`
 set to this ticket's PR. The manual job and automatic title guard execute
@@ -23,21 +27,21 @@ the actual workflow title step with fake GitHub and HTTP boundaries. It checks
 all ticket prefixes, current metadata, fork refusal, API failure and delayed
 merged-PR binding. These fixtures are not live proof.
 
-## What usually breaks
+## Gotchas
 
 - Missing board credentials or ticket write permission.
 - Trusting the event title instead of current GitHub metadata.
 - Accepting an API success without its saved link.
 - Sending credentials to forks or following redirects.
 
-## What proof to collect
+### What proof to collect
 
 Save the merged SHA, successful deployment, trusted workflow log, and CLI
 readback showing the unique persisted link. Capture a QA 985 signed-in doctor
 screenshot. Include a checklist and self-contained ticket report. No UI change
 or feature flag is involved.
 
-## Cleanup
+### Cleanup
 
 Leave the real ticket link intact. Remove only this session's merged branch
 and worktree. Save evidence outside the worktree.

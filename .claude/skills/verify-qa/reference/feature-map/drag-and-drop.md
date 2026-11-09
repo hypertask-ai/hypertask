@@ -1,10 +1,14 @@
 # Drag and drop
 
-## How a customer reaches it
+## Sub-features
+
+- `drag-and-drop` Drag and drop.
+
+## How to get to it (user POV)
 
 Dragging a card between columns on a board view.
 
-## How to drive it
+## Driving it with agent-browser
 
 `@hello-pangea/dnd` (the board's drag library) reads incremental mouse-move
 deltas, not a single jump, so a plain `dragTo()` call won't register.
@@ -14,7 +18,7 @@ steps toward `[data-rbd-droppable-id]` for the target column, then
 `mouse.up`. Copy that step shape. It waits ~500ms after `mouse.up` for the
 `PUT /api/tasks/moveTask` call to land, then reloads.
 
-## What usually breaks
+## Gotchas
 
 - Column save-view retries looping on an empty column once a card leaves it
   ([HTPR-6588](https://app.hypertask.ai/detail/project-15/6588), [HTPR-6550](https://app.hypertask.ai/detail/project-15/6550)).
@@ -24,14 +28,14 @@ steps toward `[data-rbd-droppable-id]` for the target column, then
   [HTPR-5854](https://app.hypertask.ai/detail/project-15/5854), a mobile sheet drag crash). Don't assume a drag ticket has a
   matching bug pattern here; read the ticket's own repro.
 
-## What proof to collect
+### What proof to collect
 
 Screenshot the board before the move (card in column A) and after (card in
 column B, column A's empty state correct if it's now empty). Reload and
 confirm both columns still show the moved card in the right place, not just
 the optimistic UI update.
 
-## Cleanup
+### Cleanup
 
 Move the test card back to its original column, or delete it if you created
 it for this check.
