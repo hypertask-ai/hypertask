@@ -8,7 +8,7 @@ const { access: projectAccess, matches } = require("./helpers/agent-board-scope.
 function fixture(options = {}) {
   const owner = { id: 7, displayName: "Owner", email: "owner@example.invalid" };
   const ctx = { user: owner, agentId: "agent-owner", agentRole: "write", teamScope: null, ...options.ctx };
-  const task = { id: 42, projectId: 15, waitingOnUserId: 8, waitingOnSetById: 7, waitingOnSetAt: new Date(), blockerCommentId: null };
+  const task = { id: 42, projectId: 15, waitingOnUserId: 8, waitingOnAgentId: options.waitingOnAgentId ?? null, waitingOnSetById: 7, waitingOnSetAt: new Date(), blockerCommentId: null };
   const writes = [], activities = [], boards = [], inboxes = [], access = [], members = [], leases = [], flags = [], commentReads = [], taskChanges = [];
   const projectWhere = projectAccess.getProjectWhere;
   const project = {
@@ -30,7 +30,7 @@ function fixture(options = {}) {
       update: async (query) => {
         writes.push(query);
         assert.deepEqual(query.where, { id: 42 });
-        assert.deepEqual(query.select, { id: true, waitingOnUserId: true, waitingOnSetById: true, waitingOnSetAt: true, ...(Object.hasOwn(query.data, "blockerCommentId") ? { blockerCommentId: true } : {}) });
+        assert.deepEqual(query.select, { id: true, waitingOnUserId: true, waitingOnSetById: true, waitingOnSetAt: true, ...(Object.hasOwn(query.data, "blockerCommentId") ? { blockerCommentId: true } : {}), ...(Object.hasOwn(query.data, "waitingOnAgentId") ? { waitingOnAgentId: true } : {}) });
         Object.assign(task, query.data);
         return Object.fromEntries(Object.keys(query.select).map((key) => [key, task[key]]));
       },
@@ -43,6 +43,12 @@ function fixture(options = {}) {
       return ![101, 102].includes(comment.id) || comment.taskId !== where.taskId || comment.activity !== null ? null : { id: comment.id };
     } },
     user: { findUnique: async ({ where }) => where.id === 7 ? owner : { displayName: "Member" } },
+    agent: {
+      findFirst: async ({ where }) => where.id === "11111111-1111-4111-8111-111111111111" && !options.agentMissing
+        ? { id: where.id, displayName: "Runner 9", userId: 6 }
+        : null,
+      findUnique: async () => null,
+    },
     $transaction: async (run) => run(db),
   };
   const mocks = {
@@ -57,6 +63,7 @@ function fixture(options = {}) {
       if (key === "htpr-7665-agent-read-role-guard") return true;
       if (key === "htpr-7724-blocker-comment") return options.blockerFlagEnabled !== false;
       if (key === "htpr-8205-agent-clear-blocker") return options.clearFlagEnabled === true;
+      if (key === "htpr-8917-agent-waiting-person") return options.agentWaitingFlag === true;
       assert.equal(key, "htpr-7723-task-waiting-on");
       return options.flagEnabled !== false;
     } },
@@ -88,6 +95,7 @@ function fixture(options = {}) {
       },
     },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => options.noAuth ? null : { userId: 7 } },
+    "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async (id) => (id === owner.id ? owner : { id, displayName: "Member" }) },
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => null },
   };
   mocks["@/lib/mcp/routeWrapper"] = loadRouteWrapper(mocks);
@@ -145,7 +153,7 @@ test("flag on: an owner agent sets a board member then clears through the shared
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.success, true);
-  assert.deepEqual({ ...result.task, waitingOnSetAt: null }, { id: 42, waitingOnUserId: 9, waitingOnSetById: 7, waitingOnSetAt: null });
+  assert.deepEqual({ ...result.task, waitingOnSetAt: null }, { id: 42, waitingOnUserId: 9, waitingOnSetById: 7, waitingOnSetAt: null, waitingOnAgentId: null });
   assert.ok(Number.isFinite(Date.parse(result.task.waitingOnSetAt)));
   assert.ok(f.writes[0].data.waitingOnSetAt instanceof Date);
   assert.deepEqual(f.members, [{ projectId: 15, ids: [9] }]);
@@ -157,7 +165,7 @@ test("flag on: an owner agent sets a board member then clears through the shared
 
   const cleared = await f.post({ taskId: 42, userId: null });
   assert.equal(cleared.status, 200);
-  assert.deepEqual(await cleared.json(), { success: true, task: { id: 42, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null } });
+  assert.deepEqual(await cleared.json(), { success: true, task: { id: 42, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null, waitingOnAgentId: null } });
   assert.equal(f.members.length, 1);
   assert.equal(f.activities[1].activityBody.data.waitingOnDisplayName, null);
   assert.deepEqual(f.inboxes.slice(2), [[9, { originUserId: 7 }]]);
@@ -201,7 +209,7 @@ test("flag off: the existing session and Pages route retain coercion, raw receip
   assert.equal(receipt.success, undefined);
   assert.deepEqual(f.access[0].project, projectAccess.getProjectWhere(7));
   const cleared = await f.pages({ taskId: 42, userId: null });
-  assert.deepEqual(cleared, { status: 200, body: { id: 42, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null } });
+  assert.deepEqual(cleared, { status: 200, body: { id: 42, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null, waitingOnAgentId: null } });
   assert.equal(f.writes.length, 2);
   assert.equal(f.activities.length, 2);
   assert.equal(f.boards.length, 2);
@@ -261,7 +269,7 @@ test("blocker comment and person are set in one write, replaced, read in the rec
 
   const cleared = await f.post({ taskId: 42, userId: null, blockerCommentId: null });
   assert.equal(cleared.status, 200);
-  assert.deepEqual((await cleared.json()).task, { id: 42, blockerCommentId: null, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null });
+  assert.deepEqual((await cleared.json()).task, { id: 42, blockerCommentId: null, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null, waitingOnAgentId: null });
   assert.equal(f.writes.length, 3);
   assert.equal(f.commentReads.length, 2);
 });
@@ -393,3 +401,37 @@ for (const blockerCommentId of [101, null]) {
     for (const calls of [f.members, f.activities, f.inboxes]) assert.deepEqual(calls, []);
   });
 }
+
+const runner9 = "11111111-1111-4111-8111-111111111111";
+
+test("agent waiting flag off refuses an agent id before a write", async () => {
+  const f = fixture();
+  const response = await f.post({ taskId: 42, agentId: runner9 });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { success: false, error: "Agent waiting person is not enabled" });
+  assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.access, []);
+});
+
+test("agent waiting flag on stores the agent, clears the person, and names the agent", async () => {
+  const f = fixture({ agentWaitingFlag: true });
+  const response = await f.post({ taskId: 42, agentId: runner9 });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.task.waitingOnAgentId, runner9);
+  assert.equal(result.task.waitingOnUserId, null);
+  assert.equal(f.writes[0].data.waitingOnAgentId, runner9);
+  assert.equal(f.writes[0].data.waitingOnUserId, null);
+  assert.equal(f.activities[0].activityBody.data.waitingOnDisplayName, "Runner 9");
+  assert.deepEqual(f.inboxes.map((row) => row[0]).sort(), [6, 8]);
+});
+
+test("a person set clears a stored waiting agent", async () => {
+  const f = fixture({ waitingOnAgentId: runner9 });
+  const response = await f.post({ taskId: 42, userId: 9 });
+  assert.equal(response.status, 200);
+  const task = (await response.json()).task;
+  assert.equal(task.waitingOnAgentId, null);
+  assert.equal(task.waitingOnUserId, 9);
+  assert.equal(f.writes[0].data.waitingOnAgentId, null);
+});

@@ -18,9 +18,10 @@ export const startDateBodySchema = z.object({ taskId: id, startDate: dateInput }
 export const waitingOnBodySchema = z.object({
   taskId: id,
   userId: id.nullable().optional(),
+  agentId: z.string().uuid().nullable().optional(),
   blockerCommentId: id.nullable().optional(),
   reason: z.string().trim().min(1).max(500).optional(),
-}).refine((input) => input.userId !== undefined || input.blockerCommentId !== undefined, { message: "Provide userId or blockerCommentId" });
+}).refine((input) => input.userId !== undefined || input.blockerCommentId !== undefined || input.agentId !== undefined, { message: "Provide userId, agentId, or blockerCommentId" });
 export const priorityBodySchema = z.object({ taskId: id, priority_index: z.number().int(), Priority_Value: z.string() });
 export const estimateBodySchema = z.object({ taskId: id, estimate_index: z.number().int(), estimate_value: z.string() });
 export const assigneeBodySchema = z.object({
@@ -50,6 +51,7 @@ export const waitingOnResponseSchema = z.looseObject({
   id,
   blockerCommentId: id.nullable().optional(),
   waitingOnUserId: id.nullable(),
+  waitingOnAgentId: z.string().nullable().optional(),
   waitingOnSetById: id.nullable(),
   waitingOnSetAt: z.string().nullable(),
 });

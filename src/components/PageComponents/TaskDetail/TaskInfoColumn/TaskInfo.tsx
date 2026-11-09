@@ -1,4 +1,6 @@
 import type { LabelResponse } from "@/lib/api/contracts/taskWrites";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import React, {
   Suspense,
   useContext,
@@ -162,6 +164,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     ["waiting-on-members", currentTask.projectId],
     currentTask.projectId
   );
+  const agentWaitingEnabled = useFlag(HTPR_8917_AGENT_WAITING_PERSON_FLAG);
   const waitingOnUser = useMemo(() => {
     const users: IUser[] = [
       ...(membersAndOwner?.owner ? [membersAndOwner.owner] : []),
@@ -243,7 +246,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         currentTask={currentTask}
       />
 
-      {currentTask.waitingOnUserId && (
+      {(currentTask.waitingOnUserId || (agentWaitingEnabled && currentTask.waitingOnAgent)) && (
         <TaskInfoRow>
           <LocalRightSideInfo
             onClick={openWaitingOnPicker}
@@ -259,7 +262,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           >
             <span className="inline-flex max-w-full items-center gap-1.5 font-medium text-white-black">
               <span className="truncate">
-                {waitingOnUser?.displayName ?? "Unknown user"}
+                {(agentWaitingEnabled && currentTask.waitingOnAgent?.displayName) || waitingOnUser?.displayName || "Unknown user"}
               </span>
               {waitingOnAge && (
                 <span

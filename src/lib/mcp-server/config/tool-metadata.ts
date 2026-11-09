@@ -426,7 +426,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   SET_TASK_WAITING_ON: {
     name: buildToolName('set_task_waiting_on'),
     description:
-      'Sets the person blocking a task, using the same write as the app Blocked by person modal. Requires taskId (database ID) and userId (board member ID) and/or blockerCommentId (a comment on this task). Send both to set the blocking person and reason atomically; pass both as null to clear both. Omitted fields stay unchanged. When you clear blockerCommentId on a task that has one, also send reason (why it is cleared): the ticket then leaves the Decisions list of the person asked and a note records who cleared it and why. Use list_project_members to resolve the person. Does not change task assignees or task-to-task blocking relations.',
+      'Sets the person or agent blocking a task, using the same write as the app Blocked by person modal. Requires taskId (database ID) and userId (board member ID), agentId (board member agent UUID), and/or blockerCommentId (a comment on this task). Send userId or agentId, not both. Pass userId null to clear the person and the agent. Omitted fields stay unchanged. When you clear blockerCommentId on a task that has one, also send reason (why it is cleared): the ticket then leaves the Decisions list of the person asked and a note records who cleared it and why. Use list_project_members to resolve the person or agent. Does not change task assignees or task-to-task blocking relations.',
   },
 
   FOLLOW_TASK: {

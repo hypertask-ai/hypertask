@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7723_TASK_WAITING_ON_FLAG } from "@/lib/flags/definitions/htpr-7723-task-waiting-on";
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import {
   wrapMcpRoute,
@@ -32,12 +33,16 @@ export async function POST(request: NextRequest) {
       if (body?.userId !== undefined && !(await isFeatureEnabled(HTPR_7723_TASK_WAITING_ON_FLAG, ctx.user.id))) {
         return NextResponse.json({ success: false, error: "Task waiting-on is not enabled" }, { status: 404 });
       }
+      if (body?.agentId !== undefined && !(await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, ctx.user.id))) {
+        return NextResponse.json({ success: false, error: "Agent waiting person is not enabled" }, { status: 404 });
+      }
       if (!body || Array.isArray(body) || typeof body.taskId !== "number" || !Number.isInteger(body.taskId)
         || (body.userId !== undefined && body.userId !== null && (typeof body.userId !== "number" || !Number.isInteger(body.userId)))
+        || (body.agentId !== undefined && body.agentId !== null && typeof body.agentId !== "string")
         || (body.blockerCommentId !== undefined && body.blockerCommentId !== null && (typeof body.blockerCommentId !== "number" || !Number.isInteger(body.blockerCommentId) || body.blockerCommentId <= 0))
         || (body.reason !== undefined && (typeof body.reason !== "string" || body.reason.length > 500))
-        || (body.userId === undefined && body.blockerCommentId === undefined)) {
-        return NextResponse.json({ success: false, error: "Provide integer taskId and userId and/or blockerCommentId (integer or null)" }, { status: 400 });
+        || (body.userId === undefined && body.blockerCommentId === undefined && body.agentId === undefined)) {
+        return NextResponse.json({ success: false, error: "Provide integer taskId and userId, agentId, and/or blockerCommentId (integer or null)" }, { status: 400 });
       }
       const outOfRange = findIdParamOutOfRange({ taskId: body.taskId, userId: body.userId, blockerCommentId: body.blockerCommentId });
       if (outOfRange) {
@@ -51,6 +56,7 @@ export async function POST(request: NextRequest) {
         () => setTaskWaitingOn({
           taskId: body.taskId,
           userId: body.userId,
+          waitingAgentId: body.agentId,
           blockerCommentId: body.blockerCommentId,
           reason: body.reason,
           currentUser,

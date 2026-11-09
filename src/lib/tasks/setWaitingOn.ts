@@ -7,12 +7,16 @@ import createActivity from "@/utils/controllers/activities/createActivity";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG } from "@/lib/flags/definitions/htpr-8205-agent-clear-blocker";
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import { actingAgentSelect } from "@/lib/agents/activityAttribution";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
+
+const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function setTaskWaitingOn({
   taskId,
   userId,
+  waitingAgentId,
   blockerCommentId,
   reason,
   currentUser,
@@ -21,12 +25,16 @@ export async function setTaskWaitingOn({
 }: {
   taskId: number;
   userId?: number | null;
+  waitingAgentId?: string | null;
   blockerCommentId?: number | null;
   reason?: string | null;
   currentUser: { id: number };
   agentId?: string | null;
   teamScope?: AgentTokenTeamScope | null;
 }) {
+  if (waitingAgentId !== undefined && !(await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, currentUser.id))) {
+    return { status: 404, body: { message: "Agent waiting person is not enabled" } };
+  }
   if (blockerCommentId !== undefined && !(await isFeatureEnabled(HTPR_7724_BLOCKER_COMMENT_FLAG, currentUser.id))) {
     return { status: 404, body: { message: "Blocker comments are not enabled" } };
   }
@@ -39,7 +47,7 @@ export async function setTaskWaitingOn({
         ? { AND: [getProjectWhere(currentUser.id), getProjectWhere(currentUser.id, agentId, teamScope)] }
         : getProjectWhere(currentUser.id),
     },
-    select: { projectId: true, waitingOnUserId: true, blockerCommentId: true },
+    select: { projectId: true, waitingOnUserId: true, waitingOnAgentId: true, blockerCommentId: true },
   });
   if (!task) {
     return { status: 404, body: { message: "Task not found" } };
@@ -57,6 +65,29 @@ export async function setTaskWaitingOn({
     select: { id: true },
   })) {
     return { status: 400, body: { message: "Blocker comment must be a comment on this task" } };
+  }
+
+  if (typeof waitingAgentId === "string" && userId != null) {
+    return { status: 400, body: { message: "Provide a person or an agent, not both" } };
+  }
+
+  let waitingAgent: { id: string; displayName: string | null; userId: number } | null = null;
+  if (typeof waitingAgentId === "string") {
+    if (!AGENT_UUID.test(waitingAgentId)) {
+      return { status: 400, body: { message: "Agent id must be a UUID" } };
+    }
+    waitingAgent = await prisma.agent.findFirst({
+      where: {
+        id: waitingAgentId,
+        revokedAt: null,
+        archivedAt: null,
+        members: { some: { projectId: task.projectId, status: "Accepted" } },
+      },
+      select: { id: true, displayName: true, userId: true },
+    });
+    if (!waitingAgent) {
+      return { status: 400, body: { message: "Agent is not a member of this project." } };
+    }
   }
 
   if (userId != null) {
@@ -86,6 +117,18 @@ export async function setTaskWaitingOn({
     data.waitingOnUserId = userId;
     data.waitingOnSetById = userId === null ? null : currentUser.id;
     data.waitingOnSetAt = userId === null ? null : new Date();
+    data.waitingOnAgentId = null;
+  }
+  if (waitingAgentId !== undefined) {
+    data.waitingOnAgentId = waitingAgentId;
+    if (waitingAgentId !== null) {
+      data.waitingOnUserId = null;
+      data.waitingOnSetById = currentUser.id;
+      data.waitingOnSetAt = new Date();
+    } else if (userId === undefined && task.waitingOnUserId == null) {
+      data.waitingOnSetById = null;
+      data.waitingOnSetAt = null;
+    }
   }
 
   const taskUpdate = {
@@ -97,6 +140,7 @@ export async function setTaskWaitingOn({
       waitingOnUserId: true,
       waitingOnSetById: true,
       waitingOnSetAt: true,
+      ...(data.waitingOnAgentId !== undefined ? { waitingOnAgentId: true } : {}),
     },
   } satisfies Prisma.TaskUpdateArgs;
 
@@ -109,7 +153,7 @@ export async function setTaskWaitingOn({
       fromUserId: currentUser.id,
       fromUser: currentUser,
       ...(actingAgent ? { fromAgent: actingAgent } : {}),
-      waitingOnDisplayName: waitingOnUser?.displayName ?? null,
+      waitingOnDisplayName: waitingAgent?.displayName ?? waitingOnUser?.displayName ?? null,
       ...(clearsBlocker ? { blockerCleared: true, reason: clearReason } : {}),
     },
   };
@@ -123,11 +167,17 @@ export async function setTaskWaitingOn({
     });
   } else {
     updatedTask = await prisma.task.update(taskUpdate);
-    if (userId !== undefined) await createActivity({ taskId, activityBody });
+    if (userId !== undefined || waitingAgentId !== undefined) await createActivity({ taskId, activityBody });
   }
 
   void broadcastBoardChange(task.projectId, { originUserId: currentUser.id });
   if (blockerCommentId !== undefined) void broadcastTaskChange(taskId, { originUserId: currentUser.id });
+  const nextAgentId = Object.prototype.hasOwnProperty.call(data, "waitingOnAgentId")
+    ? data.waitingOnAgentId
+    : task.waitingOnAgentId;
+  const previousAgentUserId = task.waitingOnAgentId && task.waitingOnAgentId !== nextAgentId
+    ? (await prisma.agent.findUnique({ where: { id: task.waitingOnAgentId }, select: { userId: true } }))?.userId
+    : undefined;
   const mentionedUserIds = clearsBlocker
     ? (await prisma.notification.findMany({
         where: { taskId, type: "Mentioned" },
@@ -136,7 +186,7 @@ export async function setTaskWaitingOn({
       })).map((row) => row.userId)
     : [];
   for (const affectedUserId of new Set([
-    ...(userId === undefined ? [] : [task.waitingOnUserId, userId]).filter(
+    ...(userId === undefined && waitingAgentId === undefined ? [] : [task.waitingOnUserId, userId, waitingAgent?.userId, previousAgentUserId]).filter(
       (id): id is number => typeof id === "number"
     ),
     ...mentionedUserIds,
