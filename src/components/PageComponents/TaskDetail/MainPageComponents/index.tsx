@@ -122,7 +122,9 @@ export const ClickableSpan = (
     normalizedTitle === "-" ||
     normalizedTitle.toLowerCase() === "no priority" ||
     normalizedTitle.toLowerCase() === "no tags" ||
-    normalizedTitle.toLowerCase() === "no agents";
+    normalizedTitle.toLowerCase() === "no agents" ||
+    normalizedTitle.toLowerCase() === "no due date" ||
+    normalizedTitle.toLowerCase() === "no size";
 
   return (
 
