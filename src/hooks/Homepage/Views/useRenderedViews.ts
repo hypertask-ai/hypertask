@@ -6,6 +6,7 @@ import { IFilterSettings } from '@/models/Filters/model'
 import { activeBuiltinViewsAtom, currentUserAtom, hiddenViewTabIdsAtom, showEmptyViewTabsAtom } from '@/store'
 import { applyFilters, defaultFilterSettings } from '@/utils/helperFunctions/Views/FilterHelperFunctions'
 import { applySubTaskSetting } from '@/utils/helperFunctions/Views/SubtaskHelperFunction'
+import { columnListOrBoardColumns } from '@/utils/helperFunctions/Views/ViewsHelperFunctions'
 import {
   BoardView,
   BUILTIN_VIEWS,
@@ -53,7 +54,10 @@ const useRenderedViews = (project: IProject | null) => {
   const savedViewTaskCounts = useMemo(() => {
     const tasks = project?.tasks ?? []
     return (orderedViews.filter((view) => !isBuiltinView(view)) as IView[]).map((view) => {
-      const columns = (view.board_columns_view as ISection[] | undefined) ?? project?.section ?? []
+      const columns = columnListOrBoardColumns(
+        view.board_columns_view as ISection[] | undefined,
+        project
+      )
       const sections = columns
         .filter((column) => column.visibility !== false)
         .map((column) => {

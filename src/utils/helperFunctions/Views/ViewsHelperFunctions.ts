@@ -119,6 +119,14 @@ function syncColumnsWithProject(
     };
   }
 
+export const columnListOrBoardColumns = (
+  columns: readonly ISection[] | null | undefined,
+  project?: IProject | null
+): ISection[] =>
+  columns && columns.length > 0
+    ? [...columns]
+    : (project?.section ?? []);
+
 export const getActiveColumnsViewFromProject = (
   project?: IProject | null
 ): ISection[] => {
@@ -127,7 +135,10 @@ export const getActiveColumnsViewFromProject = (
   const defaultView = project.project_view?.default_view?.board_columns_view as ISection[];
   const unsaved = view?.unsavedView?.board_columns_view as ISection[];
   const applied = view?.appliedView?.board_columns_view as ISection[];
-  const columnsView = unsaved ?? applied ?? defaultView ?? project.section ?? [];
+  const savedColumns = [unsaved, applied, defaultView].find(
+    (columns) => Array.isArray(columns) && columns.length > 0
+  );
+  const columnsView = columnListOrBoardColumns(savedColumns, project);
   const sectionsById = new Map(
     (project.section ?? []).map((section) => [
       section.id ?? section.sectionId,
