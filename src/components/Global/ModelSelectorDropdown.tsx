@@ -479,31 +479,15 @@ const AIModelDropDownList = ({
               Model
             </div>
             {autoOption ? (
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={autoSelected}
-                className={cn(
-                  "flex min-h-11 w-full items-center justify-between gap-3 rounded-[4px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground",
-                  autoSelected && "font-semibold text-white-black",
-                )}
+              <SubmenuRow
+                label={autoOption.title}
+                selected={autoSelected}
                 onClick={() => {
                   optionCallback(autoOption);
                   setIsOpen(false);
                   window.requestAnimationFrame(() => triggerRef.current?.focus());
                 }}
-              >
-                <span>{autoOption.title}</span>
-                <Check
-                  size={15}
-                  className={cn(
-                    "shrink-0 text-hypertasks-purple",
-                    autoSelected ? "opacity-100" : "opacity-0",
-                  )}
-                  strokeWidth={1.75}
-                  aria-hidden
-                />
-              </button>
+              />
             ) : null}
             {quickModelIds.map((quickModelId) => {
               const catalogOption = getAiModelOptionById(quickModelId);
