@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { scheduleBackfillAiLabel } from "@/lib/ai/labelClassifier";
 import prisma from "@/lib/prisma";
+import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
   buildSmartSplitBoardFilters,
@@ -263,6 +264,7 @@ const createSmartSplit = async (
             board_show_archived: true,
             table_sort_column: true,
             table_sort_direction: true,
+            table_group_by: true,
             board_layout: true,
           },
         },
@@ -278,6 +280,8 @@ const createSmartSplit = async (
       select: { id: true, value: true, ai_prompt: true, projectId: true },
     });
     const base = projectView.default_view;
+    const inheritedTableGroupBy =
+      (await gatedTableGroupByForViewWrite(base.table_group_by, userId)) ?? "column";
     const view = await tx.view.create({
       data: {
         id: splitId,
@@ -300,6 +304,7 @@ const createSmartSplit = async (
         board_show_archived: base.board_show_archived,
         table_sort_column: base.table_sort_column,
         table_sort_direction: base.table_sort_direction,
+        table_group_by: inheritedTableGroupBy,
         board_layout: base.board_layout,
         lastUsedAt: new Date(),
       },

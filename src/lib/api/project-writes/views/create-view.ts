@@ -8,7 +8,12 @@ import { ISection } from "@/models/model";
 import { TCreate_view_body } from "@/models/Views/model";
 import getProjectView, { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { getBoardLayoutRequestUpdate, sanitizeBoardLayout, sanitizeTableSort } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
+import {
+  getBoardLayoutRequestUpdate,
+  sanitizeBoardLayout,
+  sanitizeTableSort,
+} from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   assertViewIsNotManagedSmartSplit,
   ManagedSmartSplitMutationError,
@@ -108,6 +113,8 @@ const route = taskWriteRoute({
         view_settings.table_sort_column,
         view_settings.table_sort_direction
       );
+      const sanitizedTableGroupBy =
+        (await gatedTableGroupByForViewWrite(view_settings.table_group_by, userId)) ?? "column";
       const sanitizedBoardFilters = sanitizeBoardFilters(
         view_settings.board_filters
       );
@@ -130,6 +137,7 @@ const route = taskWriteRoute({
             board_show_archived: view_settings.board_show_archived ?? null,
             table_sort_column: sanitizedTableSort.column,
             table_sort_direction: sanitizedTableSort.direction,
+            table_group_by: sanitizedTableGroupBy,
             board_layout: sanitizeBoardLayout(view_settings.board_layout),
             visibility,
             lastUsedAt: currentDate,
@@ -158,6 +166,7 @@ const route = taskWriteRoute({
                   : { board_show_archived: view_settings.board_show_archived ?? null }),
                 table_sort_column: sanitizedTableSort.column,
                 table_sort_direction: sanitizedTableSort.direction,
+                table_group_by: sanitizedTableGroupBy,
                 ...getBoardLayoutRequestUpdate(view_settings),
                 visibility,
                 lastUsedAt: currentDate,

@@ -29,6 +29,11 @@
     "reason": "Same follower write and follower email requests that already existed in this hook; the diff only moved them under one try block and added a message. No new request, provider, retry or token budget.",
     "source": "https://app.hypertask.ai/detail/project-15/8199"
   },
+  "src/hooks/Homepage/Views/useKanbanViews.ts:02ec18c9f602d03aad7e074a0f6bf0480bbd0baf48a1099c97d96db7debb7458": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8630 keeps the same same-origin POST to Hypertask's own /api/projects/views/create-view. The diff only sends one extra field the browser already holds (table_group_by), so a saved view keeps its grouping. No paid provider, retry or token budget changes.",
+    "source": "https://app.hypertask.ai/detail/project-15/8630"
+  },
   "src/lib/ai/chatStream/modelReply.ts:942cd87065de1b8f3cd5835d7eeaed3c1ea91e97128acf509f6efde980565521": {
     "maxUsdPerDay": 0,
     "reason": "Zero additional spend: existing streamText call is unchanged except extracting its error callback. No new request, model, retry, token budget, or provider routing; this only normalizes rejected credentials before reporting.",

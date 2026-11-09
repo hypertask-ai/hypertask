@@ -8,11 +8,13 @@ import { visibleTasksFromRows } from "@/lib/myTasksBulkSelection";
 import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
 import { getSortComparator, Row, SECTION_CAP, isTaskRow } from "./tableViewShared";
+import { useFlag } from "@/hooks/useFlag";
 
 type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableState>, "sortState" | "customFieldBySortColumnRef" | "sectionOrderBySid" | "timeTotals" | "timeNow" | "sections" | "expanded" | "myTasksBulk" | "setExcludedTaskIds" | "persistedActiveItem" | "showArchivedOnBoard" | "isApple" | "myTasksSnoozeEnabled" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setExpanded">;
 
 export function useTableRows(context: Context) {
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const snapshot = useFirstScreenSurface();
   const {
   sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
@@ -54,7 +56,19 @@ export function useTableRows(context: Context) {
         });
 
       if (flattenSort) {
-        const allTasks = sections.flatMap((section) => section.items || []);
+        const flatTasks = sections.flatMap((section) => section.items || []);
+        const tagGrouped = tableGroupByTagEnabled && sections.some((section) => {
+          const sectionKey = tableSectionKey(section);
+          return typeof sectionKey === "string" && sectionKey.startsWith("tag:");
+        });
+        const allTasks = tagGrouped ? (() => {
+          const seen = new Set<number>();
+          return flatTasks.filter((task) => {
+            if (seen.has(task.id)) return false;
+            seen.add(task.id);
+            return true;
+          });
+        })() : flatTasks;
         return sortTasks(allTasks).map((task) => ({
           type: "task" as const,
           task,
@@ -95,6 +109,7 @@ export function useTableRows(context: Context) {
     isPrioritySort,
     savedViewPrioritySort,
     snapshot,
+    tableGroupByTagEnabled,
   ]);
 
   useEffect(() => {

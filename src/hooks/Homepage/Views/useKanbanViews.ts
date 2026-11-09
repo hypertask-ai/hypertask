@@ -52,6 +52,7 @@ import {
   TTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
+import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -78,6 +79,7 @@ const useKanbanViews = (project: IProject | null) => {
   const queryClient = useQueryClient();
   const deletedViewLeavesTabs = useFlag(HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG);
   const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG);
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const router = useRouter();
   const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom);
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
@@ -242,6 +244,9 @@ const useKanbanViews = (project: IProject | null) => {
     board_show_archived: getActiveShowArchivedOverrideFromProject(queuedProject),
     table_sort_column: getActiveTableSortFromProject(queuedProject)?.column ?? null,
     table_sort_direction: getActiveTableSortFromProject(queuedProject)?.direction ?? null,
+    table_group_by: tableGroupByTagEnabled
+      ? getActiveTableGroupByFromProject(queuedProject)
+      : "column",
     board_layout: boardLayoutForRequest(queuedProject),
     ...overrides,
   });
@@ -410,6 +415,19 @@ const useKanbanViews = (project: IProject | null) => {
     project,
   );
 
+  const setTableGroupByViewAndReturn = async (
+    project: IProject,
+    tableGroupBy: ReturnType<typeof getActiveTableGroupByFromProject>,
+  ) => {
+    if (tableGroupBy === "tag" && !tableGroupByTagEnabled) return;
+    return apiHandler(
+      (queuedProject) => buildUnsavedBody(queuedProject, {
+        table_group_by: tableGroupBy,
+      }),
+      project,
+    );
+  };
+
   const saveSubtaskSettingAPI = async (
     project: IProject,
     subTaskSetting: TBoardSubtaskSetting
@@ -529,7 +547,19 @@ const useKanbanViews = (project: IProject | null) => {
     return updatedProjectView;
   };
   const saveAsDefaultHandler = async (body: TCreate_view_body) => {
-    const response = await axios.post("/api/projects/views/create-view", body);
+    const requestBody =
+      tableGroupByTagEnabled &&
+      body.view_settings.table_group_by === undefined &&
+      project?.id === body.projectId
+        ? {
+            ...body,
+            view_settings: {
+              ...body.view_settings,
+              table_group_by: getActiveTableGroupByFromProject(project),
+            },
+          }
+        : body;
+    const response = await axios.post("/api/projects/views/create-view", requestBody);
     console.log("🚀 ~ saveAsDefaultHandler ~ response:", response);
     const view: string | undefined = response.data.view;
     if (response.data.project_view_updated) {
@@ -577,6 +607,7 @@ const useKanbanViews = (project: IProject | null) => {
     hasUserSelectedView,
     setBoardSortingViewAndReturn,
     setTableSortViewAndReturn,
+    setTableGroupByViewAndReturn,
     saveFilterAPI,
     setBoardColumnsViewAPI,
     switchViewHandler,

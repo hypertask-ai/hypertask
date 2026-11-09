@@ -21,6 +21,10 @@ import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
+import {
+  buildTableSectionsGroupedByTag,
+  getActiveTableGroupByFromProject,
+} from "@/lib/table-view/tableGroupByTag";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
@@ -36,6 +40,7 @@ export function useTableState(context: Context) {
   } = context;
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
@@ -168,6 +173,13 @@ export function useTableState(context: Context) {
     if (_currentProject) sections = getFilteredEmptySections(sortedSections, _currentProject, true);
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
+  }
+  if (
+    _currentProject &&
+    tableGroupByTagEnabled &&
+    getActiveTableGroupByFromProject(_currentProject) === "tag"
+  ) {
+    sections = buildTableSectionsGroupedByTag(sections) as typeof sections;
   }
 
   useEffect(() => {
