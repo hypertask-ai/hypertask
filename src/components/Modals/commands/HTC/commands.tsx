@@ -5,6 +5,7 @@ import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-gra
 import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
 import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
 import { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG } from "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top";
+import { HTPR_8947_CTRLK_NO_FOOTER_FLAG } from "@/lib/flags/definitions/htpr-8947-ctrlk-no-footer";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import {
   useCallback,
@@ -125,6 +126,7 @@ const Commands = (props: Props) => {
   const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
   const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const tabsOnTopFlag = useFlag(HTPR_8943_CTRLK_TABS_ON_TOP_FLAG);
+  const noFooterFlag = useFlag(HTPR_8947_CTRLK_NO_FOOTER_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -860,7 +862,7 @@ const Commands = (props: Props) => {
         )}
 
         {!(integratedTabsFlag && integratedTabs) && modeSwitch}
-        <ModalBody className="  p-0 rounded-[5px]">
+        <ModalBody className="  p-0 rounded-[5px]" data-build={buildId}>
           {integratedTabsFlag && integratedTabs && (isCompose || tabsOnTopFlag) && modeSwitch}
           {compose}
           {!isCompose && <>
@@ -888,10 +890,12 @@ const Commands = (props: Props) => {
           </div>
           {integratedTabsFlag && integratedTabs && !tabsOnTopFlag && modeSwitch}
           {commandGroups}
-          <ModalHintBar />
-          <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
-            v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
-          </div>
+          {!noFooterFlag && <>
+            <ModalHintBar />
+            <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
+              v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
+            </div>
+          </>}
           </>}
         </ModalBody>
       </ModalContainerCustom>
