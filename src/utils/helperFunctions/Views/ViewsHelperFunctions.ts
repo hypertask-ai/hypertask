@@ -19,6 +19,10 @@ import { SortingMode, SortingOrder } from "@prisma/client";
 import { getAppliedSubtaskSections } from "./SubtaskHelperFunction";
 import { getFilteredEmptySections } from "./EmptySectionsHelperFunction";
 import { syncSectionAutoAssignFromCanonical } from "@/lib/sectionAutoAssign";
+import {
+  sanitizeTableGroupBy,
+  type TableGroupBy,
+} from "@/lib/table-view/tableGroupByTag";
 
 
 export const defaultBoardSortingSettings: TBoardSortingViewMode = "Manual"
@@ -637,6 +641,28 @@ export const sanitizeTableSort = (column: unknown, direction: unknown): { column
     column: typeof column === "string" && TABLE_SORT_COLUMN_KEYS.has(column) ? column : null,
     direction: typeof direction === "string" && TABLE_SORT_DIRECTIONS.has(direction) ? direction : null,
 })
+
+export { sanitizeTableGroupBy, type TableGroupBy };
+
+export const effectiveTableGroupBy = (
+    value: string | null | undefined,
+): TableGroupBy =>
+    sanitizeTableGroupBy(value) ?? "column";
+
+export const getActiveTableGroupByFromProject = (
+    project?: IProject | null,
+): TableGroupBy => {
+    const view = project?.project_view?.user_project_views?.[0];
+    const activeView = view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
+    if (activeView) {
+        return effectiveTableGroupBy(activeView.table_group_by);
+    }
+    return effectiveTableGroupBy(
+        view?.unsavedView?.table_group_by ??
+            view?.appliedView?.table_group_by ??
+            project?.project_view?.default_view?.table_group_by,
+    );
+};
 
 export { getViewFromProject } from "@/lib/firstScreen/boardView";
 

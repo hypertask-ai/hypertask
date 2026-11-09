@@ -24,6 +24,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
 
 export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
   _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
@@ -92,10 +93,28 @@ export function useTableActions(context: Context) {
     async (task: ITask, index: number) => {
       setSelectedIndex(index);
       updateActiveItemAndItemInView(task);
-      setTasksPlayList(rows.filter(isTaskRow).map(({ task }) => ({ projectId: task.projectId, uniqueIndex: task.uniqueIndex })));
+      const playlist =
+        tableGroupByTagEnabled &&
+        rows.some(
+          (row) => isTaskRow(row) && typeof row.sid === "string" && row.sid.startsWith("tag:"),
+        )
+          ? (() => {
+              const seenPlaylist = new Set<string>();
+              const next: { projectId: number; uniqueIndex: number }[] = [];
+              for (const row of rows) {
+                if (!isTaskRow(row)) continue;
+                const key = `${row.task.projectId}:${row.task.uniqueIndex}`;
+                if (seenPlaylist.has(key)) continue;
+                seenPlaylist.add(key);
+                next.push({ projectId: row.task.projectId, uniqueIndex: row.task.uniqueIndex });
+              }
+              return next;
+            })()
+          : rows.filter(isTaskRow).map(({ task }) => ({ projectId: task.projectId, uniqueIndex: task.uniqueIndex }));
+      setTasksPlayList(playlist);
       navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
     },
-    [navigateToTask, rows, setTasksPlayList, updateActiveItemAndItemInView]
+    [navigateToTask, rows, setTasksPlayList, setSelectedIndex, tableGroupByTagEnabled, updateActiveItemAndItemInView]
   );
   const handleMouseEnter = useCallback(
     (index: number) => {

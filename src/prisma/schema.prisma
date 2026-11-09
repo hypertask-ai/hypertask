@@ -1126,6 +1126,7 @@ model View {
   // Table-view sort; app-level column keys (see TABLE_COLUMN_KEYS), not a DB enum.
   table_sort_column     String?
   table_sort_direction  String?
+  table_group_by        String?
   // Optional saved surface preference. App-validated to Board/Table; null inherits
   // the user's persisted browser preference.
   board_layout          String?

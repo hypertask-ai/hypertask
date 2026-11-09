@@ -56,6 +56,7 @@ export type TCreate_view_body = {
         board_show_archived?: boolean | null,
         table_sort_column?: string | null,
         table_sort_direction?: string | null,
+        table_group_by?: string | null,
         board_layout?: TSavedBoardLayout | null,
     },
     setAsDefault: boolean,
@@ -77,6 +78,7 @@ export type TUpdate_view_body = {
         board_show_archived?: boolean | null,
         table_sort_column?: string | null,
         table_sort_direction?: string | null,
+        table_group_by?: string | null,
         board_layout?: TSavedBoardLayout | null,
     },
     viewId:string;
@@ -105,5 +107,6 @@ export type TBodyAPIUnsaved = {
     board_show_archived?: boolean | null;
     table_sort_column?: string | null;
     table_sort_direction?: string | null;
+    table_group_by?: string | null;
     board_layout?: TSavedBoardLayout | null;
 }

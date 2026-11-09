@@ -50,6 +50,9 @@ async function clickDelete(status = 200, repeated = false, baseline = false) {
       "@/lib/state": { useRecoilState: atom => React.useState(values[atom]), useRecoilValue: atom => values[atom], useSetRecoilState: () => () => {} },
       "@/hooks/useFlag": { useFlag: () => false },
       "@/lib/flags/keys": { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG: "htpr-7097-deleted-view-leaves-tabs" },
+      "@/lib/flags/definitions/htpr-8630-table-group-by-tag": {
+        HTPR_8630_TABLE_GROUP_BY_TAG_FLAG: "htpr-8630-table-group-by-tag",
+      },
       "@tanstack/react-query": { useQueryClient: () => queryClient },
       "@/lib/boardSync/reconcileActiveBoardQuery": { reconcileActiveBoardQuery: async (client) => { await client.invalidateQueries(); await client.refetchQueries({ queryKey: ["projectsAll"] }); } },
       "next/navigation": { useRouter: () => ({ refresh() {}, replace() {} }) },
