@@ -2,12 +2,15 @@
 
 import { Command as CommandIcon, SlidersHorizontal } from "lucide-react";
 import { useSetRecoilState } from "@/lib/state";
-import { calendarBoardsSidebarOpenAtom } from "@/store";
+import { calendarBoardsSidebarOpenAtom, showGuestLoginAtom } from "@/store";
 import type { IUser } from "@/models/model";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import UserAvatar from "@/components/Common/UserAvatar";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7983_FREE_MODE_SIGNUP_FLAG } from "@/lib/flags/definitions/htpr-7983-free-mode-signup";
+import { isGuestUser } from "@/lib/demo/guest";
 
 const MobileTopBarActions = ({
   currentUser,
@@ -19,11 +22,24 @@ const MobileTopBarActions = ({
   const setCalendarBoardsOpen = useSetRecoilState(
     calendarBoardsSidebarOpenAtom,
   );
+  const setShowGuestLogin = useSetRecoilState(showGuestLoginAtom);
+  const freeModeSignupEnabled = useFlag(HTPR_7983_FREE_MODE_SIGNUP_FLAG);
+  const showGuestSignup = freeModeSignupEnabled && isGuestUser(currentUser);
   const { toggleShowCommands } = useHypertasksRecoilStates();
   const { openSettings } = useSettingsNavigation();
 
   return (
     <>
+      {showGuestSignup && (
+        <button
+          type="button"
+          onClick={() => setShowGuestLogin(true)}
+          className="self-center rounded-[5px] bg-white-black px-2 py-1 text-meta font-medium text-white-black-inverted"
+        >
+          Sign up
+        </button>
+      )}
+
       {onCalendar && (
         <button
           type="button"

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG } from "@/lib/flags/definitions/htpr-8052-fullscreen-chat-return";
 import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
+import { HTPR_7983_FREE_MODE_SIGNUP_FLAG } from "@/lib/flags/definitions/htpr-7983-free-mode-signup";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatAutoOpenPageAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatExplicitOpenAtAtom, aiChatEmbeddedTicketPathAtom, aiChatNewTicketPathAtom, currentUserAtom, currentProjectAtom, showAIChatInterfaceAtom } from "@/store";
@@ -11,6 +12,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7783_REMEMBER_CHAT_FLAG } from "@/lib/flags/keys";
 import { chatNavigationKey, readChatNavigationState, writeChatNavigationState } from "@/lib/aiChat/chatNavigationState";
 import { aiChatAutoOpenPage } from "@/lib/aiChat/autoOpenPreferences";
+import { guestAutoOpenAllowed } from "@/lib/aiChat/guestAutoOpen";
 import { useAiChatOpenPreferences, useSyncAiChatOpenPreferences } from "./useAiChatOpenPreferences";
 
 function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | null, pageKey: string, stableDefaultView: boolean) {
@@ -23,6 +25,7 @@ function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | 
 
 export function useAiChatAutoOpen(mobile: boolean) {
   const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
+  const guestAutoOpenEnabled = useFlag(HTPR_7983_FREE_MODE_SIGNUP_FLAG);
   const preserveFullScreenReturn = useFlag(HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG);
   const stableDefaultView = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
   useSyncAiChatOpenPreferences();
@@ -54,7 +57,8 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const navigationPageKey = `${navigationKey}:${pageKey}`;
   const fullScreenReturnPage = useRef<string | null>(null);
   const manualOpen = !embeddedTicketPath && (search?.get("newTaskAi") === "1" || search?.get("welcome_ai") === "1" || search?.has("agentSidebar") === true);
-  const allowed = !manualChat && page !== null && (values[page] || (pinned && !mobile));
+  const guestAutoOpen = guestAutoOpenAllowed({ enabled: guestAutoOpenEnabled, user, page, mobile });
+  const allowed = !manualChat && page !== null && (guestAutoOpen || values[page] || (pinned && !mobile));
 
   useEffect(() => {
     if (!enabled || !ready || !pathname || !user?.id) {
@@ -104,7 +108,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
     autoOpenedPage.current = pageKey;
     setExplicitOpenAt(null);
     setOpen(true);
-  }, [navigationKey, navigationPageKey, route, enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, manualChat, stableDefaultView, preserveFullScreenReturn, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
+  }, [navigationKey, navigationPageKey, route, enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, manualChat, guestAutoOpen, stableDefaultView, preserveFullScreenReturn, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
 
   useEffect(() => {
     if (!enabled || !ready || !navigationKey || !page || manualOpen) return;
