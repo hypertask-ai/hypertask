@@ -12,6 +12,7 @@ const lanes = [
   "changed-style-tokens",
   "contracts",
   "eslint",
+  "github-comments",
   "lint-overlap-guard",
   "oxlint",
   "paid-api-cost-notes",

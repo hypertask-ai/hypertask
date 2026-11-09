@@ -524,6 +524,10 @@ jobs:
             node --test tests/oxlint-overlap.test.cjs
           }
 
+          lane_github_comments() {
+            node scripts/check-no-comments.mjs
+          }
+
           # Directory discovery in the Ctrl+K coverage gate is broader than the PR
           # selector's exact-path heuristic, so it runs even when another suite
           # owns the diff. A PR that adds a source-text regex is exactly the PR the
@@ -561,6 +565,7 @@ jobs:
             run_lane oxlint
             run_lane eslint
             run_lane lint-overlap-guard
+            run_lane github-comments
             run_lane contracts
             if [ -n "$BASE_SHA" ]; then
               run_lane changed-style-tokens
