@@ -14,6 +14,7 @@ import type { DictationCoordinator } from "@/lib/dictationCoordinator";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_8926_COMMENT_MIC_PATTERN_FLAG } from "@/lib/flags/definitions/htpr-8926-comment-mic-pattern";
+import { HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8962-one-send-clears-inbox";
 import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 
 export interface IPropsSaveButtonMobile {
@@ -328,18 +329,37 @@ export const DesktopAttachment = ({
   dictationCoordinator?: DictationCoordinator;
 }) => {
   const micPatternEnabled = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
+  const oneSend = useFlag(HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const isApple = useDeviceContext();
   const ctrlCmd = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
   const commentMode = mode === "create-comment" || mode === "read-edit-comments";
   const micPattern = micPatternEnabled && (commentMode || mode === "read-edit-description");
+  const discardDraftButton = (
+    <span className="relative group">
+      <Trash2
+        size={16}
+        className="text-icon-dark-gray hover:text-white-black ml-auto cursor-pointer"
+        id={mode + "-discard-draft-button"}
+        strokeWidth={1.75}
+        {...(oneSend ? { "aria-label": "Discard draft" } : {})}
+        onClick={handleDiscardDrafts}
+      />
+      <Tooltip
+        left={0}
+        bottom={-45}
+        keyCombination={[`${ctrlCmd}`, `Shift`, ","]}
+        text={"Discard draft"}
+      />
+    </span>
+  );
 
   return (
     <div
       className={`attachment-button p-0 flex flex-row   rounded-sm justify-between items-center w-full `}
     >
-      {!isRecording && (
+      {!isRecording && !(oneSend && mode === "create-comment") && (
         <BottomButtons
           ctrlCmd={ctrlCmd}
           altOptions={altOptions}
@@ -350,9 +370,10 @@ export const DesktopAttachment = ({
           status={status}
         />
       )}
+      {!isRecording && oneSend && mode === "create-comment" && showDeleteComment === true && discardDraftButton}
       <div
         className={`flex gap-2 items-center ${
-          micPattern ? "ml-auto" : isRecording ? "flex-1 w-full" : ""
+          micPattern || (oneSend && mode === "create-comment") ? "ml-auto" : isRecording ? "flex-1 w-full" : ""
         }`}
       >
         {!isRecording && mode !== "read-edit-comments" && (
@@ -401,14 +422,14 @@ export const DesktopAttachment = ({
             {...(micPattern ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, ariaLabel: "Start dictation" } : {})}
           />
         )}
-        {micPatternEnabled && commentMode && (
+        {((micPatternEnabled && commentMode) || (oneSend && mode === "create-comment")) && (
           <span>
             <SendMessageButton
               label="Send"
               textButton
               shortcut={{
-                text: "Send",
-                keyCombination: presentInInbox ? [ctrlCmd, "SHIFT", "Enter"] : [ctrlCmd, "Enter"],
+                text: oneSend && mode === "create-comment" && presentInInbox ? "Send and remove from inbox" : "Send",
+                keyCombination: presentInInbox && !(oneSend && mode === "create-comment") ? [ctrlCmd, "SHIFT", "Enter"] : [ctrlCmd, "Enter"],
               }}
               mobile={false}
               disabled={Boolean(isRecording)}
@@ -419,24 +440,9 @@ export const DesktopAttachment = ({
         {!isRecording &&
           mode !== "read-edit-comments" &&
           mode !== "create-task-modal" &&
-          ((mode === "create-comment" && showDeleteComment === true) ||
-            mode === "read-edit-description") && (
-            <span className="relative group">
-              <Trash2
-                size={16}
-                className="text-icon-dark-gray hover:text-white-black ml-auto cursor-pointer"
-                id={mode + "-discard-draft-button"}
-                strokeWidth={1.75}
-                onClick={handleDiscardDrafts}
-              />
-              <Tooltip
-                left={0}
-                bottom={-45}
-                keyCombination={[`${ctrlCmd}`, `Shift`, ","]}
-                text={"Discard draft"}
-              />
-            </span>
-          )}
+          ((mode === "create-comment" && showDeleteComment === true && !oneSend) ||
+            mode === "read-edit-description") &&
+          discardDraftButton}
         {!isRecording && mode === "read-edit-comments" && onCancelEditComment && (
           <span className="relative group">
             <Trash2
