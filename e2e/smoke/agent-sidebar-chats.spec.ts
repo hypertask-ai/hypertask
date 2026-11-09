@@ -525,6 +525,7 @@ test('flag-off client comparison restores the legacy title/history and never req
 })
 
 test('switching chats does not move the ticket, its comments or its comment composer', async ({ page }, info) => {
+  await pinLegacyHeader(page)
   await page.goto(withRealtime(`/detail/project-${fixture.projectId}/1?agentSidebar=1`))
   await expect(page.getByTestId('ai-sidebar')).toBeVisible()
   await expect(page.getByTestId('comment-composer')).toBeAttached()
