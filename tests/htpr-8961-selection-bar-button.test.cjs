@@ -35,8 +35,8 @@ test("HTPR-8961 flag off: Open actions keeps the old button", () => {
 });
 
 test("HTPR-8961 flag is an improvement at Everyone", () => {
-  const source = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", definitionFile), "utf8");
-  assert.match(source, /kind: "improvement"/);
-  assert.match(source, /defaultMode: "EVERYONE"/);
-  assert.match(source, /"htpr-8961-selection-bar-button"/);
+  const definition = loader()(definitionFile).default;
+  assert.equal(definition.key, "htpr-8961-selection-bar-button");
+  assert.equal(definition.kind, "improvement");
+  assert.equal(definition.defaultMode, "EVERYONE");
 });
