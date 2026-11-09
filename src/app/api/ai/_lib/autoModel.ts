@@ -1,17 +1,9 @@
-import {
-  AUTO_MODEL_OPTION_ID,
-  aiModelOptions,
-  getAiModelDefinition,
-  isAiModelOptionVisible,
-  isPremiumAiModelDefinition,
-  type TAiModelOption,
-} from "@/lib/aiModelOptions";
-import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
+import { AUTO_MODEL_OPTION_ID, aiModelOptions, getAiModelDefinition, isAiModelOptionVisible, isPremiumAiModelDefinition, type TAiModelOption } from "@/lib/aiModelOptions";
+import { isByokProviderKey, resolveTeamProviderEnabled } from "@/lib/aiProviders";
+import { modelOptionMatchesForcedKey } from "@/lib/ai/forcedTeamKey";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { tierForFeature, type AutoTier } from "@/app/api/ai/_lib/reasoningEffort";
-
-export { AUTO_MODEL_OPTION_ID, HTPR_7915_AUTO_MODEL_FLAG };
 
 export const AUTO_LONG_THREAD_MESSAGES = 20;
 
@@ -25,9 +17,10 @@ export type AutoModelContext = {
   stepUp?: number;
 };
 
-function byokSourceEnabled(flags: AutoModelContext["byokProviderFlags"], source: string): boolean {
-  if (flags?.some((flag) => flag.provider === "gateway" && flag.enabled)) return true;
-  return source !== "gateway" && Boolean(flags?.some((flag) => flag.provider === source && flag.enabled));
+function byokAllows(flags: AutoModelContext["byokProviderFlags"], option: TAiModelOption): boolean {
+  return Boolean(
+    flags?.some((flag) => flag.enabled && isByokProviderKey(flag.provider) && modelOptionMatchesForcedKey(option, flag.provider)),
+  );
 }
 
 const EFFORT_RANK = { standard: 0, light: 1, high: 2 } as const;
@@ -54,7 +47,7 @@ export function autoModelPool(context: AutoModelContext): TAiModelOption[] {
     if (!definition || definition.provider === "custom" || option.source === "custom") continue;
     if (!isAiModelOptionVisible(option, true, false, Boolean(context.grokGemini4Enabled))) continue;
     if (!resolveTeamProviderEnabled(context.settings, definition.provider)) continue;
-    if (context.plan === "BYOK" && !byokSourceEnabled(context.byokProviderFlags, option.source)) continue;
+    if (context.plan === "BYOK" && !byokAllows(context.byokProviderFlags, option)) continue;
     if (freePlan && isPremiumAiModelDefinition(definition, true)) continue;
     const rank = EFFORT_RANK[option.effort ?? "standard"];
     const held = byModelKey.get(option.modelKey);

@@ -48,6 +48,7 @@ test("BYOK picks only models behind a key the customer enabled", () => {
   for (const stepUp of [0, 1, 2]) {
     assert.equal(pick("aiChat", { plan: "BYOK", stepUp, byokProviderFlags: [{ provider: "claude", enabled: true }] }).source, "claude");
   }
+  assert.equal(def(pick("aiChat", { plan: "BYOK", byokProviderFlags: [{ provider: "google", enabled: true }] })).provider, "google");
   assert.equal(pick("aiChat", { plan: "BYOK", byokProviderFlags: [] }), null);
   assert.equal(pick("aiChat", { plan: "BYOK", byokProviderFlags: [{ provider: "claude", enabled: false }] }), null);
 });

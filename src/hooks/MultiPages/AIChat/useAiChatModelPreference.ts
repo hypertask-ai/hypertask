@@ -44,7 +44,8 @@ export function useAiChatModelPreference() {
   const preference = useAiModelPreference("aiChat", { teamId, billing });
   const autoFlag = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
   const { data: userPreferences } = useGetUserPreferences();
-  const [autoOverride, setAutoOverride] = useState<boolean | null>(null);
+  const [override, setOverride] = useState<{ teamId: typeof teamId; auto: boolean } | null>(null);
+  const autoOverride = override?.teamId === teamId ? override.auto : null;
   const stored = getAiModelPreferenceIds(userPreferences.aiModelPreferences, "aiChat", teamId);
   const storedPick = stored.teamScoped ?? stored.global;
   const derivedAuto = storedPick === AUTO_MODEL_OPTION_ID ||
@@ -52,7 +53,7 @@ export function useAiChatModelPreference() {
   const autoActive = autoFlag && (autoOverride ?? derivedAuto);
 
   const setAiOption = (option: TAiModal) => {
-    setAutoOverride(option.id === AUTO_MODEL_OPTION_ID);
+    setOverride({ teamId, auto: option.id === AUTO_MODEL_OPTION_ID });
     preference.setAiOption(option);
   };
 
