@@ -39,7 +39,6 @@ import {
   getActiveSortingStackFromProject,
   getActiveSubtaskSettingFromProject,
   getActiveTableSortFromProject,
-  getActiveTableGroupByFromProject,
   getViewFromProject,
   getProjectForViewMutation,
   enqueueBoardViewMutation,
@@ -53,6 +52,7 @@ import {
   TTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
+import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import toast from "react-hot-toast";

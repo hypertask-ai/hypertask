@@ -10,7 +10,6 @@ import {
   getActiveFiltersFromProject,
   getActiveSortingModeFromProject,
   getActiveSortingStackFromProject,
-  getActiveTableGroupByFromProject,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
 import { ArrowUpDown, Funnel, Layers, MoreHorizontal, Timer } from "lucide-react"
 import OptionPickerModal from "@/components/Modals/OptionPicker"
@@ -20,7 +19,10 @@ import { SaveView } from "./SaveViewHeaderKanban"
 import SearchFilter from "./SearchFilter"
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
-import type { TableGroupBy } from "@/lib/table-view/tableGroupByTag"
+import {
+  getActiveTableGroupByFromProject,
+  type TableGroupBy,
+} from "@/lib/table-view/tableGroupByTag"
 import Tooltip from "@/components/Common/Tooltip"
 
 const ShellViewControls = ({ project }: { project: IProject }) => {

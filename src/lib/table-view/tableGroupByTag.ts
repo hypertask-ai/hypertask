@@ -1,4 +1,4 @@
-import type { ISection, ITask } from "@/models/model";
+import type { IProject, ISection, ITask } from "@/models/model";
 import type { TableCreateTaskSection } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
 
 export type TableGroupBy = "column" | "tag";
@@ -14,6 +14,18 @@ export const sanitizeTableGroupBy = (value: unknown): TableGroupBy | null =>
   typeof value === "string" && TABLE_GROUP_BY_VALUES.has(value as TableGroupBy)
     ? (value as TableGroupBy)
     : null;
+
+export const effectiveTableGroupBy = (value: unknown): TableGroupBy =>
+  sanitizeTableGroupBy(value) ?? "column";
+
+export const getActiveTableGroupByFromProject = (
+  project?: IProject | null,
+): TableGroupBy => {
+  const view = project?.project_view?.user_project_views?.[0];
+  const activeView =
+    view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
+  return effectiveTableGroupBy(activeView?.table_group_by);
+};
 
 export function buildTableSectionsGroupedByTag(sections: ISection[]): TableTagGroupedSection[] {
   const groups = new Map<string, { title: string; items: ITask[] }>();
