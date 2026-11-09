@@ -69,9 +69,14 @@ const AiSkillOfferCard = ({ id }: { id: string }) => {
     setBusy(true);
     setError(undefined);
     try {
-      const updated = await actOnSkillOffer(id, action);
-      queryClient.setQueryData(queryKey, updated);
-      if (action === "draft") await handleSendMessage(skillOfferDraftMessage(updated.rule));
+      if (action === "draft") {
+        if (!offer) throw new Error("This suggestion is no longer available.");
+        const sent = await handleSendMessage(skillOfferDraftMessage(offer.rule));
+        if (!sent) throw new Error("Chat is busy. Try Draft it again once the reply finishes.");
+        queryClient.setQueryData(queryKey, await actOnSkillOffer(id, "draft"));
+        return;
+      }
+      queryClient.setQueryData(queryKey, await actOnSkillOffer(id, action));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not update skill suggestion");
     } finally {

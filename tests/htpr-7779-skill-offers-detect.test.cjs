@@ -22,7 +22,7 @@ const offer = contract.verifySkillOfferPattern(
   sources,
 );
 
-function offerHarness({ claim = true, detected = offer, failSources = false, enabled = true } = {}) {
+function offerHarness({ claim = true, detected = offer, failSources = false, enabled = true, sourceCount = sources.length } = {}) {
   const calls = [];
   const offers = load("src/lib/ai/skillOffers/offer.ts", {
     "@/lib/flags": { isFeatureEnabled: async (flag, userId) => { calls.push(["flag", flag, userId]); return enabled; } },
@@ -38,7 +38,7 @@ function offerHarness({ claim = true, detected = offer, failSources = false, ena
       loadInstructionSources: async () => {
         if (failSources) throw new Error("database down");
         calls.push(["sources"]);
-        return sources;
+        return sources.slice(0, sourceCount);
       },
       detectRepeatedInstruction: async () => { calls.push(["detect"]); return detected; },
     },
@@ -76,6 +76,12 @@ test("nothing under the threshold and nothing already offered returns no card", 
   const quiet = offerHarness({ detected: null });
   assert.equal(await quiet.maybeOffer({ userId: 985, projectId: 15, sessionId: "session-0" }), null);
   assert.deepEqual(quiet.calls.filter(([kind]) => kind === "create"), []);
+});
+
+test("a board below the threshold never spends the six-hour cooldown", async () => {
+  const thin = offerHarness({ sourceCount: 2 });
+  assert.equal(await thin.maybeOffer({ userId: 985, projectId: 15, sessionId: "session-0" }), null);
+  assert.deepEqual(thin.calls.filter(([kind]) => kind === "scan" || kind === "detect"), []);
 });
 
 test("a failing scan never breaks the chat turn", async () => {
