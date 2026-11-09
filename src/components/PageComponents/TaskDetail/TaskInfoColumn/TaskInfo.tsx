@@ -168,6 +168,10 @@ const TaskInfo = (props: ITaskInfoContainer) => {
   const agentWaitingEnabled = useFlag(HTPR_8917_AGENT_WAITING_PERSON_FLAG);
   const emptyFieldLabelsEnabled = useFlag(HTPR_7868_EMPTY_FIELD_LABELS_FLAG);
   const emptySizeLabel = emptyFieldLabelsEnabled ? "No size" : "-";
+  const sizeValue = estimate_
+    ? EstimateConstants.find((x) => x.estimate_index === estimate_?.estimate_index)
+        ?.estimate_full_value
+    : undefined;
   const waitingOnUser = useMemo(() => {
     const users: IUser[] = [
       ...(membersAndOwner?.owner ? [membersAndOwner.owner] : []),
@@ -639,11 +643,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           <Suspense fallback={<></>}>
             <ClickableSpan
               title={
-                (estimate_
-                  ? EstimateConstants.find(
-                    (x) => x.estimate_index === estimate_?.estimate_index
-                  )?.estimate_full_value
-                  : emptySizeLabel) ?? emptySizeLabel
+                !sizeValue || sizeValue === "-" ? emptySizeLabel : sizeValue
               }
             />
           </Suspense>

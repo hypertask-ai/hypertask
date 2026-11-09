@@ -175,6 +175,7 @@ const TaskInfoColumnGloballyCreate = ({
     const [createTaskModal] = useRecoilState(showCreateTaskModalAtom)
     const emptyFieldLabelsEnabled = useFlag(HTPR_7868_EMPTY_FIELD_LABELS_FLAG)
     const emptySizeLabel = emptyFieldLabelsEnabled ? "No size" : "-"
+    const sizeValue = formValues.estimate ? EstimateConstants.find(x => x.estimate_index === formValues.estimate?.estimate_index)?.estimate_full_value : undefined
 
     const autoOpenedBoardPicker = useRef(false)
     useEffect(() => {
@@ -405,7 +406,7 @@ const TaskInfoColumnGloballyCreate = ({
                         keyCombination={['S']}
                     />
                     <Suspense fallback={<></>}>
-                        <ClickableSpan title={(formValues.estimate ? EstimateConstants.find(x => x.estimate_index === formValues.estimate?.estimate_index)?.estimate_full_value : emptySizeLabel) ?? emptySizeLabel} />
+                        <ClickableSpan title={!sizeValue || sizeValue === "-" ? emptySizeLabel : sizeValue} />
                     </Suspense>
                 </TaskInfoValue>
             </TaskInfoRow>

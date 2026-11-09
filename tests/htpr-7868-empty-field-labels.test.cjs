@@ -21,7 +21,7 @@ const sharedRows = {
   TaskInfoLabel: ({ children }) => React.createElement("label", null, children),
   AssigneeCard: marker("assignee"),
 };
-const estimates = [{ estimate_index: 3, estimate_full_value: "Medium" }];
+const estimates = [{ estimate_index: 0, estimate_full_value: "-" }, { estimate_index: 3, estimate_full_value: "Medium" }];
 
 const panel = loadModule("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx", {
   "@/hooks/useFlag": useFlag,
@@ -127,6 +127,17 @@ test("ticket panel keeps the dash with the flag off", () => {
   assert.doesNotMatch(html, /No due date|No size/);
   assert.match(html, /<div>-<\/div>/);
   assert.match(html, /<span data-empty="-">-<\/span>/);
+});
+
+test("the saved no-size placeholder reads No size with the flag on and a dash with it off", () => {
+  flagOn = true;
+  const withPlaceholder = panelProps(emptyTask, { estimate_index: 0 });
+  assert.match(render(panel, withPlaceholder), /<span data-empty="No size">No size<\/span>/);
+  modalForm = { estimate: { estimate_index: 0 } };
+  assert.match(render(modal), /<span data-empty="No size">No size<\/span>/);
+  flagOn = false;
+  assert.match(render(panel, withPlaceholder), /<span data-empty="-">-<\/span>/);
+  assert.match(render(modal), /<span data-empty="-">-<\/span>/);
 });
 
 test("ticket panel shows real values untouched with the flag on", () => {
