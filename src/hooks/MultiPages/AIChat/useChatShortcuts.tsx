@@ -10,6 +10,7 @@ import { CHAT_SHORTCUTS, adjacentChatSession, chatShortcutHint, dispatchChatShor
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
+import { focusChatComposerAcrossSurfaces } from "@/lib/keyboard/chatSurfaceFocus";
 
 export function useChatShortcuts(options: {
   enabled: boolean;
@@ -96,7 +97,7 @@ export function useChatShortcuts(options: {
       case "expand":
         if (options.onExpand) {
           options.onExpand();
-          focusComposer();
+          focusChatComposerAcrossSurfaces(rootRef.current);
           return true;
         }
         chat.restoreChat();
@@ -107,7 +108,7 @@ export function useChatShortcuts(options: {
             chat.currentSession?.id,
           ),
         );
-        focusComposer();
+        focusChatComposerAcrossSurfaces(rootRef.current);
         return true;
       case "model": return click("[data-ai-chat-model] button");
       case "attach":
