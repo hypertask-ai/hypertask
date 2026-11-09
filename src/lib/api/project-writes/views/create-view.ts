@@ -3,6 +3,7 @@ import { taskWriteRoute } from "@/lib/api/task-writes/route";
 import { viewWriteJson } from "./response";
 
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { ISection } from "@/models/model";
 import { TCreate_view_body } from "@/models/Views/model";
@@ -133,13 +134,12 @@ const route = taskWriteRoute({
             board_sorting_order: view_settings.board_sorting_order,
             board_sorting_stack: view_settings.board_sorting_stack ?? [],
             board_filters: sanitizedBoardFilters,
-            board_columns_view:
-              viewColumnsToWrite(
-                view_settings.board_columns_view,
-                defaultColumns?.length
-                  ? defaultColumns
-                  : await boardColumnsForProject(projectId, tx)
-              ) ?? [],
+            board_columns_view: (viewColumnsToWrite(
+              view_settings.board_columns_view,
+              defaultColumns?.length
+                ? defaultColumns
+                : await boardColumnsForProject(projectId, tx)
+            ) ?? []) as unknown as Prisma.InputJsonValue,
             board_subtask_setting: view_settings.board_subtask_setting,
             board_empty_sections: view_settings.board_empty_sections,
             board_staleness: view_settings.board_staleness ?? null,
