@@ -189,6 +189,22 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     }
   }
 
+  try {
+    const { maybeOfferRepeatedInstruction } = await import("@/lib/ai/skillOffers/offer");
+    const skillOfferCard = await maybeOfferRepeatedInstruction({
+      userId: dbUser.id,
+      projectId: usageProjectId,
+      sessionId: body.session_id,
+      actingAgentId: actingAgent?.id ?? null,
+    });
+    if (skillOfferCard) {
+      chunks.push(skillOfferCard);
+      state.send("content", { content: skillOfferCard });
+    }
+  } catch (error) {
+    console.error("[ai/chat/stream] skill offer skipped", error);
+  }
+
   const ticketRowsAllowed = reply?.ticketRowsAllowed ?? false;
   state.turnDeadline?.clear();
 

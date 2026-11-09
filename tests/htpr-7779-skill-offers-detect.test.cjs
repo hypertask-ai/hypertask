@@ -22,9 +22,10 @@ const offer = contract.verifySkillOfferPattern(
   sources,
 );
 
-function offerHarness({ claim = true, detected = offer, failSources = false } = {}) {
+function offerHarness({ claim = true, detected = offer, failSources = false, enabled = true, sourceCount = sources.length } = {}) {
   const calls = [];
   const offers = load("src/lib/ai/skillOffers/offer.ts", {
+    "@/lib/flags": { isFeatureEnabled: async (flag, userId) => { calls.push(["flag", flag, userId]); return enabled; } },
     "@/lib/prisma": { default: { project: { findUnique: async () => ({ teamId: "team-1" }) } } },
     "./store": {
       claimSkillOfferScan: async () => { calls.push(["scan"]); return claim; },
@@ -37,7 +38,7 @@ function offerHarness({ claim = true, detected = offer, failSources = false } = 
       loadInstructionSources: async () => {
         if (failSources) throw new Error("database down");
         calls.push(["sources"]);
-        return sources;
+        return sources.slice(0, sourceCount);
       },
       detectRepeatedInstruction: async () => { calls.push(["detect"]); return detected; },
     },
@@ -45,7 +46,11 @@ function offerHarness({ claim = true, detected = offer, failSources = false } = 
   return { calls, maybeOffer: offers.maybeOfferRepeatedInstruction };
 }
 
-test("no board, no chat session or an agent chat never reaches the scan", async () => {
+test("the offer is off when its flag is off, and no board, chat session or agent chat reaches the scan", async () => {
+  const off = offerHarness({ enabled: false });
+  assert.equal(await off.maybeOffer({ userId: 985, projectId: 15, sessionId: "session-0" }), null);
+  assert.deepEqual(off.calls.filter(([kind]) => kind === "scan"), []);
+
   const noBoard = offerHarness();
   assert.equal(await noBoard.maybeOffer({ userId: 985, projectId: null, sessionId: "session-0" }), null);
   const noSession = offerHarness();
@@ -71,6 +76,12 @@ test("nothing under the threshold and nothing already offered returns no card", 
   const quiet = offerHarness({ detected: null });
   assert.equal(await quiet.maybeOffer({ userId: 985, projectId: 15, sessionId: "session-0" }), null);
   assert.deepEqual(quiet.calls.filter(([kind]) => kind === "create"), []);
+});
+
+test("a board below the threshold never spends the six-hour cooldown", async () => {
+  const thin = offerHarness({ sourceCount: 2 });
+  assert.equal(await thin.maybeOffer({ userId: 985, projectId: 15, sessionId: "session-0" }), null);
+  assert.deepEqual(thin.calls.filter(([kind]) => kind === "scan" || kind === "detect"), []);
 });
 
 test("a failing scan never breaks the chat turn", async () => {
