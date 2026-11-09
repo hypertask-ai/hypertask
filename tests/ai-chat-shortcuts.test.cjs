@@ -8,6 +8,7 @@ const { load } = require("./task-route-loader.cjs");
 
 const registry = load("src/lib/aiChat/chatShortcuts.ts", {});
 const flag = load("src/lib/flags/definitions/htpr-7766-chat-shortcuts.ts", {});
+const chatComposerFocus = load("src/lib/keyboard/chatSurfaceFocus.ts", {});
 const noop = () => {};
 
 function loadHook(mocks) {
@@ -25,7 +26,7 @@ function loadHook(mocks) {
   return loaded.exports.useChatShortcuts;
 }
 
-function fixture(surface, { enabled = true, width = 1440, active = true } = {}) {
+function fixture(surface, { enabled = true, width = 1440, active = true, swapSurface = null } = {}) {
   const dom = new JSDOM(`<input id="board"><section data-ai-chat-surface="${surface}" tabindex="-1">
     <button id="header">Chat</button><div data-ai-chat-scope><button id="scope">Scope</button></div>
     <div data-ai-chat-model><button id="model">Model</button></div><div data-ai-chat-composer>
@@ -86,10 +87,11 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": flag,
     "@/lib/aiChat/chatShortcuts": registry,
+    "@/lib/keyboard/chatSurfaceFocus": chatComposerFocus,
     "@/components/Modals/OptionPicker": { default: "OptionPicker" },
     "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { aiMentionList: "mentions" } },
     "@/lib/skills/slashSkills": { SLASH_MENU_DOM_ID: "slash-menu" },
-    "next/navigation": { useRouter: () => ({ push: (path) => actions.push(`navigate:${path}`) }) },
+    "next/navigation": { useRouter: () => ({ push: (path) => { actions.push(`navigate:${path}`); if (swapSurface) swapSurface(); } }) },
     "@/lib/aiChatDisplayMode": {
       buildFullScreenChatPath: (returnPath, sessionId) =>
         `${sessionId ? `/chat/${sessionId}` : "/chat"}?return_to=${encodeURIComponent(returnPath)}`,
@@ -100,7 +102,7 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     hook = useChatShortcuts({
       enabled,
       active,
-      onExpand: surface === "fullscreen" ? () => { actions.push("exit-fullscreen"); } : undefined,
+      onExpand: surface === "fullscreen" ? () => { actions.push("exit-fullscreen"); if (swapSurface) swapSurface(); } : undefined,
     });
     hook.surfaceRef(root);
     return hook;
@@ -332,3 +334,38 @@ for (const surface of ["fullscreen", "sidebar", "floating"]) {
     } finally { f.close(); }
   });
 }
+
+function dockedSurface(surface) {
+  const element = document.createElement("section");
+  element.setAttribute("data-ai-chat-surface", surface);
+  element.innerHTML = '<div data-ai-chat-composer><div class="ProseMirror" contenteditable="true" tabindex="0"></div></div>';
+  const composer = element.querySelector(".ProseMirror");
+  composer.getClientRects = () => [{ width: 500, height: 40 }];
+  document.body.append(element);
+  return composer;
+}
+
+for (const [surface, opened] of [["fullscreen", "sidebar"], ["sidebar", "fullscreen"], ["floating", "fullscreen"]]) {
+  test(`${surface}: the expand key hands the cursor to the composer of the ${opened} surface`, () => {
+    let target;
+    const f = fixture(surface, { swapSurface: () => { target = dockedSurface(opened); } });
+    try {
+      assert.equal(f.press("e", { ctrlKey: true, shiftKey: true }).defaultPrevented, true);
+      assert.equal(document.activeElement === target, true);
+      assert.equal(document.activeElement === f.composer, false);
+    } finally { f.close(); }
+  });
+}
+
+test("a pointer press cancels the pending composer hand-over", () => {
+  const f = fixture("fullscreen");
+  try {
+    dockedSurface("sidebar");
+    chatComposerFocus.focusChatComposerAcrossSurfaces(f.root);
+    const board = document.getElementById("board");
+    board.focus();
+    f.dom.window.dispatchEvent(new f.dom.window.Event("pointerdown"));
+    f.flush();
+    assert.equal(document.activeElement === board, true);
+  } finally { f.close(); }
+});
