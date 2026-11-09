@@ -6,7 +6,7 @@ const { loadModule } = require('./helpers/loadModule.cjs');
 
 const chain = () => ({ configure: () => ({}), extend: () => ({}), create: () => ({}) });
 
-const loadTiptapHook = ({ pathname, flagOn }) => {
+const loadTiptapHook = ({ pathname, flagOn, oneComposer = false }) => {
   const captured = { effects: [], dispatches: 0 };
   const editor = {
     isDestroyed: false,
@@ -16,10 +16,11 @@ const loadTiptapHook = ({ pathname, flagOn }) => {
   const stubs = {
     react: { useRef: (initial) => ({ current: initial }), useContext: () => false, useEffect: (fn) => captured.effects.push(fn) },
     'next/navigation': { usePathname: () => pathname },
-    '@/hooks/useFlag': { useFlag: () => flagOn },
+    '@/hooks/useFlag': { useFlag: (key) => (key === 'e' ? oneComposer : flagOn) },
     '@/lib/flags/keys': { HTPR_6906_AUTOCAP_UNDO_FLAG: 'a', LOCAL_WRITING_ASSISTANCE_FLAG: 'b' },
     '@/lib/flags/definitions/htpr-5908-retype-lowercase': { HTPR_5908_RETYPE_LOWERCASE_FLAG: 'c' },
     '@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup': { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: 'd' },
+    '@/lib/flags/definitions/htpr-8824-ai-chat-one-composer': { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: 'e' },
     '@/lib/contexts/mobileContext': { MobileViewContext: {} },
     '@/components/RTE/Components/AI_Chat/MentionData': { createMentionData: () => ({}) },
     '@/components/RTE/Extensions/LinkableMention': { LinkableMention: chain() },
