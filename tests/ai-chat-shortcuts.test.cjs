@@ -357,6 +357,23 @@ for (const [surface, opened] of [["fullscreen", "sidebar"], ["sidebar", "fullscr
   });
 }
 
+test("a late focus steal is taken back while the shortcut settles", () => {
+  const f = fixture("fullscreen");
+  try {
+    chatComposerFocus.focusChatComposerAcrossSurfaces(f.root);
+    const target = dockedSurface("sidebar");
+    let frames = 0;
+    const steal = () => {
+      frames += 1;
+      if (frames === 3) return document.getElementById("board").focus();
+      requestAnimationFrame(steal);
+    };
+    requestAnimationFrame(steal);
+    f.flush();
+    assert.equal(document.activeElement === target, true);
+  } finally { f.close(); }
+});
+
 test("a pointer press cancels the pending composer hand-over", () => {
   const f = fixture("fullscreen");
   try {
