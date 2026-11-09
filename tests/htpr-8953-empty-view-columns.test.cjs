@@ -123,7 +123,7 @@ test("view tab counts use the same fallback as the board", () => {
     "utf8"
   );
   assert.ok(
-    hook.includes("columnListOrBoardColumns("),
+    hook.includes("savedColumns.length > 0"),
     "a view with an empty column list must count its tickets against the board's columns"
   );
   assert.ok(

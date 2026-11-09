@@ -110,13 +110,8 @@ const route = taskWriteRoute({
             (orderById.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
             (orderById.get(b.id) ?? Number.MAX_SAFE_INTEGER)
         );
-      } else if (!incomingColumns?.length) {
-        const boardColumns = defaultColumns?.length
-          ? defaultColumns
-          : await boardColumnsForProject(projectId);
-        view_settings.board_columns_view =
-          viewColumnsToWrite(incomingColumns, boardColumns) ?? [];
       }
+
       const sanitizedTableSort = sanitizeTableSort(
         view_settings.table_sort_column,
         view_settings.table_sort_direction
@@ -129,7 +124,7 @@ const route = taskWriteRoute({
 
       const currentDate = new Date();
       if (!view) {
-        view = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, (tx) => tx.view.create({
+        view = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, async (tx) => tx.view.create({
           data: {
             title,
             project_view_id: project_view.id,
@@ -138,7 +133,13 @@ const route = taskWriteRoute({
             board_sorting_order: view_settings.board_sorting_order,
             board_sorting_stack: view_settings.board_sorting_stack ?? [],
             board_filters: sanitizedBoardFilters,
-            board_columns_view: view_settings.board_columns_view,
+            board_columns_view:
+              viewColumnsToWrite(
+                view_settings.board_columns_view,
+                defaultColumns?.length
+                  ? defaultColumns
+                  : await boardColumnsForProject(projectId, tx)
+              ) ?? [],
             board_subtask_setting: view_settings.board_subtask_setting,
             board_empty_sections: view_settings.board_empty_sections,
             board_staleness: view_settings.board_staleness ?? null,

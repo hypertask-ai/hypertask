@@ -23,7 +23,7 @@ export const boardColumnsForProject = async (
     where: { projectId, deleted: false },
     orderBy: [{ ranking: 'asc' }, { id: 'asc' }],
   })
-  return sections.map((section) => buildViewColumnEntry(section) as ISection)
+  return sections.map((section) => buildViewColumnEntry(section) as unknown as ISection)
 }
 
 async function updateBoardViewColumns(
