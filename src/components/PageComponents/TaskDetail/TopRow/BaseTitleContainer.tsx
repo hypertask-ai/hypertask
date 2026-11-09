@@ -12,7 +12,7 @@ interface BaseTitleContainerProps {
   hasSummary?: boolean;
   titleRowContent: ReactNode;
   children?: ReactNode;
-  zIndex?: number;
+  zIndex?: number | string;
   useHorizontalPadding?: boolean;
   clearDesktopNavigation?: boolean;
 }
@@ -26,7 +26,7 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
   hasSummary,
   titleRowContent,
   children,
-  zIndex = 50,
+  zIndex = "var(--z-sticky)",
   useHorizontalPadding = true,
   clearDesktopNavigation = false,
 }) => {
