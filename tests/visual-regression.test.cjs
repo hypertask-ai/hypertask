@@ -118,6 +118,11 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
     assert.equal(evaluate(parsed.jobs["verify-qa"].if, event, journey), verify);
   }
   assert.match(parsed.concurrency["cancel-in-progress"], /github\.event_name != 'push' \}\}$/);
+  const groupFor = (event, journey, head) => vm.runInNewContext(
+    parsed.concurrency.group.replace(/^\$\{\{\s*|\s*\}\}$/g, ""),
+    { github: { event_name: event, event: { pull_request: { number: null } }, sha: "push-sha" }, inputs: { journey, head }, format: (template, value) => template.replace("{0}", value) });
+  assert.equal(groupFor("workflow_dispatch", "inbox-cycle", "production"), "feature-map-live-weekly");
+  assert.equal(groupFor("workflow_dispatch", "inbox-cycle", "runner7/hyci-205"), "verify-qa");
   assert.match(workflow, /name: visual-regression/);
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /timeout-minutes: 35/);

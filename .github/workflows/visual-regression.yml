@@ -27,7 +27,7 @@ on:
         options: [visual, inbox-cycle, inbox-cycle-broken]
 
 concurrency:
-  group: ${{ github.event_name == 'schedule' && 'feature-map-live-weekly' || (inputs.journey && inputs.journey != 'visual' && 'verify-qa' || format('visual-regression-{0}', github.event.pull_request.number || github.sha)) }}
+  group: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.journey == 'inbox-cycle' && inputs.head == 'production') && 'feature-map-live-weekly' || (inputs.journey && inputs.journey != 'visual' && 'verify-qa' || format('visual-regression-{0}', github.event.pull_request.number || github.sha)) }}
   cancel-in-progress: ${{ github.event_name != 'schedule' && (!inputs.journey || inputs.journey == 'visual') && github.event_name != 'push' }}
 
 jobs:

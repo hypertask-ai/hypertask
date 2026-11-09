@@ -66,13 +66,13 @@ export async function findOpenWeeklyTicket(title, options = {}) {
 }
 
 async function loadEvidence(evidenceDir) {
+  const found = {}
   for (const name of ['result.json', 'run.json']) {
     try {
-      const payload = JSON.parse(await readFile(path.join(evidenceDir, name), 'utf8'))
-      if (payload.sha || payload.steps) return payload
+      Object.assign(found, JSON.parse(await readFile(path.join(evidenceDir, name), 'utf8')))
     } catch {}
   }
-  return {}
+  return found
 }
 
 function activityBody({ week, counts, sha, runUrl, artifactUrl }) {
