@@ -7,6 +7,7 @@ import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/ht
 import { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG } from "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top";
 import { HTPR_8947_CTRLK_NO_FOOTER_FLAG } from "@/lib/flags/definitions/htpr-8947-ctrlk-no-footer";
 import { HTPR_7871_CTRLK_ELLIPSIS_FLAG } from "@/lib/flags/definitions/htpr-7871-ctrlk-ellipsis";
+import { HTPR_8954_CTRLK_FILLED_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8954-ctrlk-filled-search";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import {
   useCallback,
@@ -129,6 +130,7 @@ const Commands = (props: Props) => {
   const tabsOnTopFlag = useFlag(HTPR_8943_CTRLK_TABS_ON_TOP_FLAG);
   const noFooterFlag = useFlag(HTPR_8947_CTRLK_NO_FOOTER_FLAG);
   const ellipsisFlag = useFlag(HTPR_7871_CTRLK_ELLIPSIS_FLAG);
+  const filledSearchFlag = useFlag(HTPR_8954_CTRLK_FILLED_SEARCH_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -750,8 +752,9 @@ const Commands = (props: Props) => {
   }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
 
   const integratedTabs = newTaskWindow && !isMobile && !isDemo && !isInteractive;
+  const filledSearch = filledSearchFlag && integratedTabsFlag && tabsOnTopFlag && integratedTabs && !isCompose;
   const modeSwitch = !isDemo && !isInteractive ? (
-    <div className={integratedTabsFlag && integratedTabs ? "flex w-full border-b border-light-black-border-1 p-2" : "absolute -top-12 left-0 flex w-full justify-center"}>
+    <div className={integratedTabsFlag && integratedTabs ? `flex w-full p-2${filledSearch ? "" : " border-b border-light-black-border-1"}` : "absolute -top-12 left-0 flex w-full justify-center"}>
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
           { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
@@ -868,7 +871,7 @@ const Commands = (props: Props) => {
           {integratedTabsFlag && integratedTabs && (isCompose || tabsOnTopFlag) && modeSwitch}
           {compose}
           {!isCompose && <>
-          <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
+          <div className={filledSearch ? "mx-2 flex items-center gap-2.5 rounded-[4px] bg-ai-tiptap px-3" : "flex items-center gap-2.5 border-b border-light-black-border-1 px-4"}>
             <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" />
             <ModalInput
                ref={setInputRef}
