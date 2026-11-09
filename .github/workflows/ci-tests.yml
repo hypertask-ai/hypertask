@@ -706,7 +706,14 @@ jobs:
 
       - name: Pull PostgreSQL test image
         if: steps.pg.outputs.need == '1'
-        run: docker pull "$HTPR_PG_IMAGE"
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if docker pull "$HTPR_PG_IMAGE"; then break; fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 30))"
+          done
 
       # Comparison tests `git show origin/production:<file>`. The old single
       # job fetched the base ref while selecting tests; a fresh shard checkout
