@@ -53,6 +53,12 @@ test("BYOK picks only models behind a key the customer enabled", () => {
   assert.equal(pick("aiChat", { plan: "BYOK", byokProviderFlags: [{ provider: "claude", enabled: false }] }), null);
 });
 
+test("a forced team key limits Auto to that provider", () => {
+  const settings = only("anthropic", "openai");
+  for (const stepUp of [0, 1, 2]) assert.equal(def(pick("aiChat", { settings, stepUp, forcedProvider: "claude" })).provider, "anthropic");
+  assert.equal(pick("aiChat", { settings: only("anthropic"), forcedProvider: "openai" }), null);
+});
+
 test("the background ladder returns nothing instead of another provider when Auto is on", () => {
   assert.equal(ladder.resolveSystemModel("summaries", only(), true, { ownModelsOnly: true }), null);
   assert.ok(ladder.resolveSystemModel("summaries", only(), true, {}));

@@ -21,8 +21,8 @@ import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionB
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
-import { pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
-import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
+import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { getAiFeatureModelOverride, resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
 import { assertModelAllowedForPlan, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
@@ -695,7 +695,7 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  const autoPick = args.aiFeature && args.userId && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId)
+  const autoPick = args.aiFeature && args.userId && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
     ? pickAutoModelOption({
         feature: args.aiFeature,
         settings: teamContext.settings,
@@ -703,6 +703,7 @@ export async function selectTaskWriterModel(args: {
         byokProviderFlags: args.byokProviderFlags,
         grokGemini4Enabled,
         planDefault: requestDefaultModelOption,
+        forcedProvider: await autoForcedProvider(keyLookup),
       })
     : null;
   let selection = autoPick

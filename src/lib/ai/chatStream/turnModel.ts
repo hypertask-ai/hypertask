@@ -17,7 +17,7 @@ import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan }
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
-import { autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { autoForcedProvider, autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 
 import { createSseErrorResponse, reportHandledChatError, errorMessage } from "@/lib/ai/chatStream/errors";
 import { ChatRequest } from "@/lib/ai/chatStream/request";
@@ -200,6 +200,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         byokProviderFlags: body.byokProviderFlags,
         grokGemini4Enabled,
         planDefault: requestDefaultModelOption,
+        forcedProvider: await autoForcedProvider(selectionLookupContext),
         stepUp: chatStepUp({ message: body.message, history: body.chat_history }),
       });
       if (autoPick) selection = selectionFromModelOption(autoPick);
