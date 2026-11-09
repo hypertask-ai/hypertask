@@ -231,7 +231,7 @@ That cap was not enough. Deployment 7628217481 (`51fcc525`, `dpl_9tg62h9sytSJHF5
 FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
 ```
 
-Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. The cap is now 4096 MB, half the machine. A SIGKILL or another heap abort at 4096 MB is the paid Enhanced Build Machine, which is Valentin's decision.
+Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. The cap is now 3840 MB after intermittent SIGKILL at 4096 MB (HYCI-180, below). If a heap abort happens at 3840 MB or another SIGKILL lands with the cap at half the machine, the paid Enhanced Build Machine is Valentin's decision.
 
 ## Live-within-10-min incident (2026-11-07, HYCI-180)
 
@@ -254,3 +254,18 @@ Measured from the live cache at 2026-11-08 UTC, after the `76c0433` merge:
 | Fix commit pull request 3065 | 10.1 minutes to live |
 
 The fix is live on `production`. The ticket closes when the CI performance page shows at least 90 percent live-within-10-min for three consecutive London days, not on this document alone.
+
+## Heap cap 3840 MB (2026-11-08, HYCI-180)
+
+After HYCI-184 restored the 4096 MB cap at webpack parallelism 1, Vercel production builds still intermittently died with container OOM while V8 stayed inside the cap:
+
+| Merge | Pull request | First deployment | Log |
+| --- | --- | --- | --- |
+| `0b9b7307e8` | 3045 | 7639529072 | `dpl_HrSLPn4mek9iMnGazP8HZLuiuaNq` |
+| `87ee509b32` | 3084 | 7639561805 | `dpl_CJ5ddoY2GBk6Unkn2o2G3XjZS3zk` |
+
+Both logs name the same signature as the parallelism 1 note above: about three minutes into "Creating an optimized production build", `Next.js build worker exited with code: null and signal: SIGKILL`, with no "Reached heap limit" line and Vercel's `At least one "Out of Memory" ("OOM") event` footer. Each merge went live on a later successful deployment at 19.5 and 16.2 minutes after merge, which keeps the KPI below the 10 minute bar even though the app recovers without code changes.
+
+That pattern is the free lever named in the parallelism 1 note: with parallelism already at 1, lowering `--max-old-space-size` from 4096 hands headroom to native memory. The measured V8 live set at 3584 MB was 3080.7 MB (HYCI-184), so 3840 MB keeps 759.3 MB above that peak while leaving 4352 MiB for everything outside the V8 heap on the 8192 MiB machine. If the next production build reports "Reached heap limit", the compiler genuinely needs more than 3840 MB and the next step is still the paid Enhanced Build Machine, which is Valentin's decision.
+
+The build script now sets `--max-old-space-size=3840`. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
