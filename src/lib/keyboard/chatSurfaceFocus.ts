@@ -39,7 +39,8 @@ export function isAIChatElementFocused(): boolean {
 const CHAT_SURFACE_COMPOSER_SELECTOR =
   "[data-ai-chat-surface] .ProseMirror[contenteditable='true'], [data-ai-chat-surface] textarea";
 
-const FOCUS_FRAME_BUDGET = 90;
+const FOCUS_FRAME_BUDGET = 180;
+const FOCUS_STABLE_FRAMES = 30;
 
 export function visibleChatComposer(previousSurface?: Element | null): HTMLElement | null {
   const composer = Array.from(
@@ -80,7 +81,7 @@ export function focusChatComposerAcrossSurfaces(
   const step = () => {
     if (cancelled) return stop();
     settled = focusChatComposer(previousSurface) ? settled + 1 : 0;
-    if (settled >= 2) return stop();
+    if (settled >= FOCUS_STABLE_FRAMES) return stop();
     frames += 1;
     if (frames >= frameBudget) return stop();
     requestAnimationFrame(step);
