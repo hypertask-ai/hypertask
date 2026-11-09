@@ -44,6 +44,8 @@ import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
 import { Plus, X } from "lucide-react";
+import { ComposerPlusActions } from "@/components/Common/ComposerPlusActions";
+import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
 import { TaskWriterModelPicker, useTaskWriterModel } from "@/components/Global/ModelSelectorDropdown";
 import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
@@ -90,6 +92,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
   const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
+  const sharedPlusMenu = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
   const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const stopDictationButtonId = "compose-task-stop-dictation";
   const cancelDictationButtonId = "compose-task-cancel-dictation";
@@ -618,34 +621,44 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             {!newTaskWindow && !phoneTaskWriterSheet && attachments}
             {plusLayout ? (
               <div data-compose-plus-row className="flex w-full items-center justify-between pt-2">
-                <details ref={plusMenu} className="relative">
-                  <summary
-                    aria-label="Add"
-                    aria-disabled={addingImages || dictating}
-                    onClick={(event) => {
-                      if (addingImages || dictating) event.preventDefault();
-                    }}
-                    className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-[4px] text-icon-dark-gray hover:bg-hover-active hover:text-white-black [&::-webkit-details-marker]:hidden"
-                  >
-                    <Plus size={18} strokeWidth={1.75} aria-hidden />
-                  </summary>
-                  <div role="group" aria-label="Add" className="absolute bottom-[calc(100%+0.25rem)] left-0 z-popup flex min-w-44 flex-col rounded-[4px] bg-modalBackground p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
-                    <button type="button" aria-label="Attach file" disabled={addingImages || dictating}
-                      className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => { closePlusMenu(); handleAttachmentClick(); }}>
-                      <span>Attach file</span>
-                      <span className="text-text-light-gray">{getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}</span>
-                    </button>
-                    <button type="button" aria-label="Add context" disabled={addingImages || dictating}
-                      className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => { closePlusMenu(); insertContextMark(); }}>
-                      <span>Add context</span>
-                      <span className="text-text-light-gray">@</span>
-                    </button>
-                  </div>
-                </details>
+                {sharedPlusMenu ? (
+                  <ComposerPlusActions
+                    disabled={addingImages || dictating}
+                    active={active}
+                    attachShortcut={getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}
+                    onAttach={handleAttachmentClick}
+                    onAddContext={insertContextMark}
+                  />
+                ) : (
+                  <details ref={plusMenu} className="relative">
+                    <summary
+                      aria-label="Add"
+                      aria-disabled={addingImages || dictating}
+                      onClick={(event) => {
+                        if (addingImages || dictating) event.preventDefault();
+                      }}
+                      className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-[4px] text-icon-dark-gray hover:bg-hover-active hover:text-white-black [&::-webkit-details-marker]:hidden"
+                    >
+                      <Plus size={18} strokeWidth={1.75} aria-hidden />
+                    </summary>
+                    <div role="group" aria-label="Add" className="absolute bottom-[calc(100%+0.25rem)] left-0 z-popup flex min-w-44 flex-col rounded-[4px] bg-modalBackground p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
+                      <button type="button" aria-label="Attach file" disabled={addingImages || dictating}
+                        className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => { closePlusMenu(); handleAttachmentClick(); }}>
+                        <span>Attach file</span>
+                        <span className="text-text-light-gray">{getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}</span>
+                      </button>
+                      <button type="button" aria-label="Add context" disabled={addingImages || dictating}
+                        className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => { closePlusMenu(); insertContextMark(); }}>
+                        <span>Add context</span>
+                        <span className="text-text-light-gray">@</span>
+                      </button>
+                    </div>
+                  </details>
+                )}
                 <div className="flex shrink-0 items-center gap-2">
                   {dictationControl}
                   <SendMessageButton label="Send" textButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={false} onClick={() => void send()} />

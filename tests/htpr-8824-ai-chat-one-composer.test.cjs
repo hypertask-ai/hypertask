@@ -15,11 +15,12 @@ test('HTPR-8824 flag is an improvement that defaults to Everyone', () => {
   assert.equal(flag.releaseRisk.risk, 'small');
 });
 
-const oneComposer = () => loadModule('src/components/AI_CHAT/AiChatOneComposer.tsx', {
+const oneComposer = (on = true) => loadModule('src/components/AI_CHAT/AiChatOneComposer.tsx', {
   '@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context': {
     useAiChatContext: () => ({ editor: null, isTyping: false, isRecording: false, isByokBlocked: false, toggleRecording: () => {}, audioTiptapCallback: () => {} }),
   },
   '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
+  '@/hooks/useFlag': { useFlag: (key) => on && key === FLAG },
   '@/hooks/MultiPages/useGetAllTeamsMinimal': { useGetAllTeamsMinimal: () => ({ data: [] }) },
   '@/lib/state': { useRecoilState: () => [null, () => {}], useRecoilValue: () => ({ id: 6 }) },
   '@/store': {},
@@ -43,6 +44,21 @@ test('HTPR-8824 the box row holds the plus menu, the Ctrl+J mic and text Send', 
   assert.match(html, /aria-label="Add context"/);
   assert.match(html, /data-primary="true" data-compact="true" data-no-picker="true"/);
   assert.match(html, /data-text-button="true"/);
+});
+
+test('HTPR-8824 flag off keeps the previous plus menu markup', () => {
+  const { AiChatOneComposerRow } = oneComposer(false);
+  const html = renderToStaticMarkup(React.createElement(AiChatOneComposerRow, { active: true, audioButtonId: 'mic-1', empty: false, hasText: true, streamControl: null }));
+  assert.match(html, /aria-label="Add"/);
+  assert.match(html, /aria-label="Attach file"/);
+  assert.match(html, /aria-label="Add context"/);
+  assert.doesNotMatch(html, /disabled:opacity-50/);
+});
+
+test('HTPR-8824 flag on renders the shared plus menu', () => {
+  const { AiChatOneComposerRow } = oneComposer(true);
+  const html = renderToStaticMarkup(React.createElement(AiChatOneComposerRow, { active: true, audioButtonId: 'mic-1', empty: false, hasText: true, streamControl: null }));
+  assert.match(html, /disabled:opacity-50/);
 });
 
 test('HTPR-8824 the pickers sit below the box: board on the left, model on the right', () => {

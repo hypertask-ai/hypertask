@@ -20,6 +20,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6906_AUTOCAP_UNDO_FLAG, LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
 import { SafeSplitBlock } from "@/components/RTE/Extensions/SafeSplitBlock";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
+import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 import { usePathname } from "next/navigation";
 
 const DisableEnter = Extension.create({
@@ -52,6 +53,10 @@ const useTiptapForAI = ({
   const autocapUndoRef = useRef(autocapUndo);
   if (autocapUndo) autocapUndoRef.current = true;
   else autocapUndoRef.current = false;
+  const oneComposer = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
+  const oneComposerRef = useRef(false);
+  if (oneComposer) oneComposerRef.current = true;
+  else oneComposerRef.current = false;
   const isMobileRef = useRef(false);
   isMobileRef.current = useContext(MobileViewContext);
   const pathname = usePathname();
@@ -88,7 +93,7 @@ const useTiptapForAI = ({
         placeholder: () => {
           if (isMobileRef.current) return `@ for context`;
           if (fullScreenChatRef.current && listeningRef.current) return `Listening...`;
-          if (fullScreenChatRef.current) return `Ask anything, @ for context`;
+          if (fullScreenChatRef.current || oneComposerRef.current) return `Ask anything, @ for context`;
           return `Focus with CTRL + Q, @ for context`;
         },
         emptyEditorClass: `${styles.is_editor_empty}`,

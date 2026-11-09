@@ -39,6 +39,8 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys") return { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG: "htpr-8260-ctrlj-composer-keys" };
     if (id === "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer") return { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG: "htpr-8829-ctrlj-plus-composer" };
     if (id === "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs") return { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG: "htpr-8931-ctrlk-integrated-tabs" };
+    if (id === "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer") return { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: "htpr-8824-ai-chat-one-composer" };
+    if (id === "@/components/Common/ComposerPlusActions") return { ComposerPlusActions: () => null };
     if (id === "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top") return { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG: "htpr-8943-ctrlk-tabs-on-top" };
     if (id === "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model") return { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG: "htpr-8265-task-shortcuts-writer-model" };
     if (id === "@/components/Global/ModelSelectorDropdown") return { TaskWriterModelPicker: () => null, useTaskWriterModel: () => undefined };

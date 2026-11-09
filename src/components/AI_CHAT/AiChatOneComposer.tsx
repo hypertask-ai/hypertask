@@ -10,6 +10,9 @@ import AudioButton from "../RTE/Components/AudioButton";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
+import { ComposerPlusActions } from "@/components/Common/ComposerPlusActions";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 
 const menuItemClass =
   "flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active";
@@ -38,6 +41,7 @@ export function AiChatOneComposerRow({
     handleAddContext,
     handleSendMessage,
   } = useAiChatContext();
+  const sharedPlusMenu = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
   const plusMenu = useRef<HTMLDetailsElement>(null);
   const closePlusMenu = () => {
     if (plusMenu.current) plusMenu.current.open = false;
@@ -64,27 +68,31 @@ export function AiChatOneComposerRow({
 
   return (
     <div data-ai-chat-one-row className="flex w-full items-center justify-between pt-2">
-      <details ref={plusMenu} className="relative">
-        <summary
-          aria-label="Add"
-          className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-[4px] text-icon-dark-gray hover:bg-hover-active hover:text-white-black [&::-webkit-details-marker]:hidden"
-        >
-          <Plus size={18} strokeWidth={1.75} aria-hidden />
-        </summary>
-        <div role="group" aria-label="Add" className="absolute bottom-[calc(100%+0.25rem)] left-0 z-popup flex min-w-44 flex-col rounded-[4px] bg-modalBackground p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
-          <button type="button" aria-label="Attach file" className={menuItemClass}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => { closePlusMenu(); handleAttachmentClick(); }}>
-            <span>Attach file</span>
-          </button>
-          <button type="button" aria-label="Add context" className={menuItemClass}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => { closePlusMenu(); handleAddContext(); }}>
-            <span>Add context</span>
-            <span className="text-text-light-gray">@</span>
-          </button>
-        </div>
-      </details>
+      {sharedPlusMenu ? (
+        <ComposerPlusActions active={active} onAttach={handleAttachmentClick} onAddContext={handleAddContext} />
+      ) : (
+        <details ref={plusMenu} className="relative">
+          <summary
+            aria-label="Add"
+            className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-[4px] text-icon-dark-gray hover:bg-hover-active hover:text-white-black [&::-webkit-details-marker]:hidden"
+          >
+            <Plus size={18} strokeWidth={1.75} aria-hidden />
+          </summary>
+          <div role="group" aria-label="Add" className="absolute bottom-[calc(100%+0.25rem)] left-0 z-popup flex min-w-44 flex-col rounded-[4px] bg-modalBackground p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
+            <button type="button" aria-label="Attach file" className={menuItemClass}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => { closePlusMenu(); handleAttachmentClick(); }}>
+              <span>Attach file</span>
+            </button>
+            <button type="button" aria-label="Add context" className={menuItemClass}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => { closePlusMenu(); handleAddContext(); }}>
+              <span>Add context</span>
+              <span className="text-text-light-gray">@</span>
+            </button>
+          </div>
+        </details>
+      )}
       <div className="flex shrink-0 items-center gap-2">
         {streamControl}
         <AudioButton
