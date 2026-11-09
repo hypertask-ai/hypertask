@@ -263,6 +263,7 @@ import {
   shouldShowMobileCreateTaskButton,
   shouldEnableMobilePullDownCommand,
   isAgentChatPath,
+  shouldShowMobileTabBar,
 } from "../Global/mobileShellVisibility";
 import { BoardStartupContext } from "@/lib/contexts/boardStartupContext";
 import {
@@ -287,7 +288,15 @@ function StraightBoardConfirmStrip({
   if (currentUser.UserSetting?.isVerified ?? true) return null;
   if (pathname && ["/login","/onboarding","/verify-email","/invite","/share","/unauthorized"].some((p) => pathname.startsWith(p))) return null;
   return (
-    <div className="z-sticky w-full border-b border-light-black-border-1 bg-containerBackground px-4 py-3 text-center text-content text-white-black" role="status">
+    <div
+      data-straight-board-confirm
+      className={`w-full border-b border-light-black-border-1 bg-containerBackground px-4 py-3 text-center text-content text-white-black ${
+        shouldShowMobileTabBar(pathname)
+          ? "max-md:fixed max-md:inset-x-0 max-md:top-[calc(48px+env(safe-area-inset-top))] max-md:z-floating max-md:flex max-md:h-10 max-md:items-center max-md:justify-center max-md:py-0 md:z-sticky"
+          : "z-sticky"
+      }`}
+      role="status"
+    >
       <span className="text-hypertasks-green">Please confirm your email</span>
     </div>
   );
@@ -647,9 +656,9 @@ export default function GlobalProvider({
 
   const { showEmailVerificationModal, setShowEmailVerificationModal } =
     useEmailVerificationModal();
-  const straightBoardSignup = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
   const enrolledStraightBoard =
     isStraightBoardAccount(currentUser as StraightBoardAccount | null) && !isGuestUser(currentUser);
+  const straightBoardSignupOn = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
   const emailVerificationBlocking = showEmailVerificationModal && !enrolledStraightBoard;
 
   const navigateFromGlobalGShortcut = useCallback(
@@ -1331,7 +1340,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
-      {(straightBoardSignup || enrolledStraightBoard) && <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />}
+      {(straightBoardSignupOn || enrolledStraightBoard) && <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />}
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}

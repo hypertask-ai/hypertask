@@ -750,6 +750,11 @@ body {
       var(--mobile-top-bar-h) + var(--mobile-dock-h, 64px)
     );
   }
+  // The confirm-email strip sits under the fixed top bar on phones, so the
+  // shell reserves its 40px as well.
+  html:has([data-straight-board-confirm]) .mobile-tab-bar-content {
+    --mobile-top-bar-h: calc(48px + env(safe-area-inset-top) + 8px + 40px);
+  }
   .mobile-tab-bar-content .homepage-container-tag {
     max-height: calc(100svh - var(--mobile-chrome-h));
   }
