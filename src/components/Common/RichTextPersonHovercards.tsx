@@ -39,7 +39,7 @@ const RichTextPersonHovercards = ({
   const closeTimerRef = useRef<number | null>(null);
   const openTimerRef = useRef<number | null>(null);
   const pendingElementRef = useRef<HTMLElement | null>(null);
-  const openDelay = useFlag(HTPR_7873_NAME_HOVERCARD_DELAY_FLAG) ? PERSON_HOVERCARD_OPEN_DELAY_MS : 0;
+  const delayedOpen = useFlag(HTPR_7873_NAME_HOVERCARD_DELAY_FLAG);
   const [active, setActive] = useState<{
     element: HTMLElement;
     subject: PersonHovercardSubject;
@@ -60,7 +60,7 @@ const RichTextPersonHovercards = ({
     cancelClose();
     closeTimerRef.current = window.setTimeout(() => setOpen(false), 90);
   };
-  const activate = (target: EventTarget | null) => {
+  const activate = (target: EventTarget | null, openDelay: number) => {
     const mention = mentionFromTarget(target);
     if (!mention) return;
     cancelClose();
@@ -80,7 +80,7 @@ const RichTextPersonHovercards = ({
     }, openDelay);
   };
 
-  useEffect(() => {
+  const bindRoot = (openDelay: number) => {
     const root = children ? rootRef.current : rootRef.current?.parentElement;
     if (!root) return;
 
@@ -127,7 +127,7 @@ const RichTextPersonHovercards = ({
     const fromMouse = (event: PointerEvent | MouseEvent) => (event as PointerEvent).pointerType === "mouse";
     const onPointerOver = (event: PointerEvent) => {
       if (!fromMouse(event)) return;
-      activate(event.target);
+      activate(event.target, openDelay);
     };
     const onPointerOut = (event: PointerEvent) => {
       if (!fromMouse(event)) return;
@@ -148,7 +148,7 @@ const RichTextPersonHovercards = ({
     const onFocusIn = (event: FocusEvent) => {
       const mention = mentionFromTarget(event.target);
       if (!mention || !mention.element.matches(":focus-visible")) return;
-      activate(event.target);
+      activate(event.target, openDelay);
     };
     const onFocusOut = (event: FocusEvent) => {
       const mention = mentionFromTarget(event.target);
@@ -171,7 +171,12 @@ const RichTextPersonHovercards = ({
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
     };
-  }, [children, projectId, openDelay]);
+  };
+
+  useEffect(
+    delayedOpen ? () => bindRoot(PERSON_HOVERCARD_OPEN_DELAY_MS) : () => bindRoot(0),
+    [children, projectId, delayedOpen],
+  );
 
   useEffect(() => () => {
     cancelClose();

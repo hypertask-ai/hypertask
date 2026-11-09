@@ -278,7 +278,7 @@ const ParentPersonHovercard = ({
   const markerRef = useRef<HTMLSpanElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const openTimerRef = useRef<number | null>(null);
-  const openDelay = useFlag(HTPR_7873_NAME_HOVERCARD_DELAY_FLAG) ? PERSON_HOVERCARD_OPEN_DELAY_MS : 0;
+  const delayedOpen = useFlag(HTPR_7873_NAME_HOVERCARD_DELAY_FLAG);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const cancelClose = () => {
@@ -295,7 +295,7 @@ const ParentPersonHovercard = ({
     closeTimerRef.current = window.setTimeout(() => setOpen(false), 90);
   };
 
-  useEffect(() => {
+  const bindParent = (openDelay: number) => {
     const parent = markerRef.current?.parentElement;
     if (!parent || !projectId || !subject) return;
     setAnchor(parent);
@@ -356,7 +356,12 @@ const ParentPersonHovercard = ({
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [projectId, subject, openDelay]);
+  };
+
+  useEffect(
+    delayedOpen ? () => bindParent(PERSON_HOVERCARD_OPEN_DELAY_MS) : () => bindParent(0),
+    [projectId, subject, delayedOpen],
+  );
 
   useEffect(() => {
     if (!anchor) return;
