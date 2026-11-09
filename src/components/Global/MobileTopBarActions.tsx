@@ -24,13 +24,13 @@ const MobileTopBarActions = ({
   );
   const setShowGuestLogin = useSetRecoilState(showGuestLoginAtom);
   const freeModeSignupEnabled = useFlag(HTPR_7983_FREE_MODE_SIGNUP_FLAG);
-  const showGuestSignup = freeModeSignupEnabled && isGuestUser(currentUser);
+  const guestVisitor = isGuestUser(currentUser);
   const { toggleShowCommands } = useHypertasksRecoilStates();
   const { openSettings } = useSettingsNavigation();
 
   return (
     <>
-      {showGuestSignup && (
+      {freeModeSignupEnabled && guestVisitor && (
         <button
           type="button"
           onClick={() => setShowGuestLogin(true)}
