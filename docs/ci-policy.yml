@@ -420,7 +420,7 @@ feature_map_live_weekly:
   runs_on: ubuntu-latest
   required: false
   cron_utc: "5 4 * * 1"
-  triggers: [schedule]
+  triggers: [schedule, workflow_dispatch]
   node_major: 24
   permissions: [contents_read, packages_read]
   commands:

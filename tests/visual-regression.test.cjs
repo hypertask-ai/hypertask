@@ -92,6 +92,14 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.deepEqual(parsed.on.schedule.map(entry => entry.cron), ["5 4 * * 1"]);
   const weeklyFiling = parsed.jobs["verify-qa"].steps.find(step => step.name === "File fleet-board weekly result");
   assert.equal(weeklyFiling.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_MCP_TOKEN }}");
+  const filesWeekly = (event, { journey = "", head = "" } = {}) => vm.runInNewContext(
+    weeklyFiling.if.replace(/^\$\{\{\s*|\s*\}\}$/g, ""),
+    { always: () => true, github: { event_name: event }, inputs: { journey, head } });
+  assert.equal(filesWeekly("schedule"), true);
+  assert.equal(filesWeekly("workflow_dispatch", { journey: "inbox-cycle", head: "production" }), true);
+  assert.equal(filesWeekly("workflow_dispatch", { journey: "inbox-cycle", head: "runner7/hyci-205" }), false);
+  assert.equal(filesWeekly("workflow_dispatch", { journey: "inbox-cycle-broken", head: "production" }), false);
+  assert.equal(filesWeekly("push"), false);
   const evaluate = (expression, event, journey) => vm.runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), {
     github: { event_name: event, event: { pull_request: { number: event === "pull_request" ? 19 : null, draft: false } }, ref: "refs/heads/production", sha: "push-sha" },
     inputs: { journey }, format: (template, value) => template.replace("{0}", value),

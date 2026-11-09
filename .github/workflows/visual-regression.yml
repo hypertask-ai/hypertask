@@ -407,7 +407,11 @@ jobs:
         run: |
           printf '\nEvidence artifact: %s\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
       - name: File fleet-board weekly result
-        if: always() && github.event_name == 'schedule'
+        if: >-
+          always() && (
+            github.event_name == 'schedule'
+            || (github.event_name == 'workflow_dispatch' && inputs.journey == 'inbox-cycle' && inputs.head == 'production')
+          )
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           FEATURE_MAP_LIVE_ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
