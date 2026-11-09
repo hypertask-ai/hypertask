@@ -50,18 +50,18 @@ export function useAiChatModelPreference() {
   const storedPick = stored.teamScoped ?? stored.global;
   const derivedAuto = storedPick === AUTO_MODEL_OPTION_ID ||
     (!getAiModelOptionById(storedPick) && preference.usesPlanDefault);
-  const autoActive = autoFlag && (autoOverride ?? derivedAuto);
+  const base = { ...preference, modelTeamId: teamId, modelBilling: billing };
+  if (!autoFlag) return base;
 
+  const autoActive = autoOverride ?? derivedAuto;
   const setAiOption = (option: TAiModal) => {
     setOverride({ teamId, auto: option.id === AUTO_MODEL_OPTION_ID });
     preference.setAiOption(option);
   };
 
   return {
-    ...preference,
+    ...base,
     currentAiOption: autoActive ? toAutoModelOption(preference.currentAiOption) : preference.currentAiOption,
-    setAiOption: autoFlag ? setAiOption : preference.setAiOption,
-    modelTeamId: teamId,
-    modelBilling: billing,
+    setAiOption,
   };
 }

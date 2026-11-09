@@ -29,6 +29,7 @@ import type { AiChatWindowScope } from "@/lib/aiChat/chatWindows";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 
 const autoDisplayOption = toAutoModelOption(defaultAiModelOption);
+const withAutoOption = (options: TAiModal[]): TAiModal[] => [autoDisplayOption, ...options];
 
 type BoardSessionMap = Record<number, string>;
 
@@ -157,10 +158,7 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   const streamingRequestRef = useRef<string | null>(null);
   const settleSendRef = useRef<(() => void) | null>(null);
   const autoModelEnabled = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
-  const displayAiOptions = useMemo<TAiModal[]>(
-    () => autoModelEnabled ? [autoDisplayOption, ...aiOptionsWithoutOpenRouter] : aiOptionsWithoutOpenRouter,
-    [autoModelEnabled],
-  );
+  const displayAiOptions = autoModelEnabled ? withAutoOption(aiOptionsWithoutOpenRouter) : aiOptionsWithoutOpenRouter;
   const [contextList, setContextList] = useState<MentionItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<string | undefined>(undefined);
   const [showRenameChatModal, setShowRenameChatModal] =
