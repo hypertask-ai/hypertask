@@ -89,6 +89,7 @@ const TaskInfo = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/T
   "@/lib/waitingOn": load("src/lib/waitingOn.ts"),
   "@/hooks/useFlag": { useFlag: () => false },
   "@/lib/flags/definitions/htpr-8917-agent-waiting-person": { HTPR_8917_AGENT_WAITING_PERSON_FLAG: "htpr-8917-agent-waiting-person" },
+  "@/lib/flags/definitions/htpr-7868-empty-field-labels": { HTPR_7868_EMPTY_FIELD_LABELS_FLAG: "htpr-7868-empty-field-labels" },
   "@/lib/pullRequests/githubPullRequests": { derivePullRequestDisplayState: () => "merged" },
   "@/components/PageComponents/TaskDetail/pullRequestBadge": { pullRequestBadgeByState: { merged: { color: "purple", label: "Merged" } } },
   "@prisma/client": { CustomFieldType: {} },

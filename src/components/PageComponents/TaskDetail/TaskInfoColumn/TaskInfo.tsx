@@ -1,5 +1,6 @@
 import type { LabelResponse } from "@/lib/api/contracts/taskWrites";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7868_EMPTY_FIELD_LABELS_FLAG } from "@/lib/flags/definitions/htpr-7868-empty-field-labels";
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import React, {
   Suspense,
@@ -165,6 +166,12 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     currentTask.projectId
   );
   const agentWaitingEnabled = useFlag(HTPR_8917_AGENT_WAITING_PERSON_FLAG);
+  const emptyFieldLabelsEnabled = useFlag(HTPR_7868_EMPTY_FIELD_LABELS_FLAG);
+  const emptySizeLabel = emptyFieldLabelsEnabled ? "No size" : "-";
+  const sizeValue = estimate_
+    ? EstimateConstants.find((x) => x.estimate_index === estimate_?.estimate_index)
+        ?.estimate_full_value
+    : undefined;
   const waitingOnUser = useMemo(() => {
     const users: IUser[] = [
       ...(membersAndOwner?.owner ? [membersAndOwner.owner] : []),
@@ -451,6 +458,8 @@ const TaskInfo = (props: ITaskInfoContainer) => {
                 dueDate={currentTask?.dueDate}
                 isTaskInfo={true}
               />
+            ) : emptyFieldLabelsEnabled ? (
+              <ClickableSpan title="No due date" />
             ) : (
               "-"
             )}
@@ -634,11 +643,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           <Suspense fallback={<></>}>
             <ClickableSpan
               title={
-                (estimate_
-                  ? EstimateConstants.find(
-                    (x) => x.estimate_index === estimate_?.estimate_index
-                  )?.estimate_full_value
-                  : "-") ?? "-"
+                !sizeValue || sizeValue === "-" ? emptySizeLabel : sizeValue
               }
             />
           </Suspense>

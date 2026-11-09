@@ -1,4 +1,6 @@
 import Tooltip from '@/components/Common/Tooltip'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_7868_EMPTY_FIELD_LABELS_FLAG } from '@/lib/flags/definitions/htpr-7868-empty-field-labels'
 import { ClickableSpan, LocalRightSideInfo, TaskInfoRow, TaskInfoValue } from '@/components/PageComponents/TaskDetail/MainPageComponents'
 import { MobileViewContext } from '@/lib/contexts/mobileContext'
 import { useContextCreateTaskInfoColumn } from '@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskGloballyInfoColumn'
@@ -171,6 +173,9 @@ const TaskInfoColumnGloballyCreate = ({
     const _mbl = useContext(MobileViewContext);
     const [_currentProject, __] = useRecoilState(currentProjectAtom)
     const [createTaskModal] = useRecoilState(showCreateTaskModalAtom)
+    const emptyFieldLabelsEnabled = useFlag(HTPR_7868_EMPTY_FIELD_LABELS_FLAG)
+    const emptySizeLabel = emptyFieldLabelsEnabled ? "No size" : "-"
+    const sizeValue = formValues.estimate ? EstimateConstants.find(x => x.estimate_index === formValues.estimate?.estimate_index)?.estimate_full_value : undefined
 
     const autoOpenedBoardPicker = useRef(false)
     useEffect(() => {
@@ -337,7 +342,7 @@ const TaskInfoColumnGloballyCreate = ({
                                     isTaskInfo={true}
                                 />
                                 :
-                                <ClickableSpan title={"-"} />
+                                <ClickableSpan title={emptyFieldLabelsEnabled ? "No due date" : "-"} />
                         }
                     </Suspense>
                 </TaskInfoValue>
@@ -401,7 +406,7 @@ const TaskInfoColumnGloballyCreate = ({
                         keyCombination={['S']}
                     />
                     <Suspense fallback={<></>}>
-                        <ClickableSpan title={(formValues.estimate ? EstimateConstants.find(x => x.estimate_index === formValues.estimate?.estimate_index)?.estimate_full_value : "-") ?? "-"} />
+                        <ClickableSpan title={!sizeValue || sizeValue === "-" ? emptySizeLabel : sizeValue} />
                     </Suspense>
                 </TaskInfoValue>
             </TaskInfoRow>
