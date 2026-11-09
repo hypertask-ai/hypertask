@@ -5,36 +5,22 @@ const test = require("node:test");
 const React = require("react");
 const { renderToString } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const noop = () => null;
 const cn = (...parts) => parts.flat().filter(Boolean).join(" ");
 
-function load(relative, dependencies) {
-  const js = ts.transpileModule(read(relative), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, esModuleInterop: true },
-  }).outputText;
-  const loaded = { exports: {} };
-  new Function("require", "module", "exports", js)((name) => {
-    assert.ok(name in dependencies, `Unexpected dependency ${name}`);
-    return dependencies[name];
-  }, loaded, loaded.exports);
-  return loaded.exports.default;
-}
-
 const mobileContext = { MobileViewContext: React.createContext(false) };
-const BaseTitleContainer = load("src/components/PageComponents/TaskDetail/TopRow/BaseTitleContainer.tsx", {
-  react: React,
+const { default: BaseTitleContainer } = loadModule("src/components/PageComponents/TaskDetail/TopRow/BaseTitleContainer.tsx", {
   "@/utils/undoActions/helperFuncs": { cn },
   "@/lib/contexts/mobileContext": mobileContext,
 });
-const AIChatClosedLayout = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
-  react: React,
+const { default: AIChatClosedLayout } = loadModule("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
   "next/navigation": { usePathname: () => "/detail/project-15/8955" },
   "lucide-react": { ChevronLeft: noop },
-  "@/components/Common/Tooltip": { __esModule: true, default: noop },
+  "@/components/Common/Tooltip": { default: noop },
   "@/lib/contexts/mobileContext": mobileContext,
   "@/utils/undoActions/helperFuncs": { cn },
   "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
@@ -65,7 +51,7 @@ test("the ticket title row never sits on a higher layer than the AI chat slot", 
   const title = document.querySelector("[data-title-container=\"task-detail\"]");
   const slot = document.querySelector("[data-ai-chat-slot]");
   assert.ok(title && slot, "ticket title and chat slot rendered");
-  const titleLayer = layerOf(title.style.zIndex);
+  const titleLayer = layerOf(/z-index:\s*([^;]+)/.exec(title.getAttribute("style") ?? "")?.[1].trim() ?? "");
   const slotToken = slot.className.split(/\s+/).map((name) => name.replace(/^max-md:/, "")).find((name) => /^z-/.test(name));
   assert.ok(slotToken, "chat slot carries a layer class");
   assert.ok(layerOf(slotToken) >= titleLayer, "chat slot layer is at or above the title layer");
