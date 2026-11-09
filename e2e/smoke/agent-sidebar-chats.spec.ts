@@ -82,6 +82,11 @@ async function heartbeat(request: APIRequestContext, agent: Agent) {
 }
 
 async function open(page: Page, lane: string) {
+  await page.route('**/api/flags', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json()
+    await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8956-ai-chat-header-menus': false } } })
+  })
   const flags = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   const activity = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/activity/addLastActiveAt')
   await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board&agentSidebar=1`))

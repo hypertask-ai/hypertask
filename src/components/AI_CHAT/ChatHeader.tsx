@@ -228,7 +228,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const { today, previous7Days, older } = useMemo(() => {
     const query = headerMenus ? historyQuery.trim().toLowerCase() : "";
     const matchesQuery = (session: HistorySession) => !query || `${session.title ?? ""} ${session.agentName ?? ""}`.toLowerCase().includes(query);
-    const personal = ((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => (!filterAgentSessions || !session.agentId) && matchesQuery(session));
+    const personal = ((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId).filter(matchesQuery);
     const agentChats: HistorySession[] = hasAgentSessions ? (sidebarChats?.agents ?? []).flatMap((agent) =>
       (agent.sessions ?? []).map((session) => ({ ...session, agentId: agent.id, agentName: agent.displayName }))).filter(matchesQuery) : [];
     return partitionSessionsByRecency(hasAgentSessions ? [...personal, ...agentChats].sort((a, b) => getSessionUpdatedTime(b) - getSessionUpdatedTime(a)) : personal, headerMenus);
@@ -605,9 +605,8 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                     label="Pin chat open"
                     checked={aiChatPinned}
                     onClick={() => {
-                      const nextPinned = !aiChatPinned;
-                      setAiChatPinned(nextPinned);
-                      if (nextPinned) {
+                      setAiChatPinned(!aiChatPinned);
+                      if (!aiChatPinned) {
                         setKeepAiChatClosed(false);
                         setAiChatExplicitOpenAt(Date.now());
                         setShowAiChatInterface(true);
@@ -684,7 +683,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                   )}
                   {currentSession && aiSessionActionsAvailable && (
                     <>
-                      <div className="mx-1 my-1 h-px bg-gray-600/60" role="separator" />
+                      <div className="mx-1 my-1 h-px bg-border-light-gray-thin" role="separator" />
                       <div className="px-2 py-1 text-micro text-icon-dark-gray">
                         Created {format(new Date(currentSession.createdAt), "d MMM")}
                       </div>
