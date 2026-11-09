@@ -75,6 +75,15 @@ const RichTextPersonHovercards = ({
     openTimerRef.current = window.setTimeout(() => {
       openTimerRef.current = null;
       pendingElementRef.current = null;
+      const current = parsePersonMention(mention.element.getAttribute("data-label"));
+      if (
+        !mention.element.isConnected ||
+        !current ||
+        current.kind !== mention.subject.kind ||
+        current.id !== mention.subject.id
+      ) {
+        return;
+      }
       setActive(mention);
       setOpen(true);
     }, openDelay);

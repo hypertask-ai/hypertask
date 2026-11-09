@@ -48,7 +48,7 @@ const withParentRow = async (enabled, run) => {
       row.dispatchEvent(pointer(type, pointerType, window));
       if (ms) await wait(ms);
     });
-    await run({ expanded: () => row.getAttribute("aria-expanded"), fire, idle: (ms) => React.act(async () => wait(ms)) });
+    await run({ row: () => row, expanded: () => row.getAttribute("aria-expanded"), fire, idle: (ms) => React.act(async () => wait(ms)) });
   } finally { view.close(); }
 };
 
@@ -93,6 +93,15 @@ test("flag on: keyboard focus waits, a tap opens at once", async () => {
   });
 });
 
+test("flag on: Escape during the wait cancels the pending open", async () => {
+  await withParentRow(true, async ({ expanded, fire, idle, row }) => {
+    await fire("focusin", "keyboard", 100);
+    await React.act(async () => row().dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    await idle(450);
+    assert.equal(expanded(), "false");
+  });
+});
+
 test("flag off: hover and focus open at once", async () => {
   await withParentRow(false, async ({ expanded, fire }) => {
     await fire("pointerenter", "mouse");
@@ -126,7 +135,7 @@ const withMention = async (enabled, run) => {
       mention.dispatchEvent(pointer(type, pointerType, window));
       if (ms) await wait(ms);
     });
-    await run({ card: () => view.container.querySelector("#card"), fire, idle: (ms) => React.act(async () => wait(ms)) });
+    await run({ mention: () => mention, card: () => view.container.querySelector("#card"), fire, idle: (ms) => React.act(async () => wait(ms)) });
   } finally {
     view.close();
     for (const [name, descriptor] of previous) {
@@ -148,6 +157,12 @@ test("flag on: an @mention card waits for the delay and a quick pass never opens
     await fire("pointerout", "mouse");
     await idle(500);
     assert.equal(card(), null);
+  });
+  await withMention(true, async ({ card, fire, idle, mention }) => {
+    await fire("pointerover", "mouse", 100);
+    await React.act(async () => mention().setAttribute("data-label", "not-a-person"));
+    await idle(450);
+    assert.equal(card(), null, "a mention that stops naming a person during the wait never opens a card");
   });
   await withMention(true, async ({ card, fire }) => {
     await fire("click", "touch");

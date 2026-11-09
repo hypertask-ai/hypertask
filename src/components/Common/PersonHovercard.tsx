@@ -305,6 +305,7 @@ const ParentPersonHovercard = ({
     const fromMouse = (event: PointerEvent | MouseEvent) => (event as PointerEvent).pointerType === "mouse";
     const show = () => {
       cancelClose();
+      cancelOpen();
       setOpen(true);
     };
     const showAfterDelay = () => {
@@ -337,7 +338,9 @@ const ParentPersonHovercard = ({
       showAfterDelay();
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      cancelOpen();
+      setOpen(false);
     };
 
     parent.addEventListener("pointerenter", showOnHover);
