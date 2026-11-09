@@ -6,6 +6,7 @@ import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr
 import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
 import { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG } from "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top";
 import { HTPR_8947_CTRLK_NO_FOOTER_FLAG } from "@/lib/flags/definitions/htpr-8947-ctrlk-no-footer";
+import { HTPR_7871_CTRLK_ELLIPSIS_FLAG } from "@/lib/flags/definitions/htpr-7871-ctrlk-ellipsis";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import {
   useCallback,
@@ -127,6 +128,7 @@ const Commands = (props: Props) => {
   const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const tabsOnTopFlag = useFlag(HTPR_8943_CTRLK_TABS_ON_TOP_FLAG);
   const noFooterFlag = useFlag(HTPR_8947_CTRLK_NO_FOOTER_FLAG);
+  const ellipsisFlag = useFlag(HTPR_7871_CTRLK_ELLIPSIS_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -779,7 +781,7 @@ const Commands = (props: Props) => {
         ref={setInputRef}
         autoFocus={!isMobile}
         id="htc-mobile-search"
-        placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
+        placeholder={isDemo ? "Press Enter to select" : ellipsisFlag ? "Type a command or search…" : "Type a command or search..."}
         onChange={(event) => {
           if (focusProxy) delete focusProxy.pendingEnter;
           onKeyChange(event);
@@ -872,7 +874,7 @@ const Commands = (props: Props) => {
                ref={setInputRef}
                autoFocus
                id={newTaskWindow ? "htc-search" : "htc"}
-               placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
+               placeholder={isDemo ? "Press Enter to select" : ellipsisFlag ? "Type a command or search…" : "Type a command or search..."}
                onChange={(event) => {
                  if (focusProxy) delete focusProxy.pendingEnter;
                  onKeyChange(event);

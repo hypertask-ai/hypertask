@@ -693,7 +693,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
   await page.goto(withRealtime(`/pages?project_id=${boardId}`))
   await expect(page.getByRole('main', { name: 'Pages', exact: true })).toBeVisible()
   await page.keyboard.press('Control+k')
-  const commandInput = page.getByPlaceholder('Type a command or search...')
+  const commandInput = page.getByPlaceholder(/Type a command or search/)
   await expect(commandInput).toHaveCount(1)
   await commandInput.fill('New page')
   await page.getByRole('dialog').getByText('New page', { exact: true }).click()
@@ -732,7 +732,7 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     const pagePicker = page.locator('#option-picker input')
     for (let attempt = 1; ; attempt++) {
       await page.keyboard.press('Control+k')
-      await page.getByPlaceholder('Type a command or search...').fill('Link page')
+      await page.getByPlaceholder(/Type a command or search/).fill('Link page')
       await linkPageCommand.click()
       try {
         await expect(pagePicker, 'the Link page command did not open the chooser').toBeVisible({ timeout: 3_000 })
