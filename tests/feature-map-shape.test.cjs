@@ -8,21 +8,13 @@ const pages = fs.readdirSync(featureMapDir, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md")
   .map((entry) => entry.name)
   .sort();
-const legacyHeadings = [
-  "How a customer reaches it",
-  "How to drive it",
-  "What usually breaks",
-  "What proof to collect",
-  "Cleanup",
-];
-const pstackHeadings = [
+const requiredHeadings = [
   "Sub-features",
   "How to get to it (user POV)",
   "Driving it with agent-browser",
   "Gotchas",
 ];
-const acceptedShapes = [legacyHeadings, pstackHeadings];
-const template = `template: ${acceptedShapes.map((shape) => shape.map((heading) => `## ${heading}`).join(" | ")).join(" OR ")}`;
+const template = `template: ${requiredHeadings.map((heading) => `## ${heading}`).join(" | ")}`;
 
 function levelTwoHeadings(markdown) {
   const headings = [];
@@ -46,26 +38,11 @@ function levelTwoHeadings(markdown) {
   return headings;
 }
 
-function shapeFailure(page, headings, required) {
-  let previousIndex = -1;
-  for (const heading of required) {
-    const index = headings.indexOf(heading);
-    if (index === -1) return `${page}: missing heading "${heading}"`;
-    if (index <= previousIndex) return `${page}: heading "${heading}" is out of order`;
-    previousIndex = index;
-  }
-  return null;
-}
-
-test("every feature-map page uses one accepted level-two heading shape", () => {
-  const failures = [];
+test("every feature-map page has the four pstack level-two headings in order", () => {
   for (const page of pages) {
     const headings = levelTwoHeadings(fs.readFileSync(path.join(featureMapDir, page), "utf8"));
-    if (!acceptedShapes.some((shape) => shapeFailure(page, headings, shape) === null)) {
-      failures.push(shapeFailure(page, headings, pstackHeadings));
-    }
+    assert.deepEqual(headings, requiredHeadings, `${page}: ${headings.join(" | ")}\n${template}`);
   }
-  assert.equal(failures.length, 0, `${failures.join("\n")}\n${template}`);
 });
 
 test("the feature-map folder contains at least one page", () => {
