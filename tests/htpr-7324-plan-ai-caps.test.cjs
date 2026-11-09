@@ -1113,6 +1113,7 @@ for (const entry of ["editor", "chat"]) {
           "@/lib/aiModelPreferences": { getAiModelPreferenceIds: () => ({}) },
           "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true, resolveUserFacingModelOption: () => fallback },
           "@/app/api/ai/chat/stream/modelFallback": { previousModelForFailedStream: () => null },
+          "@/app/api/ai/_lib/autoModel": { isAutoRequest: () => false },
           ai: { wrapLanguageModel: ({ model }) => model },
         };
         let result;

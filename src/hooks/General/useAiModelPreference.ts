@@ -7,6 +7,7 @@ import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-aut
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import {
   AUTO_MODEL_OPTION_ID,
+  toAutoModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
   isOpenAiOnlyPaidTeam,
@@ -139,11 +140,10 @@ export function useAiModelPreference(
   const setAiOption = useCallback(
     (option: TAiModal) => {
       const autoPick = autoModelEnabled && surface === "aiChat" && option.id === AUTO_MODEL_OPTION_ID;
-      const validOption = getAiModelOptionById(option.id, haiku55Enabled);
-      const persistedId = autoPick ? AUTO_MODEL_OPTION_ID : validOption?.id;
-      if (!persistedId) return;
+      const validOption = autoPick ? toAutoModelOption(resolveOption()) : getAiModelOptionById(option.id, haiku55Enabled);
+      if (!validOption) return;
 
-      if (validOption) setCurrentAiOption(validOption);
+      setCurrentAiOption(validOption);
       if (!currentTeamId) return;
 
       void queryClient.cancelQueries(
@@ -156,7 +156,7 @@ export function useAiModelPreference(
           ...(previous ?? userPreferences),
           aiModelPreferences: mergeAiModelPreferenceUpdates(
             previous?.aiModelPreferences ?? userPreferences.aiModelPreferences,
-            { [surface]: persistedId },
+            { [surface]: validOption.id },
             currentTeamId,
           ),
         }),
@@ -164,7 +164,7 @@ export function useAiModelPreference(
 
       void axios
         .post("/api/users/preferences", {
-          aiModelPreferences: { [surface]: persistedId },
+          aiModelPreferences: { [surface]: validOption.id },
           aiModelPreferencesTeamId: currentTeamId,
         })
         .then((response) => {
@@ -182,7 +182,7 @@ export function useAiModelPreference(
           console.log("useAiModelPreference update error:", error);
         });
     },
-    [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, surface, userPreferences],
+    [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, resolveOption, surface, userPreferences],
   );
 
   return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption };
