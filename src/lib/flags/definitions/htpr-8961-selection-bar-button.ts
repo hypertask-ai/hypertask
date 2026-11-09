@@ -5,7 +5,7 @@ export const HTPR_8961_SELECTION_BAR_BUTTON_FLAG = "htpr-8961-selection-bar-butt
 export default {
   key: HTPR_8961_SELECTION_BAR_BUTTON_FLAG,
   kind: "improvement",
-  defaultMode: "EVERYONE",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-09",
   description: "The Open actions button on the board selection bar uses the app's neutral filled button instead of the indigo one. Off restores the indigo button.",
   releaseRisk: {

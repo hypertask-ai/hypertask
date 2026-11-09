@@ -34,9 +34,9 @@ test("HTPR-8961 flag off: Open actions keeps the old button", () => {
   assert.doesNotMatch(className, /bg-white-black/);
 });
 
-test("HTPR-8961 flag is an improvement at Everyone", () => {
+test("HTPR-8961 flag is an improvement at Owner + QA", () => {
   const definition = loader()(definitionFile).default;
   assert.equal(definition.key, "htpr-8961-selection-bar-button");
   assert.equal(definition.kind, "improvement");
-  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
 });
