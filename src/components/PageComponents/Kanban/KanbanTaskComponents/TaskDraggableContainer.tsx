@@ -58,9 +58,10 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         ? "blocked"
         : "plain";
   const legacyStroke = blocked ? "border-l-[3px]" : "border-l-4";
+  const selectedKeepsLayout = Boolean(onSelectToggle) && active && !blocked;
   const cleanupStroke = {
     "selected-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
-    selected: "border-l-0",
+    selected: selectedKeepsLayout ? "border-l-4 border-transparent" : "border-l-0",
     "active-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
     active: "border-l-4 border-white-black",
     blocked: "border-l-4 border-[hsl(0_62.8%_30.6%)]",
@@ -86,7 +87,8 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
     cardState === "blocked" ||
     cardState === "active" ||
     cardState === "active-blocked" ||
-    cardState === "selected-blocked";
+    cardState === "selected-blocked" ||
+    (cardState === "selected" && selectedKeepsLayout);
   const cardBody =
     "kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer";
 

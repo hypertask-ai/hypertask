@@ -12,9 +12,11 @@ const redStripe = "border-[hsl(0_62.8%_30.6%)]";
 
 const outlineKey = "htpr-7614-selected-card-border";
 
-function loadCard(enabled, outline) {
+const cleanupKey = "htpr-8255-kanban-cleanup";
+
+function loadCard(enabled, outline, cleanup = false) {
   return loader({
-    "@/hooks/useFlag": { useFlag: key => key === flagKey ? enabled : key === outlineKey && outline },
+    "@/hooks/useFlag": { useFlag: key => key === flagKey ? enabled : key === outlineKey ? outline : key === cleanupKey && cleanup },
     "@/lib/flags/keys": { HTPR_7614_SELECTED_CARD_BORDER_FLAG: outlineKey },
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/lib/state": { useRecoilState: () => [null, empty] },
@@ -29,8 +31,8 @@ function loadCard(enabled, outline) {
   })("src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx").default;
 }
 
-function harness(enabled, extra = {}, task = {}, outline = false) {
-  const Card = loadCard(enabled, outline);
+function harness(enabled, extra = {}, task = {}, outline = false, cleanup = false) {
+  const Card = loadCard(enabled, outline, cleanup);
   const app = mount();
   const calls = { opened: 0, selected: [] };
   let defaultPrevented = null;
@@ -214,3 +216,26 @@ test("drag handles and draggable props are the same with the flag on and off", (
   assert.deepEqual(attributes(true), { id: "task-42", handle: "handle-42" });
   assert.deepEqual(attributes(true), attributes(false));
 });
+
+const layoutKeys = ["border-l-0", "border-l-4", "border-l-[3px]", "p-2", "pl-3", "py-2", "pr-2"];
+const layoutOf = (h) => [...h.card.classList, ...h.link.classList].filter(name => layoutKeys.includes(name)).sort().join(" ");
+
+for (const cleanup of [false, true]) {
+  for (const blocked of [false, true]) {
+    for (const active of [false, true]) {
+      test(`flag on, cleanup ${cleanup ? "on" : "off"}, ${blocked ? "blocked" : "plain"}, ${active ? "active" : "idle"}: selecting never changes card padding or border width`, () => {
+        const h = harness(true, { active }, blocked ? { blockingTasks: [{ id: 1 }] } : {}, true, cleanup);
+        try {
+          h.render({});
+          const before = layoutOf(h);
+          h.render({ selected: true, selectionMode: true });
+          assert.equal(layoutOf(h), before);
+          h.render({ selectionMode: true });
+          assert.equal(layoutOf(h), before);
+        } finally {
+          h.close();
+        }
+      });
+    }
+  }
+}
