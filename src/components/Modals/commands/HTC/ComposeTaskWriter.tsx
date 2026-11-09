@@ -44,7 +44,7 @@ import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
 import { Plus, X } from "lucide-react";
-import { ComposerPlusMenu } from "@/components/Common/ComposerPlusMenu";
+import { ComposerPlusActions } from "@/components/Common/ComposerPlusActions";
 import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
 import { TaskWriterModelPicker, useTaskWriterModel } from "@/components/Global/ModelSelectorDropdown";
@@ -622,7 +622,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             {plusLayout ? (
               <div data-compose-plus-row className="flex w-full items-center justify-between pt-2">
                 {sharedPlusMenu ? (
-                  <ComposerPlusMenu
+                  <ComposerPlusActions
                     disabled={addingImages || dictating}
                     active={active}
                     attachShortcut={getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}

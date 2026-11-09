@@ -10,7 +10,7 @@ import AudioButton from "../RTE/Components/AudioButton";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
-import { ComposerPlusMenu } from "@/components/Common/ComposerPlusMenu";
+import { ComposerPlusActions } from "@/components/Common/ComposerPlusActions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 
@@ -69,7 +69,7 @@ export function AiChatOneComposerRow({
   return (
     <div data-ai-chat-one-row className="flex w-full items-center justify-between pt-2">
       {sharedPlusMenu ? (
-        <ComposerPlusMenu active={active} onAttach={handleAttachmentClick} onAddContext={handleAddContext} />
+        <ComposerPlusActions active={active} onAttach={handleAttachmentClick} onAddContext={handleAddContext} />
       ) : (
         <details ref={plusMenu} className="relative">
           <summary

@@ -55,13 +55,13 @@ test('HTPR-8824b mobile keeps its short placeholder with the flag on', () => {
   assert.equal(loadTiptapHook({ pathname: '/project', oneComposer: true, mobile: true }), '@ for context');
 });
 
-const plusMenu = () => loadModule('src/components/Common/ComposerPlusMenu.tsx', {
+const plusMenu = () => loadModule('src/components/Common/ComposerPlusActions.tsx', {
   'lucide-react': { Plus: () => null },
 });
 
 const render = (props) => {
-  const { ComposerPlusMenu } = plusMenu();
-  return renderToStaticMarkup(React.createElement(ComposerPlusMenu, { onAttach: () => {}, onAddContext: () => {}, ...props }));
+  const { ComposerPlusActions } = plusMenu();
+  return renderToStaticMarkup(React.createElement(ComposerPlusActions, { onAttach: () => {}, onAddContext: () => {}, ...props }));
 };
 
 test('HTPR-8824b plus menu renders the Add group with both actions', () => {

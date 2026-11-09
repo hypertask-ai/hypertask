@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 const menuItemClass =
   "flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50";
 
-export function ComposerPlusMenu({
+export function ComposerPlusActions({
   disabled,
   attachShortcut,
   onAttach,
