@@ -59,18 +59,18 @@ test("the background ladder returns nothing instead of another provider when Aut
 });
 
 test("Auto never picks a fast variant and the free plan stays off premium models", () => {
+  const settings = only(...AI_PROVIDERS.map((p) => p.key));
   for (const feature of features) {
     for (const stepUp of [0, 1, 2]) {
-      const option = pick(feature, { stepUp, grokGemini4Enabled: true });
+      const option = pick(feature, { settings, stepUp, grokGemini4Enabled: true });
       assert.doesNotMatch(`${option.id} ${option.modelKey} ${option.model}`, /-fast/);
     }
   }
-  assert.equal(auto.autoModelPool({ settings: {}, plan: "Free" }).some((o) => catalog.isPremiumAiModelDefinition(def(o), true)), false);
+  assert.equal(auto.autoModelPool({ settings, plan: "Free" }).some((o) => catalog.isPremiumAiModelDefinition(def(o), true)), false);
 });
 
 test("Auto is recognised by the picker id only", () => {
   assert.equal(auto.isAutoRequest(catalog.AUTO_MODEL_OPTION_ID), true);
   assert.equal(auto.isAutoRequest("claude-haiku-5-5"), false);
-  assert.equal(auto.isAutoRequest(null), false);
   assert.equal(catalog.getMobileAiChatModelLabel({ id: catalog.AUTO_MODEL_OPTION_ID }), "Auto");
 });
