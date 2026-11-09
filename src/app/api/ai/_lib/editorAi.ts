@@ -19,7 +19,9 @@ import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/a
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
 import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, isGrokGemini4ModelKey, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
-import { autoModelEnabled, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
 import { assertModelAllowedForPlan, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
@@ -693,7 +695,7 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  const autoPick = args.aiFeature && args.userId && !personalModelOptionId && await autoModelEnabled(args.userId)
+  const autoPick = args.aiFeature && args.userId && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId)
     ? pickAutoModelOption({
         feature: args.aiFeature,
         settings: teamContext.settings,
