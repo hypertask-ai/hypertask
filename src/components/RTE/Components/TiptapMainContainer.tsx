@@ -8,6 +8,8 @@ import AttachmentsUpload from "@/components/Common/AttachmentsUpload";
 import FileDragOverlay from "@/components/Common/FileDragAndDrop";
 import InlineDraftAiFloat from "./InlineDraftAiFloat";
 import { X } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8962-one-send-clears-inbox";
 
 interface TiptapMainContainerProps {
   mobileEditOpen?: boolean;
@@ -55,6 +57,7 @@ const TiptapMainContainer = ({
     isRecording,
   } = useTiptapGlobalContext();
   const isMbl = useContext(MobileViewContext);
+  const oneSend = useFlag(HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG);
   const allowedAttachmentModes = [
     "read-edit-description",
     "create-comment",
@@ -358,7 +361,11 @@ const TiptapMainContainer = ({
               trigger={trigger}
               callback={getAttachments}
               mode={mode}
-              sendOnClick={() => handleCallback()}
+              sendOnClick={
+                oneSend && mode === "create-comment"
+                  ? () => sendComment()
+                  : () => handleCallback()
+              }
               editor={editor}
               inInbox={inbox}
               handleCallback={handleCallback}
