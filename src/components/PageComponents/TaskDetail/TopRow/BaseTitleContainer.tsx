@@ -2,6 +2,8 @@ import React, { ReactNode } from 'react';
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8955_CHAT_OVER_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8955-chat-over-title";
 
 interface BaseTitleContainerProps {
   dataAttribute: string;
@@ -26,11 +28,13 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
   hasSummary,
   titleRowContent,
   children,
-  zIndex = "var(--z-sticky)",
+  zIndex,
   useHorizontalPadding = true,
   clearDesktopNavigation = false,
 }) => {
   const _mbl = useContext(MobileViewContext);
+  const chatOverTitle = useFlag(HTPR_8955_CHAT_OVER_TITLE_FLAG);
+  const titleLayer = zIndex ?? (chatOverTitle ? "var(--z-sticky)" : 50);
 
   const baseContainerClasses = cn(
     "flex flex-col sm:sticky text-white-black top-0 bg-inherit w-[100%] ",
@@ -58,7 +62,7 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
       data-title-container={dataAttribute}
       ref={containerRef}
       className={baseContainerClasses}
-      style={{ zIndex }}
+      style={{ zIndex: titleLayer }}
     >
       <div className={baseTitleRowClasses}>
         {titleRowContent}

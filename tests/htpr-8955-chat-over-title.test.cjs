@@ -13,9 +13,13 @@ const noop = () => null;
 const cn = (...parts) => parts.flat().filter(Boolean).join(" ");
 
 const mobileContext = { MobileViewContext: React.createContext(false) };
+const chatOverTitleKey = "htpr-8955-chat-over-title";
+let chatOverTitleOn = true;
 const { default: BaseTitleContainer } = loadModule("src/components/PageComponents/TaskDetail/TopRow/BaseTitleContainer.tsx", {
   "@/utils/undoActions/helperFuncs": { cn },
   "@/lib/contexts/mobileContext": mobileContext,
+  "@/hooks/useFlag": { useFlag: (key) => key === chatOverTitleKey && chatOverTitleOn },
+  "@/lib/flags/definitions/htpr-8955-chat-over-title": { HTPR_8955_CHAT_OVER_TITLE_FLAG: chatOverTitleKey },
 });
 const { default: AIChatClosedLayout } = loadModule("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
   "next/navigation": { usePathname: () => "/detail/project-15/8955" },
@@ -41,6 +45,7 @@ function layerOf(token) {
 }
 
 function render() {
+  chatOverTitleOn = true;
   const title = React.createElement(BaseTitleContainer, { dataAttribute: "task-detail", titleRowContent: "Ticket title" });
   const page = React.createElement(AIChatClosedLayout, { onOpenAIChat: noop, sidebarWidthPx: 575, panels: React.createElement("aside", null, "Chat") }, title);
   return new JSDOM(renderToString(page)).window.document;
@@ -67,4 +72,19 @@ test("the chat slot follows the workspace in the document so it wins a layer tie
 test("an explicit title layer still overrides the default", () => {
   const html = renderToString(React.createElement(BaseTitleContainer, { dataAttribute: "task-detail", titleRowContent: "Ticket title", zIndex: 2000 }));
   assert.match(html, /z-index:2000/);
+});
+
+test("the flag is a bugfix that defaults to Everyone", () => {
+  const { default: flag, HTPR_8955_CHAT_OVER_TITLE_FLAG: exported } = require("jiti").createJiti(__filename)(path.join(root, "src/lib/flags/definitions/htpr-8955-chat-over-title.ts"));
+  assert.equal(exported, chatOverTitleKey);
+  assert.equal(flag.key, chatOverTitleKey);
+  assert.equal(flag.kind, "bugfix");
+  assert.equal(flag.defaultMode, "EVERYONE");
+});
+
+test("with the flag off the title keeps its old layer", () => {
+  chatOverTitleOn = false;
+  const html = renderToString(React.createElement(BaseTitleContainer, { dataAttribute: "task-detail", titleRowContent: "Ticket title" }));
+  chatOverTitleOn = true;
+  assert.match(html, /z-index:50/);
 });
