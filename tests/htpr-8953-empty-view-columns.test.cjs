@@ -227,3 +227,48 @@ test("adding a column writes it once into a view that had no stored columns", as
     [1, 4]
   );
 });
+
+test("an empty applied list does not inherit the default view's hidden columns", () => {
+  const withDefault = project([]);
+  withDefault.project_view.default_view = {
+    board_columns_view: [
+      { id: 1, section_title: "Backlog", ranking: "A1", visibility: false },
+      { id: 2, section_title: "In Progress", ranking: "A2", visibility: true },
+    ],
+  };
+  assert.deepEqual(
+    getActiveColumnsViewFromProject(withDefault).map((entry) => [
+      entry.section_title,
+      entry.visibility,
+    ]),
+    [
+      ["Backlog", true],
+      ["In Progress", true],
+      ["Done", true],
+    ]
+  );
+});
+
+test("an empty applied list keeps every board column visible as a move destination", () => {
+  const { resolveMoveToColumnSections } = load(
+    "src/utils/controllers/section/moveToColumnSections.ts",
+    {}
+  );
+  const board = [
+    { id: 1, section_title: "Backlog", visibility: true },
+    { id: 2, section_title: "Done", visibility: true },
+  ];
+  const resolved = resolveMoveToColumnSections({
+    defaultColumns: [],
+    activeColumns: [],
+    activeViewType: "Saved",
+    boardSections: board,
+  });
+  assert.deepEqual(
+    resolved.map((entry) => [entry.section_title, entry.visibility]),
+    [
+      ["Backlog", true],
+      ["Done", true],
+    ]
+  );
+});

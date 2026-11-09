@@ -135,10 +135,8 @@ export const getActiveColumnsViewFromProject = (
   const defaultView = project.project_view?.default_view?.board_columns_view as ISection[];
   const unsaved = view?.unsavedView?.board_columns_view as ISection[];
   const applied = view?.appliedView?.board_columns_view as ISection[];
-  const savedColumns = [unsaved, applied, defaultView].find(
-    (columns) => Array.isArray(columns) && columns.length > 0
-  );
-  const columnsView = columnListOrBoardColumns(savedColumns, project);
+  const selectedColumns = unsaved ?? applied ?? defaultView;
+  const columnsView = columnListOrBoardColumns(selectedColumns, project);
   const sectionsById = new Map(
     (project.section ?? []).map((section) => [
       section.id ?? section.sectionId,
