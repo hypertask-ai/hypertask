@@ -1,6 +1,10 @@
 # Feature map: automatic AI feedback tickets
 
-## How a customer reaches it
+## Sub-features
+
+- `feature-map-automatic-ai-feedback-tickets` Feature map: automatic AI feedback tickets.
+
+## How to get to it (user POV)
 
 An agent's MCP, CLI or API call can file a board-15 ticket in Bugs by itself.
 `src/lib/aiFeedback/automatic.ts` queues the report, `fileAiFeedback` in
@@ -8,7 +12,7 @@ An agent's MCP, CLI or API call can file a board-15 ticket in Bugs by itself.
 open one, or is dropped, and the fingerprint in `src/lib/aiFeedback/input.ts`
 keys the dedupe.
 
-## How to drive it
+## Driving it with agent-browser
 
 - Unit: `node --test tests/htpr-7579-feedback-field.test.cjs` and
   `tests/ai-feedback-service.test.cjs`. They stub the database, so no board
@@ -26,7 +30,7 @@ It must answer `Remove unsupported fields nonsense_field from input`. Count
 `An agent's MCP call to hypertask_tasks failed` tickets on board 15 before and
 after: a refusal that opens a ticket is the bug this page exists for.
 
-## What usually breaks
+## Gotchas
 
 - A correct refusal (unknown field, wrong type, bad page/offset pair) filing a
   new ticket, which fills Bugs with work nobody can do.
@@ -36,12 +40,12 @@ after: a refusal that opens a ticket is the bug this page exists for.
 - The opposite failure is worse: a 5xx, an expired key or a 400 the API itself
   returned must keep filing. The unit tests pin both sides.
 
-## What proof to collect
+### What proof to collect
 
 The MCP reply text, the board ticket count before and after, and the unit test
 output. No screenshot is meaningful for this area; a screenshot of the ticket
 count is enough when a report calls for one.
 
-## Cleanup
+### Cleanup
 
 Nothing to delete. Keep the evidence in `~/.local/state/vcc-evidence/<TICKET>/`.
