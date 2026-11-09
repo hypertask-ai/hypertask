@@ -1,14 +1,18 @@
 # Feature flag switch API
 
-## How a customer reaches it
+## Sub-features
+
+- `release-column-safety` Release-column safety.
+
+## How to get to it (user POV)
 
 Agents owned by the flag owner switch flags through `PATCH /api/mcp/flags` (script `.claude/skills/ship/scripts/ht-flag set KEY MODE --reason <ticket URL>#comment-<id>`). Approval may use Valentin’s thumbs up or a supported yes on a switch question. The trusted HT Product Lead can also send `ownerRequest` with a source comment URL, exact quote, and request time, attesting Valentin’s intent for the requested flag and mode. The source must be unedited and accessible; explicit refusals and later withdrawals are rejected. Human comments order by time and comment ID; trusted chat records use the actual request time. `GET /api/mcp/flags` (`ht-flag get`) reads the modes. For a failed live QA, flag-owner write/admin agents hold the flag at Owner + QA with `ht-flag set KEY owner-qa --failure "reason or evidence URL"`. A hold only narrows who sees the flag, so this path needs no approval, including for high-risk, bugfix and unclassified flags. The failure reason must be nonblank and at most 300 characters. A hold applies only to a flag that is on for Everyone: Off, Owner and Owner + QA are refused, so a hold never widens an audience and never overrides an Off Valentin approved. Repeating the current mode is refused, and re-enabling any Off flag needs the ordinary approved switch. Runners never switch a flag Off: Off is Valentin's own safety switch, set on the admin page or through an approved switch. Other modes keep their approval requirements. Valentin also switches flags by hand on https://app.hypertask.ai/admin/flags, which only his login opens.
 
-## How to drive it
+## Driving it with agent-browser
 
 With the runner's own agent identity, `ht-flag get` must list the flags. For the refusal path, `ht-flag set <key> <its current mode> --reason <ticket URL>#comment-<id>` pointing at a comment that is not an approved flag question must answer 403 with the approval error text, and a fresh `ht-flag get` must show the flag mode unchanged. Never switch a production flag merely for QA. Failure-hold validation can safely use an unknown key (400), an empty failure reason (400), or an unrestricted mode (Everyone, Owner, Off) with failure evidence (403). Read the same known flag before and after to prove it stayed unchanged. Actual successful hold, retry and audit/rollback behavior is covered against disposable local data. Record live successful switches UNREACHABLE when no approved disposable flag exists.
 
-## What usually breaks
+## Gotchas
 
 - An approval that survives an edit to the comment, so one thumbs up switches a different key or mode (HTPR-7181).
 - The approval check running outside the flag write, so an edit, a removed thumbs up or a deleted ticket lands between check and write (HTPR-7181).
@@ -16,15 +20,15 @@ With the runner's own agent identity, `ht-flag get` must list the flags. For the
 - A read-only agent gaining emergency failure-hold access when the ordinary role-guard flag is disabled.
 - Repeated failure-hold requests creating duplicate history, or a failed flag write leaving history behind.
 
-## What proof to collect
+### What proof to collect
 
 Checklist written before QA; `ht-flag get` before and after; the 403 response body for the refusal path (text plus a rendered screenshot). Doctor: merge SHA production deployment success and /my-tasks signed in with a QA account. Non-Off approved switches need Valentin's decision; record them UNREACHABLE without it. A successful failure hold needs no approval but changes live behavior; do not touch a real flag just for proof. Record that path UNREACHABLE without an approved disposable flag, and point at route tests plus disposable PostgreSQL transaction evidence.
 
-## Cleanup
+### Cleanup
 
 None when only the refusal path and reads were used.
 
-## Release-column safety
+### Release-column safety
 
 Board 15 moves into **Flag: Everyone** must refuse tickets whose own or explicitly mentioned flag is not Everyone. The shared task-update boundary covers board moves, direct task updates and CLI/MCP moves. Ordinary columns and other boards stay unchanged.
 

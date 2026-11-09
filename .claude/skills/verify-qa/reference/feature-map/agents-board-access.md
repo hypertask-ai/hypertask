@@ -2,14 +2,19 @@
 
 Written from the HTPR-7574 live QA runs (PRs 1835 and 1847).
 
-## How a customer reaches it
+## Sub-features
+
+- `cross-team-identities` Cross-team identities.
+- `existing-agent-login-recovery` Existing-agent login recovery.
+
+## How to get to it (user POV)
 
 - Open **Agents** at `/agents`, or board command center → **Manage agents**. The command navigates to `/agents`, not the legacy modal.
 - Pick an owned agent at `/agents/<id-or-slug>` and expand **Board access**.
 - Board desktop: **Invite team members → Invite to Board (share)**. Phone: **Commands → Invite people** opens the same picker.
 - QA is user 985, state `~/.config/hypertask-videos/storageState-qa.json`, owned QA Sandbox 7049 at `/project?id=7049`, team `08f79efd-770e-4e32-9728-65e6d29ec893`. Never navigate to or mutate boards 15/4060 or use Valentin's account. Lists may contain other boards; that is not permission to visit them.
 
-## How to drive it
+## Driving it with agent-browser
 
 Agent lists are not always read-only for QA. `GET /api/agents/owned` can create a default Hyper AI agent and board membership on every accessible team that lacks an active owned agent; `GET /api/agents?teamId=<sandbox-team>` can seed that team too. Establish pre-existing agent and membership ids through non-seeding reads before opening these lists or the invite picker. Stop if seeding could affect a board outside the permitted QA scope. Record any automatically seeded ids separately from the two throwaway fixtures.
 
@@ -23,7 +28,7 @@ Agent lists are not always read-only for QA. `GET /api/agents/owned` can create 
 8. Judge 24 independent fresh-context first opens: porcelain, graphite, amoled, dia × desktop 1440x900 and phone 390x844 with mobile UA/touch × three opens. Await completion and parsing of team agents, board agents, and all member requests, then another 1500 ms quiet. Record every judged open, including missing rows. Anything below 24/24 is FAIL, not a retry-until-green. Never click the unattached row during this check.
 9. Prove non-owner exclusion only with an independently established non-owned fixture. Save ids only. If none exists in permitted scope, record UNREACHABLE with the closest real owned/team/member-id and positive-picker path; an all-owned response is not a negative control. Do not create another identity or change someone else's agent.
 
-## What usually breaks
+## Gotchas
 
 - Self-access returns only an admin-role error rather than actionable owner steps.
 - MCP discards safe authorization reasons or leaks arbitrary unsafe text. Schema refusals do not prove unknown-message redaction.
@@ -32,18 +37,17 @@ Agent lists are not always read-only for QA. `GET /api/agents/owned` can create 
 - A screenshot is captured before requests finish, or a shrinking desktop viewport is mislabeled as a real phone context.
 - Pixels alone are mistaken for persistence; an empty non-owner result is mistaken for exclusion proof.
 
-## What proof to collect
+### What proof to collect
 
 Write GATES.md first. Record deployment SHA/id/state, bootstrap status/id, effective flags, signed-in doctor screenshot, UI fixture creation and writer add, exact self-denial, owner cancel/remove/add and reload memberships, full redacted MCP envelope, and team API projection of ids/owner/boards/role. Save a per-attempt table and PNGs across every theme and viewport, with request settlement and fresh context ids. Render JSON tables to PNG with PIL, not ImageMagick @file. Preserve missing-row attempts and distinguish pre-judgment automation/bootstrap interruptions from feature outcomes.
 
 Record command navigation to the register and the reachable No board group without asserting legacy labels. Name unreachable paths and closest alternatives. Follow verify-qa Feature map / Doctor / Run / Cases format, with PASS/FAIL/UNREACHABLE bullets pointing inside the new run folder. Never print or persist credentials, cookies, storage-state copies, traces, HAR, token screens, or raw credential-bearing responses. Read supplied acceptance criteria without fetching forbidden board 15; no ticket/GitHub writes or repository tests/builds/tsc/next.
 
-## Cleanup
+### Cleanup
 
 Delete only this run's recorded names/ids through owner detail **Archive or delete → Delete agent → confirmation**. Match DELETE by method and route family, because UUID detail URLs can canonicalize to slugs. Require HTTP 200 deletion and HTTP 404 detail for each, reload Agents and verify names absent, and confirm both ids absent from owned/team lists. Compare pre-existing ids against the baseline, accounting separately for automatic seeds. Do not delete default agents as throwaway fixtures or remove them just to restore the original list count; list reads can recreate them. Never revoke all tokens, alter other agents, change tasks, or write flags.
 
-
-## Cross-team identities
+### Cross-team identities
 
 For the cross-team rollout, use one throwaway QA-owned agent and two QA-owned sandbox boards in different teams. Record the agent ID once, add it to the first board, then add the same ID to the second through Board access. Reload both boards and verify the same identity in the mention results and assignment list. Pair this with a normal-account flag-off check, a foreign-team refusal, and a team-bound credential refusal. Never change a real lead's credentials or remove an existing identity.
 
@@ -53,7 +57,7 @@ Mention results come from `GET /api/tasks/searchByParam?param=<name>&projectId=<
 
 Use QA 985 for browser evidence. A specifically requested real-board check may use authorized read-only CLI/API surfaces, not the owner's browser or cookies. Record any inaccessible picker as UNREACHABLE, with the exact permission reason; an API membership record alone is not visual picker proof.
 
-## Existing-agent login recovery
+### Existing-agent login recovery
 
 For HTPR-8861, use one recorded throwaway EXTERNAL agent owned by QA 985 on
 sandbox board 7049. Never rotate a fleet lead or an existing QA watcher.

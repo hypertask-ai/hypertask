@@ -1,12 +1,45 @@
 # AI chat
 
-## How a customer reaches it
+## Sub-features
+
+- `first-message-in-an-empty-chat` First message in an empty chat.
+- `shared-agent-conversations` Shared agent conversations.
+- `following-another-ticket` Following another ticket.
+- `leaving-the-full-screen-chat-for-a-ticket` Leaving the full-screen chat for a ticket.
+- `ticket-first-creation` Ticket-first creation.
+- `agent-ticket-proposals` Agent ticket proposals.
+- `manual-chat-control` Manual chat control.
+- `floating-chat-outline` Floating chat outline.
+- `running-chat-indicators` Running chat indicators.
+- `unsent-message-drafts` Unsent message drafts.
+- `retiring-a-model-version` Retiring a model version.
+- `on-demand-tool-discovery` On-demand tool discovery.
+- `malformed-chat-requests` Malformed chat requests.
+- `clickable-ticket-answers` Clickable ticket answers.
+- `independent-parallel-chats` Independent parallel chats.
+- `opening-while-chat-starts` Opening while chat starts.
+- `fullscreen-return-with-automatic-opening-disabled` Fullscreen return with automatic opening disabled.
+- `remembered-sidebar-width` Remembered sidebar width.
+- `automatic-heartbeat-step-budget` Automatic heartbeat step budget.
+- `agent-hovercard-chat-action` Agent hovercard Chat action.
+- `agent-sessions-in-the-sidebar` Agent sessions in the sidebar.
+- `desktop-chat-keyboard` Desktop chat keyboard.
+- `whole-inbox-triage` Whole-inbox triage.
+- `direct-anthropic-prompt-caching` Direct Anthropic prompt caching.
+- `idle-native-agent-heartbeat` Idle native-agent heartbeat.
+- `agent-session-picker-containment` Agent session picker containment.
+- `documentation-backed-product-answers` Documentation-backed product answers.
+- `compact-automatic-ticket-context` Compact automatic ticket context.
+- `floating-panel-elevation` Floating panel elevation.
+- `returning-from-settings` Returning from Settings.
+
+## How to get to it (user POV)
 
 The AI chat panel on a board or task (native chat, `src/app/api/ai/`), and
 the mobile Agent Chat surface. Non-demo chat uses `/api/ai/chat/stream`
 without a native-chat flag; demo chat uses `/api/demo/chat/stream`.
 
-## First message in an empty chat
+### First message in an empty chat
 
 With `htpr-8812-chat-first-message`, open AI chat from a ticket with no
 selected conversation. Type a message and press Send: the existing session
@@ -20,7 +53,7 @@ For a cost-free dispatch check, intercept the stream request in the headless
 browser and return a marked SSE response; explicitly distinguish that check
 from a real model reply.
 
-## Shared agent conversations
+### Shared agent conversations
 
 Shared conversations are permanent after HTPR-8115. On `/agents/chat`, open
 an existing accessible agent and reload its history. The create-session entry
@@ -36,7 +69,7 @@ send a message merely to test retirement: that can wake an external runtime.
 Use an existing QA conversation and record inaccessible teammate fixtures as
 UNREACHABLE, alongside the closest live owner read and route-entry tests.
 
-## Following another ticket
+### Following another ticket
 
 With `htpr-7736-chat-follows-task` enabled, pin the sidebar open on a QA
 account's ticket. Send a unique marker, then use Next task or a ticket link
@@ -49,7 +82,7 @@ conversation. Switching accounts must never show the previous account's chat.
 Flag off keeps the existing separate conversations per ticket. Compare sidebar
 bounds and composer placement before and after; no controls or layout change.
 
-## Leaving the full-screen chat for a ticket
+### Leaving the full-screen chat for a ticket
 
 Flag `htpr-7772-fullscreen-chat-handoff` (Everyone). Open `/chat`, pick a
 conversation with a ticket link in an answer, and click the link at 1440x900.
@@ -62,7 +95,7 @@ phone the chat closes on tap as before, and **New chat** still starts a clean
 conversation. Flag off closes the chat on the link click and reopening it
 shows the ticket's own conversation.
 
-## How to drive it
+## Driving it with agent-browser
 
 Use `agent-browser` headless for the request/reply check. On production,
 webdriver or a HeadlessChrome/PhantomJS user agent disables realtime before
@@ -84,7 +117,7 @@ only and may validly be fewer or absent when no specific improvement is justifie
 Record the effective flag and response. If chips are returned, wait for them
 (about 10 s), click one and check it is sent and answered in the same chat.
 
-## Ticket-first creation
+### Ticket-first creation
 
 With `htpr-7758-progressive-chat-create`, request one ticket on QA Sandbox.
 The saved title-only ticket link appears before its description finishes.
@@ -99,7 +132,7 @@ body completion, with sample counts and errors. Keep Task Writer inputs,
 models, prompts and output unchanged; prepare context before publishing so
 the new ticket cannot become its own duplicate-search result.
 
-## Agent ticket proposals
+### Agent ticket proposals
 
 Use QA 985 and a disposable external agent on QA Sandbox 7049.
 Keep its returned token in memory only; do not call a model.
@@ -121,7 +154,7 @@ Record route statuses, proposal states and ticket links, plus desktop and
 phone screenshots. Remove only the recorded Sandbox tickets, session and
 agent created by this run, through the app APIs.
 
-## Manual chat control
+### Manual chat control
 
 Flag `htpr-8088-manual-chat` (Everyone). With it on, the docked chat opens only
 when the user opens it and closes only when the user closes it. Moving between
@@ -137,7 +170,7 @@ then reload once with it open and once with it closed, and create one ticket
 with the switch on and one with it off. With the flag off, the previous
 automatic opening comes back.
 
-## Floating chat outline
+### Floating chat outline
 
 Open chat from a task, use the overflow menu's **Toggle Floating View**, then
 navigate to Inbox and reopen chat if navigation closed it. In AMOLED the
@@ -147,7 +180,7 @@ size with the outline disabled; it must not change. Porcelain, Graphite and
 Dia keep their existing outlines and corners. The rollback flag is
 `htpr-8042-amoled-chat-border`.
 
-## Running chat indicators
+### Running chat indicators
 
 The sidebar header and chat history show a spinning icon while that chat
 replies. Open the conversation picker while chats A and B are replying;
@@ -158,7 +191,7 @@ shows the indicator. Selection, rename, delete and new-chat controls remain
 unchanged. Verify desktop and phone in all four themes. The rollback flag
 is `htpr-7764-chat-running`; Off hides indicators without stopping replies.
 
-## Unsent message drafts
+### Unsent message drafts
 
 In both the docked sidebar and `/chat`, type while a reply streams.
 Finish, fail or stop that reply: the unsent text must remain.
@@ -170,7 +203,7 @@ Sending or explicitly clearing a draft must not restore it on reload.
 Opening a different account must not expose the previous account's draft.
 Capture the typed text before and after, alongside queued-message delivery.
 
-## Retiring a model version
+### Retiring a model version
 
 A saved pick, a team feature override or a stored agent pin keeps an old
 model id after that version leaves the catalogue, so the retirement is proven
@@ -193,7 +226,7 @@ The Haiku 4.5 retirement ([HTPR-7940](https://app.hypertask.ai/detail/project-15
 was proven this way: a saved `claude-haiku-4.5` chat pick loaded Haiku 5.5 and
 the chat request carried `claude-haiku-5-5`.
 
-## On-demand tool discovery
+### On-demand tool discovery
 
 With `htpr-7862-chat-deferred-tools` enabled, common ticket and inbox
 operations stay immediately available. Ask for a read-only saved-view lookup
@@ -207,7 +240,7 @@ its schema, and the following step executes the original tool. Those tests
 also verify per-conversation isolation and the full original flag-off catalog.
 Do not request writes, token minting or revocation for this check.
 
-## Malformed chat requests
+### Malformed chat requests
 
 As QA 985, POST raw malformed JSON (for example `{`) to
 `/api/ai/chat/stream`. Preserve HTTP 200, the safe request-body error SSE
@@ -219,7 +252,7 @@ When production runtime logs are readable, require an info-level invalid-JSON
 refusal without request content or a server-error incident. Otherwise record
 that log check as UNREACHABLE, not proven by the unchanged response.
 
-## Clickable ticket answers
+### Clickable ticket answers
 
 Ask chat for seven accessible tickets in one group. The streamed reply
 must include five rows and a **+2 more** control. Expand the group, then
@@ -233,7 +266,7 @@ still render. With `htpr-7683-ai-chat-ticket-rows` off, replies and history
 must remain text-only. The server entry points are
 `POST /api/ai/chat/stream` and `GET /api/ai-chat/all-sessions`.
 
-## What usually breaks
+## Gotchas
 
 - Provider/gateway slug drift breaking a specific model entirely: Grok chat
   moved between the `xai` and `spacexai` gateway slugs three times in one
@@ -250,7 +283,7 @@ must remain text-only. The server entry points are
   id ([HTPR-7317](https://app.hypertask.ai/detail/project-15/7317)): wait a
   few seconds after they appear and check they are still there.
 
-## What proof to collect
+### What proof to collect
 
 For code readability (https://app.hypertask.ai/detail/project-15/7782), request
 shell, JSON and SQL fenced blocks plus inline code and a long unbroken line.
@@ -263,7 +296,7 @@ name visible if the UI shows it. If the ticket is about a specific
 model/provider, don't accept a reply from a silently-substituted fallback
 model as a pass.
 
-## Cleanup
+### Cleanup
 
 Use only the QA account's own private board and record created ticket ids and the
 baseline of any ticket the chat may edit. Delete this run's Ctrl+J tickets
@@ -273,7 +306,7 @@ Deleting a chat session removes its chat data and attachments, not created
 tickets or ticket edits. Delete only the test conversation/thread if cleanup
 is needed, never the account's entire chat history.
 
-## Independent parallel chats
+### Independent parallel chats
 
 With `htpr-7765-parallel-chats` enabled, open a long reply in chat A,
 queue two follow-ups there, then switch to chats B and C and send in each.
@@ -286,7 +319,7 @@ Capture overlapping request times, session/message IDs, final replies,
 and a reload proving each reply stayed in its own transcript. Flag off
 retains the prior shared reply guard. Per-user request limits still apply.
 
-## Opening while chat starts
+### Opening while chat starts
 
 With `htpr-8038-chat-opener-ready` enabled, delay application JavaScript
 and inspect the existing desktop Open and phone AI buttons. They must be
@@ -307,7 +340,7 @@ Opening again must not close a chat already requested open. The existing
 **Close AI chat** button must still close it. Capture the first opening
 and use the unchanged `[data-ai-chat-scope]:visible > button` scope control.
 
-## Fullscreen return with automatic opening disabled
+### Fullscreen return with automatic opening disabled
 
 With automatic chat opening disabled, open the existing sidebar or floating
 window using its button and Ctrl+Q. Close and reopen each surface, then open
@@ -317,7 +350,7 @@ to My Tasks. Repeat at 1440x900 and 390x844, for both sidebar and floating mode.
 Closing afterward must still work; ordinary navigation must still respect
 saved automatic-opening choices. No chat message needs sending.
 
-## Remembered sidebar width
+### Remembered sidebar width
 
 With `htpr-8013-sidebar-width` enabled, use QA 985's existing sidebar resize
 handle on a desktop board. Drag to a new width, close and reopen, then reload
@@ -328,7 +361,7 @@ clamping must not replace the preference. A second account starts at 420px and
 keeps its own drags. Phone chat remains full-width. The flag-off path retains
 the previous shared width and viewport clamping behavior.
 
-## Automatic heartbeat step budget
+### Automatic heartbeat step budget
 
 Native agent heartbeat turns enter through `/api/cron/native-agent-heartbeat`,
 which reserves an execution and calls `/api/ai/chat/stream` with authenticated
@@ -346,7 +379,7 @@ isolated heartbeat trigger and execution-step telemetry are available through
 approved product surfaces, record the live four-step case as UNREACHABLE;
 do not substitute mocked SDK results for a live heartbeat.
 
-## Agent hovercard Chat action
+### Agent hovercard Chat action
 
 On a QA-owned ticket, hover an agent mention and an assigned agent.
 The existing person hovercard offers **Chat**. Select it with the sidebar
@@ -361,7 +394,7 @@ Check desktop and phone in all four themes. Do not send messages or wake
 agents merely to verify selection. `htpr-7737-agent-hover-chat` Off removes
 only this shortcut, preserving existing sidebar and profile navigation.
 
-## Agent sessions in the sidebar
+### Agent sessions in the sidebar
 
 On a board with an agent, open AI chat. With `htpr-8048-agent-sessions`
 enabled, the Bot button beside History lists the board's available agents.
@@ -379,7 +412,7 @@ The default conversation used by agent notifications must keep its original
 session ID after separate sessions have been created. With the flag Off,
 keep the original conversation picker and reject new-session requests.
 
-## Desktop chat keyboard
+### Desktop chat keyboard
 
 With `htpr-7766-chat-shortcuts` enabled, focus `/chat`, the docked sidebar,
 or a floating chat. `Alt+/` opens the same searchable shortcut list on all
@@ -413,7 +446,7 @@ left after closing a floating chat. With sidebar open but workspace focused,
 Use only chats created for this run when verifying deletion. With the flag
 disabled in an isolated browser, the prior keyboard behavior remains.
 
-## Whole-inbox triage
+### Whole-inbox triage
 
 Ask chat to read at least 500 Inbox messages. Inspect `hypertask_inbox_list`
 results: use `continue=true` across turns or pass `next_cursor` unchanged
@@ -426,7 +459,7 @@ Inbox change. Changed targets or new siblings after preview require a fresh
 approval; nothing else may disappear. An expired or another chat's list token
 must refuse the archive. Never archive pre-existing QA inbox messages.
 
-## Direct Anthropic prompt caching
+### Direct Anthropic prompt caching
 
 With `htpr-7855-direct-prompt-cache` in Owner + QA, use QA 985 on
 an approved direct-Anthropic team. Send two harmless turns without writes.
@@ -441,7 +474,7 @@ Do not make paid model calls without the run's authorization. Offline
 transport coverage uses fixture credentials and an intercepted SDK fetch
 in `tests/htpr-7855-direct-prompt-cache.test.cjs`; it does not prove live hits.
 
-## Idle native-agent heartbeat
+### Idle native-agent heartbeat
 
 The scheduled entry point is `GET /api/cron/native-agent-heartbeat`. An
 unchanged inbox already advances the scan watermark without opening a chat
@@ -460,7 +493,7 @@ a test-only change. Do not trigger the global cron or create paid model turns
 just for this check. Record an unavailable heartbeat-only daily baseline as
 UNREACHABLE, with the actual scoped usage response as closest evidence.
 
-## Agent session picker containment
+### Agent session picker containment
 
 For the approved agent-session layout (`htpr-8048-agent-sessions`), open the
 existing Bot icon beside History. The picker starts beneath the title,
@@ -476,7 +509,7 @@ the Bot trigger stays absent; record the enabled path UNREACHABLE without
 changing flags or intercepting production flag responses. Do not send paid
 agent/model messages solely for this visual check.
 
-## Documentation-backed product answers
+### Documentation-backed product answers
 
 Ask twenty product questions with known source articles, plus an own-work
 control. Capture the help-search status and the returned article links.
@@ -492,7 +525,7 @@ Check MCP tool guidance through `tools/list` and describe-tool when deferred;
 check CLI help search against the same service. Connected clients decide
 whether to follow guidance; the server cannot guarantee external model choices.
 
-## Compact automatic ticket context
+### Compact automatic ticket context
 
 With `htpr-7856-summary-context`, Current ticket chat and `/api/ai/hyper-mentioned`
 use the stored ticket summary plus the newest 20 comments, in chronological
@@ -506,7 +539,7 @@ with 200-comment fixtures, both entry points and rollback. A live answer alone
 does not prove the token reduction; compare recorded input usage on equivalent
 workloads before claiming savings.
 
-## Floating panel elevation
+### Floating panel elevation
 
 On desktop, open AI chat and switch it to the floating view. Press Ctrl+J with
 it still open. The computed `box-shadow` of `.chatwindow` and of
@@ -517,7 +550,7 @@ Resize to 390x844: the chat sheet must report no shadow. With
 `htpr-8055-floating-elevation` Off, the chat returns to its previous halo and
 the palette stays flat.
 
-## Returning from Settings
+### Returning from Settings
 
 With `htpr-7783-remember-chat`, select an older conversation, scroll upward,
 and leave an unsent draft. Visit Settings and return. Confirm the same

@@ -1,12 +1,16 @@
 # Required-check settings monitoring
 
-## How a customer reaches it
+## Sub-features
+
+- `required-check-settings-monitoring` Required-check settings monitoring.
+
+## How to get to it (user POV)
 
 GitHub Actions: Required Check Settings.
 Workflow: `.github/workflows/required-check-settings.yml`.
 This is infrastructure, without app UI changes.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Confirm the production deployment succeeded.
 2. Dispatch Required Check Settings on production.
@@ -19,7 +23,7 @@ This is infrastructure, without app UI changes.
 Never change live settings for negative controls.
 Use the verifier's isolated fixtures instead.
 
-## What usually breaks
+## Gotchas
 
 - A settings mismatch silently passes.
 - A dispatch executes unmerged branch code.
@@ -27,7 +31,7 @@ Use the verifier's isolated fixtures instead.
 - Other workflow reads exhaust GitHub's allowance.
 - Runner watches fall back to a user login.
 
-## What proof to collect
+### What proof to collect
 
 Save the merge SHA and successful deployment.
 Save the dispatched monitor's run and verification log.
@@ -49,7 +53,7 @@ must allow tests to start, with one read each. A known failed review must
 still stop tests. This does not prove other workflow reads survive quota
 exhaustion; required status publication still needs GitHub availability.
 
-## Cleanup
+### Cleanup
 
 No production settings or board fixtures are changed.
 Keep evidence outside the worktree before removal.

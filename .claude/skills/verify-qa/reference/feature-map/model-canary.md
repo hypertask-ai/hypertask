@@ -1,12 +1,16 @@
 # AI model canary
 
-## How a customer reaches it
+## Sub-features
+
+- `ai-model-canary` AI model canary.
+
+## How to get to it (user POV)
 
 The internal production cron runs `/api/cron/ai-model-canary` daily at 04:40 UTC.
 Authenticated MCP clients read `/api/mcp/ai/models/status`; reads never infer.
 This is internal monitoring, not a customer AI entry point.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Verify the merge deployment succeeded and QA 985 is signed in.
 2. Read the current MCP model status and save the timestamp and rows.
@@ -25,7 +29,7 @@ This is internal monitoring, not a customer AI entry point.
    Exercise these negative cases with synthetic credentials
    in `tests/htpr-7748-model-canary.test.cjs`, never by editing production keys.
 
-## What usually breaks
+## Gotchas
 
 - A missing internal key silently falls back to the shared trials key.
 - An internal key is configured as the trials key itself.
@@ -33,7 +37,7 @@ This is internal monitoring, not a customer AI entry point.
 - Gateway changes inadvertently disable existing QA BYOK probes.
 - A skipped probe is claimed as a successful model response.
 
-## What proof to collect
+### What proof to collect
 
 Save the safe cron counts, updated model status and provider request identity.
 Keep credentials, request headers and full configuration out of evidence.
@@ -43,7 +47,7 @@ unavailable, mark the corresponding acceptance case UNREACHABLE and keep the
 key-routing acceptance open; unit tests do not prove live billing isolation.
 No UI change means no theme matrix or feature video is required.
 
-## Cleanup
+### Cleanup
 
 Read-only status checks require no cleanup. Do not delete canary status rows,
 change provider settings or rotate credentials. The cron owns its lock and
