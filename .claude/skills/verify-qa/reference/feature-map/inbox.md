@@ -1,11 +1,24 @@
 # Inbox
 
-## How a customer reaches it
+## Sub-features
+
+- `quiet-agent-moves-and-description-edits` Quiet agent moves and description edits.
+- `blocked-by-you-bulk-archive` Blocked by you bulk archive.
+- `boundary-keyboard-jumps` Boundary keyboard jumps.
+- `typed-comments-from-your-own-agent` Typed comments from your own agent.
+- `archive-safe` Archive safe.
+- `phone-undo-toast` Phone undo toast.
+- `keyboard-focus-with-a-parked-pointer` Keyboard focus with a parked pointer.
+- `select-all-stays-inside-the-open-tab` Select all stays inside the open tab.
+- `ai-inbox-triage-command` AI inbox triage command.
+- `blocker-list-api` Blocker list API.
+
+## How to get to it (user POV)
 
 `https://app.hypertask.ai/inbox`. Notifications and reminders land here from
 `src/pages/api/queues/inboxReminder.ts` and `inboxQueue.ts`.
 
-## Quiet agent moves and description edits
+### Quiet agent moves and description edits
 
 With `htpr-8143-quiet-agent-updates` on for the recipient, move and edit a
 sandbox ticket using an agent. Neither operation creates a human inbox row,
@@ -16,7 +29,7 @@ someone whose flag is off. With the flag off, agent moves and edits notify as
 before. Do not clear existing inbox items as part of this check. Record the
 24-hour inflow comparison separately from immediate delivery proof.
 
-## How to drive it
+## Driving it with agent-browser
 
 `agent-browser`, headless, `?realtime=on`. Trigger a notification (comment on
 or assign a task the QA account watches), then check it lands in the inbox,
@@ -25,7 +38,7 @@ and that archiving/undo works.
 - **Core inbox cycle (YPER4-629), every app deploy and before any flag goes to Everyone:** `node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <folder>` as QA 985 seeds three reminders on QA Sandbox, opens one by click, sends a comment with Ctrl+Enter, presses J and E, opens one by Enter, and prints `inbox-cycle ok`. The same cycle runs in the required `browser-smoke` check (`e2e/smoke/inbox-cycle.spec.ts`) with every flag on and with live-like modes.
 - With `htpr-7311-decision-comment-link` on, open Decisions by click, Enter, and Inbox Next: each ticket jumps to and highlights its latest unanswered Question mentioning the viewer; flag off and other splits keep existing navigation. https://app.hypertask.ai/detail/project-15/7311
 
-## What usually breaks
+## Gotchas
 
 - Opening a row by mouse click dropped `?inboxFlow=true` (counter "3 / 3" instead of "1 / 3"), so sending a comment saved but stayed on the ticket ([HTPR-7655](https://app.hypertask.ai/detail/project-15/7655)). Keyboard Enter still worked, so always test the click path.
 
@@ -35,7 +48,7 @@ and that archiving/undo works.
   ([HTPR-5761](https://app.hypertask.ai/detail/project-15/5761), "make inbox archive undo immediate"); worth a regression
   check on any ticket that touches archive/undo.
 
-## What proof to collect
+### What proof to collect
 
 For Inbox visual changes, an independent reviewer must compare the live Inbox
 against its Figma frame in Light, AMOLED and Graphite 2. Capture three
@@ -46,12 +59,12 @@ Screenshot the inbox with the new item present, then after archiving it, then
 after undo, showing it restored. Reload between each step, not just after the
 last one, since undo bugs tend to be about state surviving a reload.
 
-## Cleanup
+### Cleanup
 
 Clear any test notification you created (archive it) so the QA
 account's inbox stays empty between runs.
 
-## Gap
+### Gap
 
 The PR check runs on a disposable loopback app, and the live script on QA Sandbox; neither covers the phone layout yet (`--phone` exists on the live script but is not required).
 
@@ -60,7 +73,7 @@ The PR check runs on a disposable loopback app, and the live script on QA Sandbo
   Check both desktop and phone, then reload the Inbox. The board-opened ticket
   stays open; the advance-on-send preference still controls Inbox-flow navigation.
 
-## Blocked by you bulk archive
+### Blocked by you bulk archive
 
 With `htpr-7970-bulk-blocked-inbox` and `htpr-7840-blocked-inbox-archive`
 on, select several blocked rows using the existing checkboxes, then archive.
@@ -70,7 +83,7 @@ Test a mixed selection containing a real notification and a blocked row for the
 same task: archive and undo must process that blocked task only once. Include an
 ordinary notification for a different task to cover the normal bulk path.
 
-## Boundary keyboard jumps
+### Boundary keyboard jumps
 
 With blocked tickets present, use a list longer than the desktop viewport.
 Move into its middle, press `gg`, then hold Shift for `gg`.
@@ -81,7 +94,7 @@ Neither shortcut may reorder rows or scroll a hidden split. J/K and Enter must
 continue from the newly focused row. With `htpr-8083-inbox-boundaries` off,
 the previous raw-notification boundary behavior remains.
 
-## Typed comments from your own agent
+### Typed comments from your own agent
 
 With `htpr-8090-assignee-inbox` on, assign a sandbox ticket to the QA
 account as a person. Post a `kind: qa`, `done` or `question` comment using
@@ -98,7 +111,7 @@ does not prove the reported ticket works. Archive the QA item, reload, and
 confirm it stays gone.
 Email recipients must not change: this restoration is inbox-only.
 
-## Archive safe
+### Archive safe
 
 With `htpr-8046-archive-safe` on, select Updates, Important or Agents and click
 **Archive safe**. The existing Inbox Zero confirmation shows the eligible count
@@ -111,7 +124,7 @@ are conservatively kept too. A new protected event between preview and confirm
 must refresh the preview instead of archiving. Flag off hides the entry point and
 the server refuses the safe rule; ordinary Inbox Zero remains available.
 
-## Phone undo toast
+### Phone undo toast
 
 Archive a seeded notification by swiping its Inbox row left. With
 `htpr-8097-mobile-undo-toast` on, the small undo card sits at 52% height,
@@ -122,7 +135,7 @@ Archive again and dismiss; the notification must stay archived. Check all
 four themes. Desktop placement and content stay unchanged; flag off retains
 the previous wide bottom-left phone card.
 
-## Keyboard focus with a parked pointer
+### Keyboard focus with a parked pointer
 
 With `htpr-8142-inbox-keyboard-focus` on, leave the pointer over the list
 while J/K scroll through five blocked rows mixed with ordinary notifications.
@@ -132,7 +145,7 @@ stationary pointer must not change selection. Moving the pointer must still
 focus its row. Open a blocked row, archive it, Undo, and reload: the blocker
 stays set and the row returns. Flag off retains mouse-enter focus.
 
-## Select all stays inside the open tab
+### Select all stays inside the open tab
 
 With `htpr-8148-inbox-tab-selection` on, keep messages in at least two
 splits, select one row, then click the existing group-header checkbox.
@@ -142,7 +155,7 @@ Archive the selected split, reload, and verify every unselected message remains.
 Existing ticket-wide archive and Undo behavior stays unchanged.
 Flag off retains the previous global checkbox behavior.
 
-## AI inbox triage command
+### AI inbox triage command
 
 With `htpr-8044-triage-inbox` and `htpr-8045-inbox-batches` on, press
 Ctrl+K, search **Triage inbox**, then select it. A fresh full-screen human chat opens
@@ -164,7 +177,7 @@ Keep a draft in the chat composer and verify opening the command never
 sends or clears that draft. Capture the existing palette and full-screen chat at
 1440x900 and 390x844 in Porcelain, Graphite, AMOLED and Dia.
 
-## Blocker list API
+### Blocker list API
 
 With `htpr-8200-blocker-list` enabled, GET `/api/mcp/inbox/list?waiting_on=me` with an MCP token. `waiting_on` is `me` or a positive user ID. Repeat `projectId` or `project` for numeric board IDs; both names combine. Optional `state` is `waiting`, `answered`, or `no-question`. The response is `{ success: true, blockers: [...], total }`; each row has `id`, `ticketNumber`, `url`, `title`, `projectId`, `boardTitle`, `section`, `priority`, `waitingSince`, `blockerCommentId`, `question`, `recommendation`, and `state`. Missing values are null. No state filter returns all three states.
 

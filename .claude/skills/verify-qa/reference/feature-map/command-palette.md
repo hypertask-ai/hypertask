@@ -1,12 +1,23 @@
 # Command palette (Ctrl+K)
 
-## How a customer reaches it
+## Sub-features
+
+- `search-new-task-switch-outline` Search / New Task switch outline.
+- `new-task-send-shortcut` New Task send shortcut.
+- `desktop-new-task-entry` Desktop New Task entry.
+- `archive-one-column` Archive one column.
+- `new-task-board-order` New Task board order.
+- `new-task-model-picker` New Task model picker.
+- `new-task-dictation-shortcut` New Task dictation shortcut.
+- `new-task-board-shortcut-tooltip` New Task board shortcut tooltip.
+
+## How to get to it (user POV)
 
 `Ctrl+K` (or `Cmd+K`) anywhere in the app opens the command palette. On phones
 the same palette lists the commands but hides the key chips
 (`CommandList.tsx` renders `keyboardCommands` only when `isMobile` is false).
 
-## How to drive it
+## Driving it with agent-browser
 
 - Open any task at `/detail/project-<board>/<number>`, press `Ctrl+K`, type
   `copy private`, and read the key chips on the right of each row.
@@ -19,7 +30,7 @@ the same palette lists the commands but hides the key chips
   while `htpr-7891-palette-share-key-labels` is on, so the printed key and the
   key that copies cannot disagree.
 
-## Search / New Task switch outline
+### Search / New Task switch outline
 
 Open Ctrl+J on desktop, or Commands then New Task on a phone. With
 `htpr-8015-amoled-mode-outline` enabled, the existing switch above the
@@ -30,7 +41,7 @@ AMOLED, Graphite, Porcelain and Dia. Compare computed outlines and bounding
 boxes against the pre-release captures. Flag Off keeps the old appearance.
 No tasks need creating for this styling check.
 
-## New Task send shortcut
+### New Task send shortcut
 
 With `htpr-8253-ctrlj-ctrl-enter-send` on (default Everyone), Ctrl+Enter opens
 in the New Task composer, type a two-paragraph note, and press Enter: a line
@@ -43,7 +54,7 @@ the task again and the hint reads `Enter Send`. The phone New Task sheet hides
 the footer and keeps its Send button, so record that path as the closest check
 for the phone footer.
 
-## What usually breaks
+## Gotchas
 
 - A palette label drifting from the key that actually works: the palette
   printed `CTRL :` and `CTRL SHIFT :` while the help list, the docs page and
@@ -55,7 +66,7 @@ for the phone footer.
   `CommandList.tsx` does that mapping, so a label that hard-codes `CMD` would
   print `CMD` on Windows too.
 
-## What proof to collect
+### What proof to collect
 
 Screenshots of the palette rows with the key chips, the matching help-list
 rows, and one Share Task tooltip, then compare the glyphs by eye. Shoot the
@@ -63,16 +74,16 @@ desktop viewport at 1440x900; all four themes when row styling changed.
 `tests/htpr-7891-palette-share-key-labels.test.cjs` pins the palette labels to
 the shared module and the help list.
 
-## Cleanup
+### Cleanup
 
 None; reading the palette and the help list writes nothing.
 
-## Gap
+### Gap
 
 Phone shots cannot prove the key chips, because the phone palette hides them;
 they only prove the rows still render.
 
-## Desktop New Task entry
+### Desktop New Task entry
 
 While `htpr-8035-sidebar-new-task` and the compose task writer are on, the
 left sidebar has a primary plus button. Hover shows New Task and Ctrl+J
@@ -88,7 +99,7 @@ remain unchanged either way.
 The button must not appear at 390x844, or when its flag is off. Existing
 navigation must still work, and the main content must not move horizontally.
 
-## Archive one column
+### Archive one column
 
 With `htpr-7907-column-archive` on, open a board and choose **Archive all
 tickets in a column** from Ctrl+K. The existing column picker names the
@@ -105,7 +116,7 @@ and after. Repeat the picker, confirmation and Undo at 1440x900 and
 archive too. With the flag off, the command must be absent. Archive only
 your created fixtures after the check.
 
-## New Task board order
+### New Task board order
 
 With `htpr-8014-compose-board-order` on, Ctrl+J then Ctrl+Shift+B opens the
 existing board picker with recently visited boards first. It reuses the
@@ -122,7 +133,7 @@ empty search and clear it. No task needs creating. Repeat at 1440x900 and
 Flag Off preserves API order; the move-existing-task picker stays unchanged
 in either mode. Do not modify shared QA history outside your browser context.
 
-## New Task model picker
+### New Task model picker
 
 With `htpr-8265-task-shortcuts-writer-model` on, Ctrl+J New Task shows the
 shared model picker left of the attach button. It starts on the board or
@@ -134,7 +145,7 @@ and the task-detail AI writer shows the same model because both use the
 `taskWriter` preference. Flag Off hides the picker and restores the board
 default. Repeat at 1440x900 and 390x844 in all four themes.
 
-## New Task dictation shortcut
+### New Task dictation shortcut
 
 With `htpr-8140-ctrlj-dictation-shortcut` on, open Ctrl+J and type a draft.
 Ctrl+Shift+D (Cmd+Shift+D on Apple) starts the existing New Task microphone.
@@ -145,8 +156,7 @@ remains, reopening the writer still works, and no background comment or chat
 recorder starts. Flag Off restores mouse-only activation in this writer.
 Use a permitted test microphone; physical sound quality needs real hardware.
 
-
-## New Task board shortcut tooltip
+### New Task board shortcut tooltip
 
 With `htpr-8141-board-shortcut-tooltip` on, hover the destination board chip
 inside Ctrl+J New Task. The shared tooltip shows Change board and

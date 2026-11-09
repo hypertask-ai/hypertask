@@ -1,12 +1,16 @@
 # Slack app
 
-## How a customer reaches it
+## Sub-features
+
+- `slack-app` Slack app.
+
+## How to get to it (user POV)
 
 - Open `/add-to-slack` to read the install overview and requested scopes. The `htpr-4857-add-to-slack` flag gates this page; a disabled flag returns 404.
 - Open `/slack/support`, or click Slack app support on the install page. The `htpr-6921-slack-marketplace` flag gates the support page and the install page's Privacy policy, Terms, and Slack app support links. The support flag defaults to Everyone. Switching it Off returns 404, including signed-out visitors.
 - Sign in and open Settings > Slack (`/settings/slack`), select an accessible Hypertask team, and choose Connect Slack. This uses `/api/slack/install?teamId=<team-id>` to redirect to Slack OAuth. The install overview also offers an Add to Slack authorization link.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Doctor first: verify the merge sha's Production deployment is successful and `/my-tasks` is signed in as QA user 985. Use `~/.config/hypertask-videos/storageState-qa.json`, never an admin login. If a saved state lands on `/login`, record it as expired and stop; do not refresh it during a read-only QA run.
 2. Open `/add-to-slack`. Check the scopes describe `/ht`, not `/hypertask`, and the marketplace links appear for user 985. Click Privacy policy and Terms, checking final `hypertask.ai` destinations and HTTP 200. Click Slack app support and check `/slack/support` renders.
@@ -17,7 +21,7 @@
 7. Inspect `origin/production:docs/slack-app-manifest.json` for `app_uninstalled` and `tokens_revoked`. This proves the declared event subscriptions, not delivery or cleanup in a real workspace.
 8. Record a short WebM of `/add-to-slack`, clicking Slack app support, then scrolling the support page. Keep it under 3 MB.
 
-## What usually breaks
+## Gotchas
 
 - Flag modes expose the new links to plain or signed-out visitors, or hide the support page from QA.
 - The scope copy names the retired command, legal destinations fail, or support links lead to 404.
@@ -25,7 +29,7 @@
 - OAuth loses the team, accepts an inaccessible team, has missing configuration, or points to a noncanonical callback origin.
 - Manifest subscriptions omit uninstall or token-revocation events; subscription presence alone does not prove handlers ran.
 
-## What proof to collect
+### What proof to collect
 
 Record merge sha, deployment success, doctor screenshot, verified account ids, route HTTP statuses, rendered content, clicked link final URLs and statuses, desktop and phone screenshots for each theme, reload observations, sanitized install redirect observations, manifest event evidence, and the short main-path video. Keep one primary evidence file per case and reference existing files from `proof.md` and the run checklist.
 
@@ -35,6 +39,6 @@ Live Slack parity (`/ht` commands, `@mention`, DM, and assistant panel) needs a 
 
 `node --test tests/slack-marketplace.test.cjs` renders install/support pages with mocked flags and checks server gating, /ht copy, legal/support links and retention text; it does not prove live Slack parity or event delivery.
 
-## Cleanup
+### Cleanup
 
 These page and redirect checks need no fixtures or board writes. Do not install or uninstall an app, connect or disconnect an account/team, send Slack messages, call Slack APIs, change flags, or retire the Worker bot. Never print storage state, env files, cookies, tokens, or OAuth state. Close browser contexts after recording. Workspace parity and destructive lifecycle checks require a separately authorized human run.

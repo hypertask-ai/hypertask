@@ -1,11 +1,15 @@
 # Mobile
 
-## How a customer reaches it
+## Sub-features
+
+- `phone-zoom` Phone zoom.
+
+## How to get to it (user POV)
 
 Any route at a phone viewport. Not a separate app; same routes, same code,
 different layout below the responsive breakpoint.
 
-## How to drive it
+## Driving it with agent-browser
 
 Real 390x844 phone-viewport screenshot, never a resized desktop window:
 ```
@@ -37,7 +41,7 @@ prove saving uses the first 80 description characters and shows the fallback
 notice. This injected failure proves recovery, not live provider health. Never
 change shared provider settings. Delete only this run's QA fixtures.
 
-## What usually breaks
+## Gotchas
 
 Mobile-only layout and interaction bugs desktop testing never catches, most
 recently: mobile Task Writer direct save locking up and new-task layout
@@ -49,19 +53,19 @@ initialization order ([HTPR-6556](https://app.hypertask.ai/detail/project-15/655
 `git log --oneline | grep -i 'BUGFIX.*mobile'` for the full list if a ticket
 needs older context.
 
-## What proof to collect
+### What proof to collect
 
 The real phone-width screenshot itself is the proof; a desktop-width
 screenshot is not evidence for a mobile ticket, full stop (this cost a real
 regression once, see `verify-on-phone/SKILL.md`). Reload after any state
 change and reshoot to confirm it held at that viewport.
 
-## Cleanup
+### Cleanup
 
 Same as whichever underlying area you were testing (task, comment, board);
 mobile isn't a separate data surface.
 
-## Phone zoom
+### Phone zoom
 
 With `htpr-8145-phone-zoom` enabled, inspect the server viewport on a phone:
 `user-scalable=yes`, `maximum-scale=5`. Pinch to at least 200% on My Tasks,
