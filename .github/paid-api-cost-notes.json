@@ -11,12 +11,12 @@
   },
   "src/components/Modals/Settings/GitHubSection.tsx:aea21b21a5fc71a8aec8029bd4b0da5f2c32aaf3f9e3ba497671ca232d1bca00": {
     "maxUsdPerDay": 0,
-    "reason": "Saves board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "reason": "Saves board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
   },
   "src/components/Modals/Settings/GitHubSection.tsx:c401886c70ab215a16bc73fde68f0d908d363e08777c43b6fabb1536f8c51f12": {
     "maxUsdPerDay": 0,
-    "reason": "Reads board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "reason": "Reads board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
   },
   "src/hooks/General/useFollowerKanban.ts:1f078df2800a6871f1d34ba832e8cce99475af075913f2e9ba33e1fd9491d003": {
@@ -138,5 +138,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-8049 keeps the existing chat streamText call. The error callback now pauses when a team key is forced, instead of starting another model request. No new model, retry, or token budget.",
     "source": "https://app.hypertask.ai/detail/project-15/8049"
+  },
+  "src/lib/ai/skillOffers/detect.ts:ff398dc84664a12c1415afef087ce4eeee16ca6c56887b9f04272d37a822778d": {
+    "maxUsdPerDay": 2,
+    "reason": "HTPR-7779 adds one gpt-6-luna classification call per person and board, at most once every 6 hours (the scan claim is a Redis NX lock), over at most 80 short chat messages clipped to 700 characters each. That is under 60k input tokens and about 900 output tokens per scan, so even 200 active people and boards a day stays around 2 USD at luna prices. The call is skipped entirely while the flag htpr-7779-skill-offers is off.",
+    "source": "https://app.hypertask.ai/detail/project-15/7779"
   }
 }
