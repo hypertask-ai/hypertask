@@ -752,9 +752,8 @@ const Commands = (props: Props) => {
   }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
 
   const integratedTabs = newTaskWindow && !isMobile && !isDemo && !isInteractive;
-  const filledSearch = filledSearchFlag && integratedTabsFlag && tabsOnTopFlag && integratedTabs && !isCompose;
   const modeSwitch = !isDemo && !isInteractive ? (
-    <div className={integratedTabsFlag && integratedTabs ? `flex w-full p-2${filledSearch ? "" : " border-b border-light-black-border-1"}` : "absolute -top-12 left-0 flex w-full justify-center"}>
+    <div className={integratedTabsFlag && integratedTabs ? (filledSearchFlag && tabsOnTopFlag && !isCompose ? "flex w-full p-2" : "flex w-full border-b border-light-black-border-1 p-2") : "absolute -top-12 left-0 flex w-full justify-center"}>
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
           { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
@@ -871,7 +870,7 @@ const Commands = (props: Props) => {
           {integratedTabsFlag && integratedTabs && (isCompose || tabsOnTopFlag) && modeSwitch}
           {compose}
           {!isCompose && <>
-          <div className={filledSearch ? "mx-2 flex items-center gap-2.5 rounded-[4px] bg-ai-tiptap px-3" : "flex items-center gap-2.5 border-b border-light-black-border-1 px-4"}>
+          <div className={filledSearchFlag && integratedTabsFlag && tabsOnTopFlag && integratedTabs ? "mx-2 flex items-center gap-2.5 rounded-[4px] bg-ai-tiptap px-3" : "flex items-center gap-2.5 border-b border-light-black-border-1 px-4"}>
             <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" />
             <ModalInput
                ref={setInputRef}
