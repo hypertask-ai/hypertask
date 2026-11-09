@@ -18,6 +18,7 @@ const lanes = [
   "paid-api-cost-notes",
   "typescript",
 ];
+const launchedBeforeTests = ["board-registration-boundaries", "github-comments"];
 const formerSteps = [
   "Board filter and sort contracts",
   "Changed style tokens",
@@ -83,11 +84,13 @@ function assertParallelChecks(ci) {
   assert.match(run, /^ *while read -r name pid; do$/m);
   assert.match(run, /^ *if wait "\$pid"; then$/m);
   assert.match(run, /^ *exit 1$/m);
-  assert.ok(
-    run.indexOf("run_lane board-registration-boundaries") < run.indexOf('if [ "$RUN_TESTS" = "true" ]'),
-    "the boundary gate also guards the boundary-only run",
-  );
-  for (const gated of lanes.filter((name) => name !== "board-registration-boundaries")) {
+  for (const early of launchedBeforeTests) {
+    assert.ok(
+      run.indexOf(`run_lane ${early}`) < run.indexOf('if [ "$RUN_TESTS" = "true" ]'),
+      `${early} also guards the boundary-only run`,
+    );
+  }
+  for (const gated of lanes.filter((name) => !launchedBeforeTests.includes(name))) {
     assert.ok(run.indexOf(`run_lane ${gated}`) > run.indexOf('if [ "$RUN_TESTS" = "true" ]'), `${gated} is a TypeScript or lint gate`);
   }
 

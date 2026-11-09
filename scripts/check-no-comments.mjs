@@ -6,25 +6,26 @@ import { isAllowedComment, isGeneratedFile } from "../eslint-local-rules/no-comm
 import { parseSource } from "./strip-comments.mjs";
 
 export const baselinePath = ".github/no-comments-baseline.json";
-const scriptGlob = ".github/scripts/**/*.{js,cjs,mjs}";
+const scriptGlob = ".github/scripts/**/*";
 const workflowGlob = ".github/workflows/*.{yml,yaml}";
 const scriptExtensions = new Set([".js", ".cjs", ".mjs"]);
-const workflowExtensions = new Set([".yml", ".yaml"]);
+const hashExtensions = new Set([".sh", ".py", ".yml", ".yaml"]);
 const message = (file, line) => `Comment in ${file}:${line}. Remove it and name the intent in code.`;
 
-export const allowedWorkflowComments = [
+export const allowedHashComments = [
   /^#\s*(?:yaml-language-server|actionlint|yamllint|shellcheck)\b/,
   /^#\s*(?:renovate|zizmor|gitleaks)\s*:/,
   /^#\s*(?:prettier-ignore|nosemgrep)\b/,
+  /^#\s*(?:noqa|type:|pylint:|fmt:|isort:|mypy:|pragma:|pyright:)\b/,
   /^#!/,
 ];
 
-function workflowComments(source) {
+function hashComments(source) {
   const found = [];
   source.split(/\r?\n/).forEach((text, index) => {
     const trimmed = text.trimStart();
     if (!trimmed.startsWith("#")) return;
-    if (allowedWorkflowComments.some((pattern) => pattern.test(trimmed))) return;
+    if (allowedHashComments.some((pattern) => pattern.test(trimmed))) return;
     found.push({ line: index + 1, text: trimmed });
   });
   return found;
@@ -38,10 +39,14 @@ function scriptComments(source, file) {
     .map((comment) => ({ line: comment.loc.start.line, text: source.slice(...comment.range) }));
 }
 
-export function disallowedComments(source, file) {
+export function isHashFile(source, file) {
   const extension = extname(file);
-  if (workflowExtensions.has(extension)) return workflowComments(source);
-  if (scriptExtensions.has(extension)) return scriptComments(source, file);
+  return hashExtensions.has(extension) || (extension === "" && source.startsWith("#!"));
+}
+
+export function disallowedComments(source, file) {
+  if (scriptExtensions.has(extname(file))) return scriptComments(source, file);
+  if (isHashFile(source, file)) return hashComments(source);
   throw new Error(`check-no-comments: ${file} is not a script or a workflow file`);
 }
 
@@ -55,15 +60,18 @@ function expand(paths) {
       continue;
     }
     for (const file of globSync(`${path.replace(/[\\/]+$/, "")}/**/*`)) {
-      const extension = extname(file);
-      if (scriptExtensions.has(extension) || workflowExtensions.has(extension)) files.add(file);
+      if (!statSync(resolve(file)).isFile()) continue;
+      if (scriptExtensions.has(extname(file)) || isHashFile(readFileSync(file, "utf8"), file)) files.add(file);
     }
   }
   return [...files].sort();
 }
 
 export function defaultFiles() {
-  return [...globSync(scriptGlob), ...globSync(workflowGlob)].sort();
+  const scripts = globSync(scriptGlob)
+    .filter((file) => statSync(resolve(file)).isFile())
+    .filter((file) => scriptExtensions.has(extname(file)) || isHashFile(readFileSync(file, "utf8"), file));
+  return [...scripts, ...globSync(workflowGlob)].sort();
 }
 
 export function loadBaseline(path = baselinePath) {

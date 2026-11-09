@@ -1789,13 +1789,18 @@ the 60 GitHub scripts and 976 comment lines in 30 of the 47 workflows, after a
 reviewer had already caught the same thing by hand in seven pull requests.
 
 The required `ci-tests` job now runs `scripts/check-no-comments.mjs` as its own
-static lane. It reuses the same rule and the same allowed tool markers as ESLint
+static lane, launched beside the board boundary gate so it also runs on a
+workflow-only PR, where `ci-change-scope.cjs` deliberately keeps the build
+skipped. It reuses the same rule and the same allowed tool markers as ESLint
 (`eslint-local-rules/no-comments.mjs` via `scripts/strip-comments.mjs`), so a
 shebang, an `eslint-disable` directive, `@ts-expect-error <reason>` and the
-webpack/vite pragmas still pass. Workflows are YAML, which ESLint cannot parse, so
-a line whose first non-space character is `#` is a comment there, with YAML tool
-markers allowed: `yaml-language-server`, `actionlint`, `yamllint`, `shellcheck`,
-`renovate:`, `zizmor:`, `gitleaks:`, `prettier-ignore` and `nosemgrep`.
+webpack/vite pragmas still pass. Every other file in scope is shell, Python,
+workflow YAML or an extensionless executable with a shebang, which ESLint cannot
+parse, so a line whose first non-space character is `#` is a comment there, with
+the tool markers those languages need allowed: `yaml-language-server`,
+`actionlint`, `yamllint`, `shellcheck`, `renovate:`, `zizmor:`, `gitleaks:`,
+`prettier-ignore`, `nosemgrep`, `noqa`, `type:`, `pylint:`, `fmt:`, `isort:`,
+`mypy:`, `pragma:` and `pyright:`.
 
 Existing debt is grandfathered by exact per-file counts in
 `.github/no-comments-baseline.json`, the same ratchet shape as the style-guide

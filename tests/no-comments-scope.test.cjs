@@ -62,6 +62,28 @@ test("a workflow prose comment fails and tool pragmas still pass", async () => {
   assert.deepEqual(found.map((comment) => comment.line), [3]);
 });
 
+test("shell, Python and extensionless scripts follow the same rule", async () => {
+  const { disallowedComments } = await loaded;
+  const shell = [
+    "#!/usr/bin/env bash",
+    "# Reads the drift between production and the live app.",
+    "# shellcheck disable=SC2086",
+    "set -euo pipefail",
+    "",
+  ].join("\n");
+  assert.deepEqual(disallowedComments(shell, ".github/scripts/probe.sh").map((comment) => comment.line), [2]);
+  const python = [
+    "import os",
+    "# noqa",
+    "# Walks the route surface.",
+    "",
+  ].join("\n");
+  assert.deepEqual(disallowedComments(python, ".github/scripts/probe.py").map((comment) => comment.line), [3]);
+  const executable = "#!/bin/sh\n# Dispatches the review.\nexec true\n";
+  assert.deepEqual(disallowedComments(executable, ".github/scripts/dispatch-review").map((comment) => comment.line), [2]);
+  assert.throws(() => disallowedComments("plain text\n", ".github/scripts/notes.txt"), /not a script or a workflow file/);
+});
+
 test("a baselined file keeps its allowance and rejects the next comment", async () => {
   const { check } = await loaded;
   const prose = (count) => `${Array.from({ length: count }, () => "# narrative").join("\n")}\nname: Probe\n`;

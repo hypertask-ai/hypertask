@@ -554,6 +554,7 @@ jobs:
           }
 
           run_lane board-registration-boundaries
+          run_lane github-comments
           if [ "$RUN_TESTS" = "true" ]; then
             # Lanes that diff against the base share one fetch here, so no two
             # lanes write to .git at the same time.
@@ -565,7 +566,6 @@ jobs:
             run_lane oxlint
             run_lane eslint
             run_lane lint-overlap-guard
-            run_lane github-comments
             run_lane contracts
             if [ -n "$BASE_SHA" ]; then
               run_lane changed-style-tokens
