@@ -231,7 +231,7 @@ That cap was not enough. Deployment 7628217481 (`51fcc525`, `dpl_9tg62h9sytSJHF5
 FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
 ```
 
-Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. The cap is now 3840 MB after intermittent SIGKILL at 4096 MB (HYCI-180, below). If a heap abort happens at 3840 MB or another SIGKILL lands with the cap at half the machine, the paid Enhanced Build Machine is Valentin's decision.
+Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. HYCI-180 stepped the cap down from 4096 MiB for native headroom (below). If a heap abort lands at the chosen cap or another SIGKILL hits half the machine, the paid Enhanced Build Machine is Valentin's decision.
 
 ## Live-within-10-min incident (2026-11-07, HYCI-180)
 
@@ -268,4 +268,6 @@ Both logs name the same signature as the parallelism 1 note above: about three m
 
 That pattern is the free lever named in the parallelism 1 note: with parallelism already at 1, lowering `--max-old-space-size` from 4096 hands headroom to native memory. The measured V8 live set at 3584 MB was 3080.7 MB (HYCI-184), so 3840 MB keeps 759.3 MB above that peak while leaving 4352 MiB for everything outside the V8 heap on the 8192 MiB machine. If the next production build reports "Reached heap limit", the compiler genuinely needs more than 3840 MB and the next step is still the paid Enhanced Build Machine, which is Valentin's decision.
 
-The build script now sets `--max-old-space-size=3840`. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
+The build script first set `--max-old-space-size=3840` in pull request 3087 (`0d635b84165`). Production deployment 7668278693 (`dpl_5G6Dae88e25UY24812esxUu2euVb`) failed on that merge while `bd6f21b8ec43` at 4096 MB still built, so 3840 was below the live compiler heap on the current tree.
+
+The cap is now 4000 MB: 192 MiB above 3840 for V8 and 4192 MiB for native memory on the 8192 MiB machine. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
