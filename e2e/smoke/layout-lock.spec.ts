@@ -577,7 +577,7 @@ test('layout lock: board card hover keeps content and selection usable', async (
   if (borderOnly) {
     await expect(checkbox).toHaveCount(0)
     expect(after!.x).toBeCloseTo(before!.x, 1)
-    const picked = card.locator('.kanban-task-card.bg-kanban-active-cardbg')
+    const picked = card.locator('.kanban-task-card[class*="outline-hypertasks-purple"], .kanban-task-card[class*="ring-hypertasks-purple"]')
     await link.click({ modifiers: ['Shift'] })
     await expect(picked).toHaveCount(1)
     expect((await id.boundingBox())!.x).toBeCloseTo(before!.x, 1)
