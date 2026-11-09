@@ -43,8 +43,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -426,7 +425,6 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
   const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const oneComposerFlag = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
-  const isMbl = useContext(MobileViewContext);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -661,7 +659,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
           </button>
         </div>
 
-        {(!oneComposerFlag || isMbl) && (
+        {!oneComposerFlag && (
           <div className="px-3 pb-3">
             <FullScreenChatBoardSelector
               sessions={railSessions}
