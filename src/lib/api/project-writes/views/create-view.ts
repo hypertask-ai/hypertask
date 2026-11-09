@@ -14,6 +14,8 @@ import {
   sanitizeBoardLayout,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { boardColumnsForProject } from "@/utils/controllers/section/viewHelpers";
+import { viewColumnsToWrite } from "@/utils/controllers/section/viewColumnVisibility";
 import {
   assertViewIsNotManagedSmartSplit,
   ManagedSmartSplitMutationError,
@@ -108,6 +110,12 @@ const route = taskWriteRoute({
             (orderById.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
             (orderById.get(b.id) ?? Number.MAX_SAFE_INTEGER)
         );
+      } else if (!incomingColumns?.length) {
+        const boardColumns = defaultColumns?.length
+          ? defaultColumns
+          : await boardColumnsForProject(projectId);
+        view_settings.board_columns_view =
+          viewColumnsToWrite(incomingColumns, boardColumns) ?? [];
       }
       const sanitizedTableSort = sanitizeTableSort(
         view_settings.table_sort_column,

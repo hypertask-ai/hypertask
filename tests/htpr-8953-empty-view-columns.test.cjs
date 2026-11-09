@@ -131,3 +131,99 @@ test("view tab counts use the same fallback as the board", () => {
     "the raw nullish fallback leaves an empty list counting zero tickets"
   );
 });
+
+const jiti = require("jiti")(__filename, {
+  alias: { "@": path.join(__dirname, "..", "src") },
+  interopDefault: true,
+  cache: false,
+});
+const { viewColumnsToWrite } = jiti(
+  path.join(__dirname, "..", "src/utils/controllers/section/viewColumnVisibility.ts")
+);
+
+test("a save with no column list keeps the stored columns", () => {
+  assert.equal(viewColumnsToWrite(undefined), null);
+  assert.equal(viewColumnsToWrite(null), null);
+  assert.equal(viewColumnsToWrite([]), null);
+});
+
+test("a new view with no column list stores the board's columns", () => {
+  assert.deepEqual(
+    viewColumnsToWrite(undefined, boardColumns).map((entry) => entry.section_title),
+    ["Backlog", "In Progress", "Done"]
+  );
+  assert.equal(viewColumnsToWrite([], []), null);
+  assert.deepEqual(
+    viewColumnsToWrite([{ id: 9 }], boardColumns),
+    [{ id: 9 }],
+    "a real saved list is written as it came in"
+  );
+});
+
+test("a column change rewrites a view that lost its columns instead of leaving it empty", async () => {
+  const writes = [];
+  const prismaStub = {
+    $transaction: async (operation) => operation(prismaStub),
+    $queryRaw: async () => [],
+    section: {
+      findMany: async () => [
+        { id: 1, section_title: "Backlog", ranking: "A1", projectId: 15, deleted: false },
+        { id: 2, section_title: "In Progress", ranking: "A2", projectId: 15, deleted: false },
+        { id: 3, section_title: "Done", ranking: "A3", projectId: 15, deleted: false },
+      ],
+    },
+    view: {
+      findMany: async () => [
+        { id: "broken", board_columns_view: [] },
+        { id: "healthy", board_columns_view: [{ id: 1, section_title: "Backlog", ranking: "A1", visibility: true }] },
+      ],
+      update: async (args) => {
+        writes.push(args);
+        return args.data;
+      },
+    },
+  };
+  const helpers = load("src/utils/controllers/section/viewHelpers.ts", {
+    "@/lib/prisma": { __esModule: true, default: prismaStub },
+  });
+  await helpers.removeSectionFromAllViews(2, 15);
+  const broken = writes.find((write) => write.where.id === "broken");
+  const healthy = writes.find((write) => write.where.id === "healthy");
+  assert.deepEqual(
+    broken.data.board_columns_view.map((column) => column.id),
+    [1, 3],
+    "a view with no stored columns gets the board's columns, minus the deleted one"
+  );
+  assert.deepEqual(
+    healthy.data.board_columns_view.map((column) => column.id),
+    [1]
+  );
+});
+
+test("adding a column writes it once into a view that had no stored columns", async () => {
+  const writes = [];
+  const boardSections = [
+    { id: 1, section_title: "Backlog", ranking: "A1", projectId: 15, deleted: false },
+    { id: 4, section_title: "QA", ranking: "A4", projectId: 15, deleted: false },
+  ];
+  const prismaStub = {
+    $transaction: async (operation) => operation(prismaStub),
+    $queryRaw: async () => [],
+    section: { findMany: async () => boardSections },
+    view: {
+      findMany: async () => [{ id: "broken", board_columns_view: [] }],
+      update: async (args) => {
+        writes.push(args);
+        return args.data;
+      },
+    },
+  };
+  const helpers = load("src/utils/controllers/section/viewHelpers.ts", {
+    "@/lib/prisma": { __esModule: true, default: prismaStub },
+  });
+  await helpers.appendSectionToAllViews(15, boardSections[1]);
+  assert.deepEqual(
+    writes[0].data.board_columns_view.map((column) => column.id),
+    [1, 4]
+  );
+});

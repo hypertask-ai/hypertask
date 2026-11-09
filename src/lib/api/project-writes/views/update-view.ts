@@ -11,6 +11,7 @@ import {
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
+import { viewColumnsToWrite } from "@/utils/controllers/section/viewColumnVisibility";
 import {
   sanitizeBoardLayout,
   sanitizeTableSort,
@@ -142,6 +143,7 @@ const route = taskWriteRoute({
           ? await gatedTableGroupByForViewWrite(view_settings.table_group_by, userId)
           : undefined;
       const sanitizedBoardFilters = sanitizeBoardFilters(view_settings.board_filters);
+      const columnsToWrite = viewColumnsToWrite(view_settings.board_columns_view);
       const updatedView = await mutateView(
         sanitizedBoardFilters,
         async (tx) => {
@@ -153,7 +155,7 @@ const route = taskWriteRoute({
               project_view: { select: { projectId: true } },
             },
             data: {
-              board_columns_view: view_settings.board_columns_view,
+              ...(columnsToWrite ? { board_columns_view: columnsToWrite } : {}),
               board_filters: sanitizedBoardFilters,
               board_sorting_mode: view_settings.board_sorting_mode,
               board_sorting_order: view_settings.board_sorting_order,

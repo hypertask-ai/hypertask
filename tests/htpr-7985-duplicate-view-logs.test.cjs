@@ -37,7 +37,7 @@ function service({ duplicate = true, labels = [], viewLabelError = true } = {}) 
       acquireBoardFilterWriteLock: async () => undefined,
       validateBoardFilterLabelReferences: async () => undefined,
     },
-    './nativeBoardSettings': {},
+    './nativeBoardSettings': { allBoardColumns: async () => [], canonicalBoardColumns: async () => [], normalizeNativeBoardFilters: value => value },
     '@/lib/mcp-server/utils/errors': errors,
     '@/lib/flags': { isFeatureEnabled: async () => viewLabelError },
     '@/lib/flags/definitions/htpr-8135-view-label-error': {},

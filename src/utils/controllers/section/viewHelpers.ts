@@ -5,6 +5,27 @@ import sortByStringParam from '@/utils/sortByParam'
 import { buildViewColumnEntry } from './viewColumnEntry'
 import { applyColumnVisibility } from './viewColumnVisibility'
 
+const boardColumnsForView = async (
+  tx: Prisma.TransactionClient,
+  projectId: number,
+  stored: unknown
+): Promise<ISection[]> => {
+  const columns = Array.isArray(stored) ? (stored as ISection[]) : []
+  if (columns.length > 0) return columns
+  return boardColumnsForProject(projectId, tx)
+}
+
+export const boardColumnsForProject = async (
+  projectId: number,
+  tx: Prisma.TransactionClient = prisma
+): Promise<ISection[]> => {
+  const sections = await tx.section.findMany({
+    where: { projectId, deleted: false },
+    orderBy: [{ ranking: 'asc' }, { id: 'asc' }],
+  })
+  return sections.map((section) => buildViewColumnEntry(section) as ISection)
+}
+
 async function updateBoardViewColumns(
   projectId: number,
   mapColumns: (columns: ISection[]) => unknown[],
@@ -24,7 +45,7 @@ async function updateBoardViewColumns(
     })
     for (const view of views) {
       const columns = mapColumns(
-        (view.board_columns_view as unknown as ISection[]) ?? []
+        await boardColumnsForView(tx, projectId, view.board_columns_view)
       )
       await tx.view.update({
         where: { id: view.id },
@@ -40,7 +61,7 @@ export async function appendSectionToAllViews(
   _currentUserId?: number
 ) {
   await updateBoardViewColumns(projectId, (columns) => [
-    ...columns,
+    ...columns.filter((column) => (column.id ?? column.sectionId) !== section.id),
     buildViewColumnEntry(section)
   ])
 }
