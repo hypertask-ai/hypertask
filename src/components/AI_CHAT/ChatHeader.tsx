@@ -511,7 +511,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
       ref={headerRef}
       data-chat-window-drag={windowDrag ? "" : undefined}
       className={cn(
-        "z-10 text-content px-2 gap-4 flex items-center justify-between border-gray-700 text-white-black",
+        "z-10 text-content px-2 gap-4 flex items-center justify-between text-white-black",
         !headerMenus && "font-bold",
         isSidebarMode ? "h-[48px] pt-4 pb-0" : "py-2"
       )}
@@ -683,7 +683,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                   )}
                   {currentSession && aiSessionActionsAvailable && (
                     <>
-                      <div className="mx-1 my-1 h-px bg-border-light-gray-thin" role="separator" />
+                      <div className="mx-1 my-1 border-t border-border-light-gray-thin" role="separator" />
                       <div className="px-2 py-1 text-micro text-icon-dark-gray">
                         Created {format(new Date(currentSession.createdAt), "d MMM")}
                       </div>

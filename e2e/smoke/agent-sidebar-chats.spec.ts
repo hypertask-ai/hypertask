@@ -81,12 +81,16 @@ async function heartbeat(request: APIRequestContext, agent: Agent) {
   expect(response.status()).toBe(200)
 }
 
-async function open(page: Page, lane: string) {
+async function pinLegacyHeader(page: Page) {
   await page.route('**/api/flags', async (route) => {
     const response = await route.fetch()
     const body = await response.json()
     await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8956-ai-chat-header-menus': false } } })
   })
+}
+
+async function open(page: Page, lane: string) {
+  await pinLegacyHeader(page)
   const flags = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   const activity = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/activity/addLastActiveAt')
   await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board&agentSidebar=1`))
@@ -288,6 +292,7 @@ test('past chats are listed newest first above agents and reopen', async ({ page
 
 test('an unnamed personal conversation falls back to AI chat in the header', async ({ page }, info) => {
   const chat = fixture.personalChats.find(chat => chat.lane === info.project.name)!
+  await pinLegacyHeader(page)
   await page.route('**/api/ai-chat/all-sessions*', async (route) => {
     const response = await route.fetch()
     const body = await response.json()

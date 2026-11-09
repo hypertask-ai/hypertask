@@ -292,6 +292,7 @@ function outsideView({ menu = { x: 54, y: 60, width: 288, height: 780 }, panel =
       return id === "ai-sidebar" ? sidebar : list;
     },
     viewportSize: () => viewport,
+    route: async () => {},
     getByRole: () => assert.fail("the composer can be covered by the list"),
   } };
 }
