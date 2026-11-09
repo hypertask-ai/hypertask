@@ -28,13 +28,13 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
   hasSummary,
   titleRowContent,
   children,
-  zIndex,
+  zIndex: zIndexOverride,
   useHorizontalPadding = true,
   clearDesktopNavigation = false,
 }) => {
   const _mbl = useContext(MobileViewContext);
   const chatOverTitle = useFlag(HTPR_8955_CHAT_OVER_TITLE_FLAG);
-  const titleLayer = zIndex ?? (chatOverTitle ? "var(--z-sticky)" : 50);
+  const zIndex = zIndexOverride ?? (chatOverTitle ? "var(--z-sticky)" : 50);
 
   const baseContainerClasses = cn(
     "flex flex-col sm:sticky text-white-black top-0 bg-inherit w-[100%] ",
@@ -62,7 +62,7 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
       data-title-container={dataAttribute}
       ref={containerRef}
       className={baseContainerClasses}
-      style={{ zIndex: titleLayer }}
+      style={{ zIndex }}
     >
       <div className={baseTitleRowClasses}>
         {titleRowContent}
