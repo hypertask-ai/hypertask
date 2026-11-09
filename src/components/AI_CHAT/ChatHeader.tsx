@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
+import { useAiChatOpenPreferences } from "@/hooks/General/useAiChatOpenPreferences";
+import { AI_CHAT_AUTO_OPEN_DEFAULTS, AI_CHAT_AUTO_OPEN_KEYS } from "@/lib/aiChat/autoOpenPreferences";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7575_PHONE_CHAT_DELETE_FLAG } from "@/lib/flags/definitions/htpr-7575-phone-chat-delete";
 import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-7773-chat-header-name";
@@ -190,7 +192,13 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const [isStartingNewSession, setIsStartingNewSession] = useState(false);
   const isStartingNewSessionRef = useRef(false);
   const [aiChatPinned, setAiChatPinned] = useRecoilState(aiChatPinnedAtom);
-  const [keepAiChatClosed, setKeepAiChatClosed] = useRecoilState(keepAiChatClosedAtom);
+  const [keepAiChatClosedLegacy, setKeepAiChatClosedLegacy] = useRecoilState(keepAiChatClosedAtom);
+  const openPrefs = useAiChatOpenPreferences();
+  const keepAiChatClosed = openPrefs.enabled ? AI_CHAT_AUTO_OPEN_KEYS.every((key) => !openPrefs.values[key]) : keepAiChatClosedLegacy;
+  const setKeepAiChatClosed = (closed: boolean) => {
+    if (!openPrefs.enabled) setKeepAiChatClosedLegacy(closed);
+    else AI_CHAT_AUTO_OPEN_KEYS.forEach((key) => openPrefs.setPreference(key, closed ? false : AI_CHAT_AUTO_OPEN_DEFAULTS[key]));
+  };
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyMaxHeight, setHistoryMaxHeight] = useState<number | undefined>(undefined);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -203,12 +211,9 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const overflowRef = useRef<HTMLDivElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (isDropdownOpen) {
-      const chatHeight = headerRef.current?.parentElement?.clientHeight;
-      setHistoryMaxHeight(chatHeight ? Math.round(chatHeight * 0.75) : undefined);
-    } else {
-      setHistoryQuery("");
-    }
+    const chatHeight = headerRef.current?.parentElement?.clientHeight;
+    setHistoryMaxHeight(isDropdownOpen && chatHeight ? Math.round(chatHeight * 0.75) : undefined);
+    if (!isDropdownOpen) setHistoryQuery("");
   }, [isDropdownOpen]);
   useEffect(() => {
     if (sessionPagingEnabled && isDropdownOpen) {
@@ -358,15 +363,8 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           <div className="sticky top-0 z-10 -mx-1 -mt-1 bg-modalBackground px-1 pb-1 pt-1">
             <label className="flex h-[30px] items-center gap-2 rounded-[4px] bg-ai-tiptap px-2">
               <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" aria-hidden />
-              <input
-                autoFocus
-                type="text"
-                value={historyQuery}
-                onChange={(event) => setHistoryQuery(event.target.value)}
-                placeholder="Search chats"
-                aria-label="Search chats"
-                className="min-w-0 flex-1 bg-transparent text-content text-white-black outline-none placeholder:text-text-light-gray"
-              />
+              <input autoFocus type="text" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search chats" aria-label="Search chats"
+                className="min-w-0 flex-1 bg-transparent text-content text-white-black outline-none placeholder:text-text-light-gray" />
             </label>
           </div>
         )}
@@ -562,7 +560,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           </span>
         </button>
 
-        {sidebarChats && conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
+        {sidebarChats && conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={headerMenus ? agentButtonRef : titleRef} onClose={closeConversations} />}
         {hasAgentSessions && sidebarChats && agentsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={agentButtonRef} onClose={closeAgents} agentsOnly />}
         {renderSessionMenu("left-0")}
       </div>
@@ -607,7 +605,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                     onClick={() => {
                       setAiChatPinned(!aiChatPinned);
                       if (!aiChatPinned) {
-                        setKeepAiChatClosed(false);
+                        if (keepAiChatClosed) setKeepAiChatClosed(false);
                         setAiChatExplicitOpenAt(Date.now());
                         setShowAiChatInterface(true);
                         setAiChatAutoOpenSuppressed(false);

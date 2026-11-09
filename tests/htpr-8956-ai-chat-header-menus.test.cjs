@@ -8,7 +8,7 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 const FLAG = "htpr-8956-ai-chat-header-menus";
 const day = 24 * 60 * 60 * 1000;
 
-async function mount({ enabled }) {
+async function mount({ enabled, openSwitches = false }) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/chat" });
   const globals = ["window", "document", "navigator", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = globals.map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
@@ -18,13 +18,14 @@ async function mount({ enabled }) {
   Object.defineProperty(global, "navigator", { configurable: true, value: dom.window.navigator });
   const stamp = (offset) => new Date(Date.now() - offset).toISOString();
   const chats = [["Today chat", 0], ["Week chat", 3 * day], ["Old chat", 30 * day]].map(([title, offset], index) => ({ id: `chat-${index}`, title, createdAt: stamp(offset), updatedAt: stamp(offset) }));
-  const store = { pinned: true, keepClosed: false }, noop = () => {};
+  const store = { pinned: true, keepClosed: false, prefs: { aiChatOpenNewTickets: true, aiChatOpenTickets: false, aiChatOpenBoards: false } }, noop = () => {};
   const state = { sessions: chats, currentSession: chats[0], currentAiOption: {}, isSidebarMode: true, selectSession: noop, togglePopover: noop, minimizeChat: noop };
   const atoms = { pinned: Symbol("pinned"), keepClosed: Symbol("keepClosed") };
   const { ChatHeader } = loadModule("src/components/AI_CHAT/ChatHeader.tsx", {
     react: React,
     "next/navigation": { usePathname: () => "/chat", useRouter: () => ({ push: noop }), useSearchParams: () => new URLSearchParams() },
     "@/hooks/useFlag": { useFlag: (key) => (key === FLAG ? enabled : key === "htpr-7530-keep-ai-chat-closed") },
+    "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: openSwitches, values: store.prefs, setPreference: (key, value) => { store.prefs = { ...store.prefs, [key]: value }; } }) },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => state },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
@@ -102,6 +103,17 @@ test("flag off: old menu stays", async () => {
   try {
     await click(container.querySelector('[aria-haspopup="menu"]'));
     assert.equal(container.querySelector('[role="menuitemradio"]'), null);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("flag on with open switches: Keep closed turns every auto-open preference off", async () => {
+  const { container, store, click, cleanup } = await mount({ enabled: true, openSwitches: true });
+  try {
+    await click(container.querySelector('[aria-haspopup="menu"]'));
+    await click([...container.querySelectorAll('[role="menuitemradio"]')][1]);
+    assert.deepEqual(Object.values(store.prefs), [false, false, false]);
   } finally {
     await cleanup();
   }
