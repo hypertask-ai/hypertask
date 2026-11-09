@@ -1,4 +1,5 @@
 "use client";
+import { HTPR_7870_APPEARANCE_HEADING_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7870-appearance-heading-once";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 
 import { useThemeVisibility } from "@/hooks/useThemeVisibility";
@@ -46,12 +47,13 @@ const AppearanceSection = () => {
   const visibility = useThemeVisibility();
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const headingOnce = useFlag(HTPR_7870_APPEARANCE_HEADING_ONCE_FLAG);
   const isMobile = useMobileView();
   const availableThemes = availableThemeOptions(roundedEnabled && !isMobile, graphite2Enabled, visibility);
 
   return (
     <SettingsSectionShell title="Appearance">
-      <SettingsCard title="Appearance">
+      <SettingsCard title={headingOnce && !isMobile ? undefined : "Appearance"}>
         <AppearanceThemePicker options={availableThemes} />
       </SettingsCard>
     </SettingsSectionShell>
