@@ -337,7 +337,7 @@ export function resolveSystemModel(
   return (
     ladder.find(({ provider }) =>
       resolveTeamProviderEnabled(aiProviderSettings, provider),
-    ) ?? ladder[0]
+    ) ?? (context.ownModelsOnly ? null : ladder[0])
   );
 }
 

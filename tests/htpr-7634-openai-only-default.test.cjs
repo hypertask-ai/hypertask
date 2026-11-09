@@ -25,7 +25,7 @@ const agentKey = "fixture-agent-anthropic";
 const output = "<p>Draft</p>";
 
 function moduleWithStubs(file, stubs) {
-  stubs = { "@/app/api/ai/_lib/skillAccess": { AccountSkillAccessError: class extends Error {} }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-8100-no-paid-fallback": { HTPR_8100_NO_PAID_FALLBACK_FLAG: "htpr-8100-no-paid-fallback" }, "@/lib/ai/modelFundingGuard": { fallbackRunsOnOurOwnGatewayKey: () => false }, "@/lib/ai/forcedTeamKey": load(path.join(root, "src/lib/ai/forcedTeamKey.ts")), ...stubs };
+  stubs = { "@/app/api/ai/_lib/skillAccess": { AccountSkillAccessError: class extends Error {} }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-7915-auto-model": { HTPR_7915_AUTO_MODEL_FLAG: "htpr-7915-auto-model" }, "@/app/api/ai/_lib/autoModel": { autoModelEnabled: async () => false, isAutoRequest: () => false, chatStepUp: () => 0, pickAutoModelOption: () => null }, "@/lib/flags/definitions/htpr-8100-no-paid-fallback": { HTPR_8100_NO_PAID_FALLBACK_FLAG: "htpr-8100-no-paid-fallback" }, "@/lib/ai/modelFundingGuard": { fallbackRunsOnOurOwnGatewayKey: () => false }, "@/lib/ai/forcedTeamKey": load(path.join(root, "src/lib/ai/forcedTeamKey.ts")), ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

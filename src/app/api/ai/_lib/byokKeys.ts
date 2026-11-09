@@ -46,6 +46,7 @@ import {
   parseCustomEndpointConfig,
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
+import { autoModelEnabled } from "@/app/api/ai/_lib/autoModel";
 import { MANAGED_TEAM_GATEWAY_PROVIDER } from "@/app/api/ai/_lib/managedGatewayKeys";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
@@ -791,7 +792,8 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
   }
   const openAiOnlyContext = await getOpenAiOnlyDefaultContext(lookup, storePlanId, suppliedFlags);
   const anthropicDisabled = backgroundClaudeEnabled && await isAnthropicDisabledForLookup(lookup);
-  return { haiku55Enabled: enabled, haikuDefaultEnabled, backgroundClaudeEnabled, anthropicDisabled, plan: storePlanId, hasByok: Boolean(byok), byok, ...openAiOnlyContext };
+  const ownModelsOnly = await autoModelEnabled(lookup.userId);
+  return { haiku55Enabled: enabled, haikuDefaultEnabled, backgroundClaudeEnabled, anthropicDisabled, plan: storePlanId, hasByok: Boolean(byok), byok, ownModelsOnly, ...openAiOnlyContext };
 }
 
 export function resolveAutomaticAiModel(

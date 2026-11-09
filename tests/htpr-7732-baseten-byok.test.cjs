@@ -69,6 +69,7 @@ function routingHarness({ enabled = true, plan = "Pro", saved = true, keyEnabled
     } },
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
     "@/lib/flags/definitions/htpr-7634-openai-only-default": {},
+    "@/app/api/ai/_lib/autoModel": { autoModelEnabled: async () => false },
     "@/lib/flags/definitions/htpr-8049-always-use-this-key": { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG: "htpr-8049-always-use-this-key" },
     "@/lib/ai/forcedTeamKey": load(path.join(root, "src/lib/ai/forcedTeamKey.ts")),
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { calls.flags.push([key, userId]); if (key === "htpr-8049-always-use-this-key") return false; return enabled; } },

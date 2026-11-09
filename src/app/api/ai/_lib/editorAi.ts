@@ -19,7 +19,10 @@ import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/a
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
 import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, isGrokGemini4ModelKey, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
-import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { getAiFeatureModelOverride, resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
 import { assertModelAllowedForPlan, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
@@ -692,7 +695,20 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  let selection = taskWriterSonnet
+  const autoPick = args.aiFeature && args.userId && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
+    ? pickAutoModelOption({
+        feature: args.aiFeature,
+        settings: teamContext.settings,
+        plan: storePlanId,
+        byokProviderFlags: args.byokProviderFlags,
+        grokGemini4Enabled,
+        planDefault: requestDefaultModelOption,
+        forcedProvider: await autoForcedProvider(keyLookup),
+      })
+    : null;
+  let selection = autoPick
+    ? selectionFromModelOption(autoPick)
+    : taskWriterSonnet
     ? selectionFromModelOption(getAiModelOptionById("claude-sonnet-5-5-thinking")!)
     : args.aiFeature
     ? defaultModelSelection(
@@ -810,7 +826,7 @@ export async function selectTaskWriterModel(args: {
     selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
   }
 
-  const pinnedSonnet = taskWriterSonnet && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  const pinnedSonnet = taskWriterSonnet && !autoPick && selection.modelOption?.modelKey === "claude-sonnet-5-5";
   if (pinnedSonnet && selection.modelOption) {
     selection.modelOption = {
       ...selection.modelOption,

@@ -5,10 +5,12 @@ import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { forcedByokProvider, modelOptionMatchesForcedKey } from "@/lib/ai/forcedTeamKey";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
   aiModelDefinitions,
+  AUTO_MODEL_OPTION_ID,
   aiModelOptions,
   isAiModelOptionVisible,
   isGrokGemini4ModelKey,
@@ -193,6 +195,9 @@ const AIModelDropDownList = ({
       isGuest,
     ]
   );
+  const autoFlag = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
+  const autoOption = autoFlag ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID) : undefined;
+  const autoSelected = Boolean(autoOption) && aiSelected?.id === AUTO_MODEL_OPTION_ID;
   const defaultContext = useAiDefaultModelContext(settingsTeamId);
   const freePlan = scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
@@ -217,8 +222,9 @@ const AIModelDropDownList = ({
     fallbackOption ??
     (haiku55Enabled ? planDefaultOption : defaultAiModelOption);
   const selectedModel = getAiModelDefinition(selectedOption.modelKey);
-  const selectedModelLabel =
-    selectedOption.source === "custom"
+  const selectedModelLabel = autoSelected
+    ? autoOption?.title
+    : selectedOption.source === "custom"
       ? (customEndpoint.modelId ?? selectedModel?.label)
       : selectedModel?.label;
   const selectedEfforts = getAiModelEfforts(
@@ -258,6 +264,7 @@ const AIModelDropDownList = ({
       !modelFlagsLoaded ||
       (respectTeamAvailability && providerSettingsLoading) ||
       customEndpoint.isLoading ||
+      autoSelected ||
       requestedOption.id === selectedOption.id ||
       availableOptions.length === 0
     ) {
@@ -271,6 +278,7 @@ const AIModelDropDownList = ({
     providerSettingsLoading,
     customEndpoint.isLoading,
     respectTeamAvailability,
+    autoSelected,
     requestedOption.id,
     selectedOption,
   ]);
@@ -470,6 +478,17 @@ const AIModelDropDownList = ({
             <div className="px-2.5 pb-1 pt-1.5 text-micro font-semibold uppercase tracking-[0.08em] text-text-light-gray">
               Model
             </div>
+            {autoOption ? (
+              <SubmenuRow
+                label={autoOption.title}
+                selected={autoSelected}
+                onClick={() => {
+                  optionCallback(autoOption);
+                  setIsOpen(false);
+                  window.requestAnimationFrame(() => triggerRef.current?.focus());
+                }}
+              />
+            ) : null}
             {quickModelIds.map((quickModelId) => {
               const catalogOption = getAiModelOptionById(quickModelId);
               if (!catalogOption) return null;
@@ -490,7 +509,7 @@ const AIModelDropDownList = ({
                   (scopedBilling?.storePlanId === "BYOK" && !hasCustomerKey));
               const locked = isGuestLocked || isPremiumLocked;
               const disabled = !option && !locked;
-              const selected = selectedOption.id === catalogOption.id;
+              const selected = !autoSelected && selectedOption.id === catalogOption.id;
 
               return (
                 <button
@@ -573,7 +592,7 @@ const AIModelDropDownList = ({
         }}
       >
         <span className="truncate font-medium">{selectedModelLabel}</span>
-        {selectedOption.effort ? (
+        {selectedOption.effort && !autoSelected ? (
           <span
             className={cn(
               "ml-1.5 flex-none text-text-light-gray",
@@ -637,6 +656,16 @@ const AIModelDropDownList = ({
                   : cn("absolute w-[220px] max-w-[calc(100vw-16px)]", submenuPositionClass)
               )}
             >
+              {autoOption ? (
+                <SubmenuRow
+                  label={autoOption.title}
+                  selected={autoSelected}
+                  onClick={() => {
+                    optionCallback(autoOption);
+                    setSubmenu(null);
+                  }}
+                />
+              ) : null}
               {AI_PROVIDERS.map((provider) => {
                 const models = aiModelDefinitions.filter(
                   (model) =>
@@ -674,7 +703,7 @@ const AIModelDropDownList = ({
                           key={model.key}
                           label={model.label}
                           priceTier={model.priceTier}
-                          selected={model.key === selectedOption.modelKey}
+                          selected={!autoSelected && model.key === selectedOption.modelKey}
                           locked={locked}
                           note={
                             isGuestLocked
@@ -710,7 +739,7 @@ const AIModelDropDownList = ({
                   </div>
                   <SubmenuRow
                     label={customEndpoint.modelId ?? "Custom endpoint"}
-                    selected={selectedOption.source === "custom"}
+                    selected={!autoSelected && selectedOption.source === "custom"}
                     disabled={isByokPlan && !isProviderEnabled("custom")}
                     onClick={() => selectModel("custom")}
                   />
@@ -718,7 +747,7 @@ const AIModelDropDownList = ({
               ) : null}
             </div>
           ) : null}
-          {selectedEfforts.length > 0 ? (
+          {selectedEfforts.length > 0 && !autoSelected ? (
             <>
               <MenuRow
                 label="Effort"
@@ -770,7 +799,8 @@ const AIModelDropDownList = ({
                 !isProviderEnabled(fallbackOption.source))
             }
             onClick={() => {
-              if (fallbackOption) optionCallback(fallbackOption);
+              const resetOption = autoOption ?? fallbackOption;
+              if (resetOption) optionCallback(resetOption);
               setSubmenu(null);
             }}
           >
