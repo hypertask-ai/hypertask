@@ -241,9 +241,6 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.journey != '' && inputs.journey != 'visual')
       || github.event_name == 'schedule'
-    concurrency:
-      group: ${{ github.event_name == 'schedule' && 'feature-map-live-weekly' || 'verify-qa' }}
-      cancel-in-progress: ${{ github.event_name != 'schedule' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -414,19 +411,4 @@ jobs:
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           FEATURE_MAP_LIVE_ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
-          SHIP_SESSION_NAME: CI Boss
-          TRUSTED_CLI_BINARY_VERSION: "0.2.15"
-          TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
-        run: |
-          set -euo pipefail
-          umask 077
-          mkdir -p "$HOME/.config/hypertask-agents/credentials/sessions" "$HOME/.agents/skills/ship/scripts"
-          install -m 0755 .claude/skills/ship/scripts/ship-identity "$HOME/.agents/skills/ship/scripts/ship-identity"
-          printf '%s' "$HYPERTASK_MCP_TOKEN" > "$HOME/.config/hypertask-agents/credentials/sessions/ci-boss-agent-token"
-          test "$(SHIP_SESSION_NAME=CI Boss "$HOME/.agents/skills/ship/scripts/ship-identity" | cut -f1)" = 'CI Boss'
-          CLI_BINARY="$RUNNER_TEMP/hypertask"
-          curl --fail --location --silent --show-error "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" --output "$CLI_BINARY"
-          echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check
-          chmod +x "$CLI_BINARY"
-          { echo "$RUNNER_TEMP"; echo "${GITHUB_WORKSPACE}/.claude/skills/vcc/bin"; } >> "$GITHUB_PATH"
-          node .github/scripts/feature-map-live-weekly-file.mjs
+        run: node .github/scripts/feature-map-live-weekly-file.mjs

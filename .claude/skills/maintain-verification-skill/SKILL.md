@@ -48,7 +48,7 @@ The tests use temporary Git repositories, HOME, local remotes and fake hax/vcc/s
 
 The non-required `feature-map-check` GitHub job runs the tiny tests then the checker on Mondays at 03:37 UTC, manual dispatch and scoped PRs to production. It uses free GitHub-hosted Ubuntu, pinned checkout/setup-node, Node 24, only `contents: read`, no installs or secrets. Real stale citations make it red; repair them in their own ticket, not by weakening checks. It is not a required merge check.
 
-The non-required weekly live job is the `verify-qa` job in `.github/workflows/visual-regression.yml` on the Monday 04:05 UTC schedule. It uses the same disposable browser-smoke stack as on-demand verify-qa, posts weekly pass/fail counts to board 11514 through `.github/scripts/feature-map-live-weekly-file.mjs` using `hypertask` reads and `vcc` writes as CI Boss (pinned `hypertask` CLI plus `SHIP_SESSION_NAME=CI Boss`), with `HYPERTASK_MCP_TOKEN` for the CI Boss session file and the public `packages: read` grant for CI service images. It is not a required merge check.
+The non-required weekly live job is the `verify-qa` job in `.github/workflows/visual-regression.yml` on the Monday 04:05 UTC schedule. It uses the same disposable browser-smoke stack as on-demand verify-qa, posts weekly pass/fail counts to board 11514 through `.github/scripts/feature-map-live-weekly-file.mjs` using the MCP task search, create and comment API with the `HYPERTASK_MCP_TOKEN` repository secret, plus the public `packages: read` grant for CI service images. It is not a required merge check.
 
 ## Install after shipping
 

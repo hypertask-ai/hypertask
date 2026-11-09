@@ -1,7 +1,11 @@
 import { readFile, appendFile } from 'node:fs/promises'
-import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+
+const APP = 'https://app.hypertask.ai'
+const PROJECT_ID = 11514
+const BACKLOG_SECTION_ID = 32923
+const LABELS = ['CI', 'Hypertask CI', 'brain-light']
 
 export function isoWeek(now = new Date()) {
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
@@ -20,38 +24,44 @@ export function countSteps(result) {
   return { pass, fail: steps.length - pass, total: steps.length, verdict: result?.verdict || 'FAIL' }
 }
 
-function runCli(binary, args, { execImpl = execFileSync, env = process.env, json = true } = {}) {
-  const output = execImpl(binary, json ? [...args, '--json'] : args, {
-    encoding: 'utf8', env, timeout: 60_000, maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+async function api(route, { token, fetchImpl = fetch, method = 'GET', body } = {}) {
+  if (!token) throw new Error('HYPERTASK_MCP_TOKEN is missing')
+  const response = await fetchImpl(`${APP}/api/mcp/${route}`, {
+    method,
+    signal: AbortSignal.timeout(30_000),
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    ...(body ? { body: JSON.stringify(body) } : {}),
   })
-  if (!json) return output
-  const payload = JSON.parse(output)
-  if (payload.success === false) throw new Error(`Board CLI ${binary} failed`)
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(`Hypertask ${route} returned HTTP ${response.status}`)
+  if (payload.success !== true) throw new Error(`Hypertask ${route} rejected the operation`)
   return payload
 }
 
-export const boardRead = (args, options) => runCli('hypertask', args, options)
-export const boardWrite = (args, options) => runCli('vcc', args, options)
-
-const normalize = (text) => (text || '').replace(/\s+/g, ' ').trim()
-
-function activityRows(ticketRef, options) {
-  return runCli('vcc', ['activity', 'list', ticketRef], { ...options, json: false })
-    .split('\n').map((line) => line.trimEnd()).filter(Boolean)
-    .map((line) => {
-      const first = line.indexOf('\t')
-      const second = first < 0 ? -1 : line.indexOf('\t', first + 1)
-      return { text: second < 0 ? line.slice(first + 1) : line.slice(second + 1) }
-    })
-}
-
 export async function findOpenWeeklyTicket(title, options = {}) {
-  for (const status of ['Normal', 'Archive', 'Deleted']) {
-    const payload = boardRead(['task', 'list', '--project', '11514', '--status', status, '--search', title], options)
-    if (!Array.isArray(payload.tasks)) throw new Error('Weekly live ticket search returned no task list')
-    const existing = payload.tasks.find((task) => task.title === title && task.section !== 'Done')
+  let cursor
+  let total
+  let searched = 0
+  const cursors = new Set()
+  do {
+    const query = `project_id=${PROJECT_ID}&status=open&limit=50&q=${encodeURIComponent(title)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+    const search = await api(`tasks/search?${query}`, options)
+    if (!Array.isArray(search.tasks) || search.partial || !Number.isInteger(search.total) || search.total < 0 ||
+      (total !== undefined && search.total !== total) ||
+      (search.nextCursor != null && (typeof search.nextCursor !== 'string' || !search.nextCursor.trim()))) {
+      throw new Error('Weekly live ticket search is incomplete; refusing duplicate creation')
+    }
+    total = search.total
+    searched += search.tasks.length
+    if (searched > total) throw new Error('Weekly live ticket search is incomplete; refusing duplicate creation')
+    const existing = search.tasks.find((task) => task.title === title && task.section !== 'Done')
     if (existing) return existing
-  }
+    cursor = search.nextCursor
+    if (cursor ? !search.tasks.length || cursors.has(cursor) : searched !== total) {
+      throw new Error('Weekly live ticket search is incomplete; refusing duplicate creation')
+    }
+    if (cursor) cursors.add(cursor)
+  } while (cursor)
   return null
 }
 
@@ -82,33 +92,46 @@ export async function fileWeeklyLiveResult({
   runUrl = '',
   artifactUrl = '',
   week = isoWeek(),
-  execImpl = execFileSync,
-  env = process.env,
+  fetchImpl = fetch,
+  token = process.env.HYPERTASK_MCP_TOKEN,
 } = {}) {
-  const cli = { execImpl, env }
+  const options = { token, fetchImpl }
   const result = await loadEvidence(evidenceDir)
   const counts = countSteps(result)
   const title = weeklyLiveTitle(week)
   const body = activityBody({ week, counts, sha: result.sha, runUrl, artifactUrl })
-  let ticket = await findOpenWeeklyTicket(title, cli)
+  let ticket = await findOpenWeeklyTicket(title, options)
   if (!ticket) {
-    const description = `<p>Weekly live feature-map on a disposable stack (week ${week}). Pass ${counts.pass}; fail ${counts.fail}; verdict ${counts.verdict}. Not production.</p>`
-    const created = boardWrite([
-      'task', 'create', '--project', '11514', '--title', title,
-      '--description', description, '--labels', 'CI,Hypertask CI,brain-light',
-    ], cli)
-    ticket = created.task || created.tasks?.[0]
+    const description = [
+      `<p>What's wrong or wanted: weekly live feature-map check for week ${week} on a disposable seeded copy, never production.</p>`,
+      `<p>Who it affects: internal only; this is the weekly behavior record.</p>`,
+      `<p>Recommended course and why: read the run below. A failed step names the page or journey to fix next.</p>`,
+      `<p>What Valentin must decide: nothing.</p>`,
+      `<p>How to undo: switch the Monday 04:05 UTC schedule off.</p>`,
+      `<hr><p>${body.replace(/\n/g, '<br>')}</p>`,
+    ].join('')
+    const created = await api('tasks/create', {
+      ...options,
+      method: 'POST',
+      body: {
+        project_id: PROJECT_ID,
+        section_id: BACKLOG_SECTION_ID,
+        title,
+        description,
+        content_type: 'html',
+        labels: LABELS,
+      },
+    })
+    ticket = created.task
   }
-  if (!Number.isSafeInteger(ticket?.id)) throw new Error('Weekly live ticket returned no task id')
-  const ticketRef = ticket.ticketNumber || `HYCI-${ticket.uniqueIndex}`
-  const marker = `feature-map-live-weekly ${week}`
-  const note = `${marker}\n${body}`
-  const prior = activityRows(ticketRef, cli).find((row) => (row.text || '').includes(marker))
-  if (prior && normalize(prior.text) === normalize(note)) {
-    return { ticketId: ticket.id, uniqueIndex: ticket.uniqueIndex, duplicate: true, counts }
-  }
-  runCli('vcc', ['activity', 'add', ticketRef, '--text', note], { ...cli, json: false })
-  return { ticketId: ticket.id, uniqueIndex: ticket.uniqueIndex, duplicate: false, counts }
+  const ticketNumber = ticket?.ticketNumber || (Number.isSafeInteger(ticket?.uniqueIndex) ? `HYCI-${ticket.uniqueIndex}` : null)
+  if (!ticketNumber) throw new Error('Weekly live ticket returned no ticket number')
+  await api('comments', {
+    ...options,
+    method: 'POST',
+    body: { ticket_number: ticketNumber, project_id: PROJECT_ID, text: `<p>${body.replace(/\n/g, '<br>')}</p>`, content_type: 'html' },
+  })
+  return { ticketNumber, uniqueIndex: ticket.uniqueIndex, counts }
 }
 
 async function main() {
@@ -124,11 +147,10 @@ async function main() {
   const summary = [
     '## Weekly feature-map live',
     '',
-    `Ticket: https://app.hypertask.ai/detail/project-11514/${outcome.uniqueIndex}`,
+    `Ticket: ${APP}/detail/project-${PROJECT_ID}/${outcome.uniqueIndex}`,
     `Pass: ${outcome.counts.pass}`,
     `Fail: ${outcome.counts.fail}`,
     `Verdict: ${outcome.counts.verdict}`,
-    outcome.duplicate ? 'Board note: already recorded this week.' : 'Board note: recorded.',
     '',
   ].join('\n')
   console.log(summary)

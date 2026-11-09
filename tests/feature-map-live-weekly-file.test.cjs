@@ -12,53 +12,79 @@ test('countSteps and weekly title', () => {
   assert.equal(weeklyLiveTitle(week), `Weekly feature-map live ${week}`)
 })
 
-function boardExec(rows) {
-  return (binary, args) => {
-    const route = args.filter((a) => a !== '--json')
-    const hit = rows.find((row) => row.when(binary, route))
-    if (!hit) throw new Error(`unexpected ${binary} ${route.join(' ')}`)
-    return typeof hit.body === 'string' ? hit.body : JSON.stringify(hit.body)
+function fetchFor(routes, calls = []) {
+  return async (url, init = {}) => {
+    const body = init.body ? JSON.parse(init.body) : null
+    calls.push({ url, method: init.method || 'GET', body })
+    const pathname = new URL(url).pathname + new URL(url).search
+    const hit = routes.find((route) => route.when(pathname, body))
+    if (!hit) return { ok: false, status: 404, json: async () => ({}) }
+    return { ok: true, status: 200, json: async () => hit.body }
   }
 }
 
 test('findOpenWeeklyTicket matches exact title', async () => {
   const title = weeklyLiveTitle('2026-W45')
   const ticket = await findOpenWeeklyTicket(title, {
-    execImpl: boardExec([
-      { when: (b, r) => b === 'hypertask' && r.includes('Normal'), body: { success: true, tasks: [{ id: 1, title, uniqueIndex: 99, section: 'Backlog' }] } },
-      { when: (b, r) => b === 'hypertask' && r.includes('Archive'), body: { success: true, tasks: [] } },
-      { when: (b, r) => b === 'hypertask' && r.includes('Deleted'), body: { success: true, tasks: [] } },
+    token: 'test-token',
+    fetchImpl: fetchFor([
+      {
+        when: (url) => url.startsWith('/api/mcp/tasks/search'),
+        body: { success: true, total: 2, tasks: [{ id: 1, title: `${title} old`, uniqueIndex: 7 }, { id: 2, title, uniqueIndex: 99 }] },
+      },
     ]),
   })
   assert.equal(ticket.uniqueIndex, 99)
 })
 
-test('fileWeeklyLiveResult creates then dedupes activity', async () => {
-  let created = false
-  const title = weeklyLiveTitle('2026-W45')
-  const execImpl = (binary, args) => {
-    const route = args.filter((a) => a !== '--json')
-    if (binary === 'hypertask' && route[0] === 'task' && route[1] === 'list') {
-      return JSON.stringify({ success: true, tasks: created ? [{ id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205', section: 'Backlog' }] : [] })
-    }
-    if (binary === 'vcc' && route[0] === 'task' && route[1] === 'create') {
-      created = true
-      return JSON.stringify({ success: true, task: { id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205', section: 'Backlog' } })
-    }
-    if (binary === 'vcc' && route[0] === 'activity') return route[1] === 'list' ? '' : 'ok'
-    throw new Error(`unexpected ${binary} ${route.join(' ')}`)
-  }
-  const first = await fileWeeklyLiveResult({ week: '2026-W45', evidenceDir: '/missing', execImpl })
-  assert.equal(created, true)
-  assert.equal(first.duplicate, false)
-  const prior = 'feature-map-live-weekly 2026-W45 feature-map-live-weekly 2026-W45 Pass: 0 Fail: 0 Verdict: FAIL SHA: unknown'
-  const second = await fileWeeklyLiveResult({
-    week: '2026-W45',
+test('findOpenWeeklyTicket refuses an incomplete search', async () => {
+  await assert.rejects(() => findOpenWeeklyTicket('Weekly feature-map live 2026-W45', {
+    token: 'test-token',
+    fetchImpl: fetchFor([{ when: (url) => url.startsWith('/api/mcp/tasks/search'), body: { success: true, total: 5, tasks: [] } }]),
+  }), /incomplete/)
+})
+
+test('fileWeeklyLiveResult creates a board 11514 ticket then comments', async () => {
+  const week = '2026-W45'
+  const title = weeklyLiveTitle(week)
+  const calls = []
+  const created = await fileWeeklyLiveResult({
+    week,
     evidenceDir: '/missing',
-    execImpl: boardExec([
-      { when: (b, r) => b === 'hypertask' && r[0] === 'task', body: { success: true, tasks: [{ id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205', section: 'Backlog' }] } },
-      { when: (b, r) => b === 'vcc' && r[0] === 'activity' && r[1] === 'list', body: `2026-11-08T00:00:00.000Z\tCI Boss\t${prior}` },
-    ]),
+    token: 'test-token',
+    fetchImpl: fetchFor([
+      { when: (url) => url.startsWith('/api/mcp/tasks/search'), body: { success: true, total: 0, tasks: [] } },
+      {
+        when: (url) => url === '/api/mcp/tasks/create',
+        body: { success: true, task: { id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205' } },
+      },
+      { when: (url) => url === '/api/mcp/comments', body: { success: true } },
+    ], calls),
   })
-  assert.equal(second.duplicate, true)
+  assert.equal(created.ticketNumber, 'HYCI-205')
+  const create = calls.find((call) => call.url.endsWith('/api/mcp/tasks/create'))
+  assert.equal(create.body.project_id, 11514)
+  assert.equal(create.body.title, title)
+  assert.deepEqual(create.body.labels, ['CI', 'Hypertask CI', 'brain-light'])
+  assert.match(create.body.description, /What's wrong or wanted:.*Who it affects:.*Recommended course and why:.*What Valentin must decide:.*How to undo:/)
+  const comment = calls.find((call) => call.url.endsWith('/api/mcp/comments'))
+  assert.equal(comment.body.ticket_number, 'HYCI-205')
+  assert.match(comment.body.text, /feature-map-live-weekly 2026-W45/)
+})
+
+test('fileWeeklyLiveResult reuses an open weekly ticket', async () => {
+  const week = '2026-W45'
+  const title = weeklyLiveTitle(week)
+  const calls = []
+  const outcome = await fileWeeklyLiveResult({
+    week,
+    evidenceDir: '/missing',
+    token: 'test-token',
+    fetchImpl: fetchFor([
+      { when: (url) => url.startsWith('/api/mcp/tasks/search'), body: { success: true, total: 1, tasks: [{ id: 42, title, uniqueIndex: 205, ticketNumber: 'HYCI-205' }] } },
+      { when: (url) => url === '/api/mcp/comments', body: { success: true } },
+    ], calls),
+  })
+  assert.equal(outcome.ticketNumber, 'HYCI-205')
+  assert.equal(calls.some((call) => call.url.endsWith('/api/mcp/tasks/create')), false)
 })
