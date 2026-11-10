@@ -41,7 +41,7 @@ export function repairTicketDescription(repair: EmptyViewColumnRepair, now: Date
     `<p><strong>What Valentin must decide:</strong> nothing.</p>` +
     `<p><strong>How to undo:</strong> hide or show columns in each named view, or remove the daily check.</p>` +
     `<hr><h2>Repaired on ${dayKey(now)}</h2><ul>${boards}</ul>` +
-    `<p>Filters and sorting were not touched. ${boardsWithout} had no live columns to copy and was left alone.</p>` +
+    `<p>Filters and sorting were not touched. ${boardsWithout} left alone because they had no live columns to copy.</p>` +
     `<p>Marker: ${escapeHtml(repairTicketMarker(now))}</p>`
   );
 }

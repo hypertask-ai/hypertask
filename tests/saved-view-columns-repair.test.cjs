@@ -171,12 +171,12 @@ test("the ticket marker and description name the day, the boards and the views",
       viewsFound: 1,
       viewsRepaired: 1,
       boards: [{ projectId: 41, board: "Client Board", views: ["Sprint"] }],
-      boardsWithoutColumns: 0,
+      boardsWithoutColumns: 2,
       truncated: false,
     },
     now,
   );
-  for (const text of ["saved-view-columns:2026-11-10", "Client Board", "Sprint"]) {
+  for (const text of ["saved-view-columns:2026-11-10", "Client Board", "Sprint", "2 boards left alone because they had no live columns"]) {
     assert.match(description, new RegExp(text));
   }
 });
