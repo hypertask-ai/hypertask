@@ -175,10 +175,17 @@ export function useAiModelPreference(
           if (response.status === 200 && response.data.settings) {
             queryClient.setQueryData<IUserPreferences>(
               USER_PREFERENCES_QUERY_KEY,
-              (previous) => ({
-                ...(previous ?? userPreferences),
-                ...response.data.settings,
-              }),
+              (previous) => {
+                const thinking = previous?.aiModelPreferences?.thinking;
+                const settings = response.data.settings;
+                return {
+                  ...(previous ?? userPreferences),
+                  ...settings,
+                  ...(thinking
+                    ? { aiModelPreferences: { ...settings.aiModelPreferences, thinking } }
+                    : {}),
+                };
+              },
             );
           }
         })
