@@ -16,7 +16,7 @@ export const attachOpenBlockingTasks = async <T extends TaskWithBlockingRelation
   tasks: T[],
 ): Promise<Array<Omit<T, "relatedFromTasks"> & { blockingTasks: IBlockingTask[] }>> => {
   const blockerProjectIds = tasks.flatMap((task) =>
-    task.relatedFromTasks.map(({ targetTask }) => targetTask.projectId),
+    (task.relatedFromTasks ?? []).map(({ targetTask }) => targetTask.projectId),
   );
   const doneTitlesByProject = await loadDoneTitlesByProject(
     blockerProjectIds,
@@ -24,7 +24,7 @@ export const attachOpenBlockingTasks = async <T extends TaskWithBlockingRelation
     prisma,
   );
 
-  return tasks.map(({ relatedFromTasks, ...task }) => ({
+  return tasks.map(({ relatedFromTasks = [], ...task }) => ({
     ...task,
     blockingTasks: openBlockingTasks(relatedFromTasks, doneTitlesByProject),
   }));

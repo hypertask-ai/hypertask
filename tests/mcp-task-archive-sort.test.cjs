@@ -5,6 +5,7 @@ const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const blockingStubs = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 const routePath = path.join(root, "src/lib/mcp/operations/tasks/operation.ts");
 const routeJavascript = ts.transpileModule(fs.readFileSync(routePath, "utf8"), {
   compilerOptions: {
@@ -52,7 +53,10 @@ function loadRoute(tasks = []) {
     },
     "@/utils/controllers/projects/getAllIncludes": {
       getProjectWhere: () => ({}),
+      blockedByRelationsInclude: blockingStubs.blockedByRelationsIncludeStub,
     },
+    "@/utils/controllers/tasks/attachOpenBlockingTasks": blockingStubs.attachOpenBlockingTasksStub,
+    "@/lib/blockingTasks": blockingStubs.blockingTasksMapperStub,
     "@/lib/mcp/agents": {
       mapVisibleMcpAgent: () => undefined,
       mcpVisibleAgentSelect: () => ({}),
