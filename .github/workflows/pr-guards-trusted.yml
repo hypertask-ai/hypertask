@@ -35,8 +35,6 @@ jobs:
           ref: production
           fetch-depth: 1
           persist-credentials: false
-      - name: Install the trusted workflow parser
-        run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
       - name: Mark title recheck pending
         if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
@@ -99,6 +97,8 @@ jobs:
         with:
           script: |
             await require('./.github/scripts/pr-title.cjs')({ github, context, core, pr: JSON.parse(process.env.PR_METADATA) });
+      - name: Install the trusted workflow parser
+        run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
       - name: Check workflow runner policy
         id: runner-policy
         if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
