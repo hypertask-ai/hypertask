@@ -161,6 +161,59 @@ test("human assignee isolation preserves explicit agent and mixed selections", (
   assert.equal(assigneeFilterCondition(task, [], undefined, "ANY", runtime), true);
 });
 
+test("HIDE leaves out tickets that carry any selected tag and keeps the rest", () => {
+  const selected = [{ id: "bug" }, { id: "error log" }];
+  const sections = [{
+    items: [
+      { id: "bug", ...taskWithLabels("bug") },
+      { id: "error", ...taskWithLabels("error log") },
+      { id: "both", ...taskWithLabels("bug", "feature") },
+      { id: "feature", ...taskWithLabels("feature") },
+      { id: "plain", ...taskWithLabels() },
+    ],
+  }];
+  const filters = [{ type: "Labels", searchPayload: selected, match: "HIDE" }];
+  const shown = applyFilters(sections, filters, "ANY", undefined, { tagHideFilterEnabled: true })[0]
+    .items.map(({ id }) => id);
+
+  assert.deepEqual(shown, ["feature", "plain"]);
+  assert.equal(labelFilterCondition(taskWithLabels("bug"), selected, undefined, "ANY"), true);
+});
+
+test("HIDE stays off unless the switch is on, and ANY still honors the other filter", () => {
+  const sections = [{
+    items: [
+      { id: "bug-mine", taskLabels: [{ label: { id: "bug" } }], assignees: [{ userId: 7, agentId: null }] },
+      { id: "bug-other", taskLabels: [{ label: { id: "bug" } }], assignees: [{ userId: 8, agentId: null }] },
+      { id: "mine", taskLabels: [{ label: { id: "feature" } }], assignees: [{ userId: 7, agentId: null }] },
+    ],
+  }];
+  const filters = [
+    { type: "Labels", searchPayload: [{ id: "bug" }], match: "HIDE" },
+    { type: "Assignees", searchPayload: [{ id: 7, uid: "user-7" }] },
+  ];
+
+  assert.deepEqual(
+    applyFilters(sections, filters, "ANY")[0].items.map(({ id }) => id),
+    ["bug-mine", "mine"],
+  );
+  assert.equal(
+    labelFilterCondition(taskWithLabels("bug"), [{ id: "bug" }], undefined, "HIDE"),
+    true,
+  );
+});
+
+test("tags cycle through Hide only when that mode is on", () => {
+  const { nextFilterMatch } = require("./filter-match-mode-entry.cjs");
+
+  assert.equal(nextFilterMatch("ANY", false), "ALL");
+  assert.equal(nextFilterMatch("ALL", false), "ANY");
+  assert.equal(nextFilterMatch("HIDE", false), "ALL");
+  assert.equal(nextFilterMatch("ANY", true), "ALL");
+  assert.equal(nextFilterMatch("ALL", true), "HIDE");
+  assert.equal(nextFilterMatch("HIDE", true), "ANY");
+});
+
 test("explicit legacy assignee matching restores ANY and default modes but not ALL", () => {
   const task = { assignees: [{ userId: 6, agentId: "agent-a" }] };
   const owner = { id: 6, uid: "user-6" };

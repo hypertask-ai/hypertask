@@ -1,4 +1,5 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import { IFavorites, IProject, ISection } from "@/models/model";
 import { activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -31,6 +32,7 @@ export function useLandingSectionState(context: Context) {
 
 
 const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
+const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
 const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
@@ -80,6 +82,7 @@ const boardSections: ISection[] = useMemo(() => {
 const filterRuntimeContext = useMemo(() => ({
   legacyAgentAssigneeMatch: !assigneeFixEnabled,
   agentCreatorFilterEnabled,
+  tagHideFilterEnabled,
   legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
   blockedByMeListEnabled,
   runningTaskIds: timerDataReady
@@ -87,7 +90,7 @@ const filterRuntimeContext = useMemo(() => ({
     : new Set(boardSections.flatMap((section) =>
         (section.items ?? []).map((task) => task.id)
       )),
-}), [agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, blockedByMeListEnabled, runningTimers, boardSections, timerDataReady]);
+}), [agentCreatorFilterEnabled, tagHideFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, blockedByMeListEnabled, runningTimers, boardSections, timerDataReady]);
 
 useEffect(() => {
   const project = _allProjects?.[_projectIndex]

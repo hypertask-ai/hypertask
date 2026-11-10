@@ -7,6 +7,7 @@ import { matchLabelIds, validateProjectAccess, validateProjectMemberIds } from '
 import { unresolvedLabelMessage } from '@/lib/mcp/labelMessages';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_8135_VIEW_LABEL_ERROR_FLAG } from '@/lib/flags/definitions/htpr-8135-view-label-error';
+import { HTPR_8171_HIDE_TAGS_FLAG } from '@/lib/flags/definitions/htpr-8171-hide-tags';
 import { broadcastBoardChange } from '@/lib/realtime/server';
 import { sanitizeBoardFilters } from '@/utils/helperFunctions/Views/BoardFilterSanitizer';
 import { EmptySections, Prisma, SortingMode, SortingOrder, SubtaskSetting, ViewVisibility } from '@prisma/client';
@@ -19,10 +20,13 @@ import {
 } from '@/utils/controllers/projects/views/boardFilterWriteLock';
 import { allBoardColumns, canonicalBoardColumns, normalizeNativeBoardFilters } from './nativeBoardSettings';
 
+export type LabelMatchMode = 'ALL' | 'ANY' | 'HIDE';
+
 export type CreateViewFilters = {
     label_names?: string[];
     assignee_ids?: Array<number | string>;
     match?: 'ALL' | 'ANY';
+    label_match?: LabelMatchMode;
 };
 
 export type CreateViewInput = {
@@ -49,12 +53,47 @@ function assertEmptySections(value: unknown): asserts value is EmptySections | u
     }
 }
 
-type BoardFilterEntry = { type: string; searchPayload: unknown[] };
+type BoardFilterEntry = { type: string; searchPayload: unknown[]; match?: LabelMatchMode };
+
+function boardFiltersHideLabels(value: unknown) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const added = (value as { addedFilters?: unknown }).addedFilters;
+    if (!Array.isArray(added)) return false;
+    return added.some((entry) =>
+        entry !== null &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        (entry as { type?: unknown }).type === 'Labels' &&
+        (entry as { match?: unknown }).match === 'HIDE'
+    );
+}
+
+async function assertTagHideAllowed(userId: number | undefined, requested: boolean) {
+    if (!requested) return;
+    if (userId === undefined || !(await isFeatureEnabled(HTPR_8171_HIDE_TAGS_FLAG, userId))) {
+        throw new ValidationError('Hiding tickets by tag is not available.', {
+            field: 'label_match',
+            code: 'invalid_value',
+        });
+    }
+}
+
+function withLabelMatch(
+    entry: BoardFilterEntry | undefined,
+    explicit: LabelMatchMode | undefined,
+    previous?: unknown,
+): BoardFilterEntry | undefined {
+    if (!entry) return entry;
+    const match = explicit ?? (previous === 'ALL' || previous === 'HIDE' ? previous : undefined);
+    if (match === 'ALL' || match === 'HIDE') return { ...entry, match };
+    return { type: entry.type, searchPayload: entry.searchPayload };
+}
 
 async function buildLabelsFilterEntry(
     projectId: number,
     labelNames?: string[],
-    userId?: number
+    userId?: number,
+    labelMatch?: LabelMatchMode,
 ): Promise<BoardFilterEntry | undefined> {
     if (!labelNames?.length) return undefined;
 
@@ -73,10 +112,10 @@ async function buildLabelsFilterEntry(
             `Label(s) not found in project: ${unresolved.join(', ')}`
         );
     }
-    return {
+    return withLabelMatch({
         type: 'Labels',
         searchPayload: ids.map((id) => ({ id })),
-    };
+    }, labelMatch);
 }
 
 async function buildAssigneesFilterEntry(
@@ -162,7 +201,12 @@ async function buildValidatedNativeBoardFilters(projectId: number, value: unknow
 async function buildBoardFilters(projectId: number, filters?: CreateViewFilters, userId?: number) {
     const addedFilters: BoardFilterEntry[] = [];
 
-    const labelsEntry = await buildLabelsFilterEntry(projectId, filters?.label_names, userId);
+    const labelsEntry = await buildLabelsFilterEntry(
+        projectId,
+        filters?.label_names,
+        userId,
+        filters?.label_match,
+    );
     if (labelsEntry) addedFilters.push(labelsEntry);
 
     const assigneesEntry = await buildAssigneesFilterEntry(projectId, filters?.assignee_ids);
@@ -181,6 +225,10 @@ export async function createView(input: CreateViewInput) {
         if (access.error) throw new Error(access.error.message);
     }
     assertEmptySections(input.board_empty_sections);
+    await assertTagHideAllowed(
+        userId,
+        input.filters?.label_match === 'HIDE' || boardFiltersHideLabels(input.board_filters),
+    );
 
     const existing = await prisma.view.findFirst({
         where: { title, project_view: { projectId } },
@@ -276,6 +324,10 @@ export type UpdateViewInput = {
 export async function updateView(input: UpdateViewInput) {
     const { viewId, userId, agentId } = input;
     assertEmptySections(input.board_empty_sections);
+    await assertTagHideAllowed(
+        userId,
+        input.filters?.label_match === 'HIDE' || boardFiltersHideLabels(input.board_filters),
+    );
 
     const view = await prisma.view.findUnique({
         where: { id: viewId },
@@ -379,12 +431,14 @@ export async function updateView(input: UpdateViewInput) {
                 : entry;
         };
 
+        const previousLabels = storedEntry('Labels') as { match?: unknown } | undefined;
         const labelsEntry =
             input.filters.label_names === undefined
-                ? storedEntry('Labels')
-                : keepMatch(
+                ? withLabelMatch(storedEntry('Labels') as BoardFilterEntry | undefined, input.filters.label_match, previousLabels?.match)
+                : withLabelMatch(
                       await buildLabelsFilterEntry(projectId, input.filters.label_names, userId),
-                      'Labels'
+                      input.filters.label_match,
+                      previousLabels?.match,
                   );
         const assigneesEntry =
             input.filters.assignee_ids === undefined
