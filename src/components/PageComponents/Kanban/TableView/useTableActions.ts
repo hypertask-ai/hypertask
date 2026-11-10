@@ -1,4 +1,7 @@
 import { useCallback, useEffect, type DragEvent as ReactDragEvent } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { useSetRecoilState } from "@/lib/state";
+import { tableSortAccountAtom } from "@/store";
 import { IAssignees, ITask } from "@/models/model";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import globalConstants from "@/lib/constants";
@@ -8,7 +11,6 @@ import { CommandMode } from "@/models/enums";
 import { MAX_SORT_LEVELS } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { toggleTaskTimer } from "@/hooks/Task Detail/useTimeTracking";
 import toast from "react-hot-toast";
-import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-8625-board-inbox-archive";
 import globalAPIHandlers from "@/utils/api/global";
 import { canDropTableRow, parseTableRowDragData } from "./tableRowDrag";
@@ -23,6 +25,8 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
 
 export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
+  const setSortAccount = useSetRecoilState(tableSortAccountAtom);
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes") || legacyTableGroupEnabled;
   const {
@@ -69,12 +73,27 @@ export function useTableActions(context: Context) {
         return;
       }
       setSortState(next);
-      if (_currentProject) setTableSortViewAndReturn(_currentProject, next[0] ?? null);
+      if (tableSortColumnsEnabled && _currentProject) {
+        const viewId =
+          _currentProject.project_view?.user_project_views?.[0]?.unsavedView?.id ??
+          _currentProject.project_view?.user_project_views?.[0]?.appliedView?.id ??
+          _currentProject.project_view?.default_view?.id;
+        if (viewId) setSortAccount({ viewId, sort: next });
+      }
+      if (_currentProject) {
+        setTableSortViewAndReturn(
+          _currentProject,
+          next[0] ?? null,
+          tableSortColumnsEnabled ? next : undefined,
+        );
+      }
     },
     [
       sortState,
       _currentProject,
       setTableSortViewAndReturn,
+      setSortAccount,
+      tableSortColumnsEnabled,
       customFieldBySortColumn,
       myTasksSort,
       onMyTasksSortChange,
