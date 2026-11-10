@@ -18,8 +18,10 @@ import {
   mapTaskDescriptionContent,
   mapTaskToMcpGetResponse,
   mcpTaskLabelSelect,
+  mcpTaskUserCommentCount,
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers'
+import { HTPR_8977_LIGHT_QUERIES_FLAG } from '@/lib/flags/definitions/htpr-8977-light-queries'
 import { userCommentCountsByTaskId } from '@/utils/controllers/tasks/userCommentCounts'
 import { refreshTaskPullRequests } from '@/lib/pullRequests/taskPullRequests'
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
@@ -325,6 +327,7 @@ export async function GET(request: NextRequest) {
           project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope)
         }
 
+        const lightQueries = await isFeatureEnabled(HTPR_8977_LIGHT_QUERIES_FLAG, user.id).catch(() => false)
         const include = {
           comments: {
             where: { activity: { equals: Prisma.DbNull } },
@@ -333,7 +336,7 @@ export async function GET(request: NextRequest) {
             take: 20,
           },
           ...taskMcpGetInclude(user.id, ctx.agentId, ctx.teamScope),
-          _count: undefined,
+          ...(lightQueries ? { _count: undefined } : {}),
           ...(includeAiSummary ? {
             Task_Summary: {
               take: 1,
@@ -381,13 +384,17 @@ export async function GET(request: NextRequest) {
         }
 
         const attachmentDownloadHints = await isFeatureEnabled(HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG, user.id).catch(() => false)
-        const commentCounts = await userCommentCountsByTaskId(tasks.map(task => task.id))
+        const commentCounts = lightQueries
+          ? await userCommentCountsByTaskId(tasks.map(task => task.id))
+          : null
         const mapTask = async (task: (typeof tasks)[number]) => {
           const pullRequests = task.pullRequests?.length
             ? await refreshTaskPullRequests(task.id, task.pullRequests)
             : task.pullRequests
           const detail = withAttachmentDownloadHints(mapTaskToMcpGetResponse(
-            { ...task, pullRequests, _count: { comments: commentCounts.get(task.id) ?? 0 } },
+            lightQueries
+              ? { ...task, pullRequests, _count: { comments: commentCounts!.get(task.id) ?? 0 } }
+              : { ...task, pullRequests },
             user.id,
             ctx.agentId,
             ctx.teamScope,
@@ -710,6 +717,8 @@ export async function GET(request: NextRequest) {
 
     const total = await prisma.task.count({ where })
 
+    const lightQueries = await isFeatureEnabled(HTPR_8977_LIGHT_QUERIES_FLAG, user.id).catch(() => false)
+
     const tasks = await prisma.task.findMany({
       where,
       select: {
@@ -787,6 +796,14 @@ export async function GET(request: NextRequest) {
           where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' },
           select: { id: true, type: true },
         },
+        ...(lightQueries ? {} : {
+          _count: {
+            select: {
+              taskLabels: true,
+              comments: mcpTaskUserCommentCount,
+            },
+          },
+        }),
         subTasks: {
           where: {
             ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } : {}),
@@ -819,7 +836,9 @@ export async function GET(request: NextRequest) {
       user.id,
     ).catch(() => false)
 
-    const commentCounts = await userCommentCountsByTaskId(tasks.map(task => task.id))
+    const commentCounts = lightQueries
+      ? await userCommentCountsByTaskId(tasks.map(task => task.id))
+      : null
     const uniqueProjects = new Set(tasks.map(t => t.projectId))
     const doneTitlesByProject = await loadDoneTitlesByProject(uniqueProjects, mcpDoneNameFallback)
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
@@ -871,8 +890,8 @@ export async function GET(request: NextRequest) {
         assignees,
         assigneeCount: assignees.length,
         labels: task.taskLabels.map(mapMcpTaskLabel),
-        labelCount: task.taskLabels.length,
-        commentCount: commentCounts.get(task.id) ?? 0,
+        labelCount: lightQueries ? task.taskLabels.length : task._count.taskLabels,
+        commentCount: lightQueries ? (commentCounts!.get(task.id) ?? 0) : task._count.comments,
         savedContent: task.savedContent,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt?.toISOString() || undefined,

@@ -2,6 +2,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8090-assignee-inbox";
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
+import { HTPR_8977_LIGHT_QUERIES_FLAG } from "@/lib/flags/definitions/htpr-8977-light-queries";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -231,6 +232,7 @@ const notificationGetAll = async (
       ? { AND: [visibleUserInboxWhere(parsedUserId), notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] }
       : visibleUserInboxWhere(parsedUserId);
     const includeAgentWaiting = Boolean(agentId) && await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, parsedUserId);
+    const lightQueries = await isFeatureEnabled(HTPR_8977_LIGHT_QUERIES_FLAG, parsedUserId).catch(() => false);
     const [
       notifications,
       actorActivityRows,
@@ -268,7 +270,7 @@ const notificationGetAll = async (
         orderBy: { waitingOnSetAt: "asc" },
         select: {
           ...inboxTaskSelect(parsedUserId),
-          _count: undefined,
+          ...(lightQueries ? { _count: undefined } : {}),
           notifications: {
             where: { userId: parsedUserId, agentId: null, status: "Archive", archivedAt: { not: null } },
             orderBy: { archivedAt: "desc" },
@@ -299,11 +301,15 @@ const notificationGetAll = async (
         select: { notificationMatrix: true },
       }),
     ]);
-    const waitingTaskCommentCounts = await userCommentCountsByTaskId(waitingTasks.map((task) => task.id));
-    const blockedTasks = waitingTasks.map((task) => ({
-      ...task,
-      _count: { comments: waitingTaskCommentCounts.get(task.id) ?? 0 },
-    }));
+    const blockedTasks = lightQueries
+      ? await (async () => {
+          const waitingTaskCommentCounts = await userCommentCountsByTaskId(waitingTasks.map((task) => task.id));
+          return waitingTasks.map((task) => ({
+            ...task,
+            _count: { comments: waitingTaskCommentCounts.get(task.id) ?? 0 },
+          }));
+        })()
+      : waitingTasks;
     const humanFacingCommentRows = actorActivityRows.some((row) => row.type === "Comment" && row.fromAgentId) &&
       await isFeatureEnabled(HTPR_8090_ASSIGNEE_INBOX_FLAG, parsedUserId)
       ? await prisma.notification.findMany({
