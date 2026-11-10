@@ -2904,3 +2904,37 @@ export default { key: NEW_FLAG, defaultMode: "EVERYONE", shippedOn: "2026-10-20"
     assert.equal(result.pass, true, result.reason);
   }
 });
+
+async function evaluateFlagDefinitions(baseSha, headSha, cwd, changedFiles) {
+  const original = process.cwd();
+  process.chdir(cwd);
+  try {
+    const { evaluateFlagDefinitionChanges } = await import(scriptUrl);
+    return evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles });
+  } finally {
+    process.chdir(original);
+  }
+}
+
+test("evaluateFlagDefinitionChanges stops new flags with no defaultMode before push", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "feature", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture" } } as const;`);
+  const head = commit(git, "new flag without defaultMode");
+  const result = await evaluateFlagDefinitions(base, head, dir, ["src/lib/flags/definitions/htpr-2-new.ts"]);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /must set defaultMode: "EVERYONE"/);
+});
+
+test("evaluateFlagDefinitionChanges accepts a new flag with defaultMode EVERYONE", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "feature", defaultMode: "EVERYONE", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture" } } as const;`);
+  const head = commit(git, "new flag");
+  const result = await evaluateFlagDefinitions(base, head, dir, ["src/lib/flags/definitions/htpr-2-new.ts"]);
+  assert.equal(result.pass, true, result.reason);
+});

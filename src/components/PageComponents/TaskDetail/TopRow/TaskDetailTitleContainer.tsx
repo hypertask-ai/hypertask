@@ -9,6 +9,12 @@ import BaseTitleContainer from './BaseTitleContainer';
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
 import MobileTaskDueDate from "./MobileTaskDueDate";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-sticky-title";
+import useCopyURL from "@/hooks/General/useCopyURL";
+import Tooltip from "@/components/Common/Tooltip";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
 
 interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
@@ -20,6 +26,11 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
   const { currentTask, parsedTask, cachedLayout } = useTaskContext();
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
+  const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
+  const stickyTitleLine = useFlag(HTPR_8992_STICKY_TITLE_FLAG);
+  const { copyTicketNumber } = useCopyURL();
+  const isApple = useDeviceContext();
+  const ticketNumber = currentTask?.ticketNumber?.toUpperCase();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -50,11 +61,27 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
         dataAttribute="task-detail"
         containerRef={containerRef}
         clearDesktopNavigation={clearDesktopNavigation}
-        showScrollShadow={isScrolled}
+        showScrollDivider={stickyTitleLine && isScrolled}
         hasSummary={(_mbl && cachedLayout) || hasSummary}
         titleRowContent={
           <>
             <TaskTitle />
+            {rightColumnFlag && ticketNumber && (
+              <span
+                data-task-ticket-id
+                onClick={() => void copyTicketNumber(ticketNumber)}
+                className="relative group shrink-0 cursor-pointer whitespace-nowrap text-meta text-text-light-gray hover:text-white-black"
+              >
+                {ticketNumber}
+                <Tooltip
+                  portal
+                  left={0}
+                  bottom={-40}
+                  text="Copy task ID"
+                  keyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "I"]}
+                />
+              </span>
+            )}
             <TaskOptions />
           </>
         }

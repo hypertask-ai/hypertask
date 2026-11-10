@@ -8,5 +8,33 @@
     "ticket": "https://app.hypertask.ai/detail/project-15/8255",
     "reason": "The ticket asks the column title to line up with the card text, so the column header's left padding goes from 8px to 20px and the To do column title moves 12px right at every width and sidebar state. Card text, card radii, column boxes and every other anchor keep their place.",
     "approvedIn": "https://app.hypertask.ai/detail/project-15/8255"
+  },
+  {
+    "flag": "htpr-8991-right-column",
+    "page": "ticket-short-thread",
+    "anchors": [
+      "title",
+      "description",
+      "comment-list",
+      "comment-box",
+      "properties-panel"
+    ],
+    "ticket": "https://app.hypertask.ai/detail/project-15/8991",
+    "reason": "Valentin picked option B on the ticket (\"B pls ... urgent i want this fast its very good\"): the right column shows only filled fields with Status and Project first and one quiet Add field link, and the ticket ID moves beside the title. The quiet ID takes width in the title row, so the title box narrows and can wrap one line on narrow widths, which moves the description, thread, composer and properties panel down by that line. Flag off keeps the production layout.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/8991"
+  },
+  {
+    "flag": "htpr-8991-right-column",
+    "page": "ticket-long-thread",
+    "anchors": [
+      "title",
+      "description",
+      "comment-list",
+      "comment-box",
+      "properties-panel"
+    ],
+    "ticket": "https://app.hypertask.ai/detail/project-15/8991",
+    "reason": "Valentin picked option B on the ticket (\"B pls ... urgent i want this fast its very good\"): the right column shows only filled fields with Status and Project first and one quiet Add field link, and the ticket ID moves beside the title. The quiet ID takes width in the title row, so the title box narrows and can wrap one line on narrow widths, which moves the description, thread, composer and properties panel down by that line. Flag off keeps the production layout.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/8991"
   }
 ]

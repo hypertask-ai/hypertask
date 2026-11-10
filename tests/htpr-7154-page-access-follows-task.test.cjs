@@ -161,8 +161,7 @@ for (const operation of ['listPages', 'searchPages']) {
       assert.equal(where.archived, false);
       if (operation === 'listPages') {
         assert.equal(where.projectId, board);
-        assert.equal(where.OR[0].links.some.taskId, 20);
-        assert.equal(where.OR[1].taskId, 20);
+        assert.equal(where.links.some.taskId, 20);
       } else {
         assert.equal(where.projectId.in[0], board);
         assert.equal(where.OR[1].contentText.contains, 'Secret');
@@ -185,13 +184,21 @@ test('moving a task synchronizes pages for its entire subtask tree inside each t
     $queryRaw: async () => [],
     page: {
       findMany: async ({ where, include }) => pages.filter((page) => {
-        if (!where.OR) return where.id.in.includes(page.id);
-        return where.OR.some((part) => {
-          if (part.taskId) return typeof part.taskId === 'number' ? page.taskId === part.taskId : part.taskId.in.includes(page.taskId);
-          if (part.links) return page.links.some((link) => typeof part.links.some.taskId === 'number' ? link.taskId === part.links.some.taskId : part.links.some.taskId.in.includes(link.taskId));
-          if (part.id) return part.id.in.includes(page.id);
-          return part.parentPageId.in.includes(page.parentPageId);
-        });
+        if (where.links?.some) {
+          const taskId = where.links.some.taskId;
+          const removedAt = where.links.some.removedAt;
+          return page.links.some((link) => (removedAt === null ? link.removedAt === null : true)
+            && (typeof taskId === 'number' ? link.taskId === taskId : taskId.in.includes(link.taskId)));
+        }
+        if (where.OR) {
+          return where.OR.some((part) => {
+            if (part.taskId) return typeof part.taskId === 'number' ? page.taskId === part.taskId : part.taskId.in.includes(page.taskId);
+            if (part.links) return page.links.some((link) => typeof part.links.some.taskId === 'number' ? link.taskId === part.links.some.taskId : part.links.some.taskId.in.includes(link.taskId));
+            if (part.id) return part.id.in.includes(page.id);
+            return part.parentPageId.in.includes(page.parentPageId);
+          });
+        }
+        return where.id.in.includes(page.id);
       }).map((page) => ({ ...page, ...(include?.parentPage ? { parentPage: pages.find((parent) => parent.id === page.parentPageId) ?? null } : {}) })),
       updateMany: async ({ where, data }) => {
         for (const page of pages) {

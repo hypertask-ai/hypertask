@@ -20,11 +20,13 @@ import { useRouter } from "next/navigation";
 import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import {
   buildTableSectionsGroupedByTag,
   getActiveTableGroupByFromProject,
 } from "@/lib/table-view/tableGroupByTag";
+import { getActiveTableCollapsedSectionsFromProject } from "@/lib/table-view/tableGroupByTag";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
@@ -40,6 +42,7 @@ export function useTableState(context: Context) {
   } = context;
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
+  const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
@@ -129,11 +132,18 @@ export function useTableState(context: Context) {
     }
   }, [assignProject?.name, assignProjectError, assignProjectLoading, assignTask]);
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() =>
+    getActiveTableCollapsedSectionsFromProject(_currentProject),
+  );
   const [excludedTaskIds, setExcludedTaskIds] = useState<Set<number>>(() => new Set());
   const [sortState, setSortState] = useState<SortState>(() =>
     myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
   );
-  const { setTableSortViewAndReturn, changeBoardLayout } = useKanbanViews(_currentProject);
+  const {
+    setTableSortViewAndReturn,
+    setTableCollapsedSectionsViewAndReturn,
+    changeBoardLayout,
+  } = useKanbanViews(_currentProject);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
   const lastGAt = useRef<number | null>(null);
@@ -153,6 +163,24 @@ export function useTableState(context: Context) {
     myTasksSortKey,
     _currentProject?.showTimeTotals,
   ]);
+  useEffect(() => {
+    setCollapsedSections(getActiveTableCollapsedSectionsFromProject(_currentProject));
+  }, [activeSortViewId, _currentProject?.id]);
+  const toggleCollapsedSection = useCallback(
+    (sid: string | number) => {
+      const key = String(sid);
+      setCollapsedSections((previous) => {
+        const next = new Set(previous);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        if (_currentProject && tableGroupFoldEnabled) {
+          void setTableCollapsedSectionsViewAndReturn(_currentProject, next);
+        }
+        return next;
+      });
+    },
+    [_currentProject, setTableCollapsedSectionsViewAndReturn, tableGroupFoldEnabled],
+  );
   const sortedSections = useMemo(() => {
     const base = filteredSections ?? _sections ?? [];
     const withoutExcluded =
@@ -236,7 +264,7 @@ export function useTableState(context: Context) {
   dragOverSectionId, setDragOverSectionId, moveTaskToSection, dragOverColumn, setDragOverColumn,
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
-  expanded, setExpanded, setExcludedTaskIds, sortState, setSortState,
+  expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
   setTableSortViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,

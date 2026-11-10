@@ -229,3 +229,24 @@ test("multi chat windows: Ctrl+Shift+O opens a window while the shared chat shor
   assert.match(runtime, /document\.addEventListener\("keydown", handleNewChatWindow, true\);/);
   assert.match(runtime, /chatWindows\.openNewChatWindow\(\)\.then/);
 });
+
+test("multi chat windows: docked sidebar chat never gets extra window controls", () => {
+  const runtime = read("src/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context.tsx");
+  assert.match(runtime, /if \(!windowController\.enabled \|\| contextProps\.isSidebarMode\) return undefined;/);
+});
+
+test("multi chat windows: a new window picks up the session only after the open chat steps back", () => {
+  const runtime = read("src/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context.tsx");
+  const openNew = runtime.slice(runtime.indexOf("openNewChatWindow: async"), runtime.indexOf("openNewChatWindow: async") + 520);
+  assert.match(openNew, /const created = await contextProps\.startNewSession\(\);/);
+  assert.match(openNew, /if \(previousSessionId\) contextProps\.selectSession\(previousSessionId\);/);
+  assert.match(openNew, /return windowController\.open\(created\.id\);/);
+  assert.ok(openNew.indexOf("selectSession") < openNew.indexOf("windowController.open"));
+});
+
+test("multi chat windows: sidebar mode still starts a chat in the sidebar instead of opening a window", () => {
+  const header = read("src/components/AI_CHAT/ChatHeader.tsx");
+  const startNew = header.slice(header.indexOf("handleStartNewSession"));
+  assert.match(startNew, /if \(chatWindowControls\) \{/);
+  assert.match(startNew, /await startNewSession\(\)/);
+});

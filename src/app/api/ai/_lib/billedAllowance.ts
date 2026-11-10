@@ -353,10 +353,11 @@ export async function reserveBilledScopes(args: {
   call: BilledCall;
   month: string;
   day: string;
+  holdUntilMs?: number;
 }) {
   const redis = await getRedis();
   const result = await redis.eval(RESERVE_BILLED_SCOPES_SCRIPT, args.keys.length, ...args.keys,
-    JSON.stringify(args.encoded), String(Date.now()), String(args.amount), String(Date.now() + RESERVATION_TTL_MS), args.id,
+    JSON.stringify(args.encoded), String(Date.now()), String(args.amount), String(args.holdUntilMs ?? Date.now() + RESERVATION_TTL_MS), args.id,
     BILLED_ALLOWANCE_SCOPE_INDEX, `${args.call.teamId}|${args.month}|${args.day}`, String(args.call.userId), `demo|${args.month}|${args.day}`);
   if (result === "period-rolled" || result === "shadow-uninitialized") return { retry: result, decision: [0], details: [] };
   if (!Array.isArray(result)) throw new Error("Invalid billed allowance reservation response");

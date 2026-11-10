@@ -6,6 +6,7 @@ const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const { resolveListImport, mergeGetAllIncludesStub } = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
   stubs = withStubs({ "@/lib/agents/writing": require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}) }, stubs);
@@ -18,8 +19,16 @@ function load(file, stubs = {}) {
   new Function("module", "exports", "require", javascript)(mod, mod.exports, (request) => {
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
-    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
-    return stubs[request];
+    const listImport = resolveListImport(request);
+    if (listImport !== undefined) return listImport;
+    if (request in stubs) {
+      const value = stubs[request];
+      if (request === "@/utils/controllers/projects/getAllIncludes") {
+        return mergeGetAllIncludesStub(value);
+      }
+      return value;
+    }
+    assert.ok(false, `Unexpected dependency: ${request}`);
   });
   return mod.exports;
 }
@@ -238,8 +247,8 @@ const readerWiring = [
   ["src/utils/controllers/tasks/getAll.ts", /json:tasks\.map\(stripForeignTaskRelations\)/],
   ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\)\)/],
   ["src/lib/mcp/tasks/mappers.ts", /mapTaskToMcpGetResponse[\s\S]*task = stripForeignTaskRelations\(task\)/],
-  ["src/lib/mcp/operations/tasks/operation.ts", /tasks\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
-  ["src/lib/ai/tools/listTasks.ts", /tasks\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
+  ["src/lib/mcp/operations/tasks/operation.ts", /tasksWithBlockers\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
+  ["src/lib/ai/tools/listTasks.ts", /tasksWithBlockers\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
   ["src/utils/controllers/tasks/getSharedTask.ts", /shared\.task = stripForeignTaskRelations\(shared\.task\)/],
   ["src/utils/controllers/share/getProject.ts", /project\.tasks = project\.tasks\.map\(stripForeignTaskRelations\)/],
 ];

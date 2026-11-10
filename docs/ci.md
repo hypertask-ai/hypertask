@@ -391,8 +391,11 @@ copy was rejected ("Unauthorized") and the failure was hidden by
 The trusted `pr-title` guard links same-repository production PRs to the ticket
 in their current GitHub title through the existing MCP task-update API. It uses
 `HYPERTASK_MCP_TOKEN`, not a runner-local binding file. The app checks permission,
-verifies the GitHub PR and returns the saved link. Missing credentials, rejected
-updates or an unconfirmed link fail the guard. Forks, bot titles and generated
+verifies the GitHub PR and returns the saved link. The bind POST and ticket lookup
+retry HTTP 500, 502, 503 and 504 up to twice, after one and two seconds. After
+exhausted server errors, the guard still passes when the ticket already documents
+the pull request. Missing credentials, rejected updates or an unconfirmed link fail
+the guard. Forks, bot titles and generated
 revert titles retain their existing handling. Ticketed runner bots also bind.
 The production-only manual `pr_number` input executes the same trusted title
 entry for live QA and recovery. Delayed runs can link merged PRs.
@@ -522,9 +525,16 @@ problems fail the job and appear in the step summary. It is not a required check
 and does not alter the ruleset. Existing stale pages are reported, not allowlisted.
 
 The separately installed user timer performs bounded source-only Codex reads and
-files at most one drift ticket per ISO week. It never drives the app. A runner
-ships documentation repairs through `/ship` and executes only the listed live
-recipes with `verify-qa`. See the
+files at most one drift ticket per ISO week on board 11514 (labels `CI` and
+`Hypertask CI`). It never drives the app. The Monday live run and board filing
+are documented in [docs/ci.md](../ci.md#feature-map-citation-check-yper4-610).
+The `File fleet-board weekly result` step uses `HYPERTASK_FLEET_BOARD_MCP_TOKEN`,
+the CI Boss board credential, because `HYPERTASK_MCP_TOKEN` is Error Alerts on
+board 15 only. CI Boss is already a member of board 11514.
+The same job files on a manual dispatch with `head=production` and
+`journey=inbox-cycle`, which is how a week's live proof is re-run on demand.
+A runner ships documentation repairs through `/ship` and executes only the listed
+live recipes with `verify-qa` after deploy. See the
 [maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
 installation, state, load holds, limits and offline tests.
 
@@ -1177,12 +1187,17 @@ it never replaces a required check and adds no required context.
 
 Both gates stay inside the time budget. ESLint and tsc are killed, with their
 process group, at 10 seconds for a normal change and 60 seconds for a full lint or
-full type check; a killed or skipped gate never blocks the push, because a killed
-process is not a verdict. `npm install` is
-required for the hook to run: without `node_modules` it reports the missing tool
-and passes. `HYPERTASK_SKIP_QUICK_CHECK=1` skips the hook for one push. The hook reads Git's
-ref updates and passes the push without checking when the pushed commit is not
-the checked-out one, because the tools read the working copy.
+full type check. A gate that overruns its budget reruns once with the longer
+limit; if it still cannot finish, the push stops and the message names the files
+and the command that reruns the check. Only a kill from outside the hook (a
+SIGKILL or exit 137 from the machine) still passes the push, and it prints
+`NOT TYPE CHECKED: <files>` so the gap is loud. Timeouts and a missing tool never
+pass: without `node_modules` the hook stops the push and asks for `npm install`.
+No environment variable switches the check off.
+
+The hook reads Git's ref updates and passes the push without checking when the
+pushed commit is not the checked-out one, because the tools read the working
+copy.
 
 `.github/workflows/quick-check-proof.yml` measures the real hook on hosted
 Ubuntu, is path-filtered to the hook files, and adds no job to ordinary pull

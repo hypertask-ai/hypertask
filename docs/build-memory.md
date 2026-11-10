@@ -231,7 +231,7 @@ That cap was not enough. Deployment 7628217481 (`51fcc525`, `dpl_9tg62h9sytSJHF5
 FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
 ```
 
-Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. The cap is now 3840 MB after intermittent SIGKILL at 4096 MB (HYCI-180, below). If a heap abort happens at 3840 MB or another SIGKILL lands with the cap at half the machine, the paid Enhanced Build Machine is Valentin's decision.
+Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. HYCI-180 stepped the cap down from 4096 MiB for native headroom (below). If a heap abort lands at the chosen cap or another SIGKILL hits half the machine, the paid Enhanced Build Machine is Valentin's decision.
 
 ## Live-within-10-min incident (2026-11-07, HYCI-180)
 
@@ -268,4 +268,22 @@ Both logs name the same signature as the parallelism 1 note above: about three m
 
 That pattern is the free lever named in the parallelism 1 note: with parallelism already at 1, lowering `--max-old-space-size` from 4096 hands headroom to native memory. The measured V8 live set at 3584 MB was 3080.7 MB (HYCI-184), so 3840 MB keeps 759.3 MB above that peak while leaving 4352 MiB for everything outside the V8 heap on the 8192 MiB machine. If the next production build reports "Reached heap limit", the compiler genuinely needs more than 3840 MB and the next step is still the paid Enhanced Build Machine, which is Valentin's decision.
 
-The build script now sets `--max-old-space-size=3840`. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
+The build script first set `--max-old-space-size=3840` in pull request 3087 (`0d635b84165`). Production deployment 7668278693 (`dpl_5G6Dae88e25UY24812esxUu2euVb`) failed on that merge while `bd6f21b8ec43` at 4096 MB still built, so 3840 was below the live compiler heap on the current tree.
+
+The cap was 4000 MB from 2026-11-09 through the HYCI-220 merge: 192 MiB above 3840 for V8 and 4192 MiB for native memory on the 8192 MiB machine. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
+
+## Production cache generations (2026-11-10, HYCI-220)
+
+Production deployments 7670721960 (`3d601a0`), 7670916742 (`81c3458`) and 7671062041 (`7b9b66af`) failed. The last success was 7670519182 (`a40cd74`). CI Tests was green on each failed SHA. The first red commit is a hover-card change, and the next two commits are unrelated, so the failure is not one feature's code.
+
+Next 16.3.6 sets `cache.maxMemoryGenerations` to `Infinity` for production and calls the project webpack hook after that (`node_modules/next/dist/build/webpack-config.js`). `webpackMemoryOptimizations` only toggles string interning. It does not change the cache. The production hook now sets `maxMemoryGenerations` to 0, so the filesystem cache stays and the worker does not keep every generation in RAM. At first merge the heap cap stayed 4000 MB and `NEXT_WEBPACK_PARALLELISM=1` stayed 1. Dev builds are left as the hook receives them.
+
+## Heap cap 3840 MB after disk cache (2026-11-10, HYCI-224)
+
+HYCI-220 stopped keeping webpack cache generations in RAM. The heap cap then stepped back from 4000 MB to 3840 MB so native memory on the 8192 MiB machine gets 4352 MiB instead of 4192 MiB.
+
+Production deployment `df912192` (pull request 3148) was the first green build with disk cache only, still at 4000 MB. Six earlier failures in 24 hours were container `out_of_memory` with no V8 "Reached heap limit" line, all on merges before that fix.
+
+`3840` MB failed on merge `0d635b84165` before HYCI-220 while the same tree still built at 4096 MB. That gap was the in-RAM cache peak, not the compile heap alone. With `maxMemoryGenerations=0` live, 3840 MB targets the headroom model from the HYCI-180 note without the RAM cache term that pushed 4000 MB merges into repeated container OOM.
+
+If the next production build reports "Reached heap limit", the compiler genuinely needs more than 3840 MB V8 heap on the current tree and the next step is the paid Enhanced Build Machine, which is Valentin's decision.

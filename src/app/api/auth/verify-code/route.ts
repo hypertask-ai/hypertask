@@ -24,6 +24,7 @@ import {
   getEmailCodeClientIp,
 } from '@/lib/auth/emailCodeRateLimit'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
+import { revokeOtherUserSessions } from '@/lib/auth/sessionRevocation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -102,6 +103,8 @@ export async function POST(request: NextRequest) {
         uid: true,
         displayName: true,
         photoURL: true,
+        emailVerified: true,
+        UserSetting: { select: { isVerified: true } },
       },
     })
 
@@ -146,6 +149,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (userData.UserSetting) {
+      if (
+        existingUser &&
+        !existingUser.emailVerified &&
+        !existingUser.UserSetting?.isVerified &&
+        !(await revokeOtherUserSessions(userData.id))
+      ) {
+        console.error('Email verification could not end the earlier sessions for user', userData.id)
+      }
       await prisma.userSetting.update({
         where: { id: userData.UserSetting.id },
         data: { isVerified: true },

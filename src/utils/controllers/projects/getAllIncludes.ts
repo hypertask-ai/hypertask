@@ -274,6 +274,32 @@ export const mergeTaskIncludes = (
   ...parts: Prisma.TaskInclude[]
 ): Prisma.TaskInclude => Object.assign({}, ...parts);
 
+export const blockedByRelationsInclude = (
+  userId: number,
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+) => ({
+  where: {
+    relationType: "BlockedBy" as const,
+    targetTask: {
+      project: { is: getProjectWhere(userId, agentId, teamScope) },
+    },
+  },
+  select: {
+    targetTask: {
+      select: {
+        id: true,
+        projectId: true,
+        uniqueIndex: true,
+        ticketNumber: true,
+        title: true,
+        status: true,
+        section: true,
+      },
+    },
+  },
+});
+
 export const getFullTaskInclude = (
   options: GetAllIncludesOptions
 ): Prisma.TaskInclude => {
@@ -350,27 +376,7 @@ export const getBoardTaskInclude = (
       },
     },
     {
-      relatedFromTasks: {
-        where: {
-          relationType: "BlockedBy",
-          targetTask: {
-            project: { is: getProjectWhere(options.userId) },
-          },
-        },
-        select: {
-          targetTask: {
-            select: {
-              id: true,
-              projectId: true,
-              uniqueIndex: true,
-              ticketNumber: true,
-              title: true,
-              status: true,
-              section: true,
-            },
-          },
-        },
-      },
+      relatedFromTasks: blockedByRelationsInclude(options.userId),
     },
     layers.priorityEstimate,
     layers.subTasks,

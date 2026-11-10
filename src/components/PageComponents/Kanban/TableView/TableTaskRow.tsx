@@ -42,21 +42,26 @@ export function TableStatusCell({ section }: { section: string }) {
   return <span className="min-w-0 flex items-center text-micro text-text-light-gray truncate">{section}</span>;
 }
 
-type Context = { snapshot?: FirstScreenSnapshot | null } & Pick<TableViewProps, "_currentProject" | "enableMyTasksBulkSelection"> &
+type Context = { snapshot?: FirstScreenSnapshot | null; tagGroupingActive: boolean } & Pick<TableViewProps, "_currentProject" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableState>, "selectedIndex" | "dragOverSectionId" | "currentProjectSectionIds" | "sortState" | "customFieldBySortColumn" | "sectionTitleBySid" | "timeTotals" | "timeNow" | "draggedTaskRef" | "myTasksBulk"> &
   Pick<ReturnType<typeof useTableActions>, "openTask" | "getTicketText" | "clearTaskDrag" | "handleMouseEnter" | "handleMouseLeave"> &
   Pick<ReturnType<typeof useTableColumns>, "frozenColumnOffset" | "gridTemplateColumns" | "visibleColumns">;
 
 export function createTableRowRenderer(context: Context) {
   const {
-  snapshot, selectedIndex, dragOverSectionId, currentProjectSectionIds, sortState, openTask,
+  snapshot, tagGroupingActive, selectedIndex, dragOverSectionId, currentProjectSectionIds, sortState, openTask,
   customFieldBySortColumn, frozenColumnOffset, getTicketText, _currentProject, sectionTitleBySid,
   timeTotals, timeNow, draggedTaskRef, clearTaskDrag, handleMouseEnter,
   handleMouseLeave, gridTemplateColumns, enableMyTasksBulkSelection, myTasksBulk, visibleColumns,
   } = context;
 
 
-  const renderTaskRow = (task: ITask, flatIndex: number) => {
+  const renderTaskRow = (
+    task: ITask,
+    flatIndex: number,
+    rowKey: string,
+    rowSectionId: string | number,
+  ) => {
     const selected = selectedIndex === flatIndex;
     const stickyBackground = selected
       ? "md:bg-active-elementBg"
@@ -67,7 +72,8 @@ export function createTableRowRenderer(context: Context) {
       task.id,
       task.sectionId,
       currentProjectSectionIds,
-      sortState.length > 0
+      sortState.length > 0,
+      tagGroupingActive || (typeof rowSectionId === "string" && rowSectionId.startsWith("tag:")),
     );
     const openCurrentTask = () => openTask(task, flatIndex);
     const stalenessTooltip = `${taskInColumnDays(task, snapshot ? Date.parse(snapshot.now) : undefined) ?? 0}d in column · ${taskNoCommentDays(task, snapshot ? Date.parse(snapshot.now) : undefined) ?? 0}d since last comment · ${taskOnBoardDays(task, snapshot ? Date.parse(snapshot.now) : undefined) ?? 0}d on board`;
@@ -247,8 +253,8 @@ export function createTableRowRenderer(context: Context) {
 
     return (
       <li
-        id={`inbox-${task.id}`}
-        key={`table-row-${task.id}`}
+        id={`inbox-${rowKey}`}
+        key={`table-row-${rowKey}`}
         tabIndex={-1}
         draggable={Boolean(dragData)}
         onDragStart={(event) => {
@@ -265,7 +271,9 @@ export function createTableRowRenderer(context: Context) {
         onMouseEnter={() => handleMouseEnter(flatIndex)}
         onMouseLeave={handleMouseLeave}
         style={{ gridTemplateColumns }}
-        className={`${TABLE_GRID_CLASS} table-view-row group/selection_row cursor-pointer items-center gap-2 py-[6px] md:py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-meta md:text-dense outline-none ${
+        className={`${TABLE_GRID_CLASS} table-view-row group/selection_row items-center gap-2 py-[6px] md:py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-meta md:text-dense outline-none ${
+          dragData ? "cursor-pointer" : tagGroupingActive ? "cursor-not-allowed" : "cursor-pointer"
+        } ${
           selected ? "md:bg-active-elementBg md:border-l-selected-item-border" : "md:border-l-transparent bg-transparent"
         }`}
       >

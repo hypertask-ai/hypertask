@@ -9,7 +9,13 @@ import prisma from "@/lib/prisma";
 import { mcpVisibleAgentSelect, mapVisibleMcpAgent } from "@/lib/mcp/agents";
 import { mcpTaskUserCommentCount, mapTaskDescriptionContent } from "@/lib/mcp/tasks/mappers";
 import { statusSchema, sortOrderSchema } from "@/lib/ai/chatStream/request";
+import { mapOpenBlockingTasksForRead } from "@/lib/blockingTasks";
 import { getAccessibleProjectIds, normalizePriorityInput, sanitizeForJson } from "@/lib/ai/tools/helpers";
+import {
+  attachOpenBlockingTasks,
+  type TaskWithBlockingRelations,
+} from "@/utils/controllers/tasks/attachOpenBlockingTasks";
+import { blockedByRelationsInclude } from "@/utils/controllers/projects/getAllIncludes";
 
 import type { ToolContext } from "./context";
 
@@ -180,6 +186,7 @@ export function createListTasksTool(context: ToolContext) {
                 select: { id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true },
                 orderBy: { createdAt: "asc" },
               },
+              relatedFromTasks: blockedByRelationsInclude(user.id),
             },
             orderBy,
             take: input.limit,
@@ -187,9 +194,13 @@ export function createListTasksTool(context: ToolContext) {
           }),
         ]);
 
+        const tasksWithBlockers = await attachOpenBlockingTasks(
+          tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
+        );
+
         return sanitizeForJson({
           success: true,
-          tasks: tasks.map((task) => {
+          tasks: tasksWithBlockers.map((task) => {
             task = stripForeignTaskRelations(task);
             const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId);
             const assigneeCount = task.assignees.filter(
@@ -228,6 +239,7 @@ export function createListTasksTool(context: ToolContext) {
                 title: subTask.title,
                 uniqueIndex: subTask.uniqueIndex,
               })),
+              blockingTasks: mapOpenBlockingTasksForRead(task.blockingTasks),
               projectId: task.projectId,
               status: task.status,
               priority: task.priority?.Priority_Value || undefined,

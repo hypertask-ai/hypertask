@@ -18,6 +18,12 @@ type SessionPayload = {
   agentTokenGeneration?: string | null
 }
 
+export type SessionRevocationClaims = {
+  userId: number
+  expiresAt: number
+  issuedAt: number
+}
+
 type SignedSessionPayload = SessionPayload & {
   iat: number
   jti?: string
@@ -145,6 +151,16 @@ export function verifySession(token: string | undefined): SessionPayload | null 
 
 export function verifiedSessionExpiry(token: string | undefined): number | null {
   return verifiedSessionPayload(token)?.exp ?? null
+}
+
+export function sessionRevocationClaims(token: string | undefined): SessionRevocationClaims | null {
+  const payload = verifiedSessionPayload(token)
+  if (!payload) return null
+  return {
+    userId: payload.id,
+    expiresAt: payload.exp,
+    issuedAt: payload.iat,
+  }
 }
 
 export function sessionCookieOptions(maxAgeSeconds: number) {

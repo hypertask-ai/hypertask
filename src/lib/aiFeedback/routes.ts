@@ -121,6 +121,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/factory/:operation',
   '/api/mcp/projects/:projectId',
   '/api/mcp/projects/:projectId/instructions',
+  '/api/mcp/projects/:projectId/github',
   '/api/mcp/projects/:projectId/labels',
   '/api/mcp/projects/:projectId/manifest',
   '/api/mcp/projects/:projectId/members',

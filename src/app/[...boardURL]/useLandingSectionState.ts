@@ -72,6 +72,11 @@ const { timers: runningTimers, timerDataReady } = useBoardRunningTimers(
   _currentProject?.id ?? null,
   { enabled: secondaryStartupEnabled },
 );
+const emptyViewColumnProjection = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
+const boardSections: ISection[] = useMemo(() => {
+  if (!emptyViewColumnProjection) return sections;
+  return _allProjects?.[_projectIndex]?.sections ?? sections;
+}, [emptyViewColumnProjection, sections, _allProjects, _projectIndex]);
 const filterRuntimeContext = useMemo(() => ({
   legacyAgentAssigneeMatch: !assigneeFixEnabled,
   agentCreatorFilterEnabled,
@@ -79,10 +84,10 @@ const filterRuntimeContext = useMemo(() => ({
   blockedByMeListEnabled,
   runningTaskIds: timerDataReady
     ? new Set(runningTimers.keys())
-    : new Set(sections.flatMap((section) =>
+    : new Set(boardSections.flatMap((section) =>
         (section.items ?? []).map((task) => task.id)
       )),
-}), [agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, blockedByMeListEnabled, runningTimers, sections, timerDataReady]);
+}), [agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, blockedByMeListEnabled, runningTimers, boardSections, timerDataReady]);
 
 useEffect(() => {
   const project = _allProjects?.[_projectIndex]
@@ -96,7 +101,7 @@ const subtaskSectionsForActiveView = useMemo(() => {
 
   const activeViewId = getActiveBoardViewId(_currentProject, activeBuiltinViews);
   const filtered = getFilteredSections(
-    sections,
+    boardSections,
     _currentProject,
     isBuiltinViewId(activeViewId) ? activeViewId : undefined,
     buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
@@ -113,7 +118,7 @@ const subtaskSectionsForActiveView = useMemo(() => {
   activeBuiltinViews,
   blockedByMeListEnabled,
   filterRuntimeContext,
-  sections,
+  boardSections,
 ]);
 let filteredSectionsForActiveView = subtaskSectionsForActiveView;
 if (showEmptyViewColumns) {
@@ -155,7 +160,7 @@ useLayoutEffect(() => {
   return {
   markBoardUsable, releaseSecondaryStartup, secondaryStartupEnabled, projects, setShowBoardManager,
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
-  setRecoilCurrentProject, sections, setShowTrial, showTrial, activeBuiltinViews,
+  setRecoilCurrentProject, sections: boardSections, setShowTrial, showTrial, activeBuiltinViews,
   filteredSectionsForActiveView, favorites, setFavorites, setHasHorizontalScrollbar, kanbanContainerRef,
   restoredScrollForProject, restoringScroll, readinessFrameRef, readinessPaintFrameRef, readinessEntryKey,
   readinessCompletionRef,

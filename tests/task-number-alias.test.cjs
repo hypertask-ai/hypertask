@@ -7,6 +7,10 @@ const Module = require("node:module");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const {
+  resolveListImport,
+  mergeGetAllIncludesStub,
+} = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 const oldSlug = { projectId: 15, uniqueIndex: 6641 };
 const currentTask = {
   id: 44769, projectId: 20, uniqueIndex: 6814, ticketNumber: "NEW-6814", status: "Normal",
@@ -34,6 +38,15 @@ function load(relativePath, stubs) {
     if (request === "@/lib/mcp/boards/columnRole") return load("src/lib/mcp/boards/columnRole.ts", {});
     if (request === "@/utils/controllers/notifications/inboxZero") {
       return { loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])) };
+    }
+    const listImport = resolveListImport(request);
+    if (listImport !== undefined) return listImport;
+    if (request in stubs) {
+      const value = stubs[request];
+      if (request === "@/utils/controllers/projects/getAllIncludes") {
+        return mergeGetAllIncludesStub(value);
+      }
+      return value;
     }
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);

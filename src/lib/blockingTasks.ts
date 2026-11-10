@@ -12,3 +12,16 @@ export const openBlockingTasks = (
     .filter((blocker) =>
       blockerStillOpen(blocker, doneTitlesByProject.get(blocker.projectId)),
     );
+
+export const mapOpenBlockingTasksForRead = (blockingTasks: IBlockingTask[]) =>
+  blockingTasks.map((blocker) => ({
+    id: blocker.id,
+    task_id: blocker.id,
+    ticketNumber: blocker.ticketNumber || undefined,
+    uniqueIndex: blocker.uniqueIndex,
+    title: blocker.title,
+    section: blocker.section,
+    status: blocker.status,
+    projectId: blocker.projectId,
+    url: `/detail/project-${blocker.projectId}/${blocker.uniqueIndex}`,
+  }));

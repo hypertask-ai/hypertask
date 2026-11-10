@@ -7,6 +7,7 @@ const { loader, React } = require("./helpers/htpr-7260-ui.cjs");
 const flagKey = "htpr-8255-kanban-cleanup";
 const componentPath = "src/components/PageComponents/Kanban/KanbanTaskComponents/TaskDraggableContainer.tsx";
 const flag = loader()(`src/lib/flags/definitions/${flagKey}.ts`);
+const overflowFlag = loader()("src/lib/flags/definitions/htpr-8927-board-card-overflow.ts");
 const MobileViewContext = React.createContext(false);
 const noop = () => {};
 const cn = loader({
@@ -17,9 +18,12 @@ const cn = loader({
 
 function render(enabled, mobile, props = {}) {
   const Component = loader({
-    "@/hooks/useFlag": { useFlag: key => key === flagKey && enabled },
+    "@/hooks/useFlag": {
+      useFlag: (key) => key === flagKey && enabled,
+    },
     "@/lib/flags/keys": flag,
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": flag,
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": overflowFlag,
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/utils/undoActions/helperFuncs": { cn },
     "next/link": { default: ({ prefetch, ...rest }) => React.createElement("a", rest) },

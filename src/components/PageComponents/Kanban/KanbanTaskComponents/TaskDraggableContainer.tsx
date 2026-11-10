@@ -7,12 +7,15 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7614_SELECTED_CARD_BORDER_FLAG } from "@/lib/flags/keys";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
+import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-8927-board-card-overflow";
 interface ITaskDraggableContainer {
   children: ReactNode;
   selectionControl?: ReactNode;
   provided?: DraggableProvided;
   active: boolean;
   selected?: boolean;
+  selectionMode?: boolean;
+  onSelectToggle?: (event: React.MouseEvent<HTMLElement>) => void;
   blocked?: boolean;
   snapshot?: DraggableStateSnapshot;
   _currentProject?: IProject;
@@ -29,6 +32,8 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   provided,
   active,
   selected = false,
+  selectionMode = false,
+  onSelectToggle,
   blocked,
   _currentProject,
   snapshot,
@@ -39,6 +44,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   const isMbl = useContext(MobileViewContext);
   const selectedCardBorder = useFlag(HTPR_7614_SELECTED_CARD_BORDER_FLAG);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+  const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
   const selectionLine = selectedCardBorder
     ? "!outline-solid !outline-1 !-outline-offset-1 !outline-hypertasks-purple"
     : "ring-1 ring-inset ring-hypertasks-purple";
@@ -54,9 +60,10 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         ? "blocked"
         : "plain";
   const legacyStroke = blocked ? "border-l-[3px]" : "border-l-4";
+  const selectedKeepsLayout = Boolean(onSelectToggle) && active && !blocked;
   const cleanupStroke = {
     "selected-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
-    selected: "border-l-0",
+    selected: selectedKeepsLayout ? "border-l-4 border-transparent" : "border-l-0",
     "active-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
     active: "border-l-4 border-white-black",
     blocked: "border-l-4 border-[hsl(0_62.8%_30.6%)]",
@@ -82,7 +89,8 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
     cardState === "blocked" ||
     cardState === "active" ||
     cardState === "active-blocked" ||
-    cardState === "selected-blocked";
+    cardState === "selected-blocked" ||
+    (cardState === "selected" && selectedKeepsLayout);
   const cardBody =
     "kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer";
 
@@ -111,9 +119,14 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         cleanup ? cleanupStroke : legacyStroke,
         cleanup ? cleanupStateClasses : cardStateClasses,
         cardBody,
+        cardOverflowClamp && "min-w-0 max-w-full",
         parentClassName
       )}
-      onClick={openDetail}
+      onClick={(event) =>
+        onSelectToggle && (event.shiftKey || selectionMode)
+          ? onSelectToggle(event)
+          : openDetail()
+      }
       {...provided?.draggableProps}
       {...provided?.dragHandleProps}
       style={getStyle(
@@ -132,10 +145,18 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
           cleanup
             ? `flex items-center gap-1.5 flex-wrap ${stroked ? "p-2" : "py-2 pr-2 pl-3"}`
             : "flex items-center p-2 gap-1.5 flex-wrap",
+        cardOverflowClamp &&
+          "min-w-0 w-full max-w-full overflow-x-hidden",
           linkClassName
         )}
         href={taskHref}
         onClick={(event) => {
+          const shiftSelects =
+            onSelectToggle && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && event.button === 0;
+          if (shiftSelects) {
+            event.preventDefault();
+            return;
+          }
           if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
             event.stopPropagation();
             return;

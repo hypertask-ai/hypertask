@@ -5,6 +5,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "../..");
 const requireRoot = createRequire(path.join(root, "package.json"));
 const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
+const blockingStubs = require("./mcp-task-list-blocking-stubs.cjs");
 
 function loadModule(file, stubs = {}) {
   const cache = new Map();
@@ -24,9 +25,19 @@ function loadModule(file, stubs = {}) {
     }).outputText;
     new Function("require", "module", "exports", "__filename", "__dirname", source)(
       (specifier) => {
+        const listImport = blockingStubs.resolveListImport(specifier);
+        if (listImport !== undefined && !(specifier in stubs)) return listImport;
         if (specifier in stubs) {
-          const stub = stubs[specifier];
+          const stub = specifier === "@/utils/controllers/projects/getAllIncludes"
+            ? blockingStubs.mergeGetAllIncludesStub(stubs[specifier])
+            : stubs[specifier];
           return stub && Object.hasOwn(stub, "default") ? { __esModule: true, ...stub } : stub;
+        }
+        if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks" && !(specifier in stubs)) {
+          return blockingStubs.attachOpenBlockingTasksStub;
+        }
+        if (specifier === "@/lib/blockingTasks" && !filename.endsWith("blockingTasks.ts") && !(specifier in stubs)) {
+          return blockingStubs.blockingTasksMapperStub;
         }
         if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
         if (specifier === "@/utils/controllers/logs/quietPersonalLog") return require("./stub-map.cjs").quietPersonalLogStub();

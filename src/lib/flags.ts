@@ -277,11 +277,18 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
 }
 
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
+  const {
+    FLAG_MODE_CACHE_KEY,
+    FLAG_MODE_GENERATION_KEY,
+    FLAG_MODE_WRITERS_KEY,
+    flagCacheCommand,
+    readProcessFlagCache,
+    storeProcessFlagCache,
+  } = await import("@/lib/flags/modeCache");
+  const cachedProcess = readProcessFlagCache();
+  if (cachedProcess) return cachedProcess;
   if (!process.env.REDIS_URL) return null;
   try {
-    const {
-      FLAG_MODE_CACHE_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_WRITERS_KEY, flagCacheCommand,
-    } = await import("@/lib/flags/modeCache");
     const redis = await flagCacheCommand(import("@/lib/redis").then(({ getRedis }) => getRedis()));
     const [writers, generation, cached] = await flagCacheCommand(redis.mget(
       FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
@@ -293,6 +300,8 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       if (!Array.isArray(rows) || !rows.every((row) =>
         typeof row?.key === "string" && FEATURE_FLAG_MODES.includes(row.mode),
       )) return null;
+      storeProcessFlagCache(rows);
+      return rows;
     } else {
       rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
     }
@@ -309,6 +318,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       `, 3, FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
       generation ?? "0", JSON.stringify(rows))).catch(() => undefined);
     }
+    storeProcessFlagCache(rows);
     return rows;
   } catch {
     return null;

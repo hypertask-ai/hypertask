@@ -17,7 +17,7 @@ The scanner reads recent Claude and Codex JSONL files, never executes transcript
 
 `scriptify-weekly` holds a user-wide lock, scans, then starts at most one high-effort Codex helper with the current ladder line and unlazy gates. No candidates means no helper. It creates a fresh `scriptify/<date>` worktree off fetched `origin/production`, retains it for the runner, and records committed clean work in `handoff.md`. It never pushes or writes to boards. Helper output is discarded so logs cannot persist secrets. Failures exit non-zero; inspect the retained worktree before a retry, never delete or reuse it implicitly.
 
-The helper scripts only grounded routines, adds tests, points the original skill to the script, and updates [scoreboard.md](scoreboard.md). A runner ships the handoff with `/ship` under a new project 4060 ticket.
+The helper scripts only grounded routines, adds tests, points the original skill to the script, and updates [scoreboard.md](scoreboard.md). A runner ships the handoff with `/ship` under a new Fleet CI board 11514 ticket.
 
 Install only after shipping, from a durable production checkout (not a disposable worktree):
 

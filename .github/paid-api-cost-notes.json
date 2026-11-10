@@ -158,5 +158,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-7779 loads and updates one skill offer through Hypertask's own same-origin /api/ai/skill-offers route. No third-party paid API is called from the browser; the route's own work is noted on the detection entry.",
     "source": "https://app.hypertask.ai/detail/project-15/7779"
+  },
+  "src/lib/ai/chatStream/title.ts:f2d6086639093804e118e0f46a8e23264c844b74a6f05b3fc368991d1ca8904b": {
+    "maxUsdPerDay": 1,
+    "reason": "HTPR-7854 keeps the existing first-turn title generateText call on the same title model but caps maxOutputTokens at 64 and sends chat-title effort none so reasoning tokens cannot exceed the cap. That lowers spend versus uncapped titles, so one dollar per day remains a generous ceiling for this path.",
+    "source": "https://app.hypertask.ai/detail/project-15/7854"
   }
 }

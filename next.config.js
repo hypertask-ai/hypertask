@@ -230,7 +230,10 @@ const nextConfig = {
       },
     ];
   },
-  webpack(config) {
+  webpack(config, options = {}) {
+    if (!options.dev && config.cache && typeof config.cache === "object") {
+      config.cache.maxMemoryGenerations = 0;
+    }
     // react-joyride's ESM build references ReactDOM.unmountComponentAtNode /
     // unstable_renderSubtreeIntoContainer in a dead `!isReact16` branch that
     // React 19 no longer exports, which trips webpack's strict ESM named-export

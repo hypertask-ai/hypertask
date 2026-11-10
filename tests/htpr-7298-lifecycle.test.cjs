@@ -258,7 +258,7 @@ for (const [name, pages, links, expected] of [
   ["foreign-board sole link", [page(10, 20, { projectId: 9 })], [link(10, 20)], 9],
   ["taskless origin sole link", [page(10, null)], [link(10, 20)], 2],
   ["archived sole link", [page(10, 20, { archived: true })], [link(10, 20)], 2],
-  ["legacy insert without link", [page(10)], [], 2],
+  ["origin link without extra rows", [page(10)], [link(10, 20)], 2],
   ["existing secondary link without origin row", [page(10, 21)], [link(10, 20)], 2],
 ]) {
   test(`move: ${name}`, async () => {
@@ -270,7 +270,7 @@ for (const [name, pages, links, expected] of [
     if (expected === 2) assert.ok(h.calls.indexOf("page-index:10") > h.calls.indexOf("commit"));
     assert.ok(h.calls.indexOf("task-update:20") < h.calls.indexOf("page-lock"));
     assert.ok(h.calls.indexOf("page-lock") < h.calls.indexOf("commit"));
-    if (name.includes("legacy")) assert.equal(h.state().links.find((edge) => edge.taskId === pages[0].taskId).createdAt.getTime(), pages[0].createdAt.getTime());
+    if (name.includes("origin link")) assert.equal(h.state().links.find((edge) => edge.taskId === pages[0].taskId).createdAt.getTime(), pages[0].createdAt.getTime());
   });
 }
 
@@ -296,8 +296,12 @@ test("move detaches stationary children and keeps a moving subtree together", as
   assert.ok(h.locked.has(11), "stationary child is locked too");
 });
 
-test("root and nested subtasks use the transactional sync, including legacy links", async () => {
-  const h = harness({ tasks: [task(20), task(21, { parentTaskId: 20 }), task(22, { parentTaskId: 21 })], pages: [page(10), page(11, 21), page(12, 22)], links: [] });
+test("root and nested subtasks use the transactional sync", async () => {
+  const h = harness({
+    tasks: [task(20), task(21, { parentTaskId: 20 }), task(22, { parentTaskId: 21 })],
+    pages: [page(10), page(11, 21), page(12, 22)],
+    links: [link(10, 20), link(11, 21), link(12, 22)],
+  });
   assert.equal((await h.move()).success, true);
   assert.deepEqual(h.state().pages.map((row) => row.projectId), [2, 2, 2]);
   assert.equal(h.state().links.length, 3);
@@ -345,13 +349,13 @@ test("subtree move detaches split multi-linked parent / sole-linked child and hi
 
 for (const failingTaskId of [20, 21]) {
   test(`page-sync throw rolls back task ${failingTaskId} and its page`, async () => {
-    const h = harness({ tasks: [task(20), task(21, { parentTaskId: 20 })], pages: [page(10), page(11, 21)], links: [], failPageWriteFor: failingTaskId });
+    const h = harness({ tasks: [task(20), task(21, { parentTaskId: 20 })], pages: [page(10), page(11, 21)], links: [link(10, 20), link(11, 21)], failPageWriteFor: failingTaskId });
     if (failingTaskId === 20) assert.equal((await h.move()).success, false);
     else await assert.rejects(h.move(), /Failed to update task/);
     const id = failingTaskId === 20 ? 10 : 11;
     assert.equal(h.state().tasks.find((row) => row.id === failingTaskId).projectId, 1);
     assert.equal(h.state().pages.find((row) => row.id === id).projectId, 1);
-    assert.equal(h.state().links.some((edge) => edge.pageId === id), false);
+    assert.equal(h.state().links.length, 2);
     assert.ok(h.calls.includes("rollback"));
   });
 }

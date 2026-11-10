@@ -64,6 +64,18 @@
     {
       "path": "/api/cron/abandoned-work",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/saved-view-columns",
+      "schedule": "20 1 * * *"
+    },
+    {
+      "path": "/api/cron/rocket-digest",
+      "schedule": "23 7 * * *"
+    },
+    {
+      "path": "/api/cron/rocket-digest-watchdog",
+      "schedule": "37 11 * * *"
     }
   ]
 }

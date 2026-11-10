@@ -298,22 +298,29 @@
       "id": "boards.read",
       "title": "List boards, teams, members, manifests, and playbooks",
       "matches": {
-        "api": ["^GET /api/mcp/(projects|teams/\\[teamId\\]/boards|projects/\\[projectId\\]/(members|manifest|playbook))$"],
-        "mcp": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$"],
-        "cli": ["^(teams list|project (list|show|members|manifest|playbook|sections|labels))$"],
+        "api": ["^GET /api/mcp/(projects|teams/\\[teamId\\]/boards|projects/\\[projectId\\]/(members|manifest|playbook))$", "^GET /api/mcp/projects/\\[projectId\\]/github$"],
+        "mcp": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$", "^hypertask_list_board_github_repos$"],
+        "cli": ["^(teams list|project (list|show|members|manifest|playbook|sections|labels))$", "^project github$"],
         "ai_chat": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$"],
-        "hyperai": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$"]
+        "hyperai": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$", "^hypertask_list_board_github_repos$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/8951",
+          "expires": "2026-12-05",
+          "entries": ["project github"]
+        }
       }
     },
     {
       "id": "boards.manage",
       "title": "Create, archive, invite to, and configure boards",
       "matches": {
-        "api": ["^(POST|PATCH) /api/mcp/projects$", "^PATCH /api/mcp/projects/\\[projectId\\]$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
-        "mcp": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"],
+        "api": ["^(POST|PATCH) /api/mcp/projects$", "^PATCH /api/mcp/projects/\\[projectId\\]$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$", "^PUT /api/mcp/projects/\\[projectId\\]/github$"],
+        "mcp": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$", "^hypertask_set_board_github_repos$"],
         "cli": ["^project (create-board|archive|invite|instructions)( |$)", "^project delete$", "^project update$"],
         "ai_chat": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"],
-        "hyperai": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"]
+        "hyperai": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$", "^hypertask_set_board_github_repos$"]
       }
     },
     {

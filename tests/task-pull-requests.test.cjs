@@ -123,6 +123,7 @@ test("GitHub webhook repository policy cannot target another board", () => {
   ].map((fullName) => ({
     projectId: 15,
     fullName,
+    repositoryId: null,
     provenance: "legacy",
     installationId: null,
     revokedAt: null,
@@ -159,9 +160,13 @@ test("GitHub webhook repository policy cannot target another board", () => {
     null,
   );
   assert.equal(
-    resolveBoardGithubRepository(publicRepository("hypertask-ai/hypertask"), [{
+    resolveBoardGithubRepository({
+      ...publicRepository("hypertask-ai/hypertask"),
+      id: "42",
+    }, [{
       projectId: 7049,
       fullName: "hypertask-ai/hypertask",
+      repositoryId: "42",
       provenance: "installed",
       installationId: "123",
       revokedAt: null,

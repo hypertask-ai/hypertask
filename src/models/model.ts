@@ -371,6 +371,7 @@ export interface IView {
   table_sort_column?: string | null;
   table_sort_direction?: string | null;
   table_group_by?: string | null;
+  table_collapsed_sections?: string | null;
   board_layout?: "Board" | "Table" | null;
   ViewLastUsed: IView_Last_Used[];
 }

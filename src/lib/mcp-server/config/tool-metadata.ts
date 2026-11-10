@@ -207,6 +207,9 @@ const RAW_TOOL_METADATA = {
       "Gets a read-only board hygiene report (get_hygiene), or gets/sets a board's playbook or AI custom instructions. Hygiene reports untagged open tickets, possible duplicate tags, missing shared tag views and Title Case suggestions; it changes nothing.",
   },
 
+  LIST_BOARD_GITHUB_REPOS: { name: buildToolName('list_board_github_repos'), description: 'Lists the GitHub repositories connected to one board, the ones you can still connect from your GitHub App installation, and the settings version. Board admins only. Pass the version to set_board_github_repos.' },
+  SET_BOARD_GITHUB_REPOS: { name: buildToolName('set_board_github_repos'), description: 'Replaces the GitHub repositories connected to one board. Requires repository_ids and the version from list_board_github_repos; a stale version is refused. Board admins only.' },
+
   CREATE_BOARD: {
     name: buildToolName('create_board'),
     description: `Creates a new board under a team in one API call from a structured manifest (HTPR-3142). You build title, sections[], optional labels[], optional tasks[]; the backend does not run an LLM on a prompt.

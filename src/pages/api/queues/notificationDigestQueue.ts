@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { canReadTaskNow } from "@/lib/access/canReadTaskNow";
+import { accountNotificationsBlocked } from "@/lib/auth/unverifiedEmailAccount";
 import { withQstashSignature } from "@/lib/qstash";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { unsubscribeHeaders } from "@/lib/email/unsubscribe";
@@ -56,6 +57,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res
         .status(200)
         .json({ ok: true, sent: false, reason: "board muted" });
+    }
+
+    if (await accountNotificationsBlocked(userId)) {
+      await clearDigestWindow(userId, taskId);
+      return res
+        .status(200)
+        .json({ ok: true, sent: false, reason: "unverified account" });
     }
 
     const watermark = await getLastDigestedAt(userId, taskId);
