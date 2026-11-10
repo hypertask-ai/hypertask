@@ -23,7 +23,6 @@ const UsageGroup = ({ children, title }: { children: React.ReactNode; title: str
     {children}
   </div>
 );
-
 const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
   const [data, setData] = useState<AiUsageData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +111,6 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
     </SettingsCard>
   );
 };
-
 const TeamAiUsageBreakdown = () => {
   const { teamId, project, team } = useSettingsTeam();
   const [teams, setTeams] = useState<TeamTarget[] | null>(null);
