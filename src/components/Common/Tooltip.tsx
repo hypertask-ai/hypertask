@@ -33,9 +33,9 @@ const TopLayerTooltip = ({keyCombination,bottom, text,left, groupHoverId="",shou
           {text}
         </span>
         {keyCombination.length > 0 && <div>
-          {keyCombination.map((key, index) => !key ?
-            <span key={`then-${index}`} className="px-1 text-black">then</span> :
-            <KBDElement key={`${key}-${index}`} content={key} className="px-1 font-semibold text-dense xl:text-content" />
+          {keyCombination.map((key) => !key ?
+            <span key={"then"} className="px-1 text-black">then</span> :
+            <KBDElement key={key} content={key} className="px-1 font-semibold text-dense xl:text-content" />
           )}
         </div>}
       </div>
