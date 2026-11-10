@@ -18,7 +18,10 @@ import {
   convertHtmlToText,
   isSessionNoise,
 } from "@/app/api/ai/_lib/taskContent";
-import { redactSharedPrivateWaitingActivities } from "@/lib/tasks/redactWaitingActivities";
+import {
+  redactSharedPrivateWaitingActivities,
+  scrubStoredTaskSummary,
+} from "@/lib/tasks/redactWaitingActivities";
 import {
   providerOptionsForAiModel,
   aiUsageProviderForCredential,
@@ -249,7 +252,12 @@ async function generateAndStoreTaskSummaryWithLease(
       storedSummary &&
       extractSummaryFingerprint(storedSummary) === fingerprint
     ) {
-      return stripSummaryFingerprint(storedSummary);
+      return (await scrubStoredTaskSummary(
+        stripSummaryFingerprint(storedSummary),
+        task.id,
+        0,
+        task.projectId,
+      )) ?? stripSummaryFingerprint(storedSummary);
     }
   }
 

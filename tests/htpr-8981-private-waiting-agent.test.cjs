@@ -51,8 +51,30 @@ test("a deleted private agent stays hidden, and a person with the same name does
 
 test("making an agent private or deleting it stamps waits that already name that agent", () => {
   const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
-  assert.equal(read("src/lib/agents/visibility.ts").includes("waitingOnPrivate"), true);
-  assert.equal(read("src/lib/mcp/agents/ownedAgents.ts").includes("waitingOnPrivate"), true);
+  const visibility = read("src/lib/agents/visibility.ts");
+  const owned = read("src/lib/mcp/agents/ownedAgents.ts");
+  assert.equal(visibility.includes("waitingOnPrivate"), true);
+  assert.equal(visibility.includes("#- '{data,waitingOnPrivate}'"), true);
+  assert.equal(visibility.includes('DELETE FROM "Task_Summary"'), true);
+  assert.equal(owned.includes('visibility === "PRIVATE"'), true);
+  assert.equal(owned.includes('DELETE FROM "Task_Summary"'), true);
+  for (const file of [
+    "src/utils/controllers/taskDetail/load.ts",
+    "src/utils/controllers/tasks/getSharedTask.ts",
+    "src/app/api/ai/_lib/currentTaskContext.ts",
+    "src/lib/mcp/operations/tasks/operation.ts",
+    "src/app/api/ai/_lib/taskSummaries.ts",
+  ]) assert.equal(read(file).includes("scrubStoredTaskSummary") || read(file).includes("replaceConcealedNames"), true, file);
+});
+
+test("a stored summary hides a private waiting name, and the owner still sees it", () => {
+  const comments = [{ activity: waiting({ waitingOnDisplayName: "Secret helper", waitingOnAgentId: secret.id, waitingOnPrivate: true, waitingOnAgentOwnerId: 6 }) }];
+  const hidden = privacy.hiddenWaitingAgents([secret], 9, 15);
+  const summary = "Waiting on Secret helper for the export.";
+  assert.equal(privacy.replaceConcealedNames(summary, privacy.concealedWaitingNames(comments, hidden.hiddenIds, hidden.hiddenNames, 9)), "Waiting on Private agent for the export.");
+  assert.equal(privacy.replaceConcealedNames(summary, privacy.concealedWaitingNames(comments, hidden.hiddenIds, hidden.hiddenNames, 6)), summary);
+  assert.equal(privacy.replaceConcealedNames(summary, privacy.concealedWaitingNames(comments, new Set(), new Set(), 9)), "Waiting on Private agent for the export.");
+  assert.equal(privacy.replaceConcealedNames(summary, privacy.concealedWaitingNames([{ activity: waiting({ waitingOnDisplayName: "Secret helper" }) }], new Set(), new Set(), 9)), summary);
 });
 
 test.after(() => {

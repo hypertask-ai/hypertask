@@ -139,7 +139,12 @@ export async function setOwnedAgentVisibilityInTransaction(
     where: { id: agentId, userId, ...scopeWhere },
     data: { visibility },
   });
-  if (visibility === "PRIVATE") await tx.$executeRawUnsafe(`UPDATE "Comment" SET activity = jsonb_set(jsonb_set(activity, '{data,waitingOnPrivate}', 'true'::jsonb, true), '{data,waitingOnAgentOwnerId}', to_jsonb($2::int), true) WHERE activity->>'type' = 'TaskWaitingOn' AND activity #>> '{data,waitingOnAgentId}' = $1`, agentId, userId);
+  if (visibility === "PRIVATE") {
+    await tx.$executeRawUnsafe(`UPDATE "Comment" SET activity = jsonb_set(jsonb_set(activity, '{data,waitingOnPrivate}', 'true'::jsonb, true), '{data,waitingOnAgentOwnerId}', to_jsonb($2::int), true) WHERE activity->>'type' = 'TaskWaitingOn' AND activity #>> '{data,waitingOnAgentId}' = $1`, agentId, userId);
+    await tx.$executeRawUnsafe(`DELETE FROM "Task_Summary" WHERE "taskId" IN (SELECT "taskId" FROM "Comment" WHERE activity->>'type' = 'TaskWaitingOn' AND activity #>> '{data,waitingOnAgentId}' = $1)`, agentId);
+  } else {
+    await tx.$executeRawUnsafe(`UPDATE "Comment" SET activity = (activity #- '{data,waitingOnPrivate}') #- '{data,waitingOnAgentOwnerId}' WHERE activity->>'type' = 'TaskWaitingOn' AND activity #>> '{data,waitingOnAgentId}' = $1`, agentId);
+  }
   if (updated.count !== 1) {
     return { ok: false as const, status: 404, error: "Agent does not exist" };
   }

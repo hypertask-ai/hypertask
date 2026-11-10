@@ -125,6 +125,7 @@ test("task summary and description verdict share one model request", async () =>
       description: {
         updateMany: async (args) => descriptionWrites.push(args),
       },
+      comment: { findMany: async () => [] },
     },
   });
   stubModule("src/lib/redis.ts", {

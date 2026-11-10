@@ -6,7 +6,7 @@ import type { IBlockingTask } from "@/models/model";
 import prisma from "@/lib/prisma";
 import { blockedByRelationsInclude, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { attachOpenBlockingTasks, type TaskWithBlockingRelations } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
-import { withPublicWaitingActivities } from "@/lib/tasks/redactWaitingActivities";
+import { scrubStoredTaskSummary, withPublicWaitingActivities } from "@/lib/tasks/redactWaitingActivities";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 
 export async function loadCurrentTaskContext(
@@ -73,10 +73,17 @@ export async function loadCurrentTaskContext(
       )
     : tasks;
 
-  const visibleTasks = await Promise.all(tasksWithBlockers.map(async (task) => ({
-    ...task,
-    comments: await withPublicWaitingActivities(task.comments, userId, task.projectId),
-  })));
+  const visibleTasks = await Promise.all(tasksWithBlockers.map(async (task) => {
+    const summary = task.Task_Summary?.[0];
+    const content = summary?.content
+      ? await scrubStoredTaskSummary(summary.content, task.id, userId, task.projectId)
+      : summary?.content;
+    return {
+      ...task,
+      comments: await withPublicWaitingActivities(task.comments, userId, task.projectId),
+      ...(summary ? { Task_Summary: [{ ...summary, content: content ?? null }] } : {}),
+    };
+  }));
   return visibleTasks
     .map((task) => formatTaskContext(task, options?.role ?? "primary", compact, blockersEnabled))
     .join("\n\n");

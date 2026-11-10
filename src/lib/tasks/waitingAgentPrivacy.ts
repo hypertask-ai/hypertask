@@ -45,6 +45,31 @@ export function hiddenWaitingAgents(agents: readonly WaitingAgentRecord[], userI
   return { hiddenIds, hiddenNames };
 }
 
+export function concealedWaitingNames(
+  comments: readonly { activity?: unknown }[],
+  hiddenIds: ReadonlySet<string>,
+  hiddenNames: ReadonlySet<string>,
+  viewerUserId: number,
+): string[] {
+  const names = new Set<string>();
+  for (const comment of comments) {
+    const row = waitingActivity(comment.activity);
+    if (!row?.data) continue;
+    const original = typeof row.data.waitingOnDisplayName === "string" ? row.data.waitingOnDisplayName : "";
+    if (!original || original === PRIVATE_AGENT_DISPLAY_NAME) continue;
+    const redacted = redactWaitingOnActivity(row, hiddenIds, hiddenNames, viewerUserId) as WaitingActivity;
+    if (redacted.data?.waitingOnDisplayName === PRIVATE_AGENT_DISPLAY_NAME) names.add(original);
+  }
+  return [...names];
+}
+
+export function replaceConcealedNames(text: string, names: readonly string[]): string {
+  return [...new Set(names)]
+    .filter((name) => name && name !== PRIVATE_AGENT_DISPLAY_NAME)
+    .sort((left, right) => right.length - left.length)
+    .reduce((current, name) => current.split(name).join(PRIVATE_AGENT_DISPLAY_NAME), text);
+}
+
 export function redactWaitingOnActivity(activity: unknown, hiddenIds: ReadonlySet<string>, hiddenNames: ReadonlySet<string>, viewerUserId = 0): unknown {
   const row = waitingActivity(activity);
   if (!row?.data) return activity;

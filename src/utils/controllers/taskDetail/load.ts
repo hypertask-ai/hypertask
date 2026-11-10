@@ -25,6 +25,7 @@ import {
 } from "@/lib/agents/visibility";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
 import { visibleWaitingOnActivity } from "@/lib/tasks/waitingOnActivitySql";
+import { scrubStoredTaskSummary } from "@/lib/tasks/redactWaitingActivities";
 import { attachAgentStatus } from "@/utils/controllers/tasks/attachAgentStatus";
 import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
 
@@ -518,6 +519,10 @@ export async function fetchTaskDetail(
         })
         .catch((error) => console.warn("[Pull requests] Background refresh failed", task.id, error)),
     );
+  }
+  const summaryRow = task.Task_Summary?.[0];
+  if (summaryRow?.content) {
+    summaryRow.content = await scrubStoredTaskSummary(summaryRow.content, task.id, userId, task.projectId) ?? summaryRow.content;
   }
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
