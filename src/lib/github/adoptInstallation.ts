@@ -17,9 +17,8 @@ export async function adoptGithubInstallation(input: {
   userId: number;
 }): Promise<GithubAdoptionResult> {
   const { installation, projectId, teamId, userId } = input;
-  const identity = {
+  const persistedIdentity = {
     accountId: installation.accountId,
-    accountLogin: installation.accountLogin,
     accountType: installation.accountType,
   };
   try {
@@ -37,12 +36,18 @@ export async function adoptGithubInstallation(input: {
       if (existing) {
         await tx.githubInstallation.update({
           where: { id: installation.id },
-          data: { ...identity, installedByUserId: userId, revokedAt: null },
+          data: { ...persistedIdentity, installedByUserId: userId, revokedAt: null },
         });
         return;
       }
       await tx.githubInstallation.create({
-        data: { id: installation.id, teamId, ...identity, installedByUserId: userId },
+        data: {
+          id: installation.id,
+          teamId,
+          ...persistedIdentity,
+          accountLogin: "",
+          installedByUserId: userId,
+        },
       });
     });
     return "connected";
