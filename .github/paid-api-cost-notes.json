@@ -173,7 +173,7 @@
     "maxUsdPerDay": 1,
     "reason": "HTPR-9002 sends one request per Write press on the new task screen to the existing task writer route on the board's already chosen model. It replaces the same task writer call that the compose palette makes today, behind a flag at Owner and QA, so a dollar a day is a generous ceiling.",
     "source": "https://app.hypertask.ai/detail/project-15/9002"
-    },
+  },
   "src/hooks/General/useCardParts.ts:2b694b6f508025a0c5f3f279f6c4bf32f752e15c7ad19f0ab9f9cb2b71657d01": {
     "maxUsdPerDay": 0,
     "reason": "HTPR-8971 saves one card part switch to Hypertask's own same-origin preferences route when a person flips a switch in Card settings. No provider, no model and no paid API.",
