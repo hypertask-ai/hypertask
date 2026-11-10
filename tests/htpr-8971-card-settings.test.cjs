@@ -23,11 +23,17 @@ test("the flag ships at Owner + QA as a feature with small risk", () => {
   assert.deepEqual([key, kind, defaultMode, releaseRisk.risk], [flagKey, "feature", "OWNER_AND_QA", "small"]);
 });
 
-test("no saved setting, or junk, means the empty card: every part off", () => {
+const defaultOn = ["ticketNumber", "inboxIcon", "tags"];
+
+test("no saved setting, or junk, means the default card: number, inbox icon and tags on, the rest off", () => {
   assert.deepEqual(parts.CARD_PARTS.map(({ key }) => key), partKeys);
-  for (const raw of [undefined, null, "all", [], 3, {}]) {
-    assert.ok(Object.values(parts.parseCardParts(raw)).every((shown) => shown === false), `raw ${JSON.stringify(raw)}`);
+  for (const raw of [undefined, null, "all", [], 3]) {
+    const shown = parts.parseCardParts(raw);
+    assert.deepEqual(partKeys.filter((key) => shown[key]).sort(), [...defaultOn].sort(), `raw ${JSON.stringify(raw)}`);
   }
+  assert.ok(Object.values(parts.parseCardParts({})).every((shown) => shown === false), "a saved object is kept as saved");
+  const allOff = parts.parseCardParts({ ...parts.EMPTY_CARD_PARTS, comments: true });
+  assert.deepEqual(partKeys.filter((key) => allOff[key]), ["comments"], "saved choices beat the defaults");
   const saved = parts.parseCardParts({ priority: true, size: "yes", name: true });
   assert.deepEqual(Object.keys(saved), partKeys, "only known parts survive the parse");
   assert.equal(saved.priority, true);
@@ -67,25 +73,36 @@ function renderCard({ enabled, saved }) {
   return { html, seen, task, blocker };
 }
 
-test("flag on with no saved setting: the card keeps name and people and drops every part", () => {
-  const { html, seen, blocker } = renderCard({ enabled: true });
+test("flag on with no saved setting: name, people, number, inbox icon and tags show, nothing else", () => {
+  const { html, seen, task, blocker } = renderCard({ enabled: true });
   assert.ok(html.includes("Name stays"));
   assert.deepEqual(seen.top.assignees, [{ id: 7 }]);
-  assert.equal(seen.top.ticketNumber, "");
-  assert.equal(seen.top.countNotifications, 0);
-  assert.deepEqual(seen.top.notifications, []);
+  assert.equal(seen.top.ticketNumber, "HTPR-1");
+  assert.equal(seen.top.countNotifications, 1);
+  assert.equal(seen.top.notifications, task.notifications);
   assert.equal(seen.top._count, undefined);
   assert.equal(seen.top.countSubtasks, 0);
   assert.equal(seen.subTasks.subTasks, undefined);
   assert.equal(seen.tags.priority, undefined);
   assert.equal(seen.tags.estimate, undefined);
   assert.equal(seen.tags.dueDate, undefined);
-  assert.deepEqual(seen.tags.taskLabels, []);
+  assert.equal(seen.tags.taskLabels, task.taskLabels);
   assert.deepEqual(seen.tags.task.blockingTasks, []);
-  assert.deepEqual(seen.tags.task.customFieldValues, []);
+  assert.equal(seen.tags.task.customFieldValues, task.customFieldValues);
   assert.notEqual(seen.tags.blockingUser, blocker);
   assert.equal(seen.container.blocked, false);
   assert.ok(!html.includes("in column"), "no staleness line");
+});
+
+test("flag on with every part saved off: the card keeps only name and people", () => {
+  const { html, seen } = renderCard({ enabled: true, saved: parts.EMPTY_CARD_PARTS });
+  assert.ok(html.includes("Name stays"));
+  assert.deepEqual(seen.top.assignees, [{ id: 7 }]);
+  assert.equal(seen.top.ticketNumber, "");
+  assert.equal(seen.top.countNotifications, 0);
+  assert.deepEqual(seen.top.notifications, []);
+  assert.deepEqual(seen.tags.taskLabels, []);
+  assert.deepEqual(seen.tags.task.customFieldValues, []);
 });
 
 test("flag on: switching a part on shows only that part", () => {
@@ -233,7 +250,7 @@ function preferencesApi(cardSettings = true) {
 test("a switched part persists: POST saves it and a fresh read brings it back", async () => {
   const api = preferencesApi();
   const before = await api.get();
-  assert.ok(Object.values(parts.parseCardParts(before.body.settings.cardParts)).every((shown) => !shown));
+  assert.deepEqual(parts.parseCardParts(before.body.settings.cardParts), parts.DEFAULT_CARD_PARTS);
   const next = { ...parts.EMPTY_CARD_PARTS, comments: true };
   const saved = await api.post({ cardParts: next });
   assert.equal(saved.status, 200);
@@ -265,5 +282,5 @@ test("toggling a switch updates the board at once and posts the whole card setti
   const pending = useSetCardPart()("dueDate", true);
   assert.equal(client.getQueryData(["user-preferences"]).cardParts.dueDate, true, "optimistic before the save returns");
   await pending;
-  assert.deepEqual(posts, [["/api/users/preferences", { cardParts: { ...parts.EMPTY_CARD_PARTS, dueDate: true } }]]);
+  assert.deepEqual(posts, [["/api/users/preferences", { cardParts: { ...parts.DEFAULT_CARD_PARTS, dueDate: true } }]]);
 });
