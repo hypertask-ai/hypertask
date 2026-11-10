@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { execFileSync } = require("node:child_process");
-const { readFileSync, writeFileSync } = require("node:fs");
+const { existsSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 const FIXTURES = join(__dirname, "..", "tests", "fixtures", "rag-search");
@@ -24,12 +24,8 @@ function loadFixtures() {
   return { corpus: readJson("corpus.json"), queries: readJson("queries.json") };
 }
 
-function htmlToText(html) {
-  return String(html ?? "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, String.fromCharCode(34)).replace(/&#x27;/g, String.fromCharCode(39)).replace(/&nbsp;/g, " ").replace(/[ \t]+/g, " ").trim();
-}
-
-function sanitize(text) {
-  return text.replace(/https?:\/\/\S+/g, " ").replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1200);
+function plain(html) {
+  return String(html ?? "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, String.fromCharCode(34)).replace(/&#x27;/g, String.fromCharCode(39)).replace(/&nbsp;/g, " ").replace(/https?:\/\/\S+/g, " ").replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1200);
 }
 
 function captureBoard(boardId = 15) {
@@ -39,9 +35,8 @@ function captureBoard(boardId = 15) {
     rows.push(...(page.tasks ?? []));
     if (!page.tasks?.length || rows.length >= (page.total ?? 0)) break;
   }
-  const corpus = readJson("corpus.json");
-  corpus.capturedAt = new Date().toISOString().slice(0, 10);
-  corpus.tasks = rows.map((task) => ({ id: task.id, ticketNumber: task.ticketNumber, title: String(task.title ?? "").trim(), status: String(task.status ?? "Normal"), text: sanitize(htmlToText(task.description)) })).sort((left, right) => left.ticketNumber.localeCompare(right.ticketNumber, "en", { numeric: true }));
+  const corpus = { ...readJson("corpus.json"), capturedAt: new Date().toISOString().slice(0, 10) };
+  corpus.tasks = rows.map((task) => ({ id: task.id, ticketNumber: task.ticketNumber, title: String(task.title ?? "").trim(), status: String(task.status ?? "Normal"), text: plain(task.description) })).sort((left, right) => left.ticketNumber.localeCompare(right.ticketNumber, "en", { numeric: true }));
   writeFileSync(join(FIXTURES, "corpus.json"), JSON.stringify(corpus, null, 1) + "\n");
   console.log(`captured ${corpus.tasks.length} tickets from board ${boardId}`);
 }
@@ -208,7 +203,6 @@ function measure({ corpus, queries }, vectors) {
         ndcg10: round(scored.reduce((sum, row) => sum + row.ndcg, 0) / total),
         deletedRate: round(scored.filter((row) => row.top.some((ticketNumber) => statusOf.get(ticketNumber) === "Deleted")).length / total),
         canaryLeak: round(canaries.filter((row) => row.hit).length / (canaries.length || 1)),
-        misses: scored.filter((row) => !row.hit).map((row) => row.id),
       };
     }
   }
@@ -236,31 +230,30 @@ function encode(vector) {
 }
 
 async function vectorsFor({ corpus, queries }) {
+  const saved = existsSync(join(FIXTURES, "vectors.json")) ? readJson("vectors.json") : null;
+  if (saved?.docs && saved.queries) return saved;
   const tickets = [...corpus.tasks, ...(corpus.canaries ?? [])];
   const documentVectors = await embed(tickets.map((task) => [task.ticketNumber, task.title, task.text].filter(Boolean).join(" ").replace(/\s+/g, " ").slice(0, EMBED_CAP)));
   if (!documentVectors) return null;
   const queryVectors = await embed(queries.pairs.map((pair) => pair.query.slice(0, EMBED_CAP)));
-  return {
+  const vectors = {
     model: process.env.RAG_EVAL_EMBED_MODEL ?? EMBED_MODEL,
     docs: Object.fromEntries(tickets.map((ticket, index) => [ticket.ticketNumber, encode(documentVectors[index])])),
     queries: Object.fromEntries(queries.pairs.map((pair, index) => [pair.id, encode(queryVectors[index])])),
   };
+  writeFileSync(join(FIXTURES, "vectors.json"), JSON.stringify(vectors) + "\n");
+  return vectors;
 }
 
 function printTable(result) {
   const lines = [`AI search test set: ${result.pairs} pairs over ${result.documents} documents (board ${result.board})`, "", "surface  mode      recall@10  mrr@10  nDCG@10  deleted-in-top10  deleted-canary-leak"];
-  for (const [surface, modes] of Object.entries(result.surfaces)) for (const mode of MODES) {
-    const row = modes[mode];
-    lines.push(`${surface.padEnd(8)} ${mode.padEnd(9)} ${String(row.recall10).padEnd(10)} ${String(row.mrr10).padEnd(7)} ${String(row.ndcg10).padEnd(8)} ${String(row.deletedRate).padEnd(17)} ${row.canaryLeak}`);
-  }
+  for (const [surface, modes] of Object.entries(result.surfaces)) for (const mode of MODES) lines.push(`${surface.padEnd(8)} ${mode.padEnd(9)} ${String(modes[mode].recall10).padEnd(10)} ${String(modes[mode].mrr10).padEnd(7)} ${String(modes[mode].ndcg10).padEnd(8)} ${String(modes[mode].deletedRate).padEnd(17)} ${modes[mode].canaryLeak}`);
   return lines.join("\n");
 }
 
 function floors(result) {
   const out = {};
-  for (const [surface, modes] of Object.entries(result.surfaces)) for (const mode of MODES) {
-    for (const key of ["recall10", "mrr10", "ndcg10"]) out[`${surface}.${mode}.${key}`] = modes[mode][key];
-  }
+  for (const [surface, modes] of Object.entries(result.surfaces)) for (const mode of MODES) for (const key of ["recall10", "mrr10", "ndcg10"]) out[`${surface}.${mode}.${key}`] = modes[mode][key];
   return out;
 }
 
@@ -298,7 +291,7 @@ async function main(argv) {
     console.log("\nbaseline written to tests/fixtures/rag-search/baseline.json");
     return 0;
   }
-  console.log(argv.includes("--json") ? JSON.stringify(result, null, 1) : printTable(result));
+  console.log(printTable(result));
   if (argv.includes("--check-baseline")) {
     const check = compareToBaseline(result);
     if (!check.ok) {

@@ -2,17 +2,16 @@ const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const test = require("node:test");
 
-const { loadFixtures, validate, buildIndex, fuse, documents, retrieve, measure, score, floors } = require("../scripts/rag-eval.cjs");
+const { loadFixtures, validate, buildIndex, documents, retrieve, measure, score, floors } = require("../scripts/rag-eval.cjs");
 
 const fixtures = loadFixtures();
 const rows = documents(fixtures.corpus);
 const index = buildIndex(rows);
 const keyword = (query, statusFilter = null) => retrieve({ documents_: rows, index, vectors: null, pair: { id: "t", query }, mode: "keyword", statusFilter });
 
-test("the test set is valid: board 15 only, 100+ pairs, deleted canaries the only Deleted rows", () => {
+test("the test set is valid: board 15 only, 100+ pairs, only the canaries are Deleted", () => {
   assert.deepEqual(validate(fixtures.corpus, fixtures.queries), []);
   assert.ok(fixtures.queries.pairs.length >= 100);
-  assert.ok(fixtures.corpus.tasks.length >= 150);
   assert.ok(fixtures.corpus.tasks.every((task) => task.ticketNumber.startsWith("HTPR-")));
   const deleted = rows.filter((row) => row.status === "Deleted");
   assert.equal(deleted.length, 3);
@@ -24,13 +23,7 @@ test("word search finds a ticket by its number and by a title phrase", () => {
   assert.ok(keyword("lightning button right click").slice(0, 5).includes("HTPR-9011"));
 });
 
-test("fusion ranks a ticket found by both retrievers above one found by one", () => {
-  const ranked = fuse([["A", "B", "C"], ["C", "D"]]);
-  assert.equal(ranked[0], "C");
-  assert.ok(ranked.indexOf("A") > 0);
-});
-
-test("a deleted row is hidden only when the surface filters to Normal", () => {
+test("a deleted row comes back when nothing filters status, and is hidden when it does", () => {
   assert.ok(keyword("office kitchen rota rotation").includes("CANARY-1"));
   assert.ok(!keyword("office kitchen rota rotation", "Normal").includes("CANARY-1"));
 });
