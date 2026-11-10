@@ -577,11 +577,12 @@ test("brain rule lists every brain label with its id so the writer can pick one"
   const brain = brainLabels.brainLabelsFromBoard([...boardLabels, { id: "b-hard", value: "Brain-Hard" }, { id: "b-light", value: "brain-light" }, { id: "b-medium", value: "brain-medium" }]);
   assert.deepEqual(plain(brain.options), [{ id: "b-light", name: "brain-light" }, { id: "b-medium", name: "brain-medium" }, { id: "b-hard", name: "brain-hard" }]);
   const rule = brainLabels.taskWriterBrainRule(brain);
-  assert.match(rule, /Brain label IDs: brain-light=b-light, brain-medium=b-medium, brain-hard=b-hard\./);
+  assert.match(rule, /only the ID and never the name/);
+  assert.ok(rule.includes('Brain labels: [{"id":"b-light","name":"brain-light"},{"id":"b-medium","name":"brain-medium"},{"id":"b-hard","name":"brain-hard"}].'));
   assert.match(rule, /exactly one brain label/);
   assert.match(rule, /typo/);
   assert.match(rule, /payments/);
-  assert.doesNotMatch(rule, /brain-extra-hard=/);
+  assert.doesNotMatch(rule, /"name":"brain-extra-hard"/);
 });
 
 test("the board vocabulary cuts a long label list, so brain ids must come from the brain rule", async () => {
@@ -598,5 +599,5 @@ test("the board vocabulary cuts a long label list, so brain ids must come from t
   const h = harness({ brain: true, boardLabels: longBoard, output });
   assert.equal((await h.post({ project_id: 15, prompt: "Fix a typo" })).status, 200);
   const prompt = JSON.stringify(h.calls[0].prompt);
-  for (const option of brainLabels.brainLabelsFromBoard(longBoard).options) assert.ok(prompt.includes(`${option.name}=${option.id}`), option.name);
+  for (const option of brainLabels.brainLabelsFromBoard(longBoard).options) assert.ok(prompt.includes(option.id) && prompt.includes(option.name), option.name);
 });
