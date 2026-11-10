@@ -53,32 +53,28 @@ export async function tableViewSettingsForWrite(
   const primary = sanitizeTableSort(body.table_sort_column, body.table_sort_direction);
   const hasStack = Object.prototype.hasOwnProperty.call(body, "table_sort_stack");
   const hasColumns = Object.prototype.hasOwnProperty.call(body, "table_columns");
-  let enabled = false;
-  if (hasStack || hasColumns) {
-    enabled = await isFeatureEnabled("htpr-8973-table-sort-columns", userId);
-  }
-  if (!enabled) {
+  if ((hasStack || hasColumns) && await isFeatureEnabled("htpr-8973-table-sort-columns", userId)) {
+    const stack = hasStack
+      ? sanitizeTableSortStack(body.table_sort_stack)
+      : sanitizeTableSortStack(inherited?.table_sort_stack);
+    const head = stack[0];
     return {
-      table_sort_column: primary.column,
-      table_sort_direction: primary.direction,
-      table_sort_stack: storedTableSortStack(inherited?.table_sort_stack),
-      table_columns: sanitizeTableColumns(inherited?.table_columns),
-      persistStack: false,
-      persistColumns: false,
+      table_sort_column: hasStack ? head?.column ?? null : primary.column,
+      table_sort_direction: hasStack ? head?.direction ?? null : primary.direction,
+      table_sort_stack: storedTableSortStack(stack),
+      table_columns: hasColumns
+        ? sanitizeTableColumns(body.table_columns)
+        : sanitizeTableColumns(inherited?.table_columns),
+      persistStack: hasStack,
+      persistColumns: hasColumns,
     };
   }
-  const stack = hasStack
-    ? sanitizeTableSortStack(body.table_sort_stack)
-    : sanitizeTableSortStack(inherited?.table_sort_stack);
-  const head = stack[0];
   return {
-    table_sort_column: hasStack ? head?.column ?? null : primary.column,
-    table_sort_direction: hasStack ? head?.direction ?? null : primary.direction,
-    table_sort_stack: storedTableSortStack(stack),
-    table_columns: hasColumns
-      ? sanitizeTableColumns(body.table_columns)
-      : sanitizeTableColumns(inherited?.table_columns),
-    persistStack: hasStack,
-    persistColumns: hasColumns,
+    table_sort_column: primary.column,
+    table_sort_direction: primary.direction,
+    table_sort_stack: storedTableSortStack(inherited?.table_sort_stack),
+    table_columns: sanitizeTableColumns(inherited?.table_columns),
+    persistStack: false,
+    persistColumns: false,
   };
 }
