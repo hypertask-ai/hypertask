@@ -1,6 +1,9 @@
 import UserAvatar from '@/components/Common/UserAvatar';
 import useHypertasksNavigate from '@/hooks/MultiPages/Route/useHypertasksNavigate';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from '@/lib/flags/definitions/htpr-8927-board-card-overflow';
 import type { IBlockingTask } from '@/models/model';
+import { cn } from '@/utils/undoActions/helperFuncs';
 
 export type BlockerUser = {
   displayName?: string | null;
@@ -8,12 +11,14 @@ export type BlockerUser = {
   photoURL?: string | null;
 };
 
-const blockerChipClassName = "inline-flex h-labelComponent min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-[4px] bg-[hsl(0_62.8%_30.6%)] px-1.5 text-micro font-semibold leading-none text-white";
+const blockerChipClassName =
+  "inline-flex h-labelComponent max-w-full items-center gap-1 rounded-[4px] bg-[hsl(0_62.8%_30.6%)] px-1.5 text-micro font-semibold leading-none text-white";
 
 const BlockerChip = ({ user }: { user: BlockerUser }) => {
+  const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
   const name = user.displayName?.trim() || user.email?.trim() || "Unknown person";
   return (
-    <span className={blockerChipClassName}>
+    <span className={cn(blockerChipClassName, cardOverflowClamp && "min-w-0 overflow-hidden")}>
       <UserAvatar
         alt=""
         fallbackClassName="bg-white/20 text-white"
@@ -29,13 +34,18 @@ const BlockerChip = ({ user }: { user: BlockerUser }) => {
 
 export const BlockerTaskChip = ({ task }: { task: IBlockingTask }) => {
   const { navigateToTask } = useHypertasksNavigate();
+  const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
   const ticketNumber = task.ticketNumber || `#${task.uniqueIndex}`;
   const label = `${ticketNumber} ${task.title}`;
 
   return (
     <span
       aria-label={`Open blocker ${label}`}
-      className={`${blockerChipClassName} cursor-pointer`}
+      className={cn(
+        blockerChipClassName,
+        "cursor-pointer",
+        cardOverflowClamp && "min-w-0 overflow-hidden",
+      )}
       data-blocking-task={task.id}
       role="link"
       tabIndex={0}

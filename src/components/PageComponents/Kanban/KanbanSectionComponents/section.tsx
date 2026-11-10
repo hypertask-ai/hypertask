@@ -1,6 +1,7 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
+import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-8927-board-card-overflow";
 import { HTPR_8628_KANBAN_STICKY_HEADER_FLAG } from "@/lib/flags/definitions/htpr-8628-kanban-sticky-header";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
@@ -130,6 +131,7 @@ export const Section = ({
   const currentProject = project;
   const workLimits = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+  const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
   const stickyHeader = useFlag(HTPR_8628_KANBAN_STICKY_HEADER_FLAG);
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
@@ -438,7 +440,7 @@ export const Section = ({
                   : " border-[1px] border-pageBackground group/main focus:border-[1px] focus:border-white-black mobileResponsive md:w-full flex flex-col items-start h-auto "
               }
                 focus:outline-none  bg-containerBackground shadow-md rounded-md
-                max-h-inherit section-container relative min-w-0 overflow-x-hidden
+                max-h-inherit section-container relative${cardOverflowClamp ? " min-w-0 overflow-x-hidden" : ""}
                 `}
         >
           {!isMbl &&
@@ -456,7 +458,7 @@ export const Section = ({
             data-title={section.section_title}
             data-board-scroll-ready={taskModuleReady || taskModuleFailed}
             className={`
-              ${isMbl ? "" : "overflow-x-hidden overflow-y-auto "}
+              ${isMbl ? "" : cardOverflowClamp ? "overflow-x-hidden overflow-y-auto " : "overflow-y-auto "}
               w-full sm:pb-20 h-full  max-h-inherit 
               
               scrollbar-thin 
@@ -496,7 +498,9 @@ export const Section = ({
               id={`tasks-list-${index}`}
               className={`
                 ${isMbl ? " scrollbar-thin  overflow-y-auto max-h-[98%]" : ""}
-                w-full min-w-0 max-w-full overflow-x-hidden px-2 space-y-4 mt-0`}
+                ${cardOverflowClamp
+                  ? "w-full min-w-0 max-w-full overflow-x-hidden px-2 space-y-4 mt-0"
+                  : "\"w-full px-2 space-y-4 mt-0\""}`}
             >
               {showAddItem && newTaskPosition === "top" && (
                 <NewTask

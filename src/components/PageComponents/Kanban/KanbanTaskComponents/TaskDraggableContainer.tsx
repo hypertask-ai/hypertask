@@ -7,6 +7,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7614_SELECTED_CARD_BORDER_FLAG } from "@/lib/flags/keys";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
+import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-8927-board-card-overflow";
 interface ITaskDraggableContainer {
   children: ReactNode;
   selectionControl?: ReactNode;
@@ -43,6 +44,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   const isMbl = useContext(MobileViewContext);
   const selectedCardBorder = useFlag(HTPR_7614_SELECTED_CARD_BORDER_FLAG);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+  const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
   const selectionLine = selectedCardBorder
     ? "!outline-solid !outline-1 !-outline-offset-1 !outline-hypertasks-purple"
     : "ring-1 ring-inset ring-hypertasks-purple";
@@ -90,7 +92,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
     cardState === "selected-blocked" ||
     (cardState === "selected" && selectedKeepsLayout);
   const cardBody =
-    "kanban-task-card group/kanban-selection relative min-w-0 max-w-full rounded-[5px] outline-none cursor-pointer";
+    "kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer";
 
   const getStyle = useCallback(
     (style: any, snapshot: DraggableStateSnapshot) => {
@@ -117,6 +119,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         cleanup ? cleanupStroke : legacyStroke,
         cleanup ? cleanupStateClasses : cardStateClasses,
         cardBody,
+        cardOverflowClamp && "min-w-0 max-w-full",
         parentClassName
       )}
       onClick={(event) =>
@@ -140,8 +143,10 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         prefetch={false}
         className={cn(
           cleanup
-            ? `flex min-w-0 w-full max-w-full items-center gap-1.5 flex-wrap overflow-hidden ${stroked ? "p-2" : "py-2 pr-2 pl-3"}`
-            : "flex min-w-0 w-full max-w-full items-center p-2 gap-1.5 flex-wrap overflow-hidden",
+            ? `flex items-center gap-1.5 flex-wrap ${stroked ? "p-2" : "py-2 pr-2 pl-3"}`
+            : "flex items-center p-2 gap-1.5 flex-wrap",
+        cardOverflowClamp &&
+          "min-w-0 w-full max-w-full overflow-x-hidden",
           linkClassName
         )}
         href={taskHref}

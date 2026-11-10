@@ -1,6 +1,7 @@
 import { HTPR_8629_KANBAN_HOVER_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8629-kanban-hover-layout";
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
+import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-8927-board-card-overflow";
 import { HTPR_8960_BORDER_ONLY_SELECT_FLAG } from "@/lib/flags/definitions/htpr-8960-border-only-select";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
@@ -111,12 +112,16 @@ const KanbanTaskCard = ({
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   const stableHoverLayout = useFlag(HTPR_8629_KANBAN_HOVER_LAYOUT_FLAG);
   const borderOnlySelect = useFlag(HTPR_8960_BORDER_ONLY_SELECT_FLAG);
+  const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
   return (
   <div
     ref={cardRef}
     tabIndex={0}
     id={`task-${task.id}`}
-    className="min-w-0 max-w-full w-full outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1"
+    className={cn(
+      "outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1",
+      cardOverflowClamp && "min-w-0 max-w-full w-full",
+    )}
     onFocusCapture={onFocusCapture}
     onBlurCapture={onBlurCapture}
     onMouseEnter={onMouseEnter}
@@ -193,7 +198,7 @@ const KanbanTaskCard = ({
         handleStarTask={handleStarTask}
         avatarSize={cleanup ? (isMobile ? 18 : 20) : undefined}
       />
-      <TaskTitle title={task.title} />
+      <TaskTitle title={task.title} cardOverflowClamp={cardOverflowClamp} />
       <TaskTagsRow
         task={task}
         project={project}
@@ -210,6 +215,7 @@ const KanbanTaskCard = ({
         hasDraft={hasDraft}
         blockingUser={blockingUser}
         agents={agentAssignees}
+        cardOverflowClamp={cardOverflowClamp}
       />
       <CardSubTasks
         subTasks={task.subTasks}
@@ -220,6 +226,7 @@ const KanbanTaskCard = ({
         enabled={getActiveStalenessFromProject(project)}
         project={project}
         task={task}
+        cardOverflowClamp={cardOverflowClamp}
       />
     </TaskDraggableContainer>
   </div>
@@ -230,10 +237,12 @@ const TaskStalenessLine = ({
   enabled,
   project,
   task,
+  cardOverflowClamp,
 }: {
   enabled: boolean;
   project?: IProject;
   task: ITask;
+  cardOverflowClamp: boolean;
 }) => {
   const snapshot = useFirstScreenSurface();
   const showFresh = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
@@ -268,24 +277,43 @@ const TaskStalenessLine = ({
 
   return showFresh || level !== "none" ? (
     <p
-      className={`basis-full min-w-0 max-w-full truncate text-micro leading-none ${
+      className={cn(
+        "basis-full text-micro leading-none",
+        cardOverflowClamp && "min-w-0 max-w-full truncate",
         level === "hot"
           ? "text-[var(--color-card-age-hot)]"
           : level === "warn"
             ? "text-[var(--color-card-age-warn)]"
-            : "text-text-light-gray"
-      }`}
+            : "text-text-light-gray",
+      )}
     >
       {ageLine}
     </p>
   ) : null;
 };
 
-export const TaskTitle = ({ title }: { title: string }) => {
+export const TaskTitle = ({
+  title,
+  cardOverflowClamp,
+}: {
+  title: string;
+  cardOverflowClamp: boolean;
+}) => {
   const wrapBetweenWords = useFlag(HTPR_7350_CARD_TITLE_WRAP_FLAG);
   return (
-    <div className="flex min-w-0 max-w-full flex-1 overflow-hidden text-white-black">
-      <p className={`min-w-0 max-w-full ${wrapBetweenWords ? "wrap-anywhere" : "break-all"} whitespace-pre-line text-left text-dense`}>
+    <div
+      className={cn(
+        "flex flex-1 text-white-black",
+        cardOverflowClamp && "min-w-0 max-w-full overflow-hidden",
+      )}
+    >
+      <p
+        className={cn(
+          wrapBetweenWords ? "wrap-anywhere" : "break-all",
+          "whitespace-pre-line text-left text-dense",
+          cardOverflowClamp && "min-w-0 max-w-full",
+        )}
+      >
         {title}
       </p>
     </div>

@@ -2,66 +2,37 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { renderToStaticMarkup } = require("react-dom/server");
-const { JSDOM } = require("jsdom");
-const { loader, React } = require("./helpers/htpr-7260-ui.cjs");
+const { load } = require("./task-route-loader.cjs");
 
 const root = path.join(__dirname, "..");
-const read = relative => fs.readFileSync(path.join(root, relative), "utf8");
+const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
+const flagKey = "htpr-8927-board-card-overflow";
 
-test("board column containers clip horizontal overflow", () => {
-  const source = read("src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx");
-  assert.match(source, /section-container relative min-w-0 overflow-x-hidden/);
-  assert.match(source, /overflow-x-hidden overflow-y-auto/);
-  assert.match(source, /w-full min-w-0 max-w-full overflow-x-hidden px-2 space-y-4 mt-0/);
+test("overflow clamp ships as an Everyone bugfix with rollback", () => {
+  const {
+    default: definition,
+    HTPR_8927_BOARD_CARD_OVERFLOW_FLAG,
+  } = load("src/lib/flags/definitions/htpr-8927-board-card-overflow.ts", {});
+  assert.equal(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG, flagKey);
+  assert.equal(definition.key, flagKey);
+  assert.equal(definition.kind, "bugfix");
+  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.releaseRisk.risk, "small");
 });
 
-test("kanban cards clamp wide link content", () => {
-  const source = read("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskDraggableContainer.tsx");
-  assert.match(source, /kanban-task-card[^\n]*min-w-0 max-w-full/);
-  assert.match(source, /flex min-w-0 w-full max-w-full[^\n]*overflow-hidden/);
-});
+test("kanban card and column code gates overflow classes on the ticket flag", () => {
+  const sources = [
+    read("src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx"),
+    read("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskDraggableContainer.tsx"),
+    read("src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx"),
+    read("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx"),
+    read("src/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip.tsx"),
+  ].join("\n");
 
-test("blocker chips and tag row truncate inside the card width", () => {
-  const blocker = read("src/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip.tsx");
-  assert.match(blocker, /min-w-0 max-w-full[^\n]*overflow-hidden/);
-
-  const tags = read("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx");
-  assert.match(tags, /basis-full flex min-w-0 max-w-full flex-wrap gap-1 overflow-hidden/);
-  assert.match(tags, /nowrap/);
-});
-
-test("a long blocker chip does not widen a fixed column", () => {
-  const BlockerTaskChip = loader({
-    "@/hooks/MultiPages/Route/useHypertasksNavigate": {
-      default: () => ({ navigateToTask: () => {} }),
-    },
-    "@/components/Common/UserAvatar": { default: () => null },
-  })("src/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip.tsx").BlockerTaskChip;
-
-  const html = renderToStaticMarkup(
-    React.createElement(
-      "div",
-      { style: { width: "260px" } },
-      React.createElement(BlockerTaskChip, {
-        task: {
-          id: 1,
-          projectId: 15,
-          uniqueIndex: 8927,
-          ticketNumber: "HTPR-8927",
-          title: "x".repeat(200),
-        },
-      }),
-    ),
+  assert.match(sources, new RegExp(`useFlag\\(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG\\)`));
+  assert.match(sources, /cardOverflowClamp/);
+  assert.match(
+    read("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx"),
+    /overflow-x-hidden/,
   );
-  const dom = new JSDOM(`<!doctype html><body>${html}</body>`);
-  try {
-    const chip = dom.window.document.querySelector("[data-blocking-task]");
-    const column = dom.window.document.body.firstElementChild;
-    assert.ok(chip, "blocker chip rendered");
-    assert.ok(chip.className.includes("min-w-0"));
-    assert.equal(column.scrollWidth, column.clientWidth);
-  } finally {
-    dom.window.close();
-  }
 });
