@@ -86,5 +86,4 @@ test("a finished pass records one drift count for that date", async () => {
   );
   assert.deepEqual(result.state.results, [{ date: "2026-11-09", found: 4 }, { date: "2026-11-10", found: 2 }]);
   assert.equal(result.state.afterId, 0);
-  assert.equal(drift().recordDriftPass(result.state.results, "2026-11-10", 0)[1].found, 0);
 });

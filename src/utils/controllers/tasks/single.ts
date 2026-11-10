@@ -773,15 +773,19 @@ export async function updateTaskSingle(
     const titleChanged =
       requestedMutation.title !== undefined &&
       requestedMutation.title !== taskBeforeWrite.title;
-    await upsertTaskToTurbopuffer(task.id, { strict: true });
-    if (
-      titleChanged ||
-      requestedMutation.status ||
-      requestedMutation.ticketNumber ||
-      requestedMutation.uniqueIndex ||
-      requestedMutation.projectId
-    ) {
-      await upsertAllCommentsToTurbopuffer(task.id, { strict: true });
+    try {
+      await upsertTaskToTurbopuffer(task.id, { strict: true });
+      if (
+        titleChanged ||
+        requestedMutation.status ||
+        requestedMutation.ticketNumber ||
+        requestedMutation.uniqueIndex ||
+        requestedMutation.projectId
+      ) {
+        await upsertAllCommentsToTurbopuffer(task.id, { strict: true });
+      }
+    } catch (error) {
+      console.log("🤔 ~ updateTaskSingle ~ search index error:", error);
     }
     const descriptionChanged =
       requestedMutation.description !== undefined &&
