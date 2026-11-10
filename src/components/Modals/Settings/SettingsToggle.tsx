@@ -2,6 +2,8 @@
 
 import { cn } from "@/utils/undoActions/helperFuncs";
 import type { ToggleSwitchProps } from "@/components/sidebars/RightSidebar/Single section items";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9027_AMOLED_TOGGLE_FLAG } from "@/lib/flags/definitions/htpr-9027-amoled-toggle";
 
 type SettingsToggleProps = ToggleSwitchProps & {
   hideLabel?: boolean;
@@ -18,6 +20,7 @@ const SettingsToggle: React.FC<SettingsToggleProps> = ({
   onChange,
   onKeyDown,
 }) => {
+  const amoledToggle = useFlag(HTPR_9027_AMOLED_TOGGLE_FLAG);
   return (
     <div className="flex min-h-[28px] items-center justify-between gap-4 px-2 py-1">
       <label
@@ -49,7 +52,8 @@ const SettingsToggle: React.FC<SettingsToggleProps> = ({
           aria-hidden="true"
           className={cn(
             "absolute left-[3px] top-[3px] h-[18px] w-[34px] rounded-full border-[1px] border-border-light-gray-thin transition-colors",
-            checked ? "bg-hypertasks-green" : "bg-hover-active"
+            checked ? "bg-hypertasks-green" : "bg-hover-active",
+            checked && amoledToggle && "[.amoled_&]:bg-shadcn-primary"
           )}
         >
           <span

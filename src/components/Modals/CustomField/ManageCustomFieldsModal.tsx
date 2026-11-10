@@ -21,6 +21,8 @@ import {
 import { ModalBody, ModalFooter } from "reactstrap";
 import ConfirmModal from "../Common Modals/ConfirmActionModal";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9027_AMOLED_TOGGLE_FLAG } from "@/lib/flags/definitions/htpr-9027-amoled-toggle";
 
 const CUSTOM_FIELDS_PER_PROJECT_MAX = 50;
 
@@ -284,6 +286,7 @@ function InlineToggle({
   onToggle: () => void;
   disabled?: boolean;
 }) {
+  const amoledToggle = useFlag(HTPR_9027_AMOLED_TOGGLE_FLAG);
   return (
     <button
       type="button"
@@ -300,7 +303,8 @@ function InlineToggle({
       <span
         className={cn(
           "relative h-[14px] w-[26px] shrink-0 rounded-full transition-colors",
-          checked ? "bg-hypertasks-green" : "bg-hover-active"
+          checked ? "bg-hypertasks-green" : "bg-hover-active",
+          checked && amoledToggle && "[.amoled_&]:bg-shadcn-primary"
         )}
       >
         <span
