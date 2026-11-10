@@ -248,8 +248,7 @@ const AIModelDropDownList = ({
     selectedOption.modelKey,
     availableOptions
   );
-  const thinkingEnabled =
-    thinkingFlag &&
+  const thinkingModelSupported =
     thinkingControls &&
     !autoSelected &&
     modelSupportsThinkingControl(selectedOption.modelKey);
@@ -368,7 +367,7 @@ const AIModelDropDownList = ({
   const selectModel = (modelKey: TAiModelKey) => {
     const nextOption = getNearestAiModelOption(
       modelKey,
-      thinkingEnabled ? "standard" : selectedOption.effort,
+      thinkingFlag && thinkingModelSupported ? "standard" : selectedOption.effort,
       availableOptions
     );
     if (!nextOption) return;
@@ -619,7 +618,7 @@ const AIModelDropDownList = ({
         }}
       >
         <span className="truncate font-medium">{selectedModelLabel}</span>
-        {selectedOption.effort && !autoSelected && !thinkingEnabled ? (
+        {selectedOption.effort && !autoSelected && !(thinkingFlag && thinkingModelSupported) ? (
           <span
             className={cn(
               "ml-1.5 flex-none text-text-light-gray",
@@ -774,7 +773,7 @@ const AIModelDropDownList = ({
               ) : null}
             </div>
           ) : null}
-          {thinkingEnabled ? (
+          {thinkingFlag && thinkingModelSupported ? (
             <>
               <SettingsToggle
                 square
@@ -811,7 +810,7 @@ const AIModelDropDownList = ({
               ) : null}
             </>
           ) : null}
-          {selectedEfforts.length > 0 && !autoSelected && !thinkingEnabled ? (
+          {selectedEfforts.length > 0 && !autoSelected && !(thinkingFlag && thinkingModelSupported) ? (
             <>
               <MenuRow
                 label="Effort"
