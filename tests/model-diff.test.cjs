@@ -227,7 +227,7 @@ test("rollup marker and title come from the sorted model set, and the check date
   const older = { ...families[0], model: "spacexai/grok-4.19" };
   assert.notEqual(rollupTicket([older, ...families.slice(1)]).marker, named.marker);
   assert.notEqual(rollupTicket([families[0], ...families.slice(1, 2), { ...families[2], model: "zai/glm-5.5" }]).marker, named.marker);
-  assert.ok(ticket.description.startsWith(`<p><strong>3 new model classes are not in our catalog.</strong></p><p>Gateway check 2026-10-25.`));
+  assert.ok(ticket.description.startsWith(`<h2>Problem</h2><p><strong>3 new model classes are not in our catalog.</strong></p><p>Gateway check 2026-10-25.`));
   assert.equal((ticket.description.match(/<li>/g) || []).length, 3);
   assert.match(ticket.description, /<code>new&lt;provider&gt;\/model-1<\/code>\. Gateway input price per million tokens: \$0\. ask &lt;Valentin&gt; &amp; verify\.<\/li>/);
   assert.equal((ticket.description.match(/unknown; verify pricing before shipping/g) || []).length, 2);
@@ -235,8 +235,8 @@ test("rollup marker and title come from the sorted model set, and the check date
   assert.match(ticket.description, /<code>unknown\/model-3<\/code>.*ask Valentin before shipping\.<\/li>/);
   assert.ok(!ticket.description.includes("<provider>"));
   assert.ok(!ticket.description.includes("<Valentin>"));
-  const guidance = ticketFor(report().findings[0]).description.split("<p>Follow ")[1];
-  assert.ok(ticket.description.endsWith(`<p>Follow ${guidance}`));
+  const perModel = ticketFor(report().findings[0]).description;
+  assert.ok(ticket.description.endsWith(perModel.slice(perModel.indexOf("<h2>Fix</h2>"))));
 });
 
 test("watcher creates one rollup for three new classes and one separate new-version ticket", async () => {

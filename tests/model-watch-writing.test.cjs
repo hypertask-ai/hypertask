@@ -18,7 +18,7 @@ test("watcher ticket text passes the agent writing check the board applies to ag
   assert.ok(tickets.length > 1);
   for (const ticket of tickets) {
     assert.doesNotThrow(
-      () => assertAgentWriting("agent-fixture", { title: ticket.title, description: ticket.description }),
+      () => assertAgentWriting("agent-fixture", { title: ticket.title, description: ticket.description }, {}, { create: true, houseRules: true }),
       ticket.title,
     );
   }

@@ -328,6 +328,6 @@ test('model watch tickets use words the board accepts', () => {
   ]
   for (const finding of findings) {
     const ticket = finding.kind === 'new-class' ? aiModelWatch.rollupTicket([finding], now) : aiModelWatch.ticketFor(finding)
-    assert.doesNotThrow(() => assertAgentWriting('agent', { title: ticket.title, description: ticket.description }), ticket.title)
+    assert.doesNotThrow(() => assertAgentWriting('agent', { title: ticket.title, description: ticket.description }, {}, { create: true, houseRules: true }), ticket.title)
   }
 })

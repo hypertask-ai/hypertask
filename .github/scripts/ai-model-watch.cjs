@@ -5,7 +5,7 @@ const { selectWatched, worthFiling } = require("./model-watch-allowlist.cjs");
 
 const APP = "https://app.hypertask.ai";
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-const GUIDANCE = `<p>Follow the update-ai-models skill. Replace the old version in every picker. Migrate saved picks. Check gateway input and output prices. Get a live chat answer after release. New classes and providers need Valentin's yes. Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`;
+const PARTS = `<h2>Fix</h2><p>Follow the update-ai-models skill for this class.</p><p>Replace the old version in every picker.</p><p>Move saved picks to the new version.</p><p>Check the gateway input and output prices first.</p><h2>Done when</h2><p>The pickers show the new version, and saved picks still work.</p><p>A live chat answers from it after release.</p><h2>Risk</h2><p>A new model could answer badly or cost more than planned.</p><p>Undo: remove it from the pickers.</p><h2>Decision</h2><p>New classes and providers need Valentin's yes.</p><p>Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`;
 
 function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
@@ -13,7 +13,7 @@ function ticketFor(finding) {
   return {
     marker,
     title: `AI model ${finding.kind}: ${model} [${marker}]`,
-    description: `<p><strong>${escapeHtml(finding.action)}.</strong></p><p>${escapeHtml(finding.reason)}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p><p>Gateway input price per million tokens: ${finding.inputPerMillion === null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.</p>${GUIDANCE}`,
+    description: `<h2>Problem</h2><p><strong>${escapeHtml(finding.action)}.</strong></p><p>${escapeHtml(finding.reason)}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p><p>Gateway input price per million tokens: ${finding.inputPerMillion === null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.</p>${PARTS}`,
   };
 }
 
@@ -26,7 +26,7 @@ function rollupTicket(findings, now = new Date()) {
   return {
     marker,
     title: `AI model watch new classes [${marker}]`,
-    description: `<p><strong>${findings.length} new model classes are not in our catalog.</strong></p><p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p><ul>${items}</ul>${GUIDANCE}`,
+    description: `<h2>Problem</h2><p><strong>${findings.length} new model classes are not in our catalog.</strong></p><p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p><ul>${items}</ul>${PARTS}`,
   };
 }
 
