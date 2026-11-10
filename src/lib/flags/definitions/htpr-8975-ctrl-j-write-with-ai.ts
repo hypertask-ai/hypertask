@@ -8,7 +8,7 @@ export default {
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-10",
   description:
-    "Ctrl+J (Cmd+J on Mac) in a ticket comment, comment edit or description editor opens Write with AI instead of a new task. The Write with AI box shows the same white mic as the comment row and a text Rewrite button instead of the purple arrow.",
+    "Ctrl+J (Cmd+J on Mac) in a ticket comment, comment edit or description editor opens Write with AI instead of a new task. The Write with AI box matches the comment box: same well colour, no purple border, the same white mic and a text Rewrite button instead of the purple arrow.",
   releaseRisk: {
     risk: "small",
     reason:

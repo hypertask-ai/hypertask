@@ -152,6 +152,9 @@ test("Write with AI box shows one white mic and a Rewrite word with the flag on"
   assert.equal(buttons.length, 1);
   assert.equal(doc.querySelector("[data-arrow]"), null);
   assert.doesNotMatch(buttons[0].className, /purple|rounded-full/);
+  const box = doc.querySelector('[aria-label="Write with AI"]');
+  assert.match(box.className, /bg-newcomment-well/);
+  assert.doesNotMatch(box.className, /purple|shadow-md/);
 });
 
 test("flag off keeps today's purple arrow and plain mic in the Write with AI box", () => {
@@ -160,4 +163,5 @@ test("flag off keeps today's purple arrow and plain mic in the Write with AI box
   assert.equal(micProps[0].hoverTooltip, undefined);
   assert.ok(doc.querySelector('[aria-label="Send AI instruction"] [data-arrow]'));
   assert.equal([...doc.querySelectorAll("button")].some((button) => button.textContent.trim() === "Rewrite"), false);
+  assert.match(doc.querySelector('[aria-label="Write with AI"]').className, /border-hypertasks-ai-purple\/70 bg-comment-description/);
 });

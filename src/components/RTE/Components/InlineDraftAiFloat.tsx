@@ -63,6 +63,10 @@ const CHIP_DONE_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-medium text-white-black hover:bg-hover-active focus-visible:outline-none disabled:opacity-50";
 const CHIP_PRIMARY_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-semibold bg-hypertasks-ai-purple text-white hover:opacity-90 focus-visible:outline-none disabled:opacity-50";
+const APP_CHIP_LINK_CLASS =
+  "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 text-text-light-gray hover:bg-hover-active hover:text-white-black focus-visible:outline-none focus-visible:bg-hover-active focus-visible:text-white-black disabled:opacity-50";
+const APP_CHIP_RETRY_CLASS =
+  "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:opacity-50";
 const CHIP_SHEET_ROW_CLASS =
   "flex min-h-11 items-center rounded-full bg-hover-active px-3 text-left text-dense text-white-black active:opacity-80 disabled:opacity-50";
 const MOBILE_CHIP_CLASS =
@@ -926,18 +930,14 @@ const InlineDraftAiFloat = ({
 
       {matchCommentRowControls ? (
         <span className={dictationActive ? "hidden" : "flex shrink-0 items-center"}>
-          {isLoading ? (
-            <LoaderCircle size={15} className="animate-spin text-icon-dark-gray" aria-hidden />
-          ) : (
-            <SendMessageButton
-              label="Rewrite"
-              textButton
-              shortcut={{ text: "Rewrite", keyCombination: ["ENTER"] }}
-              mobile={false}
-              disabled={!prompt.trim() || audioProcessing}
-              onClick={submitPrompt}
-            />
-          )}
+          <SendMessageButton
+            label="Rewrite"
+            textButton
+            shortcut={{ text: "Rewrite", keyCombination: ["ENTER"] }}
+            mobile={false}
+            disabled={!prompt.trim() || isLoading || audioProcessing}
+            onClick={submitPrompt}
+          />
         </span>
       ) : (
         <button
@@ -966,7 +966,7 @@ const InlineDraftAiFloat = ({
           </button>
           <button
             type="button"
-            className={CHIP_PRIMARY_CLASS}
+            className={matchCommentRowControls ? APP_CHIP_RETRY_CLASS : CHIP_PRIMARY_CLASS}
             onClick={retry}
             disabled={isLoading}
           >
@@ -979,11 +979,11 @@ const InlineDraftAiFloat = ({
           key={command}
           type="button"
           disabled={isLoading}
-          className={CHIP_LINK_CLASS}
+          className={matchCommentRowControls ? APP_CHIP_LINK_CLASS : CHIP_LINK_CLASS}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => void runAction({ command })}
         >
-          {label}
+          {matchCommentRowControls && command === "FixSpellingAndGrammar" ? "Fix spelling" : label}
         </button>
       ))}
     </div>
@@ -1383,7 +1383,11 @@ const InlineDraftAiFloat = ({
       role="dialog"
       aria-label="Write with AI"
       aria-modal="false"
-      className="my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
+      className={
+        matchCommentRowControls
+          ? "my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] bg-newcomment-well px-2 py-1.5 text-content"
+          : "my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
+      }
       onClick={(event) => event.stopPropagation()}
       onKeyDown={handlePanelKeyDown}
     >
