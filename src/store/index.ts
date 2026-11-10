@@ -271,21 +271,6 @@ export const tableColumnWidthsAtom = atom<Record<string, number>>({
     default: {},
     effects_UNSTABLE: [persistAtom],
 });
-export const tableSortAccountAtom = atom<{
-    viewId: string;
-    sort: { column: string; direction: "asc" | "desc" }[];
-} | null>({
-    key: "tableSortAccountAtom",
-    default: null,
-});
-export const tableColumnsAccountAtom = atom<{
-    viewId: string;
-    keys: string[];
-    widths: Record<string, number>;
-} | null>({
-    key: "tableColumnsAccountAtom",
-    default: null,
-});
 export const tableTitleWrapAtom = atom<boolean>({
     key: "tableTitleWrap",
     default: true,

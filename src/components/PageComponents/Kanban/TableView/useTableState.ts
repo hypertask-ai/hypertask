@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { ITask } from "@/models/model";
 import { useShowArchivedOnBoard } from "@/hooks/Homepage/useShowArchivedOnBoard";
-import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, tableSortAccountAtom, tableColumnsAccountAtom, normalizeTableVisibleColumns, normalizeMyTasksTableVisibleColumns } from "@/store";
+import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, normalizeMyTasksTableVisibleColumns } from "@/store";
 import { returnSortedItems } from "@/utils/helperFunctions/helperFunctions";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
@@ -21,8 +21,6 @@ import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
-import { HTPR_8973_TABLE_SORT_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-8973-table-sort-columns";
-import { getActiveTableColumnsFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import {
   buildTableSectionsForGrouping,
@@ -45,11 +43,6 @@ export function useTableState(context: Context) {
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
-  const tableSortColumnsEnabled = useFlag(HTPR_8973_TABLE_SORT_COLUMNS_FLAG);
-  const tableViewId =
-    _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
-    _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
-    _currentProject?.project_view?.default_view?.id;
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
@@ -68,27 +61,9 @@ export function useTableState(context: Context) {
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
   const myTasksColumnsControlled = myTasksVisibleColumns !== undefined;
   const [atomVisibleColumns, setAtomVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
-  const [accountColumns, setAccountColumns] = useRecoilState(tableColumnsAccountAtom);
-  const sortAccount = useRecoilValue(tableSortAccountAtom);
-  const savedTableColumns = tableSortColumnsEnabled && !myTasksColumnsControlled
-    ? getActiveTableColumnsFromProject(_currentProject)
-    : null;
-  const accountForView = tableSortColumnsEnabled && accountColumns?.viewId === tableViewId
-    ? accountColumns
-    : null;
-  const defaultVisibleColumns = normalizeTableVisibleColumns(undefined);
-  const savedOrDefaultKeys = savedTableColumns?.keys ?? (
-    _currentProject?.showTimeTotals && !defaultVisibleColumns.includes("time")
-      ? [...defaultVisibleColumns, "time"]
-      : defaultVisibleColumns
-  );
   const storedVisibleColumns = myTasksColumnsControlled
     ? myTasksVisibleColumns
-    : accountForView
-      ? accountForView.keys
-      : tableSortColumnsEnabled
-        ? savedOrDefaultKeys
-        : atomVisibleColumns;
+    : atomVisibleColumns;
   const normalizeVisibleColumns = myTasksColumnsControlled
     ? normalizeMyTasksTableVisibleColumns
     : normalizeTableVisibleColumns;
@@ -100,68 +75,19 @@ export function useTableState(context: Context) {
         onMyTasksVisibleColumnsChange(typeof next === "function" ? next(current) : next);
         return;
       }
-      if (tableSortColumnsEnabled && tableViewId) {
-        const current = accountForView?.keys ?? savedOrDefaultKeys;
-        const keys = typeof next === "function" ? next(current) : next;
-        if (keys === current || (keys.length === current.length && keys.every((key, index) => key === current[index]))) return;
-        setAccountColumns({
-          viewId: tableViewId,
-          keys,
-          widths: accountForView?.widths ?? savedTableColumns?.widths ?? {},
-        });
-        return;
-      }
       setAtomVisibleColumns(next);
     },
     [
-      accountForView?.keys,
-      accountForView?.widths,
       myTasksColumnsControlled,
       myTasksVisibleColumns,
       onMyTasksVisibleColumnsChange,
-      savedOrDefaultKeys,
-      savedTableColumns?.widths,
-      setAccountColumns,
       setAtomVisibleColumns,
-      tableSortColumnsEnabled,
-      tableViewId,
     ],
   );
   const [timeColumnSeededBoards, setTimeColumnSeededBoards] = useRecoilState(
     tableTimeColumnSeededBoardsAtom,
   );
-  const [atomColumnWidths, setAtomColumnWidths] = useRecoilState(tableColumnWidthsAtom);
-  const columnWidths = accountForView
-    ? accountForView.widths
-    : tableSortColumnsEnabled && !myTasksColumnsControlled
-      ? (savedTableColumns?.widths ?? {})
-      : atomColumnWidths;
-  const setColumnWidths = useCallback(
-    (next: Record<string, number> | ((current: Record<string, number>) => Record<string, number>)) => {
-      if (tableSortColumnsEnabled && tableViewId && !myTasksColumnsControlled) {
-        const current = accountForView?.widths ?? savedTableColumns?.widths ?? {};
-        const widths = typeof next === "function" ? next(current) : next;
-        setAccountColumns({
-          viewId: tableViewId,
-          keys: accountForView?.keys ?? savedOrDefaultKeys,
-          widths,
-        });
-        return;
-      }
-      setAtomColumnWidths(next);
-    },
-    [
-      accountForView?.keys,
-      accountForView?.widths,
-      myTasksColumnsControlled,
-      savedOrDefaultKeys,
-      savedTableColumns?.widths,
-      setAccountColumns,
-      setAtomColumnWidths,
-      tableSortColumnsEnabled,
-      tableViewId,
-    ],
-  );
+  const [columnWidths, setColumnWidths] = useRecoilState(tableColumnWidthsAtom);
   const { timeTotals } = useBoardRunningTimers(_currentProject?.id ?? null);
   const hasActiveBoardTimer = useMemo(
     () =>
@@ -211,7 +137,7 @@ export function useTableState(context: Context) {
   );
   const [excludedTaskIds, setExcludedTaskIds] = useState<Set<number>>(() => new Set());
   const [sortState, setSortState] = useState<SortState>(() =>
-    myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject, tableSortColumnsEnabled),
+    myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
   );
   const {
     setTableSortViewAndReturn,
@@ -226,35 +152,16 @@ export function useTableState(context: Context) {
     _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
     _currentProject?.project_view?.default_view?.id;
   useEffect(() => {
-    if (tableSortColumnsEnabled) return;
     setSortState(
-      myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject, false),
+      myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
     );
+
   }, [
     activeSortViewId,
     myTasksSort?.direction,
     myTasksSort?.field,
     myTasksSortKey,
     _currentProject?.showTimeTotals,
-    tableSortColumnsEnabled,
-  ]);
-  useEffect(() => {
-    if (!tableSortColumnsEnabled) return;
-    if (sortAccount?.viewId === activeSortViewId && sortAccount.sort) {
-      setSortState(sortAccount.sort as SortState);
-      return;
-    }
-    setSortState(
-      myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject, true),
-    );
-  }, [
-    activeSortViewId,
-    myTasksSort?.direction,
-    myTasksSort?.field,
-    myTasksSortKey,
-    sortAccount,
-    tableSortColumnsEnabled,
-    _currentProject,
   ]);
   useEffect(() => {
     setCollapsedSections(getActiveTableCollapsedSectionsFromProject(_currentProject));

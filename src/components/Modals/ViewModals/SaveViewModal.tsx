@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies"
 import { TCreate_view_body, TUpdate_view_body } from "@/models/Views/model"
 import { buildDefaultTitle, getActiveBoardLayoutPreferenceFromProject, getActiveColumnsViewFromProject, getActiveEmptySectionSettingFromProject, getActiveFiltersFromProject, getActiveSortingModeFromProject, getActiveSortingOrderFromProject, getActiveSortingStackFromProject, getActiveStalenessOverrideFromProject,
-    getActiveShowArchivedOverrideFromProject, getActiveSubtaskSettingFromProject, getActiveTableSortFromProject, getActiveTableSortStackFromProject, getActiveTableColumnsFromProject, savedBoardLayoutFromExplicitSurface, waitForBoardViewMutations, } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
+    getActiveShowArchivedOverrideFromProject, getActiveSubtaskSettingFromProject, getActiveTableSortFromProject, savedBoardLayoutFromExplicitSurface, waitForBoardViewMutations, } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
 import { IProject, IProjectsAll } from "@/models/model";
 import { ModalBody } from "reactstrap";
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
@@ -127,8 +127,6 @@ const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
             board_show_archived: getActiveShowArchivedOverrideFromProject(sourceProject),
             table_sort_column: activeTableSort?.column ?? null,
             table_sort_direction: activeTableSort?.direction ?? null,
-            table_sort_stack: getActiveTableSortStackFromProject(sourceProject),
-            table_columns: getActiveTableColumnsFromProject(sourceProject),
             board_layout: getExplicitBoardLayout() ?? getActiveBoardLayoutPreferenceFromProject(sourceProject),
         },
         userId: currentUser?.id ?? 0,

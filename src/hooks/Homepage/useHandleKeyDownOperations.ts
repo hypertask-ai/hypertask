@@ -5,7 +5,7 @@ import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definiti
 
 import { ISection, ITask } from '@/models/model'
 import  { useContext, useEffect, useRef, useState } from 'react'
-import { activeBuiltinViewsAtom, currentProjectAtom, currentUserAtom, showCommandsAtom, showSidebarAtom, activeItemAtom,activeSectionAtom, showBoardManagerAtom, appShellRailAtom, boardLayoutAtom } from '@/store'
+import { activeBuiltinViewsAtom, currentProjectAtom, currentUserAtom, showCommandsAtom, showSidebarAtom, activeItemAtom,activeSectionAtom, showBoardManagerAtom, appShellRailAtom } from '@/store'
 import { useRecoilState, useRecoilValue, useSetRecoilState } from '@/lib/state'
 import { useStore } from 'jotai'
 import { useUndoContext } from '../General/useUndo'
@@ -34,7 +34,6 @@ import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
 import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
-import { HTPR_8973_TABLE_SORT_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-8973-table-sort-columns";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
@@ -55,8 +54,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
     const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
-    const tableSortColumnsEnabled = useFlag(HTPR_8973_TABLE_SORT_COLUMNS_FLAG);
-    const boardLayout = useRecoilValue(boardLayoutAtom)
     const queryClient = useQueryClient();   
     const store = useStore();
     const {showManageColumnsModal, showSaveModal, toggleViewsModal, toggleSaveViewsModal, toggleSearchTasks, showSearchTasks} = useKanbanModalStatesContext()
@@ -220,13 +217,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
   }
     if (e.shiftKey && e.keyCode===70) setShowCommands({show: true, mode: CommandMode.ShowFilterHTC})
 
-    if (e.shiftKey && e.keyCode===83) {
-      if (tableSortColumnsEnabled && boardLayout === "table") {
-        window.dispatchEvent(new CustomEvent("htpr-8973-open-sort"))
-        return
-      }
-      setShowCommands({show: true, mode: CommandMode.SortKanbanBoard})
-    }
+    if (e.shiftKey && e.keyCode===83) setShowCommands({show: true, mode: CommandMode.SortKanbanBoard})
     
 
     if ((e.keyCode === 74 ||e.key==="ArrowDown") && !e.shiftKey && !cmdControl) {

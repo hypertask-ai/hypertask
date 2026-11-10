@@ -15,7 +15,6 @@ import axios from "axios";
 import { defaultFilterSettings, getFilteredSections } from "./FilterHelperFunctions";
 import sortByStringParam from "@/utils/sortByParam";
 import { TABLE_COLUMN_KEYS } from "./TableColumnsHelperFunctions";
-import { sanitizeTableColumns, storedTableSortStack } from "@/lib/table-view/tableViewSettings";
 import { SortingMode, SortingOrder } from "@prisma/client";
 import { getAppliedSubtaskSections } from "./SubtaskHelperFunction";
 import { getFilteredEmptySections } from "./EmptySectionsHelperFunction";
@@ -623,22 +622,6 @@ export const getActiveBoardLayoutPreferenceFromProject = (
     const activeView = row?.unsavedView ?? row?.appliedView ?? project?.project_view?.default_view;
     return sanitizeBoardLayout(activeView?.board_layout);
 };
-
-const activeTableView = (project?: IProject | null) => {
-    const view = project?.project_view?.user_project_views?.[0]
-    return view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view
-}
-
-export const getActiveTableSortStackFromProject = (project?: IProject | null): { column: string; direction: "asc" | "desc" }[] => {
-    const stored = storedTableSortStack(activeTableView(project)?.table_sort_stack)
-    if (stored?.length) return stored
-    const single = getActiveTableSortFromProject(project)
-    if (!single?.column || (single.direction !== "asc" && single.direction !== "desc")) return []
-    return [{ column: single.column, direction: single.direction }]
-}
-
-export const getActiveTableColumnsFromProject = (project?: IProject | null) =>
-    sanitizeTableColumns(activeTableView(project)?.table_columns)
 
 export const getActiveTableSortFromProject = (project?: IProject | null): TTableSort => {
     const view = project?.project_view?.user_project_views?.[0]

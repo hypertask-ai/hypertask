@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8973_TABLE_SORT_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-8973-table-sort-columns";
 import { normalizeTableVisibleColumns, withForcedStatusWhileSorted, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
 import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
@@ -15,7 +13,6 @@ export function useTableColumns(context: Context) {
   timeColumnSeededBoards, setTimeColumnSeededBoards, normalizeVisibleColumns, storedVisibleColumns, sortState,
   columnWidths, setColumnWidths, titleHeaderRef, enableMyTasksBulkSelection,
   } = context;
-  const tableSortColumnsEnabled = useFlag(HTPR_8973_TABLE_SORT_COLUMNS_FLAG);
 
   const toTableColumn = useCallback(
     (key: string): TableColumn | undefined => {
@@ -42,7 +39,7 @@ export function useTableColumns(context: Context) {
     [customFieldById, _currentProject?.showTimeTotals, myTasksColumnsControlled]
   );
   useEffect(() => {
-    if (myTasksColumnsControlled || tableSortColumnsEnabled || !customFields.length) return;
+    if (myTasksColumnsControlled || !customFields.length) return;
     const customFieldKeys = customFields
       .filter((field) => field.showInTable !== false)
       .map((field) => customFieldColumnKey(field.id));
@@ -50,9 +47,9 @@ export function useTableColumns(context: Context) {
       const seeded = seedMissingCustomFieldColumns(normalizeTableVisibleColumns(current), customFieldKeys);
       return seeded.length === current.length ? current : seeded;
     });
-  }, [customFields, myTasksColumnsControlled, setStoredVisibleColumns, tableSortColumnsEnabled]);
+  }, [customFields, myTasksColumnsControlled, setStoredVisibleColumns]);
   useEffect(() => {
-    if (myTasksColumnsControlled || tableSortColumnsEnabled) return;
+    if (myTasksColumnsControlled) return;
     const projectId = _currentProject?.id;
     if (
       !projectId ||
@@ -75,7 +72,6 @@ export function useTableColumns(context: Context) {
     setStoredVisibleColumns,
     setTimeColumnSeededBoards,
     timeColumnSeededBoards,
-    tableSortColumnsEnabled,
   ]);
   const visibleColumns = useMemo(() => {
     const normalized = normalizeVisibleColumns(storedVisibleColumns);

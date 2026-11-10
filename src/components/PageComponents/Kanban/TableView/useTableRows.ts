@@ -11,7 +11,6 @@ import { getSortComparator, Row, SECTION_CAP, isTaskRow } from "./tableViewShare
 import { tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
-import { HTPR_8973_TABLE_SORT_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-8973-table-sort-columns";
 
 const NO_COLLAPSED_SECTIONS: ReadonlySet<string> = new Set();
 
@@ -20,7 +19,6 @@ type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableM
 
 export function useTableRows(context: Context) {
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
-  const tableSortColumnsEnabled = useFlag(HTPR_8973_TABLE_SORT_COLUMNS_FLAG);
   const snapshot = useFirstScreenSurface();
   const {
   sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
@@ -102,9 +100,7 @@ export function useTableRows(context: Context) {
     sections.forEach((section, index) => {
       const sid = tableSectionKey(section) ?? `i${index}`;
       if (effectiveCollapsed.has(String(sid))) return;
-      const items = tableSortColumnsEnabled && _currentProject
-        ? [...(section.items || [])].sort((a, b) => (a.ranking ?? "").localeCompare(b.ranking ?? ""))
-        : (section.items || []);
+      const items = section.items || [];
       const shown = expanded.has(sid) ? items : items.slice(0, SECTION_CAP);
       shown.forEach((task) =>
         next.push({
@@ -125,7 +121,6 @@ export function useTableRows(context: Context) {
     tableGroupFoldEnabled,
     foldGroups,
     sortState,
-    tableSortColumnsEnabled,
     sectionOrderBySid,
     _currentProject,
     timeNow,
