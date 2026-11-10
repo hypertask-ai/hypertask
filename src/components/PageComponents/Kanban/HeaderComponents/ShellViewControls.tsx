@@ -21,6 +21,7 @@ import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
 import {
   effectiveTableGrouping,
+  getActiveTableGroupByFromProject,
   type TableGroupBy,
 } from "@/lib/table-view/tableGroupByTag"
 import Tooltip from "@/components/Common/Tooltip"
@@ -34,13 +35,12 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const [runningOnly, setRunningOnly] = useRecoilState(kanbanRunningOnlyAtom)
   const boardLayout = useRecoilValue(boardLayoutAtom)
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes")
-  const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag")
-  const tableGroupByTagEnabled = legacyTableGroupEnabled || tableGroupModesEnabled
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled
   const { setTableGroupByViewAndReturn } = useKanbanViews(project)
   const [groupOpen, setGroupOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const { timers: runningTimers } = useBoardRunningTimers(project.id)
-  const tableGroupBy = effectiveTableGrouping(project, tableGroupModesEnabled, legacyTableGroupEnabled).mode
+  const tableGroupBy = tableGroupModesEnabled ? getActiveTableGroupByFromProject(project) : effectiveTableGrouping(project, false, tableGroupByTagEnabled).mode
   const groupByLabel: Record<TableGroupBy, string> = { column: "Column", tag: "Tags", assignee: "Assignee", priority: "Priority", size: "Size" }
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
