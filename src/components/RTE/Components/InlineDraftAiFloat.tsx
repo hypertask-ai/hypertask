@@ -281,7 +281,7 @@ const InlineDraftAiFloat = ({
   const wasEditableRef = useRef(true);
   const rootRef = useRef<HTMLDivElement>(null);
   const promptInputRef = useRef<HTMLInputElement>(null);
-  const ctrlEnterSendsRef = useRef(false);
+  const boxShortcutsRef = useRef(false);
   const closeRef = useRef<() => void>(() => {});
   const recordingRef = useRef(false);
   const audioProcessingRef = useRef(false);
@@ -320,7 +320,7 @@ const InlineDraftAiFloat = ({
   const isRefineFullscreen = presentation === "refine-fullscreen";
   const isEditInline = presentation === "edit-inline";
   const isMobileAiSheet = isRefineFullscreen || isComposer;
-  ctrlEnterSendsRef.current = ticketEditorCtrlJ && !isMobileAiSheet;
+  boxShortcutsRef.current = ticketEditorCtrlJ && !isMobileAiSheet;
   const sheetViewport = useMobileVisualViewport(isMobileAiSheet);
   const sheetContainerStyle = getMobileOverlaySheetContainerStyle(sheetViewport);
 
@@ -463,13 +463,30 @@ const InlineDraftAiFloat = ({
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (
-        ctrlEnterSendsRef.current &&
+        boxShortcutsRef.current &&
         event.key === "Enter" &&
         (isApple ? event.metaKey : event.ctrlKey) &&
         (loadingRef.current || recordingRef.current || audioProcessingRef.current)
       ) {
         event.preventDefault();
         event.stopPropagation();
+        return;
+      }
+
+      if (
+        boxShortcutsRef.current &&
+        event.code === "KeyJ" &&
+        (isApple ? event.metaKey : event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !recordingRef.current &&
+        !audioProcessingRef.current &&
+        rootRef.current?.contains(event.target as Node)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeRef.current();
+        editor.commands.focus();
         return;
       }
 
