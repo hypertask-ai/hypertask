@@ -22,6 +22,7 @@ import toast from "react-hot-toast";
 import { SendArrow } from "@/components/Common/SendArrow";
 import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
+import { keepTypingInsidePrompt, usePromptFieldGrowth } from "@/hooks/General/usePromptFieldGrowth";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { AppSheet } from "@/components/Modals/Sheets/AppSheet";
 import {
@@ -58,6 +59,7 @@ import {
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
+import { HTPR_9025_AI_BOX_OUTLINE_FLAG } from "@/lib/flags/definitions/htpr-9025-ai-box-outline";
 import { HTPR_9002_CTRL_J_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-9002-ctrl-j-new-task";
 import type { NewTaskWriteChip, NewTaskWriter } from "@/lib/ai/newTaskWrite";
 
@@ -268,6 +270,7 @@ const InlineDraftAiFloat = ({
   const newTaskCtrlJ = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
   const newTaskWriter = newTaskCtrlJ ? taskWriter : undefined;
   const ticketEditorCtrlJ = ticketEditorCtrlJFlag || Boolean(newTaskWriter);
+  const aiBoxOutline = useFlag(HTPR_9025_AI_BOX_OUTLINE_FLAG);
   const [selectedWriteChipKey, setSelectedWriteChipKey] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<InlineDraftAiRange | null>(null);
@@ -289,14 +292,14 @@ const InlineDraftAiFloat = ({
   const loadingRef = useRef(false);
   const wasEditableRef = useRef(true);
   const rootRef = useRef<HTMLDivElement>(null);
-  const promptInputRef = useRef<HTMLInputElement>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const boxShortcutsRef = useRef(false);
   const closeRef = useRef<() => void>(() => {});
   const recordingRef = useRef(false);
   const audioProcessingRef = useRef(false);
   const allowSuggestReplyRef = useRef(allowSuggestReply);
   const promptRef = useRef(prompt);
-  const mobilePromptInputRef = useRef<HTMLInputElement>(null);
+  const mobilePromptInputRef = useRef<HTMLTextAreaElement>(null);
   const mobileEditableSurfaceRef = useRef<HTMLDivElement>(null);
   const mobileEditableInputHtmlRef = useRef<string | null>(null);
   const mobileInternalDragRef = useRef(false);
@@ -609,6 +612,8 @@ const InlineDraftAiFloat = ({
     mobileReview.phase,
     mobileReview.showOriginal,
   ]);
+
+  usePromptFieldGrowth(promptInputRef, mobilePromptInputRef, prompt, `${isRecording}${audioProcessing}${isMobileAiSheet}`);
 
   if (!editor || !scope) return null;
 
@@ -988,15 +993,12 @@ const InlineDraftAiFloat = ({
   const promptRow = (
     <div className="flex w-full min-w-0 items-center gap-2">
       <div className={dictationActive ? "hidden" : "min-w-[150px] flex-1"}>
-        <input
-          ref={promptInputRef}
-          autoFocus
-          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
-          value={prompt}
-          disabled={isLoading || audioProcessing}
+        <textarea
+          ref={promptInputRef} rows={1} onKeyDown={keepTypingInsidePrompt} autoFocus
+          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH} value={prompt} disabled={isLoading || audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={writeMode ? "Describe the task…" : inlineDraftAiWritePlaceholder(hasSelection, allowSuggestReply, editor.isEmpty)}
-          className="w-full border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
+          className="block max-h-40 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
         />
       </div>
 
@@ -1163,15 +1165,12 @@ const InlineDraftAiFloat = ({
       onKeyDown={handlePanelKeyDown}
     >
       {!dictationActive && (
-        <input
-          ref={mobilePromptInputRef}
-          autoFocus
-          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
-          value={prompt}
-          disabled={audioProcessing}
+        <textarea
+          ref={mobilePromptInputRef} rows={1} onKeyDown={keepTypingInsidePrompt} autoFocus
+          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH} value={prompt} disabled={audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={mobilePromptPlaceholder}
-          className="min-h-11 w-full border-0 bg-transparent text-[16px] leading-6 text-white-black outline-none placeholder:text-text-light-gray"
+          className="block max-h-40 min-h-11 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-emphasis leading-6 text-white-black outline-none placeholder:text-text-light-gray"
         />
       )}
       <div
@@ -1483,7 +1482,7 @@ const InlineDraftAiFloat = ({
       tabIndex={ticketEditorCtrlJ ? -1 : undefined}
       className={
         matchCommentRowControls
-          ? "my-2 flex outline-none w-full min-w-0 flex-col gap-2 rounded-[4px] bg-newcomment-well px-2 py-1.5 text-content"
+          ? cn("my-2 flex outline-none w-full min-w-0 flex-col gap-2 rounded-[4px] bg-newcomment-well px-2 py-1.5 text-content", aiBoxOutline && "border-thin border-border-light-gray-thin")
           : "my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
       }
       onClick={(event) => event.stopPropagation()}

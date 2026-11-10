@@ -196,6 +196,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
       projectId: usageProjectId,
       sessionId: body.session_id,
       actingAgentId: actingAgent?.id ?? null,
+      teamAiSettings: state.teamProviderSettings,
     });
     if (skillOfferCard) {
       chunks.push(skillOfferCard);

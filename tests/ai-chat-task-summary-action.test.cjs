@@ -17,10 +17,14 @@ test("promotes the readable task summary action only with task context", () => {
   assert.equal(taskSummaryActionFor(null), null);
   assert.equal(taskSummaryActionFor(0), null);
   assert.deepEqual(taskSummaryActionFor(5404), TASK_SUMMARY_ACTION);
-  assert.deepEqual(TASK_SUMMARY_ACTION, {
-    label: "Summarize the current task",
-    prompt: "/i Summarize the current task",
-  });
+  assert.equal(TASK_SUMMARY_ACTION.label, "Summarize the current task");
+  assert.match(TASK_SUMMARY_ACTION.prompt, /what it is/);
+  assert.doesNotMatch(TASK_SUMMARY_ACTION.prompt, /\/i /);
+  const hook = fs.readFileSync(
+    path.join(root, "src/hooks/MultiPages/AIChat/useCommentToAiChat.ts"),
+    "utf8"
+  );
+  assert.ok(hook.includes(TASK_SUMMARY_ACTION.prompt));
 });
 
 test("the task welcome screen sends the promoted action prompt", () => {

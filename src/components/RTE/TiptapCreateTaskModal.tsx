@@ -1210,7 +1210,7 @@ const TiptapCreateTaskModal = () => {
                     id="create-task-tiptap-description"
                     onDrop={onDropHandler}
                     className={cn(
-                      "max-h-[60svh] scrollbar-none max-w-full cursor-text pt-2 overflow-y-auto overflow-x-hidden",
+                      "max-h-[60svh] scrollbar-none max-w-full cursor-text pt-2 overflow-y-auto overflow-x-hidden [&_.ProseMirror]:[overflow-wrap:anywhere]",
                       isMbl && descriptionFirstEnabled ? "min-h-[42svh]" : "min-h-[80px]",
                     )}
                     editor={editor}

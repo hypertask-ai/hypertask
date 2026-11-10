@@ -4,13 +4,15 @@ import axios from "axios";
 import { useCallback } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
+import { HTPR_8994_CLEAR_WAITING_AGENT_FLAG } from "@/lib/flags/definitions/htpr-8994-clear-waiting-agent";
+import { applyWaitingOnWrite } from "@/lib/waitingOn";
 import toast from "react-hot-toast";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 import { LIKESHORTCUTEVENT } from "@/lib/constants/constants";
 import type { TaskDetailContext } from "./TaskDetailContext";
-function createTaskDetailCommandActions(getContext: () => TaskDetailContext, blockerCommentEnabled: boolean) {
+function createTaskDetailCommandActions(getContext: () => TaskDetailContext, blockerCommentEnabled: boolean, clearWaitingAgent: boolean) {
   const { currentId, comments, markAsDone, setCurrentTask, summarizeTicket, callBackHandlerSubtaskLinking, currentUser, currentTask, handleStarTask, navigateToNextTask, setShowRemindMeModal, callBackHandlerRemoveParent, PostFollower, queryClient, setAiChatAutoOpenSuppressed, showAiChatInterface, setAiChatExplicitOpenAt, setShowAiChatInterface, copyCommentToAiChat, summarizeComment, setEditMode, focusOn, copyTicketNumber, copyTitleAndTicketNumber, copyTaskURL, copyTaskFormattedURL, copySharedTaskURL, sharedLink, copySharedTaskFormattedURL } = getContext();
 
 
@@ -27,7 +29,11 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext, blo
       // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
       setCurrentTask((old) => ({ ...old, assignees: payload }));
     else if (mode === "WaitingOn")
-      setCurrentTask((old) => (old ? { ...old, ...payload } : old));
+      setCurrentTask((old) => {
+        if (!old) return old;
+        if (clearWaitingAgent) return applyWaitingOnWrite(old, payload);
+        return { ...old, ...payload };
+      });
     else if (mode === taskDetailConfig.commandModes.openAiWriter) openAifromHtc();
     else if (mode === taskDetailConfig.commandModes.viewSubTasks) viewSubTasksfromHtc();
     else if (mode === taskDetailConfig.commandModes.copyCommentLinkUrl) copyCommentURLFromHTC();
@@ -263,9 +269,10 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext, blo
 
 export function useTaskDetailCommandActions(getContext: () => TaskDetailContext) {
   const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const clearWaitingAgent = useFlag(HTPR_8994_CLEAR_WAITING_AGENT_FLAG);
   let blockerCommentEnabled = false;
   if (blockerCommentFlag) blockerCommentEnabled = true;
-  const actions = createTaskDetailCommandActions(getContext, blockerCommentEnabled);
+  const actions = createTaskDetailCommandActions(getContext, blockerCommentEnabled, clearWaitingAgent);
   const { getCurrentCommentIndex } = actions;
   const { currentId, comments, toggleEmojiPicker, replyToCommentHandler } = getContext();
 
