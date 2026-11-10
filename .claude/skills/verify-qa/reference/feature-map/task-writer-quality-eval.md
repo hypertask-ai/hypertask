@@ -40,6 +40,15 @@ Ordinary drafts stay under 240 visible words and skip experiment headings.
 A/B sections appear only when the ticket is an A/B test and board instructions
 or a matching template request that layout. Flag off keeps the previous prompt.
 
+### Board label pilot (Jev)
+
+Offline: no app change, no flag. `scripts/task-writer-label-eval.cjs` compares Jev's
+one-question-per-label picks with today's writer label decision on 200 past board 15
+tickets. Re-run with a capped OpenRouter key and an Anthropic key, or check the committed
+numbers with `--check-baseline`. First run, 2026-11-10: Jev loses on right labels and
+wins on wrong ones only when asked about labels a writer sets, so it replaces nothing.
+See `tests/fixtures/task-writer-label-eval/report.md` and HTPR-9047.
+
 ### Cleanup
 
 Only run-created QA Sandbox 7049 tickets are soft-deleted and read back.
