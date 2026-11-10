@@ -1,6 +1,8 @@
 import { tool } from "ai";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8987_CHAT_BLOCKER_READ_FLAG } from "@/lib/flags/definitions/htpr-8987-chat-blocker-read";
 import { HTPR_7756_CHAT_OPENS_TASK_FLAG } from "@/lib/flags/keys";
+import { mapOpenBlockingTasksForRead } from "@/lib/blockingTasks";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -29,6 +31,10 @@ export function createGetTasksTool(context: ToolContext) {
       }),
       execute: async (input) => {
         sendStatus("hypertask_get_tasks");
+        const blockersEnabled = await isFeatureEnabled(
+          HTPR_8987_CHAT_BLOCKER_READ_FLAG,
+          user.id,
+        );
         if (input.unique_index && !input.project_id) {
           return { success: false, error: "project_id is required with unique_index" };
         }
@@ -65,13 +71,17 @@ export function createGetTasksTool(context: ToolContext) {
           },
           include: {
             ...taskMcpGetInclude(user.id),
-            relatedFromTasks: blockedByRelationsInclude(user.id),
+            ...(blockersEnabled
+              ? { relatedFromTasks: blockedByRelationsInclude(user.id) }
+              : {}),
           },
         });
 
-        const tasksWithBlockers = await attachOpenBlockingTasks(
-          tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
-        );
+        const tasksWithBlockers = blockersEnabled
+          ? await attachOpenBlockingTasks(
+              tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
+            )
+          : tasks;
 
         const notFound = [
           ...(input.task_ids ?? [])
@@ -126,7 +136,16 @@ export function createGetTasksTool(context: ToolContext) {
         return sanitizeForJson({
           success: true,
           ...(navigationEmitted === undefined ? {} : { navigation_emitted: navigationEmitted }),
-          tasks: tasksWithBlockers.map((task) => mapTaskToMcpGetResponse(task, user.id)),
+          tasks: tasksWithBlockers.map((task) => {
+            const mapped = mapTaskToMcpGetResponse(task, user.id);
+            if (!blockersEnabled) return mapped;
+            return {
+              ...mapped,
+              blockingTasks: mapOpenBlockingTasksForRead(
+                "blockingTasks" in task ? (task.blockingTasks ?? []) : [],
+              ),
+            };
+          }),
           not_found: notFound,
         });
       },

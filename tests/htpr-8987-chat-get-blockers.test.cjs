@@ -91,7 +91,12 @@ test("get_tasks exposes open BlockedBy targets like list_tasks", async () => {
   const { createGetTasksTool } = load("src/lib/ai/tools/getTasks.ts", {
     ...attachDeps,
     "@/lib/prisma": prismaMock,
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags": {
+      isFeatureEnabled: async (key) => key === "htpr-8987-chat-blocker-read",
+    },
+    "@/lib/flags/definitions/htpr-8987-chat-blocker-read": {
+      HTPR_8987_CHAT_BLOCKER_READ_FLAG: "htpr-8987-chat-blocker-read",
+    },
     "@/lib/flags/keys": { HTPR_7756_CHAT_OPENS_TASK_FLAG: "htpr-7756" },
     "@/lib/mcp/tasks/mappers": mappers,
     "@/lib/ai/tools/helpers": {
@@ -114,6 +119,7 @@ test("get_tasks exposes open BlockedBy targets like list_tasks", async () => {
   assert.deepEqual(output.tasks[0].blockingTasks, [
     {
       id: 5959,
+      task_id: 5959,
       ticketNumber: "HTPR-5959",
       uniqueIndex: 5959,
       title: "Blocker ticket",
@@ -151,6 +157,7 @@ test("current ticket context lists open blockers", () => {
     },
     "primary",
     false,
+    true,
   );
 
   assert.match(text, /Open blockers \(BlockedBy\):/);
