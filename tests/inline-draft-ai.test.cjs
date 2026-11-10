@@ -180,13 +180,17 @@ test("inline draft AI prompt clicks do not bubble back to the comment editor", a
     );
   });
 
-  const prompt = container.querySelector('input[placeholder="Describe what to write…"]');
+  const prompt = container.querySelector('textarea[placeholder="Describe what to write…"]');
   assert.ok(prompt);
   prompt.focus();
   prompt.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
   assert.equal(parentClicks, 0);
   assert.equal(document.activeElement, prompt);
+  assert.equal(prompt.tagName, "TEXTAREA");
+  assert.equal(prompt.getAttribute("rows"), "1");
+  assert.match(prompt.className, /resize-none/);
+  assert.match(prompt.className, /max-h-40/);
 });
 
 test("inline draft AI preserves a range and expands a collapsed caret over existing content", () => {
