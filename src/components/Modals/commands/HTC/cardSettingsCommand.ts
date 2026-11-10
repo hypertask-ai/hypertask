@@ -1,14 +1,6 @@
-import { CommandMode } from "@/models/enums";
 import { IAllCommands } from "@/models/model";
-import { CommandGroup, ICommandList } from "./HTCTypes";
-
-const CARD_SETTINGS_COMMAND: ICommandList = {
-  key: "cardSettings",
-  name: "Card settings",
-  commandMode: CommandMode.Setting,
-  payload: "card-settings",
-  keywords: "card settings show hide parts name people ticket number inbox icon comments sub-tasks priority size due date tags staleness blocked edge empty cards",
-};
+import { CommandGroup } from "./HTCTypes";
+import { CARD_SETTINGS_COMMAND } from "./AllCommands";
 
 const CARD_SETTINGS_SHORTCUT_GROUPS = ["Frequently used", "Get started"];
 
