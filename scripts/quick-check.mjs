@@ -2,6 +2,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { evaluateFlagDefinitionChanges, touchesFlagDefinitions } from "../.github/scripts/feature-flag-gate.mjs";
 
 const BUDGET_MS = 10_000;
 const FULL_BUDGET_MS = 60_000;
@@ -268,8 +269,29 @@ if (typeOutcome === "failed") {
   blocked(`the type check failed; the push was stopped after ${elapsed(started)}s`);
 }
 
+let flagOutcome = "skipped";
+const flagScope = explicit ?? touched;
+if (flagScope.length && touchesFlagDefinitions(flagScope)) {
+  const mergeBase = git(root, ["merge-base", "HEAD", "origin/production"]);
+  const head = (git(root, ["rev-parse", "HEAD"]) ?? "").trim();
+  if (mergeBase && head) {
+    console.log("quick check: running the feature-flag definition gate");
+    const result = evaluateFlagDefinitionChanges({
+      baseSha: mergeBase.trim(),
+      headSha: head,
+      changedFiles: flagScope,
+    });
+    if (!result.pass) {
+      blocked(`${result.reason}; the push was stopped after ${elapsed(started)}s`);
+    }
+    flagOutcome = "passed";
+  }
+}
+
 const total = Date.now() - started;
-const skippedNote = skipped.length ? `, skipped ${skipped.join(" and ")}` : "";
+const skippedParts = [...skipped];
+if (flagOutcome === "skipped") skippedParts.push("feature flags");
+const skippedNote = skippedParts.length ? `, skipped ${skippedParts.join(" and ")}` : "";
 console.log(
   `quick check: format, lint and types passed in ${(total / 1000).toFixed(1)}s (lint ${lintSeconds}s, types ${typeSeconds}s)${skippedNote}`,
 );
