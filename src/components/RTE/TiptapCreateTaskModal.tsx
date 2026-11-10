@@ -131,9 +131,11 @@ const TiptapCreateTaskModal = () => {
   const { togglePriorityModal, toggleProjectsModal } =
     useContextCreateTaskInfoColumn();
 
+  const descriptionPlaceholderRef = useRef<string | null>(null);
   const { editor } = useTiptap({
     mode: "read-edit-description",
     defaultContent: formValues.description,
+    placeholderOverrideRef: descriptionPlaceholderRef,
   });
   const asyncPush = useAsyncRoutePush();
   const [filesDropped, setFilesDropped] = useState<File[]>([]);
@@ -341,18 +343,11 @@ const TiptapCreateTaskModal = () => {
       openingSectionIdRef.current = formValues.status.sectionId;
     }
   }, [formValues.currentProject?.id, formValues.status?.sectionId]);
-  const defaultDescriptionPlaceholderRef = useRef<string | null>(null);
   useEffect(() => {
-    const placeholder = editor?.extensionManager.extensions.find(
-      (extension) => extension.name === "placeholder",
-    );
-    if (!editor || !placeholder) return;
-    if (defaultDescriptionPlaceholderRef.current === null) {
-      defaultDescriptionPlaceholderRef.current = placeholder.options.placeholder;
-    }
-    placeholder.options.placeholder = newTaskCtrlJFlag && newTaskWindow && !isMbl
+    if (!editor) return;
+    descriptionPlaceholderRef.current = newTaskCtrlJFlag && newTaskWindow && !isMbl
       ? `Add a description, or press ${isApple ? "Cmd" : "Ctrl"}+J to write it with AI`
-      : defaultDescriptionPlaceholderRef.current;
+      : null;
     editor.view.dispatch(editor.state.tr);
   }, [editor, newTaskCtrlJFlag, newTaskWindow, isMbl, isApple]);
   const writeChips = useNewTaskWriteChips(projectId, inlineAiOpen);

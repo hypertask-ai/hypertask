@@ -111,3 +111,13 @@ test("flag off keeps the old Ctrl+J paths", () => {
   assert.match(float, /useFlag\(HTPR_9002_CTRL_J_NEW_TASK_FLAG\)/);
   assert.match(float, /sendLabel = writeMode \? "Write" : "Rewrite"/);
 });
+
+test("the Ctrl+J invite reaches the description placeholder through a live ref", () => {
+  const tiptap = read("src/components/RTE/Tiptap.ts");
+  assert.match(tiptap, /placeholderOverrideRef\?: MutableRefObject<string \| null>/);
+  assert.match(tiptap, /\(\) => placeholderOverrideRef\.current \?\? defaultPlaceholder/);
+  const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
+  assert.match(modal, /placeholderOverrideRef: descriptionPlaceholderRef/);
+  assert.match(modal, /descriptionPlaceholderRef\.current = newTaskCtrlJFlag && newTaskWindow && !isMbl/);
+  assert.doesNotMatch(modal, /placeholder\.options\.placeholder =/);
+});
