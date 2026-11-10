@@ -13,7 +13,7 @@ import {
   RELEASE_SECTION_TITLES,
 } from "./selection";
 import { digestUntil } from "./cursor";
-import { selectShippedTickets } from "./shipped";
+import { announcedTicketIds, selectShippedTickets } from "./shipped";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CURSOR_LOOKBACK_DAYS = 90;
@@ -22,8 +22,10 @@ export const STALE_AFTER_DAYS = 4;
 const ALARM_MARKER = "latest-updates-alarm";
 const ALARM_USER_ID = 332;
 const ALARM_CLAIM_SECONDS = 6 * 60 * 60;
+const RUN_CLAIM_SECONDS = 10 * 60;
 
 export type DigestRun = {
+  skipped: boolean;
   since: string;
   until: string;
   shipped: number;
@@ -44,17 +46,36 @@ function newestOf(dates: readonly Date[]): Date | null {
   return new Date(Math.max(...dates.map((date) => date.getTime())));
 }
 
+function lookbackStart(now: Date): Date {
+  return new Date(now.getTime() - CURSOR_LOOKBACK_DAYS * DAY_MS);
+}
+
+async function claim(key: string, now: Date, seconds: number): Promise<boolean> {
+  try {
+    const redis = await getRedis();
+    return (
+      (await redis.set(
+        `${key}:${Math.floor(now.getTime() / (seconds * 1000))}`,
+        "1",
+        "EX",
+        seconds,
+        "NX",
+      )) === "OK"
+    );
+  } catch {
+    return true;
+  }
+}
+
 export async function readDigestCursor(now: Date): Promise<Date> {
   const recent = await prisma.announcments.findMany({
-    where: { createdAt: { gte: new Date(now.getTime() - CURSOR_LOOKBACK_DAYS * DAY_MS) } },
+    where: { createdAt: { gte: lookbackStart(now) } },
     select: { body: true },
   });
-
   const marked = newestOf(
     recent
       .map((row) => digestUntil(row.body))
-      .filter((date): date is Date => date !== null)
-      .filter((date) => date.getTime() <= now.getTime()),
+      .filter((date): date is Date => date !== null && date.getTime() <= now.getTime()),
   );
   if (marked) return marked;
 
@@ -86,21 +107,23 @@ export async function runRocketDigest({
   now?: Date;
 }): Promise<DigestRun> {
   const since = await readDigestCursor(now);
-  const tickets = await selectShippedTickets(DIGEST_PROJECT_ID, since, now);
+  const announced = await announcedTicketIds();
+  const tickets = await selectShippedTickets(DIGEST_PROJECT_ID, since, now, announced);
   const entries = buildDigestEntries(tickets);
   let posted = 0;
 
-  if (!dryRun) {
+  if (!dryRun && entries.length) {
+    if (!(await claim("rocket-digest:run", now, RUN_CLAIM_SECONDS))) {
+      return { skipped: true, since: since.toISOString(), until: now.toISOString(), shipped: 0, entries: [], posted: 0 };
+    }
     for (const entry of entries) {
-      await createAnnouncement({
-        body: announcementBody(entry, now),
-        createdAt: entry.releasedAt,
-      });
+      await createAnnouncement({ body: announcementBody(entry, now), createdAt: entry.releasedAt });
       posted += 1;
     }
   }
 
   return {
+    skipped: entries.length === 0,
     since: since.toISOString(),
     until: now.toISOString(),
     shipped: tickets.length,
@@ -115,50 +138,36 @@ export async function runRocketDigest({
 }
 
 function alarmTitle(staleDays: number, shipped: number): string {
-  const days = Math.max(1, Math.floor(staleDays));
-  return `Latest Updates has posted nothing for ${days} days while ${shipped} changes shipped`;
+  return `Latest Updates has posted nothing for ${Math.max(1, Math.floor(staleDays))} days while ${shipped} changes shipped`;
 }
 
 function alarmDescription(staleDays: number, shipped: number, newestEntryAt: Date | null) {
   return (
-    `<p><strong>${escapeHtml(alarmTitle(staleDays, shipped))}</strong></p>` +
-    `<ul>` +
+    `<p><strong>${escapeHtml(alarmTitle(staleDays, shipped))}</strong></p><ul>` +
     `<li>Newest panel entry: ${escapeHtml(newestEntryAt?.toISOString() ?? "none")}.</li>` +
     `<li>Changes released since that entry: ${shipped}.</li>` +
     `<li>How to undo: nothing to undo, this ticket only reports a quiet feed.</li>` +
-    `</ul>` +
-    `<p>${escapeHtml(ALARM_MARKER)}</p>`
+    `</ul><p>${escapeHtml(ALARM_MARKER)}</p>`
   );
 }
 
 async function findOpenAlarm(): Promise<number | null> {
-  const doneSections = await prisma.section.findMany({
+  const done = await prisma.section.findMany({
     where: { projectId: ALARM_PROJECT_ID, isDone: true },
     select: { section_title: true },
   });
-  const doneTitles = doneSections.map((section) => section.section_title);
   const open = await prisma.task.findFirst({
     where: {
       projectId: ALARM_PROJECT_ID,
       deletedAt: null,
       archivedAt: null,
-      ...(doneTitles.length ? { section: { notIn: doneTitles } } : {}),
+      ...(done.length ? { section: { notIn: done.map((section) => section.section_title) } } : {}),
       description_: { is: { content: { contains: ALARM_MARKER } } },
     },
     orderBy: { id: "desc" },
     select: { uniqueIndex: true },
   });
   return open?.uniqueIndex ?? null;
-}
-
-async function claimAlarm(now: Date): Promise<boolean> {
-  try {
-    const redis = await getRedis();
-    const key = `rocket-digest:alarm:${Math.floor(now.getTime() / (ALARM_CLAIM_SECONDS * 1000))}`;
-    return (await redis.set(key, "1", "EX", ALARM_CLAIM_SECONDS, "NX")) === "OK";
-  } catch {
-    return true;
-  }
 }
 
 async function fileAlarm(
@@ -171,11 +180,7 @@ async function fileAlarm(
     select: {
       uniqueIdentifier: true,
       section: {
-        where: {
-          deleted: false,
-          visibility: true,
-          section_title: ALARM_SECTION_TITLE,
-        },
+        where: { deleted: false, visibility: true, section_title: ALARM_SECTION_TITLE },
         orderBy: { ranking: "asc" },
         take: 1,
         select: { id: true, section_title: true },
@@ -213,9 +218,7 @@ export async function checkUpdatesFreshness({
     select: { createdAt: true },
   });
   const newestEntryAt = newest?.createdAt ?? null;
-  const since = newestEntryAt
-    ? newestEntryAt
-    : new Date(now.getTime() - BACKFILL_DAYS * DAY_MS);
+  const since = newestEntryAt ?? new Date(now.getTime() - BACKFILL_DAYS * DAY_MS);
   const staleDays = newestEntryAt
     ? (now.getTime() - newestEntryAt.getTime()) / DAY_MS
     : BACKFILL_DAYS;
@@ -229,23 +232,22 @@ export async function checkUpdatesFreshness({
 
   if (staleDays < STALE_AFTER_DAYS) return quiet;
 
+  const announced = await announcedTicketIds();
   const tickets = await selectShippedTickets(
     DIGEST_PROJECT_ID,
     since,
     now,
+    announced,
     RELEASE_SECTION_TITLES,
   );
   if (!tickets.length) return quiet;
 
   const openTicket = await findOpenAlarm();
-  if (openTicket !== null) {
-    return { ...quiet, shipped: tickets.length, ticketId: openTicket };
+  if (openTicket !== null) return { ...quiet, shipped: tickets.length, ticketId: openTicket };
+  if (!(await claim("rocket-digest:alarm", now, ALARM_CLAIM_SECONDS))) {
+    return { ...quiet, shipped: tickets.length };
   }
-  if (!(await claimAlarm(now))) return { ...quiet, shipped: tickets.length };
 
   const ticketId = await fileAlarm(staleDays, tickets, newestEntryAt);
-  console.log(
-    `[rocket-digest] Alarm filed: ticket ${ticketId ?? "none"} after ${quiet.staleDays} quiet days with ${tickets.length} shipped changes`,
-  );
   return { ...quiet, shipped: tickets.length, filed: ticketId !== null, ticketId };
 }
