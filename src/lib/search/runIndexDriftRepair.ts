@@ -1,4 +1,4 @@
-import { Prisma, Status } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
@@ -47,7 +47,7 @@ async function queryRows(name: string, body: Record<string, unknown>) {
 
 export async function loadIndexDriftPage(afterId: number, take: number): Promise<Page> {
   const rows = await prisma.task.findMany({
-    where: { id: { gt: afterId }, status: { not: Status.Deleted } },
+    where: { id: { gt: afterId } },
     orderBy: { id: "asc" },
     take,
     select: { id: true, title: true, updatedAt: true },
