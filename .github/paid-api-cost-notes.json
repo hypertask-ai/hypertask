@@ -9,6 +9,16 @@
     "reason": "HTPR-7979 sends the original note to Hypertask's own same-origin task questions route. The browser call itself pays nothing; the route's model cost is noted on the route entry.",
     "source": "https://app.hypertask.ai/detail/project-15/7979"
   },
+  "src/components/Modals/Settings/AiUsageTeamsBreakdown.tsx:558dbef4821e9f2372b80b15063d75a6f9cb8bfc160014a8e1ec2c7ef10d90de": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7788 lists the teams the signed-in owner may see in full, from Hypertask's own same-origin settings API. No paid provider call; the per-team gateway report cost is unchanged and already noted on the route.",
+    "source": "https://app.hypertask.ai/detail/project-15/7788"
+  },
+  "src/components/Modals/Settings/AiUsageTeamsBreakdown.tsx:b7d56347f5ce86d23eb734cdd40e426709fc12ffab7004b16e33383c3febdda3": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7788 reuses the existing per-team AI usage endpoint once per owned team, the same request today's single-team page already makes. No new provider, retry or token budget.",
+    "source": "https://app.hypertask.ai/detail/project-15/7788"
+  },
   "src/components/Modals/Settings/GitHubSection.tsx:aea21b21a5fc71a8aec8029bd4b0da5f2c32aaf3f9e3ba497671ca232d1bca00": {
     "maxUsdPerDay": 0,
     "reason": "Saves board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",

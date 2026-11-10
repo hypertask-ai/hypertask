@@ -253,6 +253,28 @@ export const reconcileLegacySystemUserSpend = (
   }));
 };
 
+export const buildGatewayMemberSpendRows = (
+  members: Array<{ displayName: string; userId: number }>,
+  tagPayload: unknown,
+  teamSpendUsd: number,
+): Array<{ label: string; value: number }> => {
+  const systemSpend = aggregateGatewaySystemSpendParts(tagPayload);
+  const spendByUserId = new Map(
+    reconcileLegacySystemUserSpend(
+      aggregateGatewayByUserTag(tagPayload),
+      systemSpend.legacyUserTaggedSpend,
+    ).map((row) => [row.userId, Math.max(row.totalCost, 0)]),
+  );
+  const rows = members.map((member) => ({
+    label: member.displayName,
+    value: spendByUserId.get(member.userId) ?? 0,
+  }));
+  const attributedSpend = rows.reduce((total, row) => total + row.value, 0);
+  const remainder = Math.max(teamSpendUsd - attributedSpend, 0);
+  if (remainder > 0) rows.push({ label: "Other / agents", value: remainder });
+  return rows;
+};
+
 export const buildGatewayMemberUsage = (
   members: Array<{ displayName: string; userId: number }>,
   userTagUsage: GatewayUserTagUsage[],

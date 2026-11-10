@@ -1,7 +1,9 @@
 "use client";
 
 import axios from "axios";
+import dynamic from "next/dynamic";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7788_TEAM_AI_BREAKDOWN_FLAG } from "@/lib/flags/definitions/htpr-7788-team-ai-breakdown";
 import { HTPR_7919_ALLOWANCE_PERCENT_FLAG } from "@/lib/flags/definitions/htpr-7919-allowance-percent";
 import { useEffect, useState } from "react";
 import SettingsCard from "./SettingsCard";
@@ -9,18 +11,18 @@ import SettingsSectionShell from "./SettingsSectionShell";
 import { useSettingsNavigation } from "./settingsNavigation";
 import { useSettingsTeam } from "./useSettingsTeam";
 
-type PercentageRow = {
+export type PercentageRow = {
   label: string;
   pct: number;
 };
 
-type ModelUsageRow = {
+export type ModelUsageRow = {
   label: string;
   onYourKey: boolean;
   pct: number | null;
 };
 
-type AiUsageData = {
+export type AiUsageData = {
   configured: boolean;
   fundingSource: "customer" | "managed" | "shared" | null;
   period: { endDate: string; startDate: string } | null;
@@ -39,11 +41,29 @@ type AiUsageData = {
   boards: PercentageRow[];
   tasks: PercentageRow[];
   agents: PercentageRow[];
+  members: PercentageRow[];
   usageMessage: string | null;
 };
 
+const TeamAiUsageBreakdown = dynamic(
+  () => import("./AiUsageTeamsBreakdown"),
+  {
+    ssr: false,
+    loading: () => (
+      <SettingsSectionShell title="AI Usage">
+        <SettingsCard title="Teams">
+          <p className="px-2 py-2 text-dense font-medium text-text-light-gray">
+            Loading AI usage
+          </p>
+        </SettingsCard>
+      </SettingsSectionShell>
+    ),
+  },
+);
+
 const AiUsageSection = () => {
   const percentageAllowance = useFlag(HTPR_7919_ALLOWANCE_PERCENT_FLAG);
+  const teamBreakdown = useFlag(HTPR_7788_TEAM_AI_BREAKDOWN_FLAG);
   const { teamId, project } = useSettingsTeam();
   const { setSettingsSection } = useSettingsNavigation();
   const [data, setData] = useState<AiUsageData | null>(null);
@@ -53,6 +73,7 @@ const AiUsageSection = () => {
   useEffect(() => {
     let cancelled = false;
 
+    if (teamBreakdown) return;
     if (!teamId) {
       setData(null);
       setError(null);
@@ -97,7 +118,9 @@ const AiUsageSection = () => {
     return () => {
       cancelled = true;
     };
-  }, [teamId, project?.id]);
+  }, [teamBreakdown, teamId, project?.id]);
+
+  if (teamBreakdown) return <TeamAiUsageBreakdown />;
 
   if (!teamId) {
     return (
@@ -298,9 +321,9 @@ const FEATURE_LABELS: Record<string, string> = {
   "onboarding-board": "Onboarding",
   "task-questions": "Question suggestions",
 };
-const featureLabel = (slug: string) => FEATURE_LABELS[slug] ?? slug;
+export const featureLabel = (slug: string) => FEATURE_LABELS[slug] ?? slug;
 
-const formatResetDate = (iso: string) => {
+export const formatResetDate = (iso: string) => {
   const parsed = new Date(`${iso}T00:00:00Z`);
   return Number.isNaN(parsed.getTime())
     ? iso
@@ -311,13 +334,13 @@ const formatResetDate = (iso: string) => {
       });
 };
 
-const allowanceBarColor = (pct: number, capped: boolean) => {
+export const allowanceBarColor = (pct: number, capped: boolean) => {
   if (capped) return "bg-red-500";
   if (pct >= 80) return "bg-amber-500";
   return "bg-hypertasks-header-blue";
 };
 
-const ModelRow = ({ row }: { row: ModelUsageRow }) => (
+export const ModelRow = ({ row }: { row: ModelUsageRow }) => (
   <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(72px,2fr)_84px] items-center gap-3 rounded-[5px] px-2 py-2 hover:bg-hover-active">
     <span className="truncate text-dense font-semibold text-white-black">
       {row.label}
@@ -336,7 +359,7 @@ const ModelRow = ({ row }: { row: ModelUsageRow }) => (
   </div>
 );
 
-const PercentageUsageRow = ({ row }: { row: PercentageRow }) => (
+export const PercentageUsageRow = ({ row }: { row: PercentageRow }) => (
   <div className="flex items-center justify-between gap-4 rounded-[5px] px-2 py-2 hover:bg-hover-active">
     <span className="min-w-0 flex-1 truncate text-dense font-semibold text-white-black">
       {row.label}
@@ -347,7 +370,7 @@ const PercentageUsageRow = ({ row }: { row: PercentageRow }) => (
   </div>
 );
 
-const EmptyState = ({ children }: { children: React.ReactNode }) => (
+export const EmptyState = ({ children }: { children: React.ReactNode }) => (
   <p className="px-2 py-2 text-dense font-medium text-text-light-gray">
     {children}
   </p>
