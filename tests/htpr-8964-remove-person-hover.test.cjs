@@ -37,15 +37,17 @@ const fire = (window, target, type, pointerType) =>
   React.act(async () => { target.dispatchEvent(mouseEvent(window, type, pointerType)); });
 
 const withObserver = (view) => {
-  const previous = Object.getOwnPropertyDescriptor(global, "MutationObserver");
-  Object.defineProperty(global, "MutationObserver", {
-    value: view.container.ownerDocument.defaultView.MutationObserver,
-    configurable: true,
-    writable: true,
-  });
+  const browser = view.container.ownerDocument.defaultView;
+  const previous = new Map();
+  for (const [name, value] of Object.entries({ MutationObserver: browser.MutationObserver, Element: browser.Element, Node: browser.Node })) {
+    previous.set(name, Object.getOwnPropertyDescriptor(global, name));
+    Object.defineProperty(global, name, { value, configurable: true, writable: true });
+  }
   return () => {
-    if (previous) Object.defineProperty(global, "MutationObserver", previous);
-    else delete global.MutationObserver;
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(global, name, descriptor);
+      else delete global[name];
+    }
   };
 };
 
