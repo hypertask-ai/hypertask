@@ -32,11 +32,15 @@ function mappingMatchesRepository(
   }
 
   const repositoryId = githubRepositoryId(repository.id);
-  return (
-    repositoryId !== null &&
-    mapping.repositoryId !== null &&
-    mapping.repositoryId === repositoryId
-  );
+  if (
+    repositoryId === null ||
+    mapping.repositoryId === null ||
+    mapping.repositoryId !== repositoryId
+  ) {
+    return false;
+  }
+  if (typeof repository.fullName !== "string") return false;
+  return mapping.fullName === repository.fullName.toLowerCase();
 }
 
 export function resolveBoardGithubRepository(

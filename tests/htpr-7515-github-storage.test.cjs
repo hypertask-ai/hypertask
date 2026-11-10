@@ -248,4 +248,11 @@ test("installed board routing matches repository id and refuses a recreated repo
   };
   assert.equal(resolveBoardGithubRepository(matched, [installed]), 8423);
   assert.equal(resolveBoardGithubRepository(impersonated, [installed]), null);
+  assert.equal(
+    resolveBoardGithubRepository(
+      { fullName: "inne/renamed-repo", id: "456", isPrivate: false, isFork: false },
+      [installed],
+    ),
+    null,
+  );
 });
