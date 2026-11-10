@@ -11,6 +11,7 @@ import { useContext } from "react";
 import MobileTaskDueDate from "./MobileTaskDueDate";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-sticky-title";
 import useCopyURL from "@/hooks/General/useCopyURL";
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
@@ -26,6 +27,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
   const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
+  const stickyTitleLine = useFlag(HTPR_8992_STICKY_TITLE_FLAG);
   const { copyTicketNumber } = useCopyURL();
   const isApple = useDeviceContext();
   const ticketNumber = currentTask?.ticketNumber?.toUpperCase();
@@ -59,7 +61,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
         dataAttribute="task-detail"
         containerRef={containerRef}
         clearDesktopNavigation={clearDesktopNavigation}
-        showScrollShadow={isScrolled}
+        showScrollDivider={stickyTitleLine && isScrolled}
         hasSummary={(_mbl && cachedLayout) || hasSummary}
         titleRowContent={
           <>
