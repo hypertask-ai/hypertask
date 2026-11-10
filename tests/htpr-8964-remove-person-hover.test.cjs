@@ -36,6 +36,19 @@ const mouseEvent = (window, type, pointerType) => {
 const fire = (window, target, type, pointerType) =>
   React.act(async () => { target.dispatchEvent(mouseEvent(window, type, pointerType)); });
 
+const withObserver = (view) => {
+  const previous = Object.getOwnPropertyDescriptor(global, "MutationObserver");
+  Object.defineProperty(global, "MutationObserver", {
+    value: view.container.ownerDocument.defaultView.MutationObserver,
+    configurable: true,
+    writable: true,
+  });
+  return () => {
+    if (previous) Object.defineProperty(global, "MutationObserver", previous);
+    else delete global.MutationObserver;
+  };
+};
+
 test("an assignee or agent row opens no card on mouse hover once the flag is on, and still opens on tap", async () => {
   for (const removeHover of [false, true]) {
     const view = mount();
@@ -64,6 +77,7 @@ test("an assignee or agent row opens no card on mouse hover once the flag is on,
 test("a mentioned name opens no card on mouse hover once the flag is on, and still opens on tap", async () => {
   for (const removeHover of [false, true]) {
     const view = mount();
+    const restoreObserver = withObserver(view);
     const source = loader(mocks(removeHover));
     const RichTextPersonHovercards = source("src/components/Common/RichTextPersonHovercards.tsx").default;
     view.render(React.createElement(RichTextPersonHovercards, { projectId: 7049 },
@@ -81,6 +95,7 @@ test("a mentioned name opens no card on mouse hover once the flag is on, and sti
         assert.match(view.container.textContent, /Loading contact/);
       }
     } finally {
+      restoreObserver();
       view.close();
     }
   }
