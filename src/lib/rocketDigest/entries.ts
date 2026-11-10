@@ -16,20 +16,27 @@ export type DigestEntry = {
 };
 
 export const FIXES_ENTRY_TITLE = "Fixes & polish";
-export const MORE_ENTRY_TITLE = "More changes";
-export const MAX_TOPIC_ENTRIES = 10;
+export const DIGEST_VERSION = 2;
+export const MAX_TOPIC_ENTRIES = 12;
 
 const MAX_TITLE_LENGTH = 80;
 const MAX_SUMMARY_LENGTH = 170;
 const MAX_LISTED_TITLES = 4;
-const MAX_MORE_TITLES = 6;
+const MIN_SUMMARY_WORDS = 4;
 
 const HTML_BREAKS = /<(?:br|\/p|\/li|\/h[1-6]|\/div)\s*\/?>/gi;
 const HTML_TAG = /<[^>]*>/g;
+const FLAG_MODE = "(?:everyone|internal|off|qa|owner|only me \\+ qa)";
+const FLAG_NOTE = new RegExp(
+  `(?:^|(?<=[.!?]\\s))\\s*flag:\\s*(?:https?:\\/\\/\\S+|${FLAG_MODE})\\s*(?:\\([^)]{0,40}\\))?\\s*`,
+  "gi",
+);
 const LEADING_FIELD =
-  /^(?:what'?s wrong or wanted|what is wrong or wanted|what'?s needed|what we want|problem|who it affects|recommended course and why)\s*:\s*/i;
+  /^(?:what'?s wrong or wanted|what is wrong or wanted|what'?s needed|what we want|what'?s new|problem|summary|who it affects|recommended course and why)\s*:?\s*/i;
 const NEXT_FIELD =
-  /\b(?:who it affects|recommended course and why|what valentin must decide|how to undo|done when|risk|decision|how it works today|fix)\s*:/i;
+  /\b(?:who it affects|recommended course and why|what valentin must decide|how to undo|done when|risk|decision|how it works today)\s*:/i;
+const POINTER_ONLY =
+  /^(?:follow[- ]?up\b|see\b|refs?\b|part of\b|related to\b|blocked by\b|as discussed\b|ready to build\b|now ready to build\b|n\/a\b)/i;
 const TITLE_PREFIX = /^(?:\[[^\]]{1,40}\]\s*|[A-Z][A-Z0-9]*-\d+\s+)/;
 
 export function plainText(html: string): string {
@@ -63,34 +70,50 @@ function stripTitlePrefixes(title: string): string {
   return stripped;
 }
 
+function stripLeadingFields(text: string): string {
+  let stripped = text.trim();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const next = stripped.replace(LEADING_FIELD, "").trim();
+    if (next === stripped) break;
+    stripped = next;
+  }
+  return stripped;
+}
+
+function firstUsableSentence(text: string): string {
+  for (const piece of text.split(/(?<=[.!?])\s+/)) {
+    const sentence = piece.trim();
+    if (!sentence || POINTER_ONLY.test(sentence)) continue;
+    if (sentence.split(/\s+/).length < MIN_SUMMARY_WORDS) continue;
+    return sentence;
+  }
+  return "";
+}
+
+function asSentenceCase(text: string): string {
+  return /^[a-z]/.test(text) ? `${text[0].toUpperCase()}${text.slice(1)}` : text;
+}
+
 export function entryTitle(title: string): string {
   const plain = plainText(title);
   return clipAtWord(stripTitlePrefixes(title) || plain, MAX_TITLE_LENGTH);
 }
 
 export function entrySummary(description: string): string {
-  const text = plainText(description);
+  const text = plainText(description).replace(FLAG_NOTE, "").trim();
   if (!text) return "";
-  const trimmed = text.replace(LEADING_FIELD, "");
+  const trimmed = stripLeadingFields(text);
   const firstField = trimmed.search(NEXT_FIELD);
   const scope = firstField > 20 ? trimmed.slice(0, firstField) : trimmed;
-  const sentence = scope.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? scope;
-  return clipAtWord(sentence.trim(), MAX_SUMMARY_LENGTH);
-}
-
-function listedTitles(tickets: readonly ShippedTicket[], limit: number, tail: string): string {
-  const titles = tickets.slice(-limit).map((ticket) => entryTitle(ticket.title));
-  const extra = tickets.length - titles.length;
-  const listed = titles.join("; ");
-  return extra > 0 ? `${listed}, and ${extra} more ${tail}.` : listed;
+  const sentence = firstUsableSentence(scope) || firstUsableSentence(trimmed);
+  return sentence ? clipAtWord(asSentenceCase(sentence), MAX_SUMMARY_LENGTH) : "";
 }
 
 function fixesContent(tickets: readonly ShippedTicket[]): string {
-  return listedTitles(tickets, MAX_LISTED_TITLES, "small fixes");
-}
-
-function moreContent(tickets: readonly ShippedTicket[]): string {
-  return listedTitles(tickets, MAX_MORE_TITLES, "changes");
+  return tickets
+    .slice(0, MAX_LISTED_TITLES)
+    .map((ticket) => entryTitle(ticket.title))
+    .join("; ");
 }
 
 function toEntry(title: string, content: string, tickets: ShippedTicket[]): DigestEntry {
@@ -109,27 +132,19 @@ export function buildDigestEntries(
   const sorted = [...tickets].sort(
     (left, right) => left.releasedAt.getTime() - right.releasedAt.getTime(),
   );
-  const topics = sorted.filter((ticket) => ticket.kind !== "fix");
-  const fixes = sorted.filter((ticket) => ticket.kind === "fix");
   const entries: DigestEntry[] = [];
-  const overflow = topics.slice(0, Math.max(0, topics.length - maxTopics));
-  const kept = topics.slice(Math.max(0, topics.length - maxTopics));
 
-  for (const ticket of kept) {
-    const summary = entrySummary(ticket.description) || "Shipped in Hypertask.";
+  for (const ticket of sorted) {
+    if (ticket.kind === "fix") continue;
+    if (entries.length >= maxTopics) break;
+    const summary = entrySummary(ticket.description);
+    if (!summary) continue;
     entries.push(toEntry(entryTitle(ticket.title), summary, [ticket]));
   }
-  if (overflow.length) {
-    entries.push(
-      toEntry(
-        MORE_ENTRY_TITLE,
-        moreContent(overflow),
-        overflow,
-      ),
-    );
-  }
+
+  const fixes = sorted.filter((ticket) => ticket.kind === "fix");
   if (fixes.length) {
-    entries.push(toEntry(FIXES_ENTRY_TITLE, fixesContent(fixes), fixes));
+    entries.push(toEntry(FIXES_ENTRY_TITLE, fixesContent(fixes), [...fixes]));
   }
 
   return entries.sort((left, right) => left.releasedAt.getTime() - right.releasedAt.getTime());
