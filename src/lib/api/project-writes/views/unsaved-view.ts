@@ -76,13 +76,14 @@ const route = taskWriteRoute({
     )
       ? await gatedTableGroupByForViewWrite(table_group_by, userId)
       : undefined;
+    const tableGroupFoldEnabled = await isFeatureEnabled("htpr-8972-table-group-fold", userId);
     const sanitizedTableCollapsedSections = Object.prototype.hasOwnProperty.call(
       req.body,
       "table_collapsed_sections",
     )
-      ? (await isFeatureEnabled("htpr-8972-table-group-fold", userId))
+      ? tableGroupFoldEnabled
         ? sanitizeTableCollapsedSectionsForWrite(table_collapsed_sections)
-        : null
+        : undefined
       : undefined;
     const project = await prisma.project.findFirst({
       where: {
@@ -204,7 +205,9 @@ const route = taskWriteRoute({
         table_sort_column: sanitizedTableSort.column,
         table_sort_direction: sanitizedTableSort.direction,
         table_group_by: sanitizedTableGroupBy ?? null,
-        table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
+        ...(tableGroupFoldEnabled
+          ? { table_collapsed_sections: sanitizedTableCollapsedSections ?? null }
+          : {}),
         board_layout: resolvedBoardLayout,
       };
 
@@ -272,7 +275,9 @@ const route = taskWriteRoute({
             table_sort_column: sanitizedTableSort.column,
             table_sort_direction: sanitizedTableSort.direction,
             table_group_by: sanitizedTableGroupBy ?? null,
-            table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
+            ...(tableGroupFoldEnabled
+              ? { table_collapsed_sections: sanitizedTableCollapsedSections ?? null }
+              : {}),
             board_layout: resolvedBoardLayout,
             visibility: "Private",
           },
@@ -406,7 +411,9 @@ const route = taskWriteRoute({
                 table_sort_column: sanitizedTableSort.column,
                 table_sort_direction: sanitizedTableSort.direction,
                 table_group_by: sanitizedTableGroupBy ?? null,
-                table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
+                ...(tableGroupFoldEnabled
+                  ? { table_collapsed_sections: sanitizedTableCollapsedSections ?? null }
+                  : {}),
                 board_layout: resolvedBoardLayout,
               },
             }));
