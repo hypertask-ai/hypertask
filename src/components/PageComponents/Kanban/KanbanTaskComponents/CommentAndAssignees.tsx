@@ -5,9 +5,10 @@ import { MessageCircle } from "lucide-react";
 interface ICommentAndAssignees {
   commentCount?:number;
   notifications:INotification[];
+  compact?:boolean;
 }
 
-const CommentAndAssignees:React.FC<ICommentAndAssignees> = ({commentCount, notifications}) => {
+const CommentAndAssignees:React.FC<ICommentAndAssignees> = ({commentCount, notifications, compact = false}) => {
 
   return (
 
@@ -15,8 +16,8 @@ const CommentAndAssignees:React.FC<ICommentAndAssignees> = ({commentCount, notif
         <div className='bg-inherit border-[0px]  h-labelComponent 
           text-emphasis
           border-border-labelComponent rounded-sm flex gap-1 items-center px-[4px] py-[1px]'>
-          <MessageCircle size={14} className='text-label-component' strokeWidth={1.75}/>
-          <span className='text-label-component text-meta'>
+          <MessageCircle size={compact ? 12 : 14} className='text-label-component' strokeWidth={1.75}/>
+          <span className={compact ? 'text-label-component text-micro leading-4' : 'text-label-component text-meta'}>
             {commentCount}
           </span>
         </div>

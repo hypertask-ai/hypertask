@@ -194,6 +194,9 @@ test("the rendered chip keeps fresh status, hides stale or absent status, and su
     "@/components/Modals/TaskEstimate/EstimateLabelComponent": { __esModule: true, default: Empty },
     "@/components/Modals/TaskPriority/PriorityLabelComponent": { __esModule: true, default: Empty },
     "./BlockerChip": { __esModule: true, default: Empty, BlockerTaskChip: Empty },
+    "@/lib/flags/definitions/htpr-8970-calm-cards": {},
+    "@/lib/kanban/cardLabels": load("src/lib/kanban/cardLabels.ts"),
+    "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   };
   const TaskTagsRow = load("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx", mocks).default;
   const render = (status) => renderToStaticMarkup(React.createElement(TaskTagsRow, {
