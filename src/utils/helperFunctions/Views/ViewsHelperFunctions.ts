@@ -15,7 +15,6 @@ import axios from "axios";
 import { defaultFilterSettings, getFilteredSections } from "./FilterHelperFunctions";
 import sortByStringParam from "@/utils/sortByParam";
 import { TABLE_COLUMN_KEYS } from "./TableColumnsHelperFunctions";
-import { sanitizeTableColumns, storedTableSortStack } from "@/lib/table-view/tableViewSettings";
 import { SortingMode, SortingOrder } from "@prisma/client";
 import { getAppliedSubtaskSections } from "./SubtaskHelperFunction";
 import { getFilteredEmptySections } from "./EmptySectionsHelperFunction";
@@ -630,15 +629,18 @@ const activeTableView = (project?: IProject | null) => {
 }
 
 export const getActiveTableSortStackFromProject = (project?: IProject | null): { column: string; direction: "asc" | "desc" }[] => {
-    const stored = storedTableSortStack(activeTableView(project)?.table_sort_stack)
-    if (stored?.length) return stored
+    const stored = activeTableView(project)?.table_sort_stack
+    if (Array.isArray(stored) && stored.length) return stored as { column: string; direction: "asc" | "desc" }[]
     const single = getActiveTableSortFromProject(project)
     if (!single?.column || (single.direction !== "asc" && single.direction !== "desc")) return []
     return [{ column: single.column, direction: single.direction }]
 }
 
-export const getActiveTableColumnsFromProject = (project?: IProject | null) =>
-    sanitizeTableColumns(activeTableView(project)?.table_columns)
+export const getActiveTableColumnsFromProject = (project?: IProject | null) => {
+    const saved = activeTableView(project)?.table_columns
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return null
+    return saved
+}
 
 export const getActiveTableSortFromProject = (project?: IProject | null): TTableSort => {
     const view = project?.project_view?.user_project_views?.[0]
