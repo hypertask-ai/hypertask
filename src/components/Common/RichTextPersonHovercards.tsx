@@ -1,6 +1,8 @@
 "use client";
 
 import { PersonHovercardSurface } from "@/components/Common/PersonHovercard";
+import { HTPR_8964_REMOVE_PERSON_HOVER_FLAG } from "@/lib/flags/definitions/htpr-8964-remove-person-hover";
+import { useFlag } from "@/hooks/useFlag";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
@@ -40,6 +42,7 @@ const RichTextPersonHovercards = ({
     subject: PersonHovercardSubject;
   } | null>(null);
   const [open, setOpen] = useState(false);
+  const hovercardDisabled = useFlag(HTPR_8964_REMOVE_PERSON_HOVER_FLAG);
 
   const cancelClose = () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
@@ -59,7 +62,7 @@ const RichTextPersonHovercards = ({
 
   useEffect(() => {
     const root = children ? rootRef.current : rootRef.current?.parentElement;
-    if (!root) return;
+    if (!root || hovercardDisabled) return;
 
     const prepareMentions = () => {
       root.querySelectorAll<HTMLElement>(".mention[data-label]").forEach((mention) => {
@@ -148,11 +151,11 @@ const RichTextPersonHovercards = ({
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
     };
-  }, [children, projectId]);
+  }, [children, projectId, hovercardDisabled]);
 
   useEffect(() => () => cancelClose(), []);
 
-  if (!projectId) return children ?? null;
+  if (!projectId || hovercardDisabled) return children ?? null;
 
   return (
     <>

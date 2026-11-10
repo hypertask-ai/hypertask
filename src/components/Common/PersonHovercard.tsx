@@ -12,6 +12,7 @@ import { aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, isAiChatSidebar
 import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8964_REMOVE_PERSON_HOVER_FLAG } from "@/lib/flags/definitions/htpr-8964-remove-person-hover";
 import {
   autoUpdate,
   flip,
@@ -73,6 +74,7 @@ const PersonHovercardSurfaceContent = ({
 }: PersonHovercardSurfaceProps) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const hovercardDisabled = useFlag(HTPR_8964_REMOVE_PERSON_HOVER_FLAG);
   const controlled = externallyOpen !== undefined;
   const open = controlled ? externallyOpen : internalOpen;
   const setOpen = (next: boolean) => {
@@ -95,7 +97,7 @@ const PersonHovercardSurfaceContent = ({
   }, [anchor, refs]);
 
   const hover = useHover(context, {
-    enabled: !controlled,
+    enabled: !controlled && !hovercardDisabled,
     mouseOnly: true,
     handleClose: safePolygon({ blockPointerEvents: true }),
   });
@@ -276,6 +278,7 @@ const ParentPersonHovercard = ({
   const closeTimerRef = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
+  const hovercardDisabled = useFlag(HTPR_8964_REMOVE_PERSON_HOVER_FLAG);
   const cancelClose = () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
@@ -287,7 +290,7 @@ const ParentPersonHovercard = ({
 
   useEffect(() => {
     const parent = markerRef.current?.parentElement;
-    if (!parent || !projectId || !subject) return;
+    if (!parent || !projectId || !subject || hovercardDisabled) return;
     setAnchor(parent);
     parent.tabIndex = parent.tabIndex >= 0 ? parent.tabIndex : 0;
     parent.setAttribute("aria-haspopup", "dialog");
@@ -333,7 +336,7 @@ const ParentPersonHovercard = ({
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [projectId, subject]);
+  }, [projectId, subject, hovercardDisabled]);
 
   useEffect(() => {
     if (!anchor) return;
@@ -356,7 +359,7 @@ const ParentPersonHovercard = ({
   return (
     <>
       <span ref={markerRef} hidden />
-      {anchor && subject && <PersonHovercardSurface {...surfaceProps} />}
+      {!hovercardDisabled && anchor && subject && <PersonHovercardSurface {...surfaceProps} />}
     </>
   );
 };
