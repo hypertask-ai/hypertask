@@ -102,8 +102,10 @@ fi
 ln -sfn "../runner-$n-agent-token" "$link"
 
 # CLI errors may echo credentials, so show only our own failure messages.
-ticket=$(hypertask --json --token "$(cat "$token")" tasks get YPER4-159 2>/dev/null) || fail 'login verification failed (output withheld to protect tokens)'
-jq -e '.success == true and any(.tasks[]; .ticketNumber == "YPER4-159")' <<<"$ticket" >/dev/null 2>&1 || fail 'login verification did not return YPER4-159'
+# context needs no board: a check that read a ticket broke every runner start when its board (4060) was archived.
+ctx=$(hypertask --json --token "$(cat "$token")" context 2>/dev/null) || fail 'login verification failed (output withheld to protect tokens)'
+jq -e '.success == true and (.connected_agent.displayName | ascii_downcase) == ("runner '"$n"'")' <<<"$ctx" >/dev/null 2>&1 \
+  || fail 'login verification: the token is not the Runner '"$n"' agent'
 if [ "$name" = "RUNNER $n" ]; then
   identity=$("$(dirname "$SELF")/../../ship/scripts/ship-identity") || fail 'identity verification failed'
   [ "$identity" = "RUNNER $n"$'\t'"$link" ] || fail 'ship-identity does not match the runner credential'
