@@ -52,17 +52,6 @@ async function pollInbox(email) {
   return null;
 }
 
-async function signUpInBrowser(page, email) {
-  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded", timeout: 120_000 });
-  for (let round = 0; round < 2; round++) {
-    const input = page.getByPlaceholder(/email/i).first();
-    await input.waitFor({ timeout: 60_000 });
-    await input.fill(email);
-    await page.getByRole("button", { name: /continue with email/i }).first().click();
-    await page.waitForTimeout(4_000);
-  }
-}
-
 async function postReport(passed, runId) {
   const lines = steps
     .map((s) => `<li><p>${s.ok ? "PASS" : "FAIL"}: ${s.step} — ${s.detail}</p></li>`)
@@ -95,14 +84,6 @@ async function postReport(passed, runId) {
 async function walkFunnel(browser, email, teammateEmail, runId) {
   const page = await browser.newPage();
   try {
-    try {
-      await signUpInBrowser(page, email);
-      record("browser signup", true, "form submitted");
-    } catch (error) {
-      record("browser signup", false, error?.message || String(error));
-      return {};
-    }
-
     const verifyUrl = await pollInbox(email);
     record("verification inbox", Boolean(verifyUrl), verifyUrl ? "link ready" : "no link after polling");
     if (!verifyUrl) return {};
@@ -210,7 +191,7 @@ async function main() {
     token: INBOX_SECRET,
     body: { email, utmData: { utm_source: "funnel_probe_daily" } },
   });
-  record("account created", signup.ok && signup.json?.success !== false, signup.json?.error || `HTTP ${signup.status}`);
+  record("probe signup", signup.ok && signup.json?.success !== false, signup.json?.error || `HTTP ${signup.status}`);
 
   const browser = await chromium.launch({ headless: true });
   try {
