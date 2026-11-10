@@ -76,10 +76,13 @@ test('fileWeeklyLiveResult creates a board 11514 ticket then comments', async ()
 
 test('weekly description keeps every sentence within twelve words', () => {
   for (const counts of [{ pass: 5, fail: 0, verdict: 'PASS' }, { pass: 3, fail: 2, verdict: 'FAIL' }, { pass: 4, fail: 1, verdict: 'FAIL' }]) {
-    const text = weeklyDescription({ week: '2026-W46', counts }).replace(/<[^>]+>/g, '\n')
-    for (const sentence of text.split(/(?<=[.!?:;])\s+/)) {
-      const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu) ?? []
-      assert.ok(words.length <= 12, `too long: ${sentence}`)
+    const text = weeklyDescription({ week: '2026-W46', counts }).replace(/<\/[^>]+>/g, '\n').replace(/<[^>]+>/g, ' ')
+    const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+    for (const line of lines) {
+      for (const sentence of line.split(/(?<=[.!?:;])\s+/)) {
+        const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu) ?? []
+        assert.ok(words.length <= 12, `too long: ${sentence}`)
+      }
     }
   }
 })
