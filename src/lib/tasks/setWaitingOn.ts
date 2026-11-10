@@ -71,7 +71,7 @@ export async function setTaskWaitingOn({
     return { status: 400, body: { message: "Provide a person or an agent, not both" } };
   }
 
-  let waitingAgent: { id: string; displayName: string | null; userId: number } | null = null;
+  let waitingAgent: { id: string; displayName: string | null; userId: number; visibility: "PRIVATE" | "TEAM" } | null = null;
   if (typeof waitingAgentId === "string") {
     if (!AGENT_UUID.test(waitingAgentId)) {
       return { status: 400, body: { message: "Agent id must be a UUID" } };
@@ -83,7 +83,7 @@ export async function setTaskWaitingOn({
         archivedAt: null,
         members: { some: { projectId: task.projectId, status: "Accepted" } },
       },
-      select: { id: true, displayName: true, userId: true },
+      select: { id: true, displayName: true, userId: true, visibility: true },
     });
     if (!waitingAgent) {
       return { status: 400, body: { message: "Agent is not a member of this project." } };
@@ -154,7 +154,10 @@ export async function setTaskWaitingOn({
       fromUser: currentUser,
       ...(actingAgent ? { fromAgent: actingAgent } : {}),
       waitingOnDisplayName: waitingAgent?.displayName ?? waitingOnUser?.displayName ?? null,
-      ...(waitingAgent ? { waitingOnAgentId: waitingAgent.id } : {}),
+      ...(waitingAgent ? {
+        waitingOnAgentId: waitingAgent.id,
+        ...(waitingAgent.visibility === "PRIVATE" ? { waitingOnPrivate: true, waitingOnAgentOwnerId: waitingAgent.userId } : {}),
+      } : {}),
       ...(clearsBlocker ? { blockerCleared: true, reason: clearReason } : {}),
     },
   };

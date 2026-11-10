@@ -1,17 +1,13 @@
 import { PRIVATE_AGENT_DISPLAY_NAME } from "@/lib/agents/publicAgent";
 
 export type WaitingAgentRecord = {
-  id: string;
-  displayName: string | null;
-  photoURL: string | null;
-  userId: number;
-  visibility: "PRIVATE" | "TEAM";
-  members: readonly { projectId: number }[];
+  id: string; displayName: string | null; photoURL: string | null; userId: number;
+  visibility: "PRIVATE" | "TEAM"; members: readonly { projectId: number }[];
 };
 
 type WaitingActivity = {
   type?: string;
-  data?: { waitingOnAgentId?: unknown; waitingOnDisplayName?: unknown };
+  data?: { waitingOnAgentId?: unknown; waitingOnDisplayName?: unknown; waitingOnPrivate?: unknown; waitingOnAgentOwnerId?: unknown };
 };
 
 function viewerCanSeeAgent(agent: WaitingAgentRecord, userId: number, projectId: number) {
@@ -49,23 +45,21 @@ export function hiddenWaitingAgents(agents: readonly WaitingAgentRecord[], userI
   return { hiddenIds, hiddenNames };
 }
 
-export function redactWaitingOnActivity(activity: unknown, hiddenIds: ReadonlySet<string>, hiddenNames: ReadonlySet<string>): unknown {
+export function redactWaitingOnActivity(activity: unknown, hiddenIds: ReadonlySet<string>, hiddenNames: ReadonlySet<string>, viewerUserId = 0): unknown {
   const row = waitingActivity(activity);
   if (!row?.data) return activity;
   const agentId = typeof row.data.waitingOnAgentId === "string" ? row.data.waitingOnAgentId : "";
   const name = typeof row.data.waitingOnDisplayName === "string" ? row.data.waitingOnDisplayName : "";
-  if (!((agentId && hiddenIds.has(agentId)) || (!agentId && name && hiddenNames.has(name)))) return activity;
-  return {
-    ...row,
-    data: { ...row.data, waitingOnDisplayName: PRIVATE_AGENT_DISPLAY_NAME, waitingOnAgentId: null },
-  };
+  const ownerId = typeof row.data.waitingOnAgentOwnerId === "number" ? row.data.waitingOnAgentOwnerId : null;
+  const hidden = (row.data.waitingOnPrivate === true && ownerId !== viewerUserId)
+    || (agentId && hiddenIds.has(agentId)) || (!agentId && name && hiddenNames.has(name));
+  if (!hidden) return activity;
+  return { ...row, data: { ...row.data, waitingOnDisplayName: PRIVATE_AGENT_DISPLAY_NAME, waitingOnAgentId: null } };
 }
 
-export function presentWaitingAgent<T extends {
-  waitingOnAgentId?: string | null;
-  projectId?: number;
-  waitingOnAgent?: unknown;
-}>(task: T, agentsById: ReadonlyMap<string, WaitingAgentRecord>, viewerUserId: number): T {
+export function presentWaitingAgent<T extends { waitingOnAgentId?: string | null; projectId?: number; waitingOnAgent?: unknown }>(
+  task: T, agentsById: ReadonlyMap<string, WaitingAgentRecord>, viewerUserId: number,
+): T {
   const agent = task.waitingOnAgentId ? agentsById.get(task.waitingOnAgentId) : undefined;
   if (!task.waitingOnAgentId) return task;
   if (!agent || task.projectId == null || !viewerCanSeeAgent(agent, viewerUserId, task.projectId)) {

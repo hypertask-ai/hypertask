@@ -70,6 +70,8 @@ export interface ITaskWaitingOnActivity {
     fromAgent?: { id: string; displayName: string; photoURL?: string | null };
     waitingOnDisplayName?: string | null;
     waitingOnAgentId?: string | null;
+    waitingOnPrivate?: boolean;
+    waitingOnAgentOwnerId?: number | null;
     blockerCleared?: boolean;
     reason?: string | null;
   };

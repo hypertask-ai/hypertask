@@ -16,23 +16,15 @@ const team = {
 const waiting = (data) => ({ type: "TaskWaitingOn", data });
 const redact = (activity, agents, userId) => {
   const hidden = privacy.hiddenWaitingAgents(agents, userId, 15);
-  return privacy.redactWaitingOnActivity(activity, hidden.hiddenIds, hidden.hiddenNames);
+  return privacy.redactWaitingOnActivity(activity, hidden.hiddenIds, hidden.hiddenNames, userId);
 };
 
 test("a board member who cannot see a private agent gets no name or id", () => {
-  const activity = redact(
-    waiting({ waitingOnDisplayName: "Secret helper", waitingOnAgentId: secret.id, fromUserId: 7 }),
-    [secret, team],
-    9,
-  );
+  const activity = redact(waiting({ waitingOnDisplayName: "Secret helper", waitingOnAgentId: secret.id, fromUserId: 7 }), [secret, team], 9);
   assert.equal(activity.data.waitingOnDisplayName, "Private agent");
   assert.equal(activity.data.waitingOnAgentId, null);
   assert.equal(JSON.stringify(activity).includes("Secret helper"), false);
-  const listed = privacy.presentWaitingAgent(
-    { id: 1, projectId: 15, waitingOnAgentId: secret.id },
-    new Map([[secret.id, secret]]),
-    9,
-  );
+  const listed = privacy.presentWaitingAgent({ id: 1, projectId: 15, waitingOnAgentId: secret.id }, new Map([[secret.id, secret]]), 9);
   assert.equal(listed.waitingOnAgentId, null);
   assert.equal(listed.waitingOnAgent, null);
 });
@@ -45,20 +37,15 @@ test("the owner still sees the name, a teammate sees a team agent, and a person 
   assert.equal(teammate.data.waitingOnDisplayName, "Shared helper");
   const person = redact(waiting({ waitingOnDisplayName: "Jacqueline Bolz" }), [secret], 9);
   assert.equal(person.data.waitingOnDisplayName, "Jacqueline Bolz");
-  const listed = privacy.presentWaitingAgent(
-    { id: 1, projectId: 15, waitingOnAgentId: secret.id },
-    new Map([[secret.id, secret]]),
-    6,
-  );
+  const listed = privacy.presentWaitingAgent({ id: 1, projectId: 15, waitingOnAgentId: secret.id }, new Map([[secret.id, secret]]), 6);
   assert.equal(listed.waitingOnAgent.displayName, "Secret helper");
 });
 
-test("a private name stays hidden after the agent leaves the board", () => {
-  const activity = redact(waiting({ waitingOnDisplayName: "Secret helper" }), [secret], 9);
-  assert.equal(activity.data.waitingOnDisplayName, "Private agent");
-  assert.equal(activity.data.waitingOnAgentId, null);
-  const owner = redact(waiting({ waitingOnDisplayName: "Secret helper" }), [secret], 6);
-  assert.equal(owner.data.waitingOnDisplayName, "Secret helper");
+test("a deleted private agent stays hidden, and a person with the same name does not", () => {
+  const stored = waiting({ waitingOnDisplayName: "Secret helper", waitingOnAgentId: secret.id, waitingOnPrivate: true, waitingOnAgentOwnerId: 6 });
+  assert.equal(redact(stored, [], 9).data.waitingOnDisplayName, "Private agent");
+  assert.equal(redact(stored, [], 6).data.waitingOnDisplayName, "Secret helper");
+  assert.equal(redact(waiting({ waitingOnDisplayName: "Secret helper" }), [], 9).data.waitingOnDisplayName, "Secret helper");
 });
 
 test.after(() => {
