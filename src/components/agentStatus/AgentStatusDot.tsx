@@ -6,9 +6,9 @@ const AgentStatusDot = ({ mode }: { mode: AgentStatusDotMode }) => (
   <span
     data-testid="agent-status-dot"
     className={cn(
-      "status-dot h-[6px] w-[6px] shrink-0 rounded-full",
-      mode === "working" && "bg-[#51A4F1] motion-safe:animate-pulse",
-      mode === "waiting" && "bg-[#FB773F]",
+      "h-[6px] w-[6px] shrink-0 rounded-full",
+      mode === "working" && "agent-status-dot-working motion-safe:animate-pulse",
+      mode === "waiting" && "agent-status-dot-waiting",
     )}
   />
 );

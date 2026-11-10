@@ -17,6 +17,8 @@ import useCopyURL from "@/hooks/General/useCopyURL";
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import TaskDetailAgentStatusChip from "./TaskDetailAgentStatusChip";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
 
 interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
@@ -26,6 +28,7 @@ interface TaskDetailTitleContainerProps {
 
 const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNavigation = false }: TaskDetailTitleContainerProps) => {
   const { currentTask, parsedTask, cachedLayout } = useTaskContext();
+  const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG);
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
   const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
@@ -89,7 +92,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
           </>
         }
       >
-        <TaskDetailAgentStatusChip />
+        {agentPulseDot ? <TaskDetailAgentStatusChip /> : null}
         {cachedLayout && (_mbl || hasSummary) ? (
           <div data-task-summary-slot className={_mbl ? "h-10 w-full shrink-0" : "h-[21px] w-full shrink-0"}>
             {summary}

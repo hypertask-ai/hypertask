@@ -19,6 +19,12 @@ function load(file, mocks = {}) {
     if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks" && !(specifier in mocks)) {
       return blockingStubs.attachOpenBlockingTasksStub;
     }
+    if (specifier === "@/utils/controllers/tasks/attachAgentStatus" && !(specifier in mocks)) {
+      return { attachAgentStatus: async (tasks) => tasks.map((task) => ({ ...task, agentStatus: null })) };
+    }
+    if (specifier === "@/lib/flags/definitions/htpr-7339-agent-pulse-dot" && !(specifier in mocks)) {
+      return { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" };
+    }
     if (specifier === "@/lib/blockingTasks" && !file.endsWith("blockingTasks.ts") && !(specifier in mocks)) {
       return blockingStubs.blockingTasksMapperStub;
     }

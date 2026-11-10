@@ -561,6 +561,14 @@ span[data-label^="project"] {
     top: 5px;
   }
 }
+
+.agent-status-dot-working {
+  background-color: #51a4f1;
+}
+
+.agent-status-dot-waiting {
+  background-color: #fb773f;
+}
 #sectionsContainer {
   // An intrinsic grid row can overflow the board and let focus scroll its headers away.
   grid-template-rows: minmax(0, 1fr);

@@ -45,6 +45,7 @@ test("board card and ticket header gate the dot on the ticket flag", () => {
   assert.match(tagsRow, /HTPR_7339_AGENT_PULSE_DOT_FLAG/);
   assert.match(tagsRow, /AgentStatusChip/);
   assert.match(title, /TaskDetailAgentStatusChip/);
+  assert.match(title, /HTPR_7339_AGENT_PULSE_DOT_FLAG/);
   assert.match(headerChip, /HTPR_7339_AGENT_PULSE_DOT_FLAG/);
   const loadTs = read("src/utils/controllers/taskDetail/load.ts");
   assert.match(loadTs, /attachAgentStatus/);
@@ -54,9 +55,10 @@ test("board card and ticket header gate the dot on the ticket flag", () => {
 test("status dot uses approved size, colours and test id", () => {
   const dot = read("src/components/agentStatus/AgentStatusDot.tsx");
   assert.match(dot, /data-testid="agent-status-dot"/);
-  assert.match(dot, /status-dot/);
+  assert.match(dot, /agent-status-dot-working/);
+  assert.match(dot, /agent-status-dot-waiting/);
   assert.match(dot, /h-\[6px\] w-\[6px\]/);
-  assert.match(dot, /#51A4F1/);
-  assert.match(dot, /#FB773F/);
+  assert.match(fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8"), /agent-status-dot-working[\s\S]*#51A4F1/);
+  assert.match(fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8"), /agent-status-dot-waiting[\s\S]*#FB773F/);
   assert.match(dot, /motion-safe:animate-pulse/);
 });
