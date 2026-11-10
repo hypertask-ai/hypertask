@@ -289,6 +289,7 @@ export async function prepareTaskWriterRun(
       ? searchTasks({
           searchQuery: retrievalQuery,
           projectIds: [body.projectId],
+          excludeStatuses: ["Deleted", "Archive"],
           topK: Math.min(
             TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
             TASK_WRITER_RELATED_CANDIDATE_LIMIT +
