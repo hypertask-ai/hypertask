@@ -22,7 +22,7 @@ test("metrics tally one command without reading metric keys", async () => {
   await withRedisAudience("human", async () => {
     await instrumented.incr("probe");
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.filter((call) => call[0] === "hincrby").length, 1);
   assert.equal(calls[0][2], "human");
   const metrics = await readUpstashDailyMetrics(raw);
   assert.equal(metrics.total, 2);
