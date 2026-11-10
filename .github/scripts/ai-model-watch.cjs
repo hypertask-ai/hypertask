@@ -5,21 +5,22 @@ const { selectWatched, worthFiling } = require("./model-watch-allowlist.cjs");
 
 const APP = "https://app.hypertask.ai";
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-const UNDO = "remove the model from the pickers.";
 const PREMIUM = `Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.`;
+const NOTHING_TO_UNDO = "nothing to undo; no picker change is made.";
+const REVERT_PICKS = "point saved picks back at the old version.";
 
-function opening({ wrong, course, decision }) {
+function opening({ wrong, course, decision, undo }) {
   return `<p><strong>What's wrong or wanted:</strong> ${wrong}</p>` +
     `<p><strong>Who it affects:</strong> everyone who picks an AI model in chat.</p>` +
     `<p><strong>Recommended course and why:</strong> ${course}</p>` +
     `<p><strong>What Valentin must decide:</strong> ${decision}</p>` +
-    `<p><strong>How to undo:</strong> ${UNDO}</p><hr>`;
+    `<p><strong>How to undo:</strong> ${undo}</p><hr>`;
 }
 
-function parts({ problem, fix, decision }) {
+function parts({ problem, fix, decision, undo }) {
   return `<h2>Problem</h2>${problem}<h2>Fix</h2><p>${fix}</p>` +
     `<h2>Done when</h2><p>The pickers show it, and saved picks still work.</p><p>A live chat answers from it after release.</p>` +
-    `<h2>Risk</h2><p>A new model could answer badly or cost more than planned.</p><p>Undo: remove it from the pickers.</p>` +
+    `<h2>Risk</h2><p>A new model could answer badly or cost more than planned.</p><p>Undo: ${undo}</p>` +
     `<h2>Decision</h2><p>${decision}</p>`;
 }
 
@@ -29,35 +30,54 @@ const price = (finding) => finding.inputPerMillion == null
 const sentence = (text) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 function planFor(finding, automatic, premium) {
-  if (finding.kind === "stale") return {
+  if (finding.kind === "stale" && finding.current.length) return {
     course: "Replace it with the current version of its class. Why: the old one no longer answers.",
     decision: "nothing.",
-    fix: "Replace the stale entry and move saved picks to the new version.",
+    fix: "Replace the stale entry and move saved picks to its class version.",
     partsDecision: "Nothing. The replacement is already in its class.",
+    undo: REVERT_PICKS,
+  };
+  if (finding.kind === "stale") return {
+    course: "Check the direct provider before any removal. Why: one source cannot prove it was retired.",
+    decision: "nothing.",
+    fix: "Confirm the model is retired before removing it from a picker.",
+    partsDecision: "Nothing. This is a check, not a picker change.",
+    undo: NOTHING_TO_UNDO,
   };
   if (finding.inputPerMillion == null) return {
     course: "Hold it until the gateway price is verified. Why: cost decides whether it can ship.",
-    decision: "nothing for now.",
+    decision: "nothing.",
     fix: "Wait for a verified gateway price before any picker change.",
     partsDecision: "No decision yet. The price is unverified.",
+    undo: NOTHING_TO_UNDO,
   };
   if (automatic) return {
     course: "Ship it now and keep the old version as a fallback. Why: OpenAI and Anthropic classes always update.",
     decision: "nothing.",
     fix: "Replace the old version in every picker.",
     partsDecision: "Nothing. This is an automatic update.",
+    undo: REVERT_PICKS,
   };
   if (premium) return {
     course: "Hold it until the premium model policy is settled. Why: it costs more than five dollars per million tokens.",
-    decision: "nothing for now.",
+    decision: "nothing.",
     fix: "Wait for the premium model policy before any picker change.",
     partsDecision: "Valentin decides the premium policy first.",
+    undo: NOTHING_TO_UNDO,
+  };
+  if (finding.kind === "new-version") return {
+    course: "Ask Valentin first, then replace the old version. Why: a newer version changes what people can pick.",
+    decision: "Should this replace the old version?",
+    fix: "Replace the old version and move saved picks to the new one.",
+    partsDecision: `Valentin's yes on the replacement. ${PREMIUM}`,
+    undo: REVERT_PICKS,
   };
   return {
-    course: "Ask Valentin first, then replace the old version. Why: a new class changes what people can pick.",
+    course: "Ask Valentin first, then add it to every picker. Why: a new class changes what people can pick.",
     decision: "Should this model go into the pickers?",
     fix: "Add the model to every picker once Valentin agrees.",
     partsDecision: `Valentin's yes on the new class. ${PREMIUM}`,
+    undo: "remove the model from the pickers.",
   };
 }
 
@@ -71,11 +91,12 @@ function ticketFor(finding) {
   return {
     marker,
     title: `AI model ${finding.kind}: ${model} [${marker}]`,
-    description: opening({ wrong, course: plan.course, decision: plan.decision }) + parts({
+    description: opening({ wrong, course: plan.course, decision: plan.decision, undo: plan.undo }) + parts({
       problem: `<p>${sentence(escapeHtml(finding.reason))}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p>` +
         `<p>Gateway input price per million tokens: ${price(finding)}.</p><p>${sentence(escapeHtml(finding.action))}.</p>`,
       fix: plan.fix,
       decision: plan.partsDecision,
+      undo: plan.undo,
     }),
   };
 }
@@ -93,9 +114,11 @@ function rollupTicket(findings, now = new Date()) {
       wrong: `${findings.length} new model classes are not in our catalog.`,
       course: "Add the classes Valentin approves to every picker. Why: they are new frontier releases.",
       decision: "Should these new classes go into the pickers?",
+      undo: "remove the new classes from the pickers.",
     }) + parts({
       problem: `<p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p><ul>${items}</ul>`,
       fix: "Add these classes to every picker once Valentin agrees. Move saved picks to the new version. Check the gateway input and output prices first.",
+      undo: "remove the new classes from the pickers.",
       decision: `New classes and providers need Valentin's yes. ${PREMIUM}`,
     }),
   };

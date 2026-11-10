@@ -40,7 +40,7 @@ test("the decision field is a yes or no question, or the word nothing", () => {
   const decisionOf = (description) => description.match(/What Valentin must decide:<\/strong>\s*([^<]+)</)[1].trim();
   for (const ticket of watchTickets()) {
     const decision = decisionOf(ticket.description);
-    assert.ok(["nothing.", "nothing for now."].includes(decision) || decision.endsWith("?"), `${ticket.title}: ${decision}`);
+    assert.ok(decision === "nothing." || decision.endsWith("?"), `${ticket.title}: ${decision}`);
   }
 });
 
@@ -49,7 +49,13 @@ test("a stale entry tells nobody to add it back, and an unpriced finding waits f
   const stale = ticketFor({ ...base, kind: "stale", model: "openai/gpt-6-luna", modelClass: "gpt-luna", current: ["gpt-6-luna"], action: "remove stale entry; migrate saved picks to the current model of its class" });
   assert.match(stale.description, /Replace the stale entry and move saved picks/);
   assert.doesNotMatch(stale.description, /once Valentin agrees/);
+  assert.match(stale.description, /How to undo:<\/strong> nothing to undo/);
   const unpriced = ticketFor({ ...base, kind: "new-version", model: "openai/gpt-6.2-luna", modelClass: "gpt-luna", action: "ship automatically when the gateway price is at most $5 per million" });
   assert.match(unpriced.description, /Wait for a verified gateway price/);
   assert.doesNotMatch(unpriced.description, /Replace the old version in every picker/);
+  const unknown = ticketFor({ ...base, kind: "stale", model: "claude-haiku-4.5", modelClass: "claude-haiku", current: [], action: "remove stale entry; migrate saved picks to the current model of its class", reason: "picker model missing from gateway list" });
+  assert.match(unknown.description, /Confirm the model is retired/);
+  assert.doesNotMatch(unknown.description, /the old one no longer answers/);
+  const replacement = ticketFor({ ...base, kind: "new-version", provider: "moonshotai", model: "moonshotai/kimi-k3.2", modelClass: "kimi-k", current: ["kimi-k3"], inputPerMillion: 2, action: "ask Valentin before shipping" });
+  assert.match(replacement.description, /Replace the old version and move saved picks to the new one/);
 });
