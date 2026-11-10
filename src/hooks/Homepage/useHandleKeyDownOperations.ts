@@ -78,6 +78,9 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const { toggleBoardLayout } = useKanbanViews(_currentProject);
     const isMbl = useContext(MobileViewContext);
     const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
+    if (tableSortColumnsEnabled && boardLayout === "table" && appShellRailOn) {
+      queryClient.getQueryData(["projectsAll"]);
+    }
     const [sections, setSections] = useState<ISection[]>(initialSections);
     const [sectionsToDisplay, setSectionsToDisplay] = useState<ISection[]>(filteredSections);
     const [firstTask, setFirstTask] = useState<ITask | undefined|null>(_currentProject?.firstTask);
@@ -220,7 +223,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     if (e.shiftKey && e.keyCode===70) setShowCommands({show: true, mode: CommandMode.ShowFilterHTC})
 
     if (e.shiftKey && e.keyCode===83) {
-      if (tableSortColumnsEnabled && boardLayout === "table") {
+      if (tableSortColumnsEnabled && boardLayout === "table" && appShellRailOn) {
         window.dispatchEvent(new CustomEvent("htpr-8973-open-sort"))
         return
       }

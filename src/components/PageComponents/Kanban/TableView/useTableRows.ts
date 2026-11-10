@@ -20,6 +20,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableM
 export function useTableRows(context: Context) {
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
+  if (tableSortColumnsEnabled) getSortComparator("updated", "desc", new Map());
   const snapshot = useFirstScreenSurface();
   const {
   sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,

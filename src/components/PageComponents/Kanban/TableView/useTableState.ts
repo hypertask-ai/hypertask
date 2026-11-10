@@ -214,9 +214,32 @@ export function useTableState(context: Context) {
   );
   const {
     setTableSortViewAndReturn,
+    setTableColumnsViewAndReturn,
     setTableCollapsedSectionsViewAndReturn,
     changeBoardLayout,
   } = useKanbanViews(_currentProject);
+  const lastSavedColumns = useRef("");
+  useEffect(() => {
+    if (!tableSortColumnsEnabled || myTasksColumnsControlled || !tableViewId || !_currentProject) return;
+    if (!accountColumns || accountColumns.viewId !== tableViewId) return;
+    const signature = JSON.stringify({ keys: accountColumns.keys, widths: accountColumns.widths });
+    if (signature === lastSavedColumns.current) return;
+    const handle = setTimeout(() => {
+      lastSavedColumns.current = signature;
+      void setTableColumnsViewAndReturn(_currentProject, {
+        keys: accountColumns.keys,
+        widths: accountColumns.widths,
+      });
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [
+    accountColumns,
+    myTasksColumnsControlled,
+    setTableColumnsViewAndReturn,
+    tableSortColumnsEnabled,
+    tableViewId,
+    _currentProject,
+  ]);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
   const lastGAt = useRef<number | null>(null);

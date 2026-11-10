@@ -4,7 +4,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext"
 import { useRecoilState, useSetRecoilState, useRecoilValue } from "@/lib/state"
 import { CommandMode } from "@/models/enums"
 import { IProject } from "@/models/model"
-import { boardLayoutAtom, kanbanRunningOnlyAtom, showCommandsAtom, tableColumnsAccountAtom, tableSortAccountAtom } from "@/store"
+import { boardLayoutAtom, kanbanRunningOnlyAtom, showCommandsAtom, tableSortAccountAtom } from "@/store"
 import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking"
 import {
   getActiveFiltersFromProject,
@@ -14,7 +14,7 @@ import {
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
 import { ArrowUpDown, Funnel, Layers, MoreHorizontal, Timer } from "lucide-react"
 import OptionPickerModal from "@/components/Modals/OptionPicker"
-import { useContext, useEffect, useRef, useState } from "react"
+import { useContext, useEffect, useState } from "react"
 import { useKanbanModalStatesContext } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext"
 import { SaveView } from "./SaveViewHeaderKanban"
 import SearchFilter from "./SearchFilter"
@@ -40,11 +40,9 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const boardLayout = useRecoilValue(boardLayoutAtom)
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes")
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled
-  const { setTableGroupByViewAndReturn, setTableSortViewAndReturn, setTableColumnsViewAndReturn } = useKanbanViews(project)
+  const { setTableGroupByViewAndReturn, setTableSortViewAndReturn } = useKanbanViews(project)
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns")
   const sortAccount = useRecoilValue(tableSortAccountAtom)
-  const accountColumns = useRecoilValue(tableColumnsAccountAtom)
-  const lastSavedColumns = useRef("")
   const setSortAccount = useSetRecoilState(tableSortAccountAtom)
   const [sortOpen, setSortOpen] = useState(false)
   const [groupOpen, setGroupOpen] = useState(false)
@@ -74,20 +72,6 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
     window.addEventListener("htpr-8973-open-sort", open)
     return () => window.removeEventListener("htpr-8973-open-sort", open)
   }, [])
-  useEffect(() => {
-    if (!tableSortColumnsEnabled || !tableViewId) return
-    if (!accountColumns || accountColumns.viewId !== tableViewId) return
-    const signature = JSON.stringify({ keys: accountColumns.keys, widths: accountColumns.widths })
-    if (signature === lastSavedColumns.current) return
-    const handle = setTimeout(() => {
-      lastSavedColumns.current = signature
-      void setTableColumnsViewAndReturn(project, {
-        keys: accountColumns.keys,
-        widths: accountColumns.widths,
-      })
-    }, 400)
-    return () => clearTimeout(handle)
-  }, [accountColumns, project, setTableColumnsViewAndReturn, tableSortColumnsEnabled, tableViewId])
 
   if (isMbl) return null
 
@@ -117,7 +101,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
         tooltipLeft={-72}
         active={hasActiveSort}
         keyCombination={["SHIFT", "S"]}
-        onClick={() => tableSortMode ? setSortOpen(true) : openModal(CommandMode.SortKanbanBoard)}
+        onClick={() => (tableSortColumnsEnabled && boardLayout === "table") ? setSortOpen(true) : openModal(CommandMode.SortKanbanBoard)}
       >
         <ArrowUpDown size={18} strokeWidth={1.75} />
         {sortLevels > 1 && (
@@ -129,7 +113,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
       {sortOpen && tableViewId && (
         <OptionPickerModal
           header="Sort"
-          options={tableColumns.map((column) => {
+          options={tableColumns.filter((column) => column.key !== "time" || project.showTimeTotals).map((column) => {
             const level = tableSort.findIndex((item) => item.column === column.key)
             const active = tableSort[level]
             return {

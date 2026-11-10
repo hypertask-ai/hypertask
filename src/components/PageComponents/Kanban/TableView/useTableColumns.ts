@@ -40,6 +40,7 @@ export function useTableColumns(context: Context) {
     },
     [customFieldById, _currentProject?.showTimeTotals, myTasksColumnsControlled]
   );
+  if (tableSortColumnsEnabled) toTableColumn("ticket");
   useEffect(() => {
     if (myTasksColumnsControlled || tableSortColumnsEnabled || !customFields.length) return;
     const customFieldKeys = customFields

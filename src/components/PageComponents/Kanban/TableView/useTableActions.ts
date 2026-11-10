@@ -26,6 +26,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
 export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
+  if (tableSortColumnsEnabled) initialDirection("updated", new Map());
   const setSortAccount = useSetRecoilState(tableSortAccountAtom);
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes") || legacyTableGroupEnabled;
