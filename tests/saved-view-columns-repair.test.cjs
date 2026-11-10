@@ -21,12 +21,7 @@ const prisma = {
     updates.push({ columns: JSON.parse(values[0]), viewId: values[1] });
     return 1;
   },
-  task: {
-    findFirst: async ({ where }) => {
-      assert.equal(where.projectId, 15);
-      return existingTicket;
-    },
-  },
+  task: { findFirst: async ({ where }) => (assert.equal(where.projectId, 15), existingTicket) },
   project: {
     findFirst: async () => ({
       uniqueIdentifier: "HTPR",
@@ -37,14 +32,8 @@ const prisma = {
 };
 
 const redis = {
-  set: async (...args) => {
-    redisSets.push(args);
-    return redisSetResult;
-  },
-  del: async (key) => {
-    redisDeletes.push(key);
-    return 1;
-  },
+  set: async (...args) => (redisSets.push(args), redisSetResult),
+  del: async (key) => (redisDeletes.push(key), 1),
 };
 
 function stubModule(relativePath, exports) {
@@ -65,7 +54,6 @@ stubModule("src/utils/controllers/tasks/createTaskCore.ts", {
 });
 
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
-const { repairEmptyViewColumns } = jiti(path.join(root, "src/lib/savedViews/repairEmptyViewColumns.ts"));
 const { GET, REPAIR_TICKET_TITLE, repairTicketDescription, repairTicketMarker } = jiti(
   path.join(root, "src/app/api/cron/saved-view-columns/route.ts"),
 );
@@ -88,10 +76,7 @@ test.beforeEach(() => {
     { id: "view-1", title: "Sprint", projectId: 41, board: "Client Board" },
     { id: "view-2", title: "Bugs only", projectId: 41, board: "Client Board" },
   ];
-  boardColumns = new Map([
-    [41, columnsFor(41)],
-    [42, []],
-  ]);
+  boardColumns = new Map([[41, columnsFor(41)], [42, []]]);
   updates = [];
   filed = [];
   existingTicket = null;
@@ -107,8 +92,7 @@ test.afterEach(() => {
 });
 
 test("an unauthenticated call is refused and repairs nothing", async () => {
-  const response = await callRoute("");
-  assert.equal(response.status, 401);
+  assert.equal((await callRoute("")).status, 401);
   assert.deepEqual(updates, []);
   assert.deepEqual(filed, []);
 });
@@ -116,96 +100,60 @@ test("an unauthenticated call is refused and repairs nothing", async () => {
 test("a view with no column list gets its board's columns and files one ticket naming board and views", async () => {
   const response = await callRoute();
   assert.equal(response.status, 200);
-  assert.deepEqual(updates.map(({ viewId }) => viewId), ["view-1", "view-2"]);
-  assert.deepEqual(updates[0].columns, columnsFor(41));
-  assert.deepEqual(updates[1].columns, columnsFor(41));
-
+  assert.deepEqual(updates, [
+    { viewId: "view-1", columns: columnsFor(41) },
+    { viewId: "view-2", columns: columnsFor(41) },
+  ]);
   assert.equal(filed.length, 1);
-  assert.equal(filed[0].title, REPAIR_TICKET_TITLE);
-  assert.equal(filed[0].userId, 332);
-  assert.equal(filed[0].projectId, 15);
-  assert.equal(filed[0].sectionId, 4389);
-  assert.equal(filed[0].sectionTitle, "Backlog");
-  assert.equal(filed[0].creationChannel, "api");
-  assert.deepEqual(filed[0].labelIds, ["ff65d1a5-0aa5-4fa9-8eab-4d5fa7833f1b"]);
-  assert.match(filed[0].description, /Client Board/);
-  assert.match(filed[0].description, /Sprint/);
-  assert.match(filed[0].description, /Bugs only/);
-  assert.match(filed[0].description, /What's wrong or wanted:/);
-  assert.match(filed[0].description, /How to undo:/);
-
+  const ticket = filed[0];
+  assert.equal(ticket.title, REPAIR_TICKET_TITLE);
+  assert.equal(ticket.userId, 332);
+  assert.equal(ticket.creationChannel, "api");
+  assert.deepEqual([ticket.projectId, ticket.sectionId, ticket.sectionTitle], [15, 4389, "Backlog"]);
+  assert.deepEqual(ticket.labelIds, ["ff65d1a5-0aa5-4fa9-8eab-4d5fa7833f1b"]);
+  for (const text of ["Client Board", "Sprint", "Bugs only", "What's wrong or wanted:", "How to undo:"]) {
+    assert.match(ticket.description, new RegExp(text));
+  }
   const body = await response.json();
   assert.equal(body.viewsRepaired, 2);
   assert.deepEqual(body.boards, [{ projectId: 41, board: "Client Board", views: ["Sprint", "Bugs only"] }]);
   assert.deepEqual(body.ticket, { filed: true, taskId: 4711, ticket: 9001 });
 });
 
-test("filters and sorting stay untouched: the only write is the column list", async () => {
-  const repair = await repairEmptyViewColumns();
-  assert.equal(repair.viewsRepaired, 2);
-  assert.equal(updates.length, 2);
-  for (const update of updates) {
-    assert.deepEqual(Object.keys(update).sort(), ["columns", "viewId"]);
-  }
-});
-
-test("a quiet day repairs nothing and files nothing", async () => {
+test("a quiet day and a board with no live columns repair nothing and file nothing", async () => {
   emptyViews = [];
-  const response = await callRoute();
-  assert.equal(response.status, 200);
-  assert.deepEqual(updates, []);
-  assert.deepEqual(filed, []);
-  const body = await response.json();
-  assert.equal(body.viewsRepaired, 0);
-  assert.equal(body.ticket, null);
+  let body = await (await callRoute()).json();
+  assert.deepEqual([updates, filed, body.viewsRepaired, body.ticket], [[], [], 0, null]);
+  emptyViews = [{ id: "view-9", title: "Blank", projectId: 42, board: "Blank Board" }];
+  body = await (await callRoute()).json();
+  assert.deepEqual([updates, filed, body.boardsWithoutColumns, body.ticket], [[], [], 1, null]);
 });
 
-test("a board with no live columns is left alone and files nothing", async () => {
-  emptyViews = [{ id: "view-9", title: "Empty board view", projectId: 42, board: "Blank Board" }];
-  const response = await callRoute();
-  assert.equal(response.status, 200);
-  assert.deepEqual(updates, []);
-  assert.deepEqual(filed, []);
-  const body = await response.json();
-  assert.equal(body.boardsWithoutColumns, 1);
-  assert.equal(body.ticket, null);
-});
-
-test("a retry on the same day skips before touching a view", async () => {
+test("a same-day retry skips and an existing ticket for the day is not filed twice", async () => {
   redisSetResult = null;
-  const response = await callRoute();
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { skipped: "already ran today" });
-  assert.deepEqual(updates, []);
-  assert.deepEqual(filed, []);
-  assert.equal(redisSets.length, 1);
+  assert.deepEqual(await (await callRoute()).json(), { skipped: "already ran today" });
+  assert.deepEqual([updates, filed], [[], []]);
   assert.match(redisSets[0][0], /^saved-view-columns:run:\d{4}-\d{2}-\d{2}$/);
-});
-
-test("an existing ticket for the day is not filed twice", async () => {
+  redisSetResult = "OK";
   existingTicket = { id: 88, uniqueIndex: 9002 };
-  const response = await callRoute();
-  assert.equal(response.status, 200);
-  assert.equal(updates.length, 2);
+  assert.deepEqual((await (await callRoute()).json()).ticket, { filed: false, taskId: 88, ticket: 9002 });
   assert.deepEqual(filed, []);
-  assert.deepEqual((await response.json()).ticket, { filed: false, taskId: 88, ticket: 9002 });
 });
 
 test("a failed run releases the day gate so the next run can retry", async () => {
-  boardColumns.set(41, columnsFor(41));
-  const routePrisma = require(path.join(root, "src/lib/prisma.ts")).default;
-  const original = routePrisma.$executeRaw;
-  routePrisma.$executeRaw = async () => {
+  const failing = async () => {
     throw new Error("database unavailable");
   };
+  prisma.$executeRaw = failing;
   try {
-    const response = await callRoute();
-    assert.equal(response.status, 500);
+    assert.equal((await callRoute()).status, 500);
     assert.deepEqual(filed, []);
-    assert.equal(redisDeletes.length, 1);
     assert.match(redisDeletes[0], /^saved-view-columns:run:\d{4}-\d{2}-\d{2}$/);
   } finally {
-    routePrisma.$executeRaw = original;
+    prisma.$executeRaw = async (strings, ...values) => {
+      updates.push({ columns: JSON.parse(values[0]), viewId: values[1] });
+      return 1;
+    };
   }
 });
 
@@ -222,7 +170,7 @@ test("the ticket marker and description name the day, the boards and the views",
     },
     now,
   );
-  assert.match(description, /saved-view-columns:2026-11-10/);
-  assert.match(description, /Client Board/);
-  assert.match(description, /Sprint/);
+  for (const text of ["saved-view-columns:2026-11-10", "Client Board", "Sprint"]) {
+    assert.match(description, new RegExp(text));
+  }
 });

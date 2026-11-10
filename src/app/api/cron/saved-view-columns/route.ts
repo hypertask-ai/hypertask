@@ -30,27 +30,18 @@ export function repairTicketMarker(now: Date) {
 
 export function repairTicketDescription(repair: EmptyViewColumnRepair, now: Date) {
   const boards = repair.boards
-    .map(
-      (board) =>
-        `<li><p><strong>${escapeHtml(board.board)}</strong> (project ${board.projectId}): ${board.views
-          .map((view) => escapeHtml(view))
-          .join(", ")}</p></li>`,
-    )
+    .map((board) => `<li><p><strong>${escapeHtml(board.board)}</strong> (project ${board.projectId}): ${board.views.map(escapeHtml).join(", ")}</p></li>`)
     .join("");
+  const views = `${repair.viewsRepaired} saved ${repair.viewsRepaired === 1 ? "view" : "views"}`;
+  const boardsWithout = `${repair.boardsWithoutColumns} ${repair.boardsWithoutColumns === 1 ? "board" : "boards"}`;
   return (
-    `<p><strong>What's wrong or wanted:</strong> ${repair.viewsRepaired} saved ${
-      repair.viewsRepaired === 1 ? "view had" : "views had"
-    } no saved column list, so ${repair.viewsRepaired === 1 ? "it" : "they"} could hide columns. The daily check gave each one its board's columns.</p>` +
+    `<p><strong>What's wrong or wanted:</strong> ${views} had no saved column list, so they could hide columns. The daily check gave each one its board's columns.</p>` +
     `<p><strong>Who it affects:</strong> anyone opening the views named below.</p>` +
     `<p><strong>Recommended course and why:</strong> nothing to fix. This ticket records what the check repaired, so a person can look if one of these boards still looks wrong.</p>` +
     `<p><strong>What Valentin must decide:</strong> nothing.</p>` +
     `<p><strong>How to undo:</strong> hide or show columns in each named view, or remove the daily check.</p>` +
-    `<hr>` +
-    `<h2>Repaired on ${dayKey(now)}</h2>` +
-    `<ul>${boards}</ul>` +
-    `<p>Filters and sorting were not touched. ${repair.boardsWithoutColumns} ${
-      repair.boardsWithoutColumns === 1 ? "board had" : "boards had"
-    } no live columns to copy, so ${repair.boardsWithoutColumns === 1 ? "it was" : "they were"} left alone.</p>` +
+    `<hr><h2>Repaired on ${dayKey(now)}</h2><ul>${boards}</ul>` +
+    `<p>Filters and sorting were not touched. ${boardsWithout} had no live columns to copy and was left alone.</p>` +
     `<p>Marker: ${escapeHtml(repairTicketMarker(now))}</p>`
   );
 }
