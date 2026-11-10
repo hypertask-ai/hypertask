@@ -88,15 +88,26 @@ const buildGroups = (sections: ISection[], specOf: (task: ITask) => GroupSpec): 
 
 const labelId = (taskLabel: ITaskLabel) => taskLabel.label?.id ?? taskLabel.labelId;
 export function buildTableSectionsGroupedByTag(sections: ISection[], selectedTagIds: string[] = [], allTags = false): TableTagGroupedSection[] {
-  let selected = cleanTagIds(selectedTagIds);
   if (allTags) {
-    const titles = new Map<string, string>();
-    for (const section of sections) for (const task of section.items ?? []) for (const taskLabel of task.taskLabels ?? []) {
-      const id = labelId(taskLabel);
-      if (id && !titles.has(id)) titles.set(id, taskLabel.label?.value?.trim() || id);
+    const groups = new Map<string, { title: string; items: ITask[] }>();
+    const push = (key: string, title: string, task: ITask) => {
+      const group = groups.get(key);
+      if (group) group.items.push(task);
+      else groups.set(key, { title, items: [task] });
+    };
+    for (const section of sections) for (const task of section.items ?? []) {
+      const seen = new Set<string>();
+      for (const taskLabel of task.taskLabels ?? []) {
+        const id = labelId(taskLabel);
+        if (id && !seen.has(id)) { seen.add(id); push(`tag:${id}`, taskLabel.label?.value?.trim() || id, task); }
+      }
+      if (seen.size === 0) push(TABLE_GROUP_BY_TAG_NONE, NO_TAG_SECTION_TITLE, task);
     }
-    selected = [...titles.keys()].sort((a, b) => byTitle(titles.get(a) ?? a, titles.get(b) ?? b));
+    return [...groups.entries()]
+      .sort(([, a], [, b]) => (a.title === NO_TAG_SECTION_TITLE ? 1 : b.title === NO_TAG_SECTION_TITLE ? -1 : byTitle(a.title, b.title)))
+      .map(([key, group]) => ({ section_title: group.title, sectionId: key, id: key, items: group.items }));
   }
+  const selected = cleanTagIds(selectedTagIds);
   return buildGroups(sections, (task) => {
     const labels = task.taskLabels ?? [];
     const index = selected.findIndex((id) => labels.some((taskLabel) => labelId(taskLabel) === id));

@@ -17,15 +17,14 @@ const TableTagGroupPicker = ({ project, onClose, onApply }: { project: IProject;
   const [selected, setSelected] = useState<string[]>(() => {
     const grouping = getActiveTableGroupingFromProject(project);
     if (grouping.allTags) return [...counts].sort((a, b) => byTitle(a.title, b.title)).map((tag) => tag.id);
-    const available = counts.map((tag) => tag.id);
-    return grouping.tagIds.filter((id) => available.includes(id));
+    return grouping.tagIds;
   });
   const [keyword, setKeyword] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const byId = useMemo(() => new Map(counts.map((tag) => [tag.id, tag])), [counts]);
   const rows = useMemo(() => {
     const query = keyword.trim().toLowerCase();
-    const selectedRows = selected.map((id) => ({ id, title: byId.get(id)?.title ?? id, count: byId.get(id)?.count ?? 0, selected: true }));
+    const selectedRows = selected.filter((id) => byId.has(id)).map((id) => ({ id, title: byId.get(id)?.title ?? id, count: byId.get(id)?.count ?? 0, selected: true }));
     const rest = counts.filter((tag) => !selected.includes(tag.id)).map((tag) => ({ ...tag, selected: false }));
     return [...selectedRows, ...rest].filter((row) => !query || row.title.toLowerCase().includes(query));
   }, [byId, counts, selected, keyword]);
