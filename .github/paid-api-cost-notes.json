@@ -164,7 +164,7 @@
     "reason": "HTPR-7854 keeps the existing first-turn title generateText call on the same title model but caps maxOutputTokens at 64 and sends chat-title effort none so reasoning tokens cannot exceed the cap. That lowers spend versus uncapped titles, so one dollar per day remains a generous ceiling for this path.",
     "source": "https://app.hypertask.ai/detail/project-15/7854"
   },
-  "src/hooks/General/useAiModelPreference.ts:2a5426987973c5a9f48f7f019966b023de84a18cc1af928ccf19f6ef3ef8bed9": {
+  "src/hooks/General/useAiModelPreference.ts:c6f3b06f9b7e4e8f3ccfaf1be02a7b37cf4e574554057eff713b8b14439fc673": {
     "maxUsdPerDay": 0,
     "reason": "HTPR-9004 saves the Thinking and Effort choice with one small same-origin POST to Hypertask's own preferences route. The browser call pays nothing and no model is called. Thinking cost is set by the chat request, behind the htpr-9004-thinking-effort flag, and stays off until the user switches it on.",
     "source": "https://app.hypertask.ai/detail/project-15/9004"
