@@ -3,12 +3,8 @@ export const APPROVED_PROVIDER_CAPS_USD = {
   trials: 40, hypertask: 68, demo: 15, embeddings: 1, unusedCustomerKey: 10, valentinBoards: 4, vetsak: 1,
 } as const;
 export const PROVIDER_CAP_TEST_USD = 0.01;
-export function monthEndHoldUntilMs(now: Date): number {
-  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
-}
-export function upperBoundTokens(text: string): number {
-  return Math.max(1, text.length);
-}
+export function monthEndHoldUntilMs(now: Date): number { return Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1); }
+export function upperBoundTokens(text: string): number { return Math.max(1, text.length); }
 export function batchHoldMicroUsd(parts: Array<{ inputTokens: number; outputTokens: number; inputUsdPerToken: number; outputUsdPerToken: number }>): number {
   const usd = parts.reduce((sum, part) => sum + (Math.max(0, part.inputTokens) * part.inputUsdPerToken + Math.max(0, part.outputTokens) * part.outputUsdPerToken) * 0.5, 0);
   return Math.max(1, Math.ceil(usd * 1_000_000));

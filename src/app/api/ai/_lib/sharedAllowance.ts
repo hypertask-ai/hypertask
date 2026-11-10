@@ -1131,6 +1131,8 @@ export function createSharedAllowanceMiddleware(args: {
     }),
     wrapGenerate: async ({ doGenerate, params }) => {
       const reservation = await beforeCall(params);
+      const beat = setInterval(() => { void renewLiveReservation(reservation).catch(() => undefined); }, LIVE_HOLD_RENEW_MS);
+      (beat as { unref?: () => void }).unref?.();
       try {
         const result = await doGenerate();
         await settleAfterInference(reservation, result.usage);
@@ -1142,15 +1144,16 @@ export function createSharedAllowanceMiddleware(args: {
           await settleAfterInference(reservation, undefined, true, "error");
         }
         throw error;
-      }
+      } finally { clearInterval(beat); }
     },
     wrapStream: async ({ doStream, params }) => {
       const reservation = await beforeCall(params);
       let settled = false;
       let hasOutput = false;
       let terminal: Promise<void> | undefined;
-      let renewedAt = Date.now();
-      const cleanup = () => params.abortSignal?.removeEventListener("abort", onAbort);
+      const beat = setInterval(() => { if (!settled) void renewLiveReservation(reservation).catch(() => undefined); }, LIVE_HOLD_RENEW_MS);
+      (beat as { unref?: () => void }).unref?.();
+      const cleanup = () => { clearInterval(beat); params.abortSignal?.removeEventListener("abort", onAbort); };
       const release = (reason: HoldReleaseReason, usage?: GatewayUsage, beforeOutput = false) => {
         if (settled) return terminal;
         settled = true;
@@ -1180,7 +1183,6 @@ export function createSharedAllowanceMiddleware(args: {
           stream: new ReadableStream({
             async pull(controller) {
               try {
-                if (!settled && Date.now() - renewedAt >= LIVE_HOLD_RENEW_MS) { renewedAt = Date.now(); await renewLiveReservation(reservation).catch(() => undefined); }
                 const item = await reader.read();
                 if (item.done) {
                   await release("eof", undefined, !hasOutput);
