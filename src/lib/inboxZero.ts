@@ -13,7 +13,6 @@ export type InboxZeroCategories = {
   ownActions: boolean;
   superseded: boolean;
   pastReminders: boolean;
-  jevNoise?: boolean;
 };
 
 export type InboxZeroKeep = {
@@ -30,14 +29,7 @@ export type InboxZeroRules = {
   jevNotificationIds?: number[];
 };
 
-export type InboxZeroCounts = {
-  read: number;
-  reactions: number;
-  ownActions: number;
-  superseded: number;
-  pastReminders: number;
-  jevNoise?: number;
-};
+export type InboxZeroCounts = Record<keyof InboxZeroCategories, number>;
 
 export type InboxZeroPreview = {
   categoryCounts: InboxZeroCounts;

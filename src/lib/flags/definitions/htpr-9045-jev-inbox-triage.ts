@@ -7,9 +7,9 @@ export default {
   kind: "feature",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-10",
-  description: "Inbox Zero asks Jev which notifications need you, suggests archiving only the ones it calls noise at 0.9 or higher, and still waits for one confirmation.",
+  description: "Inbox Zero asks a decision model which notifications need you and only suggests archiving noise at 0.9 or higher. One confirmation still archives.",
   releaseRisk: {
     risk: "new",
-    reason: "A wrong Jev answer could suggest archiving a question. The code keeps questions, mentions, money and access items out of the suggestion, the person confirms before anything moves, and Off removes the row.",
+    reason: "A wrong answer could suggest archiving a question. Code keeps questions, mentions, money and access items out, the person confirms, and Off removes the suggestion.",
   },
 } as const satisfies FeatureFlagDefinition;

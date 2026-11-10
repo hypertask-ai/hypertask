@@ -68,7 +68,7 @@ export const InboxZeroSheetContent = ({
   initialRules = DEFAULT_INBOX_ZERO_RULES,
   executeInboxZero,
 }: InboxZeroSheetContentProps) => {
-  const jevTriageEnabled = useFlag(HTPR_9045_JEV_INBOX_TRIAGE_FLAG);
+  const jevTriage = useFlag(HTPR_9045_JEV_INBOX_TRIAGE_FLAG);
   const [threshold, setThreshold] = useState<InboxZeroThresholdDays>(
     initialRules.threshold
   );
@@ -83,11 +83,7 @@ export const InboxZeroSheetContent = ({
   const [executing, setExecuting] = useState(false);
   const rules = useMemo<InboxZeroRules>(
     () => ({
-      threshold,
-      categories: categories.jevNoise
-        ? { ...categories, jevNoise: true }
-        : categories,
-      keep,
+      threshold, categories, keep,
       ...(initialRules.safeUpdates ? { safeUpdates: initialRules.safeUpdates } : {}),
     }),
     [categories, keep, threshold, initialRules.safeUpdates]
@@ -159,7 +155,7 @@ export const InboxZeroSheetContent = ({
     setExecuting(true);
     try {
       await executeInboxZero(
-        preview.jevNotificationIds?.length
+        preview.jevNotificationIds
           ? { ...rules, jevNotificationIds: preview.jevNotificationIds }
           : rules,
         preview.previewVersion
@@ -236,14 +232,6 @@ export const InboxZeroSheetContent = ({
                     onToggle={() => toggleCategory(row.key)}
                   />
                 ))}
-                {jevTriageEnabled && (
-                  <RuleRow
-                    checked={categories.jevNoise === true}
-                    count={preview.jevNoiseCount ?? 0}
-                    label="Not for you, per Jev"
-                    onToggle={() => toggleCategory("jevNoise")}
-                  />
-                )}
               </div>
 
               <div className="border-t border-light-black-border-1 py-2">
@@ -278,6 +266,11 @@ export const InboxZeroSheetContent = ({
               : previewError
                 ? "Preview unavailable."
                 : `Will archive ${preview.totalToArchive} of ${preview.totalActive} visible Inbox items · ${preview.totalLeft} left`}
+            {jevTriage && typeof preview.jevNoiseCount === "number" && !previewLoading && (
+              <span className="block">
+                {preview.jevNoiseCount} of them need nothing from you.
+              </span>
+            )}
             {previewError && (
               <button
                 className="ml-2 underline underline-offset-2"

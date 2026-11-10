@@ -28,15 +28,12 @@ const loadPreview = async (
   db: Pick<Prisma.TransactionClient, "notification" | "section">,
   now: Date
 ) => {
-  const jevNoise =
-    rules.categories.jevNoise === true &&
-    (await isFeatureEnabled(HTPR_9045_JEV_INBOX_TRIAGE_FLAG, userId));
+  const jevOn = await isFeatureEnabled(HTPR_9045_JEV_INBOX_TRIAGE_FLAG, userId);
   const notifications = await loadActiveInboxZeroNotifications(
     userId,
     db,
     undefined,
-    Boolean(rules.safeUpdates),
-    jevNoise
+    Boolean(rules.safeUpdates) || jevOn
   );
   const doneTitlesByProject = await loadInboxZeroDoneTitlesByProject(
     notifications,
@@ -45,7 +42,7 @@ const loadPreview = async (
   return evaluateInboxZero(
     notifications,
     userId,
-    jevNoise ? rules : withoutJevTriage(rules),
+    jevOn ? rules : withoutJevTriage(rules),
     now,
     doneTitlesByProject,
     await isFeatureEnabled(HTPR_8047_INBOX_ZERO_AGENT_ACTIONS_FLAG, userId)
