@@ -42,6 +42,7 @@ type Props = {
 
 const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
   const amoledToggle = useFlag(HTPR_9027_AMOLED_TOGGLE_FLAG);
+  const toggleOnClass = amoledToggle ? "[.amoled_&]:bg-shadcn-primary" : undefined;
   const currentProject = useRecoilValue(currentProjectAtom);
   const boardName = currentProject?.title ?? currentProject?.name;
   const queryClient = useQueryClient();
@@ -224,13 +225,13 @@ const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
                           <InlineToggle
                             checked={field.showInRail !== false}
                             label="Rail"
-                            amoledToggle={amoledToggle}
+                            onClass={toggleOnClass}
                             onToggle={() => toggleVisibility(field, "showInRail")}
                           />
                           <InlineToggle
                             checked={field.showInTable !== false}
                             label="Table"
-                            amoledToggle={amoledToggle}
+                            onClass={toggleOnClass}
                             onToggle={() => toggleVisibility(field, "showInTable")}
                           />
 
@@ -283,13 +284,13 @@ function InlineToggle({
   label,
   onToggle,
   disabled,
-  amoledToggle,
+  onClass,
 }: {
   checked: boolean;
   label: string;
   onToggle: () => void;
   disabled?: boolean;
-  amoledToggle: boolean;
+  onClass?: string;
 }) {
   return (
     <button
@@ -308,7 +309,7 @@ function InlineToggle({
         className={cn(
           "relative h-[14px] w-[26px] shrink-0 rounded-full transition-colors",
           checked ? "bg-hypertasks-green" : "bg-hover-active",
-          amoledToggle && checked && "[.amoled_&]:bg-shadcn-primary"
+          checked && onClass
         )}
       >
         <span
