@@ -19,7 +19,7 @@ test("the team breakdown ships at Owner and QA behind its own flag", () => {
   assert.match(section, /dynamic(?:<[^>]+>)?\(\s*\(\) => import\("\.\/AiUsageTeamsBreakdown"\)/);
   assert.match(section, /if \(teamBreakdown\) return <TeamAiUsageBreakdown \/>;/);
   assert.match(breakdown, /\/api\/settings\/ai-usage\/owned-teams/);
-  assert.match(breakdown, /members\.length > 0/);
+  assert.match(breakdown, /title: "By member"/);
 });
 
 test("only the team owner reaches the team-wide list and member rows", () => {
