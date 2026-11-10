@@ -15,6 +15,7 @@ export function boardColumnsLine(columns: BoardColumn[]): string {
   return ` Columns on this board: ${columns.map((column) => `${column.section_title} (id ${column.id})`).join(', ')}`
 }
 
-export async function missingSectionMessage(projectId: number, sectionId: number): Promise<string> {
-  return `Section with ID ${sectionId} not found in project ${projectId}.${boardColumnsLine(await visibleBoardColumns(projectId))}`
+export async function sectionRefusal(projectId: number, sectionId: number, listColumns: boolean): Promise<string> {
+  const plain = `Section with ID ${sectionId} not found in project ${projectId}`
+  return listColumns ? `${plain}.${boardColumnsLine(await visibleBoardColumns(projectId))}` : plain
 }
