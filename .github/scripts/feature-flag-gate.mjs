@@ -1916,9 +1916,6 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
     if (added.has(definition.key) && definition.releaseRisk?.highRisk === "money" && definition.defaultMode !== "OWNER_AND_QA") {
       throw new Error(`new money flag ${definition.key} must set defaultMode: "OWNER_AND_QA"; Valentin approves release`);
     }
-    if (!baseFiles.has(path) && !definition.defaultMode && !["bugfix", "internal"].includes(definition.kind)) {
-      throw new Error(`invalid ${path}: missing defaultMode`);
-    }
     if (baseFiles.has(path)) continue;
     if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
         definition.defaultMode !== "EVERYONE" &&

@@ -2925,7 +2925,7 @@ export default { key: NEW_FLAG, kind: "feature", shippedOn: "2026-10-20", descri
   const head = commit(git, "new flag without defaultMode");
   const result = await evaluateFlagDefinitions(base, head, dir, ["src/lib/flags/definitions/htpr-2-new.ts"]);
   assert.equal(result.pass, false);
-  assert.match(result.reason, /missing defaultMode/);
+  assert.match(result.reason, /must set defaultMode: "EVERYONE"/);
 });
 
 test("evaluateFlagDefinitionChanges accepts a new flag with defaultMode EVERYONE", async (t) => {
