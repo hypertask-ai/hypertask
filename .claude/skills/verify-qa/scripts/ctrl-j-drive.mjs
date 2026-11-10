@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// Hands-free drive for the Ctrl+J New Task popup: shortcut, composer names, send, Escape.
-// Loopback only, so it drives a disposable seeded stack and never production.
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -90,11 +88,12 @@ try {
     if (task?.id) break;
   }
   if (task?.id) result.created.push(task);
+  const successes = createResponses.filter((response) => response.status() === 200).length;
   await page.screenshot({ path: path.join(dir, '02-ctrl-j-created.png') });
-  step('the send shortcut creates one task and opens it', createdTicket, {
+  step('the send shortcut creates exactly one task and opens it', createdTicket && successes === 1, {
     via: `shortcut ${shortcut}`,
     url: page.url(),
-    status: createResponses.at(-1)?.status() ?? null,
+    creates: successes,
     uniqueIndex: task?.uniqueIndex ?? (/\/detail\/project-\d+\/(\d+)/.exec(page.url()) ?? [])[1] ?? null,
     footer: footer.slice(0, 120),
   });

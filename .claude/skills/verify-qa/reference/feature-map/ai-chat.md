@@ -100,9 +100,9 @@ shows the ticket's own conversation.
 **Hands-free drive, every AI chat change:**
 `node .claude/skills/verify-qa/scripts/ai-chat-drive.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
 opens the full-page chat, checks the composer buttons and their names, sends one
-message and requires the `/api/ai/chat/stream` answer, then opens and closes the
-docked sidebar with the chat shortcut and opens the floating window the same
-way. It prints `PASS` or `FAIL` per step and ends with `ai-chat drive ok`. It
+message and requires a real assistant answer (not the stub refusal text), then
+opens the docked sidebar with the chat shortcut, closes it, and opens the
+floating window the same way. It prints `PASS` or `FAIL` per step and ends with `ai-chat drive ok`. It
 refuses any base that is not loopback, so it never drives production: run it on
 the seeded browser-smoke stack (`scripts/verify-qa <branch> hands-free-drives`
 runs it hosted with the AI stub, no model cost).

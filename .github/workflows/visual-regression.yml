@@ -379,6 +379,7 @@ jobs:
           VERIFY_QA_STATE_FILE: e2e/smoke/.state/smoke-state.json
           VERIFY_QA_FIXTURE: e2e/smoke/.state/inbox-cycle-fixture.json
           VERIFY_QA_REPORT_ONLY: '0'
+          PREMERGE_LOCAL: '1'
         run: |
           set -euo pipefail
           node scripts/premerge-local-search.mjs e2e/smoke/.state/card-fixture.json 53101 > verify-qa/search.log 2>&1 &

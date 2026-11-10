@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// Hands-free drive for AI chat: full page, docked sidebar, floating window, chat shortcut, composer names.
-// Loopback only, so it drives a disposable seeded stack and never production.
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -73,14 +71,16 @@ try {
   await page.screenshot({ path: path.join(dir, '01-full-page.png') });
   step('the full-page chat shows its composer and named buttons', (await visible(composer)) && names.length >= 2, { names });
 
-  const stream = page.waitForResponse((response) => response.url().includes('/api/ai/chat/stream'), { timeout: 60_000 }).catch(() => null);
   await composer.click();
   await page.keyboard.insertText(`AI chat drive ${Date.now()}`);
   await page.keyboard.press('Enter');
-  const response = await stream;
-  await page.waitForTimeout(1_000);
+  const answered = await page.waitForFunction(
+    () => document.querySelectorAll('.submessage-container.delivered [data-chat-content-html]').length >= 2,
+    null, { timeout: 90_000 },
+  ).then(() => true, () => false);
+  const reply = answered ? (await page.locator('.submessage-container.delivered [data-chat-content-html]').last().innerText()).trim() : '';
   await page.screenshot({ path: path.join(dir, '02-chat-sent.png') });
-  step('Enter sends the message and the stream answers', response?.status() === 200, { status: response?.status() ?? null });
+  step('Enter sends the message and an assistant answer arrives', answered && reply.length > 0 && !/Premerge stubs require/.test(reply), { reply: reply.slice(0, 120) });
 
   await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 });
