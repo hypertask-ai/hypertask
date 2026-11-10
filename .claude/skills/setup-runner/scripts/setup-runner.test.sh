@@ -22,7 +22,7 @@ args = sys.argv[1:]
 secret = 'fixture-only-bearer-value'
 mode = os.environ.get('FAKE_MODE', '')
 if args[:2] == ['agents', 'create']:
-    assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '4060', '--json']
+    assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '11514', '--json']
     call = ['create', args[3]]
 else:
     assert args == ['--json', '--token', secret, 'tasks', 'get', 'YPER4-159']

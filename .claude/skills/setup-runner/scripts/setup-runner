@@ -81,7 +81,7 @@ token=$CREDS/runner-$n-agent-token
 tmp=
 trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
 if [ ! -e "$token" ] && [ ! -L "$token" ]; then
-  response=$(hypertask agents create --name "Runner $n" --project 15 --project 4060 --json 2>/dev/null) || fail 'agent creation failed (output withheld to protect tokens)'
+  response=$(hypertask agents create --name "Runner $n" --project 15 --project 11514 --json 2>/dev/null) || fail 'agent creation failed (output withheld to protect tokens)'
   tmp=$(mktemp "$CREDS/.runner-$n-token.XXXXXX")
   if ! jq -er '.token | select(type == "string" and length > 0 and (test("\\s") | not))' <<<"$response" >"$tmp" 2>/dev/null; then
     fail 'agent creation did not return a valid token'
