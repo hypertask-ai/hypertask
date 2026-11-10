@@ -70,14 +70,29 @@ export const FALLBACK_NEW_TASK_WRITE_CHIPS: NewTaskWriteChip[] = [
   },
 ];
 
+function dropTags(html: string) {
+  let text = "";
+  let inTag = false;
+  for (let index = 0; index < html.length; index += 1) {
+    const char = html[index];
+    if (!inTag && char === "<" && /[a-z!/]/i.test(html[index + 1] ?? "")) {
+      inTag = true;
+    } else if (inTag && char === ">") {
+      inTag = false;
+    } else if (!inTag) {
+      text += char;
+    }
+  }
+  return text;
+}
+
 export function plainTextFromHtml(html: string) {
-  return html
-    .replace(/<\/(?:p|li|h[1-6]|div|tr)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
+  return dropTags(
+    html
+      .replace(/<\/(?:p|li|h[1-6]|div|tr)>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n"),
+  )
     .replace(/&nbsp;/gi, " ")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
     .replace(/&amp;/gi, "&")
     .replace(/[ \t]+/g, " ")
     .replace(/\n\s*\n+/g, "\n")

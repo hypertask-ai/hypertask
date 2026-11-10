@@ -68,6 +68,18 @@ test("plainTextFromHtml keeps block breaks", () => {
   assert.equal(plainTextFromHtml("<p>A</p><p>B &amp; C</p>"), "A\nB & C");
 });
 
+test("plainTextFromHtml never leaves tag text behind and keeps plain less-than signs", () => {
+  assert.equal(plainTextFromHtml("<scr<script>ipt>x</script>"), "ipt>x");
+  assert.equal(plainTextFromHtml("<p>a &lt;script&gt; b</p>"), "a &lt;script&gt; b");
+  assert.equal(plainTextFromHtml("<p>1 < 2 and 3 > 2</p>"), "1 < 2 and 3 > 2");
+});
+
+test("new task Ctrl+J yields to AI chat and drops results from a changed board", () => {
+  const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
+  assert.match(modal, /closest\("#htc, \.chatwindow, \[data-ai-chat-panel\]"\)/);
+  assert.match(modal, /latestProjectIdRef\.current !== projectForContext\.id/);
+});
+
 test("prompt keeps an existing title and the note", () => {
   const prompt = buildNewTaskWritePrompt("fix login", null, "Login bug");
   assert.match(prompt, /already "Login bug"/);

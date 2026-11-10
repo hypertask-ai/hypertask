@@ -278,6 +278,8 @@ const TiptapCreateTaskModal = () => {
   const projectForContext =
     formValues.currentProject ?? _currentProject ?? undefined;
   const projectId = projectForContext?.id;
+  const latestProjectIdRef = useRef(projectId);
+  latestProjectIdRef.current = projectId;
   useEffect(() => {
     if (!newTaskWindow) return;
     const openNewTask = (event: KeyboardEvent) => {
@@ -293,6 +295,7 @@ const TiptapCreateTaskModal = () => {
     if (!newTaskCtrlJFlag || !newTaskWindow || isMbl) return;
     const toggleInlineWrite = (event: KeyboardEvent) => {
       if (!isNewTaskCtrlJ(event, isApple) || showCommands.show || showAssignModal) return;
+      if (document.activeElement?.closest("#htc, .chatwindow, [data-ai-chat-panel]") || document.querySelector("#htc")) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.repeat) return;
@@ -366,6 +369,9 @@ const TiptapCreateTaskModal = () => {
           chip,
           currentTitle: getCurrentTitle(),
         });
+        if (latestProjectIdRef.current !== projectForContext.id) {
+          throw new Error("The board changed while writing. Please write again.");
+        }
         const result = shapeNewTaskWriteResult(
           extractTaskProperties(html, projectLabels, projectSections, projectAssignees),
           chip,
