@@ -159,7 +159,9 @@ export function parseTableCollapsedSections(value: unknown): Set<string> {
   try {
     const parsed = JSON.parse(value);
     if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0));
+    return new Set(
+      parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0),
+    );
   } catch {
     return new Set();
   }
@@ -182,8 +184,9 @@ export function sanitizeTableCollapsedSectionsForWrite(value: unknown): string |
 
 export function getActiveTableCollapsedSectionsFromProject(project?: IProject | null): Set<string> {
   const view = project?.project_view?.user_project_views?.[0];
-  const active = view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
-  return parseTableCollapsedSections(active?.table_collapsed_sections);
+  const activeView =
+    view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
+  return parseTableCollapsedSections(activeView?.table_collapsed_sections);
 }
 
 export const tableTaskRowKey = (taskId: number, sid: string | number) => `${taskId}:${sid}`;
