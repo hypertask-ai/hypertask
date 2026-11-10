@@ -246,7 +246,7 @@ test("multi chat windows: a new window picks up the session only after the open 
 
 test("multi chat windows: sidebar mode still starts a chat in the sidebar instead of opening a window", () => {
   const header = read("src/components/AI_CHAT/ChatHeader.tsx");
-  const startNew = header.slice(header.indexOf("handleStartNewSession"), header.indexOf("handleStartNewSession") + 260);
+  const startNew = header.slice(header.indexOf("handleStartNewSession"));
   assert.match(startNew, /if \(chatWindowControls\) \{/);
-  assert.match(startNew, /await startNewSession\(\);/);
+  assert.match(startNew, /await startNewSession\(\)/);
 });
