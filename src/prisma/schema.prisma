@@ -671,6 +671,7 @@ model UserSetting {
   // Mirror of emoji-mart's frequently-used {emojiId: count} map, so the picker's Frequently row persists across devices.
   emojiFrequency           Json?
   calendarViews            Json?
+  cardParts                Json?
 }
 
 // HTPR-7622: one row per setting change written to the database, created inside the same

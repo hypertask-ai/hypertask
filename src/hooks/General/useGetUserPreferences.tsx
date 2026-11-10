@@ -32,6 +32,7 @@ export interface IUserPreferences {
   aiChatOpenNewTickets?: boolean | null;
   aiChatOpenTickets?: boolean | null;
   aiChatOpenBoards?: boolean | null;
+  cardParts?: unknown;
 }
 
 export const DEFAULT_USER_PREFERENCES: IUserPreferences = {

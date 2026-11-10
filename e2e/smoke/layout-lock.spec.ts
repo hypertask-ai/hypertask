@@ -562,9 +562,10 @@ test('layout lock: board card hover keeps content and selection usable', async (
   const { flags } = await (await response).json() as { flags: Record<string, boolean> }
   const enabled = flags['htpr-8629-kanban-hover-layout'] === true
   const borderOnly = flags['htpr-8960-border-only-select'] === true
+  const emptyCard = flags['htpr-8971-card-settings'] === true
   const card = page.locator(`#task-${fixture.taskId}`)
   const link = card.locator(`a[href="${fixture.detailPath}"]`)
-  const id = link.locator('.task-ticket-id')
+  const id = emptyCard ? link.locator('p.text-dense').first() : link.locator('.task-ticket-id')
   const checkbox = card.locator('button').and(card.getByRole('button', { name: 'Select item', exact: true, includeHidden: true }))
   await expect(id).toBeVisible({ timeout: boardCardSignalTimeout })
   await page.mouse.move(0, 0)
