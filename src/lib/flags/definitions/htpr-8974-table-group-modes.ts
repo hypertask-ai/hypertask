@@ -8,8 +8,5 @@ export default {
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-10",
   description: "Table view can group rows by assignee, priority, size or a chosen list of tags.",
-  releaseRisk: {
-    risk: "small",
-    reason: "Optional table grouping saved per view. Off keeps the existing column and tag grouping.",
-  },
+  releaseRisk: { risk: "small", reason: "Optional table grouping saved per view. Off keeps the existing column and tag grouping." },
 } as const satisfies FeatureFlagDefinition;

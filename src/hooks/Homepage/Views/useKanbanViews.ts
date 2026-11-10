@@ -52,12 +52,7 @@ import {
   TTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
-import {
-  effectiveTableGrouping,
-  getActiveTableGroupByFromProject,
-  serializeEffectiveTableGrouping,
-  serializeTableGrouping,
-} from "@/lib/table-view/tableGroupByTag";
+import { effectiveTableGrouping, getActiveTableGroupByFromProject, serializeEffectiveTableGrouping, serializeTableGrouping } from "@/lib/table-view/tableGroupByTag";
 import {
   getActiveTableCollapsedSectionsFromProject,
   serializeTableCollapsedSections,
