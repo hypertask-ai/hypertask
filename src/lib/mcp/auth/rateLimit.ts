@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG } from '@/lib/flags/keys';
 import { createHash } from 'crypto';
+import { isFeatureEnabled, FEATURE_FLAG_OWNER_USER_ID } from '@/lib/flags';
+import { HTPR_8978_UPSTASH_AUDIENCE_FLAG } from '@/lib/flags/definitions/htpr-8978-upstash-audience';
 import { getRedis } from '@/lib/redis';
 import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision';
 import { extractBearerToken, validateMcpAuth } from './session';
@@ -62,8 +64,7 @@ export async function checkMcpRateLimit(
     }
     const fastEnabled = !(await shouldUseExactCountRateLimit())
     if (!fastEnabled) localCounts.clear()
-    const { isUpstashAudienceRoutingEnabled } = await import('@/lib/redis/audience')
-    const skipAgentRedis = await isUpstashAudienceRoutingEnabled()
+    const skipAgentRedis = await isFeatureEnabled(HTPR_8978_UPSTASH_AUDIENCE_FLAG, FEATURE_FLAG_OWNER_USER_ID)
     let agentLocalOnly = skipAgentRedis && token.startsWith('htk_')
     if (!agentLocalOnly && skipAgentRedis) {
       const ctx = await (resolveAuth ? resolveAuth() : validateMcpAuth(request))
