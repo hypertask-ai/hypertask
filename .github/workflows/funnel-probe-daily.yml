@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  PROJECT_ID: prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf
+  TEAM_ID: team_yureFlJZ6ibwebaOOkKc5whs
+
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -18,6 +22,21 @@ jobs:
           ref: production
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Resolve production CRON_SECRET
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "$VERCEL_TOKEN" ] || { echo "VERCEL_TOKEN is required"; exit 1; }
+          api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
+          EID=$(api "/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID" \
+            | jq -r '(.envs // .environmentVariables // [])[] | select(.key == "CRON_SECRET") | .id' | head -1)
+          [ -n "$EID" ] || { echo "production CRON_SECRET not found in Vercel"; exit 1; }
+          VALUE=$(api "/v1/projects/$PROJECT_ID/env/$EID?teamId=$TEAM_ID" | jq -r '.value // empty')
+          [ -n "$VALUE" ] || { echo "could not resolve production CRON_SECRET"; exit 1; }
+          echo "::add-mask::$VALUE"
+          echo "CRON_SECRET=$VALUE" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -31,6 +50,5 @@ jobs:
 
       - name: Run daily isolated signup probe
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
         run: node .github/scripts/funnel-probe-daily.mjs
