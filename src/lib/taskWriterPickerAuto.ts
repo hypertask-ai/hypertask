@@ -18,7 +18,7 @@ export function withTaskWriterAutoOption<T extends { id: string }>(
   base: TAiModelOption,
 ): T[] {
   const auto = toAutoModelOption(base);
-  return [auto as T, ...options.filter((option) => option.id !== AUTO_MODEL_OPTION_ID)];
+  return [auto as unknown as T, ...options.filter((option) => option.id !== AUTO_MODEL_OPTION_ID)];
 }
 
 export function taskWriterPickerOption(

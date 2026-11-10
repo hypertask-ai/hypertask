@@ -710,9 +710,11 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  const pickerAutoOn = args.aiFeature === "taskWriter" && typeof args.userId === "number"
-    ? await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, args.userId)
-    : false;
+  const pickerAutoEnabled = await isFeatureEnabled(
+    HTPR_8995_PICKER_AUTO_FLAG,
+    typeof args.userId === "number" ? args.userId : 0,
+  );
+  const pickerAutoOn = args.aiFeature === "taskWriter" && typeof args.userId === "number" && pickerAutoEnabled;
   const pickerSelection = pickerAutoOn
     ? taskWriterPickerOption(args.modelOptionId, args.modelSelected, haiku55Enabled)
     : null;
