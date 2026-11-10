@@ -39,6 +39,7 @@ function seededRepositoryNames(sql) {
 const legacyMappings = seededRepositoryNames(migration).map((fullName) => ({
   projectId: 15,
   fullName,
+  repositoryId: null,
   provenance: "legacy",
   installationId: null,
   revokedAt: null,
@@ -203,16 +204,48 @@ test("a connected board routes its own repositories and refuses a repo shared by
   const installed = {
     projectId: 8423,
     fullName: "inne/private-repo",
+    repositoryId: "555",
     provenance: "installed",
     installationId: "123",
     revokedAt: null,
   };
   const route = (overrides, mappings = [installed]) => resolveBoardGithubRepository(
-    { fullName: "INNE/Private-Repo", isPrivate: false, isFork: false, ...overrides },
-    mappings,
+  {
+    fullName: "INNE/Private-Repo",
+    id: "555",
+    isPrivate: false,
+    isFork: false,
+    ...overrides,
+  },
+  mappings,
   );
   assert.equal(route({}), 8423);
   assert.equal(route({ isPrivate: true }), 8423);
   assert.equal(route({ isFork: true }), null);
   assert.equal(route({}, [installed, { ...installed, projectId: 7049 }]), null);
+});
+
+test("installed board routing matches repository id and refuses a recreated repo with the same name", () => {
+  const installed = {
+    projectId: 8423,
+    fullName: "inne/private-repo",
+    repositoryId: "456",
+    provenance: "installed",
+    installationId: "123",
+    revokedAt: null,
+  };
+  const matched = {
+    fullName: "inne/private-repo",
+    id: "456",
+    isPrivate: false,
+    isFork: false,
+  };
+  const impersonated = {
+    fullName: "inne/private-repo",
+    id: "789",
+    isPrivate: false,
+    isFork: false,
+  };
+  assert.equal(resolveBoardGithubRepository(matched, [installed]), 8423);
+  assert.equal(resolveBoardGithubRepository(impersonated, [installed]), null);
 });

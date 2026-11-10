@@ -421,6 +421,7 @@ export async function POST(request: NextRequest) {
     const repositoryFullName = payload.repository.full_name;
     const routing = await lookupBoardForGithubRepository({
       fullName: repositoryFullName,
+      id: payload.repository?.id,
       isPrivate: payload.repository?.private,
       isFork: payload.repository?.fork,
     });

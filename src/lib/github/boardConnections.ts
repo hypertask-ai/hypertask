@@ -1,23 +1,55 @@
 export interface BoardGithubRepositoryMapping {
   projectId: number;
   fullName: string;
+  repositoryId: string | null;
   provenance: "legacy" | "installed";
   installationId: string | null;
   revokedAt: Date | null;
 }
 
+export function githubRepositoryId(value: unknown): string | null {
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    !/^\d+$/.test(String(value))
+  ) {
+    return null;
+  }
+  return String(value);
+}
+
+function mappingMatchesRepository(
+  repository: {
+    fullName?: unknown;
+    id?: unknown;
+  },
+  mapping: BoardGithubRepositoryMapping,
+): boolean {
+  if (mapping.revokedAt !== null) return false;
+
+  if (mapping.provenance === "legacy") {
+    if (typeof repository.fullName !== "string") return false;
+    return mapping.fullName === repository.fullName.toLowerCase();
+  }
+
+  const repositoryId = githubRepositoryId(repository.id);
+  return (
+    repositoryId !== null &&
+    mapping.repositoryId !== null &&
+    mapping.repositoryId === repositoryId
+  );
+}
+
 export function resolveBoardGithubRepository(
   repository: {
     fullName?: unknown;
+    id?: unknown;
     isPrivate?: unknown;
     isFork?: unknown;
   },
   mappings: readonly BoardGithubRepositoryMapping[],
 ): number | null {
-  if (typeof repository.fullName !== "string") return null;
-  const fullName = repository.fullName.toLowerCase();
-  const matches = mappings.filter(
-    (mapping) => mapping.fullName === fullName && mapping.revokedAt === null,
+  const matches = mappings.filter((mapping) =>
+    mappingMatchesRepository(repository, mapping),
   );
   if (matches.length !== 1) return null;
 
