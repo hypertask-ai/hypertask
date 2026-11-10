@@ -269,6 +269,7 @@ const InlineDraftAiFloat = ({
   const newTaskCtrlJ = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
   const newTaskWriter = newTaskCtrlJ ? taskWriter : undefined;
   const ticketEditorCtrlJ = ticketEditorCtrlJFlag || Boolean(newTaskWriter);
+  const aiBoxOutline = useFlag(HTPR_9025_AI_BOX_OUTLINE_FLAG);
   const [selectedWriteChipKey, setSelectedWriteChipKey] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<InlineDraftAiRange | null>(null);
