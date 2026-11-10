@@ -22,9 +22,10 @@ import {
   type TAiModelPreferences,
   type TAiModelPreferencesBySurface,
 } from "@/lib/aiModelPreferences";
+import { autoModelPreferenceAllowed } from "@/lib/taskWriterPickerAuto";
+import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import {
   aiImageModelDefinitions,
-  AUTO_MODEL_OPTION_ID,
   getAiModelOptionById,
 } from "@/lib/aiModelOptions";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
@@ -328,6 +329,7 @@ export async function POST(request: NextRequest) {
       }
 
       const preferenceUpdates = Object.entries(body.aiModelPreferences);
+      const taskWriterAuto = await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id);
       const invalidPreference = preferenceUpdates.find(
         ([surface, optionId]) =>
           !isAiModelPreferenceSurface(surface) ||
@@ -335,7 +337,7 @@ export async function POST(request: NextRequest) {
           (surface === "imageGeneration"
             ? !aiImageModelDefinitions.some((model) => model.key === optionId)
             : !getAiModelOptionById(optionId) &&
-              !(surface === "aiChat" && optionId === AUTO_MODEL_OPTION_ID)),
+              !autoModelPreferenceAllowed(surface, optionId, taskWriterAuto)),
       );
 
       if (invalidPreference) {
