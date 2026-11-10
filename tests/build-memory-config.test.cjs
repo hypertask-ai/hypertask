@@ -58,7 +58,7 @@ for (const smoke of [false, true]) {
       assert.equal(config.experimental.parallelServerCompiles, undefined);
       assert.equal(config.productionBrowserSourceMaps, true);
       assert.equal(config.outputFileTracingExcludes, undefined);
-      assert.deepEqual(config.serverExternalPackages, ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk"]);
+      assert.deepEqual(config.serverExternalPackages, ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk", "evlog"]);
       const productionCache = {
         cache: { type: "filesystem", maxMemoryGenerations: Infinity },
         resolve: { alias: {} },
