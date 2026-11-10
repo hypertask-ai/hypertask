@@ -154,6 +154,7 @@ test("pending AI header is quiet on ticket routes; resolved titles and other rou
     "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
     "@/lib/flags/definitions/htpr-7773-chat-header-name": { HTPR_7773_CHAT_HEADER_NAME_FLAG: "htpr-7773-chat-header-name" },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) },
     "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: "htpr-7575-phone-chat-delete" },
 
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], currentSession, isSessionPending: true, isSidebarMode: true }) },

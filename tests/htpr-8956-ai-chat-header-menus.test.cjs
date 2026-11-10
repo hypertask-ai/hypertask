@@ -83,11 +83,9 @@ test("flag on: three-dot menu lists the spec rows and Pin / Keep closed behave a
     const items = () => [...container.querySelectorAll('[role="menu"] [role^="menuitem"]')].map((el) => el.textContent);
     assert.deepEqual(items(), ["Pin chat open", "Keep chat closed", "Floating window", "Full screen", "Rename chat", "Delete chat"]);
     assert.equal(container.querySelector('[role="menuitemradio"][aria-checked="true"]').textContent, "Pin chat open");
-
     await click([...container.querySelectorAll('[role="menuitemradio"]')][1]);
     assert.equal(store.keepClosed, true);
     assert.equal(store.pinned, false);
-
     await openMenu();
     assert.equal(container.querySelector('[role="menuitemradio"][aria-checked="true"]').textContent, "Keep chat closed");
     await click([...container.querySelectorAll('[role="menuitemradio"]')][0]);

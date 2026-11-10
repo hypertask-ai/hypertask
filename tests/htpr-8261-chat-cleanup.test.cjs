@@ -200,6 +200,7 @@ test("chat header corners follow cleanup only outside full-screen chat", () => {
     "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: noop }) },
     "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
     "@/hooks/useFlag": { useFlag: key => key === "htpr-8261-chat-cleanup" ? cleanup : key === "htpr-8048-agent-sessions" },
+    "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], currentSession: { id: "saved", title: "Chat" }, runningSessionIds: [] }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },

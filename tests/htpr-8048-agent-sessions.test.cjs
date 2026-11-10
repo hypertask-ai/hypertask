@@ -409,6 +409,7 @@ for (const mobile of [false, true]) for (const enabled of [false, true]) {
       "next/navigation": { usePathname: () => "/project", useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: noop }) },
       "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
       "@/hooks/useFlag": { useFlag: key => key === FLAG && enabled },
+      "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) },
       "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({
         sessions: [], currentSession: { id: "saved", title: "Existing chat" }, runningSessionIds: [],
       }) },
