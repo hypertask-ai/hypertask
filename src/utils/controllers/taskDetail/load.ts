@@ -24,6 +24,7 @@ import {
   type AgentVisibility,
 } from "@/lib/agents/visibility";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
+import { visibleWaitingOnActivity } from "@/lib/tasks/waitingOnActivitySql";
 import { attachAgentStatus } from "@/utils/controllers/tasks/attachAgentStatus";
 import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
 
@@ -546,7 +547,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw<IComment[]>`
     WITH base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-        ${assignmentActivityWithCurrentAvatars} AS activity,
+        ${visibleWaitingOnActivity(userId, Prisma.sql`comment_task."projectId"`, assignmentActivityWithCurrentAvatars)} AS activity,
         c."seen",
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
@@ -684,7 +685,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     task_row AS (SELECT id AS "taskId", "projectId" FROM authorized_task),
     base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-        ${assignmentActivityWithCurrentAvatars} AS activity,
+        ${visibleWaitingOnActivity(userId, Prisma.sql`ti."projectId"`, assignmentActivityWithCurrentAvatars)} AS activity,
         c."seen",
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
@@ -767,7 +768,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
 export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw`
     SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-      c.activity, c."seen",
+      ${visibleWaitingOnActivity(userId, Prisma.sql`comment_task."projectId"`, Prisma.sql`c.activity`)} AS activity, c."seen",
       CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
       CASE WHEN agent_visibility.hidden THEN 'Private agent'
         ELSE c."agentDisplayName" END AS "agentDisplayName",

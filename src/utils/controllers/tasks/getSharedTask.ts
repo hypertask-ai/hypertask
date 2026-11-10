@@ -1,5 +1,7 @@
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { visibleWaitingOnActivity } from "@/lib/tasks/waitingOnActivitySql";
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import {
   PRIVATE_AGENT_DISPLAY_NAME,
   redactAgentIdentitiesForPublicShare,
@@ -44,6 +46,11 @@ export const getSharedComments = async (
   taskId: string | string[] | undefined
 ) => {
   try {
+    const sharedActivity = visibleWaitingOnActivity(
+      0,
+      Prisma.sql`(SELECT "projectId" FROM "Task" share_task WHERE share_task.id = c."taskId")`,
+      Prisma.sql`c.activity`,
+    );
     const comments: any[] = await prisma.$queryRaw`
           SELECT
               c.id,
@@ -51,7 +58,7 @@ export const getSharedComments = async (
               c."taskId",
               c."creatorId",
               c."createdAt",
-              c.activity,
+              ${sharedActivity} AS activity,
               c."agentId",
               c."agentDisplayName",
   

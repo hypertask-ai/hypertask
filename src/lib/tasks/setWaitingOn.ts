@@ -154,6 +154,7 @@ export async function setTaskWaitingOn({
       fromUser: currentUser,
       ...(actingAgent ? { fromAgent: actingAgent } : {}),
       waitingOnDisplayName: waitingAgent?.displayName ?? waitingOnUser?.displayName ?? null,
+      ...(waitingAgent ? { waitingOnAgentId: waitingAgent.id } : {}),
       ...(clearsBlocker ? { blockerCleared: true, reason: clearReason } : {}),
     },
   };

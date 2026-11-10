@@ -216,7 +216,7 @@ export const getCalendarReadModel = async ({
       ),
     }));
   const tasksWithOpenBlockers = await attachOpenBlockingTasks(authorizedTasks);
-  const calendarTasks = await attachWaitingOnUsers(tasksWithOpenBlockers);
+  const calendarTasks = await attachWaitingOnUsers(tasksWithOpenBlockers, userId);
 
   const calendarProjects: CalendarProjectV1[] = projects.map((project) => ({
     id: project.id,
