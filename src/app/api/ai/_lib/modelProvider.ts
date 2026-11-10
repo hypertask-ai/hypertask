@@ -80,6 +80,7 @@ export type AiGatewayFeature =
   | "generate-image"
   | "custom-instructions"
   | "smart-label"
+  | "jev-duplicate"
   | "onboarding-board"
   | "status-update"
   | "suggest-reply";

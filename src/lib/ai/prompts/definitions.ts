@@ -503,6 +503,14 @@ If yes, send.`],
 - When the brief is thin, write a shorter ticket. Never add an Open questions section.
 - Refinement means add board-grounded detail or related tickets. Do not merely rephrase the latest instruction.`],
   },
+  "task-writer-duplicate-check-rule": {
+    id: "task-writer-duplicate-check-rule",
+    version: "1",
+    parts: [`<h3>DUPLICATE CHECK (only when DUPLICATE_CHECK is in context)</h3>
+- DUPLICATE_CHECK names at most one earlier ticket the checker rated 0.9 or higher as the same work, with its ticket number and URL.
+- When DUPLICATE_CHECK is present, make the first sentence of the description exactly: Looks like TICKET may cover the same work.
+- That is the only warning allowed above the draft, and it changes no title, section or requested work. Without DUPLICATE_CHECK write no warning and never invent a match. This replaces the board research rule that a matching candidate gets no warning at the top.`],
+  },
   "task-writer-board-research-web-old-structure-rules": {
     id: "task-writer-board-research-web-old-structure-rules",
     version: "1",

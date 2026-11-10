@@ -39,12 +39,14 @@ import {
   TASK_WRITER_BOARD_RESEARCH_WEB_RULES,
   TASK_WRITER_RELATED_CANDIDATE_LIMIT,
   TASK_WRITER_STYLE_EXAMPLE_LIMIT,
+  taskWriterCandidateUrl,
 } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { isFeatureEnabled, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_9046_JEV_DUPLICATE_HINT_FLAG } from "@/lib/flags/keys";
+import type { JevDuplicateDraft } from "@/lib/ai/jevDuplicateCheck";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
@@ -149,13 +151,30 @@ function relatedTicketCandidates(
   agentId: string | null | undefined,
   teamScope: AgentTokenTeamScope | null | undefined,
   taskIds: number[],
+  jev: { projectId: number; teamId: string | null; draft: JevDuplicateDraft },
 ) {
   return indexedRows.then(async (found) => {
     const { taskRows: rows } = await authorizeIndexedRows(found, [], { userId, agentId, teamScope });
     const loaded = new Set(taskIds.map(String));
-    return formatRelatedTicketCandidates(
-      rows.filter((row) => !loaded.has(row.id)).slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT),
-    );
+    const candidates = rows.filter((row) => !loaded.has(row.id)).slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT);
+    const block = formatRelatedTicketCandidates(candidates);
+    if (!(await isFeatureEnabled(HTPR_9046_JEV_DUPLICATE_HINT_FLAG, userId))) return block;
+    const { jevDuplicateHint } = await import("@/lib/ai/jevDuplicateHint");
+    const duplicateHint = await jevDuplicateHint({
+      draft: jev.draft,
+      candidates: candidates.map((row) => ({
+        ticketNumber: row.ticketNumber || String(row.uniqueIndex),
+        url: taskWriterCandidateUrl({ projectId: row.projectId, uniqueIndex: row.uniqueIndex }),
+        title: row.title || "",
+        description: row.descriptionText || "",
+      })),
+      projectId: jev.projectId,
+      userId,
+      teamId: jev.teamId,
+      agentId,
+      teamScope,
+    });
+    return [block, duplicateHint].filter(Boolean).join("\n");
   }).catch((error) => {
     console.error("[ai/task-writer] related candidates failed", error);
     return "<RELATED_TICKET_CANDIDATES>\nunavailable:search_failed Do not invent related tickets. Ask whether this might already exist on the board.\n</RELATED_TICKET_CANDIDATES>";
@@ -278,6 +297,14 @@ export async function prepareTaskWriterRun(
     : effectivePrompt;
   const primaryTaskIds = body.taskIds.slice(0, 1);
   const relatedTaskIds = body.taskIds.slice(1);
+  const jevDuplicate = {
+    projectId: body.projectId,
+    teamId: teamContext.teamId,
+    draft: {
+      title: body.taskTitle?.trim() || (body.taskDescription || effectivePrompt).replace(/<[^>]*>/g, " ").trim().slice(0, 80) || "New task",
+      description: body.taskDescription || effectivePrompt,
+    },
+  };
   const reuseLookups = await isFeatureEnabled("htpr-9015-search-lookups", userId);
   const ticketSearch = reuseLookups && boardResearchEnabled
     ? searchTasks({
@@ -315,7 +342,7 @@ export async function prepareTaskWriterRun(
       taskSearch: ticketSearch ?? undefined,
     }),
     reuseLookups && ticketSearch
-      ? relatedTicketCandidates(ticketSearch, userId, agentId, teamScope, body.taskIds)
+      ? relatedTicketCandidates(ticketSearch, userId, agentId, teamScope, body.taskIds, jevDuplicate)
       : boardResearchEnabled
         ? relatedTicketCandidates(searchTasks({
             searchQuery: retrievalQuery,
@@ -325,7 +352,7 @@ export async function prepareTaskWriterRun(
               TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
               TASK_WRITER_RELATED_CANDIDATE_LIMIT + Math.min(body.taskIds.length, 8) + 5,
             ),
-          }), userId, agentId, teamScope, body.taskIds)
+          }), userId, agentId, teamScope, body.taskIds, jevDuplicate)
         : Promise.resolve(""),
     boardResearchEnabled
       ? loadTaskWriterStyleExamples(body.projectId, { userId, agentId, teamScope }).catch((error) => {
@@ -410,6 +437,9 @@ export async function prepareTaskWriterRun(
   }
   if (validateDraft && body.aiMode === "AiTaskWriter") {
     suffix += `\n\n${TASK_WRITER_RESEARCH_REQUEST_RULE}`;
+  }
+  if (body.aiMode === "AiTaskWriter" && await isFeatureEnabled(HTPR_9046_JEV_DUPLICATE_HINT_FLAG, userId)) {
+    suffix += `\n\n${renderPrompt("task-writer-duplicate-check-rule")}`;
   }
   const dueDateEnabled = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
