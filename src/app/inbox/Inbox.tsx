@@ -7,6 +7,7 @@ import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/ht
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
+import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
 
 import {
   FC,
@@ -1068,9 +1069,36 @@ const SplitTitlesContainer: FC<IProps> = ({
   SelectedCount = null,
   trailingAction,
 }) => {
+  const stickySplits = useFlag(HTPR_9029_STICKY_SPLITS_FLAG);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [listScrolled, setListScrolled] = useState(false);
+
+  useEffect(() => {
+    if (!stickySplits) return;
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      const bar = barRef.current;
+      if (!bar || target === bar) return;
+      if (target instanceof Document) {
+        setListScrolled(window.scrollY > 0);
+        return;
+      }
+      if (target instanceof HTMLElement && (target.contains(bar) || target.matches('[data-testid="inbox-list"]'))) {
+        setListScrolled(target.scrollTop > 0);
+      }
+    };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
+  }, [stickySplits]);
+
   return (
     <div
-      className={`inbox-text-left relative hidden items-baseline pr-[16px] pt-4 ${
+      ref={barRef}
+      className={`inbox-text-left ${
+        stickySplits
+          ? `sticky top-0 z-sticky ${contentGap ? "bg-taskDetailPage" : "bg-containerBackground"} ${listScrolled ? "shadow-[0_1px_0_0_var(--border-light-gray-thin)]" : ""}`
+          : "relative"
+      } hidden items-baseline pr-[16px] pt-4 ${
         contentGap ? "mx-[12px] w-[calc(100%-24px)] pb-4" : "w-full"
       } responsive-inbox-padding @md:flex @md:gap-[9px] h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
     >
