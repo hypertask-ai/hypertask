@@ -5,15 +5,50 @@ const { selectWatched, worthFiling } = require("./model-watch-allowlist.cjs");
 
 const APP = "https://app.hypertask.ai";
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-const PARTS = `<h2>Fix</h2><p>Follow the update-ai-models skill for this class.</p><p>Replace the old version in every picker.</p><p>Move saved picks to the new version.</p><p>Check the gateway input and output prices first.</p><h2>Done when</h2><p>The pickers show the new version, and saved picks still work.</p><p>A live chat answers from it after release.</p><h2>Risk</h2><p>A new model could answer badly or cost more than planned.</p><p>Undo: remove it from the pickers.</p><h2>Decision</h2><p>New classes and providers need Valentin's yes.</p><p>Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`;
+const UNDO = "remove the model from the pickers.";
+const PREMIUM = `Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.`;
+
+function opening({ wrong, course, decision }) {
+  return `<p><strong>What's wrong or wanted:</strong> ${wrong}</p>` +
+    `<p><strong>Who it affects:</strong> everyone who picks an AI model in chat.</p>` +
+    `<p><strong>Recommended course and why:</strong> ${course}</p>` +
+    `<p><strong>What Valentin must decide:</strong> ${decision}</p>` +
+    `<p><strong>How to undo:</strong> ${UNDO}</p><hr>`;
+}
+
+function parts({ problem, fix, decision }) {
+  return `<h2>Problem</h2>${problem}<h2>Fix</h2><p>${fix}</p>` +
+    `<h2>Done when</h2><p>The pickers show it, and saved picks still work.</p><p>A live chat answers from it after release.</p>` +
+    `<h2>Risk</h2><p>A new model could answer badly or cost more than planned.</p><p>Undo: remove it from the pickers.</p>` +
+    `<h2>Decision</h2><p>${decision}</p>`;
+}
+
+const price = (finding) => finding.inputPerMillion == null
+  ? "unknown; verify pricing before shipping"
+  : `$${escapeHtml(finding.inputPerMillion)}`;
+const sentence = (text) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
+  const automatic = finding.action === "ship automatically";
+  const premium = finding.action === "waits for HTPR-7746";
+  const wrong = finding.kind === "stale" ? "One of our picker models is gone from the gateway."
+    : finding.kind === "new-version" ? "A newer version of a model we offer is out."
+    : "A model class we do not offer is new to the gateway.";
+  const course = automatic ? "Ship it now and keep the old version as a fallback. Why: OpenAI and Anthropic classes always update."
+    : premium ? "Hold it until the premium model policy is settled. Why: it costs more than five dollars per million tokens."
+    : "Ask Valentin first, then replace the old version. Why: a new class changes what people can pick.";
+  const decision = automatic ? "nothing." : premium ? "nothing for now." : "whether to add this model.";
   return {
     marker,
     title: `AI model ${finding.kind}: ${model} [${marker}]`,
-    description: `<h2>Problem</h2><p><strong>${escapeHtml(finding.action)}.</strong></p><p>${escapeHtml(finding.reason)}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p><p>Gateway input price per million tokens: ${finding.inputPerMillion === null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.</p>${PARTS}`,
+    description: opening({ wrong, course, decision }) + parts({
+      problem: `<p>${sentence(escapeHtml(finding.reason))}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p>` +
+        `<p>Gateway input price per million tokens: ${price(finding)}.</p><p>${sentence(escapeHtml(finding.action))}.</p>`,
+      fix: automatic ? "Replace the old version in every picker." : premium ? "Wait for the premium model policy before any picker change." : "Add the model to every picker once Valentin agrees.",
+      decision: automatic ? "Nothing. This is an automatic update." : premium ? "Valentin decides the premium policy first." : `Valentin's yes on the new class. ${PREMIUM}`,
+    }),
   };
 }
 
@@ -22,11 +57,19 @@ function rollupTicket(findings, now = new Date()) {
   const families = [...new Set(models.map((model) => identity(model).family))].sort();
   const fingerprint = createHash("sha256").update(models.join("\n")).digest().readBigUInt64BE(0).toString().slice(0, 9);
   const marker = `modelwatchrollup-${families.slice(0, 3).join("-")}-${models.length}-${fingerprint}`;
-  const items = findings.map((finding) => `<li><code>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}</code>. Gateway input price per million tokens: ${finding.inputPerMillion == null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}. ${escapeHtml(finding.action)}.</li>`).join("");
+  const items = findings.map((finding) => `<li><code>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}</code>. Gateway input price per million tokens: ${price(finding)}. ${escapeHtml(finding.action)}.</li>`).join("");
   return {
     marker,
     title: `AI model watch new classes [${marker}]`,
-    description: `<h2>Problem</h2><p><strong>${findings.length} new model classes are not in our catalog.</strong></p><p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p><ul>${items}</ul>${PARTS}`,
+    description: opening({
+      wrong: `${findings.length} new model classes are not in our catalog.`,
+      course: "Add the classes Valentin approves to every picker. Why: they are new frontier releases.",
+      decision: "which new classes to add.",
+    }) + parts({
+      problem: `<p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p><ul>${items}</ul>`,
+      fix: "Add these classes to every picker once Valentin agrees. Move saved picks to the new version. Check the gateway input and output prices first.",
+      decision: `New classes and providers need Valentin's yes. ${PREMIUM}`,
+    }),
   };
 }
 
