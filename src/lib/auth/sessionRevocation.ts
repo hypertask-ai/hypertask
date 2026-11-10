@@ -1,18 +1,25 @@
-import { createHash } from 'crypto'
+import { createHash, randomBytes } from 'crypto'
 
-import { verifiedSessionExpiry } from '@/lib/auth/session'
+import { SESSION_TTL_SECONDS, sessionRevocationClaims } from '@/lib/auth/session'
 import { getRedis } from '@/lib/redis'
 
 const revokedTokens = new Map<string, number>()
 const READ_DEADLINE_MS = 300
 const WRITE_DEADLINE_MS = 500
 
+const userGenerationKey = (userId: number) => `ht_session:user-generation:${userId}`
+
 function verifiedToken(token: string | undefined) {
-  const exp = verifiedSessionExpiry(token)
-  if (exp === null || !token) return null
+  const claims = sessionRevocationClaims(token)
+  if (!claims || !token) return null
 
   const fingerprint = createHash('sha256').update(token.split('.')[0]).digest('hex')
-  return { fingerprint, exp }
+  return {
+    fingerprint,
+    exp: claims.expiresAt,
+    userId: claims.userId,
+    sessionGeneration: claims.sessionGeneration,
+  }
 }
 
 export function sessionTokenFingerprint(token: string | undefined): string | null {
@@ -61,6 +68,21 @@ export async function revokeSessionToken(token: string | undefined): Promise<voi
   }
 }
 
+export async function rotateUserSessionGeneration(userId: number): Promise<string> {
+  const generation = randomBytes(16).toString('base64url')
+
+  try {
+    await withDeadline(async () => {
+      const redis = await getRedis()
+      await redis.set(userGenerationKey(userId), generation, 'EX', SESSION_TTL_SECONDS)
+    }, WRITE_DEADLINE_MS)
+  } catch {
+    console.error('Session generation rotation failed')
+  }
+
+  return generation
+}
+
 export async function isSessionTokenRevoked(
   token: string | undefined,
   { failClosed }: { failClosed: boolean },
@@ -75,10 +97,14 @@ export async function isSessionTokenRevoked(
   }
 
   try {
-    const revoked = await withDeadline(async () => {
+    const [revoked, generation] = await withDeadline(async () => {
       const redis = await getRedis()
-      return await redis.get(`ht_session:revoked:${verified.fingerprint}`)
+      return await redis.mget(
+        `ht_session:revoked:${verified.fingerprint}`,
+        userGenerationKey(verified.userId),
+      )
     }, READ_DEADLINE_MS)
+    if (generation !== null && generation !== verified.sessionGeneration) return true
     if (revoked !== null) {
       cacheRevocation(verified.fingerprint, verified.exp)
       return true

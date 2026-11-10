@@ -24,6 +24,7 @@ import {
   getEmailCodeClientIp,
 } from '@/lib/auth/emailCodeRateLimit'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
+import { rotateUserSessionGeneration } from '@/lib/auth/sessionRevocation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -102,6 +103,8 @@ export async function POST(request: NextRequest) {
         uid: true,
         displayName: true,
         photoURL: true,
+        emailVerified: true,
+        UserSetting: { select: { isVerified: true } },
       },
     })
 
@@ -133,6 +136,7 @@ export async function POST(request: NextRequest) {
     }
 
     let userData = userUpdateResult.res.user
+    let sessionGeneration: string | undefined
     if (!userData) {
       console.error('❌ User data not found in response')
       return NextResponse.json(
@@ -154,6 +158,9 @@ export async function POST(request: NextRequest) {
         where: { id: userData.id },
         data: { emailVerified: true },
       })
+      if (existingUser && !existingUser.emailVerified && !existingUser.UserSetting?.isVerified) {
+        sessionGeneration = await rotateUserSessionGeneration(userData.id)
+      }
       try {
         await autoJoinByEmailDomain(userData.id, userData.email)
       } catch (error) {
@@ -218,7 +225,10 @@ export async function POST(request: NextRequest) {
       })
       response.cookies.set(
         SESSION_COOKIE,
-        signSession({ id: userData!.id, email: userData!.email }, SESSION_TTL_SECONDS),
+        signSession(
+          { id: userData!.id, email: userData!.email, ...(sessionGeneration ? { sessionGeneration } : {}) },
+          SESSION_TTL_SECONDS,
+        ),
         sessionCookieOptions(SESSION_TTL_SECONDS)
       )
       clearBetterAuthSessionCookies(response)
