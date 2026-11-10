@@ -41,6 +41,7 @@ type Props = {
 };
 
 const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
+  const amoledToggle = useFlag(HTPR_9027_AMOLED_TOGGLE_FLAG);
   const currentProject = useRecoilValue(currentProjectAtom);
   const boardName = currentProject?.title ?? currentProject?.name;
   const queryClient = useQueryClient();
@@ -223,11 +224,13 @@ const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
                           <InlineToggle
                             checked={field.showInRail !== false}
                             label="Rail"
+                            amoledToggle={amoledToggle}
                             onToggle={() => toggleVisibility(field, "showInRail")}
                           />
                           <InlineToggle
                             checked={field.showInTable !== false}
                             label="Table"
+                            amoledToggle={amoledToggle}
                             onToggle={() => toggleVisibility(field, "showInTable")}
                           />
 
@@ -280,13 +283,14 @@ function InlineToggle({
   label,
   onToggle,
   disabled,
+  amoledToggle,
 }: {
   checked: boolean;
   label: string;
   onToggle: () => void;
   disabled?: boolean;
+  amoledToggle: boolean;
 }) {
-  const amoledToggle = useFlag(HTPR_9027_AMOLED_TOGGLE_FLAG);
   return (
     <button
       type="button"
