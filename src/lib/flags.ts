@@ -278,7 +278,7 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
 
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
   const { currentRedisAudience } = await import("@/lib/redis/audience");
-  const { isUpstashAudienceRoutingEnabled } = await import("@/lib/redis/policy");
+  const { isUpstashAudienceRoutingEnabled } = await import("@/lib/redis/audience");
   if ((await isUpstashAudienceRoutingEnabled()) && currentRedisAudience() === "agent") {
     return prisma.featureFlag.findMany({ select: { key: true, mode: true } });
   }

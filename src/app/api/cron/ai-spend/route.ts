@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkDailyAiSpend } from "@/lib/ai/dailyAiSpend";
+import { checkUpstashDailyRequests } from "@/lib/ops/upstashRequestAlarm";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 
 export const runtime = "nodejs";
@@ -12,7 +13,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ checked: 0 });
   }
   try {
-    return NextResponse.json({ checked: 1, ...await checkDailyAiSpend() });
+    const [aiSpend, upstash] = await Promise.all([checkDailyAiSpend(), checkUpstashDailyRequests()]);
+    return NextResponse.json({ checked: 1, ...aiSpend, upstash });
   } catch {
     return NextResponse.json({ error: "AI usage check unavailable" }, { status: 503 });
   }

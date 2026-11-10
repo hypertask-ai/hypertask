@@ -10,10 +10,6 @@
       "schedule": "7 * * * *"
     },
     {
-      "path": "/api/cron/upstash-requests",
-      "schedule": "20 8 * * *"
-    },
-    {
       "path": "/api/cron/cleanup-guests",
       "schedule": "0 * * * *"
     },
