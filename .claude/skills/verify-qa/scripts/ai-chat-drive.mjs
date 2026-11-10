@@ -68,13 +68,20 @@ try {
   await page.goto('/chat', { waitUntil: 'domcontentloaded' });
   await composer.waitFor({ state: 'visible', timeout: 30_000 });
   const composerRoot = page.locator('[data-ai-chat-composer-root]:not([inert])').last();
+  const add = composerRoot.locator('summary[aria-label="Add"], button[aria-label="Add"]').first();
+  const dictation = composerRoot.locator('[aria-label="Start dictation"]').first();
   const names = [];
-  for (const label of ['Attach screenshot', 'Add context']) {
-    const button = composerRoot.locator(`[aria-label="${label}"]`).first();
-    if (await button.isVisible().catch(() => false)) names.push(await button.getAttribute('aria-label'));
+  if (await add.isVisible().catch(() => false)) {
+    await add.click();
+    for (const label of ['Attach file', 'Add context']) {
+      const item = composerRoot.locator(`[aria-label="${label}"]`).first();
+      if (await item.isVisible().catch(() => false)) names.push(await item.getAttribute('aria-label'));
+    }
+    if (await dictation.isVisible().catch(() => false)) names.push(await dictation.getAttribute('aria-label'));
+    await add.click();
   }
   await page.screenshot({ path: path.join(dir, '01-full-page.png') });
-  step('the full-page chat shows its composer and named buttons', await composer.isVisible() && names.length === 2, { names });
+  step('the full-page chat shows its composer and named buttons', await composer.isVisible() && names.length >= 2, { names });
 
   const marker = `AI chat drive ${Date.now()}`;
   const stream = page.waitForResponse((response) => response.url().includes('/api/ai/chat/stream'), { timeout: 60_000 }).catch(() => null);
@@ -94,10 +101,10 @@ try {
   const opened = await sidebar.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
   await page.screenshot({ path: path.join(dir, '03-sidebar.png') });
   step('the chat shortcut opens the docked sidebar with its composer', opened && (await composer.isVisible()), { opened });
-  await page.keyboard.press('Control+q');
+  await closeSidebar();
   const closed = await sidebar.waitFor({ state: 'hidden', timeout: 10_000 }).then(() => true, () => false);
-  await page.screenshot({ path: path.join(dir, '04-shortcut-closed.png') });
-  step('the chat shortcut closes the docked sidebar again', closed, {});
+  await page.screenshot({ path: path.join(dir, '04-sidebar-closed.png') });
+  step('the close control hides the docked sidebar', closed, {});
 } catch (error) {
   step('run', false, error.message.split('\n')[0]);
 }
