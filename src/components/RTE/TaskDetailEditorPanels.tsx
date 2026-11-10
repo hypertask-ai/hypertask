@@ -1,5 +1,5 @@
 import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
-import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/definitions/htpr-9028-inline-creation-screenshots";
+import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7393_COMMENT_INLINE_AI_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showAIChatInterfaceAtom, showCommandsAtom } from "@/store";

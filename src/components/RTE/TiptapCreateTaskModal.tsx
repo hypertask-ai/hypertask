@@ -2,7 +2,7 @@ import { PlanLimitRefusal } from "@/lib/planLimitsClient";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 import { HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { HTPR_8028_MOBILE_WRITER_SAVE_FLAG } from "@/lib/flags/definitions/htpr-8028-mobile-writer-save";
-import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/definitions/htpr-9028-inline-creation-screenshots";
+import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";

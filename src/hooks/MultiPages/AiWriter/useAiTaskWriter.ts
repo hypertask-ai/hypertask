@@ -24,8 +24,7 @@ import {
 import { getTaskWriterTaskIds } from "@/lib/ai/taskWriterTaskIds";
 import type { CurrentBoardBilling } from "@/store";
 import { buildTaskWriterRequestScope } from "@/lib/ai/taskWriterBoardContext";
-import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/guaranteeCreationScreenshots";
-import type { AgentImageAttachment } from "@/lib/media/inlineAgentImages";
+import { creationScreenshotCandidates, guaranteeCreationScreenshots, type AgentImageAttachment } from "@/lib/media/inlineAgentImages";
 const INLINE_IMAGE_RESEND_LIMIT = 100_000;
 
 const useAITaskWriter = (

@@ -1,7 +1,7 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
-import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/guaranteeCreationScreenshots";
-import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/definitions/htpr-9028-inline-creation-screenshots";
+import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
+import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";

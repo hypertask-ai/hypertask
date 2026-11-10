@@ -1,7 +1,6 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { readTaskWriterSkills, TASK_WRITER_SKILLS_HEADER, MAX_SKILL_INPUT_LENGTH, type TaskWriterSkills } from "./taskWriterSkills";
-import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut } from "@/lib/media/inlineAgentImages";
-import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/guaranteeCreationScreenshots";
+import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut, creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IProject, ITask } from "@/models/model";
