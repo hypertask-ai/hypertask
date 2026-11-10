@@ -1,7 +1,8 @@
 import { parse } from 'node-html-parser'
 import { FLAG_CHAT_RECORD, normalizeVisibleText } from '@/lib/flags/approvalWords'
 
-const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i
+const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Resume|Session|tmux|Worktree|Ledger)\s*:/i
+const BARE_GATE_LABEL = /^\s*(Gate|Gates)\s*:/i
 const FEEDBACK_TALLY_LINE = /^(?:AI feedback tally|Fingerprint): ai-fb-[0-9a-f]{12}$/
 const BUILD_ID = 'a build or commit id'
 const TECHNICAL_KINDS: Array<[RegExp, string]> = [
@@ -104,7 +105,7 @@ function lineHit(id: string, line: string): Hit | null {
   if (FLAG_RECORD_RULES.has(id) && isFlagSwitchRecord(line)) return null
   const plain = line.replace(/https?:\/\/\S+/g, 'LINK')
   if (id === 'robot-status') {
-    const status = plain.match(ROBOT_STATUS)
+    const status = plain.match(ROBOT_STATUS) ?? plain.match(BARE_GATE_LABEL)
     return status ? { legacy: true, reason: 'Robot status belongs in the agent log', offender: status[0] } : null
   }
   if (id === 'technical-detail') {
