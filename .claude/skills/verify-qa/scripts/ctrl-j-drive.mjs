@@ -48,7 +48,6 @@ const popup = page.locator('#htc').first();
 const composer = page.locator('[aria-label="Describe the task"]').first();
 const writer = page.locator('[data-compose-task-writer]').first();
 const createTask = writer.locator('[aria-label="Create task"]').first();
-const writingLabel = page.getByText(/Reading past tickets|Understanding the context|Writing the ticket|Saving the ticket/).first();
 const deleteTask = async (id) => {
   await context.request.post('/api/queues/tasks/taskDeleteReminder', { data: { taskId: id } }).catch(() => {});
   await context.request.delete(`/api/tasks/deleteTask?taskId=${id}`).catch(() => {});
@@ -93,31 +92,26 @@ try {
 
   const footer = (await writer.innerText().catch(() => '')).replace(/\s+/g, ' ').toLowerCase();
   const shortcut = /(ctrl|cmd) enter create/.test(footer) ? 'Control+Enter' : 'Enter';
-  const waitForCreate = (ms) => page.waitForResponse((response) => response.request().method() === 'POST'
-    && new URL(response.url()).pathname === '/api/tasks/create', { timeout: ms }).catch(() => null);
-  let via = `shortcut ${shortcut}`;
+  const createResponses = [];
+  page.on('response', (response) => {
+    if (response.request().method() === 'POST' && response.url().includes('/api/tasks/create')) createResponses.push(response);
+  });
   await composer.focus();
   await page.keyboard.press(shortcut);
-  let response = await waitForCreate(20_000);
-  let writes = await visible(writingLabel);
-  if (!response && !writes) {
-    via = 'Create button, the shortcut dispatched nothing';
-    await createTask.click({ timeout: 10_000 }).catch(() => {});
-    response = await waitForCreate(20_000);
-    writes = await visible(writingLabel);
+  const createdTicket = await page.waitForURL(/\/detail\/project-\d+\/\d+/, { timeout: 120_000 }).then(() => true, () => false);
+  let task = null;
+  for (const response of createResponses) {
+    const body = await response.json().catch(() => null);
+    task = body?.newTask?.newTask ?? body?.newTask ?? body?.task ?? body;
+    if (task?.id) break;
   }
-  if (!response && writes) response = await waitForCreate(60_000);
-  const body = response ? await response.json().catch(() => null) : null;
-  const task = body?.newTask?.newTask ?? body?.newTask ?? body?.task ?? body;
-  if (task?.id) result.created.push({ id: task.id, uniqueIndex: task.uniqueIndex });
-  await page.screenshot({ path: path.join(dir, '02-ctrl-j-sent.png') });
-  step('the send shortcut starts creating one task', Boolean(task?.id) || writes || Boolean(response), {
-    status: response?.status() ?? null,
-    url: response?.url() ?? null,
-    via,
-    writerRunning: writes,
-    uniqueIndex: task?.uniqueIndex ?? null,
-    body: JSON.stringify(body ?? null).slice(0, 200),
+  if (task?.id) result.created.push(task);
+  await page.screenshot({ path: path.join(dir, '02-ctrl-j-created.png') });
+  step('the send shortcut creates one task and opens it', createdTicket, {
+    via: `shortcut ${shortcut}`,
+    url: page.url(),
+    status: createResponses.at(-1)?.status() ?? null,
+    uniqueIndex: task?.uniqueIndex ?? (/\/detail\/project-\d+\/(\d+)/.exec(page.url()) ?? [])[1] ?? null,
     footer: footer.slice(0, 120),
   });
 

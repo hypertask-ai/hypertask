@@ -24,10 +24,10 @@ the same palette lists the commands but hides the key chips
 presses Ctrl+J on a seeded board, requires the New Task popup and its focused
 composer, checks the composer button names, and sends the note with the shortcut
 the footer names (`Ctrl Enter create` today, plain `Enter` when the flag is off).
-It requires the create to start: one `POST /api/tasks/create`, the writer's
-progress, or the Create button when the shortcut dispatches nothing. It deletes
-any task it created, then reopens and closes the popup with Escape. It prints
-`PASS` or `FAIL` per step and ends with `ctrl-j drive ok`. It refuses any base that is not loopback, so it never drives
+It requires the ticket to be created and opened at its detail page, records the
+create response, deletes the task it created, then reopens and closes the popup
+with Escape. It prints `PASS` or `FAIL` per step and ends with
+`ctrl-j drive ok`. It refuses any base that is not loopback, so it never drives
 production: run it on the seeded browser-smoke stack
 (`scripts/verify-qa <branch> hands-free-drives` runs it hosted).
 `--break shortcut` swallows Ctrl+J on purpose; the run must then end with
