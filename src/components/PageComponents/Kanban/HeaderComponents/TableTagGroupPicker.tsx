@@ -52,7 +52,6 @@ const TableTagGroupPicker = ({ project, onClose, onApply }: { project: IProject;
               {row.selected && <GripVertical size={14} strokeWidth={1.75} className="cursor-grab text-text-light-gray" aria-hidden />}
             </li>
           ))}
-          {rows.length === 0 && <li className="px-6 py-3 text-content text-text-light-gray">No tags with tickets in this view</li>}
         </ModalListContainer>
       </ModalBody>
       <ModalFooterComp className="m-0 justify-end px-5 pb-4 pt-0">
