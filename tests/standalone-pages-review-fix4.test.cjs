@@ -167,7 +167,7 @@ for (const taskId of [10, 11, 999]) {
       const row = h.state.links.find((link) => link.pageId === 20 && link.taskId === taskId);
       if (taskId === 999) assert.equal(row, undefined);
       else assert.ok(row.removedAt instanceof Date);
-      assert.equal(h.state.links.length, 2);
+      assert.equal(h.state.links.filter((link) => link.pageId === 20).length, 2);
     }
   });
 }

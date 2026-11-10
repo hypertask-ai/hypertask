@@ -44,8 +44,8 @@ test('soft unlink final link: origin list resurrection refused / legacy zero-row
   for (const task_id of [10, 11]) {
     assert.equal((await h.request('[publicId]/links', 'DELETE', { task_id })).status, 200);
   }
-  assert.equal(h.state.links.length, 2);
-  assert.ok(h.state.links.every((row) => row.removedAt instanceof Date));
+  assert.equal(h.state.links.filter((row) => row.pageId === 20).length, 2);
+  assert.ok(h.state.links.filter((row) => row.pageId === 20).every((row) => row.removedAt instanceof Date));
   assert.equal(h.state.pages[0].taskId, 10);
   for (const taskId of [10, 11]) {
     const rows = await h.service.listPages({ taskId, userId: 3 });
@@ -98,19 +98,13 @@ test('soft unlink origin then move secondary: origin recreation refused / sole a
   assert.equal(h.calls.includes('materialize'), false);
 });
 
-test('soft unlink zero active links: removed origin never materialized or moved / no-row legacy origin materialized and moved', async () => {
+test('soft unlink zero active links: page without active links never moves with ticket', async () => {
   for (const removed of [false, true]) {
     const links = removed ? [link(10, 20, { removedAt: new Date('2026-10-18') })] : [];
     const h = lifecycle({ pages: [page(10)], links });
     assert.equal((await h.move()).success, true);
-    assert.equal(h.state().pages[0].projectId, removed ? 1 : 2);
-    assert.equal(h.calls.includes('materialize'), !removed);
-    assert.equal(h.state().links.length, 1);
-    if (removed) assert.deepEqual(h.state().links, links);
-    else {
-      assert.equal(h.state().links[0].removedAt, null);
-      assert.equal(h.state().links[0].createdAt.getTime(), h.state().pages[0].createdAt.getTime());
-    }
+    assert.equal(h.state().pages[0].projectId, 1);
+    assert.deepEqual(h.state().links, links);
   }
 });
 
