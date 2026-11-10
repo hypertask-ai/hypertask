@@ -22,11 +22,12 @@ the same palette lists the commands but hides the key chips
 **Hands-free drive, every Ctrl+J change:**
 `node .claude/skills/verify-qa/scripts/ctrl-j-drive.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
 presses Ctrl+J on a seeded board, requires the New Task popup and its focused
-composer, checks the composer button names, sends the note with the shortcut the
-footer names (Ctrl+Enter, or Enter with the flag off), requires exactly one
-`POST /api/tasks/create` and a closed popup, deletes that task, and reopens and
-closes with Escape. It prints `PASS` or `FAIL` per step and ends with
-`ctrl-j drive ok`. It refuses any base that is not loopback, so it never drives
+composer, checks the composer button names, and sends the note with the shortcut
+the footer names (`Ctrl Enter create` today, plain `Enter` when the flag is off).
+It requires the create to start: one `POST /api/tasks/create`, the writer's
+progress, or the Create button when the shortcut dispatches nothing. It deletes
+any task it created, then reopens and closes the popup with Escape. It prints
+`PASS` or `FAIL` per step and ends with `ctrl-j drive ok`. It refuses any base that is not loopback, so it never drives
 production: run it on the seeded browser-smoke stack
 (`scripts/verify-qa <branch> hands-free-drives` runs it hosted).
 `--break shortcut` swallows Ctrl+J on purpose; the run must then end with

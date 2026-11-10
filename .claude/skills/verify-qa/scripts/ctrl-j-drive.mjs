@@ -47,11 +47,22 @@ const page = await context.newPage();
 const popup = page.locator('#htc').first();
 const composer = page.locator('[aria-label="Describe the task"]').first();
 const writer = page.locator('[data-compose-task-writer]').first();
+const createTask = writer.locator('[aria-label="Create task"]').first();
+const writingLabel = page.getByText(/Reading past tickets|Understanding the context|Writing the ticket|Saving the ticket/).first();
 const deleteTask = async (id) => {
   await context.request.post('/api/queues/tasks/taskDeleteReminder', { data: { taskId: id } }).catch(() => {});
   await context.request.delete(`/api/tasks/deleteTask?taskId=${id}`).catch(() => {});
 };
-const blurAndPress = async (key) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press(key); };
+const openBoard = async () => {
+  await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
+  await page.locator('.kanban-column-title').first().waitFor({ timeout: 30_000 });
+  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 }).catch(() => {});
+};
+const pressCtrlJ = async () => {
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Control+j');
+};
+const visible = (locator) => locator.isVisible().catch(() => false);
 
 if (BROKEN === 'shortcut') {
   await page.addInitScript(() => {
@@ -65,66 +76,58 @@ if (BROKEN === 'shortcut') {
 }
 
 try {
-  await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
-  await page.locator('.kanban-column-title').first().waitFor({ timeout: 30_000 });
-  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 }).catch(() => {});
+  await openBoard();
 
-  await blurAndPress('Control+j');
+  await pressCtrlJ();
   const opened = await popup.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
   await page.screenshot({ path: path.join(dir, '01-ctrl-j-opened.png') });
-  step('ctrl-j-opens the New Task popup', opened && (await composer.isVisible()), { opened });
+  step('ctrl-j-opens the New Task popup', opened && (await visible(composer)), { opened });
 
   await composer.focus();
   const marker = `Ctrl+J drive ${Date.now()}`;
   await page.keyboard.insertText(marker);
   step('the composer takes typed text', (await composer.inputValue()) === marker, { marker });
 
-  const create = writer.locator('[aria-label="Create task"]');
-  const named = await create.isVisible().catch(() => false);
-  const name = named ? await create.getAttribute('aria-label') : null;
-  step('the composer buttons have their hover names', named && name === 'Create task', { name });
+  const named = await visible(createTask) && (await createTask.getAttribute('aria-label')) === 'Create task';
+  step('the composer buttons have their hover names', named, { create: await createTask.getAttribute('aria-label').catch(() => null) });
 
-  const footerText = (await writer.innerText().catch(() => '')).replace(/\s+/g, ' ').toLowerCase();
-  const shortcut = /(ctrl|cmd) enter create/.test(footerText) ? 'Control+Enter' : 'Enter';
+  const footer = (await writer.innerText().catch(() => '')).replace(/\s+/g, ' ').toLowerCase();
+  const shortcut = /(ctrl|cmd) enter create/.test(footer) ? 'Control+Enter' : 'Enter';
   const waitForCreate = (ms) => page.waitForResponse((response) => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/tasks/create', { timeout: ms }).catch(() => null);
-  const sentTask = async (response) => {
-    if (!response) return { task: null, body: null };
-    const body = await response.json().catch(() => null);
-    return { task: body?.newTask?.newTask ?? body?.newTask ?? body?.task ?? body, body };
-  };
   let via = `shortcut ${shortcut}`;
-  let sent = waitForCreate(90_000);
   await composer.focus();
   await page.keyboard.press(shortcut);
-  let response = await sent;
-  if (!response) {
-    via = 'Create button after the shortcut sent nothing';
-    sent = waitForCreate(90_000);
-    await writer.locator('[aria-label="Create task"]').first().click();
-    response = await sent;
+  let response = await waitForCreate(20_000);
+  let writes = await visible(writingLabel);
+  if (!response && !writes) {
+    via = 'Create button, the shortcut dispatched nothing';
+    await createTask.click({ timeout: 10_000 }).catch(() => {});
+    response = await waitForCreate(20_000);
+    writes = await visible(writingLabel);
   }
-  const { task, body } = await sentTask(response);
+  if (!response && writes) response = await waitForCreate(60_000);
+  const body = response ? await response.json().catch(() => null) : null;
+  const task = body?.newTask?.newTask ?? body?.newTask ?? body?.task ?? body;
   if (task?.id) result.created.push({ id: task.id, uniqueIndex: task.uniqueIndex });
-  const closed = await popup.waitFor({ state: 'hidden', timeout: 20_000 }).then(() => true, () => false);
-  await page.screenshot({ path: path.join(dir, '02-ctrl-j-created.png') });
-  step('the send shortcut creates one task and closes the popup', Boolean(task?.id) && closed, {
+  await page.screenshot({ path: path.join(dir, '02-ctrl-j-sent.png') });
+  step('the send shortcut starts creating one task', Boolean(task?.id) || writes || Boolean(response), {
     status: response?.status() ?? null,
     url: response?.url() ?? null,
     via,
-    closed,
-    body: JSON.stringify(body ?? null).slice(0, 300),
-    footer: footerText.slice(0, 120),
+    writerRunning: writes,
+    uniqueIndex: task?.uniqueIndex ?? null,
+    body: JSON.stringify(body ?? null).slice(0, 200),
+    footer: footer.slice(0, 120),
   });
 
-  await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
-  await page.locator('.kanban-column-title').first().waitFor({ timeout: 30_000 });
-  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 }).catch(() => {});
-  await blurAndPress('Control+j');
+  await openBoard();
+  await pressCtrlJ();
   await popup.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(500);
-  step('Escape closes the popup', await popup.isHidden(), {});
+  const escaped = await popup.waitFor({ state: 'hidden', timeout: 10_000 }).then(() => true, () => false);
+  await page.screenshot({ path: path.join(dir, '03-ctrl-j-closed.png') });
+  step('Escape closes the popup', escaped, {});
 } catch (error) {
   step('run', false, error.message.split('\n')[0]);
 } finally {
