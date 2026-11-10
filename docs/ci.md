@@ -457,13 +457,13 @@ warn and fall back; unknown pricing never authorizes unconditional automatic
 shipping. No usable sources fails the watch.
 
 Only the families in
-[model-watch.allowlist.json](../.github/scripts/model-watch.allowlist.json) are
-filed, and only at or above the version recorded for each family. A model on a
-provider or family that is not listed is printed in the run log and files
-nothing, however new the gateway says it is. Watching another family is one line
-in that file. A day where every watched model is premium files nothing, so the
-models held for [HTPR-7746](https://app.hypertask.ai/detail/project-15/7746) ride
-along with a cheaper finding instead of filing their own ticket.
+[model-watch.allowlist.json](../../.github/scripts/model-watch.allowlist.json)
+file tickets, and only at or above the version recorded for each family. Another
+provider, a size, modality or coding side-line, or an older version stays in the
+run log. Watching a family is one line in that file. A day where everything
+watched is premium files nothing, so models held for
+[HTPR-7746](https://app.hypertask.ai/detail/project-15/7746) ride along with a
+cheaper finding instead of filing their own ticket.
 
 The existing CI `HYPERTASK_MCP_TOKEN` files board-15 tickets through the MCP
 search/create endpoints; optional `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` enable

@@ -19,7 +19,9 @@ function ticketFor(finding) {
 
 function rollupTicket(findings, now = new Date()) {
   const models = findings.map((finding) => `${finding.provider}/${identity(finding.model).name}`).sort();
-  const marker = `modelwatchrollup-${createHash("sha256").update(models.join("\n")).digest("hex").slice(0, 12)}`;
+  const families = [...new Set(models.map((model) => identity(model).family))];
+  const named = families.slice(0, 3).join("-");
+  const marker = `modelwatchrollup-${named}${families.length > 3 ? `-and-${families.length - 3}-more` : ""}`;
   const items = findings.map((finding) => `<li><code>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}</code>. Gateway input price per million tokens: ${finding.inputPerMillion == null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}. ${escapeHtml(finding.action)}.</li>`).join("");
   return {
     marker,
