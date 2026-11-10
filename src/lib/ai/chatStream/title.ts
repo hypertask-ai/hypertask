@@ -62,7 +62,7 @@ export async function generateConversationTitle(
       : byokApiKey, new Error("This team needs its own AI key for titles."));
     const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, feature: "chat" }) : resolveLegacyAiModel("openai", "gpt-6-luna", byokApiKey);
     const usageProvider = useHaiku ? aiUsageProviderForCredential(provider, modelInput) : provider;
-    const modelId = typeof model === "string" ? model : model.modelId;
+    const modelId = typeof model === "string" ? model : (model.modelId ?? "gpt-6-luna");
     const titleReasoning = titleReasoningApi();
     const titleOutputCap = titleReasoning?.CHAT_TITLE_MAX_OUTPUT_TOKENS ?? 64;
     let providerOptions = providerOptionsForAiModel(model, "chat", tags);
