@@ -1127,6 +1127,8 @@ model View {
   // Table-view sort; app-level column keys (see TABLE_COLUMN_KEYS), not a DB enum.
   table_sort_column     String?
   table_sort_direction  String?
+  table_sort_stack      Json?
+  table_columns         Json?
   table_group_by        String?
   table_collapsed_sections String?
   // Optional saved surface preference. App-validated to Board/Table; null inherits

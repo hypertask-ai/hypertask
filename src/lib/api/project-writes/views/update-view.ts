@@ -11,11 +11,11 @@ import {
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
+import { tableViewChangedJson, tableViewSettingsForWrite } from "./gate-table-view-settings";
 import { viewColumnsToWrite } from "@/utils/controllers/section/viewColumnVisibility";
 import { ISection } from "@/models/model";
 import {
   sanitizeBoardLayout,
-  sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   assertViewIsNotManagedSmartSplit,
@@ -135,9 +135,10 @@ const route = taskWriteRoute({
       });
 
       const currentDate = new Date();
-      const sanitizedTableSort = sanitizeTableSort(
-        view_settings.table_sort_column,
-        view_settings.table_sort_direction
+      const tableSettings = await tableViewSettingsForWrite(
+        userId,
+        view_settings as Record<string, unknown>,
+        null,
       );
       let sanitizedTableGroupBy =
         Object.prototype.hasOwnProperty.call(view_settings ?? {}, "table_group_by")
@@ -176,8 +177,9 @@ const route = taskWriteRoute({
               ...(view_settings.board_show_archived === undefined
                 ? {}
                 : { board_show_archived: view_settings.board_show_archived ?? null }),
-              table_sort_column: sanitizedTableSort.column,
-              table_sort_direction: sanitizedTableSort.direction,
+              table_sort_column: tableSettings.table_sort_column,
+              table_sort_direction: tableSettings.table_sort_direction,
+              ...tableViewChangedJson(tableSettings),
               ...(sanitizedTableGroupBy === undefined
                 ? {}
                 : { table_group_by: sanitizedTableGroupBy }),

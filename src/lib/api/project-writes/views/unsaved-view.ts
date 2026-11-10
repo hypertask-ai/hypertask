@@ -17,6 +17,8 @@ import {
 import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableGroupByTag";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import { gatedTableCollapsedSectionsForViewWrite } from "./gate-table-collapsed-sections";
+import { sanitizeTableColumns, storedTableSortStack } from "@/lib/table-view/tableViewSettings";
+import { tableViewCompareData, tableViewSettingsForWrite, tableViewWriteData } from "./gate-table-view-settings";
 import {
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
@@ -24,7 +26,6 @@ import {
   resolveBoardLayoutRequest,
   resolveShowArchivedRequest,
   sanitizeBoardLayout,
-  sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   MissingBoardFilterLabelError,
@@ -52,8 +53,6 @@ const route = taskWriteRoute({
       board_sorting_stack,
       board_empty_sections,
       board_staleness,
-      table_sort_column,
-      table_sort_direction,
       table_group_by,
       table_collapsed_sections,
       baseViewId,
@@ -66,10 +65,6 @@ const route = taskWriteRoute({
       return viewWriteJson({ message: "Missing required information!" }, 400);
     }
     const sanitizedBoardFilters = sanitizeBoardFilters(board_filters);
-    const sanitizedTableSort = sanitizeTableSort(
-      table_sort_column,
-      table_sort_direction
-    );
     let sanitizedTableGroupBy = Object.prototype.hasOwnProperty.call(
       req.body,
       "table_group_by",
@@ -111,6 +106,8 @@ const route = taskWriteRoute({
       board_show_archived: null,
       table_sort_column: null,
       table_sort_direction: null,
+      table_sort_stack: null,
+      table_columns: null,
       table_group_by: null,
       table_collapsed_sections: null,
       board_layout: null,
@@ -189,6 +186,14 @@ const route = taskWriteRoute({
         req.body,
         inheritedShowArchived
       );
+      const comparisonViewForTable = hasBaseViewId
+        ? baseView
+        : user_project_view?.appliedView ?? projectView.default_view;
+      const tableSettings = await tableViewSettingsForWrite(
+        userId,
+        req.body,
+        comparisonViewForTable,
+      );
       const settingsFromReqBody = {
         board_columns_view,
         board_sorting_mode,
@@ -199,8 +204,7 @@ const route = taskWriteRoute({
         board_empty_sections,
         board_staleness: board_staleness ?? null,
         board_show_archived: resolvedShowArchived,
-        table_sort_column: sanitizedTableSort.column,
-        table_sort_direction: sanitizedTableSort.direction,
+        ...tableViewCompareData(tableSettings),
         table_group_by: sanitizedTableGroupBy ?? null,
         ...(sanitizedTableCollapsedSections === undefined
           ? {}
@@ -228,6 +232,8 @@ const route = taskWriteRoute({
               board_show_archived: baseView.board_show_archived,
               table_sort_column: baseView.table_sort_column,
               table_sort_direction: baseView.table_sort_direction,
+              table_sort_stack: storedTableSortStack(baseView.table_sort_stack),
+              table_columns: sanitizeTableColumns(baseView.table_columns),
               table_group_by: baseView.table_group_by,
               table_collapsed_sections: sanitizeTableCollapsedSectionsForWrite(baseView.table_collapsed_sections),
               board_layout: sanitizeBoardLayout(baseView.board_layout),
@@ -269,8 +275,7 @@ const route = taskWriteRoute({
             board_empty_sections,
             board_staleness: board_staleness ?? null,
             board_show_archived: resolvedShowArchived,
-            table_sort_column: sanitizedTableSort.column,
-            table_sort_direction: sanitizedTableSort.direction,
+            ...tableViewWriteData(tableSettings),
             table_group_by: sanitizedTableGroupBy ?? null,
             table_collapsed_sections: sanitizedTableCollapsedSections,
             board_layout: resolvedBoardLayout,
@@ -368,6 +373,8 @@ const route = taskWriteRoute({
               board_show_archived: comparisonView.board_show_archived,
               table_sort_column: comparisonView.table_sort_column,
               table_sort_direction: comparisonView.table_sort_direction,
+              table_sort_stack: storedTableSortStack(comparisonView.table_sort_stack),
+              table_columns: sanitizeTableColumns(comparisonView.table_columns),
               table_group_by: comparisonView.table_group_by,
               table_collapsed_sections: sanitizeTableCollapsedSectionsForWrite(comparisonView.table_collapsed_sections),
               board_layout: sanitizeBoardLayout(comparisonView.board_layout),
@@ -403,8 +410,7 @@ const route = taskWriteRoute({
                 board_empty_sections,
                 board_staleness: board_staleness ?? null,
                 board_show_archived: resolvedShowArchived,
-                table_sort_column: sanitizedTableSort.column,
-                table_sort_direction: sanitizedTableSort.direction,
+                ...tableViewWriteData(tableSettings),
                 table_group_by: sanitizedTableGroupBy ?? null,
                 table_collapsed_sections: sanitizedTableCollapsedSections,
                 board_layout: resolvedBoardLayout,
