@@ -572,3 +572,31 @@ test("MCP drafts on a brain board carry exactly one brain label; off leaves them
     assert.doesNotMatch(draft.html, /ai-generated-task-tags/);
   }
 });
+
+test("brain rule lists every brain label with its id so the writer can pick one", () => {
+  const brain = brainLabels.brainLabelsFromBoard([...boardLabels, { id: "b-hard", value: "Brain-Hard" }, { id: "b-light", value: "brain-light" }, { id: "b-medium", value: "brain-medium" }]);
+  assert.deepEqual(plain(brain.options), [{ id: "b-light", name: "brain-light" }, { id: "b-medium", name: "brain-medium" }, { id: "b-hard", name: "brain-hard" }]);
+  const rule = brainLabels.taskWriterBrainRule(brain);
+  assert.match(rule, /Brain label IDs: brain-light=b-light, brain-medium=b-medium, brain-hard=b-hard\./);
+  assert.match(rule, /exactly one brain label/);
+  assert.match(rule, /typo/);
+  assert.match(rule, /payments/);
+  assert.doesNotMatch(rule, /brain-extra-hard=/);
+});
+
+test("the board vocabulary cuts a long label list, so brain ids must come from the brain rule", async () => {
+  const { formatBoardVocabulary } = load(path.join(root, "src/app/api/ai/_lib/taskWriterBoardResearch.ts"));
+  const longBoard = [
+    ...Array.from({ length: 60 }, (_, index) => ({ id: `0f0f0f0f-0000-4000-8000-${String(index).padStart(12, "0")}`, value: `Label number ${index}` })),
+    { id: "8ab3def4-0000-4000-8000-000000000001", value: "brain-light" },
+    { id: "8ab3def4-0000-4000-8000-000000000002", value: "brain-medium" },
+    { id: "8ab3def4-0000-4000-8000-000000000003", value: "brain-hard" },
+    { id: "8ab3def4-0000-4000-8000-000000000004", value: "brain-extra-hard" },
+  ];
+  const vocabulary = formatBoardVocabulary({ labels: longBoard.map(({ id, value }) => ({ id, name: value })) });
+  assert.doesNotMatch(vocabulary, /brain-light/);
+  const h = harness({ brain: true, boardLabels: longBoard, output });
+  assert.equal((await h.post({ project_id: 15, prompt: "Fix a typo" })).status, 200);
+  const prompt = JSON.stringify(h.calls[0].prompt);
+  for (const option of brainLabels.brainLabelsFromBoard(longBoard).options) assert.ok(prompt.includes(`${option.name}=${option.id}`), option.name);
+});
