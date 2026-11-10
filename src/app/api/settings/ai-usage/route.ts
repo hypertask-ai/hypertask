@@ -10,7 +10,6 @@ import {
   aggregateGatewaySystemSpend,
   aggregateGatewayTeamUsage,
   buildDisplayModelUsage,
-  buildGatewayMemberSpendRows,
   gatewayBillingPeriodRange,
   type DirectByokModelUsage,
   type DisplayModelUsage,
@@ -20,7 +19,6 @@ import { teamAiAllowanceUsd } from "@/lib/aiAllowancePolicy";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_8008_GATEWAY_KEY_ERRORS_FLAG } from "@/lib/flags/definitions/htpr-8008-gateway-key-errors";
 import { HTPR_7743_AI_USAGE_AUTH_FLAG } from "@/lib/flags/definitions/htpr-7743-ai-usage-auth";
-import { HTPR_7788_TEAM_AI_BREAKDOWN_FLAG } from "@/lib/flags/definitions/htpr-7788-team-ai-breakdown";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -78,7 +76,6 @@ type AiUsageResponse = {
   boards: PercentageRow[];
   tasks: PercentageRow[];
   agents: PercentageRow[];
-  members: PercentageRow[];
   usageMessage: string | null;
 };
 
@@ -288,48 +285,6 @@ const loadAiUsageBreakdown = async (
   }
 };
 
-const loadMemberSpendRows = async (
-  teamId: string,
-  tagPayload: unknown,
-  teamSpendUsd: number,
-): Promise<PercentageRow[]> => {
-  try {
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
-      select: {
-        googleAccount: { select: { userId: true } },
-        members: { where: { status: "Accepted" }, select: { userId: true } },
-      },
-    });
-    if (!team) return [];
-    const memberIds = Array.from(
-      new Set([
-        team.googleAccount.userId,
-        ...(team.members ?? []).map((member) => member.userId),
-      ]),
-    );
-    const users = await prisma.user.findMany({
-      where: { id: { in: memberIds } },
-      select: { displayName: true, email: true, id: true },
-    });
-    return toPercentageRows(
-      buildGatewayMemberSpendRows(
-        users.map((member) => ({
-          displayName:
-            member.displayName?.trim() || member.email || `User ${member.id}`,
-          userId: member.id,
-        })),
-        tagPayload,
-        teamSpendUsd,
-      ),
-      6,
-    );
-  } catch (error) {
-    console.error("Error loading AI usage by member:", error);
-    return [];
-  }
-};
-
 export async function GET(request: Request) {
   const user = await getServerCookieUser();
   if (!user) {
@@ -389,7 +344,6 @@ export async function GET(request: Request) {
       boards: [],
       tasks: [],
       agents: [],
-      members: [],
       usageMessage: "AI usage is not available for this team.",
     } satisfies AiUsageResponse);
   }
@@ -466,7 +420,6 @@ export async function GET(request: Request) {
         boards: breakdown?.boards ?? [],
         tasks: breakdown?.tasks ?? [],
         agents: breakdown?.agents ?? [],
-        members: [],
         usageMessage: "AI usage totals are unavailable because the AI service could not authorize usage reporting. Your AI settings may need attention.",
       } satisfies AiUsageResponse);
     }
@@ -522,12 +475,6 @@ export async function GET(request: Request) {
       breakdown?.directByokModels ?? [],
     );
     const customerFunded = funding.source === "customer";
-    const members =
-      isTeamOwner &&
-      !customerFunded &&
-      (await isFeatureEnabled(HTPR_7788_TEAM_AI_BREAKDOWN_FLAG, user.id))
-        ? await loadMemberSpendRows(teamId, tagPayload, totalPlatformUsd)
-        : [];
 
     return NextResponse.json({
       configured: true,
@@ -552,7 +499,6 @@ export async function GET(request: Request) {
       boards: breakdown?.boards ?? [],
       tasks: breakdown?.tasks ?? [],
       agents: breakdown?.agents ?? [],
-      members,
       usageMessage: customerFunded
         ? "Usage is billed to this team's own AI Gateway key and does not consume Hypertask's included allowance."
         : null,

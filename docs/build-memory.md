@@ -287,19 +287,3 @@ Production deployment `df912192` (pull request 3148) was the first green build w
 `3840` MB failed on merge `0d635b84165` before HYCI-220 while the same tree still built at 4096 MB. That gap was the in-RAM cache peak, not the compile heap alone. With `maxMemoryGenerations=0` live, 3840 MB targets the headroom model from the HYCI-180 note without the RAM cache term that pushed 4000 MB merges into repeated container OOM.
 
 If the next production build reports "Reached heap limit", the compiler genuinely needs more than 3840 MB V8 heap on the current tree and the next step is the paid Enhanced Build Machine, which is Valentin's decision.
-
-## Heap cap 3584 MB (2026-11-10, HYCI-230)
-
-The last green production deployment was 7677640763 (`cd707b0f99`). The next three production deployments failed. CI Tests was green on `dbd8b56`.
-
-| Merge | Deployment | Log |
-| --- | --- | --- |
-| `dbd8b56d58` | 7678632837 | `dpl_9ipAK4hUEHw9maThvbpDfxi8G9An` `out_of_memory` |
-| `e34208dae9` | 7678798987 | `dpl_FzxxTRNUVNXPNNCGKV2YkxmdUDg9` `out_of_memory` |
-| `7b1c3329c6` | 7678878573 | GitHub status failure, same few-minute window |
-
-Both fetched logs die in "Creating an optimized production build" with `Next.js build worker exited with code: null and signal: SIGKILL` and no "Reached heap limit" line. The heap cap was already 3840 MB, webpack parallelism was already 1, and `maxMemoryGenerations` was already 0. The first failed tree is 391 lines past the last green build, so this is the machine ceiling, not one feature.
-
-3584 MB is the last cap where that worker was still running while V8 sat on a 3080 MB live set (HYCI-184). It gives native memory 4608 MiB on the 8192 MiB machine instead of 4352 MiB. A bigger build machine costs money, so this step does not enable Enhanced Builds.
-
-If this cap logs "Reached heap limit" or another `out_of_memory` SIGKILL, the compiler needs more than an 8 GB machine. That is the paid Enhanced Build Machine, and it is Valentin's decision.
