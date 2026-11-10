@@ -174,12 +174,52 @@ test('out-of-range cursor offsets are rejected rather than restarting or creatin
   assert.equal(f.writes.length, 0);
 });
 
-test('initial empty history creates a blank session', async () => {
+test('with the flag off, initial empty history creates a blank session', async () => {
   const f = fixture({ rows: [] });
   const body = await (await f.get('compat=htpr-6924')).json();
   assert.equal(f.writes.length, 1);
   assert.equal(body.sessions.length, 1);
   assert.equal(body.sessions[0].hasMessages, false);
+});
+
+test('with the flag on, opening the sidebar with no history creates nothing', async () => {
+  const f = fixture({ rows: [], noEmptyChats: true });
+  const body = await (await f.get('compat=htpr-6924')).json();
+  assert.equal(f.writes.length, 0);
+  assert.deepEqual(body.sessions, []);
+  assert.equal(body.nextCursor, null);
+});
+
+test('with the flag on, history lists hide chats without messages', async () => {
+  const f = fixture({ noEmptyChats: true, rows: [session(1), session(2, { messages: [] }), session(3), session(4, { messages: [], agentId: id(70) })] });
+  const body = await (await f.get('compat=htpr-6924')).json();
+  assert.deepEqual(body.sessions.map((row) => row.id), [id(3), id(1)]);
+  assert.ok(body.sessions.every((row) => row.hasMessages));
+  assert.equal(f.writes.length, 0);
+});
+
+test('with the flag on, a chat that only has no messages still shows for emptyOnly and scoped lookups', async () => {
+  const f = fixture({ noEmptyChats: true, rows: [session(1, { messages: [], projectId: 4 }), session(2, { messages: [], taskId: 91, projectId: 4 }), session(3)] });
+  const empty = await (await f.get('compat=htpr-6924&emptyOnly=true')).json();
+  assert.deepEqual(empty.sessions.map((row) => row.id), [id(1), id(2)].sort((a, b) => b.localeCompare(a)));
+  const task = await (await f.get('compat=htpr-6924&taskId=91')).json();
+  assert.deepEqual(task.sessions.map((row) => row.id), [id(2)]);
+  const board = await (await f.get('compat=htpr-6924&projectId=4')).json();
+  assert.deepEqual(board.sessions.map((row) => row.id), [id(1)]);
+  assert.equal(f.writes.length, 0);
+});
+
+test('with the flag on, the legacy list does not create a session for a user with none', async () => {
+  const f = fixture({ noEmptyChats: true, rows: [] });
+  const response = await f.get('');
+  assert.equal(response.status, 200);
+  assert.equal(f.writes.length, 0);
+});
+
+test('with the flag off, the legacy list still creates a session for a user with none', async () => {
+  const f = fixture({ rows: [] });
+  assert.equal((await f.get('')).status, 200);
+  assert.equal(f.writes.length, 1);
 });
 
 test('auth and internal error retain exact original response bodies', async () => {

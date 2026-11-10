@@ -1,6 +1,7 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { chatAudienceWhere } from "@/lib/agents/chatContentScope";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
+import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 import { hydrateChatTicketMessages } from "@/lib/ai/chatStream/ticketGroups";
 import { loadSidebarChatRequest, sidebarChatProjectId } from "@/lib/agents/chatAccess";
 import { randomUUID } from "node:crypto";
@@ -24,7 +25,7 @@ const transcriptInclude = {
 };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function pagedSessions(request: NextRequest, userId: number, ticketRowsEnabled: () => Promise<boolean>, agentId?: string) {
+async function pagedSessions(request: NextRequest, userId: number, ticketRowsEnabled: () => Promise<boolean>, noEmptyChats: boolean, agentId?: string) {
   const params = new URL(request.url).searchParams;
   const visible = {
     userId,
@@ -75,7 +76,8 @@ async function pagedSessions(request: NextRequest, userId: number, ticketRowsEna
       return invalid();
     }
   }
-  const where = { ...visible, ...scope, ...(emptyOnly ? { messages: { none: {} } } : {}) };
+  const hideEmpty = noEmptyChats && !emptyOnly && !Object.keys(scope).length;
+  const where = { ...visible, ...scope, ...(emptyOnly ? { messages: { none: {} } } : hideEmpty ? { messages: { some: {} } } : {}) };
   const snapshot = cursor?.snapshot ?? randomUUID();
   const cacheKey = `ai-chat:session-page:${userId}:${scope.taskId ?? ""}:${scope.projectId ?? ""}:${emptyOnly}:${snapshot}`;
   let ids: string[];
@@ -107,7 +109,7 @@ async function pagedSessions(request: NextRequest, userId: number, ticketRowsEna
     const row = byId.get(id);
     return row ? [row] : [];
   });
-  if (!ids.length && !cursor && !Object.keys(scope).length && !emptyOnly) {
+  if (!noEmptyChats && !ids.length && !cursor && !Object.keys(scope).length && !emptyOnly) {
     page.push(await prisma.chatSession.create({ data: { userId }, select: summarySelect }));
   }
   const sessions = page.map(({ _count, ...session }) => ({
@@ -144,8 +146,10 @@ export async function GET(request: NextRequest) {
     const limited = await checkRestRateLimit(userId, "read");
     if (limited) return limited;
 
+    const noEmptyChats = await isFeatureEnabled(HTPR_9021_NO_EMPTY_CHATS_FLAG, userId).catch(() => false);
+
     if (new URL(request.url).searchParams.get("compat") === "htpr-6924") {
-      return await pagedSessions(request, userId, ticketRowsEnabled, currentUser?.agentId);
+      return await pagedSessions(request, userId, ticketRowsEnabled, noEmptyChats, currentUser?.agentId);
     }
 
     const sessions = await prisma.chatSession.findMany({
@@ -171,7 +175,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    if (sessions.length === 0) {
+    if (sessions.length === 0 && !noEmptyChats) {
       console.warn("No sessions found, creating new session");
       const session = await prisma.chatSession.create({
         data: {

@@ -630,6 +630,7 @@ export const useSessionAndChatHistory = (
     sessions,
     setActiveSession,
     startNewSession,
+    showGeneralChat: async () => { await startNewSession(); },
     selectSession,
     addMessageToSessionQuery,
     updateLastMessageInSessionCache,

@@ -249,7 +249,7 @@ function client(t, { enabled = true, cancelStatus = 200, cancelResult = { succes
     "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
     "@/utils/helperFunctions/helperFunctions": {},
     "@/utils/helperFunctions/getFileTypeFromUrl": {},
-    "@/hooks/useFlag": { useFlag: () => enabled },
+    "@/hooks/useFlag": { useFlag: (key) => key !== "htpr-9021-no-empty-chats" && enabled },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7794_STOP_CLOSES_STREAM_FLAG: FLAG },
   };
