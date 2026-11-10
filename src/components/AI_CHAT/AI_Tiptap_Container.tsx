@@ -201,6 +201,10 @@ export function AI_Tiptap_Container({
   };
   const audioButtonId = `ai-chat-audio-button-${useId()}`;
   useEffect(() => {
+    if (!agentSessionsEnabled || !editor || editor.isDestroyed) return;
+    editor.view.dispatch(editor.state.tr);
+  }, [agentSessionsEnabled, editor, sidebarAgent]);
+  useEffect(() => {
     if (
       explicitOpenAt === null ||
       Date.now() - explicitOpenAt > FOCUS_REQUEST_WINDOW_MS
@@ -298,7 +302,7 @@ export function AI_Tiptap_Container({
   );
 
   return (
-    <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root inert={disabled || !active || undefined}
+    <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root data-sidebar-agent={agentSessionsEnabled ? sidebarAgent : undefined} inert={disabled || !active || undefined}
       onKeyDownCapture={controlledComposer ? (event) => {
         if (isMbl || !active || disabled || !(event.metaKey || event.ctrlKey) || !event.shiftKey || event.keyCode !== 68) return;
         const recorder = focusRootRef.current?.querySelector<HTMLElement>(`[id="${audioButtonId}"]`);

@@ -4,13 +4,17 @@ import React, {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useState,
 } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useRecoilState } from "@/lib/state";
 import { MentionItem } from "@/models/model";
 import { DIV_ID_CONSTANTS, generalConfig } from "@/lib/configs/general.config";
 import {
   firstSelectableMentionIndex,
+  moveAgentMentionsFirst,
   nextSelectableMentionIndex,
   NON_SELECTABLE_MENTION_TYPES,
 } from "../../mentionNavigation";
@@ -37,14 +41,20 @@ interface MentionListRef {
 const MentionList = forwardRef<MentionListRef, MentionListProps>(
   (props, ref) => {
     const ignoreItems: string[] = [...NON_SELECTABLE_MENTION_TYPES];
+    const agentsFirst = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+    const sourceItems = props.items;
+    const items = useMemo(
+      () => (agentsFirst && sourceItems ? moveAgentMentionsFirst(sourceItems) : sourceItems),
+      [agentsFirst, sourceItems],
+    );
     const [selectedIndex, setSelectedIndex] = useState<number>(() =>
-      firstSelectableMentionIndex(props.items ?? []),
+      firstSelectableMentionIndex(items ?? []),
     );
     const [___, setShowMentionList] = useRecoilState(showMentionListAtom);
     const [isLoading, setIsLoading] = useState<boolean>(true);
 
     const selectItem = (index: number): void => {
-      const item = props.items[index];
+      const item = items[index];
       if (item && !ignoreItems.includes(item.type)) {
         let mentionData;
 
@@ -97,7 +107,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
 
     const upHandler = (): void => {
       const nextIndex = nextSelectableMentionIndex(
-        props.items,
+        items,
         selectedIndex,
         -1,
       );
@@ -108,7 +118,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
 
     const downHandler = (): void => {
       const nextIndex = nextSelectableMentionIndex(
-        props.items,
+        items,
         selectedIndex,
         1,
       );
@@ -131,11 +141,11 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
         document.body.style.overflow = "hidden";
       }
 
-      if (!props.items || props.items.length === 0) {
+      if (!items || items.length === 0) {
         setIsLoading(true);
       } else {
         setIsLoading(false);
-        setSelectedIndex(firstSelectableMentionIndex(props.items));
+        setSelectedIndex(firstSelectableMentionIndex(items));
       }
 
       return () => {
@@ -143,7 +153,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
           document.body.style.overflow = previousOverflow || "";
         }
       };
-    }, [props.items, props.query]);
+    }, [items, props.query]);
 
     useEffect(() => {
       setShowMentionList(true);
@@ -163,6 +173,10 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
           return true;
         }
         if (event.key === "Enter") {
+          if (agentsFirst && items[selectedIndex]?.type === "agent") {
+            event.preventDefault();
+            event.stopPropagation();
+          }
           enterHandler();
           return true;
         }
@@ -174,14 +188,14 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
       },
     }));
 
-    const hasItems = props.items?.length > 3;
-    const noResults = hasItems && props.items[0]?.type === "no-results";
+    const hasItems = items?.length > 3;
+    const noResults = hasItems && items[0]?.type === "no-results";
 
     return (
       <MentionListRows
         id={DIV_ID_CONSTANTS.aiMentionList}
         selectedIndex={selectedIndex}
-        items={props.items}
+        items={items}
         selectItem={selectItem}
         setSelectedIndex={setSelectedIndex}
         ignoreItems={ignoreItems}

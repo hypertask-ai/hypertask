@@ -1,13 +1,14 @@
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
-import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
+import type { SidebarChatAgent, SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   Bot,
   type LucideIcon,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Ellipsis,
   History,
@@ -86,6 +87,25 @@ function ActiveCheck({ className }: { className?: string }) {
 }
 
 const MENU_ROW_CLASS = "flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2 text-left text-content font-medium text-white-black transition-colors hover:bg-hover-active";
+const RECENT_AGENT_COUNT = 3;
+
+const latestAgentSessionTime = (agent: SidebarChatAgent): number =>
+  Math.max(0, ...(agent.sessions ?? []).map((session) => {
+    const time = new Date(session.updatedAt).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  }));
+
+const filterAgentsByQuery = (agents: SidebarChatAgent[], query: string): SidebarChatAgent[] => {
+  const needle = query.trim().toLowerCase();
+  return needle ? agents.filter((agent) => agent.displayName.toLowerCase().includes(needle)) : agents;
+};
+
+const visibleDropdownAgents = (agents: SidebarChatAgent[], query: string, showAll: boolean): SidebarChatAgent[] => {
+  const sorted = [...agents].sort((a, b) => latestAgentSessionTime(b) - latestAgentSessionTime(a) || a.displayName.localeCompare(b.displayName));
+  const matches = filterAgentsByQuery(sorted, query);
+  return showAll || query.trim() ? matches : matches.slice(0, RECENT_AGENT_COUNT);
+};
+
 
 function MenuRow({ icon: Icon, label, onClick, checked }: { icon: LucideIcon; label: string; onClick: () => void; checked?: boolean }) {
   return (
@@ -200,6 +220,10 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
     else AI_CHAT_AUTO_OPEN_KEYS.forEach((key) => openPrefs.setPreference(key, closed ? false : AI_CHAT_AUTO_OPEN_DEFAULTS[key]));
   };
   const [historyQuery, setHistoryQuery] = useState("");
+  const [agentViewId, setAgentViewId] = useState<string | null>(null);
+  const [showAllAgents, setShowAllAgents] = useState(false);
+  const agentViewRef = useRef<HTMLDivElement>(null);
+  const agentsInDropdown = hasAgentSessions && headerMenus && !isMbl && !!sidebarChats;
   const [historyMaxHeight, setHistoryMaxHeight] = useState<number | undefined>(undefined);
   const headerRef = useRef<HTMLDivElement>(null);
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
@@ -213,8 +237,11 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   useEffect(() => {
     const chatHeight = headerRef.current?.parentElement?.clientHeight;
     setHistoryMaxHeight(isDropdownOpen && chatHeight ? Math.round(chatHeight * 0.75) : undefined);
-    if (!isDropdownOpen) setHistoryQuery("");
+    if (!isDropdownOpen) { setHistoryQuery(""); setAgentViewId(null); setShowAllAgents(false); }
   }, [isDropdownOpen]);
+  useEffect(() => {
+    if (agentViewId) agentViewRef.current?.focus({ preventScroll: true });
+  }, [agentViewId]);
   useEffect(() => {
     if (sessionPagingEnabled && isDropdownOpen) {
       void refreshHistorySessions();
@@ -239,6 +266,12 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
     return partitionSessionsByRecency(hasAgentSessions ? [...personal, ...agentChats].sort((a, b) => getSessionUpdatedTime(b) - getSessionUpdatedTime(a)) : personal, headerMenus);
   }, [sessions, historySessions, sessionPagingEnabled, filterAgentSessions, hasAgentSessions, sidebarChats?.agents, headerMenus, historyQuery]);
 
+  const talkingAgent = agentsInDropdown && sidebarChats?.target.kind !== "ai" ? sidebarChats?.target.agent : undefined;
+  const talkingAgentSessionId = sidebarChats?.target.kind === "native-agent" ? currentSession?.id : talkingAgent?.sessionId;
+  const talkingAgentSessionTitle = talkingAgent
+    ? sidebarChats?.agents.find((agent) => agent.id === talkingAgent.id)?.sessions?.find((session) => session.id === talkingAgentSessionId)?.title
+    : undefined;
+
   const resolvedSessionId = hasAgentSessions && sidebarChats?.target.kind === "external-agent" ? sidebarChats.target.agent.sessionId : currentSession?.id;
 
   useEffect(() => {
@@ -262,13 +295,17 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (agentViewId) {
+        setAgentViewId(null);
+        return;
+      }
       setIsDropdownOpen(false);
       setIsOverflowOpen(false);
     };
 
     document.addEventListener("keydown", closeOnEscape, true);
     return () => document.removeEventListener("keydown", closeOnEscape, true);
-  }, [isDropdownOpen, isOverflowOpen]);
+  }, [isDropdownOpen, isOverflowOpen, agentViewId]);
 
   const handleStartNewSession = async () => {
     if (isStartingNewSessionRef.current) return;
@@ -347,6 +384,15 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
       }
       return rows;
     };
+    const agentView = agentsInDropdown ? sidebarChats?.agents.find((agent) => agent.id === agentViewId) : undefined;
+    const dropdownAgents = agentsInDropdown && !agentView ? visibleDropdownAgents(sidebarChats?.agents ?? [], historyQuery, showAllAgents) : [];
+    const matchingAgentCount = agentsInDropdown ? filterAgentsByQuery(sidebarChats?.agents ?? [], historyQuery).length : 0;
+    const totalAgentCount = sidebarChats?.agents.length ?? 0;
+    const startAgentSession = () => {
+      if (!agentView) return;
+      setIsDropdownOpen(false);
+      sidebarChats?.onStartAgentSession?.(agentView);
+    };
     return (
       <div
         id="ai-chat-session-history"
@@ -359,7 +405,45 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           }
         }}
       >
-        {headerMenus && (
+        {agentView && sidebarChats && (
+          <div
+            ref={agentViewRef}
+            tabIndex={-1}
+            data-testid="ai-chat-agent-view"
+            className="outline-none"
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                setAgentViewId(null);
+              }
+              if (event.key === "Enter" && event.target === event.currentTarget) {
+                event.preventDefault();
+                startAgentSession();
+              }
+            }}
+          >
+            <button type="button" className={cn(MENU_ROW_CLASS, "font-semibold")} aria-label="Back to all chats" onClick={() => setAgentViewId(null)}>
+              <ChevronLeft size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+              <Bot size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{agentView.displayName}</span>
+            </button>
+            <button type="button" className={MENU_ROW_CLASS} onClick={startAgentSession}>
+              <SquarePen size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+              <span className="min-w-0 flex-1 truncate">New session</span>
+              <kbd className="text-micro text-icon-dark-gray">Enter</kbd>
+            </button>
+            {(agentView.sessions ?? []).length > 0 && <div className="px-2 pb-1 pt-2 text-micro font-medium text-icon-dark-gray">Past sessions</div>}
+            <ul>
+              {sessionRows((agentView.sessions ?? []).map((session) => ({ ...session, agentId: agentView.id })))}
+            </ul>
+            {agentView.hasMoreSessions && (
+              <button type="button" className={cn(MENU_ROW_CLASS, "text-icon-dark-gray")} onClick={() => sidebarChats.onLoadMoreAgentSessions?.(agentView)}>
+                Show more
+              </button>
+            )}
+          </div>
+        )}
+        {headerMenus && !agentView && (
           <div className="sticky top-0 z-10 -mx-1 -mt-1 bg-modalBackground px-1 pb-1 pt-1">
             <label className="flex h-[30px] items-center gap-2 rounded-[4px] bg-ai-tiptap px-2">
               <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" aria-hidden />
@@ -368,18 +452,41 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             </label>
           </div>
         )}
-        {sessionPagingEnabled && pagingError && (
+        {!agentView && dropdownAgents.length > 0 && (
+          <div className="pt-1" data-testid="ai-chat-agents-section">
+            <div className="px-2 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">Agents</div>
+            <ul className="pb-1">
+              {dropdownAgents.map((agent) => (
+                <li key={agent.id}>
+                  <button type="button" data-agent-id={agent.id} className={MENU_ROW_CLASS} onClick={() => setAgentViewId(agent.id)}>
+                    <Bot size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">{agent.displayName}</span>
+                    <ChevronRight size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+                  </button>
+                </li>
+              ))}
+              {!historyQuery.trim() && totalAgentCount > RECENT_AGENT_COUNT && (
+                <li>
+                  <button type="button" aria-expanded={showAllAgents} className={cn(MENU_ROW_CLASS, "text-icon-dark-gray")} onClick={() => setShowAllAgents((open) => !open)}>
+                    <span className="min-w-0 flex-1 truncate">{showAllAgents ? "Fewer agents" : `All ${totalAgentCount} agents`}</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+        {!agentView && sessionPagingEnabled && pagingError && (
           <p role="alert" className="px-3 py-2 text-content">
             Couldn’t load older chats. Scroll to try again.
           </p>
         )}
-        {today.length > 0 && (
+        {!agentView && today.length > 0 && (
           <div className="pt-1">
             <div className="px-2 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">Today</div>
             <ul className="pb-1">{sessionRows(today)}</ul>
           </div>
         )}
-        {previous7Days.length > 0 && (
+        {!agentView && previous7Days.length > 0 && (
           <div className="pt-1">
             <div className={cn("px-3 pb-1 pt-1 text-micro font-medium text-icon-dark-gray", headerMenus && "px-2")}>
               Previous 7 days
@@ -392,7 +499,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
         {!headerMenus && previous7Days.length > 0 && older.length > 0 && (
           <div className="mx-2 h-px bg-gray-600/60" role="separator" />
         )}
-        {older.length > 0 && (
+        {!agentView && older.length > 0 && (
           <div className="pb-1">
             <div className={cn("px-3 pb-1 pt-2 text-micro font-medium text-icon-dark-gray", headerMenus && "px-2")}>
               Older
@@ -402,16 +509,16 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             </ul>
           </div>
         )}
-        {hasAgentSessions && sidebarChats?.agents.some((agent) => agent.hasMoreSessions) && (
+        {!agentView && hasAgentSessions && sidebarChats?.agents.some((agent) => agent.hasMoreSessions) && (
           <button type="button" className="w-full px-3 py-2 text-left text-content text-icon-dark-gray hover:bg-active-modal-element"
             onClick={() => sidebarChats.agents.filter((agent) => agent.hasMoreSessions).forEach((agent) => sidebarChats.onLoadMoreAgentSessions?.(agent))}>
             Show older agent sessions
           </button>
         )}
-        {headerMenus && historyQuery.trim() && !today.length && !previous7Days.length && !older.length && (
+        {!agentView && headerMenus && historyQuery.trim() && !today.length && !previous7Days.length && !older.length && !matchingAgentCount && (
           <p className="px-2 py-2 text-content text-icon-dark-gray">No chats found</p>
         )}
-        {sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
+        {!agentView && sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
     );
   };
@@ -427,7 +534,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
     </button>
   );
 
-  const agentsButton = (hasAgentSessions || (headerMenus && !isMbl && !!sidebarChats?.agents.length)) && sidebarChats ? (
+  const agentsButton = !agentsInDropdown && (hasAgentSessions || (headerMenus && !isMbl && !!sidebarChats?.agents.length)) && sidebarChats ? (
     <div className="relative shrink-0">
       <button ref={agentButtonRef} type="button" aria-label="Agent sessions" aria-expanded={hasAgentSessions ? agentsOpen : conversationsOpen}
         aria-controls={hasAgentSessions ? "agent-sidebar-agents" : "agent-sidebar-conversations"}
@@ -537,9 +644,11 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             headerMenus && isDropdownOpen && "bg-active-modal-element"
           )}
         >
+          {talkingAgent && <Bot size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />}
           <span className="min-w-0 truncate font-medium">
             {sidebarTitle ?? currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
           </span>
+          {talkingAgentSessionTitle && <span className="min-w-0 truncate text-icon-dark-gray" data-testid="ai-chat-agent-session-title">{talkingAgentSessionTitle}</span>}
           {runningIndicator}
           <span
             style={{

@@ -90,7 +90,9 @@ const useTiptapForAI = ({
       }),
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({
-        placeholder: () => {
+        placeholder: (props) => {
+          const sidebarAgent = props?.editor?.view.dom.closest("[data-sidebar-agent]")?.getAttribute("data-sidebar-agent");
+          if (sidebarAgent) return `Message ${sidebarAgent}`;
           if (isMobileRef.current) return `@ for context`;
           if (fullScreenChatRef.current && listeningRef.current) return `Listening...`;
           if (fullScreenChatRef.current || oneComposerRef.current) return `Ask anything, @ for context`;
