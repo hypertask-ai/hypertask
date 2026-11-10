@@ -39,6 +39,7 @@ import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
 import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
+import { HTPR_8945_CTRL_TAB_PALETTE_FLAG } from "@/lib/flags/definitions/htpr-8945-ctrl-tab-palette";
 import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
 import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
@@ -92,6 +93,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
   const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
+  const tabPaletteCycle = useFlag(HTPR_8945_CTRL_TAB_PALETTE_FLAG);
   const sharedPlusMenu = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
   const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const stopDictationButtonId = "compose-task-stop-dictation";
@@ -118,7 +120,20 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const mobile = Boolean(useContext(MobileViewContext));
   const phoneTaskWriterSheet = mobile && active;
   const plusLayout = Boolean(plusComposerEnabled && newTaskWindow && !mobile && !phoneTaskWriterSheet);
+  const tabPaletteCycleActive = plusLayout && tabPaletteCycle;
   const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow && !plusLayout);
+  useEffect(() => {
+    if (!tabPaletteCycleActive || !active) return;
+    const root = composer.current;
+    if (!root) return;
+    const tabOut = "[data-compose-plus-row] summary, [data-compose-plus-row] button, #compose-task-audio-button, [data-compose-below-row] [data-compose-board-chip]";
+    for (const node of root.querySelectorAll<HTMLElement>(tabOut)) node.tabIndex = -1;
+    return () => {
+      for (const node of root.querySelectorAll<HTMLElement>(tabOut)) {
+        if (node.tabIndex === -1) node.tabIndex = 0;
+      }
+    };
+  }, [tabPaletteCycleActive, active, text, dictating, addingImages, boardPickerOpen]);
   const [text, setText] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [writing, setWriting] = useState(false);
@@ -503,7 +518,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           setRecording(on);
         }} onProcessingChange={setTranscribing}
         disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact"
-        {...(plusLayout ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, excludeFromTabOrder: true, stopButtonId: stopDictationButtonId, hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] } } : {})}
+        {...(plusLayout ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, stopButtonId: stopDictationButtonId, hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] } } : {})}
         {...(composerKeysLayout ? { hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] }, stopButtonId: stopDictationButtonId, cancelButtonId: cancelDictationButtonId } : {})}
         callbackHandler={(transcript, replace) => {
           dictationDelivered.current = true;
@@ -517,7 +532,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
 
   const boardControl = showBoardChip && <div className="min-w-0 max-w-full">
     {boardShortcutTooltip && <Tooltip portal bottom={0} left={0} text="Change board" keyCombination={boardShortcut.split("+")} />}
-    <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip tabIndex={plusLayout ? -1 : undefined}
+    <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
       aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
       aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
       disabled={dictating} onClick={openBoardPicker}
@@ -625,7 +640,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                   <ComposerPlusActions
                     disabled={addingImages || dictating}
                     active={active}
-                    excludeFromTabOrder
                     attachShortcut={getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}
                     onAttach={handleAttachmentClick}
                     onAddContext={insertContextMark}
@@ -634,7 +648,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                   <details ref={plusMenu} className="relative">
                     <summary
                       aria-label="Add"
-                      tabIndex={-1}
                       aria-disabled={addingImages || dictating}
                       onClick={(event) => {
                         if (addingImages || dictating) event.preventDefault();
@@ -663,7 +676,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                 )}
                 <div className="flex shrink-0 items-center gap-2">
                   {dictationControl}
-                  <SendMessageButton label="Send" textButton tabIndex={-1} disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={false} onClick={() => void send()} />
+                  <SendMessageButton label="Send" textButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={false} onClick={() => void send()} />
                 </div>
               </div>
             ) : (

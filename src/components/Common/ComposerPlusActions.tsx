@@ -10,14 +10,12 @@ export function ComposerPlusActions({
   onAttach,
   onAddContext,
   active = true,
-  excludeFromTabOrder = false,
 }: {
   disabled?: boolean;
   attachShortcut?: string;
   onAttach: () => void;
   onAddContext: () => void;
   active?: boolean;
-  excludeFromTabOrder?: boolean;
 }) {
   const plusMenu = useRef<HTMLDetailsElement>(null);
   const closePlusMenu = () => {
@@ -51,7 +49,6 @@ export function ComposerPlusActions({
     <details ref={plusMenu} className="relative">
       <summary
         aria-label="Add"
-        tabIndex={excludeFromTabOrder ? -1 : undefined}
         aria-disabled={disabled}
         onClick={(event) => {
           if (disabled) event.preventDefault();

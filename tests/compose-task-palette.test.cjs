@@ -524,6 +524,7 @@ test('HTPR-8945 plus-composer Tab from New Task switches to Search instead of Ad
   await withPalette(t, { tab: 'compose' }, async ({ flags, rerender, press, values }) => {
     flags['htpr-8829-ctrlj-plus-composer'] = true;
     flags['htpr-7313-ctrlj-always-board-chip'] = true;
+    flags['htpr-8945-ctrl-tab-palette'] = true;
     await rerender();
     const textarea = document.querySelector('[data-compose-task-writer] textarea');
     assert.ok(textarea);

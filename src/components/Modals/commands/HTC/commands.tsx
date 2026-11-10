@@ -4,6 +4,7 @@ import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
 import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
+import { HTPR_8945_CTRL_TAB_PALETTE_FLAG } from "@/lib/flags/definitions/htpr-8945-ctrl-tab-palette";
 import { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG } from "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top";
 import { HTPR_8947_CTRLK_NO_FOOTER_FLAG } from "@/lib/flags/definitions/htpr-8947-ctrlk-no-footer";
 import { HTPR_7871_CTRLK_ELLIPSIS_FLAG } from "@/lib/flags/definitions/htpr-7871-ctrlk-ellipsis";
@@ -133,6 +134,7 @@ const Commands = (props: Props) => {
   const removeImageGeneration = useFlag(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG);
   const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
+  const tabPaletteCycle = useFlag(HTPR_8945_CTRL_TAB_PALETTE_FLAG);
   const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const tabsOnTopFlag = useFlag(HTPR_8943_CTRLK_TABS_ON_TOP_FLAG);
   const noFooterFlag = useFlag(HTPR_8947_CTRLK_NO_FOOTER_FLAG);
@@ -779,7 +781,7 @@ const Commands = (props: Props) => {
       if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || writing) return;
       if (skillMenuOwnsKeys && document.querySelector("[data-compose-skill-menu-open]")) return;
       const target = event.target as HTMLElement;
-      if (!plusComposerEnabled && isCompose && target.matches("[data-compose-task-writer] textarea") &&
+      if (!tabPaletteCycle && !plusComposerEnabled && isCompose && target.matches("[data-compose-task-writer] textarea") &&
           document.querySelector("[data-compose-board-chip]")) return;
       if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
@@ -788,7 +790,7 @@ const Commands = (props: Props) => {
     };
     document.addEventListener("keydown", switchTab, true);
     return () => document.removeEventListener("keydown", switchTab, true);
-  }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys, plusComposerEnabled]);
+  }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys, plusComposerEnabled, tabPaletteCycle]);
 
   const integratedTabs = newTaskWindow && !isMobile && !isDemo && !isInteractive;
   const modeSwitch = !isDemo && !isInteractive ? (
