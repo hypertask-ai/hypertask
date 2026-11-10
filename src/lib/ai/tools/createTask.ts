@@ -1,5 +1,7 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/guaranteeCreationScreenshots";
+import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/definitions/htpr-9028-inline-creation-screenshots";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
@@ -102,6 +104,7 @@ export function createCreateTaskTool(context: ToolContext) {
         }
 
         const openCreatedTaskInApp = !bulkTasks?.length;
+        const guaranteeScreenshots = await isFeatureEnabled(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG, user.id);
         const createOneTask = async (taskInput: TaskInput) => {
           const creationStartedAt = Date.now();
           const parsed = itemSchema.safeParse(
@@ -261,6 +264,16 @@ export function createCreateTaskTool(context: ToolContext) {
               priorityIndex = draft.priority ?? 0;
               estimateIndex = draft.estimate ?? 0;
               abortSignal?.throwIfAborted();
+            }
+            if (guaranteeScreenshots && requestedTasks.length === 1 && input.inline_images !== false) {
+              const note = [body?.message, "brief" in input ? input.brief : ""].filter(Boolean).join("\n");
+              description = guaranteeCreationScreenshots(description ?? "", {
+                instructions: note,
+                attachments: creationScreenshotCandidates(
+                  [...(body?.images64 ?? []), ...(body?.attachments ?? [])],
+                  note,
+                ),
+              });
             }
             const saveStartedAt = Date.now();
             let task;

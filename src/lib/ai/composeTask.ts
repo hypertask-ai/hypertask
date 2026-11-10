@@ -1,6 +1,7 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { readTaskWriterSkills, TASK_WRITER_SKILLS_HEADER, MAX_SKILL_INPUT_LENGTH, type TaskWriterSkills } from "./taskWriterSkills";
 import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut } from "@/lib/media/inlineAgentImages";
+import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/guaranteeCreationScreenshots";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IProject, ITask } from "@/models/model";
@@ -64,12 +65,13 @@ export type ComposeTaskStage = "Reading past tickets" | "Understanding the conte
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, inlineAgentImages = false,
-  applyWriterProperties = false, invokeSkills = false, writerModel,
+  applyWriterProperties = false, invokeSkills = false, writerModel, guaranteeScreenshots = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   writerModel?: { id: string; source: string };
   invokeSkills?: boolean;
   inlineAgentImages?: boolean;
+  guaranteeScreenshots?: boolean;
   applyWriterProperties?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
@@ -231,6 +233,14 @@ export async function createComposedTask({
     drafts = [];
   }
   if (!drafts.length) drafts = [{ title, description }];
+  if (guaranteeScreenshots) {
+    const attachments = creationScreenshotCandidates(uploads, text);
+    drafts = drafts.map((draft) => ({
+      ...draft,
+      description: guaranteeCreationScreenshots(draft.description, { instructions: text, attachments }),
+    }));
+    description = drafts[0].description;
+  }
   if (existingTaskId && drafts.length > 1) {
     defaults = await axios.get("/api/tasks/createGlobally", { params: { projectId: project.id, position: "top" } });
     if (!defaults?.data?.sectionId) throw new Error("This board has no column to create a task in.");
