@@ -47,7 +47,7 @@ export async function readProbeState(email: string): Promise<ProbeState | null> 
   const [taskCount, memberCount, pendingInviteCount, connectionCount, intents] = await Promise.all([
     board ? prisma.task.count({ where: { projectId: board.id, status: "Normal" } }) : 0,
     board ? prisma.member.count({ where: { projectId: board.id, status: "Accepted" } }) : 0,
-    board ? prisma.invite.count({ where: { projectId: board.id } }) : 0,
+    board ? prisma.invite.count({ where: { projectId: board.id, expired: false } }) : 0,
     prisma.logs.count({
       where: { LoggedById: user.id, log: CONNECTION_LOG, createdAt: { gte: since } },
     }),
