@@ -126,7 +126,7 @@ the count is 24 jobs per push: four shards plus the summary.
 ## PR size check (HYCI-29)
 
 - Trusted production code counts additions and deletions.
-- One config excludes generated and fixture files, including the ESLint-generated `eslint-local-rules/style-guide-suppressions.json` baseline.
+- One config excludes generated and fixture files, including the ESLint-generated style-guide suppressions baseline.
 - Renames crossing exclusion boundaries still count.
 - Incomplete measurements produce errors, never passing counts.
 - An error warns and never blocks a merge.
