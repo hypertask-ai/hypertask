@@ -1,4 +1,5 @@
 const QUIET_PERSONAL_LOG = "@/utils/controllers/logs/quietPersonalLog"
+const USER_COMMENT_COUNTS = "@/utils/controllers/tasks/userCommentCounts"
 
 function recordId(value) {
   if (typeof value === "string" || typeof value === "number") return String(value)
@@ -52,6 +53,9 @@ function withStubs(base = {}, extra = {}) {
   const defaults = Object.create(null)
   if (!(QUIET_PERSONAL_LOG in base) && !(QUIET_PERSONAL_LOG in extra)) {
     defaults[QUIET_PERSONAL_LOG] = quietPersonalLogStub()
+  }
+  if (!(USER_COMMENT_COUNTS in base) && !(USER_COMMENT_COUNTS in extra)) {
+    defaults[USER_COMMENT_COUNTS] = { userCommentCountsByTaskId: async () => new Map() }
   }
   return new Proxy(Object.create(null), {
     has: (_target, request) => request in extra || request in base || request in defaults || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,

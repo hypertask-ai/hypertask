@@ -28,6 +28,7 @@ function load(file, mocks = {}) {
     if (specifier === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (specifier === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {}, assertTicketRoom: async () => {} };
     if (specifier === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
+    if (specifier === "@/utils/controllers/tasks/userCommentCounts") return { userCommentCountsByTaskId: async () => new Map() };
     if (!specifier.startsWith("@/") && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return require(specifier);
     const base = specifier.startsWith("@/")
       ? path.join(root, "src", specifier.slice(2))

@@ -116,6 +116,9 @@ function loadRoute(tasks = []) {
     "@/utils/controllers/notifications/inboxZero": {
       loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])),
     },
+    "@/utils/controllers/tasks/userCommentCounts": {
+      userCommentCountsByTaskId: async () => new Map(),
+    },
   };
   const routeModule = { exports: {} };
 
