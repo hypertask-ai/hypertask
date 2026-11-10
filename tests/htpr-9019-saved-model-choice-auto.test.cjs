@@ -32,6 +32,7 @@ test("a stored Auto choice wins per surface and a team-scoped pick beats it", ()
 test("the switch runs once, only with the flag on, and backs the old choice up first", () => {
   const source = read(switchFile);
   assert.ok(source.indexOf("isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, userId)") < source.indexOf("prisma.$transaction"));
+  assert.match(read("src/app/api/ai/_lib/editorAi.ts"), /if \(await isFeatureEnabled\(HTPR_9019_SAVED_MODEL_AUTO_FLAG, args\.userId\)\)/);
   assert.ok(source.indexOf("isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, userId)") < source.indexOf("prisma.$transaction"));
   assert.match(source, /htpr9019ModelChoiceAutoDone\.findUnique/);
   assert.match(source, /skipDuplicates: true/);

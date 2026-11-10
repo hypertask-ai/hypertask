@@ -711,8 +711,12 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  const savedAutoChoiceEnabled = isAutoModelChoice(personalModelOptionId) &&
-    await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, args.userId ?? 0);
+  let savedAutoChoiceEnabled = false;
+  if (typeof args.userId === "number" && isAutoModelChoice(personalModelOptionId)) {
+    if (await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, args.userId)) {
+      savedAutoChoiceEnabled = true;
+    }
+  }
   let pickerSelection = null;
   if (args.aiFeature === "taskWriter" && typeof args.userId === "number") {
     if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, args.userId)) {

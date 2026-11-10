@@ -334,7 +334,10 @@ export async function POST(request: NextRequest) {
       if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id)) {
         taskWriterAuto = true;
       }
-      const savedModelAutoEnabled = await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, user.id);
+      let savedModelAutoEnabled = false;
+      if (await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, user.id)) {
+        savedModelAutoEnabled = true;
+      }
       const invalidPreference = preferenceUpdates.find(([surface, optionId]) => {
         if (!isAiModelPreferenceSurface(surface) || typeof optionId !== "string") return true;
         if (surface === "imageGeneration") {
