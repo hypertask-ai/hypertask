@@ -130,7 +130,7 @@ async function walkFunnel(browser, email, teammateEmail, runId) {
     const created = [];
     let taskError = "";
     for (const title of TASK_TITLES) {
-      const task = await api("/api/mcp/tasks", { method: "POST", token, body: { project_id: boardId, section_id: sectionId, title } });
+      const task = await api("/api/mcp/tasks/create", { method: "POST", token, body: { project_id: boardId, section_id: sectionId, title } });
       if (task.json?.task?.id) created.push(task.json.task.id);
       else taskError = taskError || `HTTP ${task.status} ${task.json?.message || task.json?.error || ""}`;
     }
