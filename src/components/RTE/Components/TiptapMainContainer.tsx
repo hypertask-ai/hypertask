@@ -325,7 +325,7 @@ const TiptapMainContainer = ({
           `}
         onFocus={handleFocus}
         id={id}
-        {...(ticketEditorCtrlJ && !isReadOnlyExistingContent ? { "data-ctrl-j-write-with-ai": "" } : {})}
+        data-ctrl-j-write-with-ai={ticketEditorCtrlJ && !isReadOnlyExistingContent ? "" : undefined}
         tabIndex={mode === "read-edit-comments" && !isEditModeActive ? -1 : 0}
         onKeyDown={handleKeydown}
         onClick={toggleExpansion}
@@ -346,16 +346,28 @@ const TiptapMainContainer = ({
           <CreatedInfoTiptap />
           <TiptapEditor />
           {shouldShowInlineDraftAi && editor && closeInlineDraftAi && (
-            <InlineDraftAiFloat
-              editor={editor}
-              onClose={closeInlineDraftAi}
-              projectId={aiProjectId}
-              taskId={aiTaskId}
-              allowSuggestReply={mode === "create-comment"}
-              toggleRecording={toggleRecording}
-              isRecording={isRecording}
-              matchCommentRowControls={ticketEditorCtrlJ}
-            />
+            ticketEditorCtrlJ ? (
+              <InlineDraftAiFloat
+                editor={editor}
+                onClose={closeInlineDraftAi}
+                projectId={aiProjectId}
+                taskId={aiTaskId}
+                allowSuggestReply={mode === "create-comment"}
+                toggleRecording={toggleRecording}
+                isRecording={isRecording}
+                matchCommentRowControls
+              />
+            ) : (
+              <InlineDraftAiFloat
+                editor={editor}
+                onClose={closeInlineDraftAi}
+                projectId={aiProjectId}
+                taskId={aiTaskId}
+                allowSuggestReply={mode === "create-comment"}
+                toggleRecording={toggleRecording}
+                isRecording={isRecording}
+              />
+            )
           )}
           {allowedAttachmentModes.includes(mode) &&
             !isReadOnlyExistingContent && (

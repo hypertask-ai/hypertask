@@ -389,12 +389,16 @@ export const DesktopAttachment = ({
             >
               ai
             </span>
-            <Tooltip
-              left={0}
-              bottom={-45}
-              keyCombination={[`${ctrlCmd}`, "J"]}
-              text={ticketEditorCtrlJ ? "Write with AI" : "Ai Task Writer"}
-            />
+            {ticketEditorCtrlJ ? (
+              <Tooltip left={0} bottom={-45} keyCombination={[`${ctrlCmd}`, "J"]} text="Write with AI" />
+            ) : (
+              <Tooltip
+                left={0}
+                bottom={-45}
+                keyCombination={[`${ctrlCmd}`, "J"]}
+                text={"Ai Task Writer"}
+              />
+            )}
           </span>
         )}
 
@@ -422,7 +426,7 @@ export const DesktopAttachment = ({
             toggleRecording={toggleRecording!}
             dictationCoordinator={dictationCoordinator}
             {...(micPattern ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, ariaLabel: "Start dictation" } : {})}
-            {...(ticketEditorCtrlJ ? { hoverTooltip: { text: "Dictate", keyCombination: [altOptions, "V"] } } : {})}
+            hoverTooltip={ticketEditorCtrlJ ? { text: "Dictate", keyCombination: [altOptions, "V"] } : undefined}
           />
         )}
         {((micPatternEnabled && commentMode) || (oneSend && mode === "create-comment")) && (
