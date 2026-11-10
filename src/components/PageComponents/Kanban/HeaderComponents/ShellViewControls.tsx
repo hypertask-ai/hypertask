@@ -142,6 +142,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
             }
           })}
           onSelect={(option) => {
+            if (typeof option.id !== "string") return
             const column = option.id
             const next = applyTableSortClick(
               tableSort,
