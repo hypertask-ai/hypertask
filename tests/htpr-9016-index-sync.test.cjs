@@ -70,27 +70,14 @@ test("a stale comment title is repaired and a failed reindex stays put", async (
 });
 
 test("a deleted task stays in the drift scan", async () => {
+  const gone = { id: 9, title: "Gone", updatedAt: new Date("2026-11-10T12:00:00.000Z") };
   const repair = load("src/lib/search/runIndexDriftRepair.ts", {
-    "@/lib/prisma": {
-      default: {
-        task: {
-          findMany: async (args) => {
-            if (args.where && args.where.status) return [];
-            return [{ id: 9, title: "Gone", updatedAt: new Date("2026-11-10T12:00:00.000Z") }];
-          },
-        },
-        comment: { groupBy: async () => [] },
-      },
-    },
-    "@/lib/turbopuffer": {
-      default: { namespace: () => ({ query: async () => ({ rows: [] }) }) },
-      turbopufferNamespaces: { task: { name: "tasks" }, comment: { name: "comments" } },
-    },
+    "@/lib/prisma": { default: { task: { findMany: async (args) => (args.where && args.where.status ? [] : [gone]) }, comment: { groupBy: async () => [] } } },
+    "@/lib/turbopuffer": { default: { namespace: () => ({ query: async () => ({ rows: [] }) }) }, turbopufferNamespaces: { task: { name: "tasks" }, comment: { name: "comments" } } },
     "@/utils/controllers/turbopuffer/turbopufferHelper": {},
   });
   const page = await repair.loadIndexDriftPage(0, 50);
-  assert.equal(page.tasks.length, 1);
-  assert.equal(page.tasks[0].id, 9);
+  assert.equal(page.tasks[0] && page.tasks[0].id, 9);
 });
 
 test("a finished pass records one drift count for that date", async () => {

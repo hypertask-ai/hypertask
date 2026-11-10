@@ -26,22 +26,14 @@ export function commentCopyDrifted(task: DriftTask, indexed: IndexedCommentCopy 
   return laterEdit(task.updatedAt, indexed.taskUpdatedAt);
 }
 export function commentsFollowTaskEdit(args: {
-  titleChanged: boolean;
-  status?: unknown;
-  ticketNumber?: unknown;
-  uniqueIndex?: unknown;
-  projectId?: unknown;
+  titleChanged: boolean; status?: unknown; ticketNumber?: unknown; uniqueIndex?: unknown; projectId?: unknown;
 }): boolean {
   return Boolean(args.titleChanged || args.status || args.ticketNumber || args.uniqueIndex || args.projectId);
 }
 
 export async function syncTaskEditSearchIndex(args: {
-  taskId: number;
-  titleChanged: boolean;
-  status?: unknown;
-  ticketNumber?: unknown;
-  uniqueIndex?: unknown;
-  projectId?: unknown;
+  taskId: number; titleChanged: boolean; status?: unknown; ticketNumber?: unknown;
+  uniqueIndex?: unknown; projectId?: unknown;
   upsertTask?: (taskId: number) => Promise<unknown>;
   upsertComments?: (taskId: number) => Promise<unknown>;
 }): Promise<void> {
@@ -54,13 +46,9 @@ export function recordDriftPass(results: DriftPass[], date: string, found: numbe
 }
 
 export async function advanceIndexDrift(args: {
-  tasks: DriftTask[];
-  indexedTasks: Map<number, IndexedTaskTime | null>;
-  indexedComments: Map<number, IndexedCommentCopy | null>;
-  batchFull: boolean;
-  maxReindex: number;
-  state: DriftState;
-  reindexTask: (taskId: number) => Promise<unknown>;
+  tasks: DriftTask[]; indexedTasks: Map<number, IndexedTaskTime | null>;
+  indexedComments: Map<number, IndexedCommentCopy | null>; batchFull: boolean; maxReindex: number;
+  state: DriftState; reindexTask: (taskId: number) => Promise<unknown>;
   reindexComments: (taskId: number) => Promise<unknown>;
 }): Promise<{ state: DriftState; reindexed: number; passComplete: boolean; stopped: boolean; passFound: number | null }> {
   const state = { afterId: args.state.afterId, found: args.state.found, results: args.state.results };
