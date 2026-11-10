@@ -60,7 +60,13 @@ test("AI list_tasks exposes open BlockedBy targets like the board payload", asyn
   };
 
   const { createListTasksTool } = load("src/lib/ai/tools/listTasks.ts", {
-    "@/lib/prisma": { __esModule: true, default: { task: { findMany, count: async () => 1 } } },
+    "@/lib/prisma": {
+      __esModule: true,
+      default: {
+        task: { findMany, count: async () => 1 },
+        section: { findMany: async () => [{ section_title: "In Progress", projectId: 15 }] },
+      },
+    },
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/flags/keys": { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG: "htpr-7733" },
     "@/lib/mcp/listQuery": require("./task-route-loader.cjs").load("src/lib/mcp/listQuery.ts", {}),
