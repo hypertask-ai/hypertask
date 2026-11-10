@@ -153,7 +153,6 @@ function ChatSessionRow({
 }
 
 export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean } = {}) => {
-  const hasAgentSessions = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const agentButtonRef = useRef<HTMLButtonElement>(null);
   const closeAgents = useCallback(() => setAgentsOpen(false), []);
@@ -223,6 +222,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const [agentViewId, setAgentViewId] = useState<string | null>(null);
   const [showAllAgents, setShowAllAgents] = useState(false);
   const agentViewRef = useRef<HTMLDivElement>(null);
+  const hasAgentSessions = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const agentsInDropdown = hasAgentSessions && headerMenus && !isMbl && !!sidebarChats;
   const [historyMaxHeight, setHistoryMaxHeight] = useState<number | undefined>(undefined);
   const headerRef = useRef<HTMLDivElement>(null);

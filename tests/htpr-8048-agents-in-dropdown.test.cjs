@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const React = require("react");
-const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
@@ -10,6 +9,7 @@ const MENUS_FLAG = "htpr-8956-ai-chat-header-menus";
 const day = 24 * 60 * 60 * 1000;
 const stamp = (offset) => new Date(Date.now() - offset).toISOString();
 const noop = () => {};
+const createRootLazy = (element) => require("react-dom/client").createRoot(element);
 
 function makeAgents() {
   return ["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map((displayName, index) => ({
@@ -58,7 +58,7 @@ async function mount({ agentFlag = true, menusFlag = true, mobile = false, targe
     "./AgentSidebarChatCommands": { AgentSidebarChatCommands: () => null },
   });
   const container = document.getElementById("root");
-  const renderer = createRoot(container);
+  const renderer = createRootLazy(container);
   const agents = makeAgents();
   const sidebarChats = {
     projectId: 15,
@@ -160,6 +160,7 @@ test("opening an agent swaps the list in place with back, New session and past s
   const { container, calls, openHistory, click, key, cleanup } = await mount();
   try {
     await openHistory();
+    await click([...container.querySelectorAll("button")].find((el) => el.textContent === "All 5 agents"));
     await click(container.querySelector('[data-agent-id="agent-4"]'));
     const view = container.querySelector('[data-testid="ai-chat-agent-view"]');
     assert.ok(view);
@@ -257,6 +258,7 @@ async function mentionList({ agentFlag }) {
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;
   Object.defineProperty(global, "navigator", { configurable: true, value: dom.window.navigator });
+  dom.window.matchMedia = () => ({ matches: false });
   const rendered = [];
   const { default: MentionList } = loadModule("src/components/RTE/Components/AI_Chat/MentionList.tsx", {
     react: React,
@@ -273,7 +275,7 @@ async function mentionList({ agentFlag }) {
     { type: "taskHeading" }, { type: "task", id: 2, name: "Task", ticketNumber: "T-1", project_id: 1, index: 1 },
     { type: "agentHeading" }, { type: "agent", id: "agent-1", name: "Alpha" },
   ];
-  const renderer = createRoot(document.getElementById("root"));
+  const renderer = createRootLazy(document.getElementById("root"));
   await React.act(async () => renderer.render(React.createElement(MentionList, { ref, items, command: (data) => commands.push(data), contextCallback: (item) => callbacks.push(item) })));
   const cleanup = async () => {
     await React.act(async () => renderer.unmount());
@@ -318,13 +320,13 @@ test("MentionList: flag off keeps the server order and does not touch the key ev
   }
 });
 
-function placeholderFor(attribute) {
+function placeholderFor(attribute, agentFlag = true) {
   const chain = () => ({ configure: () => ({}), extend: () => ({}), create: () => ({}) });
   const captured = {};
   const stubs = {
     react: { useRef: (initial) => ({ current: initial }), useContext: () => false, useEffect: noop },
     "next/navigation": { usePathname: () => "/project" },
-    "@/hooks/useFlag": { useFlag: () => false },
+    "@/hooks/useFlag": { useFlag: (key) => key === AGENT_FLAG && agentFlag },
     "@/lib/flags/keys": { HTPR_6906_AUTOCAP_UNDO_FLAG: "a", LOCAL_WRITING_ASSISTANCE_FLAG: "b" },
     "@/lib/flags/definitions/htpr-5908-retype-lowercase": { HTPR_5908_RETYPE_LOWERCASE_FLAG: "c" },
     "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "d" },
@@ -355,11 +357,5 @@ function placeholderFor(attribute) {
 test("native agent chat reads Message <agent>; without an agent the default placeholder stays", () => {
   assert.equal(placeholderFor("Alpha"), "Message Alpha");
   assert.equal(placeholderFor(null), "Focus with CTRL + Q, @ for context");
-});
-
-test("the composer only marks the agent while the agent flag is on", () => {
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const container = fs.readFileSync(path.join(__dirname, "../src/components/AI_CHAT/AI_Tiptap_Container.tsx"), "utf8");
-  assert.match(container, /data-sidebar-agent=\{agentSessionsEnabled \? sidebarAgent : undefined\}/);
+  assert.equal(placeholderFor("Alpha", false), "Focus with CTRL + Q, @ for context");
 });

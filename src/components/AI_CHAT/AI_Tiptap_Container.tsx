@@ -109,7 +109,6 @@ export function AI_Tiptap_Container({
   active?: boolean;
   sidebarAgent?: string;
 } = {}) {
-  const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const sharedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
@@ -200,6 +199,7 @@ export function AI_Tiptap_Container({
     else editor?.commands.focus("end");
   };
   const audioButtonId = `ai-chat-audio-button-${useId()}`;
+  const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   useEffect(() => {
     if (!agentSessionsEnabled || !editor || editor.isDestroyed) return;
     editor.view.dispatch(editor.state.tr);

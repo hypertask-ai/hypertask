@@ -57,6 +57,10 @@ const useTiptapForAI = ({
   const oneComposerRef = useRef(false);
   if (oneComposer) oneComposerRef.current = true;
   else oneComposerRef.current = false;
+  const agentSessions = useFlag("htpr-8048-agent-sessions");
+  const agentSessionsRef = useRef(false);
+  if (agentSessions) agentSessionsRef.current = true;
+  else agentSessionsRef.current = false;
   const isMobileRef = useRef(false);
   isMobileRef.current = useContext(MobileViewContext);
   const pathname = usePathname();
@@ -91,7 +95,7 @@ const useTiptapForAI = ({
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({
         placeholder: (props) => {
-          const sidebarAgent = props?.editor?.view.dom.closest("[data-sidebar-agent]")?.getAttribute("data-sidebar-agent");
+          const sidebarAgent = agentSessionsRef.current ? props?.editor?.view.dom.closest("[data-sidebar-agent]")?.getAttribute("data-sidebar-agent") : null;
           if (sidebarAgent) return `Message ${sidebarAgent}`;
           if (isMobileRef.current) return `@ for context`;
           if (fullScreenChatRef.current && listeningRef.current) return `Listening...`;
