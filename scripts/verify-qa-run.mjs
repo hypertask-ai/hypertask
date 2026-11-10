@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { mkdir, readFile, readdir, writeFile, appendFile } from 'node:fs/promises'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { assertLoopback } from '../.github/scripts/verify-qa-premerge.mjs'
 
