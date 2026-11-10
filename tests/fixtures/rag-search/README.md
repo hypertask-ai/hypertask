@@ -37,7 +37,9 @@ The three modes are the three ways the app can retrieve past tickets:
 - `keyword` — BM25 with the same field weights production uses in
   `buildTaskBm25RankBy` (`src/utils/controllers/turbopuffer/turbopufferHelper.ts`):
   title x4, ticket number x2, search text x1, k1 1.2, b 0.75, prefix match on
-  the last query token.
+  the last query token. Tokenising, ticket-number parsing and the exact-ticket
+  pin come from production code (`src/utils/controllers/search/rankHits.ts`),
+  so a change there moves these numbers.
 - `semantic` — cosine over vectors of the same search text production embeds,
   truncated at 4,000 characters.
 
@@ -86,9 +88,17 @@ which filters status Normal and never returns one. That gap is HTPR-9014.
 
 ## Refresh the corpus
 
-```bash
-node scripts/rag-eval.cjs --capture
-```
+The corpus is a captured snapshot, not a live read. To refresh it, pull board 15
+again with `hypertask task list --project 15` (100 per page), keep the same shape
+(`ticketNumber`, `title`, `status`, plain text in `text`), drop links and email
+addresses, cap the text at 1,200 characters, and keep the three canaries.
 
-That re-reads board 15 and rewrites `corpus.json`, keeping the canaries. Re-run
-`--write-baseline` afterwards so the floors follow the new corpus.
+`vectors.json` carries a `fixtures` fingerprint, so a changed corpus or query set
+is refused instead of scored with stale vectors; re-run with
+`RAG_EVAL_EMBED_KEY` set, then `--write-baseline`.
+
+## What this does not cover
+
+The BM25 constants and the RRF step are Turbopuffer's, so they are reimplemented
+here rather than imported. A change to production's ranking weights or fusion
+therefore needs the constants above updated by hand in the same PR.

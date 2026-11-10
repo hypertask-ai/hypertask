@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
-const { execFileSync } = require("node:child_process");
+const { createHash } = require("node:crypto");
 const { existsSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
+const jiti = require("jiti")(__filename, { alias: { "@": join(__dirname, "..", "src") }, fsCache: false, interopDefault: true });
+const { tokenize, parseTicketSearchQuery } = jiti(join(__dirname, "..", "src", "utils", "controllers", "search", "rankHits.ts"));
 
 const FIXTURES = join(__dirname, "..", "tests", "fixtures", "rag-search");
 const TOP_K = 10;
@@ -16,39 +18,32 @@ const MODES = ["keyword", "semantic", "hybrid"];
 const EMBED_MODEL = "text-embedding-3-small";
 const EMBED_URL = "https://api.openai.com/v1/embeddings";
 const EMBED_CAP = 4000;
+const CEILING_KEYS = ["deletedRate", "canaryLeak"];
 
 const readJson = (name) => JSON.parse(readFileSync(join(FIXTURES, name), "utf8"));
 const round = (value) => Math.round(value * 1000) / 1000;
+
+function fixtureHash() {
+  const hash = createHash("sha256");
+  for (const name of ["corpus.json", "queries.json"]) hash.update(readFileSync(join(FIXTURES, name)));
+  return hash.digest("hex").slice(0, 16);
+}
 
 function loadFixtures() {
   return { corpus: readJson("corpus.json"), queries: readJson("queries.json") };
 }
 
-function plain(html) {
-  return String(html ?? "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, String.fromCharCode(34)).replace(/&#x27;/g, String.fromCharCode(39)).replace(/&nbsp;/g, " ").replace(/https?:\/\/\S+/g, " ").replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1200);
-}
-
-function captureBoard(boardId = 15) {
-  const rows = [];
-  for (let offset = 0; ; offset += 100) {
-    const page = JSON.parse(execFileSync("hypertask", ["task", "list", "--project", String(boardId), "--limit", "100", "--offset", String(offset), "--json"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }));
-    rows.push(...(page.tasks ?? []));
-    if (!page.tasks?.length || rows.length >= (page.total ?? 0)) break;
-  }
-  const corpus = { ...readJson("corpus.json"), capturedAt: new Date().toISOString().slice(0, 10) };
-  corpus.tasks = rows.map((task) => ({ id: task.id, ticketNumber: task.ticketNumber, title: String(task.title ?? "").trim(), status: String(task.status ?? "Normal"), text: plain(task.description) })).sort((left, right) => left.ticketNumber.localeCompare(right.ticketNumber, "en", { numeric: true }));
-  writeFileSync(join(FIXTURES, "corpus.json"), JSON.stringify(corpus, null, 1) + "\n");
-  console.log(`captured ${corpus.tasks.length} tickets from board ${boardId}`);
-}
-
 function documents(corpus) {
-  return [...corpus.tasks, ...(corpus.canaries ?? [])].map((task) => ({ ...task, text: task.text ?? "", searchText: [task.ticketNumber, task.title, task.text].filter(Boolean).join(" ") }));
+  return [...corpus.tasks, ...(corpus.canaries ?? [])].map((task) => ({
+    ...task,
+    text: task.text ?? "",
+    searchText: [task.ticketNumber, task.title, task.text].filter(Boolean).join(" "),
+  }));
 }
 
 function validate(corpus, queries) {
   const problems = [];
-  const tickets = [...corpus.tasks, ...(corpus.canaries ?? [])];
-  const known = new Set(tickets.map((task) => task.ticketNumber));
+  const known = new Set([...corpus.tasks, ...(corpus.canaries ?? [])].map((task) => task.ticketNumber));
   const pairs = queries.pairs ?? [];
   const canaries = corpus.canaries ?? [];
   if (corpus.boardId !== 15 || queries.boardId !== 15) problems.push("fixtures must come from board 15");
@@ -71,10 +66,6 @@ function validate(corpus, queries) {
   }
   if (answered.size < 80) problems.push(`only ${answered.size} distinct answers, need at least 80`);
   return problems;
-}
-
-function tokenize(value) {
-  return String(value ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 }
 
 function buildIndex(rows) {
@@ -169,9 +160,8 @@ function retrieve({ documents_: rows, index, vectors, pair, mode, statusFilter }
     ? cosineRank(pool, (ticketNumber) => (vectors.docs[ticketNumber] ? decode(vectors.docs[ticketNumber]) : null), decode(vectors.queries[pair.id]))
     : []);
   const ranked = mode === "keyword" ? keyword() : mode === "semantic" ? semantic() : fuse([semantic(), keyword()].filter((list) => list.length));
-  const exact = /^([A-Za-z]{2,10})[-\s]?(\d{1,7})$/.exec(pair.query.trim());
-  const pinned = exact ? `${exact[1].toUpperCase()}-${exact[2]}` : null;
-  const ordered = pinned && ranked.includes(pinned) ? [pinned, ...ranked.filter((ticketNumber) => ticketNumber !== pinned)] : ranked;
+  const exact = parseTicketSearchQuery(pair.query.trim())?.normalizedQuery;
+  const ordered = exact && ranked.includes(exact) ? [exact, ...ranked.filter((ticketNumber) => ticketNumber !== exact)] : ranked;
   return ordered.slice(0, TOP_K);
 }
 
@@ -189,7 +179,7 @@ function measure({ corpus, queries }, vectors) {
   const statusOf = new Map(rows.map((row) => [row.ticketNumber, row.status]));
   const answerPairs = queries.pairs.filter((pair) => pair.kind !== "deleted_canary");
   const canaryPairs = queries.pairs.filter((pair) => pair.kind === "deleted_canary");
-  const result = { ticket: "HTPR-9012", board: corpus.boardId, documents: rows.length, pairs: queries.pairs.length, surfaces: {} };
+  const result = { ticket: "HTPR-9012", board: corpus.boardId, documents: rows.length, pairs: queries.pairs.length, fixtures: fixtureHash(), surfaces: {} };
   for (const [surface, statusFilter] of Object.entries(SURFACES)) {
     result.surfaces[surface] = {};
     for (const mode of MODES) {
@@ -230,14 +220,17 @@ function encode(vector) {
 }
 
 async function vectorsFor({ corpus, queries }) {
+  const fixtures = fixtureHash();
   const saved = existsSync(join(FIXTURES, "vectors.json")) ? readJson("vectors.json") : null;
-  if (saved?.docs && saved.queries) return saved;
+  if (saved?.docs && saved.queries && saved.fixtures === fixtures) return saved;
+  if (saved?.docs && saved.fixtures !== fixtures) console.error("saved vectors are stale for these fixtures, re-embedding");
   const tickets = [...corpus.tasks, ...(corpus.canaries ?? [])];
   const documentVectors = await embed(tickets.map((task) => [task.ticketNumber, task.title, task.text].filter(Boolean).join(" ").replace(/\s+/g, " ").slice(0, EMBED_CAP)));
   if (!documentVectors) return null;
   const queryVectors = await embed(queries.pairs.map((pair) => pair.query.slice(0, EMBED_CAP)));
   const vectors = {
     model: process.env.RAG_EVAL_EMBED_MODEL ?? EMBED_MODEL,
+    fixtures,
     docs: Object.fromEntries(tickets.map((ticket, index) => [ticket.ticketNumber, encode(documentVectors[index])])),
     queries: Object.fromEntries(queries.pairs.map((pair, index) => [pair.id, encode(queryVectors[index])])),
   };
@@ -252,24 +245,31 @@ function printTable(result) {
 }
 
 function floors(result) {
-  const out = {};
-  for (const [surface, modes] of Object.entries(result.surfaces)) for (const mode of MODES) for (const key of ["recall10", "mrr10", "ndcg10"]) out[`${surface}.${mode}.${key}`] = modes[mode][key];
-  return out;
+  const scores = {};
+  const ceilings = {};
+  for (const [surface, modes] of Object.entries(result.surfaces)) for (const mode of MODES) {
+    for (const key of ["recall10", "mrr10", "ndcg10"]) scores[`${surface}.${mode}.${key}`] = modes[mode][key];
+    for (const key of CEILING_KEYS) ceilings[`${surface}.${mode}.${key}`] = modes[mode][key];
+  }
+  return { scores, ceilings };
 }
 
 function compareToBaseline(result) {
-  let baseline;
-  try { baseline = readJson("baseline.json"); } catch { return { ok: true, skipped: "no baseline recorded yet" }; }
+  if (!existsSync(join(FIXTURES, "baseline.json"))) return { ok: false, regressions: ["baseline.json is missing, so no floor is enforced"] };
+  const baseline = readJson("baseline.json");
   const measured = floors(result);
-  const regressions = Object.entries(baseline.floors ?? {})
-    .filter(([key, floor]) => typeof measured[key] !== "number" || measured[key] + 0.001 < floor)
-    .map(([key, floor]) => `${key} fell from ${floor} to ${measured[key]}`);
+  const regressions = [];
+  for (const [key, floor] of Object.entries(baseline.floors ?? {})) {
+    if (typeof measured.scores[key] !== "number" || measured.scores[key] + 0.001 < floor) regressions.push(`${key} fell from ${floor} to ${measured.scores[key]}`);
+  }
+  for (const [key, ceiling] of Object.entries(baseline.ceilings ?? {})) {
+    if (typeof measured.ceilings[key] !== "number" || measured.ceilings[key] > ceiling + 0.001) regressions.push(`${key} rose from ${ceiling} to ${measured.ceilings[key]}`);
+  }
   return { ok: regressions.length === 0, recordedAt: baseline.recordedAt, regressions };
 }
 
 async function main(argv) {
   const fixtures = loadFixtures();
-  if (argv.includes("--capture")) return captureBoard(), 0;
   if (argv.includes("--check-set")) {
     const problems = validate(fixtures.corpus, fixtures.queries);
     if (problems.length) {
@@ -286,7 +286,8 @@ async function main(argv) {
   }
   const result = measure(fixtures, vectors);
   if (argv.includes("--write-baseline")) {
-    writeFileSync(join(FIXTURES, "baseline.json"), `${JSON.stringify({ recordedAt: new Date().toISOString(), model: vectors.model, floors: floors(result), result }, null, 1)}\n`);
+    const { scores, ceilings } = floors(result);
+    writeFileSync(join(FIXTURES, "baseline.json"), `${JSON.stringify({ ticket: "HTPR-9012", recordedAt: new Date().toISOString(), model: vectors.model, fixtures: result.fixtures, floors: scores, ceilings }, null, 1)}\n`);
     console.log(printTable(result));
     console.log("\nbaseline written to tests/fixtures/rag-search/baseline.json");
     return 0;
@@ -295,10 +296,10 @@ async function main(argv) {
   if (argv.includes("--check-baseline")) {
     const check = compareToBaseline(result);
     if (!check.ok) {
-      console.error(`\nbaseline regression against ${check.recordedAt}:\n- ${check.regressions.join("\n- ")}`);
+      console.error(`\nbaseline check failed${check.recordedAt ? ` against ${check.recordedAt}` : ""}:\n- ${check.regressions.join("\n- ")}`);
       return 1;
     }
-    console.error(`\nbaseline ok${check.skipped ? ` (${check.skipped})` : ` against ${check.recordedAt}`}`);
+    console.error(`\nbaseline ok against ${check.recordedAt}`);
   }
   return 0;
 }
@@ -310,4 +311,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { validate, measure, documents, retrieve, buildIndex, keywordRank, cosineRank, fuse, score, tokenize, loadFixtures, printTable, floors };
+module.exports = { validate, measure, documents, retrieve, buildIndex, keywordRank, cosineRank, fuse, score, tokenize, loadFixtures, printTable, floors, fixtureHash, compareToBaseline };

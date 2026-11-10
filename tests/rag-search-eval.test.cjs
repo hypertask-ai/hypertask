@@ -39,7 +39,8 @@ test("the same fixtures always measure the same numbers", () => {
   const vectors = syntheticVectors(fixtures);
   const result = measure(fixtures, vectors);
   assert.deepEqual(result, measure(fixtures, vectors));
-  assert.equal(Object.keys(floors(result)).length, 18);
+  assert.equal(Object.keys(floors(result).scores).length, 18);
+  assert.equal(Object.keys(floors(result).ceilings).length, 12);
 });
 
 function syntheticVectors({ corpus, queries }) {
