@@ -51,7 +51,8 @@ async function connectProductionRedis(): Promise<RedisClient> {
 }
 
 export async function getRedis(): Promise<RedisClient> {
-  if (currentRedisAudience() === "agent") {
+  const { isUpstashAudienceRoutingEnabled } = await import("@/lib/redis/policy");
+  if ((await isUpstashAudienceRoutingEnabled()) && currentRedisAudience() === "agent") {
     if (!globalForRedis.agentRedis) {
       globalForRedis.agentRedis = createMemoryRedisClient();
     }

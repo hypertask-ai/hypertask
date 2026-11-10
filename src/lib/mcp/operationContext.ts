@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { withRedisAudience } from '@/lib/redis/audience'
 import type { McpAuthContext } from './auth/types'
 
 type ExecutionContext = { token: string; auth: McpAuthContext }
@@ -12,7 +13,8 @@ export function withMcpExecutionContext<T>(
   auth: McpAuthContext | undefined,
   execute: () => T,
 ): T {
-  return auth ? executionContext.run({ token, auth }, execute) : execute()
+  const run = () => (auth ? executionContext.run({ token, auth }, execute) : execute());
+  return auth?.agentId ? withRedisAudience('agent', run) : run();
 }
 
 export function getMcpExecutionContext(token: string): McpAuthContext | undefined {

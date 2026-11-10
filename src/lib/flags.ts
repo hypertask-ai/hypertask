@@ -278,7 +278,8 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
 
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
   const { currentRedisAudience } = await import("@/lib/redis/audience");
-  if (currentRedisAudience() === "agent") {
+  const { isUpstashAudienceRoutingEnabled } = await import("@/lib/redis/policy");
+  if ((await isUpstashAudienceRoutingEnabled()) && currentRedisAudience() === "agent") {
     return prisma.featureFlag.findMany({ select: { key: true, mode: true } });
   }
   const {
@@ -290,8 +291,10 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
     readHumanProcessFlagCache,
     storeHumanProcessFlagCache,
   } = await import("@/lib/flags/modeCache");
-  const cachedProcess = readHumanProcessFlagCache();
-  if (cachedProcess) return cachedProcess;
+  if (await isUpstashAudienceRoutingEnabled()) {
+    const cachedProcess = readHumanProcessFlagCache();
+    if (cachedProcess) return cachedProcess;
+  }
   if (!process.env.REDIS_URL) return null;
   try {
     const redis = await flagCacheCommand(import("@/lib/redis").then(({ getRedis }) => getRedis()));
@@ -305,7 +308,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       if (!Array.isArray(rows) || !rows.every((row) =>
         typeof row?.key === "string" && FEATURE_FLAG_MODES.includes(row.mode),
       )) return null;
-      storeHumanProcessFlagCache(rows);
+      if (await isUpstashAudienceRoutingEnabled()) storeHumanProcessFlagCache(rows);
       return rows;
     } else {
       rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
@@ -323,8 +326,10 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       `, 3, FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
       generation ?? "0", JSON.stringify(rows))).catch(() => undefined);
     }
-    clearHumanProcessFlagCache();
-    storeHumanProcessFlagCache(rows);
+    if (await isUpstashAudienceRoutingEnabled()) {
+      clearHumanProcessFlagCache();
+      storeHumanProcessFlagCache(rows);
+    }
     return rows;
   } catch {
     return null;

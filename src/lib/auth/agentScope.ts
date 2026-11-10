@@ -40,10 +40,6 @@ export function agentScopeMode(ownerUserId: number): Promise<"WATCH" | "ENFORCE"
 }
 
 export async function prepareAgentScope(ownerUserId: number, agentId?: string | null): Promise<void> {
-  if (agentId) {
-    const { markRedisAudienceAgent } = await import("@/lib/redis/audience");
-    markRedisAudienceAgent();
-  }
   const scope = scopes.getStore();
   if (!scope || !agentId) return;
   await (scope.prepared ??= (async () => {

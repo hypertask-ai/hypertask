@@ -1,4 +1,5 @@
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
+import { withRedisAudience } from "@/lib/redis/audience";
 import { queueRestFailure } from '@/lib/aiFeedback/automatic'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
@@ -84,7 +85,8 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
     const operationContext = getMcpOperationContext(request)
     if (operationContext) {
       await prepareAgentScope(operationContext.auth.user.id, operationContext.auth.agentId)
-      const result = await legacy(request, ...args)
+      const run = () => legacy(request, ...args)
+      const result = await (operationContext.auth.agentId ? withRedisAudience("agent", run) : run())
       if (result instanceof Response) reportUnexplainedMcpServerError(request, result.status)
       return result
     }
