@@ -81,6 +81,7 @@ async function withSidebar(options, check) {
     "./taskSummaryAction": { taskSummaryActionFor: () => ({ label: "Summarize the current task", prompt: "/i Summarize the current task" }) },
     "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
     "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
+    "@/lib/flags/definitions/htpr-9031-chip-starters": { HTPR_9031_CHIP_STARTERS_FLAG: "htpr-9031-chip-starters" },
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", null, message.content) },
     "./TypingIndicator": { TypingIndicator: () => React.createElement("span", null, "Loading") },
