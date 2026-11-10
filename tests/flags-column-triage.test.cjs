@@ -35,10 +35,10 @@ test("repair removes stale state labels, keeps unrelated labels and content, and
 });
 
 test("a registry ticket with no declaration gets one question and its exact live card", async () => {
-  const { triageFlagsColumn, clarificationQuestion, clarificationMarker } = await load();
+  const { triageFlagsColumn, clarificationBody, clarificationMarker } = await load();
   const f = fixture({ tasks: [task({ ticketNumber: "HTPR-7511", description: "<p>Existing description.</p>" })] });
   assert.equal(triageFlagsColumn({ ...f, apply: true }).clean, true);
-  assert.equal(f.state.comments["HTPR-7511"][0].text, clarificationQuestion);
+  assert.equal(f.state.comments["HTPR-7511"][0].text, clarificationBody);
 });
 
 test("missing, unknown and ambiguous flags remain unresolved, never get a guessed label", async () => {

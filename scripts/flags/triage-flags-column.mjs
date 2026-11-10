@@ -8,15 +8,8 @@ export const stateLabels = {
   OWNER_AND_QA: "flag:qa-only",
   OFF: "flag:off",
 };
-export const clarificationMarker = "declare the flag key and current state";
-export const clarificationQuestion = [
-  "<p><strong>What this is:</strong> This ticket sits in a Flag column but the description does not declare which flag governs it.</p>",
-  "<p>Question: <strong>Which flag key and current state should this ticket use?</strong></p>",
-  "<p>My recommendation: Add the live flag key to the description plus a clickable link to its card on /admin/flags.</p>",
-  `<p>Why: The flags triage script cannot apply exactly one state label until you ${clarificationMarker} on the ticket.</p>`,
-  "<p>Yes: I will update the ticket with the flag key, state, and admin link.</p>",
-  "<p>No: This ticket should not stay in a Flag column without a declared flag.</p>",
-].join("");
+export const clarificationMarker = "Please declare the flag key and current state";
+export const clarificationBody = `<p><strong>Flags triage</strong></p><p>${clarificationMarker} on this ticket, plus a clickable link to its card on /admin/flags.</p>`;
 export const excludedFlagSection = "No Flag";
 const labels = [...Object.values(stateLabels), "flag:internal"];
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -156,7 +149,7 @@ export function triageFlagsColumn({ run = command, apply = false } = {}) {
       task = readTask(run, task.ticketNumber);
       if (!isFlagColumnTitle(task.section) || task.projectId !== 15 || task.status !== "Normal") continue;
       inspection = inspectTicket(task, readFlags(run), commentsFor(task.ticketNumber));
-      if (inspection.ask) run("vcc", ["comment", "add", task.ticketNumber, "--kind", "question", "--text", clarificationQuestion, "--json"]);
+      if (inspection.ask) run("vcc", ["comment", "add", task.ticketNumber, "--kind", "qa", "--text", clarificationBody, "--json"]);
       if (inspection.label) {
         const args = ["task", "update", task.ticketNumber, "--project", "15"];
         const stale = (task.labels ?? []).map((label) => label.name).filter((name) => labels.includes(name) && name !== inspection.label);
