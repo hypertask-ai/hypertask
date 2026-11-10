@@ -1,5 +1,4 @@
 "use client";
-
 import { ModalBody } from "reactstrap";
 import { useMemo, useState } from "react";
 import { GripVertical } from "lucide-react";
@@ -7,10 +6,8 @@ import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import { ModalContainerCustom, ModalFooterComp, ModalHeaderComp, ModalInput, ModalListContainer } from "@/components/Common/CommonModalComponents";
 import { countTableTags, getActiveTableGroupingFromProject } from "@/lib/table-view/tableGroupByTag";
 import type { IProject } from "@/models/model";
-
 const ACTION = "inline-flex min-h-7 items-center rounded-[4px] border-0 px-2 py-1 text-meta font-medium text-white-black hover:bg-hover-active";
 type Props = { project: IProject; onClose: () => void; onApply: (tagIds: string[]) => void };
-
 const TableTagGroupPicker = ({ project, onClose, onApply }: Props) => {
   const counts = useMemo(
     () => countTableTags(project.filteredSections?.length ? project.filteredSections : project.sections ?? []),

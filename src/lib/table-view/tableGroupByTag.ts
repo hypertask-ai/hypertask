@@ -14,13 +14,7 @@ export const UNASSIGNED_GROUP_TITLE = "Unassigned";
 export const NO_PRIORITY_GROUP_TITLE = "No priority";
 export const NO_SIZE_GROUP_TITLE = "No size";
 
-const TABLE_GROUP_BY_VALUES = new Set<TableGroupBy>([
-  "column",
-  "tag",
-  "assignee",
-  "priority",
-  "size",
-]);
+const TABLE_GROUP_BY_VALUES = new Set<TableGroupBy>(["column", "tag", "assignee", "priority", "size"]);
 const TAG_PREFIX = "tag:";
 const TAG_ID = /^[A-Za-z0-9_-]+$/;
 const MAX_SELECTED_TAGS = 100;
@@ -158,21 +152,13 @@ export const buildTableSectionsGroupedByAssignee = (sections: ISection[]) =>
 export const buildTableSectionsGroupedByPriority = (sections: ISection[]) =>
   buildGroups(sections, (task) => {
     const index = task.priority?.priority_index ?? 0;
-    return {
-      key: `priority:${index}`,
-      title: task.priority?.Priority_Value?.trim() || NO_PRIORITY_GROUP_TITLE,
-      order: index === 0 ? LAST : index,
-    };
+    return { key: `priority:${index}`, title: task.priority?.Priority_Value?.trim() || NO_PRIORITY_GROUP_TITLE, order: index === 0 ? LAST : index };
   });
 
 export const buildTableSectionsGroupedBySize = (sections: ISection[]) =>
   buildGroups(sections, (task) => {
     const index = task.estimate?.estimate_index ?? 0;
-    return {
-      key: `size:${index}`,
-      title: task.estimate?.estimate_value?.trim() || NO_SIZE_GROUP_TITLE,
-      order: index === 0 ? LAST : index,
-    };
+    return { key: `size:${index}`, title: task.estimate?.estimate_value?.trim() || NO_SIZE_GROUP_TITLE, order: index === 0 ? LAST : index };
   });
 
 export function buildTableSectionsForGrouping(
