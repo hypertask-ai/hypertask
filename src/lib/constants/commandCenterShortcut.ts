@@ -78,3 +78,12 @@ export const isComposePaletteShortcut = (
   !event.altKey && !event.shiftKey &&
   (event.ctrlKey || (isApple && event.metaKey)) &&
   (isCommandMenuRoute(pathname) || pathname === "/new");
+
+export const TICKET_EDITOR_CTRL_J_ATTRIBUTE = "data-ctrl-j-write-with-ai";
+
+export const isTicketEditorWriteWithAiShortcut = (
+  event: CommandCenterKeyboardEvent & { target: EventTarget | null },
+) =>
+  event.code === "KeyJ" &&
+  typeof (event.target as Element | null)?.closest === "function" &&
+  Boolean((event.target as Element).closest(`[${TICKET_EDITOR_CTRL_J_ATTRIBUTE}]`));

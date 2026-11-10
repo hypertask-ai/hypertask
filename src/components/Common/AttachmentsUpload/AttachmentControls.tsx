@@ -15,6 +15,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_8926_COMMENT_MIC_PATTERN_FLAG } from "@/lib/flags/definitions/htpr-8926-comment-mic-pattern";
 import { HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8962-one-send-clears-inbox";
+import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
 import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 
 export interface IPropsSaveButtonMobile {
@@ -331,6 +332,7 @@ export const DesktopAttachment = ({
   const micPatternEnabled = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
   const oneSend = useFlag(HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
+  const ticketEditorCtrlJ = useFlag(HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG);
   const isApple = useDeviceContext();
   const ctrlCmd = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
@@ -391,7 +393,7 @@ export const DesktopAttachment = ({
               left={0}
               bottom={-45}
               keyCombination={[`${ctrlCmd}`, "J"]}
-              text={"Ai Task Writer"}
+              text={ticketEditorCtrlJ ? "Write with AI" : "Ai Task Writer"}
             />
           </span>
         )}
@@ -420,6 +422,7 @@ export const DesktopAttachment = ({
             toggleRecording={toggleRecording!}
             dictationCoordinator={dictationCoordinator}
             {...(micPattern ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, ariaLabel: "Start dictation" } : {})}
+            {...(ticketEditorCtrlJ ? { hoverTooltip: { text: "Dictate", keyCombination: [altOptions, "V"] } } : {})}
           />
         )}
         {((micPatternEnabled && commentMode) || (oneSend && mode === "create-comment")) && (

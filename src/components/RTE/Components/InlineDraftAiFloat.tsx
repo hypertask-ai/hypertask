@@ -20,6 +20,8 @@ import { LoaderCircle, PencilSparkles, Sparkles, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { SendArrow } from "@/components/Common/SendArrow";
+import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { AppSheet } from "@/components/Modals/Sheets/AppSheet";
 import {
@@ -237,6 +239,7 @@ const InlineDraftAiFloat = ({
   isRecording = false,
   presentation = "inline",
   suppressEditorSelectionHighlight = false,
+  matchCommentRowControls = false,
 }: {
   editor: Editor;
   onClose: () => void;
@@ -247,7 +250,9 @@ const InlineDraftAiFloat = ({
   isRecording?: boolean;
   presentation?: "inline" | "composer" | "refine-fullscreen" | "edit-inline";
   suppressEditorSelectionHighlight?: boolean;
+  matchCommentRowControls?: boolean;
 }) => {
+  const isApple = useDeviceContext();
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<InlineDraftAiRange | null>(null);
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
@@ -609,6 +614,14 @@ const InlineDraftAiFloat = ({
         isMobileAiSheet && !prompt.trim() ? "ml-auto" : undefined
       }
       disabled={isLoading}
+      {...(matchCommentRowControls
+        ? {
+            compactListeningPill: true,
+            primaryMic: true,
+            hideDevicePicker: true,
+            hoverTooltip: { text: "Dictate", keyCombination: [isApple ? "OPT" : "ALT", "V"] },
+          }
+        : {})}
     />
   ) : null;
 
@@ -911,19 +924,36 @@ const InlineDraftAiFloat = ({
         </div>
       )}
 
-      <button
-        type="button"
-        aria-label="Send AI instruction"
-        disabled={!prompt.trim() || isLoading || audioProcessing}
-        onClick={submitPrompt}
-        className={`${dictationActive ? "hidden" : "flex"} h-7 w-7 shrink-0 items-center justify-center rounded-full bg-hypertasks-ai-purple text-white disabled:bg-icon-dark-gray disabled:text-comment-description`}
-      >
-        {isLoading ? (
-          <LoaderCircle size={15} className="animate-spin" aria-hidden />
-        ) : (
-          <SendArrow size={16} />
-        )}
-      </button>
+      {matchCommentRowControls ? (
+        <span className={dictationActive ? "hidden" : "flex shrink-0 items-center"}>
+          {isLoading ? (
+            <LoaderCircle size={15} className="animate-spin text-icon-dark-gray" aria-hidden />
+          ) : (
+            <SendMessageButton
+              label="Rewrite"
+              textButton
+              shortcut={{ text: "Rewrite", keyCombination: ["ENTER"] }}
+              mobile={false}
+              disabled={!prompt.trim() || audioProcessing}
+              onClick={submitPrompt}
+            />
+          )}
+        </span>
+      ) : (
+        <button
+          type="button"
+          aria-label="Send AI instruction"
+          disabled={!prompt.trim() || isLoading || audioProcessing}
+          onClick={submitPrompt}
+          className={`${dictationActive ? "hidden" : "flex"} h-7 w-7 shrink-0 items-center justify-center rounded-full bg-hypertasks-ai-purple text-white disabled:bg-icon-dark-gray disabled:text-comment-description`}
+        >
+          {isLoading ? (
+            <LoaderCircle size={15} className="animate-spin" aria-hidden />
+          ) : (
+            <SendArrow size={16} />
+          )}
+        </button>
+      )}
     </div>
   );
 
