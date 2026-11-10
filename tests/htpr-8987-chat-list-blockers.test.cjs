@@ -46,14 +46,48 @@ test("AI list_tasks exposes open BlockedBy targets like the board payload", asyn
     return [blockedTask];
   };
 
-  const { createListTasksTool } = load("src/lib/ai/tools/listTasks.ts", {
-    "@/lib/prisma": {
-      __esModule: true,
-      default: {
-        task: { findMany, count: async () => 1 },
-        section: { findMany: async () => [{ section_title: "In Progress", projectId: 15 }] },
-      },
+  const prismaMock = {
+    __esModule: true,
+    default: {
+      task: { findMany, count: async () => 1 },
+      section: { findMany: async () => [{ section_title: "In Progress", projectId: 15 }] },
     },
+  };
+  const attachDeps = {
+    "@/lib/prisma": prismaMock,
+    "@/utils/controllers/notifications/inboxZero": {
+      loadDoneTitlesByProject: async (projectIds) =>
+        new Map([...projectIds].map((id) => [id, new Set()])),
+    },
+    "@/lib/doneColumns": load("src/lib/doneColumns.ts", {}),
+    "@/lib/mcp/tasks/blockerStillOpen": load("src/lib/mcp/tasks/blockerStillOpen.ts", {
+      "@/lib/doneColumns": load("src/lib/doneColumns.ts", {}),
+    }),
+    "@/lib/blockingTasks": load("src/lib/blockingTasks.ts", {
+      "@/lib/mcp/tasks/blockerStillOpen": load("src/lib/mcp/tasks/blockerStillOpen.ts", {
+        "@/lib/doneColumns": load("src/lib/doneColumns.ts", {}),
+      }),
+    }),
+    "@/utils/controllers/tasks/attachOpenBlockingTasks": load(
+      "src/utils/controllers/tasks/attachOpenBlockingTasks.ts",
+      {
+        "@/lib/prisma": prismaMock,
+        "@/lib/doneColumns": load("src/lib/doneColumns.ts", {}),
+        "@/lib/blockingTasks": load("src/lib/blockingTasks.ts", {
+          "@/lib/mcp/tasks/blockerStillOpen": load("src/lib/mcp/tasks/blockerStillOpen.ts", {
+            "@/lib/doneColumns": load("src/lib/doneColumns.ts", {}),
+          }),
+        }),
+        "@/utils/controllers/notifications/inboxZero": {
+          loadDoneTitlesByProject: async (projectIds) =>
+            new Map([...projectIds].map((id) => [id, new Set()])),
+        },
+      },
+    ),
+  };
+  const { createListTasksTool } = load("src/lib/ai/tools/listTasks.ts", {
+    ...attachDeps,
+    "@/lib/prisma": prismaMock,
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/flags/keys": { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG: "htpr-7733" },
     "@/lib/mcp/listQuery": require("./task-route-loader.cjs").load("src/lib/mcp/listQuery.ts", {}),

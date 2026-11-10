@@ -26,17 +26,17 @@ function loadModule(file, stubs = {}) {
     new Function("require", "module", "exports", "__filename", "__dirname", source)(
       (specifier) => {
         const listImport = blockingStubs.resolveListImport(specifier);
-        if (listImport !== undefined) return listImport;
+        if (listImport !== undefined && !(specifier in stubs)) return listImport;
         if (specifier in stubs) {
           const stub = specifier === "@/utils/controllers/projects/getAllIncludes"
             ? blockingStubs.mergeGetAllIncludesStub(stubs[specifier])
             : stubs[specifier];
           return stub && Object.hasOwn(stub, "default") ? { __esModule: true, ...stub } : stub;
         }
-        if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks") {
+        if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks" && !(specifier in stubs)) {
           return blockingStubs.attachOpenBlockingTasksStub;
         }
-        if (specifier === "@/lib/blockingTasks" && !filename.endsWith("blockingTasks.ts")) {
+        if (specifier === "@/lib/blockingTasks" && !filename.endsWith("blockingTasks.ts") && !(specifier in stubs)) {
           return blockingStubs.blockingTasksMapperStub;
         }
         if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
