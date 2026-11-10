@@ -39,7 +39,7 @@ test("every assignment activity snapshot preserves the user profile photo", () =
   assert.equal(
     (
       taskDetailLoadSource.match(
-        /\$\{assignmentActivityWithCurrentAvatars\} AS activity/g
+        /assignmentActivityWithCurrentAvatars\)\} AS activity/g
       ) || []
     ).length,
     2

@@ -14,6 +14,7 @@ const { findCachedTaskDetail } = jiti(path.join(root, "src/lib/navigation/cached
 function load({ task = null } = {}) {
   const queries = [], flagCalls = [];
   const mocks = {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/lib/tasks/sameBoardRelations": jiti(path.join(root, "src/lib/tasks/sameBoardRelations.ts")),
     "@prisma/client": require("@prisma/client"),
     "@vercel/functions": {},

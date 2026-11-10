@@ -32,6 +32,7 @@ function relationRows(spec, key, otherKey, taskKey) {
 
 function load() {
   const mocks = {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/lib/tasks/sameBoardRelations": jiti(path.join(root, "src/lib/tasks/sameBoardRelations.ts")),
     "@prisma/client": require("@prisma/client"),
     "@vercel/functions": {},

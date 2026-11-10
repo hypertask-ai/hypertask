@@ -38,6 +38,13 @@ const agentPulseDotStubs = {
   },
 };
 
+const passRows = async (rows) => rows;
+const waitingActivityStubs = {
+  "@/lib/tasks/redactWaitingActivities": { withPublicWaitingActivities: passRows, redactSharedPrivateWaitingActivities: passRows },
+  "@/lib/tasks/waitingOnActivitySql": { visibleWaitingOnActivity: () => ({}) },
+  "@/lib/tasks/waitingAgentPrivacy": { presentWaitingAgent: (task) => task, collectWaitingTargets: () => ({ ids: [], names: [] }), hiddenWaitingAgents: () => ({ hiddenIds: new Set(), hiddenNames: new Set() }), redactWaitingOnActivity: (activity) => activity },
+};
+
 const straightBoardGuardStubs = {
   "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed", accountNotificationsBlocked: async () => false },
 };
@@ -67,15 +74,16 @@ function withStubs(base = {}, extra = {}) {
     defaults[USER_COMMENT_COUNTS] = { userCommentCountsByTaskId: async () => new Map() }
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base || request in defaults || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
+    has: (_target, request) => request in extra || request in base || request in defaults || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,
     get: (_target, request) =>
       request in extra ? extra[request]
       : request in base ? base[request]
       : request in defaults ? defaults[request]
       : request in agentPulseDotStubs ? agentPulseDotStubs[request]
       : request in emailStraightBoardStubs ? emailStraightBoardStubs[request]
+      : request in waitingActivityStubs ? waitingActivityStubs[request]
       : plainLanguageTicketStubs[request],
   });
 }
 
-module.exports = { withStubs, enforcementFor, quietPersonalLogStub, emailStraightBoardStubs, straightBoardRouteStubs, straightBoardGuardStubs };
+module.exports = { withStubs, enforcementFor, quietPersonalLogStub, emailStraightBoardStubs, straightBoardRouteStubs, straightBoardGuardStubs, waitingActivityStubs };

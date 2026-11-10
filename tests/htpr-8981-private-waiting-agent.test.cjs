@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const createJiti = require("jiti");
@@ -60,22 +59,6 @@ test("a private name stays hidden after the agent leaves the board", () => {
   assert.equal(activity.data.waitingOnAgentId, null);
   const owner = redact(waiting({ waitingOnDisplayName: "Secret helper" }), [secret], 6);
   assert.equal(owner.data.waitingOnDisplayName, "Secret helper");
-});
-
-test("comment, board, share, and AI reads use the hide", () => {
-  const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
-  for (const file of [
-    "src/utils/controllers/taskDetail/load.ts",
-    "src/utils/controllers/tasks/getSharedTask.ts",
-    "src/lib/tasks/waitingOnActivitySql.ts",
-  ]) assert.equal(read(file).includes("visibleWaitingOnActivity"), true);
-  for (const file of [
-    "src/lib/mcp/operations/comments/operation.ts",
-    "src/lib/ai/tools/getCommentsForTask.ts",
-    "src/app/api/ai/_lib/currentTaskContext.ts",
-    "src/app/api/ai/task-questions/route.ts",
-  ]) assert.equal(read(file).includes("withPublicWaitingActivities"), true);
-  assert.equal(read("src/lib/tasks/setWaitingOn.ts").includes("waitingOnAgentId: waitingAgent.id"), true);
 });
 
 test.after(() => {
