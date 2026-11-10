@@ -4,8 +4,11 @@ import { SESSION_TTL_SECONDS, sessionRevocationClaims } from '@/lib/auth/session
 import { getRedis } from '@/lib/redis'
 
 const revokedTokens = new Map<string, number>()
+const clearedTokens = new Map<string, number>()
 const READ_DEADLINE_MS = 300
 const WRITE_DEADLINE_MS = 500
+const CLEARED_CACHE_MS = Number(process.env.SESSION_REVOCATION_CACHE_MS ?? 30_000)
+const CLEARED_CACHE_LIMIT = 2000
 
 const userRevokedBeforeKey = (userId: number) => `ht_session:user-revoked-before:${userId}`
 
@@ -26,7 +29,17 @@ export function sessionTokenFingerprint(token: string | undefined): string | nul
   return verifiedToken(token)?.fingerprint ?? null
 }
 
+function cacheClearance(fingerprint: string) {
+  if (!(CLEARED_CACHE_MS > 0)) return
+  clearedTokens.delete(fingerprint)
+  if (clearedTokens.size >= CLEARED_CACHE_LIMIT) {
+    clearedTokens.delete(clearedTokens.keys().next().value!)
+  }
+  clearedTokens.set(fingerprint, Date.now() + CLEARED_CACHE_MS)
+}
+
 function cacheRevocation(fingerprint: string, exp: number) {
+  clearedTokens.delete(fingerprint)
   revokedTokens.delete(fingerprint)
   if (revokedTokens.size >= 1000) {
     revokedTokens.delete(revokedTokens.keys().next().value!)
@@ -70,6 +83,7 @@ export async function revokeSessionToken(token: string | undefined): Promise<voi
 
 export async function revokeOtherUserSessions(userId: number): Promise<boolean> {
   const revokedBefore = Math.floor(Date.now() / 1000)
+  clearSessionRevocationCache()
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -86,6 +100,10 @@ export async function revokeOtherUserSessions(userId: number): Promise<boolean> 
   return false
 }
 
+export function clearSessionRevocationCache(): void {
+  clearedTokens.clear()
+}
+
 export async function isSessionTokenRevoked(
   token: string | undefined,
   { failClosed }: { failClosed: boolean },
@@ -99,19 +117,27 @@ export async function isSessionTokenRevoked(
     revokedTokens.delete(verified.fingerprint)
   }
 
+  const clearedUntil = clearedTokens.get(verified.fingerprint)
+  if (clearedUntil !== undefined) {
+    if (clearedUntil > Date.now()) return false
+    clearedTokens.delete(verified.fingerprint)
+  }
+
   try {
     const [revoked, revokedBefore] = await withDeadline(async () => {
       const redis = await getRedis()
-      return await Promise.all([
-        redis.get(`ht_session:revoked:${verified.fingerprint}`),
-        redis.get(userRevokedBeforeKey(verified.userId)),
-      ])
+      const [token, user] = await redis.mget(
+        `ht_session:revoked:${verified.fingerprint}`,
+        userRevokedBeforeKey(verified.userId),
+      )
+      return [token, user]
     }, READ_DEADLINE_MS)
     if (revokedBefore !== null && verified.issuedAt < Number(revokedBefore)) return true
     if (revoked !== null) {
       cacheRevocation(verified.fingerprint, verified.exp)
       return true
     }
+    cacheClearance(verified.fingerprint)
     return false
   } catch {
     return failClosed

@@ -40,20 +40,30 @@ function clientIp(request: NextRequest) {
   );
 }
 
-async function incrementWithExpiry(key: string) {
+const INTAKE_CLAIM = `
+local ip = redis.call('INCR', KEYS[1])
+if ip == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+local global = redis.call('INCR', KEYS[2])
+if global == 1 then redis.call('EXPIRE', KEYS[2], ARGV[1]) end
+return {ip, global}
+`;
+
+async function claimIntakeWindow(ipKey: string, globalKey: string) {
   const redis = await getRedis();
-  const count = await redis.incr(key);
-  if (count === 1) await redis.expire(key, RATE_WINDOW_SECONDS);
-  return count;
+  const counts = await redis.eval(INTAKE_CLAIM, 2, ipKey, globalKey, RATE_WINDOW_SECONDS);
+  if (!Array.isArray(counts) || counts.length !== 2) {
+    throw new Error("Invalid error intake counters");
+  }
+  return counts.map(Number) as [number, number];
 }
 
 async function isRateLimited(request: NextRequest) {
   const ipHash = createHash("sha256").update(clientIp(request)).digest("hex");
   const window = Math.floor(Date.now() / (RATE_WINDOW_SECONDS * 1000));
-  const [ipCount, globalCount] = await Promise.all([
-    incrementWithExpiry(`errors:intake:ip:${ipHash}:${window}`),
-    incrementWithExpiry(`errors:intake:global:${window}`),
-  ]);
+  const [ipCount, globalCount] = await claimIntakeWindow(
+    `errors:intake:ip:${ipHash}:${window}`,
+    `errors:intake:global:${window}`,
+  );
 
   return ipCount > PER_IP_RATE_LIMIT || globalCount > GLOBAL_RATE_LIMIT;
 }
