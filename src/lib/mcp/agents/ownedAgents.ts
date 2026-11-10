@@ -1,7 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
-import { markPrivateWaitingActivities } from '@/lib/tasks/waitingOnActivitySql'
 
 export type OwnedAgentRow = {
   id: string
@@ -26,6 +25,7 @@ type AgentRowForDelete = {
 }
 
 type AgentManagementTransaction = {
+  $executeRawUnsafe?(query: string, ...values: unknown[]): Promise<unknown>
   agent: {
     findFirst(args: {
       where: Prisma.AgentWhereInput
@@ -402,7 +402,7 @@ export async function deleteOwnedAgent(
             where: { agentId: agent.id },
             data: { agentId: null },
           })
-          await markPrivateWaitingActivities(transaction, agent.id, userId)
+          await transaction.$executeRawUnsafe?.(`UPDATE "Comment" SET activity = jsonb_set(jsonb_set(activity, '{data,waitingOnPrivate}', 'true'::jsonb, true), '{data,waitingOnAgentOwnerId}', to_jsonb($2::int), true) WHERE activity->>'type' = 'TaskWaitingOn' AND activity #>> '{data,waitingOnAgentId}' = $1`, agent.id, userId)
           await transaction.agent.delete({ where: { id: agent.id } })
 
           return {

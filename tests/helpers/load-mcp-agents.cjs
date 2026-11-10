@@ -24,7 +24,6 @@ function loadReal(relativePath) {
   loaded.require = (request) => {
     if (request === "@/lib/prisma") return { __esModule: true, default: {} };
     if (request === "@/lib/agents/visibility") return loadReal("src/lib/agents/visibility.ts");
-    if (request === "@/lib/tasks/waitingOnActivitySql") return require("./stub-map.cjs").waitingActivityStubs[request];
     return require(request);
   };
   loaded._compile(javascript, filePath);

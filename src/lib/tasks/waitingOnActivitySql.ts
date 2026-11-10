@@ -1,16 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { PRIVATE_AGENT_DISPLAY_NAME } from "@/lib/agents/publicAgent";
 
-export async function markPrivateWaitingActivities(db: { $executeRaw: (query: Prisma.Sql) => Promise<unknown> }, agentId: string, ownerUserId: number) {
-  if (typeof db.$executeRaw !== "function") return;
-  await db.$executeRaw(Prisma.sql`
-    UPDATE "Comment" SET activity = jsonb_set(
-      jsonb_set(activity, '{data,waitingOnPrivate}', 'true'::jsonb, true),
-      '{data,waitingOnAgentOwnerId}', to_jsonb(${ownerUserId}::int), true)
-    WHERE activity->>'type' = 'TaskWaitingOn'
-      AND activity #>> '{data,waitingOnAgentId}' = ${agentId}`);
-}
-
 export function visibleWaitingOnActivity(userId: number, projectId: Prisma.Sql, activity: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`
     (SELECT CASE WHEN activity_row.activity->>'type' = 'TaskWaitingOn' AND (

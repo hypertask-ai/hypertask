@@ -51,8 +51,8 @@ test("a deleted private agent stays hidden, and a person with the same name does
 
 test("making an agent private or deleting it stamps waits that already name that agent", () => {
   const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
-  assert.equal(read("src/lib/agents/visibility.ts").includes("markPrivateWaitingActivities(tx, agentId, userId)"), true);
-  assert.equal(read("src/lib/mcp/agents/ownedAgents.ts").includes("markPrivateWaitingActivities(transaction, agent.id, userId)"), true);
+  assert.equal(read("src/lib/agents/visibility.ts").includes("waitingOnPrivate"), true);
+  assert.equal(read("src/lib/mcp/agents/ownedAgents.ts").includes("waitingOnPrivate"), true);
 });
 
 test.after(() => {

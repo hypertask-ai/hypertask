@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { markPrivateWaitingActivities } from "@/lib/tasks/waitingOnActivitySql";
 
 export const AGENT_VISIBILITIES = ["PRIVATE", "TEAM"] as const;
 export type AgentVisibility = (typeof AGENT_VISIBILITIES)[number];
@@ -140,7 +139,7 @@ export async function setOwnedAgentVisibilityInTransaction(
     where: { id: agentId, userId, ...scopeWhere },
     data: { visibility },
   });
-  if (visibility === "PRIVATE") await markPrivateWaitingActivities(tx, agentId, userId);
+  if (visibility === "PRIVATE") await tx.$executeRawUnsafe(`UPDATE "Comment" SET activity = jsonb_set(jsonb_set(activity, '{data,waitingOnPrivate}', 'true'::jsonb, true), '{data,waitingOnAgentOwnerId}', to_jsonb($2::int), true) WHERE activity->>'type' = 'TaskWaitingOn' AND activity #>> '{data,waitingOnAgentId}' = $1`, agentId, userId);
   if (updated.count !== 1) {
     return { ok: false as const, status: 404, error: "Agent does not exist" };
   }
