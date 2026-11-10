@@ -56,9 +56,9 @@ test("every read point switches after the Haiku reset and reads a saved Auto as 
   assert.match(hook, /storedAutoModelRequested\(/);
   assert.match(hook, /toAutoModelOption\(planDefault\)/);
   const dropdown = read("src/components/Global/ModelSelectorDropdown.tsx");
-  assert.match(dropdown, /savedAutoOption = autoFlag && savedModelAuto \? toAutoModelOption\(selectedOption\)/);
+  assert.match(dropdown, /savedAutoOption = savedModelAuto && \(autoFlag \|\| pickerAutoFlag\) \? toAutoModelOption\(selectedOption\)/);
   assert.match(dropdown, /autoSelected = Boolean\(autoOption \?\? savedAutoOption\)/);
-  assert.match(read("src/app/api/users/preferences/route.ts"), /!savedModelAutoEnabled && preferenceUpdates\.some\(/);
+  assert.match(read("src/app/api/users/preferences/route.ts"), /return !savedModelAutoEnabled;/);
   assert.match(read("src/app/api/users/preferences/route.ts"), /modelReset === "failed"/);
   assert.match(read("src/lib/ai/chatStream/turnModel.ts"), /!autoRequested && isServerChosenDefaultTurn/);
   assert.match(read("src/lib/flags/definitions/htpr-9019-saved-model-auto.ts"), /defaultMode: "OWNER_AND_QA"/);
