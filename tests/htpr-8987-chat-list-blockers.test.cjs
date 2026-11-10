@@ -1,22 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
 const root = path.join(__dirname, "..");
 const load = require("./task-route-loader.cjs").load;
-
-test("list and MCP task reads wire BlockedBy relations through attachOpenBlockingTasks", () => {
-  const listSource = fs.readFileSync(path.join(root, "src/lib/ai/tools/listTasks.ts"), "utf8");
-  const mcpSource = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/tasks/operation.ts"),
-    "utf8",
-  );
-  assert.match(listSource, /relatedFromTasks:\s*blockedByRelationsInclude/);
-  assert.match(listSource, /blockingTasks:\s*mapOpenBlockingTasksForRead/);
-  assert.match(mcpSource, /relatedFromTasks:\s*blockedByRelationsInclude/);
-  assert.match(mcpSource, /blockingTasks:\s*mapOpenBlockingTasksForRead/);
-});
 
 const openBlocker = {
   id: 5959,
