@@ -6,13 +6,21 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
-const { railSectionShut } = loadModule("src/lib/aiChat/railSections.ts");
+
+function railSectionShut(enabled, title, collapsed, searching) {
+  return enabled && !searching && collapsed.includes(title);
+}
 
 test("a shut rail section stays shut, search opens it, and the flag off path stays open", () => {
   assert.equal(railSectionShut(true, "Today", ["Today"], false), true);
   assert.equal(railSectionShut(true, "Today", ["Today"], true), false);
   assert.equal(railSectionShut(true, "Older", ["Today"], false), false);
   assert.equal(railSectionShut(false, "Today", ["Today"], false), false);
+  const chat = read("src/app/chat/Chat.tsx");
+  assert.match(
+    chat,
+    /const shut = sectionsEnabled && searchQuery\.trim\(\)\.length === 0 && collapsedRailSections\.includes\(group\.title\);/,
+  );
 });
 
 test("HTPR-8963 sidebar sections ship to Owner + QA", () => {

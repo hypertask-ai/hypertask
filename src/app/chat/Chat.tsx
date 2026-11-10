@@ -2,7 +2,6 @@
 
 import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
 import { chatShortcutHint } from "@/lib/aiChat/chatShortcuts";
-import { railSectionShut } from "@/lib/aiChat/railSections";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 import { AI_Tiptap_Container } from "@/components/AI_CHAT/AI_Tiptap_Container";
@@ -642,12 +641,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const sectionLabelClass = `flex w-full items-center gap-1 rounded-[4px] pb-1 pt-2 text-left text-micro font-medium text-icon-dark-gray ${cleanupEnabled ? "px-1" : "px-3"}`;
   const sessionSections: React.ReactElement[] = [];
   for (const group of displayedSessionGroups) {
-    const shut = railSectionShut(
-      sectionsEnabled,
-      group.title,
-      collapsedRailSections,
-      searchQuery.trim().length > 0,
-    );
+    const shut = sectionsEnabled && searchQuery.trim().length === 0 && collapsedRailSections.includes(group.title);
     const rows: React.ReactElement[] = [];
     for (const session of group.sessions) {
       const isActive = session.id === currentSession?.id;
