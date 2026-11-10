@@ -438,7 +438,7 @@ export const Section = ({
                   : " border-[1px] border-pageBackground group/main focus:border-[1px] focus:border-white-black mobileResponsive md:w-full flex flex-col items-start h-auto "
               }
                 focus:outline-none  bg-containerBackground shadow-md rounded-md
-                max-h-inherit section-container relative
+                max-h-inherit section-container relative min-w-0 overflow-x-hidden
                 `}
         >
           {!isMbl &&
@@ -456,7 +456,7 @@ export const Section = ({
             data-title={section.section_title}
             data-board-scroll-ready={taskModuleReady || taskModuleFailed}
             className={`
-              ${isMbl ? "" : "overflow-y-auto "}
+              ${isMbl ? "" : "overflow-x-hidden overflow-y-auto "}
               w-full sm:pb-20 h-full  max-h-inherit 
               
               scrollbar-thin 
@@ -496,7 +496,7 @@ export const Section = ({
               id={`tasks-list-${index}`}
               className={`
                 ${isMbl ? " scrollbar-thin  overflow-y-auto max-h-[98%]" : ""}
-                "w-full px-2 space-y-4 mt-0"`}
+                w-full min-w-0 max-w-full overflow-x-hidden px-2 space-y-4 mt-0`}
             >
               {showAddItem && newTaskPosition === "top" && (
                 <NewTask

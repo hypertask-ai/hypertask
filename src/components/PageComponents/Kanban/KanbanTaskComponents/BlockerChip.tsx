@@ -8,7 +8,7 @@ export type BlockerUser = {
   photoURL?: string | null;
 };
 
-const blockerChipClassName = "inline-flex h-labelComponent max-w-full items-center gap-1 rounded-[4px] bg-[hsl(0_62.8%_30.6%)] px-1.5 text-micro font-semibold leading-none text-white";
+const blockerChipClassName = "inline-flex h-labelComponent min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-[4px] bg-[hsl(0_62.8%_30.6%)] px-1.5 text-micro font-semibold leading-none text-white";
 
 const BlockerChip = ({ user }: { user: BlockerUser }) => {
   const name = user.displayName?.trim() || user.email?.trim() || "Unknown person";

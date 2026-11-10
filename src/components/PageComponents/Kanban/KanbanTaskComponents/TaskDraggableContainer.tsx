@@ -90,7 +90,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
     cardState === "selected-blocked" ||
     (cardState === "selected" && selectedKeepsLayout);
   const cardBody =
-    "kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer";
+    "kanban-task-card group/kanban-selection relative min-w-0 max-w-full rounded-[5px] outline-none cursor-pointer";
 
   const getStyle = useCallback(
     (style: any, snapshot: DraggableStateSnapshot) => {
@@ -140,8 +140,8 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         prefetch={false}
         className={cn(
           cleanup
-            ? `flex items-center gap-1.5 flex-wrap ${stroked ? "p-2" : "py-2 pr-2 pl-3"}`
-            : "flex items-center p-2 gap-1.5 flex-wrap",
+            ? `flex min-w-0 w-full max-w-full items-center gap-1.5 flex-wrap overflow-hidden ${stroked ? "p-2" : "py-2 pr-2 pl-3"}`
+            : "flex min-w-0 w-full max-w-full items-center p-2 gap-1.5 flex-wrap overflow-hidden",
           linkClassName
         )}
         href={taskHref}

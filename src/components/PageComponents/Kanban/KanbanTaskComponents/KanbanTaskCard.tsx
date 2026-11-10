@@ -116,7 +116,7 @@ const KanbanTaskCard = ({
     ref={cardRef}
     tabIndex={0}
     id={`task-${task.id}`}
-    className="outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1"
+    className="min-w-0 max-w-full w-full outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1"
     onFocusCapture={onFocusCapture}
     onBlurCapture={onBlurCapture}
     onMouseEnter={onMouseEnter}
@@ -268,7 +268,7 @@ const TaskStalenessLine = ({
 
   return showFresh || level !== "none" ? (
     <p
-      className={`basis-full text-micro leading-none ${
+      className={`basis-full min-w-0 max-w-full truncate text-micro leading-none ${
         level === "hot"
           ? "text-[var(--color-card-age-hot)]"
           : level === "warn"
@@ -284,8 +284,8 @@ const TaskStalenessLine = ({
 export const TaskTitle = ({ title }: { title: string }) => {
   const wrapBetweenWords = useFlag(HTPR_7350_CARD_TITLE_WRAP_FLAG);
   return (
-    <div className="flex flex-1 text-white-black">
-      <p className={`${wrapBetweenWords ? "wrap-anywhere" : "break-all"} whitespace-pre-line text-left text-dense`}>
+    <div className="flex min-w-0 max-w-full flex-1 overflow-hidden text-white-black">
+      <p className={`min-w-0 max-w-full ${wrapBetweenWords ? "wrap-anywhere" : "break-all"} whitespace-pre-line text-left text-dense`}>
         {title}
       </p>
     </div>

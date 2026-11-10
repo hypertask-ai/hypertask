@@ -109,7 +109,7 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
   return (
 
     agentStatusLine||agents.length>0||blockingUser||(task.blockingTasks?.length ?? 0)>0||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(taskLabels&&taskLabels?.length>0)||hasCustomFieldValues?
-    <div className={`basis-full flex gap-1 flex-wrap`}>
+    <div className="basis-full flex min-w-0 max-w-full flex-wrap gap-1 overflow-hidden">
     {agentStatusLine && (
       <LabelWrapper title={agentStatusLine} className="min-w-0 max-w-full overflow-hidden" data-testid="agent-status-chip">
         <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
@@ -194,6 +194,7 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
                     fontWeight={500}
                     onClick={() => handleClick("TaskLabels")}
                     flexBasis={false}
+                    nowrap
                     labelValue={taskLabel.label?.value ?? ""} />
                 ))}
                 {extra > 0 && (
@@ -226,10 +227,10 @@ const AgentChip = ({ agent, onClick }: { agent: IAgent; onClick: () => void }) =
       e.stopPropagation();
       onClick();
     }}
-    className="cursor-pointer"
+    className="min-w-0 max-w-full cursor-pointer overflow-hidden"
   >
     <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
-    <span className="truncate">{agent.displayName}</span>
+    <span className="min-w-0 truncate">{agent.displayName}</span>
   </LabelWrapper>
 );
 
@@ -265,6 +266,7 @@ const CustomFieldChips = ({ projectId, values }: { projectId: number; values?: C
           key={`custom-field-${field.id}`}
           fontWeight={500}
           flexBasis={false}
+          nowrap
           labelValue={`${field.name} ${display}`}
         />
       ))}
