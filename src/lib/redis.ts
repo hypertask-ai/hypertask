@@ -1,5 +1,3 @@
-import { instrumentRedisMetrics } from "@/lib/redis/metrics";
-
 type RedisClient = InstanceType<(typeof import("ioredis"))["default"]>;
 
 function getRedisUrl() {
@@ -33,20 +31,6 @@ const globalForRedis = globalThis as unknown as {
   redisPromise?: Promise<RedisClient>;
 };
 
-async function connectProductionRedis(): Promise<RedisClient> {
-  const { default: Redis } = await import("ioredis");
-  const client = new Redis(getRedisUrl(), { protocol: 2 });
-  client.on("error", logReconnectingConnectionError);
-  const metrics = {
-    incrby: (key: string, amount: number) => client.incrby(key, amount),
-    hincrby: (key: string, field: string, amount: number) => client.hincrby(key, field, amount),
-    expire: (key: string, seconds: number) => client.expire(key, seconds),
-    get: (key: string) => client.get(key),
-    hgetall: (key: string) => client.hgetall(key),
-  };
-  return instrumentRedisMetrics(client, metrics) as RedisClient;
-}
-
 export async function getRedis(): Promise<RedisClient> {
   if (globalForRedis.redis) return globalForRedis.redis;
 
@@ -55,7 +39,10 @@ export async function getRedis(): Promise<RedisClient> {
       if (process.env.NEXT_RUNTIME === "edge") {
         throw new Error("Redis TCP client is unavailable in the Edge runtime.");
       }
-      const client = await connectProductionRedis();
+
+      const { default: Redis } = await import("ioredis");
+      const client = new Redis(getRedisUrl(), { protocol: 2 });
+      client.on("error", logReconnectingConnectionError);
       globalForRedis.redis = client;
       return client;
     })();

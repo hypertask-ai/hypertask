@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG } from '@/lib/flags/keys';
 import { createHash } from 'crypto';
-import { isFeatureEnabled, FEATURE_FLAG_OWNER_USER_ID } from '@/lib/flags';
-import { HTPR_8978_UPSTASH_AUDIENCE_FLAG } from '@/lib/flags/definitions/htpr-8978-upstash-audience';
 import { getRedis } from '@/lib/redis';
 import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision';
 import { extractBearerToken, validateMcpAuth } from './session';
@@ -64,38 +62,6 @@ export async function checkMcpRateLimit(
     }
     const fastEnabled = !(await shouldUseExactCountRateLimit())
     if (!fastEnabled) localCounts.clear()
-    const skipAgentRedis = await isFeatureEnabled(HTPR_8978_UPSTASH_AUDIENCE_FLAG, FEATURE_FLAG_OWNER_USER_ID)
-    let agentLocalOnly = skipAgentRedis && token.startsWith('htk_')
-    if (!agentLocalOnly && skipAgentRedis) {
-      const ctx = await (resolveAuth ? resolveAuth() : validateMcpAuth(request))
-      agentLocalOnly = Boolean(ctx?.agentId)
-    }
-    if (agentLocalOnly) {
-      let entry = localCounts.get(key)
-      if (!entry) {
-        if (localCounts.size >= MAX_LOCAL_COUNTS) agentLocalOnly = false
-        else {
-          entry = { count: 0, reserved: 0, leasing: false }
-          localCounts.set(key, entry)
-        }
-      }
-      if (agentLocalOnly) {
-      const count = entry ? ++entry.count : 1
-      const countOutcome = classifyMcpRateLimitCount(count)
-      if (countOutcome === 'allow') return null
-      let limit = MCP_AGENT_RATE_LIMIT_PER_MINUTE
-      if (countOutcome === 'resolve-tier') {
-        const ctx = await (resolveAuth ? resolveAuth() : validateMcpAuth(request))
-        limit = resolveMcpRateLimit(ctx, token)
-      }
-      const decision = decideMcpRateLimit(count, limit, windowStartSeconds, nowSeconds)
-      if (!decision.limited) return null
-      return NextResponse.json(
-        { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
-        { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } },
-      )
-      }
-    }
     const redis = await getRedis()
     const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined
     if (prepaid && prepaid.reserved > 0) {

@@ -12,7 +12,6 @@ import type { FeatureFlagDefinition, FeatureFlagKind } from "@/lib/flags/definit
 import {
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
 } from "@/lib/flags/keys";
-import { HTPR_8978_UPSTASH_AUDIENCE_FLAG } from "@/lib/flags/definitions/htpr-8978-upstash-audience";
 
 export * from "@/lib/flags/keys";
 export type { FeatureFlagKind } from "@/lib/flags/definitions";
@@ -278,24 +277,16 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
 }
 
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
-  const { currentRedisAudience } = await import("@/lib/redis/audience");
-  const { isUpstashAudienceRoutingEnabled } = await import("@/lib/redis/audience");
-  if ((await isUpstashAudienceRoutingEnabled()) && currentRedisAudience() === "agent") {
-    return prisma.featureFlag.findMany({ select: { key: true, mode: true } });
-  }
   const {
-    clearHumanProcessFlagCache,
     FLAG_MODE_CACHE_KEY,
     FLAG_MODE_GENERATION_KEY,
     FLAG_MODE_WRITERS_KEY,
     flagCacheCommand,
-    readHumanProcessFlagCache,
-    storeHumanProcessFlagCache,
+    readProcessFlagCache,
+    storeProcessFlagCache,
   } = await import("@/lib/flags/modeCache");
-  if (await isUpstashAudienceRoutingEnabled()) {
-    const cachedProcess = readHumanProcessFlagCache();
-    if (cachedProcess) return cachedProcess;
-  }
+  const cachedProcess = readProcessFlagCache();
+  if (cachedProcess) return cachedProcess;
   if (!process.env.REDIS_URL) return null;
   try {
     const redis = await flagCacheCommand(import("@/lib/redis").then(({ getRedis }) => getRedis()));
@@ -309,7 +300,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       if (!Array.isArray(rows) || !rows.every((row) =>
         typeof row?.key === "string" && FEATURE_FLAG_MODES.includes(row.mode),
       )) return null;
-      if (await isUpstashAudienceRoutingEnabled()) storeHumanProcessFlagCache(rows);
+      storeProcessFlagCache(rows);
       return rows;
     } else {
       rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
@@ -321,16 +312,13 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       await flagCacheCommand(redis.eval(`
         if (redis.call('GET', KEYS[1]) or '0') == '0'
           and (redis.call('GET', KEYS[2]) or '0') == ARGV[1] then
-          return redis.call('SET', KEYS[3], ARGV[2], 'EX', 60)
+          return redis.call('SET', KEYS[3], ARGV[2], 'EX', 30)
         end
         return 0
       `, 3, FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
       generation ?? "0", JSON.stringify(rows))).catch(() => undefined);
     }
-    if (await isUpstashAudienceRoutingEnabled()) {
-      clearHumanProcessFlagCache();
-      storeHumanProcessFlagCache(rows);
-    }
+    storeProcessFlagCache(rows);
     return rows;
   } catch {
     return null;

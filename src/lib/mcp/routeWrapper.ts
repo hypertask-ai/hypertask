@@ -1,7 +1,4 @@
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
-import { isFeatureEnabled, FEATURE_FLAG_OWNER_USER_ID } from "@/lib/flags";
-import { HTPR_8978_UPSTASH_AUDIENCE_FLAG } from "@/lib/flags/definitions/htpr-8978-upstash-audience";
-import { withRedisAudience } from "@/lib/redis/audience";
 import { queueRestFailure } from '@/lib/aiFeedback/automatic'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
@@ -87,10 +84,7 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
     const operationContext = getMcpOperationContext(request)
     if (operationContext) {
       await prepareAgentScope(operationContext.auth.user.id, operationContext.auth.agentId)
-      const run = () => legacy(request, ...args)
-      const agentAudience = operationContext.auth.agentId
-        && await isFeatureEnabled(HTPR_8978_UPSTASH_AUDIENCE_FLAG, FEATURE_FLAG_OWNER_USER_ID)
-      const result = await (agentAudience ? withRedisAudience("agent", run) : run())
+      const result = await legacy(request, ...args)
       if (result instanceof Response) reportUnexplainedMcpServerError(request, result.status)
       return result
     }

@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { upstashAudienceRoutingCached, withRedisAudience } from '@/lib/redis/audience'
 import type { McpAuthContext } from './auth/types'
 
 type ExecutionContext = { token: string; auth: McpAuthContext }
@@ -13,8 +12,7 @@ export function withMcpExecutionContext<T>(
   auth: McpAuthContext | undefined,
   execute: () => T,
 ): T {
-  const run = () => (auth ? executionContext.run({ token, auth }, execute) : execute());
-  return auth?.agentId && upstashAudienceRoutingCached() ? withRedisAudience('agent', run) : run();
+  return auth ? executionContext.run({ token, auth }, execute) : execute()
 }
 
 export function getMcpExecutionContext(token: string): McpAuthContext | undefined {
