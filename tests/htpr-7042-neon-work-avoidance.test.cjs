@@ -164,14 +164,30 @@ function flagHarness() {
     $executeRaw: async () => 0,
     $transaction: async (run) => run(db),
   };
-  h.flags = load("src/lib/flags.ts", {
+  const modules = new Map();
+  const mocks = {
     "@/lib/prisma": { default: db }, "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
     "@/lib/redis": { getRedis: async () => { if (h.failRedis) throw new Error("Redis unavailable"); if (h.redisDelay) await h.redisDelay(); return h.redis ?? redis; } },
-  });
+  };
+  h.modeCache = load("src/lib/flags/modeCache.ts", mocks, modules);
+  h.flags = load("src/lib/flags.ts", mocks, modules);
   h.db = db;
-  h.read = (key = target, userId = 7) => h.flags.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(key, userId));
+  h.read = (key = target, userId = 7) => {
+    h.modeCache.clearProcessFlagCache();
+    return h.flags.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(key, userId));
+  };
   return h;
 }
+test("one process keeps flag answers in memory for fifteen seconds and a flag write drops them", async () => {
+  const h = flagHarness();
+  const read = () => h.flags.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(target, 7));
+  assert.equal(await read(), true);
+  const reads = [h.tables, h.single];
+  assert.equal(await read(), true);
+  assert.deepEqual([h.tables, h.single], reads);
+  await h.flags.setFeatureFlagMode(target, "OFF");
+  assert.equal(await read(), false);
+});
 test("registry and uncached flag reads and writes do not load optional cache plumbing", async () => {
   const previousRedisUrl = process.env.REDIS_URL;
   delete process.env.REDIS_URL;
@@ -351,9 +367,7 @@ test("browser smoke reseeding invalidates cached raw modes before publishing all
   const write = seed.match(/await withFlagModeInvalidation\(async \(\) => \{[\s\S]*?\n  \}\);/)
     ?? seed.match(/for \(const \[key, mode\] of Object.entries\(modes\)\) \{\n\s+await prisma.featureFlag.upsert[^\n]+\n\s+\}/);
   assert.ok(write, "Seed flag mutation block must be exercised");
-  const { withFlagModeInvalidation } = load("src/lib/flags/modeCache.ts", {
-    "@/lib/redis": { getRedis: async () => redis },
-  });
+  const { withFlagModeInvalidation } = h.modeCache;
   await new (Object.getPrototypeOf(async () => {}).constructor)("withFlagModeInvalidation", "prisma", "modes", write[0])(
     withFlagModeInvalidation, h.db, { [flag]: "EVERYONE", [key]: "EVERYONE" },
   );
