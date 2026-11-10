@@ -1,31 +1,14 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const chipKey = "htpr-9031-chip-starters";
 
-function load(file, mocks = {}) {
-  const mod = { exports: {} };
-  const compiled = ts.transpileModule(read(file), {
-    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-  }).outputText;
-  new Function("require", "module", "exports", compiled)((name) => {
-    if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
-    if (name.startsWith("@/") || name.startsWith("./")) throw new Error(`Unstubbed dependency: ${name}`);
-    return require(name);
-  }, mod, mod.exports);
-  return mod.exports;
-}
-
 function welcomeDocument({ flagOn }) {
-  const { WelcomeScreen } = load("src/components/AI_CHAT/WelcomeScreen.tsx", {
+  const { WelcomeScreen } = loadModule("src/components/AI_CHAT/WelcomeScreen.tsx", {
     "@/hooks/useFlag": { useFlag: (key) => key === chipKey && flagOn },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {},
@@ -50,7 +33,6 @@ function welcomeDocument({ flagOn }) {
 const classes = (element) => element.className.split(/\s+/);
 
 test("the flag is an improvement that starts at Owner + QA", () => {
-  const { loadModule } = require("./helpers/loadModule.cjs");
   const { default: flag, HTPR_9031_CHIP_STARTERS_FLAG: exported } = loadModule("src/lib/flags/definitions/htpr-9031-chip-starters.ts");
   assert.equal(exported, chipKey);
   assert.equal(flag.key, chipKey);
