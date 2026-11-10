@@ -115,7 +115,7 @@ const TeamAiUsageBreakdown = () => {
   const { teamId, project, team } = useSettingsTeam();
   const [teams, setTeams] = useState<TeamTarget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { id: projectId } = project ?? {};
+  const projectId = project?.id;
   const teamName = team?.title;
 
   useEffect(() => {
