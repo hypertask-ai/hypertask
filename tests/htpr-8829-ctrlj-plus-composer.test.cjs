@@ -57,7 +57,12 @@ test('HTPR-8829 Tab leaves the textarea and the board chip to the browser so Sen
     const chip = document.querySelector('[data-compose-board-chip]');
     const shiftTabFromChip = await press('Tab', { shiftKey: true }, chip);
     assert.equal(shiftTabFromChip.defaultPrevented, false, 'Shift+Tab from the board chip is not redirected to the textarea');
+    flags['htpr-8945-ctrl-tab-palette'] = true;
+    await rerender();
+    const paletteTab = await press('Tab', {}, input());
+    assert.equal(paletteTab.defaultPrevented, true, 'HTPR-8945 reserves Tab for Search and New Task');
     flags['htpr-8829-ctrlj-plus-composer'] = false;
+    flags['htpr-8945-ctrl-tab-palette'] = false;
     await rerender();
     const legacyTab = await press('Tab', {}, input());
     assert.equal(legacyTab.defaultPrevented, true, 'flag off keeps the old textarea to chip jump');

@@ -39,6 +39,7 @@ import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
 import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
+import { HTPR_8945_CTRL_TAB_PALETTE_FLAG } from "@/lib/flags/definitions/htpr-8945-ctrl-tab-palette";
 import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
 import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
@@ -92,6 +93,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
   const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
+  const tabPaletteCycle = useFlag(HTPR_8945_CTRL_TAB_PALETTE_FLAG);
   const sharedPlusMenu = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
   const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const stopDictationButtonId = "compose-task-stop-dictation";
@@ -118,6 +120,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const mobile = Boolean(useContext(MobileViewContext));
   const phoneTaskWriterSheet = mobile && active;
   const plusLayout = Boolean(plusComposerEnabled && newTaskWindow && !mobile && !phoneTaskWriterSheet);
+  const tabPaletteCycleActive = plusLayout && tabPaletteCycle;
   const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow && !plusLayout);
   const [text, setText] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
@@ -133,6 +136,18 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const mounted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const composer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!tabPaletteCycleActive || !active) return;
+    const root = composer.current;
+    if (!root) return;
+    const tabOut = "[data-compose-plus-row] summary, [data-compose-plus-row] button, #compose-task-audio-button, [data-compose-below-row] [data-compose-board-chip]";
+    for (const node of root.querySelectorAll<HTMLElement>(tabOut)) node.tabIndex = -1;
+    return () => {
+      for (const node of root.querySelectorAll<HTMLElement>(tabOut)) {
+        if (node.tabIndex === -1) node.tabIndex = 0;
+      }
+    };
+  }, [tabPaletteCycleActive, active, text, dictating, addingImages, boardPickerOpen]);
   const [writingHeight, setWritingHeight] = useState<number>();
   const user = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
