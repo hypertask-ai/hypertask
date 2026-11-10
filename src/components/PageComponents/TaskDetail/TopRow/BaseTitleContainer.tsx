@@ -45,7 +45,7 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
       ?
         cn(
           "items-start sticky top-[env(safe-area-inset-top)] border-b",
-          stickyTitleLine ? "border-border-light-gray-thin" : "border-light-black-border-1",
+          stickyTitleLine && dataAttribute === "task-detail" ? "border-border-light-gray-thin" : "border-light-black-border-1",
           dataAttribute === "task-detail" ? "pt-2" : "pt-4"
         )
       : "pt-9 items-baseline pb-[8px]",
