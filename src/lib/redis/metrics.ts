@@ -1,17 +1,19 @@
 import { currentRedisAudience } from "@/lib/redis/audience";
 
-const dailyKey = () => `upstash:metrics:daily:${new Date().toISOString().slice(0, 10)}`;
 const splitKey = () => `upstash:metrics:split:${new Date().toISOString().slice(0, 10)}`;
+const METRICS_KEY_PREFIX = "upstash:metrics:";
 
 type RedisClient = {
-  incrby(key: string, amount: number): Promise<number>;
   hincrby(key: string, field: string, amount: number): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
-  get(key: string): Promise<string | null>;
   hgetall(key: string): Promise<Record<string, string>>;
 };
 
 export const UPSTASH_DAILY_REQUEST_ALARM = 300_000;
+
+function metricsKey(key: string): boolean {
+  return key.startsWith(METRICS_KEY_PREFIX);
+}
 
 export function instrumentRedisMetrics<T extends object>(client: T, raw: RedisClient): T {
   return new Proxy(client, {
@@ -21,45 +23,40 @@ export function instrumentRedisMetrics<T extends object>(client: T, raw: RedisCl
       const name = String(property);
       if (name === "on" || name === "disconnect") return value;
       return (...args: unknown[]) => {
-        const audience = currentRedisAudience();
         const result = Reflect.apply(value, target, args);
+        const maybeRecord = () => {
+          if (name === "eval" || name === "multi" || name === "pipeline") return;
+          const key = typeof args[0] === "string" ? args[0] : undefined;
+          if (key && metricsKey(key)) return;
+          void recordCommand(raw, currentRedisAudience());
+        };
         if (result && typeof result.then === "function") {
           return result.then((resolved: unknown) => {
-            void recordCommand(raw, audience);
+            maybeRecord();
             return resolved;
           });
         }
-        void recordCommand(raw, audience);
+        maybeRecord();
         return result;
       };
     },
   });
 }
 
-let recordingMetrics = false;
-
 async function recordCommand(client: RedisClient, audience: string) {
-  if (recordingMetrics) return;
-  recordingMetrics = true;
   try {
-    const dayKey = dailyKey();
-    await client.incrby(dayKey, 1);
-    await client.expire(dayKey, 86_400 * 4);
-    await client.hincrby(splitKey(), audience, 1);
-    await client.expire(splitKey(), 86_400 * 4);
+    const key = splitKey();
+    await client.hincrby(key, audience, 1);
+    await client.expire(key, 86_400 * 4);
   } catch {
-  } finally {
-    recordingMetrics = false;
   }
 }
 
 export async function readUpstashDailyMetrics(client: RedisClient) {
-  const total = Number(await client.get(dailyKey()) ?? 0);
   const split = await client.hgetall(splitKey());
-  return {
-    total: Number.isFinite(total) ? total : 0,
-    human: Number(split.human ?? 0),
-    agent: Number(split.agent ?? 0),
-    job: Number(split.job ?? 0),
-  };
+  const human = Number(split.human ?? 0);
+  const agent = Number(split.agent ?? 0);
+  const job = Number(split.job ?? 0);
+  const total = human + agent + job;
+  return { total: Number.isFinite(total) ? total : 0, human, agent, job };
 }

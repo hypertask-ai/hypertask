@@ -1,5 +1,3 @@
-import { currentRedisAudience } from "@/lib/redis/audience";
-import { createMemoryRedisClient } from "@/lib/redis/memoryClient";
 import { instrumentRedisMetrics } from "@/lib/redis/metrics";
 
 type RedisClient = InstanceType<(typeof import("ioredis"))["default"]>;
@@ -33,7 +31,6 @@ function logReconnectingConnectionError(error: NodeJS.ErrnoException) {
 const globalForRedis = globalThis as unknown as {
   redis?: RedisClient;
   redisPromise?: Promise<RedisClient>;
-  agentRedis?: ReturnType<typeof createMemoryRedisClient>;
 };
 
 async function connectProductionRedis(): Promise<RedisClient> {
@@ -51,14 +48,6 @@ async function connectProductionRedis(): Promise<RedisClient> {
 }
 
 export async function getRedis(): Promise<RedisClient> {
-  const { isUpstashAudienceRoutingEnabled } = await import("@/lib/redis/audience");
-  if ((await isUpstashAudienceRoutingEnabled()) && currentRedisAudience() === "agent") {
-    if (!globalForRedis.agentRedis) {
-      globalForRedis.agentRedis = createMemoryRedisClient();
-    }
-    return globalForRedis.agentRedis as unknown as RedisClient;
-  }
-
   if (globalForRedis.redis) return globalForRedis.redis;
 
   if (!globalForRedis.redisPromise) {

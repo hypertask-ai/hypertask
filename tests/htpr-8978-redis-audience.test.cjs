@@ -6,31 +6,27 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 
-test("agent traffic uses in-memory Redis and records zero production commands", async () => {
+test("metrics tally one command without reading metric keys", async () => {
   const calls = [];
-  const fakeClient = {
-    incrby: async (key, amount) => {
-      calls.push(["incrby", key, amount]);
+  const raw = {
+    hincrby: async (key, field, amount) => {
+      calls.push(["hincrby", key, field, amount]);
       return amount;
     },
-    hincrby: async () => 1,
     expire: async () => 1,
-    get: async () => null,
-    hgetall: async () => ({}),
+    hgetall: async () => ({ human: "2" }),
   };
   const { withRedisAudience } = jiti(path.join(root, "src/lib/redis/audience.ts"));
-  const { createMemoryRedisClient } = jiti(path.join(root, "src/lib/redis/memoryClient.ts"));
-  const memory = createMemoryRedisClient();
-  await withRedisAudience("agent", async () => {
-    await memory.set("agent-runtime:test", "1");
-    assert.equal(await memory.get("agent-runtime:test"), "1");
-  });
-  const { instrumentRedisMetrics } = jiti(path.join(root, "src/lib/redis/metrics.ts"));
-  const instrumented = instrumentRedisMetrics(fakeClient, fakeClient);
+  const { instrumentRedisMetrics, readUpstashDailyMetrics } = jiti(path.join(root, "src/lib/redis/metrics.ts"));
+  const instrumented = instrumentRedisMetrics({ incr: async () => 1 }, raw);
   await withRedisAudience("human", async () => {
-    await instrumented.incrby("probe", 1);
+    await instrumented.incr("probe");
   });
-  assert.deepEqual(calls, [["incrby", "probe", 1]]);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][2], "human");
+  const metrics = await readUpstashDailyMetrics(raw);
+  assert.equal(metrics.total, 2);
+  assert.equal(metrics.human, 2);
 });
 
 test("human flag cache reuses process memory for one minute", async () => {

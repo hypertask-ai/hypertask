@@ -62,6 +62,34 @@ export async function checkMcpRateLimit(
     }
     const fastEnabled = !(await shouldUseExactCountRateLimit())
     if (!fastEnabled) localCounts.clear()
+    const { isUpstashAudienceRoutingEnabled } = await import('@/lib/redis/audience')
+    const skipAgentRedis = await isUpstashAudienceRoutingEnabled()
+    let agentLocalOnly = skipAgentRedis && token.startsWith('htk_')
+    if (!agentLocalOnly && skipAgentRedis) {
+      const ctx = await (resolveAuth ? resolveAuth() : validateMcpAuth(request))
+      agentLocalOnly = Boolean(ctx?.agentId)
+    }
+    if (agentLocalOnly) {
+      let entry = localCounts.get(key)
+      if (!entry && localCounts.size < MAX_LOCAL_COUNTS) {
+        entry = { count: 0, reserved: 0, leasing: false }
+        localCounts.set(key, entry)
+      }
+      const count = entry ? ++entry.count : 1
+      const countOutcome = classifyMcpRateLimitCount(count)
+      if (countOutcome === 'allow') return null
+      let limit = MCP_AGENT_RATE_LIMIT_PER_MINUTE
+      if (countOutcome === 'resolve-tier') {
+        const ctx = await (resolveAuth ? resolveAuth() : validateMcpAuth(request))
+        limit = resolveMcpRateLimit(ctx, token)
+      }
+      const decision = decideMcpRateLimit(count, limit, windowStartSeconds, nowSeconds)
+      if (!decision.limited) return null
+      return NextResponse.json(
+        { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } },
+      )
+    }
     const redis = await getRedis()
     const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined
     if (prepaid && prepaid.reserved > 0) {
