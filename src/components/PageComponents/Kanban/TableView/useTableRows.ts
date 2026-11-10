@@ -96,7 +96,7 @@ export function useTableRows(context: Context) {
     const next: Row[] = [];
     sections.forEach((section, index) => {
       const sid = tableSectionKey(section) ?? `i${index}`;
-      if (collapsedSections.has(String(sid))) return;
+      if (effectiveCollapsed.has(String(sid))) return;
       const items = section.items || [];
       const shown = expanded.has(sid) ? items : items.slice(0, SECTION_CAP);
       shown.forEach((task) =>

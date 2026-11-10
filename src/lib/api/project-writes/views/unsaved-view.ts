@@ -269,7 +269,7 @@ const route = taskWriteRoute({
             table_sort_column: sanitizedTableSort.column,
             table_sort_direction: sanitizedTableSort.direction,
             table_group_by: sanitizedTableGroupBy ?? null,
-            table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
+            table_collapsed_sections: sanitizedTableCollapsedSections,
             board_layout: resolvedBoardLayout,
             visibility: "Private",
           },
@@ -403,9 +403,7 @@ const route = taskWriteRoute({
                 table_sort_column: sanitizedTableSort.column,
                 table_sort_direction: sanitizedTableSort.direction,
                 table_group_by: sanitizedTableGroupBy ?? null,
-                ...(tableGroupFoldEnabled
-                  ? { table_collapsed_sections: sanitizedTableCollapsedSections ?? null }
-                  : {}),
+                table_collapsed_sections: sanitizedTableCollapsedSections,
                 board_layout: resolvedBoardLayout,
               },
             }));

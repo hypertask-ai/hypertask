@@ -418,30 +418,20 @@ const TableView = ({
                     className={`${destinationSectionId !== null && dragOverSectionId === destinationSectionId ? "bg-hover-active" : "bg-containerBackground"} shadow-md rounded-md py-2`}
                   >
                     <div
-                      role="button"
-                      tabIndex={0}
-                      className="flex cursor-pointer items-center gap-1 px-[10px] pt-1"
-                      onClick={() => {
-                        if (tableGroupFoldEnabled) toggleCollapsedSection(sid);
-                      }}
+                      role={tableGroupFoldEnabled ? "button" : undefined}
+                      tabIndex={tableGroupFoldEnabled ? 0 : undefined}
+                      className={`flex items-center gap-1 px-[10px] pt-1 ${tableGroupFoldEnabled ? "cursor-pointer" : ""}`}
+                      onClick={tableGroupFoldEnabled ? () => toggleCollapsedSection(sid) : undefined}
                     >
-                      <ChevronDown
-                        size={14}
-                        strokeWidth={1.75}
-                        className={`shrink-0 text-text-light-gray transition-transform ${folded ? "-rotate-90" : ""}`}
-                        aria-hidden
-                      />
-                      <SplitTitle
-                        isSelected
-                        onClick={() => {}}
-                        tab={{
-                          idx: sectionIndex,
-                          project: section.section_title,
-                          length: rawItems.length,
-                          hasUnseen: false,
-                          overdueCount: myTasksSectionOverdueCounts?.[sectionIndex] ?? 0,
-                        }}
-                      />
+                      {tableGroupFoldEnabled && (
+                        <ChevronDown
+                          size={14}
+                          strokeWidth={1.75}
+                          className={`shrink-0 text-text-light-gray transition-transform ${folded ? "-rotate-90" : ""}`}
+                          aria-hidden
+                        />
+                      )}
+                      <SplitTitle isSelected onClick={() => {}} tab={{ idx: sectionIndex, project: section.section_title, length: rawItems.length, hasUnseen: false, overdueCount: myTasksSectionOverdueCounts?.[sectionIndex] ?? 0 }} />
                     </div>
                     {!folded && (
                     <ul className="px-0">

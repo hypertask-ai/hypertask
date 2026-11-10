@@ -5,7 +5,7 @@ export const HTPR_8972_TABLE_GROUP_FOLD_FLAG = "htpr-8972-table-group-fold";
 export default {
   key: HTPR_8972_TABLE_GROUP_FOLD_FLAG,
   kind: "bugfix",
-  defaultMode: "EVERYONE",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-10",
   description:
     "Table view keeps groups when sorting, folds group headers, and persists folded section ids on the saved view.",
