@@ -10,6 +10,7 @@ import InlineDraftAiFloat from "./InlineDraftAiFloat";
 import { X } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8962-one-send-clears-inbox";
+import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
 
 interface TiptapMainContainerProps {
   mobileEditOpen?: boolean;
@@ -58,6 +59,7 @@ const TiptapMainContainer = ({
   } = useTiptapGlobalContext();
   const isMbl = useContext(MobileViewContext);
   const oneSend = useFlag(HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG);
+  const ticketEditorCtrlJ = useFlag(HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG);
   const allowedAttachmentModes = [
     "read-edit-description",
     "create-comment",
@@ -323,6 +325,7 @@ const TiptapMainContainer = ({
           `}
         onFocus={handleFocus}
         id={id}
+        data-ctrl-j-write-with-ai={ticketEditorCtrlJ && !isReadOnlyExistingContent ? "" : undefined}
         tabIndex={mode === "read-edit-comments" && !isEditModeActive ? -1 : 0}
         onKeyDown={handleKeydown}
         onClick={toggleExpansion}
@@ -343,15 +346,28 @@ const TiptapMainContainer = ({
           <CreatedInfoTiptap />
           <TiptapEditor />
           {shouldShowInlineDraftAi && editor && closeInlineDraftAi && (
-            <InlineDraftAiFloat
-              editor={editor}
-              onClose={closeInlineDraftAi}
-              projectId={aiProjectId}
-              taskId={aiTaskId}
-              allowSuggestReply={mode === "create-comment"}
-              toggleRecording={toggleRecording}
-              isRecording={isRecording}
-            />
+            ticketEditorCtrlJ ? (
+              <InlineDraftAiFloat
+                editor={editor}
+                onClose={closeInlineDraftAi}
+                projectId={aiProjectId}
+                taskId={aiTaskId}
+                allowSuggestReply={mode === "create-comment"}
+                toggleRecording={toggleRecording}
+                isRecording={isRecording}
+                matchCommentRowControls
+              />
+            ) : (
+              <InlineDraftAiFloat
+                editor={editor}
+                onClose={closeInlineDraftAi}
+                projectId={aiProjectId}
+                taskId={aiTaskId}
+                allowSuggestReply={mode === "create-comment"}
+                toggleRecording={toggleRecording}
+                isRecording={isRecording}
+              />
+            )
           )}
           {allowedAttachmentModes.includes(mode) &&
             !isReadOnlyExistingContent && (

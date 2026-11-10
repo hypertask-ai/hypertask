@@ -24,15 +24,25 @@ function contextLoader({ summary = task.Task_Summary, readable = true, enabled =
   const queries = [];
   const context = load("src/app/api/ai/_lib/currentTaskContext.ts", {
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+      if (key === "htpr-8987-chat-blocker-read") return false;
       assert.equal(key, flag);
       assert.equal(userId, 985);
       return enabled;
     } },
+    "@/lib/flags/definitions/htpr-8987-chat-blocker-read": {
+      HTPR_8987_CHAT_BLOCKER_READ_FLAG: "htpr-8987-chat-blocker-read",
+    },
     "@/lib/prisma": { default: { task: { findMany: async (query) => {
       queries.push(query);
       return readable ? [{ ...task, Task_Summary: summary, comments: task.comments.slice(0, query.select.comments.take) }] : [];
     } } } },
-    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => access },
+    "@/utils/controllers/projects/getAllIncludes": {
+      projectContentAccessWhere: () => access,
+      blockedByRelationsInclude: () => ({}),
+    },
+    "@/utils/controllers/tasks/attachOpenBlockingTasks": {
+      attachOpenBlockingTasks: async (tasks) => tasks,
+    },
     "@/lib/mcp/webhooks/ssrfGuard": {},
   });
   return { ...context, queries };

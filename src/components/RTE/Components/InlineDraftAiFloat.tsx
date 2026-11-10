@@ -20,6 +20,8 @@ import { LoaderCircle, PencilSparkles, Sparkles, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { SendArrow } from "@/components/Common/SendArrow";
+import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { AppSheet } from "@/components/Modals/Sheets/AppSheet";
 import {
@@ -54,6 +56,8 @@ import {
   type InlineDraftAiSourceSnapshot,
 } from "./inlineDraftAi";
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
 
 const CHIP_LINK_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 text-text-light-gray hover:bg-hover-active hover:text-white-black focus-visible:outline-none focus-visible:bg-hypertasks-ai-purple focus-visible:font-semibold focus-visible:text-white disabled:opacity-50";
@@ -61,6 +65,10 @@ const CHIP_DONE_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-medium text-white-black hover:bg-hover-active focus-visible:outline-none disabled:opacity-50";
 const CHIP_PRIMARY_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-semibold bg-hypertasks-ai-purple text-white hover:opacity-90 focus-visible:outline-none disabled:opacity-50";
+const APP_CHIP_LINK_CLASS =
+  "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 text-text-light-gray hover:bg-hover-active hover:text-white-black focus-visible:outline-none focus-visible:bg-hover-active focus-visible:text-white-black disabled:opacity-50";
+const APP_CHIP_RETRY_CLASS =
+  "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:opacity-50";
 const CHIP_SHEET_ROW_CLASS =
   "flex min-h-11 items-center rounded-full bg-hover-active px-3 text-left text-dense text-white-black active:opacity-80 disabled:opacity-50";
 const MOBILE_CHIP_CLASS =
@@ -237,6 +245,7 @@ const InlineDraftAiFloat = ({
   isRecording = false,
   presentation = "inline",
   suppressEditorSelectionHighlight = false,
+  matchCommentRowControls = false,
 }: {
   editor: Editor;
   onClose: () => void;
@@ -247,7 +256,10 @@ const InlineDraftAiFloat = ({
   isRecording?: boolean;
   presentation?: "inline" | "composer" | "refine-fullscreen" | "edit-inline";
   suppressEditorSelectionHighlight?: boolean;
+  matchCommentRowControls?: boolean;
 }) => {
+  const isApple = useDeviceContext();
+  const ticketEditorCtrlJ = useFlag(HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG);
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<InlineDraftAiRange | null>(null);
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
@@ -268,6 +280,8 @@ const InlineDraftAiFloat = ({
   const loadingRef = useRef(false);
   const wasEditableRef = useRef(true);
   const rootRef = useRef<HTMLDivElement>(null);
+  const promptInputRef = useRef<HTMLInputElement>(null);
+  const ctrlEnterSendsRef = useRef(false);
   const closeRef = useRef<() => void>(() => {});
   const recordingRef = useRef(false);
   const audioProcessingRef = useRef(false);
@@ -306,6 +320,7 @@ const InlineDraftAiFloat = ({
   const isRefineFullscreen = presentation === "refine-fullscreen";
   const isEditInline = presentation === "edit-inline";
   const isMobileAiSheet = isRefineFullscreen || isComposer;
+  ctrlEnterSendsRef.current = ticketEditorCtrlJ && !isMobileAiSheet;
   const sheetViewport = useMobileVisualViewport(isMobileAiSheet);
   const sheetContainerStyle = getMobileOverlaySheetContainerStyle(sheetViewport);
 
@@ -433,7 +448,31 @@ const InlineDraftAiFloat = ({
   closeRef.current = close;
 
   useEffect(() => {
+    if (!ticketEditorCtrlJ || presentation !== "inline") return;
+    const active = document.activeElement;
+    const focusIsOurs =
+      !active ||
+      active === document.body ||
+      Boolean(rootRef.current?.contains(active)) ||
+      editor.view.dom.contains(active);
+    if (!focusIsOurs) return;
+    const target = isLoading ? rootRef.current : promptInputRef.current;
+    target?.focus({ preventScroll: true });
+  }, [editor, ticketEditorCtrlJ, presentation, isLoading]);
+
+  useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (
+        ctrlEnterSendsRef.current &&
+        event.key === "Enter" &&
+        (isApple ? event.metaKey : event.ctrlKey) &&
+        (loadingRef.current || recordingRef.current || audioProcessingRef.current)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
       if (event.key === "Escape") {
         if (recordingRef.current || audioProcessingRef.current) {
           return;
@@ -486,7 +525,7 @@ const InlineDraftAiFloat = ({
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [editor]);
+  }, [editor, isApple]);
 
   useEffect(() => {
     if (isMobileAiSheet) return;
@@ -609,6 +648,14 @@ const InlineDraftAiFloat = ({
         isMobileAiSheet && !prompt.trim() ? "ml-auto" : undefined
       }
       disabled={isLoading}
+      {...(matchCommentRowControls
+        ? {
+            compactListeningPill: true,
+            primaryMic: true,
+            hideDevicePicker: true,
+            hoverTooltip: { text: "Dictate", keyCombination: [isApple ? "OPT" : "ALT", "V"] },
+          }
+        : {})}
     />
   ) : null;
 
@@ -877,6 +924,10 @@ const InlineDraftAiFloat = ({
 
   const handlePanelKeyDown = (event: ReactKeyboardEvent) => {
     if (event.key !== "Enter") return;
+    if (ticketEditorCtrlJ && !isMobileAiSheet && (isApple ? event.metaKey : event.ctrlKey)) {
+      close();
+      return;
+    }
     if ((event.target as HTMLElement | null)?.tagName === "BUTTON") return;
     event.preventDefault();
     event.stopPropagation();
@@ -887,6 +938,7 @@ const InlineDraftAiFloat = ({
     <div className="flex w-full min-w-0 items-center gap-2">
       <div className={dictationActive ? "hidden" : "min-w-[150px] flex-1"}>
         <input
+          ref={promptInputRef}
           autoFocus
           maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
           value={prompt}
@@ -911,19 +963,32 @@ const InlineDraftAiFloat = ({
         </div>
       )}
 
-      <button
-        type="button"
-        aria-label="Send AI instruction"
-        disabled={!prompt.trim() || isLoading || audioProcessing}
-        onClick={submitPrompt}
-        className={`${dictationActive ? "hidden" : "flex"} h-7 w-7 shrink-0 items-center justify-center rounded-full bg-hypertasks-ai-purple text-white disabled:bg-icon-dark-gray disabled:text-comment-description`}
-      >
-        {isLoading ? (
-          <LoaderCircle size={15} className="animate-spin" aria-hidden />
-        ) : (
-          <SendArrow size={16} />
-        )}
-      </button>
+      {matchCommentRowControls ? (
+        <span className={dictationActive ? "hidden" : "flex shrink-0 items-center"}>
+          <SendMessageButton
+            label="Rewrite"
+            textButton
+            shortcut={{ text: "Rewrite", keyCombination: ["ENTER"] }}
+            mobile={false}
+            disabled={!prompt.trim() || isLoading || audioProcessing}
+            onClick={submitPrompt}
+          />
+        </span>
+      ) : (
+        <button
+          type="button"
+          aria-label="Send AI instruction"
+          disabled={!prompt.trim() || isLoading || audioProcessing}
+          onClick={submitPrompt}
+          className={`${dictationActive ? "hidden" : "flex"} h-7 w-7 shrink-0 items-center justify-center rounded-full bg-hypertasks-ai-purple text-white disabled:bg-icon-dark-gray disabled:text-comment-description`}
+        >
+          {isLoading ? (
+            <LoaderCircle size={15} className="animate-spin" aria-hidden />
+          ) : (
+            <SendArrow size={16} />
+          )}
+        </button>
+      )}
     </div>
   );
 
@@ -936,7 +1001,7 @@ const InlineDraftAiFloat = ({
           </button>
           <button
             type="button"
-            className={CHIP_PRIMARY_CLASS}
+            className={matchCommentRowControls ? APP_CHIP_RETRY_CLASS : CHIP_PRIMARY_CLASS}
             onClick={retry}
             disabled={isLoading}
           >
@@ -949,11 +1014,11 @@ const InlineDraftAiFloat = ({
           key={command}
           type="button"
           disabled={isLoading}
-          className={CHIP_LINK_CLASS}
+          className={matchCommentRowControls ? APP_CHIP_LINK_CLASS : CHIP_LINK_CLASS}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => void runAction({ command })}
         >
-          {label}
+          {matchCommentRowControls && command === "FixSpellingAndGrammar" ? "Fix spelling" : label}
         </button>
       ))}
     </div>
@@ -1353,7 +1418,12 @@ const InlineDraftAiFloat = ({
       role="dialog"
       aria-label="Write with AI"
       aria-modal="false"
-      className="my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
+      tabIndex={ticketEditorCtrlJ ? -1 : undefined}
+      className={
+        matchCommentRowControls
+          ? "my-2 flex outline-none w-full min-w-0 flex-col gap-2 rounded-[4px] bg-newcomment-well px-2 py-1.5 text-content"
+          : "my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
+      }
       onClick={(event) => event.stopPropagation()}
       onKeyDown={handlePanelKeyDown}
     >

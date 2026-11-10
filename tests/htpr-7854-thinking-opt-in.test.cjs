@@ -304,50 +304,48 @@ test("flag on sends the mapped effort and flag off keeps today's Haiku default",
   assert.equal(haikuUntouched.providerOptions.anthropic.effort, "medium");
 });
 
-test("chat title caps output at 64 tokens only when the flag is on", async () => {
-  for (const flagOn of [true, false]) {
-    let captured;
-    let configured;
-    const filename = path.join(root, "src/lib/ai/chatStream/title.ts");
-    const stubs = {
-      "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
-      "@/app/api/ai/_lib/modelProvider": {
-        resolveAiModel: () => ({ modelId: "gpt-6-luna" }),
-        aiUsageProviderForCredential: () => "openai",
-        configureAiModelUsage: (_model, context) => { configured = context; },
-        isAiGatewayEnabled: () => true,
-        providerOptionsForAiModel: () => ({ gateway: { tags: ["chat"] } }),
-      },
-      "@/lib/aiModelOptions": { defaultModelKeyFor: () => "gpt-6-luna" },
-      "@/app/api/ai/_lib/byokKeys": {
-        resolveAiFallbackCredential: async (run) => run(),
-        getAiDefaultModelContext: async () => ({ haiku55Enabled: false, byok: undefined }),
-        resolveAutomaticAiModel: () => ({ modelId: "gpt-6-luna" }),
-        getByokOrTeamGatewayApiKeyForProvider: async () => "fixture",
-      },
-      "@/lib/ai/prompts/registry": { renderPrompt: () => "Name this chat" },
-      "@/app/api/ai/_lib/reasoningEffort": {
-        aiThinkingOptInEnabled: async () => flagOn,
-        CHAT_TITLE_MAX_OUTPUT_TOKENS: 64,
-      },
-      ai: { generateText: async (args) => { captured = args; return { text: "Weekly plan" }; } },
-    };
-    const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-    }).outputText;
-    const loadedModule = { exports: {} };
-    vm.runInNewContext(code, {
-      module: loadedModule,
-      exports: loadedModule.exports,
-      require: (id) => stubs[id] ?? require(id),
-      process, console,
-    }, { filename });
-    const title = await loadedModule.exports.generateConversationTitle("Plan the week", "Plan the week", "fixture", { userId: 7 }, { userId: 7 });
-    assert.equal(title, "Weekly plan");
-    assert.equal(configured.reasoningFeature, "chat-title");
-    assert.equal(captured.providerOptions.gateway.tags[0], "chat");
-    assert.equal(captured.providerOptions.anthropic, undefined);
-    if (flagOn) assert.equal(captured.maxOutputTokens, 64);
-    else assert.equal(captured.maxOutputTokens, undefined);
-  }
+test("chat title always caps output at 64 tokens", async () => {
+  let captured;
+  let configured;
+  const filename = path.join(root, "src/lib/ai/chatStream/title.ts");
+  const stubs = {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
+    "@/app/api/ai/_lib/modelProvider": {
+      resolveAiModel: () => ({ modelId: "gpt-6-luna" }),
+      aiUsageProviderForCredential: () => "openai",
+      configureAiModelUsage: (_model, context) => { configured = context; },
+      isAiGatewayEnabled: () => true,
+      providerOptionsForAiModel: () => ({ gateway: { tags: ["chat"] } }),
+    },
+    "@/lib/aiModelOptions": { defaultModelKeyFor: () => "gpt-6-luna" },
+    "@/app/api/ai/_lib/byokKeys": {
+      resolveAiFallbackCredential: async (run) => run(),
+      getAiDefaultModelContext: async () => ({ haiku55Enabled: false, byok: undefined }),
+      resolveAutomaticAiModel: () => ({ modelId: "gpt-6-luna" }),
+      getByokOrTeamGatewayApiKeyForProvider: async () => "fixture",
+    },
+    "@/lib/ai/prompts/registry": { renderPrompt: () => "Name this chat" },
+    "@/app/api/ai/_lib/reasoningEffort": {
+      CHAT_TITLE_MAX_OUTPUT_TOKENS: 64,
+      applyReasoningToParams: (params, input, modelId) => reasoning.applyReasoningToParams(params, input, modelId),
+    },
+    ai: { generateText: async (args) => { captured = args; return { text: "Weekly plan" }; } },
+  };
+  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const loadedModule = { exports: {} };
+  vm.runInNewContext(code, {
+    module: loadedModule,
+    exports: loadedModule.exports,
+    require: (id) => stubs[id] ?? require(id),
+    process, console,
+  }, { filename });
+  const title = await loadedModule.exports.generateConversationTitle("Plan the week", "Plan the week", "fixture", { userId: 7 }, { userId: 7 });
+  assert.equal(title, "Weekly plan");
+  assert.equal(configured.reasoningFeature, "chat-title");
+  assert.equal(captured.providerOptions.gateway.tags[0], "chat");
+  assert.equal(captured.providerOptions.anthropic, undefined);
+  assert.equal(captured.maxOutputTokens, 64);
+  assert.equal(captured.providerOptions.openai.reasoningEffort, "none");
 });

@@ -49,6 +49,9 @@ stubSourceModule("src/components/Modals/Sheets/mobileOverlayAppSheetStyles.ts", 
   mobileOverlayAppSheetHandleRowClass: "row",
   mobileOverlayAppSheetPanelClass: "panel",
 });
+stubSourceModule("src/hooks/useFlag.tsx", {
+  useFlag: () => false,
+});
 stubSourceModule("src/hooks/General/useMobileVisualViewport.ts", {
   useMobileVisualViewport: () => null,
 });
