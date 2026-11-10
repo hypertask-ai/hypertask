@@ -203,8 +203,10 @@ export function useTableState(context: Context) {
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
   }
-  const grouping = _currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled) ? effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled) : null;
-  if (grouping && grouping.mode !== "column") sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
+  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled)) {
+    const grouping = effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled);
+    if (grouping.mode !== "column") sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
+  }
 
   useEffect(() => {
     if (excludedTaskIds.size === 0) return;
