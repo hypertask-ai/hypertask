@@ -77,7 +77,7 @@ async function main() {
   record("new probe identity", true, email.split("@")[0]);
   const signup = await fetch(`${BASE}/api/auth/instant-signup`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${INBOX_SECRET}` },
     body: JSON.stringify({ email, utmData: { utm_source: "funnel_probe_daily" } }),
     signal: AbortSignal.timeout(60_000),
   });
