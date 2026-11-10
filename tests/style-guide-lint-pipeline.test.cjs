@@ -9,12 +9,18 @@ const root = path.join(__dirname, "..");
 const { scripts } = require("../package.json");
 const baseline = require("../eslint-local-rules/style-guide-suppressions.json");
 const eslint = path.join(path.dirname(require.resolve("eslint/package.json")), "bin/eslint.js");
-const rules = [
+const styleGuideRules = [
   "tailwindcss/no-custom-classname",
   "hypertask-style/no-raw-tailwind-colors",
   "hypertask-style/no-unapproved-color-literals",
   "hypertask-style/no-forbidden-utilities",
 ];
+const quickCheckRules = [
+  "import/no-duplicates",
+  "no-redeclare",
+  "@typescript-eslint/no-redeclare",
+];
+const rules = [...styleGuideRules, ...quickCheckRules];
 
 function lint(code, filename = "src/components/StyleGuidePipelineProbe.tsx") {
   const fixture = mkdtempSync(path.join(root, ".style-lint-test-"));
@@ -59,13 +65,17 @@ test("the required CI lint step uses the baseline-aware npm command without rege
   assert.doesNotMatch(scripts.lint, /--suppress-all|--suppress-rule|--prune-suppressions/);
 });
 
-test("the baseline contains only TSX paths and the four style-guide rules", () => {
+test("the baseline contains only known rules and style-guide paths stay TSX", () => {
   assert.ok(Object.keys(baseline).length > 0);
   for (const [filename, allowances] of Object.entries(baseline)) {
-    assert.match(filename, /^src\/.+\.tsx$/);
     for (const [rule, { count }] of Object.entries(allowances)) {
       assert.ok(rules.includes(rule), rule);
       assert.ok(Number.isInteger(count) && count > 0);
+      if (styleGuideRules.includes(rule)) {
+        assert.match(filename, /^src\/.+\.tsx$/);
+      } else {
+        assert.match(filename, /^(?:src|tests|scripts)\/.+\.[cm]?[jt]sx?$/);
+      }
     }
   }
 });
