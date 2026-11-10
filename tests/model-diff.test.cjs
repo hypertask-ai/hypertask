@@ -288,8 +288,9 @@ test("watcher files one rollup per pending model set, not one per day", async ()
     { token: "fixture", fetchImpl, now: new Date("2026-10-24T23:30:00-02:00") });
   const second = await fileFindings({ sourcesUsed: ["gateway"], findings },
     { token: "fixture", fetchImpl, now: new Date("2026-10-26T00:30:00+02:00") });
+  const marker = existing[0].title.match(/\[([^\]]+)\]/)[1];
   assert.equal(creates, 1);
-  assert.deepEqual(markers, markers.map(() => existing[0].title.match(/\[([^\]]+)\]/)[1]));
+  assert.deepEqual(markers, [marker, marker]);
   assert.deepEqual(first, [{ title: existing[0].title, action: "created", ticket: "HTPR-fixture" }]);
   assert.deepEqual(second, [{ title: existing[0].title, action: "exists" }]);
 });
@@ -297,14 +298,16 @@ test("watcher files one rollup per pending model set, not one per day", async ()
 test("watcher files a new rollup when a model joins the pending set", async () => {
   const findings = report().findings.filter((finding) => finding.kind === "new-class").slice(0, 3);
   const existing = [];
-  const markers = [];
+  const searches = [];
+  const creates = [];
   const fetchImpl = async (url, options) => {
     if (options.method === "GET") {
       const marker = new URL(url).searchParams.get("q");
+      searches.push(marker);
       const tasks = existing.filter((ticket) => ticket.title.includes(`[${marker}]`));
       return response({ success: true, tasks, total: tasks.length });
     }
-    markers.push(options.headers["Idempotency-Key"]);
+    creates.push(options.headers["Idempotency-Key"]);
     const ticket = { title: JSON.parse(options.body).title, ticketNumber: `HTPR-fixture-${existing.length + 1}` };
     existing.push(ticket);
     return response({ success: true, task: ticket });
@@ -314,8 +317,9 @@ test("watcher files a new rollup when a model joins the pending set", async () =
     results.push(...await fileFindings({ sourcesUsed: ["gateway"], findings: set }, { token: "fixture", fetchImpl }));
   }
   assert.equal(existing.length, 2);
-  assert.equal(markers[0], markers[1]);
-  assert.notEqual(markers[0], markers[2]);
+  assert.equal(searches[0], searches[1]);
+  assert.notEqual(searches[0], searches[2]);
+  assert.deepEqual(creates, [searches[0], searches[2]]);
   assert.deepEqual(results.map((result) => result.action), ["created", "exists", "created"]);
 });
 

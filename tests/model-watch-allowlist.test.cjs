@@ -141,7 +141,7 @@ test("a watched subset files one rollup listing only the watched models", async 
   assert.deepEqual(results, [{ title: creates[0].title, action: "created", ticket: "HTPR-fixture" }]);
 });
 
-test("a report without usable sources fails instead of reporting a quiet day", async () => {
-  await assert.rejects(fileReport({ sourcesUsed: [], findings: [] }, { token: "fixture" }), /No usable model discovery report/);
-  await assert.rejects(fileReport({ sourcesUsed: ["gateway"] }, { token: "fixture" }), /No usable model discovery report/);
+test("a report without usable sources fails instead of reporting a quiet day", () => {
+  assert.throws(() => fileReport({ sourcesUsed: [], findings: [] }, { token: "fixture" }), /No usable model discovery report/);
+  assert.throws(() => fileReport({ sourcesUsed: ["gateway"] }, { token: "fixture" }), /No usable model discovery report/);
 });
