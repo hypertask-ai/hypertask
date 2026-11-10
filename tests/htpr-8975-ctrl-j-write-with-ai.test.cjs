@@ -173,7 +173,9 @@ function panel(t, enabled, { onClose = () => {}, onParentKeyDown } = {}) {
       setTextSelection: () => {},
       unsetHighlight: () => {},
       focus: () => {},
-      selectAll: () => {},
+      selectAll: () => {
+        editor.state.selection = { from: 0, to: editor.state.doc.content.size };
+      },
       setContent: (html) => {
         editor.contents.push(html);
         editor.isEmpty = false;
