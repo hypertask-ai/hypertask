@@ -70,24 +70,6 @@ test("get_tasks exposes open BlockedBy targets like list_tasks", async () => {
     ),
   };
 
-  const mappers = load("src/lib/mcp/tasks/mappers.ts", {
-    "@/lib/tasks/sameBoardRelations": { stripForeignTaskRelations: (task) => task },
-    "@/lib/auth/agentScope": { agentScopeEnforced: () => false, recordAgentBoardScopeMiss: () => {} },
-    "@/lib/mcp/agents": {
-      mcpVisibleAgentSelect: () => ({}),
-      mapVisibleMcpAgent: () => undefined,
-    },
-    "@/lib/agents/visibility": { accessibleAgentWhere: {}, isAgentVisibleToUser: () => true },
-    "@/lib/staleness": { taskStaleness: () => ({}) },
-    "@/lib/pullRequests/githubPullRequests": { derivePullRequestDisplayState: () => "open" },
-    "@/lib/blockingTasks": attachDeps["@/lib/blockingTasks"],
-    "@/utils/controllers/projects/getAllIncludes": {
-      projectContentAccessWhere: () => ({}),
-      getProjectWhere: () => ({ members: { some: { userId: 6 } } }),
-    },
-    "@prisma/client": require("@prisma/client"),
-  });
-
   const { createGetTasksTool } = load("src/lib/ai/tools/getTasks.ts", {
     ...attachDeps,
     "@/lib/prisma": prismaMock,
@@ -98,10 +80,14 @@ test("get_tasks exposes open BlockedBy targets like list_tasks", async () => {
       HTPR_8987_CHAT_BLOCKER_READ_FLAG: "htpr-8987-chat-blocker-read",
     },
     "@/lib/flags/keys": { HTPR_7756_CHAT_OPENS_TASK_FLAG: "htpr-7756" },
-    "@/lib/mcp/tasks/mappers": mappers,
+    "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}) },
     "@/lib/ai/tools/helpers": {
       sanitizeForJson: (value) => value,
-      mapTaskToMcpGetResponse: (task, userId) => mappers.mapTaskToMcpGetResponse(task, userId),
+      mapTaskToMcpGetResponse: (task) => ({
+        id: task.id,
+        ticketNumber: task.ticketNumber,
+        title: task.title,
+      }),
     },
     ai: { tool: (definition) => definition },
     zod: require("zod"),
