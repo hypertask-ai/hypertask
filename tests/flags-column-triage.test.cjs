@@ -9,8 +9,14 @@ const flagUrl = `https://app.hypertask.ai/admin/flags/${key}`;
 const flag = (extra = {}) => ({ key, mode: "OWNER_ONLY", kind: "feature", ticketId: "HTPR-7511", ...extra });
 const task = (extra = {}) => ({
   ticketNumber: "HTPR-7549", url: "https://app.hypertask.ai/detail/project-15/7549", projectId: 15,
-  section: "Flags", status: "Normal", description: `<p>Behind ${key}, never Everyone.</p>`, labels: [{ name: "Bug" }], ...extra,
+  section: "Flag: Only Me + QA", status: "Normal", description: `<p>Behind ${key}, never Everyone.</p>`, labels: [{ name: "Bug" }], ...extra,
 });
+const flagSections = () => [
+  { section_title: "Flag: Everyone" },
+  { section_title: "Flag: Only Me + QA" },
+  { section_title: "Flag: Off" },
+  { section_title: "No Flag" },
+];
 
 function fixture({ tasks = [task()], flags = [flag()], comments = {}, intercept } = {}) {
   const calls = [];
@@ -26,7 +32,7 @@ function fixture({ tasks = [task()], flags = [flag()], comments = {}, intercept 
       return structuredClone({ flags: state.flags });
     }
     if (binary === "hypertask") {
-      if (args[0] === "sections") return { success: true, sections: [{ section_title: "Flags" }] };
+      if (args[0] === "sections") return { success: true, sections: flagSections() };
       if (args[0] === "tasks" && args[1] === "list") return structuredClone({ success: true, tasks: state.tasks, total: state.tasks.length });
       if (args[0] === "tasks" && args[1] === "get") return structuredClone({ success: true, tasks: state.tasks.filter((entry) => entry.ticketNumber === args[2]) });
       if (args[0] === "comment") return structuredClone({ success: true, comments: state.comments[args[2]] ?? [] });
@@ -187,7 +193,7 @@ test("all task and comment pages are read, including an existing clarification o
 test("missing columns, incomplete pages, repeated cursors and invalid flag reads fail closed before repair", async () => {
   const { triageFlagsColumn } = await load();
   const cases = [
-    [(binary, args) => binary === "hypertask" && args[0] === "sections" ? { success: true, sections: [] } : undefined, /no Flags column/],
+    [(binary, args) => binary === "hypertask" && args[0] === "sections" ? { success: true, sections: [] } : undefined, /no Flag: columns/],
     [(binary) => binary.endsWith("/ht-flag") ? { flags: [{ key, mode: "NEW_MODE" }] } : undefined, /Invalid live flag/],
     [(binary, args) => binary === "hypertask" && args[0] === "tasks" && args[1] === "list" ? { success: true, tasks: [task()], total: 2 } : undefined, /Incomplete tasks/],
     [(binary, args) => binary === "hypertask" && args[0] === "comment" ? { success: true, comments: [], has_more: true } : undefined, /Incomplete comments/],
@@ -202,7 +208,15 @@ test("missing columns, incomplete pages, repeated cursors and invalid flag reads
   assert.throws(() => triageFlagsColumn(f), /read unavailable/);
 });
 
-test("repair rereads the ticket and skips one that has left Flags", async () => {
+test("No Flag alone is not a triage scope", async () => {
+  const { triageFlagsColumn } = await load();
+  const f = fixture({ intercept(binary, args) {
+    if (binary === "hypertask" && args[0] === "sections") return { success: true, sections: [{ section_title: "No Flag" }] };
+  } });
+  assert.throws(() => triageFlagsColumn(f), /no Flag: columns/);
+});
+
+test("repair rereads the ticket and skips one that has left flag columns", async () => {
   const { triageFlagsColumn } = await load();
   const f = fixture({ intercept(binary, args) {
     if (binary === "hypertask" && args[0] === "tasks" && args[1] === "get") return { success: true, tasks: [task({ section: "Done" })] };

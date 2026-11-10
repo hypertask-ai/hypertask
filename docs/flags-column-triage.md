@@ -6,7 +6,7 @@ Owner: **Mini Boss CEO**. Review the report every six hours, resolve exact drift
 node scripts/flags/triage-flags-column.mjs
 ```
 
-The default is read-only: board 15's Flags column, ticket comments and the live `/api/mcp/flags` metadata through `ht-flag get`. No database access or AI judgement. Exit 0 means clean, 2 means exact ticket drift is listed in JSON, and 1 means a read or command failed. A partial read must not produce a clean report. Every report includes the owner reminder.
+The default is read-only: every board 15 **Flag:** column except **No Flag** (today **Flag: Everyone**, **Flag: Only Me + QA**, and **Flag: Off**), ticket comments, and the live `/api/mcp/flags` metadata through `ht-flag get`. No database access or AI judgement. Exit 0 means clean, 2 means exact ticket drift is listed in JSON, and 1 means a read or command failed. A partial read must not produce a clean report. Every report includes the owner reminder.
 
 The fixed state-label vocabulary is:
 
@@ -30,7 +30,7 @@ Only the owning session, under its own `vcc` identity, may opt into board writes
 node scripts/flags/triage-flags-column.mjs --apply
 ```
 
-This creates the fixed label vocabulary, adds a missing-declaration question once, and repairs only unambiguously resolved tickets. It rereads each affected ticket before writing, skips tickets that left Flags, uses additive/removal label operations to preserve unrelated labels, appends the flag link without replacing existing content, and rereads the result. It never changes flag modes. Unresolved tickets remain drift (exit 2), with their exact links in the report. The Mini Boss CEO must obtain their declarations, then rerun repair; it must not declare those tickets clean while they are unresolved.
+This creates the fixed label vocabulary, adds a missing-declaration question once, and repairs only unambiguously resolved tickets. It rereads each affected ticket before writing, skips tickets that left the flag columns, uses additive/removal label operations to preserve unrelated labels, appends the flag link without replacing existing content, and rereads the result. It never changes flag modes. Unresolved tickets remain drift (exit 2), with their exact links in the report. The Mini Boss CEO must obtain their declarations, then rerun repair; it must not declare those tickets clean while they are unresolved.
 
 ## Several-times-daily schedule
 

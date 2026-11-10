@@ -9,6 +9,7 @@ export const stateLabels = {
   OFF: "flag:off",
 };
 export const clarification = "Flags triage: Please declare the flag key and current state on this ticket.";
+export const excludedFlagSection = "No Flag";
 const labels = [...Object.values(stateLabels), "flag:internal"];
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const flagReader = path.join(root, ".claude/skills/ship/scripts/ht-flag");
@@ -89,11 +90,45 @@ function readTask(run, ticket) {
   return result.tasks[0];
 }
 
+export function sectionTitle(section) {
+  return section.section_title ?? section.name;
+}
+
+export function isFlagColumnSection(section) {
+  if (section.deleted) return false;
+  const title = sectionTitle(section);
+  return title.startsWith("Flag:") && title !== excludedFlagSection;
+}
+
+export function isFlagColumnTitle(title) {
+  return title.startsWith("Flag:") && title !== excludedFlagSection;
+}
+
+export function flagColumnSections(sections) {
+  return sections.filter(isFlagColumnSection);
+}
+
+function readFlagColumnTasks(run, sections) {
+  const columns = flagColumnSections(sections);
+  if (!columns.length) throw new Error("Board 15 has no Flag: columns");
+  const seen = new Set();
+  const tasks = [];
+  for (const column of columns) {
+    const title = sectionTitle(column);
+    for (const task of pages(run, ["tasks", "list", "--project", "15", "--section", title], "tasks")) {
+      if (seen.has(task.ticketNumber)) throw new Error(`Duplicate ticket ${task.ticketNumber} in flag columns`);
+      seen.add(task.ticketNumber);
+      tasks.push(task);
+    }
+  }
+  return tasks;
+}
+
 export function triageFlagsColumn({ run = command, apply = false } = {}) {
   const sections = run("hypertask", ["sections", "list", "--project", "15", "--json"]);
-  if (sections.success !== true || !sections.sections?.some((section) => section.section_title === "Flags" && !section.deleted)) throw new Error("Board 15 has no Flags column");
+  if (sections.success !== true || !Array.isArray(sections.sections)) throw new Error("Cannot read board 15 sections");
   const flags = readFlags(run);
-  const tasks = pages(run, ["tasks", "list", "--project", "15", "--section", "Flags"], "tasks");
+  const tasks = readFlagColumnTasks(run, sections.sections);
   const report = { owner: "Mini Boss CEO", reminder: "Review this report several times daily; resolve every drift item or request the missing declaration.", clean: true, tickets: [] };
   const commentsFor = (ticket) => pages(run, ["comment", "list", ticket], "comments");
   const inspections = tasks.map((task) => ({ task, inspection: inspectTicket(task, flags, commentsFor(task.ticketNumber)) }));
@@ -107,7 +142,7 @@ export function triageFlagsColumn({ run = command, apply = false } = {}) {
     let { task, inspection } = entry;
     if (apply && inspection.issues.length) {
       task = readTask(run, task.ticketNumber);
-      if (task.section !== "Flags" || task.projectId !== 15 || task.status !== "Normal") continue;
+      if (!isFlagColumnTitle(task.section) || task.projectId !== 15 || task.status !== "Normal") continue;
       inspection = inspectTicket(task, readFlags(run), commentsFor(task.ticketNumber));
       if (inspection.ask) run("vcc", ["comment", "add", task.ticketNumber, "--text", `<p>${clarification}</p>`, "--json"]);
       if (inspection.label) {
