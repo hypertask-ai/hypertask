@@ -16,6 +16,33 @@ export async function announcedTicketIds(): Promise<Set<number>> {
   return ids;
 }
 
+function toRows(
+  entries: readonly {
+    timestamp: Date;
+    task: {
+      uniqueIndex: number;
+      title: string;
+      description: string;
+      section: string;
+      deletedAt: Date | null;
+      description_: { content: string } | null;
+      taskLabels: { label: { value: string | null } }[];
+    };
+  }[],
+): ReleaseEventRow[] {
+  return entries.map(({ timestamp, task }) => ({
+    timestamp,
+    task: {
+      uniqueIndex: task.uniqueIndex,
+      title: task.title,
+      description: task.description || task.description_?.content || "",
+      section: task.section,
+      deletedAt: task.deletedAt,
+      taskLabels: task.taskLabels,
+    },
+  }));
+}
+
 export async function selectShippedTickets(
   projectId: number,
   since: Date,
@@ -29,7 +56,7 @@ export async function selectShippedTickets(
     where: {
       timestamp: { gte: since, lte: until },
       to: { in: [...releaseSections] },
-      task: { projectId, deletedAt: null },
+      task: { projectId, deletedAt: null, archivedAt: null },
     },
     select: {
       timestamp: true,
@@ -48,19 +75,32 @@ export async function selectShippedTickets(
     orderBy: { timestamp: "asc" },
   });
 
-  const live: ReleaseEventRow[] = rows.map(({ timestamp, task }) => ({
-    timestamp,
-    task: {
-      uniqueIndex: task.uniqueIndex,
-      title: task.title,
-      description: task.description || task.description_?.content || "",
-      section: task.section,
-      deletedAt: task.deletedAt,
-      taskLabels: task.taskLabels,
+  const sitting = await prisma.task.findMany({
+    where: {
+      projectId,
+      deletedAt: null,
+      archivedAt: null,
+      section: { in: [...releaseSections] },
+      sectionChangedAt: { gte: since, lte: until },
     },
-  }));
+    select: {
+      uniqueIndex: true,
+      title: true,
+      description: true,
+      section: true,
+      deletedAt: true,
+      sectionChangedAt: true,
+      description_: { select: { content: true } },
+      taskLabels: { select: { label: { select: { value: true } } } },
+    },
+  });
 
-  return toShippedTickets(live, releaseSections).filter(
+  const events: ReleaseEventRow[] = toRows(rows);
+  const current: ReleaseEventRow[] = toRows(
+    sitting.map((task) => ({ timestamp: task.sectionChangedAt, task })),
+  );
+
+  return toShippedTickets([...events, ...current]).filter(
     (ticket) => !announced.has(ticket.uniqueIndex),
   );
 }
