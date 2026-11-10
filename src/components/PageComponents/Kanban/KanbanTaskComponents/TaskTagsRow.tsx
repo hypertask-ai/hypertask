@@ -15,7 +15,7 @@ import React from 'react'
 import { useFlag } from '@/hooks/useFlag';
 import { agentStatusIsFresh, agentStatusText, agentStepFor } from '@/lib/agentStatus/chip';
 import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
-import AgentStatusChip from '@/components/agentStatus/AgentStatusChip';
+import AgentStatusChip from '@/lib/agentStatus/AgentStatusChip';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 import { useBoardCardData } from './BoardCardData';
 import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from '@/lib/flags/definitions/htpr-7677-board-card-data-once';

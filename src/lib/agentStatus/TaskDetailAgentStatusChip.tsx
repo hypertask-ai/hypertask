@@ -1,7 +1,7 @@
 import React from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
-import AgentStatusChip from "@/components/agentStatus/AgentStatusChip";
+import AgentStatusChip from "@/lib/agentStatus/AgentStatusChip";
 import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
 
 const TaskDetailAgentStatusChip = () => {

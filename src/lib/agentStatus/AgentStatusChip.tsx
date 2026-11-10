@@ -1,7 +1,7 @@
 import React from "react";
 import { FaRobot } from "react-icons/fa6";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
-import AgentStatusDot from "@/components/agentStatus/AgentStatusDot";
+import AgentStatusDot from "@/lib/agentStatus/AgentStatusDot";
 import { agentStatusDotMode, agentStatusDotStep } from "@/lib/agentStatus/dot";
 import {
   agentStatusIsFresh,

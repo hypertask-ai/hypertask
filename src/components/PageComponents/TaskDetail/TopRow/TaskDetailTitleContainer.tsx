@@ -16,8 +16,7 @@ import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-s
 import useCopyURL from "@/hooks/General/useCopyURL";
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import TaskDetailAgentStatusChip from "./TaskDetailAgentStatusChip";
-import { useFlag } from "@/hooks/useFlag";
+import TaskDetailAgentStatusChip from "@/lib/agentStatus/TaskDetailAgentStatusChip";
 import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
 
 interface TaskDetailTitleContainerProps {

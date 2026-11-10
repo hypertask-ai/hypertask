@@ -44,7 +44,7 @@ const common = {
   "@/lib/taskDetail/initialTicketPosition": require("jiti").createJiti(__filename)(path.join(root, "src/lib/taskDetail/initialTicketPosition.ts")),
   "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: "unread-ticket-opens-top" },
   "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" },
-  "./TaskDetailAgentStatusChip": { default: () => null },
+  "@/lib/agentStatus/TaskDetailAgentStatusChip": { default: () => null },
   "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
   "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
 };
