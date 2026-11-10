@@ -13,7 +13,7 @@ const productionEnv = {
 test("production build compiles the app before applying migrations", () => {
   assert.deepEqual(packageJson.scripts.build.split(/\s*&&\s*/), [
     "npx prisma generate",
-    "NODE_OPTIONS=--max-old-space-size=3840 NEXT_WEBPACK_PARALLELISM=1 next build --webpack",
+    "NODE_OPTIONS=--max-old-space-size=3680 NEXT_WEBPACK_PARALLELISM=1 next build --webpack",
     "node scripts/run-production-migrations.mjs",
   ]);
 });
