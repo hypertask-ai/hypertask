@@ -213,7 +213,7 @@ function panel(t, enabled, { onClose = () => {}, onParentKeyDown } = {}) {
       target.dispatchEvent(new dom.window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
     });
   const rewrite = async (instruction) => {
-    const input = container.querySelector('[aria-label="Write with AI"] textarea');
+    const input = container.querySelector('[aria-label="Write with AI"] input');
     const propsKey = Object.keys(input).find((name) => name.startsWith("__reactProps$"));
     React.act(() => {
       input[propsKey].onChange({ target: { value: instruction } });

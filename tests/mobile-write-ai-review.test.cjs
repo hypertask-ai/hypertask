@@ -266,7 +266,7 @@ test("mobile Write with AI matches the empty mobile composer state", async () =>
     assert.equal(icon?.getAttribute("stroke-width"), "1.5");
     assert.equal(container.querySelector('[contenteditable="true"]'), null);
 
-    const prompt = container.querySelector("textarea");
+    const prompt = container.querySelector("input");
     assert.equal(prompt.placeholder, "Describe the text you want written…");
     assert.match(container.textContent, /Nothing written yet/);
     assert.match(
@@ -307,7 +307,7 @@ test("mobile Write with AI renders the complete existing-draft chip strip", asyn
     };
 
     assert.equal(
-      container.querySelector("textarea").placeholder,
+      container.querySelector("input").placeholder,
       "Describe how to edit the text",
     );
     const strip = container.querySelector(".overflow-x-auto");
@@ -349,7 +349,7 @@ test("mobile Write with AI keeps the keyboard target and chip strip in place whi
         resolveResponse = resolve;
       });
 
-    const prompt = container.querySelector("textarea");
+    const prompt = container.querySelector("input");
     const strip = container.querySelector(".overflow-x-auto");
     const chip = buttonWithText(container, "Improve readability");
     const draft = container.querySelector('[contenteditable="true"]');
@@ -370,7 +370,7 @@ test("mobile Write with AI keeps the keyboard target and chip strip in place whi
 
     await click(dom, chip);
 
-    assert.strictEqual(container.querySelector("textarea"), prompt);
+    assert.strictEqual(container.querySelector("input"), prompt);
     assert.strictEqual(container.querySelector(".overflow-x-auto"), strip);
     assert.equal(document.activeElement, prompt);
     assert.equal(draft.getAttribute("contenteditable"), "false");
@@ -535,7 +535,7 @@ test("first mobile AI generation can be accepted below the editable draft", asyn
     };
 
     assert.equal(buttonWithText(container, "Use this text"), undefined);
-    await setInput(dom, container.querySelector("textarea"), "Draft a reply");
+    await setInput(dom, container.querySelector("input"), "Draft a reply");
     await click(dom, container.querySelector('[aria-label="Send AI instruction"]'));
 
     assert.equal(requests[0].command, "WriteContent");
@@ -557,7 +557,7 @@ test("first mobile AI generation can be accepted below the editable draft", asyn
     );
     assert.match(container.textContent, /Your draft · tap to edit/i);
     assert.equal(
-      container.querySelector("textarea").placeholder,
+      container.querySelector("input").placeholder,
       "Describe how to edit the text",
     );
     const editActions = container.querySelector(".overflow-x-auto");
