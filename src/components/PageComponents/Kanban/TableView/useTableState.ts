@@ -203,7 +203,7 @@ export function useTableState(context: Context) {
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
   }
-  const grouping = _currentProject ? effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled) : null;
+  const grouping = _currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled) ? effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled) : null;
   if (grouping && grouping.mode !== "column") sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
 
   useEffect(() => {
