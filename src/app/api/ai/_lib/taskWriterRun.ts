@@ -143,6 +143,25 @@ export function projectAccessWhere(userId: number, agentId?: string | null, team
   return projectContentAccessWhere(userId, agentId, teamScope);
 }
 
+function relatedTicketCandidates(
+  indexedRows: Promise<Awaited<ReturnType<typeof searchTasks>>>,
+  userId: number,
+  agentId: string | null | undefined,
+  teamScope: AgentTokenTeamScope | null | undefined,
+  taskIds: number[],
+) {
+  return indexedRows.then(async (found) => {
+    const { taskRows: rows } = await authorizeIndexedRows(found, [], { userId, agentId, teamScope });
+    const loaded = new Set(taskIds.map(String));
+    return formatRelatedTicketCandidates(
+      rows.filter((row) => !loaded.has(row.id)).slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT),
+    );
+  }).catch((error) => {
+    console.error("[ai/task-writer] related candidates failed", error);
+    return "<RELATED_TICKET_CANDIDATES>\nunavailable:search_failed Do not invent related tickets. Ask whether this might already exist on the board.\n</RELATED_TICKET_CANDIDATES>";
+  });
+}
+
 export async function prepareTaskWriterRun(
   body: TaskWriterRequest,
   userId: number,
@@ -259,6 +278,15 @@ export async function prepareTaskWriterRun(
     : effectivePrompt;
   const primaryTaskIds = body.taskIds.slice(0, 1);
   const relatedTaskIds = body.taskIds.slice(1);
+  const reuseLookups = await isFeatureEnabled("htpr-9015-search-lookups", userId);
+  const ticketSearch = reuseLookups && boardResearchEnabled
+    ? searchTasks({
+        searchQuery: retrievalQuery,
+        projectIds: [body.projectId],
+        excludeStatuses: ["Deleted", "Archive"],
+        topK: 50,
+      })
+    : null;
   const [
     currentTaskContext,
     relatedTaskContext,
@@ -284,33 +312,21 @@ export async function prepareTaskWriterRun(
       aiMode: body.aiMode,
       taskIds: body.taskIds,
       reserveCommentBudget: boardResearchEnabled,
+      taskSearch: ticketSearch ?? undefined,
     }),
-    boardResearchEnabled
-      ? searchTasks({
-          searchQuery: retrievalQuery,
-          projectIds: [body.projectId],
-          excludeStatuses: ["Deleted", "Archive"],
-          topK: Math.min(
-            TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
-            TASK_WRITER_RELATED_CANDIDATE_LIMIT +
-              Math.min(body.taskIds.length, 8) +
-              5
-          ),
-        })
-          .then(async (indexedRows) => {
-            const { taskRows: rows } = await authorizeIndexedRows(indexedRows, [], { userId, agentId, teamScope });
-            const loaded = new Set(body.taskIds.map(String));
-            return formatRelatedTicketCandidates(
-              rows
-                .filter((row) => !loaded.has(row.id))
-                .slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT)
-            );
-          })
-          .catch((error) => {
-            console.error("[ai/task-writer] related candidates failed", error);
-            return "<RELATED_TICKET_CANDIDATES>\nunavailable:search_failed Do not invent related tickets. Ask whether this might already exist on the board.\n</RELATED_TICKET_CANDIDATES>";
-          })
-      : Promise.resolve(""),
+    reuseLookups && ticketSearch
+      ? relatedTicketCandidates(ticketSearch, userId, agentId, teamScope, body.taskIds)
+      : boardResearchEnabled
+        ? relatedTicketCandidates(searchTasks({
+            searchQuery: retrievalQuery,
+            projectIds: [body.projectId],
+            excludeStatuses: ["Deleted", "Archive"],
+            topK: Math.min(
+              TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
+              TASK_WRITER_RELATED_CANDIDATE_LIMIT + Math.min(body.taskIds.length, 8) + 5,
+            ),
+          }), userId, agentId, teamScope, body.taskIds)
+        : Promise.resolve(""),
     boardResearchEnabled
       ? loadTaskWriterStyleExamples(body.projectId, { userId, agentId, teamScope }).catch((error) => {
           console.error("[ai/task-writer] style examples failed", error);

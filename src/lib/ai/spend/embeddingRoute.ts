@@ -1,5 +1,6 @@
 import { getTeamGatewayFunding, isOurGatewayKey, resolveTeamByokApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { remainingSpendPathEnabled, resolveTeamAllowancePolicy } from "@/app/api/ai/_lib/planAllowancePolicy";
+import { isFeatureEnabled } from "@/lib/flags";
 import { reservePlanAllowance, settlePlanAllowance, teamAllowanceSnapshot, SharedAiAllowanceExceededError } from "@/app/api/ai/_lib/sharedAllowance";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import prisma from "@/lib/prisma";
@@ -44,7 +45,45 @@ async function teamIds(projectIds: number[]) {
   const projects = await prisma.project.findMany({ where: { id: { in: ids } }, select: { teamId: true } });
   return [...new Set(projects.map((project) => project.teamId).filter((id): id is string => Boolean(id)))];
 }
-export async function embeddingSpendMode(projectIds: number[], teamId?: string | null): Promise<(Route & { teamId?: string }) | "mixed-keyword"> {
+const ROUTE_TTL_MS = 60_000;
+const routeCache = new Map<string, { at: number; value: Promise<(Route & { teamId?: string }) | "mixed-keyword"> }>();
+
+export function resetEmbeddingSpendModeCacheForTests() {
+  routeCache.clear();
+}
+
+function spendModeKey(projectIds: number[], teamId?: string | null) {
+  if (teamId) return `team:${teamId}`;
+  const ids = [...new Set(projectIds.filter((id) => Number.isInteger(id)))].sort((a, b) => a - b);
+  return `projects:${ids.join(",")}`;
+}
+
+function rememberRoute(key: string, load: () => Promise<(Route & { teamId?: string }) | "mixed-keyword">) {
+  const now = Date.now();
+  const hit = routeCache.get(key);
+  if (hit && now - hit.at < ROUTE_TTL_MS) return hit.value;
+  if (routeCache.size > 200) {
+    for (const [cachedKey, cached] of routeCache) {
+      if (now - cached.at >= ROUTE_TTL_MS) routeCache.delete(cachedKey);
+    }
+    if (routeCache.size > 200) routeCache.clear();
+  }
+  const value = load().then((route) => {
+    if (route !== "mixed-keyword" && (route.httpKey || route.allowanceKey)) {
+      const current = routeCache.get(key);
+      if (current?.value === value) routeCache.delete(key);
+    }
+    return route;
+  });
+  routeCache.set(key, { at: now, value });
+  value.catch(() => {
+    const current = routeCache.get(key);
+    if (current?.value === value) routeCache.delete(key);
+  });
+  return value;
+}
+
+async function resolveEmbeddingSpendMode(projectIds: number[], teamId?: string | null): Promise<(Route & { teamId?: string }) | "mixed-keyword"> {
   const ids = teamId ? [teamId] : await teamIds(projectIds);
   if (ids.length !== 1) {
     if (ids.length === 0) return { mode: "current" };
@@ -52,6 +91,12 @@ export async function embeddingSpendMode(projectIds: number[], teamId?: string |
     return routes.some((route) => route.mode !== "current") ? "mixed-keyword" : { mode: "current" };
   }
   return { ...(await routeForTeam(ids[0])), teamId: ids[0] };
+}
+
+export async function embeddingSpendMode(projectIds: number[], teamId?: string | null) {
+  const on = await isFeatureEnabled("htpr-9015-search-lookups", 0);
+  if (!on) return resolveEmbeddingSpendMode(projectIds, teamId);
+  return rememberRoute(spendModeKey(projectIds, teamId), () => resolveEmbeddingSpendMode(projectIds, teamId));
 }
 export async function withSpendCharge<T>(route: Route, teamId: string, texts: string[], work: () => Promise<T>) {
   if (route.mode === "vector" && route.allowanceKey && route.fundingSource) {
