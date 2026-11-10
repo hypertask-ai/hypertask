@@ -263,24 +263,19 @@ async function updateTaskTreeStatus(
     }))
   }, { timeout: 30_000 })
 
-  await syncTaskTreeSearchIndex(trashedTaskIds, status)
+  await syncSearchIndex(trashedTaskIds, status)
   return task
 }
 
-async function syncTaskTreeSearchIndex(
+async function syncSearchIndex(
   taskIds: number[],
   status: "Deleted" | "Normal",
 ) {
-  if (taskIds.length === 0) return
   try {
-    const { deleteTasksFromTurbopuffer, upsertTasksToTurbopuffer } = await import(
-      "@/utils/controllers/turbopuffer/turbopufferHelper"
+    const { syncTaskTreeSearchIndex } = await import(
+      "@/utils/controllers/turbopuffer/syncTaskTreeSearchIndex"
     )
-    if (status === "Deleted") {
-      await deleteTasksFromTurbopuffer(taskIds)
-      return
-    }
-    await upsertTasksToTurbopuffer(taskIds)
+    await syncTaskTreeSearchIndex(taskIds, status)
   } catch (error) {
     console.log("search index sync after trash or restore failed:", error)
   }

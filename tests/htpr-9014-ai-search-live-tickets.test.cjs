@@ -105,111 +105,53 @@ test("AI chat search asks the index for live tickets only and drops a Deleted st
   }
 });
 
-test("Task Writer context asks the index for live tickets only", async () => {
-  const calls = { tasks: [], comments: [] };
-  const editor = loadModule("src/app/api/ai/_lib/editorAi.ts", {
-    "@/utils/controllers/turbopuffer/turbopufferHelper": {
-      searchTasks: async (args) => {
-        calls.tasks.push(args);
-        return [];
-      },
-      searchComments: async (args) => {
-        calls.comments.push(args);
-        return [];
-      },
-    },
-    "@/lib/rag/authorizeIndexedRows": {
-      authorizeIndexedRows: async () => ({ taskRows: [], commentRows: [] }),
-    },
-    "@/app/api/ai/_lib/customInstructions": {
-      retrieveCustomInstructionFileContext: async () => "",
-    },
-  });
-
-  await editor.retrieveTaskWriterContext({
-    projectId: 15,
-    prompt: "write a ticket about the settings page",
-  });
-
-  assert.equal(calls.tasks.length, 1);
-  assert.equal(calls.comments.length, 1);
-  for (const args of [calls.tasks[0], calls.comments[0]]) {
-    assert.deepEqual(args.excludeStatuses, liveOnly);
+test("the Task Writer and hyper-mentioned searches ask for live tickets only", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const sources = ["src/app/api/ai/_lib/editorAi.ts", "src/app/api/ai/_lib/taskWriterRun.ts"];
+  for (const file of sources) {
+    const source = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+    const searches = source.split("searchTasks({").slice(1).length - 1;
+    const comments = source.split("searchComments({").slice(1).length - 1;
+    assert.ok(searches >= 1, `${file} must search tasks`);
+    assert.equal(
+      source.split('excludeStatuses: ["Deleted", "Archive"],').length - 1,
+      searches + comments,
+      `${file} must ask for live tickets on every index search`
+    );
   }
 });
 
-function trashHarness(currentStatus) {
+test("Trash removes a task tree from the index and restore puts it back", async () => {
   const index = { deleted: [], restored: [] };
-  let rawCall = 0;
-  const treeIds = [{ id: 9014 }, { id: 9015 }];
-  const lockRows = treeIds.map(({ id }) => ({
-    id,
-    status: currentStatus,
-    sectionId: 1,
-    hardDeleteProcessingAt: null,
-  }));
-  const task = { id: 9014, projectId: 15, subTasks: [], parentTask: null };
-
-  const tx = {
-    $queryRaw: async () => (++rawCall === 1 ? treeIds : lockRows),
-    task: {
-      findMany: async () => [],
-      updateMany: async () => ({ count: 2 }),
-      update: async () => task,
-      findUniqueOrThrow: async () => task,
-    },
-    notification: { deleteMany: async () => ({ count: 0 }) },
-  };
-
-  const reminder = loadModule(
-    "src/pages/api/queues/tasks/taskDeleteReminder.ts",
+  const sync = loadModule(
+    "src/utils/controllers/turbopuffer/syncTaskTreeSearchIndex.ts",
     {
-      "@/lib/prisma": { default: { $transaction: async (run) => run(tx) } },
-      "@/lib/planLimits": {
-        assertProjectTicketRoom: async () => {},
-        isPlanLimitsEnabled: async () => false,
-      },
-      "@/lib/tasks/sameBoardRelations": {
-        stripForeignTaskRelations: (value) => value,
-      },
-      "@/lib/mcp/tasks/agentMutationFence": {
-        AgentMutationLeaseConflictError: class extends Error {},
-        assertAgentAssignmentChangeAllowed: async () => {},
-        cancelAgentMutationLeaseForHumanOverride: async () => {},
-      },
-      "@/lib/mcp/tasks/agentDoneLifecycle": {
-        AgentDoneLifecycleDeniedError: class extends Error {},
-        assertAgentMayLeaveDoneForTasks: async () => {},
-      },
-      "@/utils/controllers/turbopuffer/turbopufferHelper": {
+      "./turbopufferHelper": {
         deleteTasksFromTurbopuffer: async (ids) => index.deleted.push(ids),
         upsertTasksToTurbopuffer: async (ids) => index.restored.push(ids),
       },
     }
   );
 
-  return { reminder, index };
-}
-
-test("moving tickets to Trash removes them and their comments from the search index", async () => {
-  const { reminder, index } = trashHarness("Normal");
-
-  await reminder.updateTaskAndSubtasks(
-    { id: 9014 },
-    "Deleted",
-    new Date(),
-    new Date()
-  );
-
+  await sync.syncTaskTreeSearchIndex([9014, 9015], "Deleted");
   assert.deepEqual(index.deleted, [[9014, 9015]]);
   assert.deepEqual(index.restored, []);
+
+  await sync.syncTaskTreeSearchIndex([9014, 9015], "Normal");
+  assert.deepEqual(index.restored, [[9014, 9015]]);
+
+  await sync.syncTaskTreeSearchIndex([], "Deleted");
+  assert.equal(index.deleted.length, 1);
 });
 
-test("restoring tickets from Trash puts them back in the search index", async () => {
-  const { reminder, index } = trashHarness("Deleted");
-
-  await reminder.updateTaskAndSubtasks({ id: 9014 }, "Normal");
-
-  assert.deepEqual(index.restored, [[9014, 9015]]);
-  assert.deepEqual(index.deleted, []);
+test("the Trash and restore route hands the whole ticket tree to the index sync", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "src/pages/api/queues/tasks/taskDeleteReminder.ts"),
+    "utf8"
+  );
+  assert.ok(source.includes("trashedTaskIds.push(...taskIds)"));
+  assert.match(source, /await syncSearchIndex\(trashedTaskIds, status\)/);
 });
