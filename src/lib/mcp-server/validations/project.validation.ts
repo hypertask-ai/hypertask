@@ -72,6 +72,37 @@ export function getBoardPlaybookInputSchema() {
 export const BoardPlaybookInputSchema = getBoardPlaybookInputSchema();
 export type BoardPlaybookInput = z.infer<typeof BoardPlaybookInputSchema>;
 
+export function getBoardGithubReposInputSchema() {
+  return z
+    .object({
+      project_id: z.number().int().positive().max(2_147_483_647),
+    })
+    .strict();
+}
+
+export const BoardGithubReposInputSchema = getBoardGithubReposInputSchema();
+export type BoardGithubReposInput = z.infer<typeof BoardGithubReposInputSchema>;
+
+export function getSetBoardGithubReposInputSchema() {
+  return z
+    .object({
+      project_id: z.number().int().positive().max(2_147_483_647),
+      repository_ids: z
+        .array(z.string().regex(/^[1-9][0-9]{0,19}$/))
+        .max(50)
+        .describe('GitHub repository IDs to keep connected. An empty array disconnects every repository.'),
+      version: z
+        .string()
+        .min(1)
+        .max(256)
+        .describe('The version returned by list_board_github_repos. The write is refused as stale when it is out of date.'),
+    })
+    .strict();
+}
+
+export const SetBoardGithubReposInputSchema = getSetBoardGithubReposInputSchema();
+export type SetBoardGithubReposInput = z.infer<typeof SetBoardGithubReposInputSchema>;
+
 export function getBoardConfigBaseSchema() {
   return z
     .object({
