@@ -560,7 +560,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           if (hasAgentSessions) { closeConversations(); setAgentsOpen((open) => !open); return; }
           setConversationsOpen((open) => !open);
         }}
-        className={isMbl ? "flex h-11 w-11 touch-manipulation items-center justify-center rounded-[4px] text-icon-dark-gray hover:bg-hover-active hover:text-white-black" : "block text-icon-dark-gray hover:text-white-black"}>
+        className={isMbl ? `flex h-11 w-11 touch-manipulation items-center justify-center ${chatCleanup ? "rounded-[4px]" : "rounded-full"} text-icon-dark-gray hover:bg-hover-active hover:text-white-black` : "block text-icon-dark-gray hover:text-white-black"}>
         <Bot size={isMbl ? 20 : 16} strokeWidth={1.75} />
       </button>
     </div>
