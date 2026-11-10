@@ -995,9 +995,7 @@ const InlineDraftAiFloat = ({
       <div className={dictationActive ? "hidden" : "min-w-[150px] flex-1"}>
         <textarea
           ref={promptInputRef} rows={1} onKeyDown={keepTypingInsidePrompt} autoFocus
-          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
-          value={prompt}
-          disabled={isLoading || audioProcessing}
+          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH} value={prompt} disabled={isLoading || audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={writeMode ? "Describe the task…" : inlineDraftAiWritePlaceholder(hasSelection, allowSuggestReply, editor.isEmpty)}
           className="block max-h-40 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
@@ -1169,9 +1167,7 @@ const InlineDraftAiFloat = ({
       {!dictationActive && (
         <textarea
           ref={mobilePromptInputRef} rows={1} onKeyDown={keepTypingInsidePrompt} autoFocus
-          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
-          value={prompt}
-          disabled={audioProcessing}
+          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH} value={prompt} disabled={audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={mobilePromptPlaceholder}
           className="block max-h-40 min-h-11 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-emphasis leading-6 text-white-black outline-none placeholder:text-text-light-gray"
