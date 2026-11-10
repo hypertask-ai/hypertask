@@ -68,7 +68,8 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
       body: JSON.stringify({ ticket_number: ticket, pull_request_url: url }),
     });
     if (!response.ok) {
-      if (response.status === 409 && await ticketDocumentsPull()) {
+      const canTrustTicketRecord = response.status === 409 || response.status >= 500;
+      if (canTrustTicketRecord && await ticketDocumentsPull()) {
         core.info(`Title OK: ${pr.title}; ${ticket} already documents ${url}`);
         return;
       }

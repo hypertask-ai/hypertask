@@ -99,6 +99,21 @@ test('title guard passes when bind conflicts but the titled ticket already docum
   assert.equal(result.writes.length, 2);
 });
 
+test('title guard passes when bind is unavailable but the titled ticket already documents the pull request', async () => {
+  const result = await run({
+    status: 502,
+    taskLookup: {
+      tasks: [{
+        ticketNumber: 'YPER4-731',
+        pullRequests: [],
+        description: '<p>Work sits in https://github.com/hypertask-ai/hypertask/pull/123</p>',
+      }],
+    },
+  });
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.writes.length, 2);
+});
+
 test('409 fallback rejects a partial pull path or another repository URL', async () => {
   for (const description of [
     '<p>See /pull/1234 for context</p>',
