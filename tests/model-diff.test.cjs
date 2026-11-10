@@ -212,7 +212,7 @@ test("rollup marker and title come from the sorted model set, and the check date
     { kind: "new-class", provider: "unknown", model: "unknown/model-3", action: "ask Valentin before shipping" },
   ];
   const ticket = rollupTicket(findings, new Date("2026-10-24T23:30:00-02:00"));
-  assert.equal(ticket.marker, "modelwatchrollup-model");
+  assert.match(ticket.marker, /^modelwatchrollup-model-3-\d{1,9}$/);
   assert.equal(ticket.title, `AI model watch new classes [${ticket.marker}]`);
   const families = [
     { kind: "new-class", provider: "spacexai", model: "spacexai/grok-4.20", inputPerMillion: 2, action: "ask Valentin before shipping" },
@@ -220,11 +220,13 @@ test("rollup marker and title come from the sorted model set, and the check date
     { kind: "new-class", provider: "zai", model: "zai/glm-5.4", inputPerMillion: 1, action: "ask Valentin before shipping" },
   ];
   const named = rollupTicket(families, new Date("2026-10-25T00:00:00Z"));
-  assert.equal(named.marker, "modelwatchrollup-gemini-pro-glm-grok");
+  assert.match(named.marker, /^modelwatchrollup-gemini-pro-glm-grok-3-\d{1,9}$/);
   assert.equal(rollupTicket([...families].reverse(), new Date("2027-01-02T00:00:00Z")).marker, named.marker);
   assert.notEqual(rollupTicket(families.slice(0, 2)).marker, named.marker);
-  assert.equal(rollupTicket([...families, { kind: "new-class", provider: "deepseek", model: "deepseek/deepseek-v5", inputPerMillion: 1 }]).marker,
-    "modelwatchrollup-deepseek-gemini-pro-glm-and-1-more");
+  assert.notEqual(rollupTicket([...families, { kind: "new-class", provider: "deepseek", model: "deepseek/deepseek-v5", inputPerMillion: 1 }]).marker, named.marker);
+  const older = { ...families[0], model: "spacexai/grok-4.19" };
+  assert.notEqual(rollupTicket([older, ...families.slice(1)]).marker, named.marker);
+  assert.notEqual(rollupTicket([families[0], ...families.slice(1, 2), { ...families[2], model: "zai/glm-5.5" }]).marker, named.marker);
   assert.ok(ticket.description.startsWith(`<p><strong>3 new model classes are not in our catalog.</strong></p><p>Gateway check 2026-10-25.`));
   assert.equal((ticket.description.match(/<li>/g) || []).length, 3);
   assert.match(ticket.description, /<code>new&lt;provider&gt;\/model-1<\/code>\. Gateway input price per million tokens: \$0\. ask &lt;Valentin&gt; &amp; verify\.<\/li>/);

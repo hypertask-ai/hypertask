@@ -457,7 +457,7 @@ warn and fall back; unknown pricing never authorizes unconditional automatic
 shipping. No usable sources fails the watch.
 
 Only the families in
-[model-watch.allowlist.json](../../.github/scripts/model-watch.allowlist.json)
+[model-watch.allowlist.json](../.github/scripts/model-watch.allowlist.json)
 file tickets, and only at or above the version recorded for each family. Another
 provider, a size, modality or coding side-line, or an older version stays in the
 run log. Watching a family is one line in that file. A day where everything
