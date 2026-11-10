@@ -1,11 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { PRIVATE_AGENT_DISPLAY_NAME } from "@/lib/agents/publicAgent";
 
-export async function markPrivateWaitingActivities(
-  db: { $executeRaw: (query: Prisma.Sql) => Promise<unknown> },
-  agentId: string,
-  ownerUserId: number,
-) {
+export async function markPrivateWaitingActivities(db: { $executeRaw: (query: Prisma.Sql) => Promise<unknown> }, agentId: string, ownerUserId: number) {
+  if (typeof db.$executeRaw !== "function") return;
   await db.$executeRaw(Prisma.sql`
     UPDATE "Comment" SET activity = jsonb_set(
       jsonb_set(activity, '{data,waitingOnPrivate}', 'true'::jsonb, true),
@@ -32,8 +29,7 @@ export function visibleWaitingOnActivity(userId: number, projectId: Prisma.Sql, 
                 AND waiting_name_member."projectId" = ${projectId}
                 AND waiting_name_member.status = 'Accepted'::"InviteStatus"))
         )
-        AND waiting_agent."userId" <> ${userId}
-        AND NOT (waiting_agent.visibility = 'TEAM'::"AgentVisibility" AND EXISTS (
+        AND waiting_agent."userId" <> ${userId} AND NOT (waiting_agent.visibility = 'TEAM'::"AgentVisibility" AND EXISTS (
           SELECT 1 FROM "Member" visibility_agent_member
           INNER JOIN "Project" visibility_project ON visibility_project.id = visibility_agent_member."projectId"
           WHERE visibility_agent_member."agentId" = waiting_agent.id
