@@ -21,7 +21,7 @@ export const LABEL_CLASS = "border-border-labelComponent text-label-component";
 
 export const MIN_COLUMN_WIDTH_PX = 60;
 
-export type TaskRow = { type: "task"; task: ITask; sid: string | number };
+export type TaskRow = { type: "task"; task: ITask; sid: string | number; rowKey: string };
 
 export type Row = TaskRow | { type: "more"; sid: string | number; hidden: number };
 
