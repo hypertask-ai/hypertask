@@ -23,6 +23,9 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 6
+    },
+    "import/no-duplicates": {
+      "count": 8
     }
   },
   "src/app/[...boardURL]/NoBoardsEmptyState.tsx": {
@@ -139,6 +142,9 @@
   },
   "src/app/detail/[...slug]/TaskDetailPanels.tsx": {
     "tailwindcss/no-custom-classname": {
+      "count": 2
+    },
+    "import/no-duplicates": {
       "count": 2
     }
   },
@@ -278,6 +284,9 @@
   "src/app/pinned/PinnedComp.tsx": {
     "tailwindcss/no-custom-classname": {
       "count": 2
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/app/reminders/ReminderPageComponent.tsx": {
@@ -354,6 +363,9 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 7
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/app/search/SearchComp.tsx": {
@@ -365,6 +377,9 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 9
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/app/share/SharedTaskDetailComp.tsx": {
@@ -385,6 +400,9 @@
       "count": 1
     },
     "tailwindcss/no-custom-classname": {
+      "count": 2
+    },
+    "import/no-duplicates": {
       "count": 2
     }
   },
@@ -425,10 +443,16 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 1
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/AI_CHAT/AI_Tiptap_Container.tsx": {
     "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    },
+    "import/no-duplicates": {
       "count": 2
     }
   },
@@ -751,11 +775,17 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 2
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/Modals/AssignToUser/AssignToUser.tsx": {
     "tailwindcss/no-custom-classname": {
       "count": 1
+    },
+    "import/no-duplicates": {
+      "count": 4
     }
   },
   "src/components/Modals/BlockedByPerson/BlockedByPerson.tsx": {
@@ -1155,6 +1185,9 @@
     },
     "hypertask-style/no-unapproved-color-literals": {
       "count": 10
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/Modals/TrialPlan/TrialPlanComponents.tsx": {
@@ -1194,6 +1227,9 @@
   "src/components/Modals/commands/HTC/commands.tsx": {
     "tailwindcss/no-custom-classname": {
       "count": 1
+    },
+    "import/no-duplicates": {
+      "count": 5
     }
   },
   "src/components/Modals/commands/SwitchAccount/SwitchAccountModal.tsx": {
@@ -1282,6 +1318,9 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 3
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/PageComponents/Calendar/month-navigation.tsx": {
@@ -1545,6 +1584,9 @@
   "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx": {
     "tailwindcss/no-custom-classname": {
       "count": 1
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/PageComponents/Kanban/KanbanHomepageComponents/KanbanBulkActionBar.tsx": {
@@ -1566,6 +1608,9 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 7
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx": {
@@ -1610,6 +1655,9 @@
   "src/components/PageComponents/Kanban/TableView/TableView.tsx": {
     "tailwindcss/no-custom-classname": {
       "count": 2
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/PageComponents/Login/HypertaskLoginCarousel.tsx": {
@@ -1644,6 +1692,9 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 1
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/PageComponents/Search/SearchList.tsx": {
@@ -1936,11 +1987,17 @@
   "src/components/PageComponents/TaskDetail/TopRow/BaseTitleContainer.tsx": {
     "tailwindcss/no-custom-classname": {
       "count": 2
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/PageComponents/TaskDetail/TopRow/TaskDetailTitleContainer.tsx": {
     "tailwindcss/no-custom-classname": {
       "count": 1
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/PageComponents/TaskDetail/TopRow/TaskSummary.tsx": {
@@ -1951,6 +2008,9 @@
   "src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx": {
     "hypertask-style/no-unapproved-color-literals": {
       "count": 1
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/PageComponents/Trash/TaskRow.tsx": {
@@ -1969,6 +2029,9 @@
   "src/components/ProviderGlobal/GloablProviders.tsx": {
     "tailwindcss/no-custom-classname": {
       "count": 1
+    },
+    "import/no-duplicates": {
+      "count": 4
     }
   },
   "src/components/RTE/Components/AIDropdown.tsx": {
@@ -2189,6 +2252,9 @@
     },
     "tailwindcss/no-custom-classname": {
       "count": 11
+    },
+    "import/no-duplicates": {
+      "count": 2
     }
   },
   "src/components/sidebars/Announcements/index.tsx": {
@@ -2256,6 +2322,456 @@
       "count": 1
     },
     "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  },
+  "scripts/visual-regression-ci.mjs": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/app/[...boardURL]/useLandingSectionState.ts": {
+    "import/no-duplicates": {
+      "count": 3
+    }
+  },
+  "src/app/agents/chat/page.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/app/api/ai/_lib/boardMemory.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/app/api/ai/_lib/commentSummaries.ts": {
+    "import/no-duplicates": {
+      "count": 5
+    }
+  },
+  "src/app/api/ai/_lib/customInstructions.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/app/api/ai/_lib/editorAi.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/app/api/ai/_lib/taskSummaries.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/app/api/ai/_lib/taskWriterRun.ts": {
+    "import/no-duplicates": {
+      "count": 7
+    }
+  },
+  "src/app/api/ai/hyper-mentioned/route.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/app/api/ai/task-questions/route.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/app/api/auth/instant-signup/route.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/app/api/cron/native-agent-heartbeat/route.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/app/api/ops/funnel-probe-inbox/route.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/app/layout.tsx": {
+    "import/no-duplicates": {
+      "count": 3
+    }
+  },
+  "src/app/search/SearchChipsInput.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/Settings/PlansSection.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/commands/HTC/ComposeTaskWriter.tsx": {
+    "import/no-duplicates": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/Kanban/TableView/tableViewShared.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterWithProvider.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentOptions/CopyCommentLink.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentOptions/NewTaskFromComment.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentOptions/ReplyToComment.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/InnerHTMLComment.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/index.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/SharedTask/CommentsAndDescription/Description/DescriptionContainer.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/SharedTask/TopRow/TaskTitle.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/SharedTask/TopRow/TaskTitleContainer.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TopRow/RunningTimerIndicator.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/ProviderGlobal/useGlobalProvider.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/RTE/TaskDetailEditorPanels.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/RTE/Tiptap.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/components/RTE/TiptapCreateTaskModal.tsx": {
+    "import/no-duplicates": {
+      "count": 6
+    }
+  },
+  "src/components/RTE/useTaskDetailEditorEvents.tsx": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/components/boardCommandActions.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/commandModalCallbacks.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/components/commands.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/hooks/Homepage/useHandleKeyDownOperations.ts": {
+    "import/no-duplicates": {
+      "count": 5
+    }
+  },
+  "src/hooks/MultiPages/AIChat/useAiChat.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/hooks/MultiPages/AIChat/useAiTiptap.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/hooks/MultiPages/HTC/useDarkMode.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/hooks/MultiPages/useFunnelCookies.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/hooks/MultiPages/useUpdateTaskInBoards.tsx": {
+    "import/no-duplicates": {
+      "count": 3
+    }
+  },
+  "src/lib/agentWebhooks/outbox.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/ai/chatStream/modelReply.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/ai/chatStream/modelTurn.ts": {
+    "import/no-duplicates": {
+      "count": 3
+    }
+  },
+  "src/lib/ai/chatStream/title.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/lib/ai/labelClassifier.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/api/task-writes/create-global.ts": {
+    "import/no-duplicates": {
+      "count": 3
+    }
+  },
+  "src/lib/api/typedClient.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/auth/devicePairing.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/calendarSync/indexedDbReadModel.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/contexts/TaskDetail/DescriptionProvider.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/firstScreen/serverBoardDocument.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/lib/mcp-server/lib/services/section.service.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp-server/lib/services/view.service.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp-server/stateless-http.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp-server/tools/add-comment.tool.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp-server/validations/attachment.validation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp-server/validations/view.validation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp/operations/comments/operation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp/operations/pages/create/operation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp/operations/reports/create/operation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp/operations/tasks/create/operation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp/operations/tasks/operation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp/operations/tasks/update/operation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp/operations/teams/[teamId]/boards/operation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/mcp/operations/view/[viewId]/operation.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/myTasksFiltering.ts": {
+    "import/no-duplicates": {
+      "count": 4
+    }
+  },
+  "src/lib/search/rankedWhere.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/lib/slack/chat.ts": {
+    "import/no-duplicates": {
+      "count": 5
+    }
+  },
+  "src/lib/slack/taskCreate.ts": {
+    "import/no-duplicates": {
+      "count": 5
+    }
+  },
+  "src/lib/slack/threadSummary.ts": {
+    "import/no-duplicates": {
+      "count": 5
+    }
+  },
+  "src/pages/api/ai/project/customInstruction.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/pages/api/queues/duedateQueue.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/pages/api/queues/inboxQueue.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/pages/api/teams/aiFeatureModels.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/utils/Providers.tsx": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/utils/controllers/comments/commentNotifications.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/utils/controllers/comments/persistComment.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "src/utils/controllers/reports/statusUpdate.ts": {
+    "import/no-duplicates": {
+      "count": 5
+    }
+  },
+  "src/utils/helperFunctions/Views/BoardEmptyStateHelper.ts": {
+    "import/no-duplicates": {
+      "count": 3
+    }
+  },
+  "src/utils/helperFunctions/Views/FilterHelperFunctions.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "tests/ci-image-sources.test.cjs": {
+    "no-redeclare": {
+      "count": 1
+    }
+  },
+  "tests/editor-writing-assistance.test.ts": {
+    "import/no-duplicates": {
+      "count": 2
+    }
+  },
+  "tests/fixtures/typed-api-client-contract.ts": {
+    "import/no-duplicates": {
+      "count": 8
+    }
+  },
+  "tests/mcp-transports.test.ts": {
+    "import/no-duplicates": {
       "count": 2
     }
   }

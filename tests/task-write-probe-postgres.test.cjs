@@ -6,6 +6,7 @@ const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const { NextRequest } = require("next/server");
+const { withSchemaExtensions } = require("./helpers/schema-extensions.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -168,7 +169,7 @@ async function provision() {
     const apply = run(
       "docker",
       ["exec", "-i", container, "psql", "-U", PG_USER, "-d", PG_DB, "-v", "ON_ERROR_STOP=1"],
-      { input: fs.readFileSync(schemaSql, "utf8") },
+      { input: withSchemaExtensions(fs.readFileSync(schemaSql, "utf8")) },
     );
     fs.rmSync(schemaSql, { force: true });
     if (apply.status !== 0) {

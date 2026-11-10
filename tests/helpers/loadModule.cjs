@@ -41,6 +41,7 @@ function loadModule(file, stubs = {}) {
         }
         if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
         if (specifier === "@/utils/controllers/logs/quietPersonalLog") return require("./stub-map.cjs").quietPersonalLogStub();
+        if (specifier === "@/utils/controllers/tasks/userCommentCounts") return { userCommentCountsByTaskId: async () => new Map() };
         if (!specifier.startsWith("@/") && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return localRequire(specifier);
         const base = specifier.startsWith("@/") ? path.join(root, "src", specifier.slice(2)) : path.resolve(path.dirname(filename), specifier);
         const target = [base, ...[".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", "/index.ts", "/index.tsx", "/index.js", "/index.mjs"].map(ext => base + ext)]

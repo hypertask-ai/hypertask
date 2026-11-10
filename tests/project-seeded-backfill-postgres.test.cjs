@@ -3,6 +3,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { withSchemaExtensions } = require("./helpers/schema-extensions.cjs");
 
 const root = path.resolve(__dirname, "..");
 const migration = path.join(root, "src/prisma/migrations/20261017130000_htpr_7287_backfill_project_seeded/migration.sql");
@@ -58,7 +59,7 @@ test("seeded backfill updates only proven starter and demo boards and is idempot
       "--config", path.join(root, "prisma.config.ts"),
       "--from-empty", "--to-schema", path.join(root, "src/prisma/schema.prisma"), "--script",
     ], { env: { ...process.env, DATABASE_URL: "postgresql://ht:ht@127.0.0.1:1/ht_seeded", DIRECT_URL: "postgresql://ht:ht@127.0.0.1:1/ht_seeded" } }));
-    psql(container, schemaSql);
+    psql(container, withSchemaExtensions(schemaSql));
     psql(container, `
       INSERT INTO "User" ("id", "uid", "email", "joinedAt") VALUES
         (332, 'hyper-ai', 'ai@example.test', '2026-01-01'),

@@ -6,6 +6,7 @@ const http = require("node:http");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
+const { withSchemaExtensions } = require("./helpers/schema-extensions.cjs");
 
 const root = path.resolve(__dirname, "..");
 const PG_IMAGE = process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea";
@@ -92,7 +93,7 @@ async function provision() {
     }
     const apply = run("docker", [
       "exec", "-i", container, "psql", "-U", PG_USER, "-d", PG_DB, "-v", "ON_ERROR_STOP=1",
-    ], { input: fs.readFileSync(schemaSql, "utf8") });
+    ], { input: withSchemaExtensions(fs.readFileSync(schemaSql, "utf8")) });
     if (apply.status !== 0) {
       return { skipReason: `applying the Prisma schema failed: ${(apply.stderr || apply.stdout).trim()}`, cleanup };
     }

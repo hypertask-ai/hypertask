@@ -1,6 +1,7 @@
 import { defineConfig } from "eslint/config";
 import { fixupConfigRules } from "@eslint/compat";
 import tsParser from "@typescript-eslint/parser";
+import eslintPluginImport from "eslint-plugin-import";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import { styleGuideLintConfig } from "./eslint-local-rules/style-guide.mjs";
 import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
@@ -118,5 +119,31 @@ export default defineConfig([
     rules: Object.fromEntries(
       oxlintOwnedRules().map((rule) => [rule, "off"]),
     ),
+  },
+  {
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
+    rules: {
+      "import/no-duplicates": "error",
+    },
+  },
+  {
+    files: ["**/*.{js,jsx,mjs,cjs}"],
+    rules: {
+      "no-redeclare": "error",
+    },
+  },
+  {
+    files: ["**/*.{ts,tsx,mts,cts}"],
+    rules: {
+      "no-redeclare": "off",
+      "@typescript-eslint/no-redeclare": "error",
+    },
+  },
+  {
+    files: ["**/*.cjs"],
+    plugins: { import: eslintPluginImport },
+    rules: {
+      "import/no-duplicates": "error",
+    },
   },
 ]);

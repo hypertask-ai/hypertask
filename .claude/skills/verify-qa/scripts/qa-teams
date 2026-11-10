@@ -11,7 +11,7 @@ const identityPath = '/api/users/getById';
 
 const NAMED_TEAMS = [
   { label: 'free', userId: 3411, stateFile: 'state-free.json', teamId: '308dcc93-8076-4e30-a982-ae8b0df82cee', plan: 'Free', funding: 'shared' },
-  { label: 'pro', userId: 3413, stateFile: 'state-pro.json', teamId: '2ce0d9f8-4179-489d-bbce-2b0e197f8067', plan: 'Pro', funding: 'managed' },
+  { label: 'pro', userId: 3413, stateFile: 'state-pro.json', teamId: '2ce0d9f8-4179-489d-bbce-2b0e197f8067', plan: 'Pro', funding: 'shared' },
   { label: 'byok', userId: 3412, stateFile: 'state-byok.json', teamId: '977c0c91-c14f-47b0-b8bc-933cc751f19d', plan: 'BYOK', funding: 'customer' },
 ];
 

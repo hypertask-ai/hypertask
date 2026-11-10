@@ -26,7 +26,10 @@ npm run lint -- \
   --suppress-rule tailwindcss/no-custom-classname \
   --suppress-rule hypertask-style/no-raw-tailwind-colors \
   --suppress-rule hypertask-style/no-unapproved-color-literals \
-  --suppress-rule hypertask-style/no-forbidden-utilities
+  --suppress-rule hypertask-style/no-forbidden-utilities \
+  --suppress-rule import/no-duplicates \
+  --suppress-rule no-redeclare \
+  --suppress-rule @typescript-eslint/no-redeclare
 ```
 
 ## Added-line token check

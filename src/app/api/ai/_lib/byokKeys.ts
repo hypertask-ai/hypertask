@@ -201,6 +201,20 @@ async function resolveLookupPlan(lookup?: ByokLookupContext) {
   return storePlanIdForProject(null, teamId);
 }
 
+async function compedProTeam(teamId: string | null | undefined) {
+  if (!teamId) return false;
+  try {
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      select: { compedUntil: true, compedPlan: true },
+    });
+    const until = team?.compedUntil ? new Date(team.compedUntil).getTime() : NaN;
+    return until > Date.now() && team?.compedPlan !== "BYOK";
+  } catch {
+    return false;
+  }
+}
+
 function getSharedIncludedAllowanceGatewayKey(plan: string | undefined) {
   if (plan !== "Free" && plan !== "BYOK") return undefined;
 
@@ -571,6 +585,12 @@ export async function getTeamGatewayFunding(
   await loadManaged();
   if (managedEnabled && managedKey) {
     return withProvenance(managedFunding(managedKey), managedProvenance, options?.includeProvenance);
+  }
+  if (managedKey) return undefined;
+
+  const platformGatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  if (isVercelAiGatewayKey(platformGatewayKey) && await compedProTeam(await resolveLookupTeamId(lookup))) {
+    return { apiKey: platformGatewayKey, source: "shared" };
   }
 
   return undefined;
