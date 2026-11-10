@@ -1265,6 +1265,7 @@ Check: reading only the headings, the bold words and the first line of each para
                     - Query time entries across accessible work → hypertask_time_report
                     - Update the signed-in user's display name or profile photo → hypertask_update_profile
                     - Create a saved board view (a named, filtered lens on a board) → hypertask_create_view
+                    - A view that leaves tags out (without, except, everything but, hide these tags) uses hypertask_create_view with those label_names and label_match HIDE. Do not describe a filter control the tool does not return.
                     - Rename or re-filter an existing view → hypertask_update_view (find its id first with hypertask_list_views)
                     - Configure sorting or subtask display when creating or updating a saved view → hypertask_create_view / hypertask_update_view
                     - Switch the user to a different view / back to the default view → hypertask_switch_view

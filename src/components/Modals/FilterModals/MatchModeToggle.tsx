@@ -1,5 +1,7 @@
 import useFilters from "@/hooks/Homepage/Filters/useFilters";
-import { supportsMatchMode, TFilter, TMatchFilters } from "@/models/Filters/model";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
+import { nextFilterMatch, supportsMatchMode, TFilter, TFilterMatch } from "@/models/Filters/model";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useRecoilValue } from "@/lib/state";
 import { currentProjectAtom } from "@/store";
@@ -18,6 +20,7 @@ type Props = {
 const MatchModeToggle = ({ type, noun, view }: Props) => {
   const currentProject = useRecoilValue(currentProjectAtom);
   const { toggleFilterValueMatch } = useFilters();
+  const tagHideEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
   const myTasksFilters = useMyTasksFilterController();
   const kanbanActive = getActiveFiltersFromProject(currentProject).addedFilters.find(
     (filter) => filter.type === type
@@ -26,21 +29,25 @@ const MatchModeToggle = ({ type, noun, view }: Props) => {
     (filter) => filter.type === type
   );
   const activeFilter = view === "MyTasks" ? myTasksActive : kanbanActive;
-  const match: TMatchFilters = activeFilter?.match ?? "ANY";
+  const hideEnabled = type === "Labels" && tagHideEnabled;
+  const storedMatch = activeFilter?.match;
+  let match: TFilterMatch = "ANY";
+  if (storedMatch === "HIDE" && hideEnabled) match = "HIDE";
+  else if (storedMatch === "ALL") match = "ALL";
   const canToggle =
     (view === "Kanban" || view === "MyTasks") &&
     supportsMatchMode(type) &&
     !!activeFilter?.searchPayload?.length;
 
-  const pending = useRef<TMatchFilters>(match);
-  const lastSeen = useRef<TMatchFilters>(match);
+  const pending = useRef<TFilterMatch>(match);
+  const lastSeen = useRef<TFilterMatch>(match);
   if (lastSeen.current !== match) {
     lastSeen.current = match;
     pending.current = match;
   }
   const writeQueue = useRef<Promise<unknown>>(Promise.resolve());
   const flip = () => {
-    const next: TMatchFilters = pending.current === "ALL" ? "ANY" : "ALL";
+    const next = nextFilterMatch(pending.current, hideEnabled);
     pending.current = next;
     writeQueue.current = writeQueue.current
       .catch(() => {})

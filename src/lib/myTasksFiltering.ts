@@ -22,10 +22,12 @@ import {
 import { isMyTasksSnoozed } from "@/lib/myTasksSnooze";
 import {
   defaultConditions,
+  filtersRespectingTagHide,
   priorityFilterCondition,
 } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import type {
   IFilterRuntimeContext,
+  TFilterMatch,
   TMatchFilters,
 } from "@/models/Filters/model";
 
@@ -213,13 +215,15 @@ const matchesFilterSettings = (
 ): boolean => {
   const settings = config.filterSettings;
   if (!settings?.addedFilters?.length) return true;
+  const addedFilters = filtersRespectingTagHide(settings.addedFilters, runtimeContext);
+  if (!addedFilters.length) return true;
   const overall: TMatchFilters =
     settings.matchFilters === "ALL" ? "ALL" : "ANY";
   const project = projectForTask(task);
   const run = (
     type: (typeof settings.addedFilters)[number]["type"],
     searchPayload: unknown[],
-    match?: TMatchFilters,
+    match?: TFilterMatch,
   ) => {
     const condition = defaultConditions[type];
     return (
@@ -227,11 +231,11 @@ const matchesFilterSettings = (
     );
   };
   if (overall === "ALL") {
-    return settings.addedFilters.every((filter) =>
+    return addedFilters.every((filter) =>
       run(filter.type, filter.searchPayload, filter.match),
     );
   }
-  return settings.addedFilters.some((filter) =>
+  return addedFilters.some((filter) =>
     run(filter.type, filter.searchPayload, filter.match),
   );
 };

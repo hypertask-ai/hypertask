@@ -10,9 +10,11 @@ import {
   IFilter,
   IFilterCommandRowEl,
   IFilterModalProps,
-  TMatchFilters,
+  TFilterMatch,
   supportsMatchMode,
 } from "@/models/Filters/model";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import { ModalBody } from "reactstrap";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
 import { useRecoilValue } from "@/lib/state";
@@ -111,8 +113,8 @@ export const ToggleFilterType = ({
   handleFilterChange,
   noun = "Filters",
 }: {
-  selectedOption: TMatchFilters;
-  handleFilterChange: (filter: TMatchFilters) => void;
+  selectedOption: TFilterMatch;
+  handleFilterChange: (filter: TFilterMatch) => void;
   noun?: string;
 }) => {
   return (
@@ -122,7 +124,9 @@ export const ToggleFilterType = ({
         handleFilterChange(selectedOption === "ALL" ? "ANY" : "ALL")
       }
     >
-      <span>Match {selectedOption === "ALL" ? "ALL" : "ANY"} {noun}</span>
+      <span>
+        {selectedOption === "HIDE" ? `Hide ${noun}` : `Match ${selectedOption === "ALL" ? "ALL" : "ANY"} ${noun}`}
+      </span>
     </div>
   );
 };
@@ -156,6 +160,7 @@ const RenderActiveFilters: FC<RenderActiveFiltersProps> = ({
   elKey,
 }) => {
   const currentUser = useRecoilValue(currentUserAtom);
+  const tagHideEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
   const getPayloadToDisplay = (currentlyActive: IFilter) => {
     let payload: any[];
     switch (currentlyActive.type) {
@@ -210,6 +215,9 @@ const RenderActiveFilters: FC<RenderActiveFiltersProps> = ({
   return (
     <span className="text-micro font-medium">
       {displayText}
+      {currentlyActive.type === "Labels" && currentlyActive.match === "HIDE" && tagHideEnabled && (
+        <span className="ml-1 text-text-light-gray">· Hide</span>
+      )}
       {supportsMatchMode(currentlyActive.type) && currentlyActive.match === "ALL" && (
         <span className="ml-1 text-text-light-gray">· ALL</span>
       )}

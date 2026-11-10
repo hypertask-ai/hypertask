@@ -1,4 +1,4 @@
-import { TFilter, IFilterSettings, TMatchFilters  } from "@/models/Filters/model"
+import { TFilter, IFilterSettings, TFilterMatch  } from "@/models/Filters/model"
 import { defaultFilterSettings, defaultConditions } from "@/utils/helperFunctions/Views/FilterHelperFunctions"
 import { useRecoilState } from "@/lib/state";
 import { currentProjectAtom } from "@/store";
@@ -98,7 +98,7 @@ const useFilters = ()=>{
 
     }
 
-    async function toggleFilterValueMatch(type: TFilter, next?: TMatchFilters) {
+    async function toggleFilterValueMatch(type: TFilter, next?: TFilterMatch) {
       if (!_currentProject) return;
       const filters = getActiveFiltersFromProject(_currentProject);
       const existingFilter = filters.addedFilters.find((filter) => filter.type === type);
