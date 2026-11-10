@@ -14,6 +14,12 @@ on:
       - "tests/ai-eval.test.cjs"
       - "tests/ai-prompt-registry.test.cjs"
       - "tests/fixtures/ai/**"
+      - "tests/fixtures/rag-search/**"
+      - "tests/rag-search-eval.test.cjs"
+      - "scripts/rag-eval.cjs"
+      - "src/lib/rag/**"
+      - "src/utils/controllers/search/**"
+      - "src/utils/controllers/turbopuffer/**"
       - ".github/workflows/ai-evals.yml"
   push:
     branches: [production]
@@ -29,6 +35,12 @@ on:
       - "tests/ai-eval.test.cjs"
       - "tests/ai-prompt-registry.test.cjs"
       - "tests/fixtures/ai/**"
+      - "tests/fixtures/rag-search/**"
+      - "tests/rag-search-eval.test.cjs"
+      - "scripts/rag-eval.cjs"
+      - "src/lib/rag/**"
+      - "src/utils/controllers/search/**"
+      - "src/utils/controllers/turbopuffer/**"
       - ".github/workflows/ai-evals.yml"
 
 permissions:
@@ -60,3 +72,7 @@ jobs:
         env:
           AI_EVAL_LIVE: "0"
           AI_EVAL_WRONG_TOOL_THRESHOLD: "0"
+      - run: node --test tests/rag-search-eval.test.cjs
+      - run: node scripts/rag-eval.cjs --check-baseline
+        env:
+          RAG_EVAL_EMBED_KEY: ${{ secrets.OPENAI_API_KEY }}
