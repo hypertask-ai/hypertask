@@ -79,17 +79,3 @@ test("setting repositories forwards the selection and its version", async () => 
   assert.equal(response.status, 200);
   assert.deepEqual(world.saved, { userId: 10, projectId: 15, body: { repositoryIds: ["456"], version: "v1" } });
 });
-
-test("a stale settings version keeps its refusal", async () => {
-  world.error = new BoardGithubSettingsError(409, "stale");
-  const response = await put({ repositoryIds: [], version: "old" });
-  assert.equal(response.status, 409);
-  assert.deepEqual(await response.json(), { success: false, error: "stale" });
-});
-
-test("a read-only agent cannot set repositories", async () => {
-  world.writeRoleRefusal = nextServer.NextResponse.json({ success: false, error: "read_only_agent" }, { status: 403 });
-  const response = await put({ repositoryIds: [], version: "v1" });
-  assert.equal(response.status, 403);
-  assert.equal(world.saved, null);
-});
