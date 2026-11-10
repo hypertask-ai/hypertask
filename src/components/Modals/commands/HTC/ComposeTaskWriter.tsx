@@ -122,18 +122,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const plusLayout = Boolean(plusComposerEnabled && newTaskWindow && !mobile && !phoneTaskWriterSheet);
   const tabPaletteCycleActive = plusLayout && tabPaletteCycle;
   const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow && !plusLayout);
-  useEffect(() => {
-    if (!tabPaletteCycleActive || !active) return;
-    const root = composer.current;
-    if (!root) return;
-    const tabOut = "[data-compose-plus-row] summary, [data-compose-plus-row] button, #compose-task-audio-button, [data-compose-below-row] [data-compose-board-chip]";
-    for (const node of root.querySelectorAll<HTMLElement>(tabOut)) node.tabIndex = -1;
-    return () => {
-      for (const node of root.querySelectorAll<HTMLElement>(tabOut)) {
-        if (node.tabIndex === -1) node.tabIndex = 0;
-      }
-    };
-  }, [tabPaletteCycleActive, active, text, dictating, addingImages, boardPickerOpen]);
   const [text, setText] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [writing, setWriting] = useState(false);
