@@ -119,6 +119,19 @@ test("an empty failure still says what to do next", () => {
   assert.ok(story.fix.length > 0);
 });
 
+test("a bare key with no header around it is redacted too", () => {
+  const story = requestLog.aiChatFailureStory(
+    new Error("custom endpoint replied 401 for key sk-live-9f8e7d6c5b4a7c3d1e2f"),
+  );
+  assert.equal(story.message.includes("sk-live-9f8e7d6c5b4a7c3d1e2f"), false);
+  assert.match(story.message, /\[redacted\]/);
+  const longOpaque = requestLog.aiChatFailureStory(
+    new Error("token Zj8kQ2mNp0rS4tU6vW8xY1zA3bC5dE7fG9hJ declined"),
+  );
+  assert.equal(longOpaque.message.includes("Zj8kQ2mNp0rS4tU6vW8xY1zA3bC5dE7fG9hJ"), false);
+  assert.match(longOpaque.message, /declined/);
+});
+
 test("the line never carries keys, emails or prompt text, and stays on one line", () => {
   const event = requestLog.buildAiChatRequestEvent({
     ...turn,
@@ -134,5 +147,5 @@ test("the line never carries keys, emails or prompt text, and stays on one line"
   assert.equal(line.includes("\n"), false);
   assert.equal(Object.hasOwn(event, "message"), false);
   assert.equal(Object.hasOwn(event, "prompt"), false);
-  assert.equal(event.error.message.includes("api.openai.com"), true);
+  assert.match(event.error.message, /\/v1\/chat/);
 });

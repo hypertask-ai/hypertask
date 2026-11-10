@@ -5,6 +5,21 @@ import type { AiChatTurnOutcome } from "@/lib/telemetry/aiChatObservability";
 const ROUTE = "/api/ai/chat/stream";
 const ERROR_TEXT_LIMIT = 300;
 
+const BARE_SECRET_PATTERNS = [
+  /\b(?:sk|rk|pk|ak)[-_][A-Za-z0-9_-]{8,}/g,
+  /\bAIza[A-Za-z0-9_-]{16,}/g,
+  /\bgh[pousr]_[A-Za-z0-9]{16,}/g,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
+  /\b[A-Za-z0-9_+/=-]{32,}/g,
+];
+
+function withoutBareSecrets(text: string) {
+  return BARE_SECRET_PATTERNS.reduce(
+    (value, pattern) => value.replace(pattern, "[redacted]"),
+    text,
+  );
+}
+
 export type AiChatRequestLogInput = {
   requestId: string;
   userId: number;
@@ -47,7 +62,7 @@ export function aiChatFailureStory(
         ? error
         : "The AI chat turn failed without a message.";
   const message = redactErrorText(
-    raw.trim() || "The AI chat turn failed.",
+    withoutBareSecrets(raw.trim() || "The AI chat turn failed."),
     ERROR_TEXT_LIMIT,
   );
 
