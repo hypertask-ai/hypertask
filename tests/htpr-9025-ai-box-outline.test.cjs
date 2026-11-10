@@ -16,5 +16,5 @@ test('Write with AI box outline ships behind its own Owner + QA flag', () => {
 
 test('flagged outline uses the shared 1px border token on the borderless box only', () => {
   assert.match(source, /useFlag\(HTPR_9025_AI_BOX_OUTLINE_FLAG\)/);
-  assert.match(source, /matchCommentRowControls && aiBoxOutline && "border-thin border-border-light-gray-thin"/);
+  assert.match(source, /aiBoxOutline && matchCommentRowControls && "border-thin border-border-light-gray-thin"/);
 });
