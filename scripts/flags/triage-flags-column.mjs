@@ -8,7 +8,15 @@ export const stateLabels = {
   OWNER_AND_QA: "flag:qa-only",
   OFF: "flag:off",
 };
-export const clarification = "Flags triage: Please declare the flag key and current state on this ticket.";
+export const clarificationMarker = "declare the flag key and current state";
+export const clarificationQuestion = [
+  "<p><strong>What this is:</strong> This ticket sits in a Flag column but the description does not declare which flag governs it.</p>",
+  "<p>Question: <strong>Which flag key and current state should this ticket use?</strong></p>",
+  "<p>My recommendation: Add the live flag key to the description plus a clickable link to its card on /admin/flags.</p>",
+  `<p>Why: The flags triage script cannot apply exactly one state label until you ${clarificationMarker} on the ticket.</p>`,
+  "<p>Yes: I will update the ticket with the flag key, state, and admin link.</p>",
+  "<p>No: This ticket should not stay in a Flag column without a declared flag.</p>",
+].join("");
 export const excludedFlagSection = "No Flag";
 const labels = [...Object.values(stateLabels), "flag:internal"];
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -56,7 +64,7 @@ export function inspectTicket(task, flags, comments) {
   const unknown = [...new Set(description.match(/\b(?:htpr|yper4|hyfa)-\d+-[a-z0-9]+(?:-[a-z0-9]+)*\b/g) ?? [])]
     .filter((key) => !flags.some((flag) => flag.key === key));
   const issues = [];
-  const hasQuestion = comments.some((comment) => (comment.text ?? comment.commentText ?? "").includes(clarification));
+  const hasQuestion = comments.some((comment) => (comment.text ?? comment.commentText ?? "").includes(clarificationMarker));
   const result = { ticket: task.ticketNumber, url: task.url, issues, candidates: candidates.map((flag) => flag.key), label: null, flagUrl: null, addLink: false, ask: false };
   if (!declared.length) {
     issues.push("No declared live flag key in the description");
@@ -148,7 +156,7 @@ export function triageFlagsColumn({ run = command, apply = false } = {}) {
       task = readTask(run, task.ticketNumber);
       if (!isFlagColumnTitle(task.section) || task.projectId !== 15 || task.status !== "Normal") continue;
       inspection = inspectTicket(task, readFlags(run), commentsFor(task.ticketNumber));
-      if (inspection.ask) run("vcc", ["comment", "add", task.ticketNumber, "--kind", "question", "--text", `<p>${clarification}</p>`, "--json"]);
+      if (inspection.ask) run("vcc", ["comment", "add", task.ticketNumber, "--kind", "question", "--text", clarificationQuestion, "--json"]);
       if (inspection.label) {
         const args = ["task", "update", task.ticketNumber, "--project", "15"];
         const stale = (task.labels ?? []).map((label) => label.name).filter((name) => labels.includes(name) && name !== inspection.label);

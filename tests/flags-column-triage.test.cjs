@@ -35,21 +35,21 @@ test("repair removes stale state labels, keeps unrelated labels and content, and
 });
 
 test("a registry ticket with no declaration gets one question and its exact live card", async () => {
-  const { triageFlagsColumn, clarification } = await load();
+  const { triageFlagsColumn, clarificationQuestion, clarificationMarker } = await load();
   const f = fixture({ tasks: [task({ ticketNumber: "HTPR-7511", description: "<p>Existing description.</p>" })] });
   assert.equal(triageFlagsColumn({ ...f, apply: true }).clean, true);
-  assert.equal(f.state.comments["HTPR-7511"][0].text, `<p>${clarification}</p>`);
+  assert.equal(f.state.comments["HTPR-7511"][0].text, clarificationQuestion);
 });
 
 test("missing, unknown and ambiguous flags remain unresolved, never get a guessed label", async () => {
-  const { triageFlagsColumn, clarification } = await load();
+  const { triageFlagsColumn, clarificationMarker } = await load();
   for (const description of cases.ambiguousDescriptions) {
     const f = fixture({ tasks: [task({ description })], flags: [flag(), flag({ key: "htpr-2-other", ticketId: "HTPR-2" })] });
     const report = triageFlagsColumn({ ...f, apply: true });
     assert.equal(report.clean, false);
     assert.equal(report.tickets[0].label, null);
     triageFlagsColumn({ ...f, apply: true });
-    assert.equal((f.state.comments["HTPR-7549"] ?? []).filter((comment) => comment.text.includes(clarification)).length, 1);
+    assert.equal((f.state.comments["HTPR-7549"] ?? []).filter((comment) => comment.text.includes(clarificationMarker)).length, 1);
   }
 });
 
