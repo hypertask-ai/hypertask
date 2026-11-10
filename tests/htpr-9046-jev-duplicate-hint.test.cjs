@@ -76,7 +76,7 @@ test("only a confident same-work yes reaches the draft, own-account teams and em
   assert.equal(await hintRuntime({ respond: () => "no 0.99" }).hint.jevDuplicateHint(args), "");
   const started = Date.now();
   await hintRuntime({ respond: () => new Promise(() => {}) }).hint.jevDuplicateHint(args);
-  assert.ok(Date.now() - started < 2500);
+  assert.ok(Date.now() - started < 3200);
 });
 
 function writerRun({ enabled, candidates = [candidate] }) {

@@ -1,5 +1,5 @@
 export const JEV_DUPLICATE_MIN_CONFIDENCE = 0.9;
-export const JEV_DUPLICATE_CALL_TIMEOUT_MS = 900;
+export const JEV_DUPLICATE_CALL_TIMEOUT_MS = 2000;
 export const JEV_DUPLICATE_TEXT_LIMIT = 800;
 
 export type JevDuplicateDraft = { title: string; description: string };

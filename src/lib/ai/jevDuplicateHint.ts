@@ -12,7 +12,7 @@ import {
 } from "@/lib/ai/jevDuplicateCheck";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 
-export const JEV_DECISION_MODEL_SLUG = "openrouter/jev";
+export const DUPLICATE_DECISION_MODEL_SLUG = "anthropic/claude-haiku-5.5";
 
 function withDeadline<T>(work: Promise<T>, fallback: T): Promise<T> {
   const deadline = new Promise<T>((resolve) => {
@@ -27,7 +27,7 @@ async function askJev(
   apiKey: string,
   tags: AiGatewayTags
 ): Promise<string | null> {
-  const model = resolveGatewayModel(JEV_DECISION_MODEL_SLUG, apiKey);
+  const model = resolveGatewayModel(DUPLICATE_DECISION_MODEL_SLUG, apiKey);
   const reply = generateText({
     model,
     prompt,
