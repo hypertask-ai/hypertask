@@ -121,6 +121,8 @@ export function AI_Tiptap_Container({
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
+  let thinkingControlsEnabled = false;
+  if (thinkingControlsFlag) thinkingControlsEnabled = true;
   const pathname = usePathname();
   const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
   const chatCleanupEnabled = chatCleanupFlag && !pathname?.startsWith("/chat");
@@ -290,7 +292,7 @@ export function AI_Tiptap_Container({
       currentOptions={displayAiOptions}
       className={oneComposer ? "bottom-[110%] right-0 left-auto top-auto" : "bottom-[110%] top-auto"}
       stackSubmenus
-      thinkingControls={thinkingControlsFlag}
+      thinkingControls={thinkingControlsEnabled}
       effortLabelClassName={
         oneComposer || pathname?.startsWith("/chat") ? undefined : "hidden"
       }
