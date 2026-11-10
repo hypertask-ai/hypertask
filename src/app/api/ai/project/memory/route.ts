@@ -106,7 +106,17 @@ export async function POST(request: NextRequest) {
       await learnBoardMemoryFromSignal({ projectId, signal, userId }),
     );
   } catch (error) {
-    return failureResponse(error);
+    const known = knownFailureResponse(error);
+    if (known) return known;
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/project/memory",
+      source: "handled",
+      extra: { stage: "request" },
+    });
+    console.error("Board memory request failed", error);
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
   }
 }
 
@@ -139,11 +149,21 @@ async function withUser(handler: (userId: number) => Promise<NextResponse>) {
     if (!userId) return unauthorized();
     return await handler(userId);
   } catch (error) {
-    return failureResponse(error);
+    const known = knownFailureResponse(error);
+    if (known) return known;
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/project/memory",
+      source: "handled",
+      extra: { stage: "request" },
+    });
+    console.error("Board memory request failed", error);
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
   }
 }
 
-async function failureResponse(error: unknown) {
+function knownFailureResponse(error: unknown) {
   if (error instanceof BoardMemoryRateLimitError) {
     return NextResponse.json(
       { error: error.message },
@@ -171,13 +191,5 @@ async function failureResponse(error: unknown) {
       { status: 404 },
     );
   }
-  await reportError({
-    message: error instanceof Error ? error.message : "AI request failed",
-    stack: error instanceof Error ? error.stack : undefined,
-    url: "/api/ai/project/memory",
-    source: "handled",
-    extra: { stage: "request" },
-  });
-  console.error("Board memory request failed", error);
-  return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  return null;
 }
