@@ -58,6 +58,7 @@ interface IProp {
   compactListeningPill?: boolean;
   compactRecordingPill?: boolean;
   primaryMic?: boolean;
+  excludeFromTabOrder?: boolean;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -96,6 +97,7 @@ export const AudioButton = ({
   compactListeningPill = false,
   compactRecordingPill = false,
   primaryMic = false,
+  excludeFromTabOrder = false,
 }: IProp) => {
   const showCompactPill = compactListeningPill || compactRecordingPill;
   const activeRef = useRef(active);
@@ -732,7 +734,7 @@ export const AudioButton = ({
                 onTouchStart={onMicTouchStart}
                 onTouchMove={onMicTouchMove}
                 role={isKeyboardAccessible ? "button" : undefined}
-                tabIndex={isKeyboardAccessible && !disabled ? 0 : undefined}
+                tabIndex={excludeFromTabOrder ? -1 : isKeyboardAccessible && !disabled ? 0 : undefined}
                 aria-disabled={isKeyboardAccessible ? disabled : undefined}
                 aria-label={isMobileTaskWriter ? "Start dictation" : dictationAriaLabel}
                 onKeyDown={(event) => {

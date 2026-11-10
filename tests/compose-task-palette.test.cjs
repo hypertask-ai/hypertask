@@ -520,6 +520,21 @@ test('three-switch creation marks the new ticket and leaves opening to its page 
   });
 });
 
+test('HTPR-8945 plus-composer Tab from New Task switches to Search instead of Add or mic', async (t) => {
+  await withPalette(t, { tab: 'compose' }, async ({ flags, rerender, press, values }) => {
+    flags['htpr-8829-ctrlj-plus-composer'] = true;
+    flags['htpr-7313-ctrlj-always-board-chip'] = true;
+    await rerender();
+    const textarea = document.querySelector('[data-compose-task-writer] textarea');
+    assert.ok(textarea);
+    textarea.focus();
+    await press('Tab', {}, textarea);
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+    assert.notEqual(document.activeElement?.getAttribute('aria-label'), 'Add');
+    assert.notEqual(document.activeElement?.id, 'compose-task-audio-button');
+  });
+});
+
 for (const modeOutline of [false, true]) for (const mobile of [false, true]) {
   test(`AMOLED mode outline flag ${modeOutline} preserves tab switching on ${mobile ? 'phone' : 'desktop'}`, async (t) => {
     await withPalette(t, { modeOutline, mobile }, async ({ press, input, values }) => {

@@ -13,6 +13,7 @@ export function SendMessageButton({
   label,
   textButton = false,
   shortcut,
+  tabIndex,
   onClick,
 }: {
   disabled: boolean;
@@ -23,6 +24,7 @@ export function SendMessageButton({
   label?: string;
   textButton?: boolean;
   shortcut?: { text: string; keyCombination: string[] };
+  tabIndex?: number;
   onClick: () => void;
 }) {
   const sendTooltip =
@@ -73,6 +75,7 @@ export function SendMessageButton({
       className={buttonClassName}
       onClick={onClick}
       disabled={disabled}
+      tabIndex={tabIndex}
       aria-label={queueMode ? "Queue message" : label ? label : "Send message"}
     >
       <Tooltip {...tooltipProps} />

@@ -503,7 +503,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           setRecording(on);
         }} onProcessingChange={setTranscribing}
         disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact"
-        {...(plusLayout ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, stopButtonId: stopDictationButtonId, hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] } } : {})}
+        {...(plusLayout ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, excludeFromTabOrder: true, stopButtonId: stopDictationButtonId, hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] } } : {})}
         {...(composerKeysLayout ? { hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] }, stopButtonId: stopDictationButtonId, cancelButtonId: cancelDictationButtonId } : {})}
         callbackHandler={(transcript, replace) => {
           dictationDelivered.current = true;
@@ -517,7 +517,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
 
   const boardControl = showBoardChip && <div className="min-w-0 max-w-full">
     {boardShortcutTooltip && <Tooltip portal bottom={0} left={0} text="Change board" keyCombination={boardShortcut.split("+")} />}
-    <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
+    <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip tabIndex={plusLayout ? -1 : undefined}
       aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
       aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
       disabled={dictating} onClick={openBoardPicker}
@@ -625,6 +625,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                   <ComposerPlusActions
                     disabled={addingImages || dictating}
                     active={active}
+                    excludeFromTabOrder
                     attachShortcut={getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}
                     onAttach={handleAttachmentClick}
                     onAddContext={insertContextMark}
@@ -633,6 +634,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                   <details ref={plusMenu} className="relative">
                     <summary
                       aria-label="Add"
+                      tabIndex={-1}
                       aria-disabled={addingImages || dictating}
                       onClick={(event) => {
                         if (addingImages || dictating) event.preventDefault();
@@ -661,7 +663,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                 )}
                 <div className="flex shrink-0 items-center gap-2">
                   {dictationControl}
-                  <SendMessageButton label="Send" textButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={false} onClick={() => void send()} />
+                  <SendMessageButton label="Send" textButton tabIndex={-1} disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={false} onClick={() => void send()} />
                 </div>
               </div>
             ) : (
