@@ -202,7 +202,9 @@ const route = taskWriteRoute({
         table_sort_column: sanitizedTableSort.column,
         table_sort_direction: sanitizedTableSort.direction,
         table_group_by: sanitizedTableGroupBy ?? null,
-        table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
+        ...(sanitizedTableCollapsedSections === undefined
+          ? {}
+          : { table_collapsed_sections: sanitizedTableCollapsedSections }),
         board_layout: resolvedBoardLayout,
       };
 
