@@ -83,7 +83,6 @@ const buildGroups = (sections: ISection[], specOf: (task: ITask) => GroupSpec): 
 };
 
 const labelId = (taskLabel: ITaskLabel) => taskLabel.label?.id ?? taskLabel.labelId;
-
 export function buildTableSectionsGroupedByTag(
   sections: ISection[],
   selectedTagIds: string[] = [],
@@ -149,7 +148,6 @@ export const buildTableSectionsGroupedBySize = (sections: ISection[]) =>
     const index = task.estimate?.estimate_index ?? 0;
     return { key: `size:${index}`, title: task.estimate?.estimate_value?.trim() || NO_SIZE_GROUP_TITLE, order: index === 0 ? LAST : index };
   });
-
 export function buildTableSectionsForGrouping(
   sections: ISection[],
   grouping: TableGrouping,
