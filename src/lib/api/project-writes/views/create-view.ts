@@ -10,10 +10,10 @@ import { TCreate_view_body } from "@/models/Views/model";
 import getProjectView, { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
+import { tableViewSettingsForWrite, tableViewWriteData } from "./gate-table-view-settings";
 import {
   getBoardLayoutRequestUpdate,
   sanitizeBoardLayout,
-  sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { boardColumnsForProject } from "@/utils/controllers/section/viewHelpers";
 import { viewColumnsToWrite } from "@/utils/controllers/section/viewColumnVisibility";
@@ -113,10 +113,7 @@ const route = taskWriteRoute({
         );
       }
 
-      const sanitizedTableSort = sanitizeTableSort(
-        view_settings.table_sort_column,
-        view_settings.table_sort_direction
-      );
+      const tableSettings = await tableViewSettingsForWrite(userId, view_settings as Record<string, unknown>, null);
       const sanitizedTableGroupBy =
         (await gatedTableGroupByForViewWrite(view_settings.table_group_by, userId)) ?? "column";
       const sanitizedBoardFilters = sanitizeBoardFilters(
@@ -144,8 +141,7 @@ const route = taskWriteRoute({
             board_empty_sections: view_settings.board_empty_sections,
             board_staleness: view_settings.board_staleness ?? null,
             board_show_archived: view_settings.board_show_archived ?? null,
-            table_sort_column: sanitizedTableSort.column,
-            table_sort_direction: sanitizedTableSort.direction,
+            ...tableViewWriteData(tableSettings),
             table_group_by: sanitizedTableGroupBy,
             board_layout: sanitizeBoardLayout(view_settings.board_layout),
             visibility,
@@ -173,8 +169,7 @@ const route = taskWriteRoute({
                 ...(view_settings.board_show_archived === undefined
                   ? {}
                   : { board_show_archived: view_settings.board_show_archived ?? null }),
-                table_sort_column: sanitizedTableSort.column,
-                table_sort_direction: sanitizedTableSort.direction,
+                ...tableViewWriteData(tableSettings),
                 table_group_by: sanitizedTableGroupBy,
                 ...getBoardLayoutRequestUpdate(view_settings),
                 visibility,

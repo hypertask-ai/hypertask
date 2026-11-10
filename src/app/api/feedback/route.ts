@@ -6,11 +6,14 @@ import { escapeHtml } from "@/utils/htmlEscape";
 import assigneesAssign from "@/utils/controllers/assignees/assign";
 import { createProvisionedTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { HYPERTASKS_STORAGE_PUBLIC_BASE_URL } from "@/lib/storage/hypertasksS3";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8887_FEEDBACK_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
 import { NextRequest, NextResponse } from "next/server";
 
 const FEEDBACK_PROJECT_ID = 15;
 const FEEDBACK_SECTION_ID = 4389;
 const FEEDBACK_LABEL_VALUE = "user-feedback";
+const BRAIN_LABEL_VALUE = "brain-medium";
 const FEEDBACK_PRIORITY_INDEX = 1;
 const MAX_FEEDBACK_LENGTH = 5000;
 const MAX_FEEDBACK_HTML_LENGTH = 20000;
@@ -116,6 +119,20 @@ function feedbackDescription(
   return `${body}<p><strong>From:</strong> ${escapeHtml(displayName)} (${escapeHtml(user.email)}) — userId ${user.id}</p>${contextBlock}${screenshot}`;
 }
 
+async function labelIdFor(value: string) {
+  const existing = await prisma.label.findFirst({
+    where: { projectId: FEEDBACK_PROJECT_ID, value },
+    select: { id: true },
+  });
+  return (
+    existing ??
+    (await prisma.label.create({
+      data: { value, projectId: FEEDBACK_PROJECT_ID },
+      select: { id: true },
+    }))
+  ).id;
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSessionUser(request.headers);
   if (!session) {
@@ -190,7 +207,11 @@ export async function POST(request: NextRequest) {
   ) as FeedbackContext;
 
   try {
-    const [user, project, label] = await Promise.all([
+    const brainTag = await isFeatureEnabled(
+      HTPR_8887_FEEDBACK_BRAIN_TAG_FLAG,
+      session.userId
+    );
+    const [user, project, labelIds] = await Promise.all([
       prisma.user.findUnique({
         where: { id: session.userId },
         select: { id: true, displayName: true, email: true },
@@ -211,24 +232,17 @@ export async function POST(request: NextRequest) {
           },
         },
       }),
-      prisma.label.findFirst({
-        where: { projectId: FEEDBACK_PROJECT_ID, value: FEEDBACK_LABEL_VALUE },
-        select: { id: true },
-      }),
+      Promise.all(
+        [FEEDBACK_LABEL_VALUE, ...(brainTag ? [BRAIN_LABEL_VALUE] : [])].map(
+          labelIdFor
+        )
+      ),
     ]);
 
     const section = project?.section[0];
     if (!user || !project?.uniqueIdentifier || !section) {
       throw new Error("Feedback destination is not configured");
     }
-    const labelId =
-      label?.id ??
-      (
-        await prisma.label.create({
-          data: { value: FEEDBACK_LABEL_VALUE, projectId: FEEDBACK_PROJECT_ID },
-          select: { id: true },
-        })
-      ).id;
 
     const titleSource = isHtml
       ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
@@ -248,7 +262,7 @@ export async function POST(request: NextRequest) {
       sectionTitle: section.section_title,
       projectIdentifier: project.uniqueIdentifier,
       createDrafts: false,
-      labelIds: [labelId],
+      labelIds,
       priorityIndex: FEEDBACK_PRIORITY_INDEX,
     });
 

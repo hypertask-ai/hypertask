@@ -11,6 +11,11 @@ function stubModule(relativePath, exports) {
 }
 
 const calls = { sectionWhere: null, labelFindWhere: null, labelCreates: [], createTaskCoreArgs: null }
+const flag = { brain: false }
+
+stubModule('src/lib/flags.ts', {
+  isFeatureEnabled: async (key) => key === 'htpr-8887-feedback-brain-tag' && flag.brain,
+})
 
 stubModule('src/lib/auth/getSessionUser.ts', {
   getSessionUser: async () => ({ userId: 6 }),
@@ -123,6 +128,54 @@ test('feedback submission creates the user-feedback label when it does not exist
     assert.deepEqual(calls.labelCreates[0].data, { value: 'user-feedback', projectId: 15 })
     assert.deepEqual(calls.createTaskCoreArgs.labelIds, ['label-created'])
   } finally {
+    prismaStub.label.findFirst = originalFindFirst
+  }
+})
+
+test('feedback submission tags brain-medium on a new ticket when the flag is on', async () => {
+  flag.brain = true
+  const prismaStub = require.cache[path.join(root, 'src/lib/prisma.ts')].exports.default
+  const originalFindFirst = prismaStub.label.findFirst
+  prismaStub.label.findFirst = async (args) => {
+    calls.labelFindWhere = args.where
+    if (args.where.value === 'brain-medium') return { id: 'label-brain-medium' }
+    return { id: 'label-user-feedback' }
+  }
+  calls.labelCreates.length = 0
+
+  try {
+    const response = await POST(feedbackRequest({ text: 'The board check is red', kind: 'Bug' }))
+    const body = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(body.success, true)
+    assert.equal(calls.labelCreates.length, 0)
+    assert.deepEqual(calls.createTaskCoreArgs.labelIds, ['label-user-feedback', 'label-brain-medium'])
+  } finally {
+    flag.brain = false
+    prismaStub.label.findFirst = originalFindFirst
+  }
+})
+
+test('feedback submission creates brain-medium when that label is missing', async () => {
+  flag.brain = true
+  const prismaStub = require.cache[path.join(root, 'src/lib/prisma.ts')].exports.default
+  const originalFindFirst = prismaStub.label.findFirst
+  prismaStub.label.findFirst = async (args) => {
+    if (args.where.value === 'user-feedback') return { id: 'label-user-feedback' }
+    return null
+  }
+  calls.labelCreates.length = 0
+
+  try {
+    const response = await POST(feedbackRequest({ text: 'Need a brain tag', kind: 'Bug' }))
+    assert.equal(response.status, 200)
+    assert.deepEqual(calls.labelCreates.map((created) => created.data), [
+      { value: 'brain-medium', projectId: 15 },
+    ])
+    assert.deepEqual(calls.createTaskCoreArgs.labelIds, ['label-user-feedback', 'label-created'])
+  } finally {
+    flag.brain = false
     prismaStub.label.findFirst = originalFindFirst
   }
 })

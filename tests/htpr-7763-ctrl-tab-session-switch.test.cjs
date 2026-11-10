@@ -110,7 +110,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     "@/components/AI_CHAT/MessageList": { MessageList: "MessageList" },
     "@/components/AI_CHAT/WelcomeScreen": { WelcomeScreen: "WelcomeScreen" },
     "@/hooks/MultiPages/useGetAllTeamsMinimal": { useGetAllTeamsMinimal: () => ({ data: [] }) },
-    "@/hooks/useFlag": { useFlag: key => key === FLAG ? enabled : paging },
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-8963-sidebar-sections" ? false : key === FLAG ? enabled : paging },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/ai/composeIntroTaskId": { composeIntroTaskId: () => undefined },
     "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "paging" },
@@ -118,6 +118,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
     "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
     "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer": { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: "htpr-8824-ai-chat-one-composer" },
+    "@/lib/flags/definitions/htpr-8963-sidebar-sections": { HTPR_8963_SIDEBAR_SECTIONS_FLAG: "htpr-8963-sidebar-sections" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => context },
     "@/lib/aiChatDisplayMode": displayMode,
     "@/lib/state": {

@@ -19,6 +19,8 @@ const mocks = {
   "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
   "@/lib/flags/keys": {},
   "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
+  "@/lib/flags/definitions/htpr-8994-clear-waiting-agent": { HTPR_8994_CLEAR_WAITING_AGENT_FLAG: "htpr-8994-clear-waiting-agent" },
+  "@/lib/waitingOn": { applyWaitingOnWrite: (task, fields) => ({ ...task, ...fields }) },
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
   "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
@@ -188,7 +190,8 @@ test("ticket AI commands triggered before the runtime is ready wait without bloc
     });
     await React.act(async () => { await Promise.all([summary, branch]); });
     assert.equal(sent.length, 1);
-    assert.match(sent[0], /Summarize this ticket/);
+    assert.match(sent[0], /what it is/);
+    assert.match(sent[0], /No Next action line/);
     assert.equal(started, 1);
     assert.deepEqual(inserted, ["<blockquote>QA comment</blockquote>"]);
   } finally {

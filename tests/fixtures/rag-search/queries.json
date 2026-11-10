@@ -1,0 +1,1234 @@
+{
+ "boardId": 15,
+ "board": "Hypertask Product",
+ "capturedAt": "2026-11-10",
+ "note": "Query and answer pairs built from board 15 only. Duplicate pairs come from the board's own duplicate tickets; every other pair was written from the ticket's title and body by the runner that built this set. No client board content is used.",
+ "pairs": [
+  {
+   "id": "q001",
+   "kind": "duplicate",
+   "query": "in the ctrl+j popup tab does not move between search and new task",
+   "expected": [
+    "HTPR-8996",
+    "HTPR-8945"
+   ]
+  },
+  {
+   "id": "q002",
+   "kind": "duplicate",
+   "query": "own key only mode is the same work as the own key ticket",
+   "expected": [
+    "HTPR-7844",
+    "HTPR-8027"
+   ]
+  },
+  {
+   "id": "q003",
+   "kind": "paraphrase",
+   "query": "chat answers keep citing tickets we deleted",
+   "expected": [
+    "HTPR-9014"
+   ]
+  },
+  {
+   "id": "q004",
+   "kind": "paraphrase",
+   "query": "the comments that match never appear in an answer about a ticket",
+   "expected": [
+    "HTPR-9013"
+   ]
+  },
+  {
+   "id": "q005",
+   "kind": "paraphrase",
+   "query": "page search still goes through the slow old query instead of the index",
+   "expected": [
+    "HTPR-9017"
+   ]
+  },
+  {
+   "id": "q006",
+   "kind": "paraphrase",
+   "query": "search index not updated when someone edits a ticket",
+   "expected": [
+    "HTPR-9016"
+   ]
+  },
+  {
+   "id": "q007",
+   "kind": "paraphrase",
+   "query": "repeated spend lookups make ai search slow",
+   "expected": [
+    "HTPR-9015"
+   ]
+  },
+  {
+   "id": "q008",
+   "kind": "paraphrase",
+   "query": "nothing measures whether search returns the right ticket",
+   "expected": [
+    "HTPR-9012"
+   ]
+  },
+  {
+   "id": "q009",
+   "kind": "paraphrase",
+   "query": "make auto the model everyone starts on when they never picked one",
+   "expected": [
+    "HTPR-9019"
+   ]
+  },
+  {
+   "id": "q010",
+   "kind": "paraphrase",
+   "query": "nobody should have to choose a model, default to the routing one",
+   "expected": [
+    "HTPR-8995"
+   ]
+  },
+  {
+   "id": "q011",
+   "kind": "paraphrase",
+   "query": "the tips bar spacing is off against the style guide",
+   "expected": [
+    "HTPR-9018"
+   ]
+  },
+  {
+   "id": "q012",
+   "kind": "paraphrase",
+   "query": "right click a row should offer the same quick action as the button",
+   "expected": [
+    "HTPR-9011"
+   ]
+  },
+  {
+   "id": "q013",
+   "kind": "paraphrase",
+   "query": "task writer should learn the labels this board uses",
+   "expected": [
+    "HTPR-9010"
+   ]
+  },
+  {
+   "id": "q014",
+   "kind": "paraphrase",
+   "query": "guess priority from words like urgent or whenever in the note",
+   "expected": [
+    "HTPR-9009"
+   ]
+  },
+  {
+   "id": "q015",
+   "kind": "paraphrase",
+   "query": "moving with j and k loses the card you were on",
+   "expected": [
+    "HTPR-9007"
+   ]
+  },
+  {
+   "id": "q016",
+   "kind": "paraphrase",
+   "query": "new task created with n does not appear in the column i pressed it in",
+   "expected": [
+    "HTPR-9006"
+   ]
+  },
+  {
+   "id": "q017",
+   "kind": "paraphrase",
+   "query": "same lightning entry point for the command palette across the app",
+   "expected": [
+    "HTPR-9005"
+   ]
+  },
+  {
+   "id": "q018",
+   "kind": "paraphrase",
+   "query": "add a reasoning toggle and how hard the model thinks",
+   "expected": [
+    "HTPR-9004"
+   ]
+  },
+  {
+   "id": "q019",
+   "kind": "paraphrase",
+   "query": "the page editor and page view need a new design",
+   "expected": [
+    "HTPR-9003"
+   ]
+  },
+  {
+   "id": "q020",
+   "kind": "paraphrase",
+   "query": "press c then ctrl+j and the rewrite should open in the description",
+   "expected": [
+    "HTPR-9002"
+   ]
+  },
+  {
+   "id": "q021",
+   "kind": "paraphrase",
+   "query": "kill every round corner and use four pixel radii",
+   "expected": [
+    "HTPR-9000"
+   ]
+  },
+  {
+   "id": "q022",
+   "kind": "paraphrase",
+   "query": "long ticket needs a quick way back to the top, g then g",
+   "expected": [
+    "HTPR-8998"
+   ]
+  },
+  {
+   "id": "q023",
+   "kind": "paraphrase",
+   "query": "the ticket number disappeared from the properties block",
+   "expected": [
+    "HTPR-8997"
+   ]
+  },
+  {
+   "id": "q024",
+   "kind": "paraphrase",
+   "query": "remove the person a ticket is waiting on",
+   "expected": [
+    "HTPR-8994"
+   ]
+  },
+  {
+   "id": "q025",
+   "kind": "paraphrase",
+   "query": "side panel of a ticket lists fields with nothing in them",
+   "expected": [
+    "HTPR-8991"
+   ]
+  },
+  {
+   "id": "q026",
+   "kind": "paraphrase",
+   "query": "two tickets with the same name should fail the check quickly",
+   "expected": [
+    "HTPR-8990"
+   ]
+  },
+  {
+   "id": "q027",
+   "kind": "paraphrase",
+   "query": "saved view came back without its columns after the repair job",
+   "expected": [
+    "HTPR-8989"
+   ]
+  },
+  {
+   "id": "q028",
+   "kind": "paraphrase",
+   "query": "open more than one ai chat at the same time",
+   "expected": [
+    "HTPR-8988"
+   ]
+  },
+  {
+   "id": "q029",
+   "kind": "paraphrase",
+   "query": "ai cannot read the tickets that block another ticket on board 15",
+   "expected": [
+    "HTPR-8987"
+   ]
+  },
+  {
+   "id": "q030",
+   "kind": "paraphrase",
+   "query": "a team that turned ai off still gets skill offers",
+   "expected": [
+    "HTPR-8984"
+   ]
+  },
+  {
+   "id": "q031",
+   "kind": "paraphrase",
+   "query": "question and ticket checks should limit text length and stop slow patterns",
+   "expected": [
+    "HTPR-8982"
+   ]
+  },
+  {
+   "id": "q032",
+   "kind": "paraphrase",
+   "query": "agent names show up when a ticket waits on an agent",
+   "expected": [
+    "HTPR-8981"
+   ]
+  },
+  {
+   "id": "q033",
+   "kind": "paraphrase",
+   "query": "email not verified should end the session and stop emails",
+   "expected": [
+    "HTPR-8979"
+   ]
+  },
+  {
+   "id": "q034",
+   "kind": "paraphrase",
+   "query": "upstash is expensive, agents should queue elsewhere",
+   "expected": [
+    "HTPR-8978"
+   ]
+  },
+  {
+   "id": "q035",
+   "kind": "paraphrase",
+   "query": "postgres bill grew, list the queries doing the damage",
+   "expected": [
+    "HTPR-8977"
+   ]
+  },
+  {
+   "id": "q036",
+   "kind": "paraphrase",
+   "query": "select cards with the mouse using ctrl or shift click",
+   "expected": [
+    "HTPR-8976"
+   ]
+  },
+  {
+   "id": "q037",
+   "kind": "paraphrase",
+   "query": "ctrl+j inside the editor should open the ai writer and the mic sits right",
+   "expected": [
+    "HTPR-8975"
+   ]
+  },
+  {
+   "id": "q038",
+   "kind": "paraphrase",
+   "query": "table view, pick what to group rows by",
+   "expected": [
+    "HTPR-8974"
+   ]
+  },
+  {
+   "id": "q039",
+   "kind": "paraphrase",
+   "query": "each table view should remember its columns and share one sort",
+   "expected": [
+    "HTPR-8973"
+   ]
+  },
+  {
+   "id": "q040",
+   "kind": "paraphrase",
+   "query": "card menu for settings with a default title and default people",
+   "expected": [
+    "HTPR-8971"
+   ]
+  },
+  {
+   "id": "q041",
+   "kind": "paraphrase",
+   "query": "cards look noisy, calm them down without dropping anything",
+   "expected": [
+    "HTPR-8970"
+   ]
+  },
+  {
+   "id": "q042",
+   "kind": "paraphrase",
+   "query": "chat summary ends with a next action i never asked for",
+   "expected": [
+    "HTPR-8966"
+   ]
+  },
+  {
+   "id": "q043",
+   "kind": "paraphrase",
+   "query": "hovering a name pops a card, remove that",
+   "expected": [
+    "HTPR-8964"
+   ]
+  },
+  {
+   "id": "q044",
+   "kind": "paraphrase",
+   "query": "collapse sidebar groups and pin favourite threads",
+   "expected": [
+    "HTPR-8963"
+   ]
+  },
+  {
+   "id": "q045",
+   "kind": "paraphrase",
+   "query": "select bar needs an open actions button drawn like the rest of the app",
+   "expected": [
+    "HTPR-8961"
+   ]
+  },
+  {
+   "id": "q046",
+   "kind": "paraphrase",
+   "query": "selection checkbox should not push the card content around",
+   "expected": [
+    "HTPR-8960"
+   ]
+  },
+  {
+   "id": "q047",
+   "kind": "paraphrase",
+   "query": "chat model menu has too much going on, auto should sit first",
+   "expected": [
+    "HTPR-8957"
+   ]
+  },
+  {
+   "id": "q048",
+   "kind": "paraphrase",
+   "query": "chat header title should open the list of past chats",
+   "expected": [
+    "HTPR-8956"
+   ]
+  },
+  {
+   "id": "q049",
+   "kind": "paraphrase",
+   "query": "github app for boards needs creating and keys for production",
+   "expected": [
+    "HTPR-8950"
+   ]
+  },
+  {
+   "id": "q050",
+   "kind": "paraphrase",
+   "query": "the updates list has been frozen for three weeks",
+   "expected": [
+    "HTPR-8948"
+   ]
+  },
+  {
+   "id": "q051",
+   "kind": "paraphrase",
+   "query": "an agent update call came back with a 500 from the api",
+   "expected": [
+    "HTPR-8946"
+   ]
+  },
+  {
+   "id": "q052",
+   "kind": "paraphrase",
+   "query": "the count on a view tab includes cards from columns that are hidden",
+   "expected": [
+    "HTPR-8944"
+   ]
+  },
+  {
+   "id": "q053",
+   "kind": "paraphrase",
+   "query": "acceptance list in the proof and a second runner redoes it",
+   "expected": [
+    "HTPR-8941"
+   ]
+  },
+  {
+   "id": "q054",
+   "kind": "paraphrase",
+   "query": "drive boards, tickets, comments and flags without a person clicking",
+   "expected": [
+    "HTPR-8940"
+   ]
+  },
+  {
+   "id": "q055",
+   "kind": "paraphrase",
+   "query": "drive the ai chat and the ctrl+j popup without a person clicking",
+   "expected": [
+    "HTPR-8939"
+   ]
+  },
+  {
+   "id": "q056",
+   "kind": "paraphrase",
+   "query": "stop merging a change nobody ran in the real app",
+   "expected": [
+    "HTPR-8938"
+   ]
+  },
+  {
+   "id": "q057",
+   "kind": "paraphrase",
+   "query": "one flag stub that every test shares instead of mocks",
+   "expected": [
+    "HTPR-8936"
+   ]
+  },
+  {
+   "id": "q058",
+   "kind": "paraphrase",
+   "query": "block pull requests that are too big or badly titled",
+   "expected": [
+    "HTPR-8935"
+   ]
+  },
+  {
+   "id": "q059",
+   "kind": "paraphrase",
+   "query": "shortcut to select every card in one column",
+   "expected": [
+    "HTPR-8929"
+   ]
+  },
+  {
+   "id": "q060",
+   "kind": "paraphrase",
+   "query": "one set of ticket writing rules for every agent",
+   "expected": [
+    "HTPR-8905"
+   ]
+  },
+  {
+   "id": "q061",
+   "kind": "paraphrase",
+   "query": "stop burning ai money on work that only agents touch",
+   "expected": [
+    "HTPR-8904"
+   ]
+  },
+  {
+   "id": "q062",
+   "kind": "paraphrase",
+   "query": "feedback tickets arrive with no brain tag on them",
+   "expected": [
+    "HTPR-8887"
+   ]
+  },
+  {
+   "id": "q063",
+   "kind": "paraphrase",
+   "query": "a lead is not allowed to turn a switch off",
+   "expected": [
+    "HTPR-8882"
+   ]
+  },
+  {
+   "id": "q064",
+   "kind": "paraphrase",
+   "query": "watch new model classes every day",
+   "expected": [
+    "HTPR-8876"
+   ]
+  },
+  {
+   "id": "q065",
+   "kind": "paraphrase",
+   "query": "cli search takes positional words while other commands take flags",
+   "expected": [
+    "HTPR-8869"
+   ]
+  },
+  {
+   "id": "q066",
+   "kind": "paraphrase",
+   "query": "ctrl+m from the chat box should land in the comment box",
+   "expected": [
+    "HTPR-8867"
+   ]
+  },
+  {
+   "id": "q067",
+   "kind": "paraphrase",
+   "query": "one log line per chat request so we can read them",
+   "expected": [
+    "HTPR-8863"
+   ]
+  },
+  {
+   "id": "q068",
+   "kind": "paraphrase",
+   "query": "retire the snooze switch on my tasks",
+   "expected": [
+    "HTPR-8857"
+   ]
+  },
+  {
+   "id": "q069",
+   "kind": "paraphrase",
+   "query": "when can a waiting feature be released for good",
+   "expected": [
+    "HTPR-8843"
+   ]
+  },
+  {
+   "id": "q070",
+   "kind": "paraphrase",
+   "query": "QA rejected my completion heading as a robot status line",
+   "expected": [
+    "HTPR-8832"
+   ]
+  },
+  {
+   "id": "q071",
+   "kind": "paraphrase",
+   "query": "every composer should have one mic and a white send",
+   "expected": [
+    "HTPR-8824"
+   ]
+  },
+  {
+   "id": "q072",
+   "kind": "paraphrase",
+   "query": "linking help lets you pass a relation type that is ignored",
+   "expected": [
+    "HTPR-8779"
+   ]
+  },
+  {
+   "id": "q073",
+   "kind": "paraphrase",
+   "query": "payment, mail and ai credentials from before are still valid",
+   "expected": [
+    "HTPR-8746"
+   ]
+  },
+  {
+   "id": "q074",
+   "kind": "paraphrase",
+   "query": "attack our own app copy and see what breaks",
+   "expected": [
+    "HTPR-8745"
+   ]
+  },
+  {
+   "id": "q075",
+   "kind": "paraphrase",
+   "query": "move a batch of tickets to a different board",
+   "expected": [
+    "HTPR-8737"
+   ]
+  },
+  {
+   "id": "q076",
+   "kind": "paraphrase",
+   "query": "the old color themes should sit beside graphite 2",
+   "expected": [
+    "HTPR-8710"
+   ]
+  },
+  {
+   "id": "q077",
+   "kind": "paraphrase",
+   "query": "production deploy killed by memory again",
+   "expected": [
+    "HTPR-8459"
+   ]
+  },
+  {
+   "id": "q078",
+   "kind": "paraphrase",
+   "query": "keep a month of request logs in cloudflare r2",
+   "expected": [
+    "HTPR-8338"
+   ]
+  },
+  {
+   "id": "q079",
+   "kind": "paraphrase",
+   "query": "a runner must never set a switch to off",
+   "expected": [
+    "HTPR-8232"
+   ]
+  },
+  {
+   "id": "q080",
+   "kind": "paraphrase",
+   "query": "hide tickets carrying a tag from a view",
+   "expected": [
+    "HTPR-8171"
+   ]
+  },
+  {
+   "id": "q081",
+   "kind": "paraphrase",
+   "query": "the verify pipeline is down",
+   "expected": [
+    "HTPR-8150"
+   ]
+  },
+  {
+   "id": "q082",
+   "kind": "paraphrase",
+   "query": "saving a task from ctrl+j feels slow",
+   "expected": [
+    "HTPR-8095"
+   ]
+  },
+  {
+   "id": "q083",
+   "kind": "paraphrase",
+   "query": "desktop app should sign in through the web routes",
+   "expected": [
+    "HTPR-8064"
+   ]
+  },
+  {
+   "id": "q084",
+   "kind": "paraphrase",
+   "query": "merge two tags that mean the same thing with undo",
+   "expected": [
+    "HTPR-8051"
+   ]
+  },
+  {
+   "id": "q085",
+   "kind": "paraphrase",
+   "query": "always use this key toggle in ai settings",
+   "expected": [
+    "HTPR-8049"
+   ]
+  },
+  {
+   "id": "q086",
+   "kind": "paraphrase",
+   "query": "pick which agent session the chat talks to",
+   "expected": [
+    "HTPR-8048"
+   ]
+  },
+  {
+   "id": "q087",
+   "kind": "paraphrase",
+   "query": "one button clears the pure updates out of the inbox",
+   "expected": [
+    "HTPR-8046"
+   ]
+  },
+  {
+   "id": "q088",
+   "kind": "paraphrase",
+   "query": "triage the inbox from ctrl+k and let ai throw away noise",
+   "expected": [
+    "HTPR-8044"
+   ]
+  },
+  {
+   "id": "q089",
+   "kind": "paraphrase",
+   "query": "chat asks a question and should offer buttons to answer it",
+   "expected": [
+    "HTPR-8043"
+   ]
+  },
+  {
+   "id": "q090",
+   "kind": "paraphrase",
+   "query": "the daily canary charges our own trial key",
+   "expected": [
+    "HTPR-8037"
+   ]
+  },
+  {
+   "id": "q091",
+   "kind": "paraphrase",
+   "query": "mobile chat should be full screen with a list of chats",
+   "expected": [
+    "HTPR-8032"
+   ]
+  },
+  {
+   "id": "q092",
+   "kind": "paraphrase",
+   "query": "new task on a phone sits under the status bar and the dictation bar is wrong",
+   "expected": [
+    "HTPR-8029"
+   ]
+  },
+  {
+   "id": "q093",
+   "kind": "paraphrase",
+   "query": "dictation is dropped when the task writer saves on mobile",
+   "expected": [
+    "HTPR-8028"
+   ]
+  },
+  {
+   "id": "q094",
+   "kind": "paraphrase",
+   "query": "a team that brings a key should never touch ours",
+   "expected": [
+    "HTPR-8027"
+   ]
+  },
+  {
+   "id": "q095",
+   "kind": "paraphrase",
+   "query": "make a project view out of tags",
+   "expected": [
+    "HTPR-8024"
+   ]
+  },
+  {
+   "id": "q096",
+   "kind": "paraphrase",
+   "query": "free plan sign up button is covered while chat is open",
+   "expected": [
+    "HTPR-7983"
+   ]
+  },
+  {
+   "id": "q097",
+   "kind": "paraphrase",
+   "query": "delete the legacy billing and trial screens",
+   "expected": [
+    "HTPR-7981"
+   ]
+  },
+  {
+   "id": "q098",
+   "kind": "paraphrase",
+   "query": "settings should show the plan, upgrade and invoice management",
+   "expected": [
+    "HTPR-7980"
+   ]
+  },
+  {
+   "id": "q099",
+   "kind": "paraphrase",
+   "query": "the chips that appear after a ticket is created need restyling",
+   "expected": [
+    "HTPR-7979"
+   ]
+  },
+  {
+   "id": "q100",
+   "kind": "paraphrase",
+   "query": "flag old cards and limit work in progress per column",
+   "expected": [
+    "HTPR-7975"
+   ]
+  },
+  {
+   "id": "q101",
+   "kind": "paraphrase",
+   "query": "calendar filter and sort state is only shown with colour",
+   "expected": [
+    "HTPR-7962"
+   ]
+  },
+  {
+   "id": "q102",
+   "kind": "paraphrase",
+   "query": "a guide that shows up in the sidebar and teaches the product",
+   "expected": [
+    "HTPR-7946"
+   ]
+  },
+  {
+   "id": "q103",
+   "kind": "paraphrase",
+   "query": "stop signup abuse with a captcha and limits per ip",
+   "expected": [
+    "HTPR-7926"
+   ]
+  },
+  {
+   "id": "q104",
+   "kind": "paraphrase",
+   "query": "free teams get two dollars of ai and only on boards they used",
+   "expected": [
+    "HTPR-7925"
+   ]
+  },
+  {
+   "id": "q105",
+   "kind": "paraphrase",
+   "query": "there are no test teams for each plan",
+   "expected": [
+    "HTPR-7918"
+   ]
+  },
+  {
+   "id": "q106",
+   "kind": "paraphrase",
+   "query": "agent setup should live in the repo or the cli, one path",
+   "expected": [
+    "HTPR-7876"
+   ]
+  },
+  {
+   "id": "q107",
+   "kind": "paraphrase",
+   "query": "agent comments never reach people because they have no kind",
+   "expected": [
+    "HTPR-7654"
+   ]
+  },
+  {
+   "id": "q108",
+   "kind": "paraphrase",
+   "query": "ctrl+k placeholder shows three dots instead of one ellipsis",
+   "expected": [
+    "HTPR-7871"
+   ]
+  },
+  {
+   "id": "q109",
+   "kind": "paraphrase",
+   "query": "chat prompt repeats sections and names tools that do not exist",
+   "expected": [
+    "HTPR-7861"
+   ]
+  },
+  {
+   "id": "q110",
+   "kind": "paraphrase",
+   "query": "thinking should be off unless a feature asks for it",
+   "expected": [
+    "HTPR-7854"
+   ]
+  },
+  {
+   "id": "q111",
+   "kind": "paraphrase",
+   "query": "a chat turn should stop after fewer steps",
+   "expected": [
+    "HTPR-7849"
+   ]
+  },
+  {
+   "id": "q112",
+   "kind": "paraphrase",
+   "query": "summaries regenerate whenever anything on the task changes",
+   "expected": [
+    "HTPR-7848"
+   ]
+  },
+  {
+   "id": "q113",
+   "kind": "paraphrase",
+   "query": "signing out does nothing and the next sign in lands in the wrong account",
+   "expected": [
+    "HTPR-7799"
+   ]
+  },
+  {
+   "id": "q114",
+   "kind": "paraphrase",
+   "query": "a small meter that shows ai allowance running out",
+   "expected": [
+    "HTPR-7797"
+   ]
+  },
+  {
+   "id": "q115",
+   "kind": "paraphrase",
+   "query": "admin page per client for token source, models and cap",
+   "expected": [
+    "HTPR-7795"
+   ]
+  },
+  {
+   "id": "q116",
+   "kind": "paraphrase",
+   "query": "let gmail and calendar push events into a board",
+   "expected": [
+    "HTPR-7790"
+   ]
+  },
+  {
+   "id": "q117",
+   "kind": "paraphrase",
+   "query": "flags column tickets have no flag label and no link",
+   "expected": [
+    "HTPR-7789"
+   ]
+  },
+  {
+   "id": "q118",
+   "kind": "paraphrase",
+   "query": "a page that breaks ai usage down per team",
+   "expected": [
+    "HTPR-7788"
+   ]
+  },
+  {
+   "id": "q119",
+   "kind": "paraphrase",
+   "query": "delete four kinds of personal data we never use",
+   "expected": [
+    "HTPR-7786"
+   ]
+  },
+  {
+   "id": "q120",
+   "kind": "paraphrase",
+   "query": "several floating chats that dock to the bottom and show running",
+   "expected": [
+    "HTPR-7771"
+   ]
+  },
+  {
+   "id": "q121",
+   "kind": "paraphrase",
+   "query": "every chat action should have a keyboard shortcut",
+   "expected": [
+    "HTPR-7766"
+   ]
+  },
+  {
+   "id": "q122",
+   "kind": "paraphrase",
+   "query": "sidebar chat should spin while it is answering",
+   "expected": [
+    "HTPR-7764"
+   ]
+  },
+  {
+   "id": "q123",
+   "kind": "paraphrase",
+   "query": "ai says it cannot read images",
+   "expected": [
+    "HTPR-7761"
+   ]
+  },
+  {
+   "id": "q124",
+   "kind": "paraphrase",
+   "query": "premium models on our own keys with a warning near the limit",
+   "expected": [
+    "HTPR-7746"
+   ]
+  },
+  {
+   "id": "q125",
+   "kind": "paraphrase",
+   "query": "built in skills that come with a new board",
+   "expected": [
+    "HTPR-7745"
+   ]
+  },
+  {
+   "id": "q126",
+   "kind": "paraphrase",
+   "query": "chat with an agent from the cli works but the fallback path does not",
+   "expected": [
+    "HTPR-7742"
+   ]
+  },
+  {
+   "id": "q127",
+   "kind": "paraphrase",
+   "query": "hover an agent name and start a direct chat with it",
+   "expected": [
+    "HTPR-7737"
+   ]
+  },
+  {
+   "id": "q128",
+   "kind": "paraphrase",
+   "query": "agent sessions should be a dropdown of their own",
+   "expected": [
+    "HTPR-7735"
+   ]
+  },
+  {
+   "id": "q129",
+   "kind": "paraphrase",
+   "query": "add baseten as a bring your own key provider",
+   "expected": [
+    "HTPR-7732"
+   ]
+  },
+  {
+   "id": "q130",
+   "kind": "paraphrase",
+   "query": "use the allowance before the customer key, on every provider",
+   "expected": [
+    "HTPR-7731"
+   ]
+  },
+  {
+   "id": "q131",
+   "kind": "paraphrase",
+   "query": "when the allowance runs out offer a button to review ai options",
+   "expected": [
+    "HTPR-7679"
+   ]
+  },
+  {
+   "id": "q132",
+   "kind": "paraphrase",
+   "query": "what skills should do for agents limited to one team",
+   "expected": [
+    "HTPR-7663"
+   ]
+  },
+  {
+   "id": "q133",
+   "kind": "paraphrase",
+   "query": "list what we keep forever and say when it gets deleted",
+   "expected": [
+    "HTPR-7625"
+   ]
+  },
+  {
+   "id": "q134",
+   "kind": "paraphrase",
+   "query": "ask the ai to change a setting for me",
+   "expected": [
+    "HTPR-7622"
+   ]
+  },
+  {
+   "id": "q135",
+   "kind": "paraphrase",
+   "query": "slash skills should carry comment context into the side chat",
+   "expected": [
+    "HTPR-7612"
+   ]
+  },
+  {
+   "id": "q136",
+   "kind": "paraphrase",
+   "query": "the grok bot could not onboard itself",
+   "expected": [
+    "HTPR-7574"
+   ]
+  },
+  {
+   "id": "q137",
+   "kind": "paraphrase",
+   "query": "log an agent in with a code used once",
+   "expected": [
+    "HTPR-7552"
+   ]
+  },
+  {
+   "id": "q138",
+   "kind": "paraphrase",
+   "query": "connect github per board from the command palette so pull requests show",
+   "expected": [
+    "HTPR-7515"
+   ]
+  },
+  {
+   "id": "q139",
+   "kind": "paraphrase",
+   "query": "signup should land on the board with google or email in one click",
+   "expected": [
+    "HTPR-7511"
+   ]
+  },
+  {
+   "id": "q140",
+   "kind": "paraphrase",
+   "query": "81 agent board reads are still on the debt list",
+   "expected": [
+    "HTPR-7508"
+   ]
+  },
+  {
+   "id": "q141",
+   "kind": "paraphrase",
+   "query": "templates per ticket type filled in by the writer",
+   "expected": [
+    "HTPR-7472"
+   ]
+  },
+  {
+   "id": "q142",
+   "kind": "paraphrase",
+   "query": "cap the other places ai money leaves the account",
+   "expected": [
+    "HTPR-7394"
+   ]
+  },
+  {
+   "id": "q143",
+   "kind": "paraphrase",
+   "query": "rust desktop app pilot on a local database",
+   "expected": [
+    "HTPR-7381"
+   ]
+  },
+  {
+   "id": "q144",
+   "kind": "paraphrase",
+   "query": "the updates split in the inbox should be thought through again",
+   "expected": [
+    "HTPR-7340"
+   ]
+  },
+  {
+   "id": "q145",
+   "kind": "paraphrase",
+   "query": "cards should pulse while an agent is working on them",
+   "expected": [
+    "HTPR-7339"
+   ]
+  },
+  {
+   "id": "q146",
+   "kind": "paraphrase",
+   "query": "a signup that walks every funnel step once a day",
+   "expected": [
+    "HTPR-7294"
+   ]
+  },
+  {
+   "id": "q147",
+   "kind": "paraphrase",
+   "query": "an agent login reaches boards it was never given",
+   "expected": [
+    "HTPR-7146"
+   ]
+  },
+  {
+   "id": "q148",
+   "kind": "paraphrase",
+   "query": "agent card should float above the board instead of pushing columns down",
+   "expected": [
+    "HTPR-7041"
+   ]
+  },
+  {
+   "id": "q149",
+   "kind": "paraphrase",
+   "query": "marketplace listing for the slack app and a parity check",
+   "expected": [
+    "HTPR-6921"
+   ]
+  },
+  {
+   "id": "q150",
+   "kind": "paraphrase",
+   "query": "team scoped management keys",
+   "expected": [
+    "HTPR-6542"
+   ]
+  },
+  {
+   "id": "c001",
+   "kind": "deleted_canary",
+   "query": "who cleans the office kitchen this week and how do we swap turns",
+   "expected": [
+    "CANARY-1"
+   ]
+  },
+  {
+   "id": "c002",
+   "kind": "deleted_canary",
+   "query": "badge printer keeps jamming on the thick sticker paper",
+   "expected": [
+    "CANARY-2"
+   ]
+  },
+  {
+   "id": "c003",
+   "kind": "deleted_canary",
+   "query": "coat rack by reception fell over, where do lost umbrellas go",
+   "expected": [
+    "CANARY-3"
+   ]
+  }
+ ]
+}

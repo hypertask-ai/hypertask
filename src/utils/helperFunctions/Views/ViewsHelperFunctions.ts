@@ -623,6 +623,25 @@ export const getActiveBoardLayoutPreferenceFromProject = (
     return sanitizeBoardLayout(activeView?.board_layout);
 };
 
+const activeTableView = (project?: IProject | null) => {
+    const view = project?.project_view?.user_project_views?.[0]
+    return view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view
+}
+
+export const getActiveTableSortStackFromProject = (project?: IProject | null): { column: string; direction: "asc" | "desc" }[] => {
+    const stored = activeTableView(project)?.table_sort_stack
+    if (Array.isArray(stored) && stored.length) return stored as { column: string; direction: "asc" | "desc" }[]
+    const single = getActiveTableSortFromProject(project)
+    if (!single?.column || (single.direction !== "asc" && single.direction !== "desc")) return []
+    return [{ column: single.column, direction: single.direction }]
+}
+
+export const getActiveTableColumnsFromProject = (project?: IProject | null) => {
+    const saved = activeTableView(project)?.table_columns
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return null
+    return saved
+}
+
 export const getActiveTableSortFromProject = (project?: IProject | null): TTableSort => {
     const view = project?.project_view?.user_project_views?.[0]
     const activeView = view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view
