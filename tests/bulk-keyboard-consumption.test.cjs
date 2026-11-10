@@ -45,6 +45,7 @@ function fixture({ selected = true, isApple = false } = {}) {
     returnIfModalOrInputActive: () => false, selectedTasks, items: tasks,
     CommandMode: { OpenAssignModal: "assign", LabelModal: "label", MoveToColumn: "move" },
     clearSelection() {}, toggleTaskSelection() {}, selectAll() {}, selectAllEnabled: false,
+    columnSelectAllEnabled: false,
     openBulkCommand: mode => { bulkCommands.push(mode); cards[2].focus(); },
     bulkArchiveUndoAll: false, bulkArchiveInstantHide: false, onArchiveSelectedBatch: undefined,
     isProcessing: false, queryClient: { invalidateQueries() {}, refetchQueries() {} },
