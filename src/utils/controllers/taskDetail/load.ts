@@ -523,7 +523,10 @@ export async function fetchTaskDetail(
   const waitingAgent = publicWaitingAgent(task.waitingOnAgent, userId, task.projectId);
   let agentStatus = null;
   if (await isFeatureEnabled(HTPR_7339_AGENT_PULSE_DOT_FLAG, userId)) {
-    const [withAgentStatus] = await attachAgentStatus([{ id: task.id }]);
+    const [withAgentStatus] = await attachAgentStatus([{ id: task.id }], Date.now(), {
+      userId,
+      projectId: task.projectId,
+    });
     agentStatus = withAgentStatus.agentStatus;
   }
   return {

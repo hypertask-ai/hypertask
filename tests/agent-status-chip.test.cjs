@@ -33,6 +33,25 @@ const loadAttach = (runs) => {
   return { attachAgentStatus, calls };
 };
 
+test("private agent runs stay hidden from other board members", async () => {
+  const { attachAgentStatus } = loadAttach([
+    {
+      taskId: 1,
+      lastActivityAt: minutesAgo(1),
+      agent: {
+        displayName: "SECRET RUNNER",
+        userId: 99,
+        visibility: "PRIVATE",
+        members: [],
+      },
+    },
+  ]);
+  assert.deepEqual(
+    await attachAgentStatus([{ id: 1 }], NOW, { userId: 6, projectId: 15 }),
+    [{ id: 1, agentStatus: null }],
+  );
+});
+
 test("one batched run query serves any number of cards, newest run per task wins", async () => {
   const { attachAgentStatus, calls } = loadAttach([
     { taskId: 2, lastActivityAt: minutesAgo(1), agent: { displayName: "RUNNER 6" } },
