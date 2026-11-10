@@ -15,7 +15,7 @@ import {
 } from "@/app/api/ai/_lib/editorAi";
 import { getDesktopCliTokenUser, logDesktopCliAuthorization } from "@/lib/auth/desktopCliTokenUser";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
-import { normalizeTaskWriterLabels, validateTaskWriterLabelIds, extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
+import { normalizeTaskWriterLabels, finalizeTaskWriterLabelIds, extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
 import {
   AiFeatureDisabledError,
   AutoDescriptionSuggestionsDisabledError,
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       ));
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, skills, composeSkillsEnabled } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, brainLabels, skills, composeSkillsEnabled } =
       await prepareTaskWriterRun(body, userId);
     let titleOnly = false;
     if (body.requestKind === "auto-title") {
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         const { customFields: modelCustomFields, labelIds: modelLabelIds, ...task } = draft as typeof draft & { customFields?: unknown; labelIds?: unknown };
         const customFields = customFieldDefinitions?.length
           ? fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, modelCustomFields) : [];
-        const fieldValues = { ...(customFields.length ? { customFields } : {}), ...(boardLabelIds ? { labelIds: validateTaskWriterLabelIds(modelLabelIds, boardLabelIds) } : {}) };
+        const fieldValues = { ...(customFields.length ? { customFields } : {}), ...(boardLabelIds ? { labelIds: finalizeTaskWriterLabelIds(modelLabelIds, boardLabelIds, brainLabels) } : {}) };
         const filtered = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
         const description = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
         if (!dueDateContext) return { ...task, description, ...fieldValues };
@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
           if (titleOnly) {
             controller.enqueue(encoder.encode(draft));
           } else if (dueDateContext || boardLabelIds) {
-            const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds) : draft;
+            const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds, brainLabels) : draft;
             const dated = dueDateContext ? applyTaskWriterDueDate(labeled, dueDateContext).html : labeled;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));
           } else if (ticketTypeEnabled && held) {
