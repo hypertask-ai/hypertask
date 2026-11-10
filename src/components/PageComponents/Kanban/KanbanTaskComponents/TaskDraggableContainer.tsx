@@ -7,6 +7,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7614_SELECTED_CARD_BORDER_FLAG } from "@/lib/flags/keys";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
+import { HTPR_8960_BORDER_ONLY_SELECT_FLAG } from "@/lib/flags/definitions/htpr-8960-border-only-select";
 interface ITaskDraggableContainer {
   children: ReactNode;
   selectionControl?: ReactNode;
@@ -43,6 +44,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   const isMbl = useContext(MobileViewContext);
   const selectedCardBorder = useFlag(HTPR_7614_SELECTED_CARD_BORDER_FLAG);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+  const borderOnlySelect = useFlag(HTPR_8960_BORDER_ONLY_SELECT_FLAG);
   const selectionLine = selectedCardBorder
     ? "!outline-solid !outline-1 !-outline-offset-1 !outline-hypertasks-purple"
     : "ring-1 ring-inset ring-hypertasks-purple";
@@ -58,7 +60,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         ? "blocked"
         : "plain";
   const legacyStroke = blocked ? "border-l-[3px]" : "border-l-4";
-  const stillContent = Boolean(onSelectToggle) && !blocked;
+  const stillContent = borderOnlySelect && Boolean(onSelectToggle) && !blocked;
   const cleanupStroke = {
     "selected-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
     selected: "border-l-0",
