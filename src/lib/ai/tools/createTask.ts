@@ -233,6 +233,7 @@ export function createCreateTaskTool(context: ToolContext) {
                 initialTitle = briefTitle;
                 earlyTask = await save(initialTitle, undefined, true);
                 context.provisionalTickets?.set(earlyTask.id, { title: initialTitle, description: "", projectId: input.project_id });
+                send("open_task", { projectId: earlyTask.projectId, uniqueIndex: earlyTask.uniqueIndex });
                 send("task_created", { content: savedLink(earlyTask) });
                 earlyTaskPublished = true;
                 send("status", { content: "Ticket created. Writing its description…" });
