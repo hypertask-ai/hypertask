@@ -12,8 +12,7 @@ import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, typ
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
-import { isFeatureEnabled } from "@/lib/flags";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getTeamGatewayFunding, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
@@ -32,11 +31,16 @@ import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardR
 import prisma from "@/lib/prisma";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
-async function nativeSearchForSelection(provider: string, apiKey: unknown, userId?: number | null) {
+async function nativeSearchForSelection(provider: string, apiKey: unknown, userId?: number | null, teamId?: string | null) {
   const key = typeof apiKey === "string" ? apiKey.trim() : "";
   let on = false;
   try { if (typeof isFeatureEnabled === "function" && userId && await isFeatureEnabled("htpr-7394-remaining-ai-spend", userId)) on = true; } catch { on = false; }
-  const pays = Boolean(key) && !isOurGatewayKey(key);
+  let ours = isOurGatewayKey(key);
+  if (!ours && key && teamId) {
+    const funding = await getTeamGatewayFunding({ trustedTeamId: teamId }).catch(() => undefined);
+    ours = Boolean(funding && funding.apiKey === key && funding.source !== "customer");
+  }
+  const pays = Boolean(key) && !ours;
   return (provider === "claude" || provider === "openai") && !(on && !pays);
 }
 
@@ -867,7 +871,7 @@ export async function selectTaskWriterModel(args: {
       feature: args.feature ?? "task-writer",
       tags,
       modelOption: selection.modelOption,
-      includeNativeWebSearch: await nativeSearchForSelection(selection.provider, byokApiKey, args.userId),
+      includeNativeWebSearch: await nativeSearchForSelection(selection.provider, byokApiKey, args.userId, teamContext.teamId ?? args.teamId),
     }
   );
   const selected = {

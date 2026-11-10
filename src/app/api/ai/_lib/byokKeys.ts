@@ -13,6 +13,7 @@ import { fallbackRunsOnOurOwnGatewayKey } from "@/lib/ai/modelFundingGuard";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
+  gatewayFundingSourceForApiKey,
   isVercelAiGatewayKey,
   registerManagedGatewayKey,
   resolveAiModel,
@@ -437,6 +438,7 @@ export function isOurGatewayKey(apiKey: unknown): boolean {
   if (normalized === process.env.AI_GATEWAY_API_KEY?.trim()) return true;
   if (normalized === process.env.DEMO_AI_GATEWAY_API_KEY?.trim()) return true;
   if (normalized === process.env.TURBOPUFFER_EMBEDDINGS_API_KEY?.trim()) return true;
+  if (gatewayFundingSourceForApiKey(normalized) === "managed") return true;
   return isPlatformManagedGatewayKey(normalized);
 }
 

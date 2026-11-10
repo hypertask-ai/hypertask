@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Prisma } from "@prisma/client";
 
-import { startGatewayBatch } from "@/lib/ai/batch/gatewayBatch";
+import { cancelGatewayBatch, startGatewayBatch } from "@/lib/ai/batch/gatewayBatch";
 import { batchIdempotencyKey, type BatchKind, type BatchTextRequest } from "@/lib/ai/batch/batchJobs";
 import prisma from "@/lib/prisma";
 
@@ -40,24 +40,36 @@ export async function submitBatch(args: {
     throw error;
   }
   await rememberBatchGateway(idempotencyKey, gatewayBatchId);
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.aiBatch.findUnique({ where: { gatewayBatchId }, select: { id: true } });
-    if (existing) return existing.id;
-    const id = randomUUID();
-    const claimed = args.claim ? new Set(await args.claim(tx, id)) : null;
-    const entries = Object.entries(args.items).filter(([key]) => !claimed || claimed.has(key));
-    if (entries.length === 0) return null;
-    await tx.aiBatch.create({
-      data: {
-        id,
-        gatewayBatchId,
-        kind: args.kind,
-        teamId: args.teamId,
-        userId: args.userId,
-        model: args.model,
-        items: Object.fromEntries(entries) as object,
-      },
+  let savedId: string | null;
+  try {
+    savedId = await prisma.$transaction(async (tx) => {
+      const existing = await tx.aiBatch.findUnique({ where: { gatewayBatchId }, select: { id: true } });
+      if (existing) return existing.id;
+      const id = randomUUID();
+      const claimed = args.claim ? new Set(await args.claim(tx, id)) : null;
+      const entries = Object.entries(args.items).filter(([key]) => !claimed || claimed.has(key));
+      if (entries.length === 0) return null;
+      await tx.aiBatch.create({
+        data: {
+          id,
+          gatewayBatchId,
+          kind: args.kind,
+          teamId: args.teamId,
+          userId: args.userId,
+          model: args.model,
+          items: Object.fromEntries(entries) as object,
+        },
+      });
+      return id;
     });
-    return id;
-  });
+  } catch (error) {
+    await releasePlanBatch(idempotencyKey);
+    await cancelGatewayBatch(args.gatewayKey, gatewayBatchId).catch(() => undefined);
+    throw error;
+  }
+  if (!savedId) {
+    await releasePlanBatch(idempotencyKey);
+    await cancelGatewayBatch(args.gatewayKey, gatewayBatchId).catch(() => undefined);
+  }
+  return savedId;
 }

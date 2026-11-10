@@ -115,7 +115,7 @@ async function collectOne(batch: BatchRow, nowMs: number): Promise<"waiting" | "
   if (claimed.count === 0) return "waiting";
 
   const { settleHeldBatch } = await import("@/lib/ai/spend/batchHold");
-  await settleHeldBatch({ gatewayBatchId: batch.gatewayBatchId, model: batch.model, outcomes: plan.outcomes }).catch(() => undefined);
+  await settleHeldBatch({ gatewayBatchId: batch.gatewayBatchId, model: batch.model, outcomes: plan.outcomes });
 
   if (batch.kind === "slack-summary") await applySlackBatch(batch, items, plan.outcomes);
   else if (batch.kind === "smart-label") await applyLabelBatch(batch, items, plan.outcomes);
