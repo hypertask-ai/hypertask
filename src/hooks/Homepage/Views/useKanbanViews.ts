@@ -87,7 +87,7 @@ const useKanbanViews = (project: IProject | null) => {
   const queryClient = useQueryClient();
   const deletedViewLeavesTabs = useFlag(HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG);
   const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG);
-  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes");
   const router = useRouter();
   const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom);
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);

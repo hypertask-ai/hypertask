@@ -24,7 +24,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
 
 export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
-  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes");
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
   _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,

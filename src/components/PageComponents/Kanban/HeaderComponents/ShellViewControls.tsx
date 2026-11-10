@@ -41,7 +41,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const setShowCommands = useSetRecoilState(showCommandsAtom)
   const [runningOnly, setRunningOnly] = useRecoilState(kanbanRunningOnlyAtom)
   const boardLayout = useRecoilValue(boardLayoutAtom)
-  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag")
+  const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes")
   const { setTableGroupByViewAndReturn } = useKanbanViews(project)
   const [groupOpen, setGroupOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)

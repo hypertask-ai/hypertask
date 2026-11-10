@@ -29,7 +29,7 @@ test("chosen tag order wins, Other holds the rest and other grouping modes work"
   ];
   const tags = buildTableSectionsGroupedByTag([{ section_title: "Backlog", items }], ["l2", "l1"]);
   assert.deepEqual(tags.map((section) => [section.section_title, section.items.length]), [["Desktop", 1], ["Mobile", 1], ["Other", 1]]);
-  const byMode = (mode: "assignee" | "priority") => buildTableSectionsForGrouping([{ section_title: "Backlog", items }], { mode, tagIds: [] }).map((section) => section.section_title);
+  const byMode = (mode: "assignee" | "priority") => buildTableSectionsForGrouping([{ section_title: "Backlog", items }], { mode, tagIds: [], allTags: false }).map((section) => section.section_title);
   assert.deepEqual(byMode("assignee"), ["Valentin", "Unassigned"]);
   assert.deepEqual(byMode("priority"), ["High", "No priority"]);
   assert.equal(serializeTableGrouping("tag", ["l2", "l1"]), "tag:l2,l1");
