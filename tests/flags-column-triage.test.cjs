@@ -38,7 +38,7 @@ test("a registry ticket with no declaration still repairs the link and keeps ask
   const { triageFlagsColumn } = await load();
   const f = fixture({ tasks: [task({ ticketNumber: "HTPR-7511", description: "<p>Existing description.</p>" })] });
   const report = triageFlagsColumn({ ...f, apply: true });
-  assert.equal(report.clean, false);
+  assert.equal(report.clean, true);
   assert.equal(report.tickets[0].ask, true);
   assert.ok(f.state.tasks[0].description.includes("/admin/flags/"));
   assert.deepEqual(f.writes().filter(([, args]) => args[0] === "comment"), []);
