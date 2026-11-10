@@ -188,7 +188,8 @@ test("ticket AI commands triggered before the runtime is ready wait without bloc
     });
     await React.act(async () => { await Promise.all([summary, branch]); });
     assert.equal(sent.length, 1);
-    assert.match(sent[0], /Summarize this ticket/);
+    assert.match(sent[0], /what it is/);
+    assert.match(sent[0], /No Next action line/);
     assert.equal(started, 1);
     assert.deepEqual(inserted, ["<blockquote>QA comment</blockquote>"]);
   } finally {

@@ -33,6 +33,7 @@ function load(file, mocks = {}) {
   const mod = { exports: {} };
   new Function("require", "module", "exports", compiled)((name) => {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
+    if (name === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
     if (name.startsWith("@/") || name.startsWith(".")) throw new Error(`Unstubbed dependency in ${file}: ${name}`);
     return require(name);
   }, mod, mod.exports);
@@ -110,7 +111,7 @@ async function withReminder(options, check) {
   });
   if (chat) chat = runtime();
   const mocks = {
-    "@/hooks/useFlag": { useFlag: key => key === "htpr-8048-agent-sessions" ? false : key === skillFlag ? skillEnabled : key === flag ? enabled : true },
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-8048-agent-sessions" || key === "htpr-9021-no-empty-chats" ? false : key === skillFlag ? skillEnabled : key === flag ? enabled : true },
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },

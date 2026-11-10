@@ -1,5 +1,5 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
-import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7977_SHORT_TASK_WRITER_FLAG, HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
+import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7977_SHORT_TASK_WRITER_FLAG, HTPR_9009_WRITER_URGENCY_FLAG, HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
@@ -233,6 +233,10 @@ export async function prepareTaskWriterRun(
     ? await import("@/lib/ai/taskWriterBrainLabels")
     : null;
   const brainLabels = boardLabels ? brainTools?.brainLabelsFromBoard(boardLabels) ?? null : null;
+  const urgencyTools = body.aiMode === "AiTaskWriter" && await isFeatureEnabled(HTPR_9009_WRITER_URGENCY_FLAG, userId)
+    ? await import("@/lib/ai/taskWriterUrgency")
+    : null;
+  const urgentNote = urgencyTools?.noteIsUrgent(urgencyTools.taskWriterUserNote(body)) ?? false;
   const composeSkillsEnabled = body.requestKind === "compose-task" && body.invokeSkills &&
     await isFeatureEnabled(HTPR_7312_CTRLJ_SKILLS_FLAG, userId);
   if (composeSkillsEnabled) {
@@ -285,6 +289,7 @@ export async function prepareTaskWriterRun(
       ? searchTasks({
           searchQuery: retrievalQuery,
           projectIds: [body.projectId],
+          excludeStatuses: ["Deleted", "Archive"],
           topK: Math.min(
             TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
             TASK_WRITER_RELATED_CANDIDATE_LIMIT +
@@ -449,6 +454,7 @@ export async function prepareTaskWriterRun(
     customFieldDefinitions,
     boardLabelIds: boardLabels?.map((label) => label.id),
     brainLabels,
+    urgentNote,
     tasksSchema,
   };
 }

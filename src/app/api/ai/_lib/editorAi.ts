@@ -1160,11 +1160,13 @@ export async function retrieveTaskWriterContext(args: {
       searchTasks({
         searchQuery: args.prompt,
         projectIds,
+        excludeStatuses: ["Deleted", "Archive"],
         topK: 50,
       }),
       searchComments({
         searchQuery: args.prompt,
         projectIds,
+        excludeStatuses: ["Deleted", "Archive"],
         topK: 60,
         limit: 50,
       }),

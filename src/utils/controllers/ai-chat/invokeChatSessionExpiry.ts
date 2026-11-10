@@ -1,5 +1,7 @@
 import prisma from "@/lib/prisma";
 import { subDays } from "date-fns";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 
 export const CHAT_SESSION_EXPIRY_DAYS = 30;
 
@@ -49,6 +51,7 @@ export async function invokeChatSessionExpiry(job: ChatSessionExpiryJobPayload) 
 }
 
 export async function recreateSessionIfEmpty(userId: number) {
+  if (await isFeatureEnabled(HTPR_9021_NO_EMPTY_CHATS_FLAG, userId).catch(() => false)) return;
   const remainingSessions = await prisma.chatSession.count({
     where: { userId },
   });

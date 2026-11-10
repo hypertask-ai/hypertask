@@ -17,6 +17,7 @@ function load(file, mocks = {}) {
     if (name === "react/jsx-runtime") return require(name);
     if (name === "@/lib/flags/definitions/htpr-8048-agent-sessions") return { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" };
     if (name === "@/lib/flags/definitions/htpr-7737-agent-hover-chat") return { HTPR_7737_AGENT_HOVER_CHAT_FLAG: "htpr-7737-agent-hover-chat" };
+    if (name === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
     assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency ${name}`);
     return { __esModule: true, ...mocks[name] };
   }, loaded, loaded.exports);
@@ -170,7 +171,7 @@ function sidebar(initialSession = { id: "remembered", agentId: null }, { createS
   const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
     "react-hot-toast": { default: { error: assert.fail } },
     react: { ...state.react, default: state.react },
-    "@/hooks/useFlag": { useFlag: key => !["htpr-7800-skill-runs-in-sidebar", "htpr-8048-agent-sessions"].includes(key) }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
+    "@/hooks/useFlag": { useFlag: key => !["htpr-7800-skill-runs-in-sidebar", "htpr-8048-agent-sessions", "htpr-9021-no-empty-chats"].includes(key) }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: (options) => { shortcutOptions = options; return { enabled: true }; } },
     "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },

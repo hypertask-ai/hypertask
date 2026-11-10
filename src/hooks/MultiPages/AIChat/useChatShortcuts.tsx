@@ -132,7 +132,7 @@ export function useChatShortcuts(options: {
       case "stop":
         if (chat.isRecording) return click("[data-ai-chat-recording-cancel]");
         if (document.activeElement instanceof HTMLInputElement) return false;
-        if (!chat.isTyping || document.getElementById(DIV_ID_CONSTANTS.aiMentionList) || document.getElementById(SLASH_MENU_DOM_ID) || root.querySelector("[aria-expanded='true']")) return false;
+        if (!chat.isTyping || document.getElementById(DIV_ID_CONSTANTS.aiMentionList) || document.getElementById(SLASH_MENU_DOM_ID) || root.querySelector("[aria-expanded='true']:not([data-chat-rail-section])")) return false;
         chat.handleCancelStream();
         focusComposer();
         return true;

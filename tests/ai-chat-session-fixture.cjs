@@ -13,7 +13,7 @@ function matches(row, where) {
   if (where.OR && !where.OR.some((clause) => matches(row, clause))) return false;
   for (const [key, value] of Object.entries(where)) {
     if (key === 'AND' || key === 'OR') continue;
-    if (key === 'messages') { if (value.none && row.messages.length) return false; continue; }
+    if (key === 'messages') { if (value.none && row.messages.length) return false; if (value.some && !row.messages.length) return false; continue; }
     if (key === 'agent') {
       if (!row.agentId || !matches(row.agent ?? {
         id: row.agentId, userId: row.userId, runtimeType: row.runtimeType, crossTeamHomeTeamId: null,
@@ -54,6 +54,7 @@ function fixture(options = {}) {
   };
   const { GET } = load('src/app/api/ai-chat/all-sessions/route.ts', {
     '@/lib/prisma': { default: { chatSession } },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key === 'htpr-9021-no-empty-chats' ? !!options.noEmptyChats : false },
     '@/lib/auth/currentUser': { loadCurrentUser: async () => options.unauthorized ? null : { userId, user: { id: userId } } },
     '@/lib/redis': { getRedis: async () => redis },
     '@/lib/api/rateLimit': { checkRestRateLimit: async (...args) => { limits.push(args); return options.limited ? Response.json({ error: 'Rate limit exceeded. Please try again shortly.' }, { status: 429, headers: { 'Retry-After': '17' } }) : null; } },

@@ -118,6 +118,7 @@ export interface ChatContextType {
   audioTiptapCallback: (text: string, setContent?: boolean) => void;
   toggleRecording: (val: boolean) => void;
   startNewSession: () => Promise<IChatSession | undefined>;
+  showGeneralChat: () => Promise<unknown>;
   selectSession: (sessionId: string) => void;
   toggleRenameChatModal: () => void;
   renameChat: (newTitle: string) => void;

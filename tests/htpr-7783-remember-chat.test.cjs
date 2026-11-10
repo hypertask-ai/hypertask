@@ -46,7 +46,7 @@ async function withChat(options, check) {
     "@/tiptap/pm/state": { EditorState: { create: value => value } },
     "@tiptap/pm/state": { EditorState: { create: value => value } },
     "@/store": atoms, "@/lib/state": state,
-    "@/hooks/useFlag": { useFlag: key => key === "htpr-6929-compose-task-writer" ? !!options.compose : key === "htpr-8088-manual-chat" ? !!options.manualChat : key === "htpr-7736-chat-follows-task" ? !!options.followsTask : key === flag ? options.enabled !== false : key === "htpr-6971-chat-history-paging" ? options.paged : key === "htpr-7518-agent-sidebar-chats" ? !!options.agentSidebar : ["htpr-7052-chat-names", "htpr-6936-ask-ai-fullscreen"].includes(key), useFlagReady: () => true },
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-9021-no-empty-chats" ? !!options.noEmptyChats : key === "htpr-6929-compose-task-writer" ? !!options.compose : key === "htpr-8088-manual-chat" ? !!options.manualChat : key === "htpr-7736-chat-follows-task" ? !!options.followsTask : key === flag ? options.enabled !== false : key === "htpr-6971-chat-history-paging" ? options.paged : key === "htpr-7518-agent-sidebar-chats" ? !!options.agentSidebar : ["htpr-7052-chat-names", "htpr-6936-ask-ai-fullscreen"].includes(key), useFlagReady: () => true },
     "@/lib/flags/keys": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "htpr-6929-compose-task-writer", HTPR_7783_REMEMBER_CHAT_FLAG: flag, HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "htpr-6971-chat-history-paging", HTPR_7052_CHAT_NAMES_FLAG: "htpr-7052-chat-names", HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats", HTPR_6936_ASK_AI_FULLSCREEN_FLAG: "htpr-6936-ask-ai-fullscreen" },
     "@/lib/aiChat/chatNavigationState": navigation,
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => nativeSidebar },
@@ -582,5 +582,45 @@ test("legacy Compose intent replaces an unrelated active session without ticket 
     await view.set(atoms.composeTaskChatIntroAtom, { taskId: 43, content: "Task intro" });
     assert.equal(view.history().currentSession.id, "compose-target");
     assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+  });
+});
+
+for (const enabled of [true, false]) test(`no-empty-chats on ${enabled ? "remembered" : "latest-chat"} navigation: opening the board creates nothing and the first send creates one chat`, async () => {
+  await withChat({ paged: true, enabled, noEmptyChats: true, rows: [] }, async view => {
+    assert.equal(view.chatState().showWelcomeScreen, true);
+    assert.equal(view.chatState().isSessionPending, false);
+    assert.equal(view.history().currentSession, undefined);
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+    await view.visit("/project"); await view.reload();
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+    await React.act(async () => { const selected = await view.resolver().ensureSessionForCurrentBoard(); assert.equal(selected.id, "explicit-new"); }); await view.flush();
+    assert.equal(view.history().currentSession.id, "explicit-new");
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 1);
+  });
+});
+
+test("no-empty-chats: lookups never create, only an explicit new chat or a send does", async () => {
+  await withChat({ paged: true, noEmptyChats: true, rows: [] }, async view => {
+    let found;
+    await React.act(async () => { found = await view.resolver().ensureSessionForCurrentBoard(undefined, false); }); await view.flush();
+    assert.equal(found, undefined);
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+    await React.act(async () => { await view.resolver().showGeneralChat(); }); await view.flush();
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+    assert.equal(view.chatState().showWelcomeScreen, true);
+    await React.act(async () => { await view.resolver().startNewSession(); }); await view.flush();
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 1);
+  });
+});
+
+test("no-empty-chats: history hides chats that have no messages", async () => {
+  const blank = { ...row("blank"), messages: [] };
+  await withChat({ paged: true, enabled: false, noEmptyChats: true, rows: [blank, row("newest"), row("older")] }, async view => {
+    assert.deepEqual(view.chatState().historySessions.map(item => item.id), ["newest", "older"]);
+    assert.equal(view.history().currentSession.id, "newest");
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+  });
+  await withChat({ paged: true, enabled: false, noEmptyChats: false, rows: [blank, row("newest"), row("older")] }, async view => {
+    assert.deepEqual(view.chatState().historySessions.map(item => item.id).sort(), ["blank", "newest", "older"]);
   });
 });
