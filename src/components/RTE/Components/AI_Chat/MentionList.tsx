@@ -38,7 +38,7 @@ interface MentionListRef {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
 }
 
-const MentionList = forwardRef<MentionListRef, MentionListProps>(
+export const MentionList = forwardRef<MentionListRef, MentionListProps>(
   (props, ref) => {
     const ignoreItems: string[] = [...NON_SELECTABLE_MENTION_TYPES];
     const agentsFirst = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
