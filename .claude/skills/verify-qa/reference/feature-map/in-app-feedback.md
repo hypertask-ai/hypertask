@@ -6,13 +6,13 @@ The feedback form posts to `POST /api/feedback`. `src/components/Modals/Feedback
 
 ## How to drive it
 
-Sign in as the QA account. Post JSON to `https://app.hypertask.ai/api/feedback` with `text`, `kind`, and `notify: false`. Then find the new board 15 ticket by its title (`Bug: ` plus the first line) and read its labels. Flag off is the same post from an account that does not have the flag. The response body is only `{ success: true }`, so the ticket read is the proof.
+Sign in as the QA account. Post JSON to `https://app.hypertask.ai/api/feedback` with `text`, `kind`, and `notify: false`. Then find the new board 15 ticket by its title (`Bug: ` plus the first line) and read its labels. The response body is only `{ success: true }`, so the ticket read is the proof. The flag ships at `defaultMode: EVERYONE`, so flag off is UNREACHABLE in the declared mode: every account sees the brain tag. An authorized agent can prove the off path only during an Owner + QA hold with the flag Off; runners never switch a flag Off.
 
 ## What usually breaks
 
 - The new ticket has `user-feedback` and no `brain-medium` while the flag is on.
 - `brain-medium` appears while the flag is off.
-- `notify: true` assigns every accepted human member of board 15. Proof posts use `notify: false`.
+- Every post assigns every accepted human member of board 15, whether `notify` is true or false; `notify` only adds a Notify marker to the description. Expect the inbox assignment and archive the fixture ticket.
 
 ## What proof to collect
 
