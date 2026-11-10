@@ -192,6 +192,8 @@ export function useAiModelPreference(
   return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption };
 }
 
+let pendingThinkingWrite: Promise<unknown> = Promise.resolve();
+
 export function useAiThinkingPreference() {
   const queryClient = useQueryClient();
   const { data: userPreferences } = useGetUserPreferences();
@@ -199,7 +201,11 @@ export function useAiThinkingPreference() {
 
   const setPreference = useCallback(
     (update: Partial<TAiThinkingPreference>) => {
-      const next = { ...preference, ...update };
+      const latest = queryClient.getQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY) ?? userPreferences;
+      const next = {
+        ...parseAiThinkingPreference(latest.aiModelPreferences?.thinking),
+        ...update,
+      };
       void queryClient.cancelQueries(
         { queryKey: USER_PREFERENCES_QUERY_KEY },
         { revert: false },
@@ -214,13 +220,13 @@ export function useAiThinkingPreference() {
           },
         }),
       );
-      void axios
-        .post("/api/users/preferences", { aiThinkingPreference: next })
+      pendingThinkingWrite = pendingThinkingWrite
+        .then(() => axios.post("/api/users/preferences", { aiThinkingPreference: next }))
         .catch((error) => {
           console.log("useAiThinkingPreference update error:", error);
         });
     },
-    [preference, queryClient, userPreferences],
+    [queryClient, userPreferences],
   );
 
   return { preference, setPreference };
