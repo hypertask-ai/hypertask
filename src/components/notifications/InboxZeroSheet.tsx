@@ -9,6 +9,8 @@ import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
 import useInboxZeroActions, {
   InboxZeroPreviewChangedError,
 } from "@/hooks/Inbox/useInboxZeroActions";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9045_JEV_INBOX_TRIAGE_FLAG } from "@/lib/flags/definitions/htpr-9045-jev-inbox-triage";
 import {
   DEFAULT_INBOX_ZERO_RULES,
   INBOX_ZERO_THRESHOLD_OPTIONS,
@@ -66,6 +68,7 @@ export const InboxZeroSheetContent = ({
   initialRules = DEFAULT_INBOX_ZERO_RULES,
   executeInboxZero,
 }: InboxZeroSheetContentProps) => {
+  const jevTriageEnabled = useFlag(HTPR_9045_JEV_INBOX_TRIAGE_FLAG);
   const [threshold, setThreshold] = useState<InboxZeroThresholdDays>(
     initialRules.threshold
   );
@@ -80,7 +83,11 @@ export const InboxZeroSheetContent = ({
   const [executing, setExecuting] = useState(false);
   const rules = useMemo<InboxZeroRules>(
     () => ({
-      threshold, categories, keep,
+      threshold,
+      categories: categories.jevNoise
+        ? { ...categories, jevNoise: true }
+        : categories,
+      keep,
       ...(initialRules.safeUpdates ? { safeUpdates: initialRules.safeUpdates } : {}),
     }),
     [categories, keep, threshold, initialRules.safeUpdates]
@@ -151,7 +158,12 @@ export const InboxZeroSheetContent = ({
     }
     setExecuting(true);
     try {
-      await executeInboxZero(rules, preview.previewVersion);
+      await executeInboxZero(
+        preview.jevNotificationIds?.length
+          ? { ...rules, jevNotificationIds: preview.jevNotificationIds }
+          : rules,
+        preview.previewVersion
+      );
       onClose();
     } catch (error) {
       if (error instanceof InboxZeroPreviewChangedError) {
@@ -224,6 +236,14 @@ export const InboxZeroSheetContent = ({
                     onToggle={() => toggleCategory(row.key)}
                   />
                 ))}
+                {jevTriageEnabled && (
+                  <RuleRow
+                    checked={categories.jevNoise === true}
+                    count={preview.jevNoiseCount ?? 0}
+                    label="Not for you, per Jev"
+                    onToggle={() => toggleCategory("jevNoise")}
+                  />
+                )}
               </div>
 
               <div className="border-t border-light-black-border-1 py-2">

@@ -13,6 +13,7 @@ export type InboxZeroCategories = {
   ownActions: boolean;
   superseded: boolean;
   pastReminders: boolean;
+  jevNoise?: boolean;
 };
 
 export type InboxZeroKeep = {
@@ -26,12 +27,22 @@ export type InboxZeroRules = {
   categories: InboxZeroCategories;
   keep: InboxZeroKeep;
   safeUpdates?: { taskIds: number[]; agentOnly: boolean };
+  jevNotificationIds?: number[];
 };
 
-export type InboxZeroCounts = Record<keyof InboxZeroCategories, number>;
+export type InboxZeroCounts = {
+  read: number;
+  reactions: number;
+  ownActions: number;
+  superseded: number;
+  pastReminders: number;
+  jevNoise?: number;
+};
 
 export type InboxZeroPreview = {
   categoryCounts: InboxZeroCounts;
+  jevNoiseCount?: number;
+  jevNotificationIds?: number[];
   totalActive: number;
   totalToArchive: number;
   totalLeft: number;
