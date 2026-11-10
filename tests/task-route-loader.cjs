@@ -16,10 +16,10 @@ function load(file, mocks = {}) {
       }
       return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
     }
-    if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks") {
+    if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks" && !(specifier in mocks)) {
       return blockingStubs.attachOpenBlockingTasksStub;
     }
-    if (specifier === "@/lib/blockingTasks" && !file.endsWith("blockingTasks.ts")) {
+    if (specifier === "@/lib/blockingTasks" && !file.endsWith("blockingTasks.ts") && !(specifier in mocks)) {
       return blockingStubs.blockingTasksMapperStub;
     }
     if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
