@@ -27,7 +27,6 @@ function fixture(t, { enabled = true, mobile = true, selectAll = true, overview 
       useFlag: (key) =>
         (key === flag && currentEnabled) ||
         (key === selectAllFlag && selectAll) ||
-        key === "htpr-8927-board-card-overflow" ||
         key === "htpr-8960-border-only-select",
     },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },

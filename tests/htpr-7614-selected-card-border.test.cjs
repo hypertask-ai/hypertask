@@ -23,8 +23,7 @@ const cn = loader({
 function render(enabled, mobile, props = {}) {
   const Component = loader({
     "@/hooks/useFlag": {
-      useFlag: (key) =>
-        (key === flagKey && enabled) || key === overflowFlag.HTPR_8927_BOARD_CARD_OVERFLOW_FLAG,
+      useFlag: (key) => key === flagKey && enabled,
     },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": overflowFlag,

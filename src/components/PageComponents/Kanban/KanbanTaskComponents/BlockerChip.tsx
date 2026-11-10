@@ -11,8 +11,7 @@ export type BlockerUser = {
   photoURL?: string | null;
 };
 
-const blockerChipClassName =
-  "inline-flex h-labelComponent max-w-full items-center gap-1 rounded-[4px] bg-[hsl(0_62.8%_30.6%)] px-1.5 text-micro font-semibold leading-none text-white";
+const blockerChipClassName = "inline-flex h-labelComponent max-w-full items-center gap-1 rounded-[4px] bg-[hsl(0_62.8%_30.6%)] px-1.5 text-micro font-semibold leading-none text-white";
 
 const BlockerChip = ({ user }: { user: BlockerUser }) => {
   const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
@@ -41,11 +40,7 @@ export const BlockerTaskChip = ({ task }: { task: IBlockingTask }) => {
   return (
     <span
       aria-label={`Open blocker ${label}`}
-      className={cn(
-        blockerChipClassName,
-        "cursor-pointer",
-        cardOverflowClamp && "min-w-0 overflow-hidden",
-      )}
+      className={cn(blockerChipClassName, "cursor-pointer", cardOverflowClamp && "min-w-0 overflow-hidden")}
       data-blocking-task={task.id}
       role="link"
       tabIndex={0}
