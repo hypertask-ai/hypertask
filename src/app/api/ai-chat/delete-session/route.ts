@@ -1,6 +1,8 @@
 import { chatAudienceWhere } from "@/lib/agents/chatContentScope";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 import prisma from "@/lib/prisma";
 import { deleteTaskAttachmentFromS3 } from "@/lib/storage/uploadTaskAttachmentToS3";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -104,15 +106,18 @@ export async function DELETE(req: NextRequest) {
       });
     });
 
-    try {
-      const numSessions = await prisma.chatSession.count({
-        where: { userId: user.id },
-      });
-      if (numSessions === 0) {
-        await prisma.chatSession.create({ data: { userId: user.id } });
+    const noEmptyChats = await isFeatureEnabled(HTPR_9021_NO_EMPTY_CHATS_FLAG, user.id).catch(() => false);
+    if (!noEmptyChats) {
+      try {
+        const numSessions = await prisma.chatSession.count({
+          where: { userId: user.id },
+        });
+        if (numSessions === 0) {
+          await prisma.chatSession.create({ data: { userId: user.id } });
+        }
+      } catch (error) {
+        console.error("[ai-chat/delete-session] replacement session creation failed after deletion", error);
       }
-    } catch (error) {
-      console.error("[ai-chat/delete-session] replacement session creation failed after deletion", error);
     }
 
     return NextResponse.json(

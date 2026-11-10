@@ -541,7 +541,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     "@/lib/ai/chatStream/errors": { normalizeProviderAuthError: async (error) => error, userFacingErrorMessage: (error) => error.message, userFacingErrorDetails: () => ({}), reportHandledChatError: async () => {} },
     "@/app/api/ai/_lib/heartbeatExecution": {}, "@/app/api/ai/chat/stream/bulkTools": { hasVisibleCompletion: (chunks) => chunks.length > 0 },
     "@/lib/ai/chatStream/types": {}, "@/lib/ai/tools/constants": { MAX_TOOL_STEPS: 1 },
-    "@/lib/ai/chatStream/content": {}, "@/lib/ai/tools/metadata": {},
+    "@/lib/ai/chatStream/thinkingChoice": { userThinkingChoice: async () => null }, "@/lib/ai/chatStream/content": {}, "@/lib/ai/tools/metadata": {},
     "@/lib/ai/tools/deferredTools": load(path.join(root, "src/lib/ai/tools/deferredTools.ts")),
     ai: { stepCountIs: () => ({}), streamText: ({ model, onError }) => ({ textStream: (async function* () {
       try {

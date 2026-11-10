@@ -39,6 +39,13 @@ const stubSourceModule = (relativePath, exports) =>
 stubSourceModule("src/hooks/General/useCurrentBoardBilling.ts", {
   useCurrentBoardBilling: () => billing,
 });
+stubSourceModule("src/hooks/General/useAiModelPreference.ts", {
+  useAiModelPreference: () => ({}),
+  useAiThinkingPreference: () => ({
+    preference: { enabled: false, effort: "low" },
+    setPreference: () => {},
+  }),
+});
 stubSourceModule("src/hooks/useTeamAiProviders.ts", {
   useTeamAiProviders: () => ({
     enabledProviders,

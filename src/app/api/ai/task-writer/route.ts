@@ -15,7 +15,7 @@ import {
 } from "@/app/api/ai/_lib/editorAi";
 import { getDesktopCliTokenUser, logDesktopCliAuthorization } from "@/lib/auth/desktopCliTokenUser";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
-import { normalizeTaskWriterLabels, finalizeTaskWriterLabelIds, extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
+import { normalizeTaskWriterLabels, finalizeTaskWriterLabelIds, forceUrgentPriorityMarker, extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
 import {
   AiFeatureDisabledError,
   AutoDescriptionSuggestionsDisabledError,
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       ));
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, brainLabels, skills, composeSkillsEnabled } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, brainLabels, urgentNote, skills, composeSkillsEnabled } =
       await prepareTaskWriterRun(body, userId);
     let titleOnly = false;
     if (body.requestKind === "auto-title") {
@@ -129,7 +129,8 @@ export async function POST(request: NextRequest) {
           ? fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, modelCustomFields) : [];
         const fieldValues = { ...(customFields.length ? { customFields } : {}), ...(boardLabelIds ? { labelIds: finalizeTaskWriterLabelIds(modelLabelIds, boardLabelIds, brainLabels) } : {}) };
         const filtered = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
-        const description = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
+        const typedDescription = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
+        const description = urgentNote ? forceUrgentPriorityMarker(typedDescription) : typedDescription;
         if (!dueDateContext) return { ...task, description, ...fieldValues };
         const dueDate = validateTaskWriterDueDate(modelDueDate, dueDateContext.today);
         return { ...task, description, ...fieldValues, ...(dueDate ? { dueDate } : {}) };
@@ -149,8 +150,8 @@ export async function POST(request: NextRequest) {
 
         let held = "";
         const enqueueText = (text: string) => {
-          if (titleOnly || validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds) draft += text;
-          if (!text || titleOnly || dueDateContext || boardLabelIds) return;
+          if (titleOnly || validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds || urgentNote) draft += text;
+          if (!text || titleOnly || dueDateContext || boardLabelIds || urgentNote) return;
           if (!ticketTypeEnabled) {
             controller.enqueue(encoder.encode(text));
             return;
@@ -236,9 +237,10 @@ export async function POST(request: NextRequest) {
           }
           if (titleOnly) {
             controller.enqueue(encoder.encode(draft));
-          } else if (dueDateContext || boardLabelIds) {
+          } else if (dueDateContext || boardLabelIds || urgentNote) {
             const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds, brainLabels) : draft;
-            const dated = dueDateContext ? applyTaskWriterDueDate(labeled, dueDateContext).html : labeled;
+            const urgent = urgentNote ? forceUrgentPriorityMarker(labeled) : labeled;
+            const dated = dueDateContext ? applyTaskWriterDueDate(urgent, dueDateContext).html : urgent;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));
           } else if (ticketTypeEnabled && held) {
             controller.enqueue(encoder.encode(normalizeTaskWriterTicketType(held)));

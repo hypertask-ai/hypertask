@@ -9,6 +9,16 @@
     "reason": "HTPR-7979 sends the original note to Hypertask's own same-origin task questions route. The browser call itself pays nothing; the route's model cost is noted on the route entry.",
     "source": "https://app.hypertask.ai/detail/project-15/7979"
   },
+  "src/components/Modals/Settings/AiUsageSection.tsx:558dbef4821e9f2372b80b15063d75a6f9cb8bfc160014a8e1ec2c7ef10d90de": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7788 lists the teams the signed-in owner may see in full, from Hypertask's own same-origin settings API. No paid provider call; the per-team gateway report cost is unchanged and already noted on the route.",
+    "source": "https://app.hypertask.ai/detail/project-15/7788"
+  },
+  "src/components/Modals/Settings/AiUsageSection.tsx:b7d56347f5ce86d23eb734cdd40e426709fc12ffab7004b16e33383c3febdda3": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7788 reuses the existing per-team AI usage endpoint once per owned team, the same request today's single-team page already makes. No new provider, retry or token budget.",
+    "source": "https://app.hypertask.ai/detail/project-15/7788"
+  },
   "src/components/Modals/Settings/GitHubSection.tsx:aea21b21a5fc71a8aec8029bd4b0da5f2c32aaf3f9e3ba497671ca232d1bca00": {
     "maxUsdPerDay": 0,
     "reason": "Saves board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
@@ -163,6 +173,11 @@
     "maxUsdPerDay": 1,
     "reason": "HTPR-7854 keeps the existing first-turn title generateText call on the same title model but caps maxOutputTokens at 64 and sends chat-title effort none so reasoning tokens cannot exceed the cap. That lowers spend versus uncapped titles, so one dollar per day remains a generous ceiling for this path.",
     "source": "https://app.hypertask.ai/detail/project-15/7854"
+  },
+  "src/hooks/General/useAiModelPreference.ts:c6f3b06f9b7e4e8f3ccfaf1be02a7b37cf4e574554057eff713b8b14439fc673": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-9004 saves the Thinking and Effort choice with one small same-origin POST to Hypertask's own preferences route. The browser call pays nothing and no model is called. Thinking cost is set by the chat request, behind the htpr-9004-thinking-effort flag, and stays off until the user switches it on.",
+    "source": "https://app.hypertask.ai/detail/project-15/9004"
   },
   "src/hooks/MultiPages/Tasks/useNewTaskWriteChips.ts:c57e9a3305e777924bf5238428f700e24cc2a7da440aac5bcf886f8c67b81d59": {
     "maxUsdPerDay": 0,

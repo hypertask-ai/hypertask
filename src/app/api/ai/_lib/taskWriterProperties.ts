@@ -56,6 +56,8 @@ function indexFromMarker(
   return allowed.has(value) ? value : undefined;
 }
 
+export const TASK_WRITER_URGENT_PRIORITY_INDEX = 1;
+
 const PRIORITY_INDEXES = new Set(
   PriorityConstants.map((entry) => entry.priority_index)
 );
@@ -85,9 +87,22 @@ export function normalizeTaskWriterLabels(html: string, boardLabelIds: string[],
   return root.toString();
 }
 
+export function forceUrgentPriorityMarker(html: string): string {
+  const root = parse(html);
+  const markers = root.querySelectorAll("#ai-generated-task-priority");
+  for (const marker of markers) marker.set_content(String(TASK_WRITER_URGENT_PRIORITY_INDEX));
+  if (!markers.length) {
+    const siblingMarker = root.querySelector("#ai-generated-task-estimate, #ai-generated-task-tags, #ai-generated-task-status");
+    const priorityMarker = `<span id="ai-generated-task-priority" style="display:none">${TASK_WRITER_URGENT_PRIORITY_INDEX}</span>`;
+    if (siblingMarker) siblingMarker.insertAdjacentHTML("beforebegin", priorityMarker);
+    else root.insertAdjacentHTML("beforeend", priorityMarker);
+  }
+  return root.toString();
+}
+
 export function extractTaskWriterProperties(
   html: string,
-  options: { fallbackTitle?: string | null; boardLabelIds?: string[]; brainLabels?: TaskWriterBrainLabels | null } = {}
+  options: { fallbackTitle?: string | null; boardLabelIds?: string[]; brainLabels?: TaskWriterBrainLabels | null; forceUrgent?: boolean } = {}
 ): TaskWriterProperties {
   const parsed = parse(repairDuplicateNote(html, options.fallbackTitle));
   const root = parsed.querySelector("body") ?? parsed;
@@ -97,11 +112,12 @@ export function extractTaskWriterProperties(
   const title = isDuplicateNoteTitle(rawTitle) ? null : rawTitle;
   titleEl?.remove();
 
-  const priority = indexFromMarker(
+  const modelPriority = indexFromMarker(
     root,
     "ai-generated-task-priority",
     PRIORITY_INDEXES
   );
+  const priority = options.forceUrgent ? TASK_WRITER_URGENT_PRIORITY_INDEX : modelPriority;
   const estimate = indexFromMarker(
     root,
     "ai-generated-task-estimate",

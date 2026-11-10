@@ -22,6 +22,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7857_HEARTBEAT_STEP_CAP_FLAG, HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG } from "@/lib/flags/keys";
 
 import { selectModel } from "@/lib/ai/chatStream/models";
+import { userThinkingChoice } from "@/lib/ai/chatStream/thinkingChoice";
 
 import { withHigherEffort } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
@@ -88,6 +89,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const chunks: string[] = [];
   let ranTools = false;
   let reachedStepLimit = false;
+  const thinkingChoice = heartbeatExecutionId ? null : await userThinkingChoice(dbUser.id, state.body?.modelOptionId);
   for (let attempt = 0; attempt < 2; attempt++) {
     ranTools = false;
     reachedStepLimit = false;
@@ -101,6 +103,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       provider: state.selected.usageProvider,
       feature: "chat",
       reasoningFeature: heartbeatExecutionId ? "heartbeat" : "chat",
+      ...(thinkingChoice ? { reasoningEffort: thinkingChoice, userReasoning: true } : {}),
     });
     const result = streamText({
       model: state.selected.model,
