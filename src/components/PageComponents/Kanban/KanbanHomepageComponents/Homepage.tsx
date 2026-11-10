@@ -241,9 +241,6 @@ const HomePage = ({
   });
   const [loading, setLoading] = useState<boolean>(false)
   const [renderAllTasks, setRenderAllTasks] = useState(false);
-  const [pendingBulkArchiveIds, setPendingBulkArchiveIds] = useState<Set<number>>(
-    () => new Set(),
-  );
 
   const showCommands = useRecoilValue(showCommandsAtom);
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
