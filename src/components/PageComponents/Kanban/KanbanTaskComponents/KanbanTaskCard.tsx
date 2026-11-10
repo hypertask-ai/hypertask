@@ -294,10 +294,10 @@ const TaskStalenessLine = ({
 
 export const TaskTitle = ({
   title,
-  cardOverflowClamp,
+  cardOverflowClamp = false,
 }: {
   title: string;
-  cardOverflowClamp: boolean;
+  cardOverflowClamp?: boolean;
 }) => {
   const wrapBetweenWords = useFlag(HTPR_7350_CARD_TITLE_WRAP_FLAG);
   return (

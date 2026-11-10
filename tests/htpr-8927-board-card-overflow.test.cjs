@@ -26,7 +26,6 @@ test("kanban card and column code gates overflow classes on the ticket flag", ()
     read("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskDraggableContainer.tsx"),
     read("src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx"),
     read("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx"),
-    read("src/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip.tsx"),
   ].join("\n");
 
   assert.match(sources, new RegExp(`useFlag\\(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG\\)`));

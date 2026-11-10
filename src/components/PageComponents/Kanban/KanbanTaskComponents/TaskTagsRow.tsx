@@ -129,9 +129,21 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
         onClick={() => handleClick("Assignees")}
       />
     ))}
-    {blockingUser && <BlockerChip user={blockingUser} />}
+    {blockingUser && (cardOverflowClamp ? (
+      <span className="inline-flex min-w-0 max-w-full overflow-hidden">
+        <BlockerChip user={blockingUser} />
+      </span>
+    ) : (
+      <BlockerChip user={blockingUser} />
+    ))}
     {task.blockingTasks?.map((blockingTask) => (
-      <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
+      cardOverflowClamp ? (
+        <span key={blockingTask.id} className="inline-flex min-w-0 max-w-full overflow-hidden">
+          <BlockerTaskChip task={blockingTask} />
+        </span>
+      ) : (
+        <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
+      )
     ))}
     {(runningTimer || (showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)) && (
       <TaskTimeBadge
@@ -216,13 +228,7 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
             );
           })()}
 
-          {hasCustomFieldValues && (
-            <CustomFieldChips
-              projectId={task.projectId}
-              values={customFieldValues}
-              cardOverflowClamp={cardOverflowClamp}
-            />
-          )}
+          {hasCustomFieldValues && <CustomFieldChips projectId={task.projectId} values={customFieldValues} cardOverflowClamp={cardOverflowClamp} />}
 
     </div>
     :<></>
