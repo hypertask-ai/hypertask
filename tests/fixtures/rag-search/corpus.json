@@ -1,0 +1,1248 @@
+{
+ "boardId": 15,
+ "board": "Hypertask Product",
+ "capturedAt": "2026-11-10",
+ "embedModel": "Xenova/all-MiniLM-L6-v2",
+ "embedDim": 384,
+ "embedTextCap": 4000,
+ "source": "hypertask task list --project 15 (status Normal only)",
+ "tasks": [
+  {
+   "id": 41340,
+   "ticketNumber": "HTPR-6542",
+   "title": "Management keys: team-scoped keys (build)",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Problem: management keys cover the whole account. A key cannot be tied to one team. Design was approved on 8 Sept and confirmed on 16 Sept: Fix: build team keys. Old keys stay as they are. A key can optionally belong to one team. No team means today's behaviour. Nothing changes. Owner leaves the team? The key is disabled for good. Same if the owner rejoins under a new membership. Creating keys and the new Settings controls sit behind a switch. Start fresh. The old attempt was too big and is closed. Done when: A team key works only for its team. Existing account keys work as before. A team key stops for good when the owner leaves. Risk: a key stops by mistake. Undo: switch it off. Note: this changes the database, so it waits for HT Manager Review. Decision: none. Result: Team choices use four-pixel corners. A team key works only for its team. An account key still works as before. Leaving a team was not tested. Flag: (Owner + QA)"
+  },
+  {
+   "id": 54645,
+   "ticketNumber": "HTPR-6921",
+   "title": "Slack app: Marketplace listing, live parity check in a real workspace, then retire the Worker bot",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Problem: two Slack bots run side by side. The official Slack app now has the /ht commands. It also has chat and personal login. The old Worker bot still runs. It is a follow-up of Fix: finish the move to the official app. Update the official app and reauthorize installs. Test commands, chat, DMs and the assistant panel. Use a real workspace. Test as a linked and an unlinked user. Get Marketplace ready: install page, privacy policy, support links. Only after that: uninstall the old bot and switch off its address. Done when: Everything works in a real workspace. The Marketplace listing is ready. The old bot is gone. Risk: installs could break during reauthorization. Undo: keep the old bot until tests pass. Decision: the legal pages need Valentin. Needs a workspace with the official app installed. Requested by Valentin in a Claude session on 2026-10-04."
+  },
+  {
+   "id": 58006,
+   "ticketNumber": "HTPR-7041",
+   "title": "Connect your agent card: show it as a dismissable overlay, not a block that pushes the board columns down",
+   "status": "Normal",
+   "text": "The Connect your agent card from sits as a wide block above the board columns and pushes them down. Valentin wants an overlay the user can click away. His words, 2026-10-09: \"why would this not be an overlay that the user can click a way but an element ath sitt on top of the coluimns this is so odd i have nver seen this\". Screenshot: (onboarding video at 0:31, Show the card as an overlay (a modal or a floating panel) on top of the board, so the columns keep their normal position. Clicking outside it, pressing Escape or Dismiss closes it; closing stays closed after a reload, as today. The live Waiting for your agent then Connected! states, the agent choices and the email stay unchanged. Reuse the app's existing modal or popover component; phone layout checked. Flag htpr-7026-agent-connect-check is on for Everyone, so this change needs the recorded pre-merge click-through."
+  },
+  {
+   "id": 59788,
+   "ticketNumber": "HTPR-7146",
+   "title": "An agent login can reach every board its owner can, not only the boards it was given",
+   "status": "Normal",
+   "text": "Flag: (Off) Problem An agent login with only some boards can still use every board. Found on 12 Oct: Runner 6 had boards 15 and 4060 only. It could still read the announcements board. Fix An agent sees and changes only the boards it was given. Risk Medium. Agents that relied on extra boards lose them. Decision None needed from Valentin. Done when An agent given boards 15 and 2128 cannot open any other board."
+  },
+  {
+   "id": 62734,
+   "ticketNumber": "HTPR-7294",
+   "title": "[FEATURE] Add a daily isolated test signup that walks every funnel step",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Problem: nothing proves a new user can sign up every day. Today's tests reuse old test accounts and boards. The retry job only retries queued events. Nobody is alerted if a signup step goes silent. Priority: P2. Requested monitoring is missing. The silence alerts are already live. They comment on This ticket is only the daily test signup. Fix: a daily fake signup that walks every funnel step. A fresh browser signs up as a brand new user each day. It creates its own board and three tasks. It connects the command line or AI tool. It invites a teammate at a second test address. It checks that each step saved and sent its event. Test runs stay out of customer numbers. It cleans up only what it created. A failure alert names the failing step and the owner. Done when: The signup runs daily with a new identity. A dropped step gives the right alert. Alerts leak no email, cookie or token. Customer conversion numbers stay clean. No real people are mailed. No live charges. Risk: each test signup also creates a billing account. That is a real production write. Undo: stop the daily run. Decision: needs a yes on production writes, including the billing account. Needs before st"
+  },
+  {
+   "id": 64085,
+   "ticketNumber": "HTPR-7339",
+   "title": "Pulsing light on board cards and ticket view while an agent is working",
+   "status": "Normal",
+   "text": "Draw the wireframe of the board and ticket view, desktop and phone, and get Valentin's yes by name . Then build the pulsing light behind a flag named after this ticket. Problem Valentin, 2026-10-18: \"we need to have an indicator for AGENT is working on something. I am really thinking about an animation in the task view and on the board so i can see pulsing lights for tickets that are actively being worked on by a runner\". Already there The HTPR-7071 agent status chip is on board cards, behind the flag htpr-7071-agent-status-chip. The chip shows the agent name, current step and last report. How others do it Linear shows an animated agent avatar on issues while an agent works. Cursor and ChatGPT pulse a dot while a task runs. They stop when it is done or waiting. Source: Linear agents . Proposal Add a pulsing dot on the HTPR-7071 chip and in the ticket header. It pulses only while the agent reported in the last 10 minutes . It shows a steady colour when the agent waits for Valentin. It is gone when the agent is idle. The agent log feeds it (see the \"agent posts are log by default\" ticket), so runners need no extra step. Affected screen Proposed: the board card chip and the ticket hea"
+  },
+  {
+   "id": 64086,
+   "ticketNumber": "HTPR-7340",
+   "title": "Rethink the Updates split in the inbox",
+   "status": "Normal",
+   "text": "Problem: the Updates split in the inbox may be wrong. Valentin (2026-10-18): \"also the update split in the inbox its becoming a bit questionable we should probably rethink that soon too\" Unknown: what exactly feels wrong today. Fix: wait, measure, then show a wireframe. Build nothing yet. First the \"agent posts are log by default\" ticket must ship. It removes most agent noise. Then measure for one week what lands in Updates. Compare how Linear and Superhuman split their inboxes. Draw a wireframe for Valentin. Done when: A week of numbers is on this ticket. The Linear and Superhuman comparison is on this ticket. A wireframe waits for Valentin's yes or no. Not in this ticket: building the new split. Risk: none. Nothing is built before his yes. Related: , and"
+  },
+  {
+   "id": 64897,
+   "ticketNumber": "HTPR-7381",
+   "title": "[FEATURE] Native Rust desktop app pilot: Inbox, Board and Task detail on a local database",
+   "status": "Normal",
+   "text": "Build a native desktop pilot of Hypertask in Rust with GPUI , with no browser engine anywhere, covering Inbox, Board and Task detail only. Scope Three screens copied from app.hypertask.ai so they look and feel the same. A local SQLite database on the computer. Every read is local, every edit is instant and syncs in the background. Budgets Pass/fail budgets are set before any UI work. Cold start under 300 ms Input to frame under 16 ms Memory under 100 MB Sources The real app is the spec, so nothing is reinvented. Database schema API handlers in src/pages/api and src/utils/controllers src/lib/realtime/server.ts The six theme files in src/styles/tailwindThemes Recorded network traffic of the three screens The August C desktop spike (hypertas-desktop-c, SPEC.md and git history) Build order UI-free Rust core : local SQLite, delta pull, realtime push, optimistic write queue, Rust types generated from the schema, contract tests replaying recorded traffic, property tests on the write queue. GPUI screens built on the theme tokens. Done when Outside evidence shows all of these: Pixel diff scores against Playwright screenshots of the live app, per screen and theme Hyperfine cold start times F"
+  },
+  {
+   "id": 64980,
+   "ticketNumber": "HTPR-7394",
+   "title": "Cap the remaining AI spend paths: batches, search embeddings, web search fees and a provider spend limit",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Follow-up of HTPR-7324 ( ). Three design reviews found these AI spend paths need their own durable state, so they ship separately from the main cap. Until this ships: with the HTPR-7324 flag on, teams skip the half-price batch path and use the normal capped path, so batches cannot leak. Search embeddings and web search tool fees stay outside the cap (about $0.00002 per indexed item). Batches (Slack summaries, smart labels): reserve the cost before submitting, keyed by the batch idempotency key with a saved intent. Settle once per batch on collection, including partial results, and keep it through month end. Then turn the half-price batch path back on for capped teams. Search embeddings: charge each team for its own indexing and searches, and split mixed-team writes by team. BYOK teams get keyword search unless they bring an embedding key. Over the cap, rows are still written for keyword search. Native web search fees: count tool fees, not only tokens, or turn the tool off on our key. Long calls: renew the reservation for calls longer than 10 minutes, so late results settle at their real cost. Provider backstop (key layout): five AI Gateway keys, split by risk. Th"
+  },
+  {
+   "id": 65501,
+   "ticketNumber": "HTPR-7472",
+   "title": "[FEATURE] Task templates per type (Bug, A/B test) and a task writer that fills them with ideas from the board in one go",
+   "status": "Normal",
+   "text": "Flag: (Off) Problem: new tickets come out half empty. Valentin (Oct 20): \"i think we need to be able to define TASK templates how does a bug look like how does an ab test look like but then also the task writer would do ideation in one go... like if i ask it to provide 5 good headlines it would LEARN from the RAG and write the headlines directly into the new ticket\" Example: an inne ticket came out with \"headline to be written\" five times. Fix: one template per task type. A writer fills it fully. Templates live in board settings. Examples: Bug, A/B test. Bug holds steps, expected and actual. A/B test holds tag, score, problem, idea, control, variations, metrics. The task writer picks the matching template from the request. Asked for ideas, it learns from the board's tickets, docs and memory. It writes finished ideas straight into the ticket. No placeholders. No follow-up chat. It fills the score the same way. Done when: Board settings let you define a template per type. The task writer picks the right template. \"5 good headlines\" gives 5 real headlines in the new ticket. Risk: none for old tickets. It is hidden behind a switch. Undo: switch it off. Decision: first step is a clickab"
+  },
+  {
+   "id": 66289,
+   "ticketNumber": "HTPR-7508",
+   "title": "[INFRA] Scope or except the 81 agent board reads on the HTPR-7496 debt list",
+   "status": "Normal",
+   "text": "Follow-up from . That ticket adds a CI check that stops new board reads in agent routes that skip the agent scope helpers. The 85 reads that exist today are kept on a debt list ( .github/scripts/agent-scope/agent-scope-baseline.json ), owner HT Product Lead, expiry 2027-01-19. What to do Review each listed read. Either scope it with the shared helpers (getProjectWhere, getProjectListingWhere, projectContentAccessWhere, taskWriteAccessWhere, savedViewBoardAccessWhere) or move it to the reviewed exceptions file with a reason. Delete each fixed entry from the debt list in the same PR. Split into smaller tickets per area as needed. Known real gaps from the HTPR-7495 design: agent activity, document search, createGlobally GET, cancelInvite, getArchived. Reads per file (54 files) src/app/api/agents/[agentId]/route.ts : 7 src/lib/mcp/operations/tasks/context/operation.ts : 4 src/pages/api/ai/chat/mention.ts : 4 src/pages/api/ai/generateComments.ts : 4 src/pages/api/search/document.ts : 4 src/lib/mcp/operations/comments/[comment_id]/operation.ts : 3 src/app/api/ai/task-questions/route.ts : 2 src/app/api/reports/status-update/route.ts : 2 src/app/api/settings/ai-usage/route.ts : 2 src/lib/m"
+  },
+  {
+   "id": 66320,
+   "ticketNumber": "HTPR-7511",
+   "title": "Signup goes straight to the board: one-click Google or email, first task button and Start plan button on the board",
+   "status": "Normal",
+   "text": "Goal New users land on their board in one click, with no onboarding steps in between. Activation (first task) and the upsell (start a plan) happen on the board itself. Model: Valentin, 2026-10-21: \"That is my biggest priority, to get them onto the board as quickly as possible so they can experience the product.\" \"If we have any sort of onboarding flow, I don't want it. I want them to go straight to the board.\" Flow to wireframe Home page: two buttons like boat.dev: \"Dashboard\" (top right) and the CLI install command ( curl -fsSL hypertask.ai/install | sh ). Reference: Login page: same structure as boat.dev, with a sign-in for humans (Google, email) and a sign-in for agents. References: and Google: one click, straight to the empty board on the free plan. No steps in between. Email: type the email, go straight to the board without confirming first. A banner on top says \"Please confirm your email\" until they do. A new email gets a board right away; a known email still needs its login code. Empty board: one big button in the middle to write the first task, which opens the task writer. Reference: boat.dev's big \"New\" button on an empty dashboard, Upsell: a clear \"Start a Hypertask plan\""
+  },
+  {
+   "id": 66381,
+   "ticketNumber": "HTPR-7515",
+   "title": "Connect GitHub per board from Ctrl+K, so PRs show on tickets on every board",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Problem Pull requests show on tickets only for board 15. The repo-to-board link is hard-coded in src/lib/pullRequests/githubPullRequests.ts (BOARD_15_GITHUB_REPOSITORIES and BOARD_15_PULL_REQUEST_AUTHOR_IDS), so no other board can connect GitHub. On 2026-10-21 inne's INBO-46 (\"Link GitHub to board 8423 so each PR shows on its ticket\") got stuck because nobody could find a GitHub setting. Valentin, 2026-10-21: \"We need to formalize the GitHub connection.\" \"There should be a control k element connect GitHub or something per board that you can determine which repo belongs to which board. And then the pull request show up in the ticket like it does for the Hypertask product board.\" Screenshot: Ctrl+K search for \"github\" finds only \"Copy branch name\" ( ). Requirements Ctrl+K \"Connect GitHub\" on any board: pick which GitHub repos belong to this board. Connection through a GitHub App the board owner installs on their org or account; no shared secrets or hand edits. PRs whose title or branch carries the board's ticket key (for example INBO-46) show on that ticket, exactly like board 15 today: badge, state, checks, and the existing moves. Board 15 moves onto the same mech"
+  },
+  {
+   "id": 66712,
+   "ticketNumber": "HTPR-7552",
+   "title": "[FEATURE] Sign in an agent with a one-time code",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Problem: agents need a copied token to sign in. They also need their own board when connecting. Fix: sign in with a one-time code. The code lasts five minutes. You approve it in the browser. Done when: Command line and MCP sign in safely. Agents see only their new board. Expired and repeated codes stay safe. Old token sign-in still works. Risk: wrong access could expose other boards. The preview is for you only. Undo: the flag stops new sign-ins. Decision: approved. You own the new board. Browser approval and linked releases were approved: Part of: Flag:"
+  },
+  {
+   "id": 67630,
+   "ticketNumber": "HTPR-7574",
+   "title": "I told grok bot to onboard itself it didn'twork",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Flag: (Owner + QA) Blocked on 1 click from you. No tickets are filed yet because Grok Bot doesn't have access to board 2060 (Software Factory). The 4 tickets are written and ready to post. Next action, 1 minute: Open Software Factory board . Add the agent \"Grok Bot\" with write access. Hypertask's docs say this lives in the board settings under Agents. You can also do it from Grok Bot's agent page under board access. Reply \"done\". Why I couldn't do it myself: my agent only has write access, and adding a board needs admin. Inviting it through your Hypertask connection was also refused. After you reply \"done\": I re-check triage-cli once, which is 1 approval on your laptop. Then I file these 4 tickets in Todo at Medium priority: Slack hypertasks.slack.com fails auth ( invalid_auth ). You'll need to sign back in to Slack in a browser. Gmail inne ( ) fails because gws isn't installed on the VPS. Gmail personal ( ) fails for the same reason. Gmail work ( ) fails for the same reason. Already on the board, so I won't file them again: IGSH-480 (Codex login on Hetzner), IGSH-486 (WhatsApp personal re-pair, which looks fixed now), IGSH-488 (triage keys into 1Password). -> I ca"
+  },
+  {
+   "id": 68114,
+   "ticketNumber": "HTPR-7612",
+   "title": "Slash skills send comment context to sidebar chat",
+   "status": "Normal",
+   "text": "Slash skills send comments to sidebar AI chat. Valentin: “upon completion of the forward slash skill name and enter, it would take the comment content, the ticket content, plus the skill content and give it to the AI chat sidebar as a prompt, and would give the answer to that prompt in the AI sidebar chat. Completely circumventing the Write with AI function inside the comments.” Original request . Yes: rebuild the wireframe . Wireframe acceptance Type a comment, then / and a skill. Enter sends comment, ticket and skill together. Existing sidebar opens and shows the answer. No inline AI writer opens for this flow. Comment remains an unposted draft. Reuse current desktop and phone controls. Existing AI button and global Ctrl+J remain separate. The earlier inline-writer sketch solved the wrong problem. Rebuild the clickable wireframe, post one approval Question, then wait. No product implementation before approval."
+  },
+  {
+   "id": 68302,
+   "ticketNumber": "HTPR-7622",
+   "title": "Ask the AI to change your settings for you",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Problem: changing settings takes too many clicks. Valentin, 2026-10-23: \"what would make sense is to have an AI that knows the settings of Hypertask. So when you go to settings you can just ask the AI to set it for you.\" Fix: in Settings, you ask the AI in plain words. Examples: \"make Anna an admin on this board\", \"switch me to the dark theme\", \"turn off email notifications for comments\". It uses the live AI chat. Sidebar and Ctrl+J. It knows every setting on the page and nearby. It can only do what you could click yourself. It shows one confirm card first. What changes, from what to what. You press Apply or Cancel. Then it offers Undo. People, access, billing and deletes always need the card. Cannot do it? It says where the setting is and opens it. Done when: You ask for a setting and the card appears. Apply changes it. Undo puts it back. A member cannot change what only the owner may change. Risk: a wrong change is applied. Undo: the Undo button. Process: new screens need a wireframe and your sign-off first."
+  },
+  {
+   "id": 68313,
+   "ticketNumber": "HTPR-7625",
+   "title": "[SECURITY] Map what data we keep forever and propose automatic deletion dates",
+   "status": "Normal",
+   "text": "Now Waiting on your yes to the deletion dates in the Question below. Problem We keep most personal and customer data forever. Today only 5 kinds of data delete by themselves. A break-in would reach every old copy. On 2026-10-23 you said yes in chat to these security tickets. Customer emails stay. You said: Don't delete the emails though we still need those for reactivate customer Fix One page lists 17 kinds of data. Each kind shows what we keep today and a proposed deletion date. Your yes deletes nothing. It starts one build ticket per kind. Each build ticket first runs 7 days without deleting anything. Done when You have answered the Question below. One build ticket exists for each kind you approved. Risk Worst case: we delete data someone still needs. Undo: nothing is deleted before a 7 day dry run. Customer emails and customer work always stay. Decision One Question in the comments below."
+  },
+  {
+   "id": 69108,
+   "ticketNumber": "HTPR-7654",
+   "title": "CLI bug: comment add has no --kind, so agent comments never reach people",
+   "status": "Normal",
+   "text": "Now Waiting on your yes to restore npm publishing access. Problem Agents that install the CLI from npm cannot post comments people see. The fixed version exists, but npm still serves the 11 October version. You approved the publish. Publishing access then failed twice. Fix Restore publishing access for the CLI package. Then we publish the prepared version 2.0.12 to npm. Then we install it fresh and post proof here. Done when A fresh npm install lets an agent post a comment people see. Proof is posted on this ticket. Risk Worst case: a bad version reaches new installs. Undo: we publish a fixed version. Decision One Question in the comments below."
+  },
+  {
+   "id": 69480,
+   "ticketNumber": "HTPR-7663",
+   "title": "Decide global skills behaviour for team-limited agents",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Follow-up from Product decision needed: what account-wide (global) skills should do for an agent limited to one team. Since 7179, a team-limited agent gets \"not allowed\" on creating, editing, importing or loading account-wide skills, as a safe interim rule. Board skills still work. Options: keep refusing; allow read-only use; or let owners pick which global skills a team agent may use."
+  },
+  {
+   "id": 70246,
+   "ticketNumber": "HTPR-7679",
+   "title": "[FEATURE] Allowance-used message offers a Review AI options button",
+   "status": "Normal",
+   "text": "When an AI feature says the team's allowance is used up, offer a one-click way to upgrade or add an AI key. Follow-up from Today AI features (Ctrl+J task writer, AI chat, mentions, reply suggestions, improve writing, voice notes) show plain text: \"This team has used its included AI allowance for this month. Upgrade or add your own AI key to continue.\" Nothing to click. The only button with a way forward is \"Review AI options\" in Settings, AI usage (src/components/Modals/Settings/AiUsageSection.tsx), which opens the AI keys settings. Idea Next to the allowance message, show the same \"Review AI options\" action (and maybe \"See plans\"), reusing that live button and the existing settings navigation. The server already sends the message, and the AI chat also sends the allowance period and team. Needs a wireframe and UX sign-off before any code. No allowance amounts or billing change."
+  },
+  {
+   "id": 75207,
+   "ticketNumber": "HTPR-7731",
+   "title": "Own AI keys: use the AI allowance first, then the key; check every provider",
+   "status": "Normal",
+   "text": "Problem: unclear what happens when AI allowance runs out. Valentin, 2026-10-24: \"also check all api key entry models pls the way it shoud work use up ai allowance then swithc to the api key\". We do not know if every key provider works. Fix: allowance first, then your own key. AI requests use the team's included allowance first. When it is used up, they use the team's own key. They are not refused. Check what happens today. Change it if it differs. Test every provider in Settings, AI, Bring your own key. Providers include OpenAI, Anthropic, Google, DeepSeek and Moonshot. Each provider that fails gets its own bug ticket. DeepSeek is already filed: A key is never shown or logged. Done when: The order is allowance first, then your own key. Test key passes for each provider with a real key. Once the allowance is gone, an AI chat answer uses that key. Risk: AI calls could be billed to the wrong place. Undo: revert. Decision: none."
+  },
+  {
+   "id": 75208,
+   "ticketNumber": "HTPR-7732",
+   "title": "Bring your own key: add Baseten",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Let teams add their own Baseten key under Bring your own key. Valentin, 2026-10-24: \"also allow adding baseten keys pls\". Add Baseten as one more provider row on Settings, AI, Bring your own key, built like the existing rows: key field, Test key, Remove, switch. Show the Baseten models the key can use, and route those requests to Baseten with the team's key. Same order as the other keys: use the plan's AI allowance first, then the key. Done when: Test key passes with a real Baseten key, and an AI chat answer comes from a Baseten model. Never print or log a key."
+  },
+  {
+   "id": 75245,
+   "ticketNumber": "HTPR-7735",
+   "title": "Agent sessions get their own dropdown in the AI chat header",
+   "status": "Normal",
+   "text": "Problem: agent sessions sit inside the normal chat dropdown. Valentin (2026-10-24): \"we need to abstract the agent sessions into its own drop down. So just add a little agent icon in the AI chat on the top right where the new chat icon is and the history icon. And then this will open a drop down which allows us to essentially select an agent. Does that make sense? Right now, the the... This session lives in the drop down that manages the cha...\" (his message was cut off here). Fix: agent sessions get their own dropdown. A small agent icon sits next to New chat and History. It opens a dropdown to pick an agent. You start or resume its session there. Agent sessions leave the regular chat dropdown. Done when: The icon shows in the AI chat header. Picking an agent starts or resumes its session. The regular dropdown shows only normal chats. Risk: low. Undo: switch the flag Off. Decision: needs Valentin's yes on a clickable wireframe before any code. Goes with"
+  },
+  {
+   "id": 75249,
+   "ticketNumber": "HTPR-7737",
+   "title": "Hovering an agent name offers Chat, which opens a direct chat with that agent in the AI sidebar",
+   "status": "Normal",
+   "text": "Flag: (Off) Now (3 Nov): the hover card works on a phone and on a desktop. One switch keeps the Chat button hidden. Your one decision: switch it back on for everyone. Problem: starting a chat with an agent takes too many steps. You must find the agent in the side chat picker first. Valentin wants one step from the agent name he already sees. Marked urgent in his note. Fix: hover an agent name, get a \"Chat\" action. Clicking it opens the side chat on that agent's chat. It opens the side chat if it was closed. It reuses the existing agent chats and the existing hover. No new chat screen. Done when: Hover an agent name and click Chat. That agent's chat opens in the side chat. Risk: none for data. Undo: switch it off. Decision: one open Question, see the marked comment. Your yes switches it on for everyone. Related: Flag: htpr-7737-agent-hover-chat"
+  },
+  {
+   "id": 75265,
+   "ticketNumber": "HTPR-7742",
+   "title": "Agent chat works for every agent: fallback fix, CLI and MCP listen, honest status",
+   "status": "Normal",
+   "text": "Problem: agent chat does not work for every agent. Valentin (2026-10-24): \"we need to roll out agent chat now to all agents pls anybody adding an agent should be abel to make this agent talk with them thorught they siebar chat\" Valentin: \"can we sovle it through the cli so that agents interact with the mcp /cli /api know how to attach themselves\". He said \"run\" to this plan. Some agents are shut out of chat. Mini Boss CEO shows \"runtime has not enabled chat\": Fix: chat works for every agent people add, with no setup. Fix the rule that shuts some agents out. Add a command and an MCP tool to listen and reply. Agents learn this when they connect. The sidebar shows \"Online\" or \"Reads when it next runs\". It never says \"runtime has not enabled chat\". Only the wording changes. No new elements. First count the affected agents. Count again after release. Done when: A new agent answers a new user, using only MCP. A real Claude Code agent answers a test user live. Mini Boss CEO answers Valentin. Unanswered agent chats drop. Risk: agents may get more messages. Undo: switch the flag Off."
+  },
+  {
+   "id": 75268,
+   "ticketNumber": "HTPR-7745",
+   "title": "Boards come with built-in skills: inbox triage, board triage, catch me up, decisions, write a ticket",
+   "status": "Normal",
+   "text": "Every Hypertask board comes with a starter set of skills: inbox triage, board triage and more, ready in AI chat and for connected agents. Valentin, 2026-10-24: \"hypertask boards should come with a set of SKILLS presinstalled so that ther eis a triage skill fo rhte inbox and the baord for example\". Today: the app has exactly one built-in skill (Improve readability). Every other skill must be written or imported by hand per person or board. Starter set, built from the skills we already run every day: Inbox triage: sort the inbox into decisions, replies needed, FYI and noise, each with a link. Board triage: sort a column (for example Done) into needs you, important finished, bugs fixed, safe to archive. Catch me up: what changed and what is still open since you last looked. Decisions: every open question waiting for you, with a link to the exact comment. Write a ticket: turn rough text or a screenshot into a clear ticket. How it works: Built-in skills ship in the app, versioned, so we update them for everyone at once. A board can switch one off or copy it to edit. They show up in AI chat (slash menu) and through the CLI and MCP skill list, so customers' agents can use them too. They u"
+  },
+  {
+   "id": 75270,
+   "ticketNumber": "HTPR-7746",
+   "title": "Premium AI models: own key everywhere, allowance warning on paid plans",
+   "status": "Normal",
+   "text": "Premium AI models (Fable 5.1, GPT 6 Astra) come with your own key everywhere, and with a clear \"uses your allowance fast\" warning on allowance plans. Valentin, 2026-10-24: \"astra/fable are supe rexpensive and burn the allwoance super quick not sure how to ahndle that. on bring your own key that is fineand we must add it there actually but on the free and pro plan with allownace this needs a warnign that its burning all tokens fast\". Prices per million words in and out (Vercel AI Gateway): Fable 5.1 and GPT 6 Astra cost $10 and $50. Opus 5.5 costs $4 and $20, Sonnet 5.5 and GPT 6.1 Sol $2 and $10, GPT 6 Luna $0.10 and $0.50. Premium costs 5 times Sonnet and 100 times Luna. Own key: add Fable 5.1 and GPT 6 Astra for teams with their own Anthropic or OpenAI key. Billed to their key, no warning needed beyond the price label. Allowance plans: premium models carry a \"Premium\" label in the model picker saying they use the allowance about 5 times faster than Sonnet. The first time someone picks one, a short confirm shows how many messages the remaining allowance covers. Free plan: recommendation below, Valentin decides. Reuse the existing picker and the existing allowance warning. Wirefram"
+  },
+  {
+   "id": 75321,
+   "ticketNumber": "HTPR-7761",
+   "title": "AI chat says it cannot read images",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Now The fix is live. One paid image check is left. Your yes on the Question below lets us run it. Problem File a bug for lack of vision because i think this tool can do vision no? He sent the chat an image link. He asked if it could read the image. It said it cannot read images at all. The link reached the model as plain text. Fix An image link now reaches the model as a picture. A model without vision says it cannot see images. The fix is shipped and live. Done when The chat describes a screenshot sent as a link. A model without vision says so honestly. One real reply proves picture reading works. Risk The check sends a few paid AI replies. The most it can cost is $0.10. If the check fails, we roll the fix back. Decision One Question below: approve up to $0.10 for image checks."
+  },
+  {
+   "id": 75324,
+   "ticketNumber": "HTPR-7764",
+   "title": "AI chat sidebar and chat dropdown show a spinner while a chat is running",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Problem: you cannot see which AI chats are running. The side chat shows nothing while it works. The chat list shows nothing either. You must open a chat to know. Fix: a small spinner on running chats. The side chat shows it while its chat runs. Each running chat in the list shows it too. It disappears when the chat ends, fails or is cancelled. It reuses an existing spinner look. It stays visible when the side chat is folded to its header. Done when: Sending a message shows the spinner in both places. It clears as soon as the reply ends. A background chat shows its own spinner in the list. Risk: none for data. Undo: switch it off. Decision: new screen element. A short wireframe and Valentin's yes by name come first. Related: Related: Screenshot: Switch page:"
+  },
+  {
+   "id": 75338,
+   "ticketNumber": "HTPR-7766",
+   "title": "AI chat keyboard shortcuts: every action keyboard driven on /chat, the sidebar chat and floating windows",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Widened (2026-10-29): i asked for the whole view to have shortucts and all elements need mouse over flags (not the session list) but drop downas and making it fulls creen and also the sidbear view needs shortcut also the sidbear view needs shortcut to go to full screen on shortcut Hover on any chat control shows its name and key. Not on the chat list rows. Dropdowns get keys: board scope, model, mic. New key: sidebar chat goes full screen, and back. New key: open and close the sidebar chat. Now: the keys are built and live behind the switch. The switch is Off. Nothing else blocks this ticket. One thumbs-up on the question below turns the keys on for testing. Then I press every key on the live site. Then this closes. Problem: AI chat actions still need the mouse. Valentin: \"every action needs a keyboard shortcut.\" Session switching, board scope and search have no reliable key. Same for model, attach, mic and mentions. He widened it. Keys must work on all three chat places. They must fit the rest of the keyboard. Fix: one key map for the AI chat, used everywhere. Three places: full-screen chat, sidebar chat, floating window. The same key does the same thing in all "
+  },
+  {
+   "id": 75341,
+   "ticketNumber": "HTPR-7769",
+   "title": "AI side chat manages all team settings through a team-scoped management key",
+   "status": "Normal",
+   "text": "Let the AI side chat manage every Hypertask setting for the current team, not just the open settings page, through a management key limited to that team. Problem HTPR-7622 lets the AI change settings one page at a time. \"Set this team up like that\" still needs many manual steps across members, AI models, skills, labels, integrations, notifications, boards and agents. Hypothesis If the AI side chat holds a team-scoped management key bounded by the signed-in person's rights, then team setup requests finish in one conversation, with no access outside the team. Proposed, not measured. Requirements Scope. The key covers one team only. It never reaches another team the user belongs to. Coverage. Team members and roles, AI models and BYOK keys, skills, labels, integrations, notification defaults, board and section setup, agent management and tokens. Rights. Access never exceeds the signed-in person's own rights. The server enforces this on the write endpoints, not only in the UI. Confirm card. Changes to people, access, billing, tokens or deletions always show what changes, from what to what, with Apply and Cancel, then Undo afterwards. Preview. Ambiguous writes are previewed before they "
+  },
+  {
+   "id": 75343,
+   "ticketNumber": "HTPR-7771",
+   "title": "Floating AI chats: open several at once and minimize each to a bottom dock that shows running or idle",
+   "status": "Normal",
+   "text": "Let the user open several floating AI chat windows, each with its own session, and minimize each one to a dock strip at the bottom of Hypertask that shows whether that chat is working. Problem The floating window's minus button collapses it to a single small tab (HTPR-4297), and there is no way to see which of several chats is running without restoring each one. Current behavior One floating window collapses to one bottom-right tab, and the tab does not show whether the chat is working. Several floating windows side by side, each with a dock entry, are not supported. Verify the current multi-window behavior on the live site before building. Requirements Every floating chat window has a minimize control that sends it to a dock strip at the bottom edge of the Hypertask window, not the operating system taskbar. The dock has one entry per minimized window , showing the chat title and a running/idle indicator. The indicator animates while that chat works and clears when it finishes, fails or is stopped. Clicking a dock entry restores the window to its previous size and position. A running chat keeps working while minimized , and its reply is there on restore. Close is a separate control"
+  },
+  {
+   "id": 75362,
+   "ticketNumber": "HTPR-7786",
+   "title": "[SECURITY] Stop saving personal data we never use (4 kinds, emails stay)",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Stop saving personal data we never use (4 kinds, emails stay) Board: 15 Valentin said Yes to all four changes, with a thumbs up on the question at on 2026-10-24. His follow-up was: \"Yes to all Especially if you think that linear would also do it like this.\" Stop saving unused personal copies, not useful customer work. Customer emails stay in every case , including emails already shown in logs, under HT Product Lead decision 300221. Linear publishes purpose-based retention, not its exact logging/schema choices; we recommend the principle, not an unverified claim that Linear has these same four internals. Source decision: Proposal: The proposal URL required Cloudflare Access during this review. Scope reconstructed from its matching local four-group inventory and the supplied approved question; no page contents guessed. Runner must compare with the authenticated proposal before filing/starting the build. Code baseline: origin/production c763b6c9d6b5a0b4781b18bc10ab4e9c3bf177f7 . References below are to that commit, not the shared dirty working directory. Re-resolve them if production changes. This is a build-ticket DRAFT, not a filed ticket or a completed implementati"
+  },
+  {
+   "id": 75364,
+   "ticketNumber": "HTPR-7788",
+   "title": "Add a page with the full AI breakdown per team",
+   "status": "Normal",
+   "text": "Build a page that shows the full AI usage breakdown for each team. This is an improvement to the existing AI usage reporting, not a bug. Problem No single page shows the full AI breakdown per team. Existing views cover narrower slices: the team allowance view in Settings AI usage: team allowance progress bar + per-model % (no dollars, no per-user) and the transcription-only view in Dashboard Transcription Usage Page: Map AI Cost by Team, Board, and User . Proposed behavior One page lists every team and opens a full AI breakdown for each. Proposed breakdown dimensions: model , feature , board and member . Proposed: show spend against the team allowance. Requirements Build on the data and wording already used on the AI usage page ( Settings AI usage: team allowance progress bar + per-model % (no dollars, no per-user) , AI usage page polish: drop 'no cost' line, fix allowance contrast, prettify feature labels ). Keep totals reconcilable. AI usage page polish: drop 'no cost' line, fix allowance contrast, prettify feature labels kept summaries in the breakdown for this reason. Decide the audience before building. Settings AI usage: team allowance progress bar + per-model % (no dollars, "
+  },
+  {
+   "id": 75369,
+   "ticketNumber": "HTPR-7789",
+   "title": "Flags column tickets show no flag state label and no flag link",
+   "status": "Normal",
+   "text": "Core ask Every ticket in the Flags column needs one flag-state label and a link to its flag's card on /admin/flags , so Valentin can see what each ticket is set to at a glance. Valentin's note: \"everything that's in the flags column needs a label which states the flag state. So that I can see what a ticket is set to. Also, each ticket needs the URL of the flag.\" Proposed label set to create on board 15: flag:everyone , flag:owner-only , flag:qa-only , flag:off , flag:internal . One label per ticket. No ticket in the column without one. Today board 15 has no flag custom field and no flag-state labels. Flag state lives only in ticket prose. Of 23 tickets in Flags, 1 declares an audience (HTPR-7363, \"Owner and QA first\"). 3 are Owner only, never Everyone: HTPR-7549, HTPR-7550, HTPR-7551, all behind htpr-7511-signup-straight-to-board . 4 name a flag but no audience: HTPR-7727, HTPR-7723, HTPR-7577, HTPR-7509. 5 say \"a flag\" without naming it: HTPR-6542, HTPR-7699, HTPR-7686, HTPR-7684, HTPR-6177. 10 name no flag at all: HTPR-5906, HTPR-6556, HTPR-6371, HTPR-4857, HTPR-7574, HTPR-7037, HTPR-6899, HTPR-6817, HTPR-5908, HTPR-3533. Also covered Write a comment on every Flags ticket that do"
+  },
+  {
+   "id": 75375,
+   "ticketNumber": "HTPR-7790",
+   "title": "Add board connectors so outside tools like Gmail and Calendar can feed events and tickets into a board",
+   "status": "Normal",
+   "text": "Build a connectors framework that lets a board owner link external tools, starting with Gmail and Calendar, so their events and messages create or update tickets on that board. Problem Hypertask has no generic way to bring outside tools into a board. Today only a few one-off links exist (Slack, GitHub for board 15, Google Calendar behind a flag), so each new tool needs custom work. Requirements Connect from one place. A board owner picks a tool and links it to a specific board. Proposed entry point: Ctrl+K and board settings. First connectors: Gmail and Calendar. Other tools follow on the same framework. Inbound only at first. Events and messages create tickets on the chosen board. Two-way sync is out of scope. Per-board mapping. Each connection names its target board and column. Access. Only members of the board's team can connect or remove a connector. Add a \"still refused\" test for a non-member. Secrets. Use OAuth install flows and encrypt tokens at rest. No shared or hand-edited secrets. No duplicates. The same event or email never creates two tickets. Agent access. CLI and MCP commands list and set a board's connectors. UI. New screens need a wireframe and UX sign-off first. R"
+  },
+  {
+   "id": 75432,
+   "ticketNumber": "HTPR-7795",
+   "title": "Per-client AI settings admin page: token source, visible models, preselected model and cap per team",
+   "status": "Normal",
+   "text": "Per-client AI settings admin page (rewritten 2026-10-25, replaces the comps-page Custom plan spec). One admin page per team where Valentin sets where its tokens come from and which models it sees. Funding model (Valentin, final): paying teams and new paying users see all models. Anthropic models are preselected and billed to Valentin's free monthly $200 Anthropic key. Any other model runs on the regular Vercel AI Gateway out of the team's allowance. The gateway plus allowance is also the fallback once the month's $200 is used up. DeepSeek is not a fallback. inne: own Anthropic key only. inne and vetsak: Anthropic models only. Token source per team, one of: Default (Anthropic on the $200 key, then the gateway allowance; other models on the gateway allowance), Own key only (never our keys or the gateway, e.g. inne), Allowance only (gateway allowance for everything). Visible providers: a checkbox per provider. inne and vetsak: Anthropic only. Their model pickers never show anything else. Preselected model: Haiku 5.5 by default, changeable per team. Monthly $ cap: optional, per team. Live numbers: this month's $ on Valentin's keys vs $ on the team's own key, per team, from AiUsage. Key"
+  },
+  {
+   "id": 75439,
+   "ticketNumber": "HTPR-7797",
+   "title": "Tiny AI allowance meter that appears when the allowance runs low",
+   "status": "Normal",
+   "text": "A tiny AI allowance meter icon that appears only when the team's AI allowance is running low. Valentin, 2026-10-24: \"i am also thinking to add an ai allowance meter somewhere super small icon that starts showing when ai allowance is going towards the end\". Hidden while there is plenty left. It appears when the team has used about 80% (the number is set in the wireframe step). Very small: one icon with a fill level, in the AI chat or model picker area. Hover or tap shows what is left and when it resets, and links to Settings, AI usage. At 100%: it says the allowance is used up, and what happens next (own key takes over, or upgrade), matching HTPR-7731. Uses the same numbers as Settings, AI usage, so the two never disagree (see HTPR-7687). New visible UI: wireframe from the live AI chat and model picker first, reusing existing icon styles, then Valentin's yes. Goes with HTPR-7746 (allowance warning on paid plans) and HTPR-7731. Proof: a QA team at 85% sees the icon, a team at 20% does not, and the numbers match Settings."
+  },
+  {
+   "id": 75455,
+   "ticketNumber": "HTPR-7799",
+   "title": "[BUG] Sign out does nothing and sign-in lands in another account (Valentin locked out of his Gmail account in a new Chrome profile)",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Opening app.hypertask.ai/project with no board id shows an empty board area instead of your boards or a clear message. Valentin, 2026-10-24, in a new Chrome profile inside Multiprompt: the AI chat panel loads, but /project is blank, and /project?id=339 and /project?id=8423 say \"This board or ticket is unavailable\". Clearing cookies did not help. /project with no id opens the person's last used board, or their board list if they have none. If the signed-in account has no access to a board, the unavailable screen names the signed-in email and offers \"Switch account\", so a wrong login is obvious. Proof: a fresh browser profile signed in as a member lands on a board; one signed in as a non-member sees its own email and the switch button."
+  },
+  {
+   "id": 75547,
+   "ticketNumber": "HTPR-7807",
+   "title": "Empty view with all columns hidden: replace the current empty-state screen",
+   "status": "Normal",
+   "text": "Flag: (Off) Problem: the empty view screen is disliked. A view has no tickets and empty columns are hidden. The board then shows the screen in this screenshot: Valentin: \"i am not a big fan of htis iew\". He asks what else we could do. The exact words on that screen are unconfirmed. Fix: pick one better screen. Show a wireframe first. Idea 1: show the empty columns when the view has zero tickets. Idea 2: show a short message with a way to add a ticket. Idea 3: keep the columns visible but dimmed. These are ideas, not decisions. The saved hide-empty choice per view stays unchanged. New tickets bring the hiding back. Done when: An empty view no longer shows the old screen. The new screen is checked on desktop and phone. Risk: small. It changes only the empty view. Undo: revert. Decision: Valentin picks one idea after seeing a wireframe. Related: Flag:"
+  },
+  {
+   "id": 75551,
+   "ticketNumber": "HTPR-7811",
+   "title": "Shrink /ship guidance and move runner infra out of the product repo",
+   "status": "Normal",
+   "text": "Problem: the /ship instructions are too big. Every agent reads about 74 KB of /ship guidance. Some rules are already enforced by checks or code. It also holds server runner setup that is not product work. Fix: a lean /ship set. Checks replace prose. Rules a tool can enforce become checks. The text goes. Rules the code already enforces are deleted. Runner setup moves out of the product repo. Proposed home: the agent worker repo, as in No rule is dropped unless a check or code covers it. The PR lists each removed rule and what covers it. Done when: Before and after sizes are posted on this ticket. Each rule moved to a check has a working check. No runner setup remains in the product repo. A test run of /ship still finishes end to end. Risk: a needed rule gets lost. Undo: revert. Decision: HT Product Lead owns /ship. Approval comes before merge. Related:"
+  },
+  {
+   "id": 75894,
+   "ticketNumber": "HTPR-7844",
+   "title": "[BUG] inne key-only: every AI call uses inne's own Anthropic key, never our keys or the gateway",
+   "status": "Normal",
+   "text": "@HT Product Lead Filed per Valentin's 'file it' (2026-10-25). Feature work: no agent starts until Valentin says go. Please flag conflicts with AGENTS.md or /ship. Funding model (Valentin, 2026-10-25, final): paying teams and new paying users see all models. Anthropic models are preselected and billed to Valentin's free monthly $200 Anthropic key. Any other model the user picks runs on the regular Vercel AI Gateway out of the team's allowance. The gateway plus allowance is also the fallback once the month's $200 is used up. DeepSeek is not a fallback. inne runs only on its own Anthropic key, never on Valentin's keys or the gateway. inne and vetsak see Anthropic models only. Goal. Add a per-team key-only setting and set it for inne. Every AI call for a key-only team uses the team's own saved Anthropic key. A call that cannot run on that key fails with a clear message and never falls back to the managed or shared gateway key or a platform key. Today inne still leaks onto our keys for any provider it has no key for, plus labels, images, side calls, embeddings and dictation. Where. Gateway funding and the managed/shared fallback: src/lib/ai/byokKeys.ts:422 (getTeamGatewayFunding) and :4"
+  },
+  {
+   "id": 75898,
+   "ticketNumber": "HTPR-7848",
+   "title": "AI task summaries stop rerunning on every change",
+   "status": "Normal",
+   "text": "Now Ready to build. Valentin filed this ticket, so it is his yes. Problem file it We pay for AI task summaries nobody needs. Summaries rerun on every new task, comment and activity. A Stripe checkout triggers a summary for every task. Fix Several events close together make one AI call. Nothing changed means no AI call. A Stripe checkout makes no summaries. A summary updates when someone opens the ticket. Done when Tests show one call for many quick events. Tests show zero calls when nothing changed. Tests show zero summaries after a Stripe checkout. Daily summary usage is reported before and after. Risk Summaries may update a little later. Undo: one switch puts the old behaviour back. Decision None. His own ticket is the yes. Build it behind a switch."
+  },
+  {
+   "id": 75899,
+   "ticketNumber": "HTPR-7849",
+   "title": "AI chat turns use fewer steps and less context",
+   "status": "Normal",
+   "text": "Now A trial is ready to measure. It needs your yes to spend up to $1. The Question below has the details. Problem file it One AI chat turn can cost far too much. A turn can run up to 32 steps. Each step resends a long instructions block. It also resends the last 15 messages. It sends the full ticket with up to 200 comments. Fix Steps per turn: 32 down to about 8. Ticket context: only the last 30 comments. Answer length: 16k down to about 4k. Check the saved-copy discount actually kicks in. Done when Tests prove the new caps. 10 real chat turns are measured before and after. The report shows tokens, steps and saved-copy hits. Answer quality does not drop on those turns. Risk Very long chats may stop early. Undo: switch the feature off. Decision One Question below: approve up to $1 for comparison chats. Related: replaces the comment clipping part."
+  },
+  {
+   "id": 75912,
+   "ticketNumber": "HTPR-7854",
+   "title": "[IMPROVEMENT] AI thinking off by default; features opt in; chat title capped at 64 output tokens",
+   "status": "Normal",
+   "text": "Flag: (Everyone) @HT Product Lead Turn adaptive thinking off by default. Chat, heartbeat, chat title, task writer and @HyperAI only think when the feature explicitly opts in. Cap the chat title call at 64 output tokens. Why. Today adaptive thinking runs at medium effort unless maxOutputTokens is set and at most 1,200. Thinking is billed as output, which costs 5x input. Even chat titles think. Estimated saving about $50 a month. Where. src/app/api/ai/_lib/modelProvider.ts:486-495 ; chat cap src/lib/ai/chatStream/models.ts:175 ; title src/lib/ai/chatStream/title.ts:60-68 . Verify. Tests assert no thinking config is sent unless a feature opts in, and the title call sends maxOutputTokens 64. After rollout, outputTokens for chat, task-writer, hyper-mentioned and custom-instructions drop without stored reply length dropping. Flag: Everyone: no (default off; flip to Everyone right after CI green + QA, Valentin approves the flag request) Repo: (branch production). Line numbers from the 2026-10-24 efficiency audit; re-check before editing. Flag:"
+  },
+  {
+   "id": 75932,
+   "ticketNumber": "HTPR-7861",
+   "title": "[IMPROVEMENT] Chat system prompt: delete duplicate sections, fix wrong tool names, add prefix token budget to CI",
+   "status": "Normal",
+   "text": "@HT Product Lead Measured (js-tiktoken cl100k proxy) chat stable prefix = 22,462 tokens: 4,525 system + 17,937 for 84 tools. Analysis: What. In src/lib/ai/prompts/definitions.ts: replace section 4.1 (1103-1134) with 5 lines using the registered tool names (rag_retrieval, hypertask_list_tasks, hypertask_get_tasks, hypertask_get_comments_for_task; today it names tools that do not exist, causing extra steps). Delete the 4.2 write catalog (1137-1181) except the label-replace and confirmation rules. Delete preamble (1063), section 1 (1075-1078), section 3, final reminder (1224-1226), the duplicate filter-key list (1218-1221). Move 2.1 voice and 3.1 summary style into the comment/summary paths. Drop $schema from tool payloads (1,260 tokens) if the provider does not strip it, and use format: uuid instead of the UUID regex. Add chat-prefix-budget.mjs (from the analysis agent store) as a CI check failing when the prefix grows past the new measured size. Verify. Budget script shows the new size; ai-eval golden tasks: same tool choice, steps equal or fewer. Flag: Everyone: no (default off; flip right after CI green + QA, Valentin approves)"
+  },
+  {
+   "id": 75959,
+   "ticketNumber": "HTPR-7871",
+   "title": "Design: Ctrl+K placeholder uses three dots instead of an ellipsis",
+   "status": "Normal",
+   "text": "Flag: (Everyone) What the user sees The Ctrl+K input placeholder reads \"Type a command or search...\" with three full stops. Commands in the same menu, such as \"Decline as duplicate of…\" and \"Blocked by person…\", use the real ellipsis character, so the menu is inconsistent with itself. Screen: command menu (command-menu.png, ticket-*.png). The attached crop shows the placeholder. Rules it breaks VERCEL-content-12: \"Use the \"…\" character, not \"...\".\" VERCEL-form-09: \"Placeholders end with \"…\" and show an example value or pattern.\" Where (production) commands.tsx:736 and commands.tsx:822 both set \"Type a command or search...\" . The command labels that already use \"…\" live in taskCommands.ts (lines 52 and 327 at audit time). Acceptance The solution needs Valentin's review before work starts. Any fix passes CI, visual regression and the layout lock, adds no new visible chrome and does not raise the lint baseline. Filed by Design Lead from the design audit of real demo-board screenshots (1280×800). Line numbers checked on branch production on 25 Oct 2026. This is a problem report only."
+  },
+  {
+   "id": 75967,
+   "ticketNumber": "HTPR-7875",
+   "title": "[IMPROVE] Agent comments show: CLI comment add takes --kind, toolkit sends it",
+   "status": "Normal",
+   "text": "Agents look silent because their comments land in the hidden agent log. Server rule: an agent comment with no kind (question, qa, done), no reply id, no person mention and no image goes to the hidden log when HTPR_7341 is on (src/lib/mcp/operations/comments/agentChatterRouting.ts, operation.ts:905). CLI 2.0.10 comment add has no --kind option, and agent-toolkit posts {ticket_number, text, reply_to_comment_id} with text prefixes only (adapters/hypertask/adapter.sh:1110-1119). Do: 1. Add --kind question|qa|done to hypertask comment add (repo hypertask-ai/cli) and list it in capabilities --json . 2. Map the toolkit's Question:/Done:/Handoff: prefixes onto kind, then delete the prefix contract. 3. Contract test: a CLI comment with --kind done is visible on the ticket. Proof: live comment posted via CLI shows in the ticket thread, not the log. First check whether HTPR_7341 is on in prod. Flag: none (CLI option, additive). Everyone: yes. @HT Product Lead FYI, this explains silent agents. Runs through /ship after the PR drain."
+  },
+  {
+   "id": 75968,
+   "ticketNumber": "HTPR-7876",
+   "title": "[IMPROVE] One agent onboarding path: move /setup-agents into the main repo or CLI",
+   "status": "Normal",
+   "text": "agent-toolkit is not a product; fold its one generic piece into Hypertask. Seen: hypertask-ai/agent-toolkit is ~25k lines of private fleet ops, 0 stars/forks/outside PRs, 6 commits since 1 Oct. Fresh install runs 59 eval files for 11 min then exits 2 (pytest missing); PyYAML and /unlazy undeclared; clones private company-skills over SSH; no release tags; personal hardcodes (/home/valentin/projects/*). Do, deletions first: 1. Drop the toolkit's own queue ranking (server has task next ). 2. Move evals to CI only; install gets a 5 s smoke check. 3. Port /setup-agents to hypertask agents setup (CLI or main repo) with real error messages and declared deps. 4. Then archive or make private agent-toolkit (needs Valentin's go). Proof: a clean HOME sets up one agent in under 2 minutes with one command. Flag: none (setup tooling, no app change). Everyone: yes. @HT Product Lead FYI. Starts after the PR drain, through /ship."
+  },
+  {
+   "id": 76113,
+   "ticketNumber": "HTPR-7881",
+   "title": "Chat composer offers no board skills until a board is picked",
+   "status": "Normal",
+   "text": "The full-screen /chat composer only offers personal skills when no board is selected, so a chat started without a board cannot run a board skill. Where this came from Found while shipping HTPR-7879 . That ticket fixed the slash menu on ticket pages (the comment editor now lists the board's skills). In the /chat composer the menu is project-scoped by design: it asks for the board selected in that chat. With no board selected it correctly shows the personal list, which on QA account 985 is just /qa-7480-check . Problem Live as QA 985 (headless, 1440x900, merge fdcd1efe2): the comment editor lists 9 board skills including /minimalist-review . The /chat composer lists 1 personal skill. A board skill cannot be reached from a chat that has no board yet, and the composer gives no hint that picking a board would add skills. Change wanted When no board is selected in the chat, offer the board skills the account can see (the same set /api/ai/skills?projectId= returns for a board the account belongs to), or make the board choice obvious next to the composer. Whatever is chosen must respect access: a skill from a board the account cannot see must never appear. Pick the option with HT Product L"
+  },
+  {
+   "id": 76430,
+   "ticketNumber": "HTPR-7904",
+   "title": "Agents create their own identity from the CLI, MCP or API, with one-click owner approval",
+   "status": "Normal",
+   "text": "@HT Product Lead filing this on Valentin's go (2026-10-25). Goal. Any agent that has the Hypertask CLI, MCP or API, signed in as a user, can create its own agent identity (name, repo, board, role) without the account management key. Flow. The agent runs one join command, for example hypertask agents join . The first time, the owner approves in the browser with one click, like a device-code sign-in. The owner can tick \"allow this tool to create more agents\" so later joins need no click. This grant is revocable in settings. Join is idempotent. The same name and repo return the same agent, and a crashed run finishes on rerun. Least privilege. An agent can never create an agent with more access than itself, and the management key never goes to agents. Also. An agent can read its own record and memberships with its own token (today it gets \"Agents cannot list managed agent identities\"), and roles can be changed after creation. Why. This is dogfooding for customer agent onboarding. Today self-setup only works with the account-wide management key. Principles: experience first, and make operations idempotent. Proof. An e2e test where a fresh agent joins via the CLI and via MCP, a second jo"
+  },
+  {
+   "id": 76470,
+   "ticketNumber": "HTPR-7915",
+   "title": "Auto model: default 'Auto' in AI chat picker, and all other AI features use Auto",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Valentin's call (2026-10-25). The AI sidebar chat keeps its model picker, but the default option is Auto . Power users can still pick a model or their own models (for example DeepSeek). Every other AI feature (Task Writer and the rest) has no picker and always uses Auto. Where it lives today. Sidebar picker: src/components/Global/ModelSelectorDropdown.tsx . It already falls back to pickAutoAiModelOption ( src/lib/aiModelOptions.ts ) when nothing is chosen, but that just picks the plan default or first non-premium model. No 'Auto' option is shown and nothing routes by job. Task Writer: selectTaskWriterModel in src/app/api/ai/_lib/editorAi.ts , called from taskWriterRun.ts . It uses the model the client sends ( modelSelected / modelOptionId ), so it follows whatever the picker says. Per-feature models: src/lib/systemModelLadder.ts . AI_FEATURES lists every feature (aiChat, taskWriter, writeWithAi, askAi, hyperAi, summaries, etc.), SYSTEM_MODEL_LADDERS.fast is the cheap ladder for background jobs, and teams can override per feature in aiProviderSettings.featureModels . Auto v1: simple rules, no smart classifier. Route by feature or job type: short jobs (task writing, "
+  },
+  {
+   "id": 76512,
+   "ticketNumber": "HTPR-7918",
+   "title": "Test teams for every plan: Free, Pro, Comped, Bring-your-own-key",
+   "status": "Normal",
+   "text": "Why. Allowance, flag and billing checks need a real team on each plan. Example: HTPR-7877 , where the MyTeam test team ($1 monthly AI allowance) tripped the allowance alert and we could only check it on one plan. What. One named test team per plan: Free, Pro, Comped, and Bring-your-own-key (BYOK). BYOK uses a capped test provider key held in 1Password, never written in this ticket or in the repo. Each team has an agent QA login. List all four in the verify-qa feature map so every QA run can pick a plan. A one-command reset that puts each team back to a known state. What exists today (read-only lookup, 2026-10-25, verify-qa skill on production and the QA runner on hypertask-vps). Free: QA user 3411, stays on Free. Exists. Pro: QA user 3413, team 2ce0d9f8. It is Pro only because it is comped until 2027-10-03, not a paying Pro team. BYOK: QA user 3412, team 977c0c91, with a saved gateway key. Also comped (BYOK comp until 2027-10-03), not a paying BYOK team. Whether its key is capped is not checked. Comped: covered in practice by the two comped teams above, but there is no team named and listed as the Comped case. Also present: QA Team Board fixture (owner 4036, member 4037, team da1f2"
+  },
+  {
+   "id": 76537,
+   "ticketNumber": "HTPR-7925",
+   "title": "Free plan: automatic AI capped at $2/month and only on boards a person used in the last 14 days",
+   "status": "Normal",
+   "text": "Why. Valentin chose a generous Free plan (2026-10-25). A cost check showed boards and tickets cost us about $0. AI is the only real cost: a typical Free team costs about 1 cent a month, a heavy one $2 to $12, all of it AI. Today. Free limits live in src/lib/planLimits.ts behind flag htpr-7686-free-plan-limits (Owner + QA only, never released). See HTPR-7686 . Do not flip the flag in this ticket; that needs Valentin's yes. The real cost leak. Automatic AI (ticket summaries and similar) does not count toward the allowance and is capped at $10/month for Free, 10x the $1 allowance. One team spent $4.95 on automatic summaries with nobody ever using AI themselves. Change. For Free teams: (1) cap automatic AI at $2/month per team; (2) run automatic AI only on boards a person (not an agent or integration) opened or edited in the last 14 days. The manual $1 allowance stays as is. Customers never see dollars (per HTPR-7919 ). When automatic AI pauses, show only something like \"Automatic summaries are paused for this month on the Free plan.\" Done when. A Free test team's automatic AI stops at $2 in a month (gateway bill confirms) and resumes next month. A board no person touched in 14 days ge"
+  },
+  {
+   "id": 76538,
+   "ticketNumber": "HTPR-7926",
+   "title": "Signup guard: captcha plus per-IP and per-domain signup limits",
+   "status": "Normal",
+   "text": "Now The build is blocked on one setup step. It needs your yes. The Question below has the details. Problem You chose a generous Free plan on 2026-10-25. The signup page has no check that a person is real. Every fake signup unlocks free AI use. Fix Add a \"prove you are human\" check to signup. Limit signups from one network address in a short time. Limit signups from one email domain in a short time. Big public email domains are handled sensibly. Related: Done when Signup fails without the check and works with it. This holds for email signup and Google signup. Signups over the limits get a plain message. Normal signups pass. Existing users still log in as before. Risk Real new users could be blocked by mistake. The feature starts for the owner and QA only, for 24 hours. A second agent reviews it before release. Undo: one switch restores today's signup. Decision One Question below: set up the free signup check on Cloudflare."
+  },
+  {
+   "id": 76652,
+   "ticketNumber": "HTPR-7939",
+   "title": "AI model watch new classes [modelwatchrollup-2026-10-25]",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) 168 new model classes are not in our catalog. alibaba/qwen-3.235b . Gateway input price per million tokens: $0.22. ask Valentin before shipping. alibaba/qwen3-coder . Gateway input price per million tokens: $0.22. ask Valentin before shipping. alibaba/qwen3-coder-30b-a3b . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-coder-next . Gateway input price per million tokens: $0.5. ask Valentin before shipping. alibaba/qwen3-max-thinking . Gateway input price per million tokens: $1.2. ask Valentin before shipping. alibaba/qwen3-next-80b-a3b-instruct . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-next-80b-a3b-thinking . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-vl-instruct . Gateway input price per million tokens: $0.19999999999999998. ask Valentin before shipping. alibaba/qwen3.8.2.4t-a95b . Gateway input price per million tokens: $2. ask Valentin before shipping. alibaba/qwen3.8.27b . Gateway input price per million tokens: $0.5. ask Valentin before shipping. alibaba/qwen3.8-flash . Gateway input price per million tokens: $0.15. a"
+  },
+  {
+   "id": 76728,
+   "ticketNumber": "HTPR-7946",
+   "title": "HyperAI: a proactive guide in the sidebar, starting with onboarding",
+   "status": "Normal",
+   "text": "HT Product Lead New product idea from Valentin (25 Oct 2026). Filed by Poteto Advisor. UX needed: wireframes first, no build before Valentin has seen them. What it is HyperAI: our own agent that lives in the sidebar AI chat, a \"Grok Bot experience for Kanban\". It speaks first, sets people up, and keeps guiding them around the board. Its first job is onboarding on the demo board and on first sign-in, replacing today's modal and slides. The end state is that hypertask.ai itself is the demo board: people work logged out, and HyperAI asks them to sign in so they keep their work. Who it affects New visitors (demo board, and later anyone landing on hypertask.ai or arriving from an ad) and new signups on their first sign-in. Existing users only see it in Phase 2, and they can mute it. Why The funnel is leaking. Growth's last count (MARK-164, 13 Oct): 593 website visitors, 12 signups, 0 activated. The demo board's AI only answers if asked, and first sign-in is a 3 to 5 slide modal flow. Goal: talk to people and pull them into using the board; on the demo, get them to sign up. Poteto recommendation: phase it Phase 1: HyperAI onboards in the sidebar (demo board + first sign-in). The sidebar "
+  },
+  {
+   "id": 76844,
+   "ticketNumber": "HTPR-7962",
+   "title": "Design: Calendar filter and sort state is colour-only",
+   "status": "Normal",
+   "text": "What the user sees Calendar view, top right. Filter on? Funnel icon turns blue. Sort on? Arrow icon turns blue. No count. No label. No other cue. Nine filter types collapse into one blue tint. Screen readers hear the same name either way. The blue is raw hex #51A4F1. Not in the DESIGN.md colour table. Save View text uses raw #E28C28 too. Attached capture shows the resting state only. Rules it breaks Vercel : \"Redundant status cues. Don’t rely on color alone; include text labels.\" Vercel : \"Accessible content. Set accurate names ( aria-label ).\" docs/DESIGN.md Colors table lists themed CSS vars. #51A4F1 and #E28C28 are not there. Where (production) calendar.tsx:292-295 filter button. Fixed aria-label. text-[#51A4F1] when active. calendar.tsx:313-315 sort button. Same pattern. calendar.tsx:84-93 nine filter types feed one flag. calendar.tsx:240 and :269 text-[#E28C28] , Save View. Acceptance The solution needs Valentin's review before work starts. Fix passes CI, visual regression, layout lock. No new visible chrome. Lint baseline does not rise. Filed by Design Lead. Code audit, branch production, 25 Oct 2026. Problem report only."
+  },
+  {
+   "id": 76860,
+   "ticketNumber": "HTPR-7966",
+   "title": "Three leaked-key alerts open on the app repo since August",
+   "status": "Normal",
+   "text": "Now The old server key was removed. The current app key rejects other sites. Old project access remains unavailable. GitHub warning access is also unavailable. Problem Three leaked-key warnings need documented closure. An older development key still needs restrictions. Its project owner has not been found. Fix Keep the removed server key out. Confirm both public keys are safely restricted. Allow only approved sites and required Firebase services. Close each warning with supporting evidence. Done when No server key remains in app code. Both public keys have verified restrictions. All three warnings have accurate closure reasons. GitHub shows no open leaked-key warnings. Approved app access still works. Risk Wrong restrictions could break login or notifications. Restore approved access if legitimate requests fail. Never restore a leaked server key. Decision: none. Access repair is required."
+  },
+  {
+   "id": 77258,
+   "ticketNumber": "HTPR-7975",
+   "title": "Board hygiene 4: stale cards and WIP limits per column",
+   "status": "Normal",
+   "text": "Flag: (Off) Problem: stuck work is hard to see on a board. Fix: work limits and stale cards per column. Each column can set a limit. Over the limit turns the column red. Cards show days in column. Cards turn stale after a set age. Simple rules per board. Done when: In Progress over its limit shows red. Stale cards are flagged on both boards. Risk: boards may look busier. Undo: switch the flag Off. Decision: none. On for Everyone by default. Flag:"
+  },
+  {
+   "id": 77884,
+   "ticketNumber": "HTPR-7979",
+   "title": "Redesign AI chat chips after ticket creation",
+   "status": "Normal",
+   "text": "Flag: (Off) Problem Chips after a new ticket are bad. They nitpick wording. They copy the prompt's own examples. They ask for sections that already exist. They can't see the original note. They can't see the board's rules. Learn from real use first Export 30 days of these chats. All boards. Include chip clicks. Measure click rate per chip type. Group what users typed themselves. Find the top 5 jobs after creating. New design Show 0 to 3 chips. Each chip is a one-tap next action. Or a real open decision in the ticket. Examples: assign a runner. Split into sub-tasks. More: set priority. Link related tickets. Or answer a \"Proposed:\" item. Pass in the original note. Pass in the board's rules. No wording nitpicks. Nothing fits? Show no chips. Test it Put it behind a new flag. A/B test: new chips against no chips. Split users 50/50. Done when New chips beat no chips. Measure follow-up actions per ticket. Fewer typed \"fix the ticket\" messages. Numbers come from our own logs. The eval beats its baseline. Release only on Valentin's go."
+  },
+  {
+   "id": 77889,
+   "ticketNumber": "HTPR-7980",
+   "title": "Billing: Settings shows plan, Upgrade and Manage billing",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Problem: billing screens in Settings are too big. Billing really lives on Stripe pages, not ours. Every paying or trial team sees these screens. Owners mostly. Fix: Settings shows one small billing card. The card shows plan and price. Upgrade button opens Stripe Checkout. Already built. Manage billing button opens the Stripe portal. The portal handles plan switch, cancel, invoices and card. Seats stay automatic. We keep that. Done when: Switch on: Settings shows one billing card only. Manage billing opens the Stripe portal. The portal allows plan switch, cancel, invoices and card. Seat count cannot be edited in the portal. Risk: a team cannot find billing. Undo: switch it off, the old screen comes back. Decision: nothing to start. Turning it on for everyone needs your yes. Later, own tickets: Delete the old screens: Handle cancel: Related: , , Switch:"
+  },
+  {
+   "id": 77890,
+   "ticketNumber": "HTPR-7981",
+   "title": "Billing: delete our old billing and trial screens",
+   "status": "Normal",
+   "text": "For Valentin What's wanted: Delete our own billing and trial screens. Who it affects: Nobody, once the new billing card ships. Recommended course and why: Subtract after the Stripe portal card is live. Less code, fewer billing bugs. Check each file unused first. What Valentin must decide: Nothing. Starts after HTPR-7980 is live for everyone. How to undo: Revert the PR. Done when. Old screens and their routes gone. Build, tests and lint pass. Upgrade and Manage billing still work. Tech detail: see agent log on this ticket."
+  },
+  {
+   "id": 77892,
+   "ticketNumber": "HTPR-7983",
+   "title": "Free mode: Sign up button with AI chat open",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) For Valentin What's wanted: Guests see one clear Sign up button. AI chat already open. Who it affects: Every new visitor. Not signed up yet. Recommended course and why: One button, always visible on free boards. Tap it, sign up, stay on the same board. Chat stays open. Builds on HTPR-7511 and HTPR-7553 . Chat opening is HTPR-7701 . Split out of HTPR-4842 . What Valentin must decide: Nothing to start. Release to everyone needs your yes. How to undo: Behind a flag. Flag off, today's screen. Done when. Guest on a free board sees Sign up button. AI chat open on first load. Sign up keeps the board and the chat. Works on phone and desktop. Tech detail: see agent log on this ticket."
+  },
+  {
+   "id": 78418,
+   "ticketNumber": "HTPR-8009",
+   "title": "The comped Pro test team has no managed AI key",
+   "status": "Normal",
+   "text": "Why. The comped Pro test team (team 2ce0d9f8, QA user 3413) gets the Pro plan from its comp, but it has no managed AI key, so Settings, AI usage returns \"not configured\" and no key source. A comped Pro team therefore has no Pro AI funding. Found while building the test team health check in What. Decide with HT Product Lead whether a comped Pro team should get a managed AI key when the comp is granted. If yes, make the comp step create that key (today only the admin team gateway key route does), then check the Pro health line prints OK. If no, change the Pro test team expectation in the qa-teams tool and the verify-qa billing feature map. Done when. The Pro health line from the qa-teams tool prints OK, or the tool and docs say a comped Pro team has no managed key on purpose."
+  },
+  {
+   "id": 78667,
+   "ticketNumber": "HTPR-8024",
+   "title": "Create project views from tags",
+   "status": "Normal",
+   "text": "Want. Open each project through its tag. Create project views from existing tag editor. Keep views aligned through renames and merges. Preserve bookmarks and unrelated saved filters. Starts with owner and QA access only. Merging removes its source tag. Off blocks creation and merging. Existing saved views remain intact. Infra twin: Board hygiene project views . Existing change: Project views change . Flag: htpr-8024-project-tag-views"
+  },
+  {
+   "id": 78739,
+   "ticketNumber": "HTPR-8027",
+   "title": "Own key only: a team's AI bills fully to its Anthropic key, usage counts all",
+   "status": "Normal",
+   "text": "The ask (Valentin, 2026-10-26): \"so inne needs to be a byok team that has no included allowance and ALL their AI in absolut terms is billed against their anthropic key. How do we do that? we need that anyway altough most ucstomers HAVE included usage. but usage neesd to take into account everything.\" What this thread settled inne added a dedicated Anthropic key with a $20 monthly budget in their Hypertask settings today. Today inne still uses two keys. Their Anthropic key pays only for direct Haiku and Sonnet calls. Everything else (Opus summaries 76%, Gemini Flash Lite 11%, GPT) runs on Hypertask's shared AI Gateway key: $5.20 so far in October, out of the $70 included allowance. The inne usage page shows dollars only for Hypertask's key. Calls on their own key show tokens only, no dollars (13.7 million tokens in October, roughly $40 to $55). Valentin does not want inne to set up their own Vercel account. The fix stays inside Hypertask. Want A team setting \"Own key only\": the team gets no included allowance. Every AI call from every feature, agent and background job bills to the team's own Anthropic key. Nothing falls back to Hypertask's key. For an own-key-only team, features tha"
+  },
+  {
+   "id": 78794,
+   "ticketNumber": "HTPR-8028",
+   "title": "Mobile new task: dictated text is lost after Save with task writer",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Problem: dictated text is lost on mobile. It happens on Save with task writer. Fix ASAP. Steps: tap the bottom right add button. Dictate. Press Save with task writer. The New Task window opens in a layout not made for phones. The dictated text is lost. No task is created. Builds on: , and Fix: keep the dictated text. Make the window fit a phone. The text carries into the task writer. If the writer fails, the text is still saved as a task. The window works with the keyboard open. Done when: Dictate on mobile, press Save with task writer. The task is created with the dictated text. The window works on iPhone and Android. Desktop is unchanged. Risk: low. It is behind a feature flag. Undo: switch the flag off."
+  },
+  {
+   "id": 78795,
+   "ticketNumber": "HTPR-8029",
+   "title": "Mobile new task modal: fix status bar overlap and dictation bar position",
+   "status": "Normal",
+   "text": "We need to fix how the new task model looks on mobile. It has problems layout wise. I'm attaching a few tasks, and you can give it to the design lead to fix it. One problem is is that it underlaps the Android status bar, which is sub ideal. Then the dictation bar sits somewhere in the middle."
+  },
+  {
+   "id": 78839,
+   "ticketNumber": "HTPR-8032",
+   "title": "Mobile AI chat: full-screen redesign with session sidebar",
+   "status": "Normal",
+   "text": "Design lead to redesign the phone AI chat sheet so it opens full screen, and rework the arrangement of elements toward a conventional mobile AI chat view. Problem On a phone the AI chat sheet leaves too much of the board or ticket visible, and its header, session dropdown, composer, bubbles and spacing need a design pass. The board context picker and its buttons are oversized for the available space. Valentin's note: the chat \"isn't too bad\" now, but needs an overhaul and fixes. Design direction Target: a conventional full-screen mobile chat, simplified and optimized for the full-screen experience. Reference points are the traditional mobile AI chat views: OpenAI, Anthropic, Grok. Keep our visual style. Change the arrangement of elements, not the brand. Compact the board context picker. It currently eats a large share of scarce phone real estate with big buttons. Make it a compact chip, or fold it into the header. Session switching moves to a sidebar. Desktop already has the full-screen experience with a session sidebar. Mobile should mirror that: a slide-in drawer listing past AI chat sessions, instead of the current dropdown that covers the conversation. Refinement, not a rebuild"
+  },
+  {
+   "id": 78861,
+   "ticketNumber": "HTPR-8034",
+   "title": "AI model new-version: spacexai/grok-4.20-non-reasoning [modelwatch5904cd3f688085b0306c]",
+   "status": "Normal",
+   "text": "ask Valentin before shipping. newer version in an existing class. Class: grok . Current: grok-4.7. Gateway input price per million tokens: $1.25. Follow .claude/skills/update-ai-models/SKILL.md : replace the old version in every picker, migrate saved picks, verify gateway input/output prices and get a live chat answer after release. New classes/providers need Valentin's yes. Premium models wait for HTPR-7746 ; do not auto-ship them."
+  },
+  {
+   "id": 79065,
+   "ticketNumber": "HTPR-8037",
+   "title": "QA canary bills the trials key",
+   "status": "Normal",
+   "text": "Now: Checks are off in the live app. He picks the extra key. Problem Test model chats can spend the trial allowance. Real trials can then get blocked. Checks stay off until a separate key exists. Fix Checks stop when their own key is missing. They never use the trial key. Done when A check run uses the extra key. The trial allowance stays untouched. Risk Worst case: a bad model goes unseen. Undo: add the key, then turn checks on. Decision The open question asks for that key."
+  },
+  {
+   "id": 79247,
+   "ticketNumber": "HTPR-8043",
+   "title": "AI chat offers clickable answers when it asks a question",
+   "status": "Normal",
+   "text": "When the AI chat asks a question with a clear set of answers, it should show 2 to 4 answer buttons under the message. Tapping one sends that answer. Problem Most AI chats ask a question and show the possible answers as buttons. Our AI chat asks only in plain text, so the user has to type the answer. Affected screen The AI chat message list, in the sidebar, full-screen chat and phone view. Requirements Show 2 to 4 short buttons. They appear under the AI message when the question has a clear set of answers. Tap sends the reply. The tapped answer goes out as the user's reply through the normal message flow. Typing still works. The buttons are an extra, not a replacement. Reuse, no new library. Build on the chat's existing suggestion chips. Flag. Ship behind a flag named after this ticket. Proposed: share the button look with the clickable ticket rows in HTPR-7683. Why Fewer typed answers and fewer wrong guesses from the AI. Acceptance criteria A question from the AI with options shows buttons on desktop and phone. Tapping a button sends that answer. Typing still works. No more than 4 buttons show. Proof A clickable wireframe is approved before any code. Live QA on desktop and phone sh"
+  },
+  {
+   "id": 79252,
+   "ticketNumber": "HTPR-8044",
+   "title": "Ctrl+K \"Triage inbox\": AI clears noise, asks once",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Now: Shortcut live; allow paid AI verification? Problem: clearing a big inbox takes too many typed confirms. Agent-heavy inboxes hold 200+ items, mostly agent moves. Triage now needs many typed yes answers. Fix: one Ctrl+K command, \"Triage inbox\". It opens the AI chat with a ready prompt. The AI reads the whole inbox. Safe noise is flagged by rules. Judgement is used only for leftovers. You give one yes. One batch is archived. Undo restores the whole batch. Leftovers come back as decisions, with links. It reuses the existing Inbox Zero skill. It already previews, archives and undoes. Done when: The command opens the AI chat with the prompt loaded. The AI reads every item, not just 100. One plan message, one yes, one archive batch. The archived list equals the shown list. Undo restores the whole batch. Leftovers are grouped as decisions, with links. No money or outage claims are repeated unchecked. Risk: a wrong batch is archived. A preview check stops that. Undo: switch it off to hide the command. Decision: Paid AI verification needs approval. Related: Switch page:"
+  },
+  {
+   "id": 79254,
+   "ticketNumber": "HTPR-8046",
+   "title": "Inbox: \"Archive safe\" button clears pure updates",
+   "status": "Normal",
+   "text": "Flag: (Off) Problem: the inbox fills with updates nobody needs to read. Agents create most of the noise. Fix: an \"Archive safe\" button. It sits on Updates, Important and Agents. It shows a count before archiving. Safe means a pure update: moves, edits, agent activity. Never safe: an @mention of you. Never safe: a question or decision waiting on you. Never safe: a ticket assigned to you. Never safe: anything addressed to you or a human comment. Built as a new Inbox Zero rule. Preview, archive and undo already exist. No AI needed. It is fast and predictable. Done when: The button shows the count first. Agent-only moves and edits are archived. Mentions, questions, assignments and human comments stay. Tickets waiting on you stay. Undo (Ctrl+Z) restores everything archived. It works in all three splits. Risk: a needed item gets archived. Undo restores the batch. It is behind a feature flag. Decision: none to start. Related: , , and"
+  },
+  {
+   "id": 79256,
+   "ticketNumber": "HTPR-8048",
+   "title": "HTPR-8048 [FEATURE] Agent sessions picker in the AI chat header (Agents dropdown and @ in chat box)",
+   "status": "Normal",
+   "text": "Flag: (Off) Problem: the AI chat cannot pick an agent session. Valentin approved it on Valentin: \"Lets do both actually allow both pls very good\" Clickable wireframe: Fix: an agent picker in the AI chat header. The Bot icon sits beside History. It opens a list of agents. Each agent offers \"Start a new session\" and its past sessions. Typing @ in the chat box lists agents too. Picking one adds an @agent tag. The chat then talks to that agent. History shows agent sessions beside past chats. Each agent row has a small agent name tag. This is the only new element. Valentin said yes to it. Nothing existing moves or gets renamed. Works on desktop and phone, light and dark. Done when: The Bot icon opens the agent list. Typing @ lists agents. Picking an agent sets the chat to it. History shows agent sessions with name tags. Design Lead checks it against the wireframe before Valentin Review. Risk: low. It is behind a feature flag. Undo: switch the flag off. Flag:"
+  },
+  {
+   "id": 79258,
+   "ticketNumber": "HTPR-8049",
+   "title": "AI keys: 'Always use this key' switch in Settings",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) For Valentin What's wanted. Force one saved key. It beats the allowance. Each saved team key gets a switch: \"Always use this key\". Lives in Settings, in the key list. Not the model picker. Team admins only. Off (default): normal order. Allowance first, then key. On: every AI request uses that key. Allowance skipped. Model picker then shows only that key's models. No pay-with choice in the picker. Only one key forced at a time. Forced key fails: AI pauses with a clear error. No silent fallback to allowance. Confirmed by Valentin. Own-key-only teams (inne): unchanged. Already locked to their key. Search and dictation stay on our keys, as today. Behind a flag. Flag off means today's behaviour. Who it affects. Team admins with saved own keys. Example: your Baseten key with fast DeepSeek. Recommended course and why. Build the Settings switch. Keeps the picker simple. Keeps allowance-first as default. What Valentin must decide. Nothing to start. Turning it on needs your yes. How to undo. Switch off. Or flag off. Done when Switch shows in the Settings key list. On: requests use that key. Proven with a real call on a test key. Picker lists that key's models only. Off: al"
+  },
+  {
+   "id": 79358,
+   "ticketNumber": "HTPR-8051",
+   "title": "Merge duplicate tags and fix names, with preview and undo",
+   "status": "Normal",
+   "text": "The ask (from the board hygiene work, YPER4-787): Let a team merge duplicate tags and fix tag names (reuse tags, Title Case) from the app. What this thread settled Merging a tag changes every ticket that carries it and every saved view or smart split that filters on it. Smart splits and saved views must keep working after a merge. A merge must be undoable in one step. Related: (project views from tags). Reuse its tag patterns. New visible UI needs a clickable wireframe and Valentin sign-off before code. Ship behind a flag. Done when A user can pick two or more tags, name the result, preview which tickets and views change, and confirm. Smart splits and saved views that used a merged tag now use the result. Undo restores every ticket and view exactly. Live check on a test team in the browser and on phone. Deeper pass Field: data migration with reversible changes; a pro writes a dry-run preview and a journal of every change before touching rows. Raw source: the tags table, saved view filters and smart split rules on a copy of real shapes. Proof: merge then undo on a seeded team, compare ticket tags and view filters before and after."
+  },
+  {
+   "id": 79479,
+   "ticketNumber": "HTPR-8064",
+   "title": "[FEATURE] Desktop app: let the desktop sign-in use the web routes behind Ctrl+K, shortcuts and the AI sidebar",
+   "status": "Normal",
+   "text": "Problem The desktop app ( ) now matches the web on look, memory and most data. The remaining gaps all have the same cause. The desktop signs in with the CLI token, and the web accepts that token on only four routes: task writer, task defaults, comment star and pin, and mention search. The allow list is in src/lib/auth/desktopCliTokenUser.ts:7 , behind the flag from . Every other route the web screens use accepts only the browser session cookie ( src/lib/auth/getSessionUser.ts:21-25,70-79 ). Because of this, the desktop cannot do the following: 74 command center (Ctrl+K) commands, for example Inbox Zero, mark unseen, remind me, relations, start date and recurrence, templates, follow, share link, create task, views, staleness, invite link, snippets and search. Most keyboard shortcuts that are not done yet in docs/keyboard-parity.md of the desktop repo. 4 shown values (view settings, photos and comment summaries). AI sidebar attachments, voice recording and context add. The full list, with the exact route and file and line for each, is in docs/cmdk-round4.md (\"Exact missing routes and fields\", rows B1 to B22 and N1 to N3) in . Proposed change Let the desktop CLI token call the existin"
+  },
+  {
+   "id": 80059,
+   "ticketNumber": "HTPR-8095",
+   "title": "Speed up the wait when saving a Ctrl+J New Task",
+   "status": "Normal",
+   "text": "Cut the waiting time between pressing Enter in the Ctrl+J New Task window and seeing the saved ticket. Problem Users find the wait in the Ctrl+J New Task flow too long. No Ctrl+J timing exists yet, so the slow stage is unknown. Affected screen The Ctrl+J New Task window, from Enter to the saved ticket opening. Requirements Measure first. Proposed: log per-stage duration from Enter to the opened ticket (task writer call, title generation, save, UI update) and post the baseline with sample count in a comment. Aim the fix at the slowest stage found. Output structure and style stay the same for the same note. The typed note is still saved when the AI writer fails. Acceptance criteria Proposed: a per-stage baseline is posted, with the slowest stage named. Proposed: before and after timings on the same set of notes, with p50, p75 and p95. Proposed: error rate does not rise. Out of scope Proposed: changes to how the Task Writer writes the ticket. Proposed: the AI chat creation path, covered by HTPR-7759. Related tickets Builds on HTPR-7759 . Speed up task creation from the AI chat. Builds on HTPR-5243 . Investigate slow saving of a new task. Builds on HTPR-6929 . Added the Ctrl+J task wri"
+  },
+  {
+   "id": 82276,
+   "ticketNumber": "HTPR-8150",
+   "title": "[verify] pipeline broken",
+   "status": "Normal",
+   "text": "Now Parked. The nightly check cannot run until Vercel accepts the setup. Problem The nightly check of the main flows failed to run. No flows were verified, so a green board today means nothing. Vercel refuses the verification setup before any product check starts. Fix Find why Vercel refuses the setup. Make the nightly check run and report again. Done when The nightly check runs to the end. The report shows real results for each main flow. Risk Until fixed, broken flows can go unnoticed. Undo: nothing changes in the app while we investigate. Decision None. No money or keys are involved so far."
+  },
+  {
+   "id": 82722,
+   "ticketNumber": "HTPR-8171",
+   "title": "Views can hide tickets by tag",
+   "status": "Normal",
+   "text": "Problem: a view can't hide tickets by tag. Filters only show tickets that have a tag. There is no \"everything except\" option. Valentin asked the AI chat (2026-10-29): \"I want a view without error log tickets and bugs. So everything BUT errorlogs and bugs can you set it up?\" The AI chat made an empty view, then gave him steps for an option that doesn't exist. Fix: a tag filter can hide tickets too. Pick a tag, choose \"hide\". Works in saved views. The AI chat can set it up when asked. Done when: Valentin's view hides Bug and error log tickets. The AI chat builds that view from his sentence. Risk: a saved view shows the wrong tickets. Undo: switch it off. Decision: design first. HT Design Lead posts the wireframe."
+  },
+  {
+   "id": 83763,
+   "ticketNumber": "HTPR-8207",
+   "title": "Add five new AI models to the model pickers",
+   "status": "Normal",
+   "text": "Now Waiting on your yes to add five new AI models. The Question below lists them with prices. Problem The model watch found 122 gateway models missing from our catalog. Five are the newest main model of a family we ship. 117 are old models or small variants. New model families need your yes before they ship. Fix Add the five to the model pickers. Replace the old version in every picker. Move saved picks to the new version. Check the gateway prices. Premium models wait for Done when The five models show in the pickers. Saved picks still work. A live chat answers from each new model after release. Risk A new model could answer badly or cost more than planned. Undo: remove it from the pickers. Decision One Question below: add the five models."
+  },
+  {
+   "id": 84452,
+   "ticketNumber": "HTPR-8232",
+   "title": "[INFRA] Runners never switch flags Off; failed QA goes to Owner + QA",
+   "status": "Normal",
+   "text": "Runners never switch a flag to Off. Failed QA goes to Owner + QA. Default to everyone. High risk owner + QA. Off is my safety switch. Valentin, 2026-10-31. Now Runners can no longer switch flags Off. This part is live. 10 flags still sit Off from runners. Problem Agents cannot switch any flag right now. The app refuses every agent's switch. So the 10 flags stay stuck at Off. Fix Fix the flag switch first: Then move the 10 flags to Owner + QA. Then send their tickets back to work. Done when The 10 flags read Owner + QA. Their tickets are back in the work queue. Risk: a broken feature shows to Valentin and QA. That is the point. Decision: none. Valentin already asked for this."
+  },
+  {
+   "id": 85723,
+   "ticketNumber": "HTPR-8273",
+   "title": "AI model watch new classes [modelwatchrollup-2026-11-02]",
+   "status": "Normal",
+   "text": "Now: Valentin says yes or no to three models. One decision. Then a runner adds them. What this is The model radar found 120 models we do not offer. Most of them are old builds. Some are coding, vision or preview variants. 73 come from brands we do not resell. 3 are worth adding. The three Qwen 3.8 Max. $2 per million input words. Kimi K3.1 Pro. $2 per million input words. GLM-5.3. $1.40 per million input words. All three come from brands we resell. Each is its brand's newest main model. None is a premium model. Problem We show older versions of these brands. Our picker looks stale next to rivals. Fix Add the three to every model picker. Put them behind this ticket's switch first. Switch mode: Owner + QA. Saved picks stay untouched. Done when His yes is on this ticket. Each model answers in live chat. A second runner checks the pickers. Risk Worst case: one picker row fails in chat. Undo: switch the ticket off. Output price is still unverified. Our server is blocked by the model gateway. Not in this ticket Premium models wait for HTPR-7746 . Claude Fable 5.1 is over $5 per million. GPT 6 Astra is over $5 per million. GPT 5.5 Pro is over $5 per million. o3 Pro is over $5 per million."
+  },
+  {
+   "id": 86002,
+   "ticketNumber": "HTPR-8338",
+   "title": "Keep 30 days of app request logs in our Cloudflare storage",
+   "status": "Normal",
+   "text": "Now : storage is free at our size. It waits on your one yes. A private place needs a key. can this be stored for free in r2 bucket on cloduflare what is the size of 30 days of logs? plan it out pls and put it on a ticket so a worker can take it over Valentin, 2026-11-03. Origin: Now Each app request leaves one log line. Those lines vanish after about one day. We cannot look back at last week's problems. Problem A customer says it broke last week. We cannot check. An app login gets misused. We cannot see what it did. Fix The app saves one short line per request. Lines go to our own Cloudflare storage, in batches. Storage deletes anything older than 30 days by itself. A line keeps only time, action, page, result, user and address. Never message text or private content. Behind a flag, so a bad change rolls back fast. Plan for the worker Check storage access and the bucket list. Ask for the new bucket with one Question. It is his call. Build the saver behind the flag. Batch the writes. Test it automatically. Prove no private content gets saved. Merge, switch the flag for QA, check the stored lines. Measure speed before and after. Then Everyone. Done when A QA request shows up in storag"
+  },
+  {
+   "id": 87000,
+   "ticketNumber": "HTPR-8416",
+   "title": "AI model watch new classes [modelwatchrollup-2026-11-03]",
+   "status": "Normal",
+   "text": "120 new model classes are not in our catalog. alibaba/qwen-3.235b . Gateway input price per million tokens: $0.22. ask Valentin before shipping. alibaba/qwen3-coder . Gateway input price per million tokens: $0.22. ask Valentin before shipping. alibaba/qwen3-coder-30b-a3b . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-coder-next . Gateway input price per million tokens: $0.5. ask Valentin before shipping. alibaba/qwen3-next-80b-a3b-instruct . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-next-80b-a3b-thinking . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-vl-instruct . Gateway input price per million tokens: $0.19999999999999998. ask Valentin before shipping. alibaba/qwen3.8.2.4t-a95b . Gateway input price per million tokens: $2. ask Valentin before shipping. alibaba/qwen3.8.27b . Gateway input price per million tokens: $0.5. ask Valentin before shipping. alibaba/qwen3.8-flash . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3.8-max . Gateway input price per million tokens: $2. ask Valentin before shipping."
+  },
+  {
+   "id": 87393,
+   "ticketNumber": "HTPR-8459",
+   "title": "Merged changes cannot go live: production builds die for memory again",
+   "status": "Normal",
+   "text": "Now Merged work cannot reach you tonight. Two live builds died for memory after 18:50. The app still serves the 18:36 copy. Three merged changes wait, mine is one. Problem Each build dies two minutes in. Vercel names it an out of memory kill. One compile worker. Two files at once. Compiler memory capped at 4096 MB. The build machine is the small 8 GB one. The last green build was 18:36 today. The first death added only 241 lines of code. So the code did not grow by much. Fix Build one file at a time. Or lower the compiler memory cap. Both are one line in the build script. Wait for one green build before changing more. A bigger build machine costs money. That step waits for you. Done when Two builds in a row are green. The app serves the newest production copy. The merged changes are live. Risk Slower builds. Nothing else. Undo is one line. Decision None yet. Only a bigger machine would need your yes. Not in this ticket The earlier memory fix is on the Fleet build-fix board. It is done, so this is a new note."
+  },
+  {
+   "id": 88262,
+   "ticketNumber": "HTPR-8630",
+   "title": "Table view: group tickets by tag",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) is it possible to build a table view that only shows backlog tickets broken down by tags or defined tag cluster? so that i see all tickets in one column clustered? by topic Valentin, 2026-11-04. Now The table view groups rows by board column only. Sorting flattens it into one list. To see one topic, he needs one saved view per tag. Problem He cannot see the whole backlog split by topic on one screen. Fix Table view gets a Group by choice: Column or Tag. Group by Tag shows one header per tag, with its ticket count. A ticket with two tags shows under both. Tickets with no tag go under \"No tag\" at the end. Groups fold open and closed, like the column groups today. It works with filters. Status Backlog plus Group by Tag gives his view. The choice saves with the view. Later, not in scope Named tag clusters (several tags as one topic). Done when Filter to Backlog, group by Tag: one group per tag, counts match the board. A two-tag ticket shows in both groups. Saved view reopens grouped by Tag. Light, AMOLED and Graphite 2 checked. A test covers it. Live screenshots on this ticket. Risk : low. Behind a flag. Undo: roll back the change. Decision : none. His own ask is his"
+  },
+  {
+   "id": 88733,
+   "ticketNumber": "HTPR-8710",
+   "title": "Bring back the old themes next to Graphite 2",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Flag: (Owner + QA) Flag: (Owner + QA) Flag: (Owner + QA) Flag: (Owner + QA) Flag: (Owner + QA) sorry where is the old graphite theme? nobody requested cutting the old theme and if you do it has to be a flag both of course both you can just replace the main theme with an experimental theme turn the flag off for graphite too its full of bugs bring it only back once you have the flag per theme Valentin, Slack, 2026-11-04. Cause: HTPR-8056 asked for three themes only. Now Graphite 2 is on for everyone. The theme list shows only Light, AMOLED and Graphite 2. Follow system, Dark Graphite, Paper Dia and Material are gone. People on old Graphite were moved to Graphite 2. People on Dia were moved to Light. Problem Nobody asked to cut themes. People lost the theme they picked. Fix Every old theme is back and stays the main set. Graphite 2 is an extra, experimental theme. Every theme gets its own flag. Graphite 2 shows only while its own flag is on. Graphite 2 comes back only after per-theme flags are live. Nobody's saved theme gets swapped. Each person gets their saved theme back. Graphite 2 keeps its own icons. Done when The theme list shows every old theme plus Graphite "
+  },
+  {
+   "id": 88736,
+   "ticketNumber": "HTPR-8712",
+   "title": "Design pass: find why it failed, add a real design check",
+   "status": "Normal",
+   "text": "everything in this design pass was badly done? how can we get better? tickets had exact specifications and what was delivered was nothing like what was requested despite the requests being completely reasonable. Valentin, 2026-11-04. He said yes to the plan below. Now 1 of 10 design tickets is done. Live screens do not match the Figma frames. Old themes were cut without anyone asking. Plan Find the first wrong step on each of the 10 tickets. Name the one shared cause. Build a design check: live screenshot next to Figma, per theme. Design changes stay at Owner + QA until that check passes. A different runner grades the checklist, never the builder. Rerun 2 or 3 failed tickets through the new flow. Done when Failure table on this ticket, one row per ticket, with links. Design check merged and used on all 10 tickets. Scores before and after on this ticket. 2 or 3 reruns pass first time. Risk : low. Rules and checks only. Decision : none. His yes is above."
+  },
+  {
+   "id": 88863,
+   "ticketNumber": "HTPR-8737",
+   "title": "Bulk move selected tickets from one board to another",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Let a user select several tickets and move them to another board in one action. I can't bulk move tickets between a board and another pls enable that Problem Moving tickets between boards works one ticket at a time. There is no way to move a selection of tickets to another board together. Requirements Select multiple tickets on the board, then choose a target board in one step. The target column list shows only active columns, in the default board order (see HTPR-2726 ). Moved tickets keep their parent-child links when the whole family moves (see HTPR-4580 ). Respect existing permissions. Tickets the user cannot move stay put, and the user sees which ones. Proposed: reuse the batch-select bar from the Kanban batch-select work ( HTPR-4128 ) rather than a new UI. Done when Select 3 tickets, pick another board and column: all 3 appear there. Selected tickets leave the source board. A failed move gives a clear message and does not move a different ticket (see HTPR-4945 ). Related HTPR-4128 : builds on, Kanban batch-select with a move-to-column action. HTPR-2726 : builds on, column list when moving between boards. HTPR-3590 : related, AI Chat and MCP moving a single t"
+  },
+  {
+   "id": 88883,
+   "ticketNumber": "HTPR-8745",
+   "title": "Run a Strix attack test on a test copy of the app",
+   "status": "Normal",
+   "text": "Now: ready to run. Your call: a $50 AI budget. Problem Nobody has tried to break into Hypertask the way an attacker would. Scans only find known patterns. They miss logic holes. Example: an agent login reaches boards it should not, Fix Run Strix. It is a free, open tool. AI agents act as hackers against a test copy of the app. Test copy only, with two fake teams. Never the live app or real data. Main goal: can one team or agent reach another team's boards? Each hole it proves becomes a Security ticket. Done when Strix report is on this ticket. Every proven hole has a ticket. A rerun after fixes cannot repeat them. Risk: it runs on our server and slows other work. Undo: stop it. Decision: one Question below."
+  },
+  {
+   "id": 88884,
+   "ticketNumber": "HTPR-8746",
+   "title": "Old payment, email and AI keys still work",
+   "status": "Normal",
+   "text": "Now: 5 old keys still work. Your call: replace them. Problem Old copies of our code from 2023 and 2024 hold real keys. A scan today tried each key. 5 still work. Stripe live payment key. It can charge and refund. Two SendGrid email keys. They can send email as us. One Google Cloud login, project hypertasks-396716. One OpenAI key. It can spend our AI money. The copies are private. The old GitHub repo and our main server hold them. The public repo is clean. Its history was checked too. Fix Get fresh keys from Stripe, SendGrid, Google and OpenAI. Store them in 1Password and the live app. Switch the old keys off at each provider. Done when The same scan finds 0 working keys. Payments, email and AI still work live. Risk: a missed spot breaks payments or email. Undo: put the old key back until fixed. Decision: one Question below. Not in this ticket: leaked keys in the public repo,"
+  },
+  {
+   "id": 88978,
+   "ticketNumber": "HTPR-8779",
+   "title": "Agent feedback, friction: Link help accepts a free-form relation type but does not...",
+   "status": "Normal",
+   "text": "Problem The link command help names a relation type option. It lists no allowed values. Agents guess. A wrong guess links tickets the wrong way. Four older reports said the same. They are closed and linked here. Fix Help text lists the three types: Related to, Blocked by, Blocked to. It says Related to is the default. Done when The link command help shows all three types. The help names the default. Risk Help text only. Undo by reverting the one change. Decision None."
+  },
+  {
+   "id": 89274,
+   "ticketNumber": "HTPR-8814",
+   "title": "AI model watch new classes [modelwatchrollup-2026-11-05]",
+   "status": "Normal",
+   "text": "120 new model classes are not in our catalog. alibaba/qwen-3.235b . Gateway input price per million tokens: $0.22. ask Valentin before shipping. alibaba/qwen3-coder . Gateway input price per million tokens: $0.22. ask Valentin before shipping. alibaba/qwen3-coder-30b-a3b . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-coder-next . Gateway input price per million tokens: $0.5. ask Valentin before shipping. alibaba/qwen3-next-80b-a3b-instruct . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-next-80b-a3b-thinking . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-vl-instruct . Gateway input price per million tokens: $0.19999999999999998. ask Valentin before shipping. alibaba/qwen3.8.2.4t-a95b . Gateway input price per million tokens: $2. ask Valentin before shipping. alibaba/qwen3.8.27b . Gateway input price per million tokens: $0.5. ask Valentin before shipping. alibaba/qwen3.8-flash . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3.8-max . Gateway input price per million tokens: $2. ask Valentin before shipping."
+  },
+  {
+   "id": 89397,
+   "ticketNumber": "HTPR-8824",
+   "title": "One mic and Send pattern in every composer: white mic left of a text Send",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Goal. Every composer uses one mic and Send pattern. A white mic sits left of a text Send. why do the mic arrangments look so differnt this is the main part that all modals must have this mic arrangment with the white mic that is a reoccuring pattern across the app Valentin, chat, 2026-11-05. The pattern (Figma node 120:7971, \"Mic + Send (Ctrl+J v4 pattern)\") Mic: 28px square, 4px corners, primary fill (white in dark themes), dark icon. Send: plain text, 13px semibold, no box. Send is grey until it can send, then white. 8px gap between mic and Send. While dictating, the Dictation pill replaces the mic. Surfaces Sidebar and floating AI chat: HTPR-8261, PR Full-screen AI chat: HTPR-8263 Ctrl+J New Task: HTPR-8260 Task page comment composer New task modal and task writer Any other composer with a mic Build. Make one shared mic and Send control. Use it on every surface above. Never restyle a surface on its own. Done when Every composer matches the frame, side by side. Light, AMOLED and Graphite 2 each have a screenshot pair. Attached: live today and the approved frame."
+  },
+  {
+   "id": 89544,
+   "ticketNumber": "HTPR-8832",
+   "title": "Agent feedback, friction: A completion comment heading was rejected as robot status...",
+   "status": "Normal",
+   "text": "Problem Agents write a done comment with a heading like Observation gate. The server reads it as a robot status line. It rejects the comment as not for people. Same for Acceptance gate and Full-day observation gate. Fix Flag only a bare Gate label opening a line. Headings with more words before Gate must pass. The house rules ticket check has the same rule. Change it the same way. Done when A comment with Observation gate as a heading posts. A bare Gate label opening a line is still refused. A test covers both cases. Risk Loosens one check. Undo by reverting the change. Decision None. Live check Observation gate: the page rendered for a person."
+  },
+  {
+   "id": 89610,
+   "ticketNumber": "HTPR-8843",
+   "title": "Release safe waiting features after checking lasting harm",
+   "status": "Normal",
+   "text": "Problem thy all go to everyone unless super high risk saftey comes from roll back Valentin, 2026-11-02. Hypertask features wait without a lasting-harm reason. The earlier count was 46 waiting features. Today's list needs checking, not guessing. Fix Check each waiting feature against lasting harm. Keep restrictions for charges, leaks, permanent deletion, customer emails. Release safe features after the required live checks. Keep design changes restricted until independent visual review. Collect money decisions together, with amounts. Keep genuine risks restricted with written reasons. Done when All earlier 46 features have recorded outcomes. Each is live or has a written reason. New waiting features receive the same review. Money decisions have amounts and one clear question. Reversible changes no longer count as lasting harm. Risk A wrong release could expose private data. Keep genuine risks restricted; undo reversible mistakes. Decision None. This review spends nothing. Source Release list from the parent Cover all 71 earlier waiting features. Include the 25 marked safe, not just 46. Recheck today's list before changing anything. Record one outcome for every waiting feature. Expla"
+  },
+  {
+   "id": 89701,
+   "ticketNumber": "HTPR-8857",
+   "title": "Remove feature flag htpr-6461-my-tasks-snooze",
+   "status": "Normal",
+   "text": "Keep this released change. Remove its safety switch. Switch: htpr-6461-my-tasks-snooze Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page ."
+  },
+  {
+   "id": 89826,
+   "ticketNumber": "HTPR-8863",
+   "title": "Try evlog: one clear log line per AI chat request",
+   "status": "Normal",
+   "text": "Now Valentin wants to try evlog. can we test this pls? evlog is a free logging library, MIT licence. It writes one full log line per request. Errors say why they failed and what to do next. It supports the framework our app uses. Problem One request writes many scattered log lines. Finding the cause of a failure is slow. Many errors only say \"something went wrong\". Fix Add evlog to one busy route: the AI chat reply. Keep our current log store. No paid add-on. Put it behind a feature flag. Compare one day before and after. Done when One AI chat failure shows its whole story in one line. Log volume before and after is measured. Page speed before and after is measured. A short verdict says: roll out wider, or drop it. Risk Logs must never hold keys or private text. Check that the redaction works before going live. Decision None needed. His message is the ask."
+  },
+  {
+   "id": 89864,
+   "ticketNumber": "HTPR-8867",
+   "title": "[AI CHAT] Ctrl+M must move focus back to the comment box when the AI chat input has focus",
+   "status": "Normal",
+   "text": "Problem After Ctrl+Q moves focus into the AI chat box, pressing Ctrl+M does not return focus to the comment box. The AI chat appears to suppress Ctrl+M, so the user cannot jump back to the comment from the chat input. Current behavior Press Ctrl+Q . Focus moves to the AI chat input. Press Ctrl+M . Focus stays in the AI chat input. Requirements With focus in the AI chat input, Ctrl+M moves focus to the comment box. The AI chat input must not swallow or block the Ctrl+M keystroke. Ctrl+Q keeps moving focus to the AI chat input as it does today. Done when Ctrl+Q, then Ctrl+M, then Ctrl+Q again works in the view shown in the screenshot. Typing in the AI chat input is unaffected."
+  },
+  {
+   "id": 89894,
+   "ticketNumber": "HTPR-8869",
+   "title": "Agent feedback, friction: Search uses positional text while nearby list commands use...",
+   "status": "Normal",
+   "text": "Problem The search command help lists a query option. Using that option fails with \"required argument: query\". Typing the words without the option works. Agents follow the help and hit the error. Fix Make the query option work. Keep the plain words form working too. Add one test for the option form. Done when Search with the query option returns tickets. Search with plain words still returns tickets. The new test passes in the pull request checks. Risk Small. Search is read only. Undo by reverting the change. Decision None."
+  },
+  {
+   "id": 89961,
+   "ticketNumber": "HTPR-8872",
+   "title": "Agent feedback, friction: A ticket with an explicit unfinished full-day observation...",
+   "status": "Normal",
+   "text": "Problem A ticket can state a full-day observation gate that is not finished. Moving that ticket to a Done column still works. The gate stays unchecked. The ticket looks finished but is not. Fix Refuse the move to Done while a stated observation gate is open. Say which gate is open in the refusal. The ship check script gets the same rule. A closed pull request already tried this. Start from it. Done when Moving a ticket with an open gate to Done is refused. The refusal names the gate. A ticket with no gate moves as before. A test covers all three. Risk A wrong match could block a valid Done move. Undo by reverting the change. Decision None."
+  },
+  {
+   "id": 89989,
+   "ticketNumber": "HTPR-8876",
+   "title": "AI model watch new classes [modelwatchrollup-2026-11-06]",
+   "status": "Normal",
+   "text": "120 new model classes are not in our catalog. alibaba/qwen-3.235b . Gateway input price per million tokens: $0.22. ask Valentin before shipping. alibaba/qwen3-coder . Gateway input price per million tokens: $0.22. ask Valentin before shipping. alibaba/qwen3-coder-30b-a3b . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-coder-next . Gateway input price per million tokens: $0.5. ask Valentin before shipping. alibaba/qwen3-next-80b-a3b-instruct . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-next-80b-a3b-thinking . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3-vl-instruct . Gateway input price per million tokens: $0.19999999999999998. ask Valentin before shipping. alibaba/qwen3.8.2.4t-a95b . Gateway input price per million tokens: $2. ask Valentin before shipping. alibaba/qwen3.8.27b . Gateway input price per million tokens: $0.06. ask Valentin before shipping. alibaba/qwen3.8-flash . Gateway input price per million tokens: $0.15. ask Valentin before shipping. alibaba/qwen3.8-max . Gateway input price per million tokens: $2. ask Valentin before shipping"
+  },
+  {
+   "id": 90270,
+   "ticketNumber": "HTPR-8882",
+   "title": "Lead cannot switch a flag Off on Valentin's order",
+   "status": "Normal",
+   "text": "Now HT Product Lead could not switch a flag Off on Valentin's order. He had to switch it himself in the flag page. its off but fix the bug that you can t turn this off you need complete authority over feature flags not just me manually Problem The flag server wants the flag's code name in a comment. The comment rules refuse code names in people comments. So the lead can never record his order where the server looks. His chat order counts as approval by house rule. The tool disagrees. Fix HT Product Lead may switch any flag to any mode, Off included. The lead logs his words and the switch in the agent lane. The flag server accepts that agent-lane record as proof. Runners keep today's limits. They still never switch Off. Every lead switch shows in the flag's history with his quoted words. Done when The lead switches a flag Off with one command on his order. No people comment is needed. The flag history shows who switched it and his words. A runner trying the same is still refused. Risk This changes who may switch flags. It needs still-allowed tests. Undo: roll the change back. Decision None needed. His message is the ask."
+  },
+  {
+   "id": 90276,
+   "ticketNumber": "HTPR-8883",
+   "title": "Agent feedback, friction: Question lint rejected the phone-unlock decision as context...",
+   "status": "Normal",
+   "text": "Problem Agents write a Question for Valentin with three context points. The server counts the Question line as a fourth point. It rejects the comment as too long. It hit the phone unlock decision on 7 Nov. Fix Count only the context points before the Question line. Three points plus the Question must pass. Four points plus the Question must still fail. Done when A Question with three points posts. A Question with four points is refused. A test covers both cases. Risk Loosens one check by one item. Undo by reverting the change. Decision None."
+  },
+  {
+   "id": 90336,
+   "ticketNumber": "HTPR-8887",
+   "title": "[BUGFIX] App feedback tickets arrive with no brain tag",
+   "status": "Normal",
+   "text": "Now Feedback tickets from the app arrive with no brain tag. Problem Runners pick their model from the brain tag. The board check turns red for each one. A script tags them later, one by one. Fix The app's feedback reporter adds brain-medium to every new ticket. Done when A new feedback ticket has brain-medium at once. The brain check stays green for a day. Risk Low. Undo: roll the change back. Decision None needed."
+  },
+  {
+   "id": 90711,
+   "ticketNumber": "HTPR-8904",
+   "title": "Stop automatic AI spending on agent-only work",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Problem Hypertask spends AI credit on agent-only activity. Automatic summaries and labels can run without people. Daily spending needs tracking by AI feature. Fix Skip automatic AI for agent tickets and comments. Include ticket summaries, comment summaries, and automatic labels. Keep people's AI working on mixed boards. Record spending by feature. Raise a daily warning. Done when Agent-only changes cause no automatic AI calls. People's changes still get their usual AI. Daily totals show spending by feature. A test proves the daily warning works. Daily AI spending stays below $5. Record one full day's before-and-after spending. Risk People could lose automatic summaries by mistake. Undo the change if their AI stops. Decision None. No purchases or paid calls are authorised. Source Remaining product work from Not in this ticket Key routing: Summary refresh timing: Free-plan limits: Allowance accuracy:"
+  },
+  {
+   "id": 90724,
+   "ticketNumber": "HTPR-8905",
+   "title": "Use the same ticket writing rules everywhere",
+   "status": "Normal",
+   "text": "Problem Hypertask and agent tools keep separate writing rules. The same words can receive different refusals. Fix Use one shared rule list in both places. Done when Both places accept the same good examples. Both places refuse the same bad examples. Changing the shared rules reveals any differences. Risk Good writing could be refused. Undo: roll back this change. Decision None. Not in this ticket The agent tool change:"
+  },
+  {
+   "id": 91334,
+   "ticketNumber": "HTPR-8929",
+   "title": "Board: give \"Select all in this column\" a direct keyboard shortcut",
+   "status": "Normal",
+   "text": "Add one direct keyboard shortcut that selects every card in the focused column. Today this is only available as a command in the command menu. Problem Ctrl+A selects every card on the board. Selecting one column means opening Commands and picking \"Select all in this column\", which needs the mouse or several keystrokes. What changes Proposed shortcut: Shift+A , selecting all cards in the focused column, or the column under the pointer when nothing is focused. Fallback if Shift+A is taken: Alt+A . Ctrl+Shift+A is not recommended because Chrome uses it for tab search. Ctrl+A keeps selecting the whole board. Show the shortcut on the \"Select all in this column\" row in Commands and in the shortcut bar and ? sidebar, with the right keys for Windows and Mac. Requirements Check the chosen key against src/lib/utils/keyboardShortcuts and common browsers before building. It must not clash with an existing binding. The shortcut does nothing while typing in a text field. The selection bar and bulk commands behave as they do after Ctrl+A. Done when Pressing the shortcut on a board selects all cards in that column only, and the bar shows the count. The tooltip, Commands row and ? sidebar show the "
+  },
+  {
+   "id": 91557,
+   "ticketNumber": "HTPR-8935",
+   "title": "Oversized or badly titled pull requests are stopped before opening",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Bad pull request titles and sizes show up only after the push. Who it affects: Internal only. 20 failed GitHub runs in 24 hours. Recommended course and why: Check title and size inside the open-PR script. Why: runners already use it. What Valentin must decide: nothing. How to undo: Remove the new steps. The GitHub guards still run. Problem Runners learn about bad titles and sizes only after the push. 20 failed GitHub runs in 24 hours. 10 failed on size or shape. 10 failed on a title with no ticket and tag. One pull request had 1256 hand-written lines against a 400-line cap. Each failure wastes a full round of checks. Valentin asked: how do we fix that this seems very important Evidence: Full findings: Fix The open-PR script already builds the title. Make it the only supported way. Before it opens anything, it runs the size and title checks. A hand-made pull request must also fail early. Exact files and messages are in the agent log on this ticket. Done when A branch like the 1256-line one is refused early. A title with no ticket and tag is refused. The right shape is shown. A normal small pull request still opens in one step. Risk The size count could wrongl"
+  },
+  {
+   "id": 91558,
+   "ticketNumber": "HTPR-8936",
+   "title": "One shared flag stub replaces hand-made flag mocks in tests",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Tests use hand-made fake flag lists. They drift from the real flags. Who it affects: Internal only. 11 pull requests had review comments on it. Recommended course and why: Add one shared helper. Block new hand-made fakes. Why: it cannot drift. What Valentin must decide: nothing. How to undo: Remove the new rule. The helper can stay. Problem Tests build their own fake flag lists by hand. They drift from the real flags. 11 pull requests, 16 review comments. One reads \"flag mock also needs updating\". Each drift costs a review round and a fix. Valentin asked: how do we fix that this seems very important Evidence: Full findings: Fix Add one shared test helper. It builds the fake flags from the real flag definitions. A new flag then never goes missing from a test. A new hand-made fake of the flag module fails the code rules. Only new ones fail. Old ones stay until someone touches them. Exact files and messages are in the agent log on this ticket. Done when Adding a flag needs no edit in tests that use the helper. A new hand-made fake fails with a message that names the helper. The code rules stay green on the current main branch. Risk The helper must fit every cur"
+  },
+  {
+   "id": 91560,
+   "ticketNumber": "HTPR-8938",
+   "title": "A change cannot merge until it is driven in the real app",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Nothing proves a change works in the real app before it merges. Who it affects: Everyone using the app. Runners who redo failed work. Recommended course and why: Add a required driven-proof check, report-only first. Why: proof today comes after merge. What Valentin must decide: nothing. How to undo: Make the check not required. It is one repo setting. Problem Nothing proves a change works in the real app before it merges. Proof happens after the merge. The live check there is mostly paperwork. 8 recent merged pull requests had unchecked live test boxes at merge. One ticket failed live QA five times. The builder had passed it with a narrow check. Two other tickets were fixed forward by a later pull request. Every failed round costs runner time and plan quota. Valentin asked: how do we fix that this seems very important Evidence: Full findings: Fix Add a required check named driven-proof on the production branch. It fails unless the pull request carries a proof record. The record comes from a hands-free run of the changed feature. That run uses the pull request preview. Or it uses a seeded throwaway copy of the app. The record names the feature page it covers."
+  },
+  {
+   "id": 91561,
+   "ticketNumber": "HTPR-8939",
+   "title": "Hands-free test drive for AI chat and the Ctrl+J popup",
+   "status": "Normal",
+   "text": "What's wrong or wanted: AI chat and the Ctrl+J popup have no hands-free test drive. Who it affects: Internal only. These areas came back for rework. Recommended course and why: Write drive scripts for both. Why: the proof check can then run them. What Valentin must decide: nothing. How to undo: Delete the scripts. Nothing in the app changes. Problem Only one feature has a working hands-free test drive. The rest are written steps. About 19 of 57 feature pages say \"verify by hand\" or \"no smoke id\". Chat shortcuts and the Ctrl+J popup came back for rework. Without a drive script, each runner re-invents the check or skips it. Valentin asked: how do we fix that this seems very important Evidence: Full findings: Fix Write drive scripts for AI chat and the Ctrl+J popup. AI chat covers the full page, the sidebar and floating windows. Cover the keyboard shortcuts and hover names. Cover the composer buttons. Reuse the stable selectors the smoke tests already use. Link each script from its feature page, so runners find it. Exact files and messages are in the agent log on this ticket. Done when One command drives each area and prints pass or fail per step. The script fails when a shortcut is b"
+  },
+  {
+   "id": 91562,
+   "ticketNumber": "HTPR-8940",
+   "title": "Hands-free test drive for board, tasks, comments and flags",
+   "status": "Normal",
+   "text": "What's wrong or wanted: The board, tasks, comments and flags have no hands-free test drive. Who it affects: Internal only. The Kanban cleanup came back for rework. Recommended course and why: Write drive scripts for all four. Why: runners can then prove changes there. What Valentin must decide: nothing. How to undo: Delete the scripts. Nothing in the app changes. Problem Only one feature has a working hands-free test drive. The rest are written steps. About 19 of 57 feature pages say \"verify by hand\" or \"no smoke id\". The Kanban board cleanup came back for rework after its first merge. Tasks, comments and flags are the next most rework-prone areas. Valentin asked: how do we fix that this seems very important Evidence: Full findings: Fix Write drive scripts for the board: cards, columns, drag and the four themes. Add scripts for the task page, comments and flag states. Reuse the stable selectors the smoke tests already use. Link each script from its feature page, so runners find it. Exact files and messages are in the agent log on this ticket. Done when One command drives each area and prints pass or fail per step. Each script fails when its feature is broken on purpose. Each featur"
+  },
+  {
+   "id": 91563,
+   "ticketNumber": "HTPR-8941",
+   "title": "Proof lists each acceptance item and a different runner re-runs it",
+   "status": "Normal",
+   "text": "What's wrong or wanted: The proof check reads the shape of the proof. It never tests behavior. Who it affects: Internal only. One ticket failed live QA five times. Recommended course and why: List every acceptance point. A second runner re-runs it. Why: builders should not grade themselves. What Valentin must decide: nothing. How to undo: Switch the stricter mode off. The old check stays. Problem The proof check only reads the shape of the proof. It never tests behavior. Builders pass it with a narrow check of their own work. One ticket failed live QA five times this way. The same builder grades the same work, so nobody looks again. Valentin asked: how do we fix that this seems very important Evidence: Full findings: Fix The proof must list every acceptance point from the ticket. It must also list every \"what usually breaks\" item from the feature page. Each item gets a result and a piece of evidence. A different runner re-runs the drive script before the ticket is Done. Exact files and messages are in the agent log on this ticket. Done when A proof that skips one acceptance point is refused. The message names it. A proof marked pass with no evidence is refused. The old chat shortcu"
+  },
+  {
+   "id": 91689,
+   "ticketNumber": "HTPR-8944",
+   "title": "View tab count includes cards in hidden columns",
+   "status": "Normal",
+   "text": "What's wrong or wanted: View tab count includes hidden columns. Who it affects: anyone using saved views with hidden columns. Recommended course and why: Count only what the view shows. What Valentin must decide: nothing. How to undo: revert the PR. Problem The Agent Feedback tab says 46. The view shows only 5 cards. The other 41 sit in No Flag, a hidden column. Screenshot: Valentin, 2026-11-08: Why does this number not update it says agent feedback 46 but there's only five tickets in there Fix The tab count counts only cards in visible columns. Done when Agent Feedback tab shows 5 with today's data. Hiding a column lowers the count at once. Showing it again raises the count. Default view count stays the same. Risk Low. Undo: revert the PR. Decision None needed."
+  },
+  {
+   "id": 91711,
+   "ticketNumber": "HTPR-8945",
+   "title": "Ctrl+J and Ctrl+K: Tab switches between Search and New Task",
+   "status": "Normal",
+   "text": "Make Tab switch between the Search and New Task tabs in the Ctrl+J and Ctrl+K windows, and stop it from moving focus to other controls. Problem In the Ctrl+J New Task window, Tab moves focus to the plus sign , then the mic . Valentin wants Tab reserved for switching tabs. Same on Ctrl+K. What changes In Ctrl+J, Tab switches to Search. In Ctrl+K, Tab switches between Search and New Task. Tab no longer focuses the plus sign or the mic. Requirements The plus menu and mic stay usable by mouse and their existing shortcuts (Ctrl+U for attach, @ for context). Other shortcuts, including Ctrl+Enter to send, keep working. Proposed: check the Search tab in Ctrl+K, where Tab may also be used for suggestions (see HTPR-6910 ). Done when Tab switches tabs in both Ctrl+J and Ctrl+K. Focus never lands on the plus sign or mic via Tab. Checked on the live site. Related HTPR-6937 , builds on: Tab switches between Search and New Task. HTPR-8829 , builds on: plus menu and mic inside the box."
+  },
+  {
+   "id": 92202,
+   "ticketNumber": "HTPR-8946",
+   "title": "An agent's API call to /api/mcp/tasks/update failed because Hypertask returned a server error (9 Nov)",
+   "status": "Normal",
+   "text": "Problem An agent&#39;s API call failed on the server. Who hit it : an agent owned by Valentin Yeo. This is likely a Hypertask bug. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None."
+  },
+  {
+   "id": 92265,
+   "ticketNumber": "HTPR-8948",
+   "title": "Latest Updates panel stopped showing new changes 3 weeks ago",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Latest Updates stopped updating 3 weeks ago. Who it affects: every user who opens the rocket panel. Recommended course and why: Fix the job, add an alarm, backfill. What Valentin must decide: nothing. How to undo: revert the PR. Problem The rocket panel shows Latest Updates. Newest entry is 3 weeks old. We shipped a lot since then. Users think nothing changed. Screenshot: Valentin, 2026-11-09: sidebar has completely broken down this should show recent changes its basically an automated user curated changelog How it works today A robot job called rocket-digest fills the panel. It lives in the agent-fleet repo, folder workers/rocket-digest. It runs every two days at 07:23 UTC. It reads production deploys since the newest entry. An AI model writes short entries from them. It posts them through the announcements admin API. Nobody noticed when it stopped. Fix Find why it stopped. Read its run log in the agent-fleet-logs database. Do one test run that posts nothing. Read the error. Likely causes: expired key, retired AI model, failing admin API. Fix that cause at the root. Base entries on shipped tickets, not raw deploys. A change counts once its flag reaches Ever"
+  },
+  {
+   "id": 92460,
+   "ticketNumber": "HTPR-8950",
+   "title": "Create the board GitHub App and its production keys",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Connect GitHub works on every board now. No board can install the GitHub App it needs. Who it affects: every board outside 15. Also anyone who wants pull requests on tickets. Recommended course and why: Make the App on the hypertask-ai account. Then put its five keys into production. Why: the code is finished. This is the only step left. What Valentin must decide: Yes, make the App now. Keep its keys encrypted inside Hypertask only. How to undo: uninstall the App. Then remove the five values. Decision What this is: Connect GitHub already works on every board. It needs one GitHub App that we do not have yet. You are the only person with admin rights on hypertask-ai. Question: Make the board GitHub App now? My recommendation: Yes. Why: the code is live and waits on this one step. Yes: keep the keys encrypted inside Hypertask. No: boards outside 15 stay unconnected. Problem Pressing Install GitHub App answers \"GitHub is not configured\". No GitHub App exists on the hypertask-ai account. Its five keys are not in production. So no board can install it. Pull requests cannot reach a board outside 15. Fix Someone with GitHub admin rights makes one GitHub App. The App"
+  },
+  {
+   "id": 92533,
+   "ticketNumber": "HTPR-8956",
+   "title": "AI chat header: title is the history dropdown, cleaner menu",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) What's wrong or wanted: AI chat header menus are messy. Who it affects: everyone using AI chat. Recommended course and why: One history dropdown on the title, cleaner menu. Why: two doors to one list confuse. What Valentin must decide: yes to the Figma. How to undo: switch the new flag off. Problem The history element has 2 access points. Make it more obvious that the title is a drop down. And remove the clock icons. Add a keep chat closed too. The past session list can be much longer. Menu today: History today: Fix Remove the clock icon. Title becomes a clear dropdown button. History list fills most of the chat, with search. Menu items on one line each. Add Keep chat closed next to Pin chat open. Figma: Done when Live header matches the Figma. Risk Small. Header only. Decision Yes to the Figma."
+  },
+  {
+   "id": 92534,
+   "ticketNumber": "HTPR-8957",
+   "title": "AI chat: calmer model picker with Auto on top",
+   "status": "Normal",
+   "text": "What's wrong or wanted: The AI model picker looks messy. Who it affects: everyone using AI chat. Recommended course and why: A calmer picker with Auto on top. Why: fewer parts, easier pick. What Valentin must decide: which Figma option. How to undo: switch the new flag off. Problem I would really like to improve the model picker. It's ugly today. This is how T3 does it. No description. Today: Reference: Fix Figma options A, B and C. Auto pinned on top. No model descriptions. Build the option Valentin picks. Done when Live picker matches the picked option. Risk Small. Picker look only. Decision Pick option A, B or C."
+  },
+  {
+   "id": 92614,
+   "ticketNumber": "HTPR-8960",
+   "title": "Board cards: calmer select checkbox that never moves the card",
+   "status": "Normal",
+   "text": "Flag: (Everyone) What's wrong or wanted: Card select checkbox is ugly and jumps. Who it affects: everyone selecting cards on a board. Recommended course and why: A calm checkbox that never moves the card. Why: selecting should not jump. What Valentin must decide: which Figma option. How to undo: switch the new flag off. Problem Design pls a better version of the select checkbox. This is ugly. Also when active it moves around. Hover: Selected: The checkbox looks like a plain browser box. When checked, it covers the ticket number. The card text shifts sideways. Fix Figma options for hover, checked and many checked. Built from the app's own colours and corners. Fixed spot, so nothing moves. Build the option Valentin picks. Done when Live checkbox matches the picked option. Selecting a card moves nothing. Risk Small. Board card look only. Decision Pick an option."
+  },
+  {
+   "id": 92615,
+   "ticketNumber": "HTPR-8961",
+   "title": "Board selection bar: Open actions button in the app's own style",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) What's wrong or wanted: Blue \"Open actions\" button looks out of place. Who it affects: everyone selecting cards on a board. Recommended course and why: Use the app's own button style. Why: one look everywhere. What Valentin must decide: nothing. How to undo: switch the new flag off. Problem Element looks out of place. Pls bring it into our style. Screenshot: The selection bar shows a blue \"Open actions\" button. Nothing else in the app uses that blue. Fix Restyle the button with the app's own button look. Same in every theme. Done when Live button matches the app's other buttons. Proof in Light and AMOLED. Risk Small. One button look. Decision Nothing."
+  },
+  {
+   "id": 92637,
+   "ticketNumber": "HTPR-8963",
+   "title": "Allow toggling sidebar sections shut and pinning favorite threads",
+   "status": "Normal",
+   "text": "Let users collapse sidebar sections and pin favorite threads. Problem Sidebar sections cannot be toggled shut, and favorite threads cannot be pinned. What changes Each sidebar section can be collapsed and expanded. Favorite threads can be pinned. Done when Sections collapse and expand from the sidebar. Pinned favorite threads stay pinned. Reference screenshot: Related: HTPR-2038 Allow pinning of sidebar (Archive), HTPR-1629 Allow PUBLIC pinning of comments on task detail (Archive), HTPR-3592 Ctrl+B Sidebar: Remember Last Used Settings (Archive)."
+  },
+  {
+   "id": 92638,
+   "ticketNumber": "HTPR-8964",
+   "title": "Remove mouse-over function for names and agents",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Remove the mouse-over behavior on names and agents completely. Problem The mouse-over on names and agents is annoying and should be removed. Requirements Remove the mouse-over function for names and agents. Done when Hovering over a name or agent shows no mouse-over behavior. Reference Related: HTPR-5605 (builds on) allows hovering over an agent to open its page, which this removal may conflict with."
+  },
+  {
+   "id": 92640,
+   "ticketNumber": "HTPR-8966",
+   "title": "AI chat summary: plain shape, no Next action",
+   "status": "Normal",
+   "text": "What's wrong or wanted: AI chat task summaries read like robot status. Who it affects: AI chat users. Recommended course and why: Plain summary first. What Valentin must decide: nothing. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-09: AI chat offers skill for summary already a default action The summary opens with \"Next action\". A summary should say what the task is first. The summary uses insider words. Flag states, PR numbers, screen sizes, owner names. Skill offers are out of scope. Valentin switched them off on 9 Nov. See Fix Summary shape, in plain words: What it is: one or two lines. Where it stands: one line. What is still open: up to three bullets. No \"Next action\" heading. No flag names, PR numbers or internal names. Done when Summarize on a task gives the plain three-part shape. No \"Next action\" line in a summary. Checked live on a real task, desktop and phone. Risk Low. Only chat replies and offers change. Undo: revert the PR. Decision None needed. Related:"
+  },
+  {
+   "id": 92656,
+   "ticketNumber": "HTPR-8970",
+   "title": "Board cards: calmer Calm A card, every element kept",
+   "status": "Normal",
+   "text": "Flag: (Everyone) What's wrong or wanted: Board cards are loud. Build the picked Calm A design. Who it affects: everyone using the board. Recommended course and why: Same parts, calmer look. Why: Valentin picked it. What Valentin must decide: nothing. How to undo: switch the new flag off. Problem i don't like our cards set calm a Today: Picked design, row Calm A: Figma: Design ticket: Fix Title leads the card. One quiet line for priority, size, date and counts. Agent status becomes one grey line. Lead, assignee and agent faces become one avatar stack. In inbox becomes a blue dot. Labels become quiet outline chips, not bold. Age line turns grey. Corners 4px. Done when Live cards match Calm A in every theme. Nothing is lost from today's card. Risk Medium. Every board card changes look. Decision Nothing."
+  },
+  {
+   "id": 92657,
+   "ticketNumber": "HTPR-8971",
+   "title": "Board cards: Card settings menu, default name and people",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Cards show too much. Valentin wants to choose every part. Who it affects: everyone using the board. Recommended course and why: A \"Card settings\" item in the board menu. Default card shows only name and people. Why: calm by default, full detail when wanted. What Valentin must decide: nothing, he asked for it. How to undo: switch the new flag off. Problem def add a menu element card settings that allows me to completely configure the card and the default card should only be name and people Cards today: Default card (minimal row): Fix New \"Card settings\" item in the board menu. One switch per card part. Parts: ticket number, inbox icon, comments, sub-tasks. More parts: priority, size, due date, tags. More parts: staleness, blocked edge. Name and people always show. Default: everything else off. Saved per person. Builds on the polished card in Figma frame first, posted as FYI. Done when A new user sees only name and people. Each switch shows or hides its part on every card. Choice stays after reload. Risk Small. Hiding only, nothing deleted."
+  },
+  {
+   "id": 92661,
+   "ticketNumber": "HTPR-8973",
+   "title": "Table view: one sort control, and each view keeps its own columns",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Two sort controls; views forget their columns. Who it affects: anyone with more than one table view. Recommended course and why: One sort control. Each view keeps its own setup. What Valentin must decide: nothing. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-10: tables are still bad how we fix table sorting / clustering / filtering Two separate sort controls exist. The Sort button in the toolbar. Clicking a column header. They fight, and you cannot tell which one wins. Shift-click sorts by up to three columns. Only the first one is saved. Shown columns and widths are shared by every view. Hide a column in one view, it hides everywhere. They are saved in the browser, not the account. Fix One sort. The column header and the Sort button set the same sort. The header shows the arrow and its order number. All sort levels save with the view. Shown columns, order and widths save with each view. Saved on the account, so every device matches. A view with no saved columns uses the defaults. Done when Sort by Priority then Updated, reload: both kept. Sort button and header always show the same sort. Hide Due in one view: other views still show it. "
+  },
+  {
+   "id": 92662,
+   "ticketNumber": "HTPR-8974",
+   "title": "Table view: choose what to group by, and which tags",
+   "status": "Normal",
+   "text": "What's wrong or wanted: You cannot choose which tags to group by. Who it affects: table view users. Recommended course and why: Option A, the tag checklist. Valentin picked it. What Valentin must decide: nothing. He picked A. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-10: i can't determine which tags i want to cluster by it just doesn't feel super useful right now Valentin, 2026-11-04, the first ask: broken down by tags or defined tag cluster Group by Tag makes one group for every tag. Board 15 has about 100 tags. Noise tags get groups too: P1, brain-medium, QA7098 broken. A ticket with three tags shows three times. Group counts add up to more than the board. Group by offers only Column or Tag. No assignee, priority or size grouping. Group order is A to Z only. Chosen: option A, the tag checklist Valentin, 2026-11-10: A pls Group by Tags opens a checklist. Tick the tags you want as groups. Drag them into the order you want. Each ticket shows a single time, under its first ticked tag. Everything else sits in Other, at the end. Saved with the view. Later, not in scope: named clusters set in board settings. Fix Group by menu: Column, Assignee, Priority, Size, Ta"
+  },
+  {
+   "id": 92692,
+   "ticketNumber": "HTPR-8975",
+   "title": "Ticket editor: Ctrl+J opens Write with AI, one mic, right hover",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) What's wrong or wanted: The comment box mic is confusing. Ctrl+J should open Write with AI. Who it affects: everyone writing in a ticket. Recommended course and why: One mic only. Ctrl+J opens Write with AI while editing. Why: one key, one icon, one meaning. What Valentin must decide: pick the Figma flow first. How to undo: switch the new flag off. Problem one more instance of a mic... the mouse over is wrong its not ctrl+j opened and its not the task writer. so IF i am in edit mode in a ticket ctrl+j must open the Write with AI function and the write with ai function must use the same icon pls give me a design for this flow first before you build Second mic inside Write with AI: Wrong hover on the mic: Fix Remove the extra mic in Write with AI. Mic hover says what it does. Editing a ticket: Ctrl+J opens Write with AI. Write with AI uses the task writer icon. Figma flow first, then build. Done when Valentin picks a flow. Ctrl+J opens Write with AI while editing. One mic, correct hover. Risk Small. Keyboard and icons only. Decision Pick a flow in Figma."
+  },
+  {
+   "id": 92693,
+   "ticketNumber": "HTPR-8976",
+   "title": "Board cards: Ctrl+click and Shift+click select for mouse users",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Mouse users cannot pick several cards. Ctrl+click and Shift+click fail. Who it affects: everyone selecting cards with a mouse. Recommended course and why: Use the file manager rules everyone knows. Why: no checkbox anymore, so clicks must do it. What Valentin must decide: nothing, he asked for it. How to undo: switch the new flag off. Problem ctrl+click and shift+click for mouse users doesn't work pls turn that on. only then this version without a checkbox works Today Ctrl+click opens a new tab. Today Shift+click toggles one card only. Fix Ctrl+click or Cmd+click: add or remove one card. Shift+click: select every card between the last click and this one. Shift+click across columns: select in board order. Middle click still opens a new tab. Click empty board space: clear the selection. Esc: clear the selection. The selection bar shows a short hint once. Done when Ctrl+click picks several cards. Shift+click picks a range. Plain click still opens the card. Proof in Light, AMOLED and Graphite 2. Risk Small. Ctrl+click no longer opens a new tab. Middle click does. Decision None. Built on his ask."
+  },
+  {
+   "id": 92700,
+   "ticketNumber": "HTPR-8977",
+   "title": "Database bill climbing: find and cut the heaviest queries",
+   "status": "Normal",
+   "text": "What's wrong or wanted: The database bill keeps climbing. Who it affects: Valentin's Neon bill. Recommended course and why: Find the heavy queries and cut them. What Valentin must decide: nothing. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-10: review my neon.tech charges pls they are also climbing for some reason Neon invoices: July: $43. August: $71. September: $87. October: $113. November: $55. November so far, 1 to 10 Nov: The live database never sleeps. It averages 0.8 compute units, all day. That is about 590 compute hours a month, about $62. It sends out 233 GB in 10 days. That is about 750 GB a month. 500 GB is included, the rest costs about $25. Storage is small, 3 GB, about $1. Expected November bill: about $90. So the cost is busy work, not data size. A board app this size should not move 25 GB a day. Fix Find the top queries by time and by rows sent. Use the database's own query stats. Name who sends them. App pages, background jobs, agent tools, board checks. Cut the three biggest. Fetch only needed fields and rows. Cache repeated reads. Slow down polling loops. Post before and after numbers on this ticket. Done when Top 10 queries listed, each wi"
+  },
+  {
+   "id": 92701,
+   "ticketNumber": "HTPR-8978",
+   "title": "Upstash bill: agents stop using it, humans read it less",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Upstash bill grew 30 times in 4 months. Who it affects: Valentin pays it. Recommended course and why: Agents stop using Upstash. It is for humans only. What Valentin must decide: nothing. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-10: agents don't need real time updates via upstash. upstash should be human only we need to get the cost explosion under control i can't afford this Upstash bills: July: $1.69. August: $10.68. September: $40.76. October: $53.43. November so far, 10 days: $23.89. November on track for about $72. What we pay for: Only requests cost money. Stored data is 2 MB. About 1.2 million requests a day, 14 every second. That is about $2.40 a day. The bill grew with the agent fleet, not with users. Where the requests likely come from: Feature flag checks on every app request. The agent tools connection for agents. Background job locks. Live updates use a separate service, not Upstash. Fix Measure first. Sample Upstash commands for one hour. Split them by sender: human app, agent, job. Post the split on this ticket. Agents never touch Upstash. Agent and command-line calls skip the Upstash flag cache. Flags for agents come "
+  },
+  {
+   "id": 92702,
+   "ticketNumber": "HTPR-8979",
+   "title": "Unverified email signups: end the session on verify, block notifications",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Unverified email signup gets a full sign-in. Who it affects: New email signups. Recommended course and why: Fix it before the flag goes wider. What Valentin must decide: nothing. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-10: go through the vulnerabilities see if we need to file tickets for those Sign up with any typed email gives a 7-day sign-in. Verifying later does not end that sign-in. Notifications and emails still reach the mailbox owner. Feature is still at Owner and QA only. Found by Vercel's security scan, rows 2 and 11. Fix Unverified accounts get no notifications or emails. Verifying ends every other open sign-in. The feature stays off for everyone until fixed. Done when A test: unverified signup sends no email. A test: verify ends the old sign-in. Live check on a test address. Vercel scan no longer lists it. Risk Low. Undo: revert the PR. Decision None needed. Related:"
+  },
+  {
+   "id": 92704,
+   "ticketNumber": "HTPR-8981",
+   "title": "Waiting on an agent: hide private agent names",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Private agent names leak through waiting on. Who it affects: Teams with private agents. Recommended course and why: Fix it before the flag goes wider. What Valentin must decide: nothing. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-10: go through the vulnerabilities see if we need to file tickets for those Waiting on an agent saves the agent name in activity. Some ticket lists may show it to anyone on the board. This is live for everyone. Found by Vercel's security scan, rows 10 and 12. Fix Activity and ticket lists hide private agent names. Show them only to people allowed to see that agent. Done when A test: a board member without access sees no name. Live check with a private test agent. Vercel scan no longer lists it. Risk Low. Undo: revert the PR. Decision None needed. Related:"
+  },
+  {
+   "id": 92705,
+   "ticketNumber": "HTPR-8982",
+   "title": "Ticket and question checks: cap text length, fix slow patterns",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Crafted ticket text can stall the server. Who it affects: Every signed-in user and agent. Recommended course and why: Fix it before the flag goes wider. What Valentin must decide: nothing. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-10: go through the vulnerabilities see if we need to file tickets for those Ticket text checks have no length limit. Some patterns get very slow on crafted text. One request could tie up a server. Found by Vercel's security scan, rows 5 and 8. Fix Cap the text length before any check. Rewrite the slow patterns. Count only the question part in the question check. Done when A test: 1 MB crafted text checks in under 100 ms. Normal tickets still pass the same way. Vercel scan no longer lists it. Risk Low. Undo: revert the PR. Decision None needed."
+  },
+  {
+   "id": 92707,
+   "ticketNumber": "HTPR-8984",
+   "title": "Skill offers: respect team AI opt-outs before reading chats",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Skill offers send chat history to an AI. Who it affects: Teams that turned AI off. Recommended course and why: Fix it before the flag goes wider. What Valentin must decide: nothing. How to undo: revert the PR. Problem Screenshot: Valentin, 2026-11-10: go through the vulnerabilities see if we need to file tickets for those Skill offers read the last chat messages. They send them to an AI model. It may ignore team AI settings. The feature is off since 9 Nov. Found by Vercel's security scan, row 1. Fix Check team AI settings before any scan. No scan when the team turned AI off. Done when A test: AI off means no scan. Vercel scan no longer lists it. Risk Low. Undo: revert the PR. Decision None needed. Related:"
+  },
+  {
+   "id": 92722,
+   "ticketNumber": "HTPR-8987",
+   "title": "[BUG] AI chat cannot see blocker tasks on board 15",
+   "status": "Normal",
+   "text": "Flag: (Everyone) The AI chat misses blocker tasks on the Hypertask Product board, as shown in the attached screenshot. Problem The AI chat does not show blocker tasks for board 15. Screenshot: Expected behavior Proposed: the chat names the blocker tasks on the board, or says it cannot see them. Requirements Reproduce on board 15 with a task blocked by another task. Find where the chat's task read drops blocker tasks, and compare with the REST and MCP output. Fix the read so blocker tasks appear in chat answers about the board. Add a test that fails without the fix. Done when The chat names the blocker tasks shown on board 15. The new test passes with the fix. Open questions The brief has no exact chat prompt or blocked task example. Add both before work starts. Related tickets Builds on: HTPR-5959 , blocked-by task relations are missing from the board payload. Related: HTPR-4326 , the chat sees partial task sets per board. Related: HTPR-6526 , the chat says the board is empty with four tasks."
+  },
+  {
+   "id": 92723,
+   "ticketNumber": "HTPR-8988",
+   "title": "Several chat windows: sidebar opens floating windows, floating mode nests chats",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Several chat windows breaks in both chat modes. Who it affects: anyone using AI chat with the flag on. Recommended course and why: Fix both bugs, then Valentin tries it again. What Valentin must decide: nothing. How to undo: revert the PR. Problem Flag: (Off) Valentin, 2026-11-10: i want that feature but it is super broken when i use it on the sidebar ai chat it opens floating windows it should not open new windows when i have ai chat in the sidebar if i am in floating window mode it cascades the chats inside the chat so its completely broken Sidebar mode. Opening another chat opens a floating window. The sidebar should stay one chat. No new windows. The new chat option should not show in the sidebar. Floating mode. A new chat opens inside the current chat window. Windows nest inside each other, a cascade. Each chat should be its own window, side by side. Original ticket: Fix Sidebar mode: one chat only. Hide the open-another-chat action there. Never open a floating window from the sidebar. Floating mode: each chat is its own top-level window. New windows open next to the others, never inside one. Each window moves and closes on its own. Add a test for each "
+  },
+  {
+   "id": 92728,
+   "ticketNumber": "HTPR-8989",
+   "title": "Daily check repaired saved views with no column list",
+   "status": "Normal",
+   "text": "What's wrong or wanted: 187 saved views had no saved column list, so they could hide columns. The daily check gave each one its board's columns. Who it affects: anyone opening the views named below. Recommended course and why: nothing to fix. This ticket records what the check repaired, so a person can look if one of these boards still looks wrong. What Valentin must decide: nothing. How to undo: hide or show columns in each named view, or remove the daily check. Repaired on 2026-11-10 testowy (project 329): default-view-id-329 Checkup (project 331): default-view-id-331 Test (project 338): default-view-id-338 inne (project 339): Tracking, Compliance Engineering, Compliance Experiments Darian (project 340): default-view-id-340 Test kanban (project 341): default-view-id-341 Truely Backlog (project 347): default-view-id-347 test (project 348): default-view-id-348 Project (project 349): default-view-id-349 A board (project 353): default-view-id-353 Test Board (project 354): default-view-id-354 Creative Art (project 356): default-view-id-356 Valentin Todo List (project 362): default-view-id-362 Campaign 1 (project 365): default-view-id-365 inne (project 367): default-view-id-367 Marketi"
+  },
+  {
+   "id": 92773,
+   "ticketNumber": "HTPR-8990",
+   "title": "Duplicate imports and repeated names fail lint in seconds",
+   "status": "Normal",
+   "text": "What's wrong or wanted: A duplicate import or a repeated name reaches GitHub. The type check should catch it first. When that check runs out of time, it does not. Who it affects: Internal only. Runners pushing changes. Recommended course and why: Turn on two cheap lint rules. They catch a duplicate import and a repeated name. It takes about a second. Existing violations get a baseline, so only new ones fail. Ten pull requests in 14 days hit this exact failure. What Valentin must decide: nothing. How to undo: revert the config and the baseline file. The type check still catches the same errors. Problem Only the type check catches a duplicate import. It also catches a repeated name. That check can run out of time. Then the mistake reaches GitHub and blocks the whole pull request. Ten pull requests in 14 days hit this exact failure. Fix Turn on the duplicate import rule and the repeated name rule. Record existing violations in the baseline file, so only new ones fail. Split out of HTPR-8934. The baseline is about 500 lines on its own. The size guard caps a hand-written change at 400 lines. Done when A new duplicate import fails lint in the pre-push hook. Existing violations do not fai"
+  },
+  {
+   "id": 93034,
+   "ticketNumber": "HTPR-8991",
+   "title": "Ticket page: right column shows only filled fields",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) What's wrong or wanted: The ticket side column shows empty fields. Who it affects: everyone opening a ticket. Recommended course and why: Show only filled fields. Empty ones fold into one add row. Why: the column shows facts, not blanks. What Valentin must decide: pick a Figma option. How to undo: switch the new flag off. Problem how would lauren tan improve the right column with the ticket details do i need to see all of them when they are empty Today: 5 of 11 rows say \"No ...\" or \"Set value\". ID repeats the page address. \"The Assignees\" reads like a placeholder. Fix Filled fields only. Empty fields become small add buttons. Status always shows. ID moves next to the title, click to copy. Same keys still set every field. Figma options first. Done when Valentin picks an option. An empty field takes no row. Every field can still be set. Risk Small. Layout only, no data change. Decision Pick an option in Figma."
+  },
+  {
+   "id": 93083,
+   "ticketNumber": "HTPR-8993",
+   "title": "Ticket side box: 4px corners, hide cancelled fields",
+   "status": "Normal",
+   "text": "What's wrong or wanted: The ticket side box has 5px corners. Ours are 2 or 4px. Who it affects: everyone opening a ticket. Recommended course and why: Set the corners to 4px. Why: house style. What Valentin must decide: nothing. How to undo: revert the change. Problem Found during live checks of The box asks for 4px but shows 5px. An older outline style overrides it. Two label chips also use 5px. Fix Remove the 5px override. Use 4px on the chips. One more fix: a field opened from Add field stays after cancel. Hide it again after cancel. Done when Corners measure 4px in all themes. Cancelled fields hide again. Risk Tiny. Corners and one hide rule. Decision None."
+  },
+  {
+   "id": 93088,
+   "ticketNumber": "HTPR-8994",
+   "title": "Let anyone clear the waiting-on person on a ticket",
+   "status": "Normal",
+   "text": "Problem I can't click the X to remove HT Product Lead as the waiting-on person. Anyone should be able to remove anyone as a waiting-on person, so this must not be restricted. Screenshot: What changes The X on the waiting-on person removes it for any board member. Removing a waiting-on person is not limited to its owner. Done when Clicking the X on HT Product Lead clears the waiting-on person. Any member can clear any waiting-on person."
+  },
+  {
+   "id": 93089,
+   "ticketNumber": "HTPR-8995",
+   "title": "AI model picker: add Auto as the default option",
+   "status": "Normal",
+   "text": "Auto is missing from the model picker. It should be the default selection. Problem The model picker has no Auto option. Auto should be selected by default. What changes Show Auto as the first, default option in the model picker. Keep the other models and any team-owned models selectable. Done when Auto is listed and selected by default. Other models remain selectable. Related tickets HTPR-7915 Auto model: default 'Auto' in AI chat picker (same work, builds on) HTPR-8957 AI chat: calmer model picker with Auto on top (same area) Proposed properties: Priority Medium , Size S , Tags AI ✨ brain-light"
+  },
+  {
+   "id": 93090,
+   "ticketNumber": "HTPR-8996",
+   "title": "Ctrl+J modal: Tab switches between Search and New Task",
+   "status": "Normal",
+   "text": "Problem In the Ctrl+J modal, Tab cycles through every focusable element instead of switching between the Search and New Task tabs. What changes Tab switches between Search and New Task, back and forth. Tab no longer moves focus to other elements. Screenshot Related HTPR-8945, builds on: Tab switches between Search and New Task in Ctrl+J and Ctrl+K."
+  },
+  {
+   "id": 93091,
+   "ticketNumber": "HTPR-8997",
+   "title": "Restore ticket ID in ticket properties above status",
+   "status": "Normal",
+   "text": "Flag: (Everyone) What's wrong or wanted: The ticket ID left the properties column. Who it affects: everyone opening a ticket. Recommended course and why: Put the ID row back above Status. Why: it lived there before. What Valentin must decide: nothing. How to undo: switch the new flag off. Problem The ID moved out with It should sit above Status, like before. Screenshot: Related: Fix Show the ID row first, above Status. Click still copies the ID. Done when The ID shows above Status on live. Proof in Light, AMOLED and Graphite 2. Risk Tiny. One existing row comes back. Decision None. Fix on his ask."
+  },
+  {
+   "id": 93093,
+   "ticketNumber": "HTPR-8998",
+   "title": "Ticket page: jump to top button with G G shortcut",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Long tickets need a jump to top button. Who it affects: everyone reading long tickets with a mouse. Recommended course and why: One small round arrow button, bottom right. It shows only after scrolling. Why: minimal, out of the way. What Valentin must decide: pick a Figma option. How to undo: switch the new flag off. Problem i want a scroll up button on long tickets jump to top for mouse users and when they mouse over it shows gg as the keyboard shortcut minimalist pls show me figma No visible way back to the top on desktop. Scroll-to-top state already exists in the ticket page code. Fix Figma options first, then build his pick. Button appears after scrolling down. Click jumps to the top. Hover tooltip shows the shortcut G G. G G also works from the keyboard. Done when Valentin picks an option. Button jumps to top on long tickets. Tooltip shows G G. Proof in Light, AMOLED and Graphite 2. Risk Small. One button and one shortcut. Decision Pick an option in Figma."
+  },
+  {
+   "id": 93110,
+   "ticketNumber": "HTPR-9000",
+   "title": "No round buttons, chips or panels: switch to 4px corners",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Round buttons and pills break our design system. Who it affects: everyone using the app. Recommended course and why: Make every round button, chip and panel 4px. Why: Hypertask uses 2 or 4px corners only. What Valentin must decide: nothing. The optional Rounded theme stays as is. How to undo: switch the new flag off. Problem why is it circular we dont do circular in this design system About 40 places still use circles or pills. Worst: task action buttons, back buttons, AI chat buttons. Also chips, count badges, toggles and remove buttons. New house rule: round code is a bug, never an example. Fix Swap round corners for 4px in app code. Start with buttons, then chips and badges. Leave avatars, small dots and spinners. Leave the Rounded theme a user can choose. Leave email templates. Done when No button, chip or panel is round. Proof in Light, AMOLED and Graphite 2. Risk Small. Corners only, many screens. Decision None. Built on his rule."
+  },
+  {
+   "id": 93154,
+   "ticketNumber": "HTPR-9002",
+   "title": "Pressing c for new task modal and then ctrl+j should open the rewrite function inside the description pls",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA) Instead it currently saves the ticket and opens the ticket with ai chat open. But i think what we need todo is make the rewrite function the thing that is opened and give the rewrite function also task writer abilities This is what happens currently when i press ctrl+j on an unsved new task But it would be better to see this modal But tuned for writing the task"
+  },
+  {
+   "id": 93177,
+   "ticketNumber": "HTPR-9003",
+   "title": "Overhaul page design",
+   "status": "Normal",
+   "text": "The page needs a design overhaul."
+  },
+  {
+   "id": 93179,
+   "ticketNumber": "HTPR-9004",
+   "title": "AI model selector: Thinking switch (default off) and Effort level",
+   "status": "Normal",
+   "text": "What's wrong or wanted: The model selector needs thinking and effort controls. Who it affects: everyone choosing an AI model in chat. Recommended course and why: Add Thinking and Effort to the model selector. Why: he asked for it. What Valentin must decide: nothing. He asked for it. How to undo: switch the new flag off. Problem the new model selector needs an option turn thinking on or off pls (default off) and effort level controls can you add them? Thinking is now off by default: Users cannot turn it back on per chat. No way to pick an effort level. Fix Thinking switch in the model selector, off by default. Effort choice: Low, Medium, High. Effort shows only for models that support it. The choice is saved per user. Reuse existing menu rows, no new menu. Done when Thinking can be turned on and off. Effort changes the request sent to the model. Default stays off. Proof in Light, AMOLED and Graphite 2. Risk Small. Thinking on costs more per answer. Decision None. Built on his ask."
+  },
+  {
+   "id": 93183,
+   "ticketNumber": "HTPR-9005",
+   "title": "One lightning button opens Ctrl+K everywhere",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA, new) What's wrong or wanted: The command menu has four different mouse buttons. Who it affects: everyone who opens Ctrl+K with the mouse. Recommended course and why: Use one lightning button everywhere. Why: one icon, one meaning. What Valentin must decide: nothing. He picked B. How to undo: roll back the change. Problem b lighting very good thanks you Today: logo, three dots, a ⌘ sign and a text button. They all open the same command menu. Figma: Image: Fix Lightning icon (lucide Zap, stroke 1.75) on every Ctrl+K door. Ticket header, board card, board header, comment. Bottom corner button, phone top bar, bulk bar. Cards and comments: 16px icon in a 24px box, on hover. Bars: 18px icon in a 32px box, always shown. Phone: always shown. Tooltip: Commands, with Ctrl K keys. Corners 4px. Remove the round corners on these buttons. Bulk bar loses its purple. AI chat and My Tasks keep their own three dots. Done when Every place above shows the lightning button. Each one opens Ctrl+K for that item. Proof in Light, AMOLED and Graphite 2. Risk Small. Icons and corners only. Decision None. He picked B."
+  },
+  {
+   "id": 93187,
+   "ticketNumber": "HTPR-9006",
+   "title": "[BUG] Pressing N on kanban creates task that doesn't show in the current column or view",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Problem Pressing N on the board creates a task. The new card does not show in that column. Fix The new card stays in the open column. It also stays inside a tag view. Done when Press N in a column. The card shows there. Do the same inside a tag view. Risk A new card could land in the wrong column. Undo: turn the switch off. Decision none Result Pressing N shows the card in the open column. A tag view keeps that card too. Checked live on the board. Switch"
+  },
+  {
+   "id": 93197,
+   "ticketNumber": "HTPR-9007",
+   "title": "Fix: keyboard j/k inside a column no longer keeps focus in view",
+   "status": "Normal",
+   "text": "Flag: (Everyone) Problem Pressing j or k in a column hides the card. Fix Scroll the column so the focused card stays in view. Keep the rest of keyboard navigation the same. Risk Low. Scrolling only. Decision None. Done when j and k keep the focused card on screen. Flag:"
+  },
+  {
+   "id": 93199,
+   "ticketNumber": "HTPR-9008",
+   "title": "Board: j and k keep the focused card in view",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Pressing j or k in a column moves focus out of sight. Who it affects: everyone who moves through cards by keyboard. Recommended course and why: Scroll the column so the focused card stays visible. Why: users cannot see where they are. What Valentin must decide: nothing. How to undo: revert the PR. Problem j and k in a column lose the focused card. Reported on the inne board: Valentin marked it urgent. Fix Scroll the column so the focused card stays visible. Keep the rest of keyboard navigation the same. Risk Low. Scrolling only. Undo: revert the PR. Decision None needed. Done when In a long column, j and k keep focus on screen. A live screen recording shows it."
+  },
+  {
+   "id": 93198,
+   "ticketNumber": "HTPR-9009",
+   "title": "[AI task writer] Set priority from urgency wording in ticket notes",
+   "status": "Normal",
+   "text": "Problem Urgency wording like \"urgent\" in a note does not set the ticket priority. The task writer should detect it and set Urgent priority. What changes Detect urgency words (e.g. \"urgent\", \"asap\", \"today\") in the user note. Map them to Priority 1 (Urgent) in the proposed properties. Keep the title and description unchanged by this rule. Done when A note containing \"urgent\" returns Priority Urgent (value 1). A note without urgency wording does not set Urgent."
+  },
+  {
+   "id": 93200,
+   "ticketNumber": "HTPR-9010",
+   "title": "Task writer should infer board tags from context, including brain tag",
+   "status": "Normal",
+   "text": "Make the task writer apply the board's common tags on its own, without the user naming them. Board 15 uses a brain-* tag on nearly every ticket, so the writer should pick the right brain tag from the ticket's context and set it on every new task. Reuse only tags that already exist on the board, never invent new ones. Choose the brain tag from complexity: brain-light, brain-medium (default), brain-hard, or brain-extra-hard. Apply tags only when they clearly fit, consistent with the existing tag-overuse fix in HTPR-3823. The user should not need to mention tags or the brain tag in the prompt. Related: builds on HTPR-3823 (tag over-suggestion) and HTPR-7513 (wrong project tag)."
+  },
+  {
+   "id": 93232,
+   "ticketNumber": "HTPR-9011",
+   "title": "Lightning button and right-click on rows without one",
+   "status": "Normal",
+   "text": "Flag: (Owner + QA, shared with the first part) What's wrong or wanted: Many rows lack a mouse menu button. Who it affects: mouse users on lists, tables and inbox. Recommended course and why: Add the lightning button and right-click. Why: same door everywhere. What Valentin must decide: nothing. He picked B. How to undo: roll back the change. Problem b lighting very good thanks you 10 places have no button today. No right-click menu anywhere. First part: Figma: Fix Lightning button on hover: table rows, My Tasks lists, inbox rows, search results. Also pages and agents list, phone board cards. Right-click a card, row or comment opens the same menu. Same size, spot and tooltip as the first part. Done when Every place above has the button. Right-click opens Ctrl+K for that item. Proof in Light, AMOLED and Graphite 2. Risk Small. Adds buttons, changes no data. Decision None. He picked B."
+  },
+  {
+   "id": 93241,
+   "ticketNumber": "HTPR-9012",
+   "title": "AI search: build a test set that scores search results",
+   "status": "Normal",
+   "text": "What's wrong or wanted: No test checks AI search results. Who it affects: Every AI feature that searches past tickets. Recommended course and why: Build a test set first. Every later fix proves itself. What Valentin must decide: nothing. How to undo: revert the PR. Problem Valentin, 2026-11-10: review our RAG its day one can we improve rag performance and output and effect on results its so old now we never improved it No test checks if search finds the right ticket. So no change to search can be proven better. Fix Build about 100 query and answer pairs from board 15. Duplicate tickets and their originals. Comments that name another ticket. Chat answers that cited a ticket. Score how often the right ticket is in the top 10. Count how often a deleted ticket comes back. Compare word search, meaning search and both mixed. Run it with the existing AI tests, report only. No client text in the test set. Done when Baseline numbers posted on this ticket. The test runs on GitHub with every change. Risk None. No product change. Decision None needed. Parent:"
+  },
+  {
+   "id": 93242,
+   "ticketNumber": "HTPR-9013",
+   "title": "AI chat: fix comment ranking and show comments in answers",
+   "status": "Normal",
+   "text": "What's wrong or wanted: AI chat ranks and shows comments badly. Who it affects: Everyone asking the AI chat about past work. Recommended course and why: Two small bugs. Fixing them gives better answers for free. What Valentin must decide: nothing. How to undo: revert the PR. Problem Valentin, 2026-11-10: review our RAG its day one can we improve rag performance and output and effect on results its so old now we never improved it Comment results get re-sorted by date. The best match is thrown away. Newest of 200 wins instead. Chat almost never shows comments. Tickets fill all 10 slots first. Fix Keep the search rank for comments. Mix tickets and comments by rank, or keep slots for comments. Add a test for both. Done when AI search test score goes up, numbers posted here. Chat answers show relevant comments. Risk Low. Undo: revert the PR. Decision None needed. Needs:"
+  },
+  {
+   "id": 93243,
+   "ticketNumber": "HTPR-9014",
+   "title": "AI chat and Task Writer: never use deleted tickets",
+   "status": "Normal",
+   "text": "What's wrong or wanted: AI can use deleted tickets. Who it affects: Everyone using AI chat or the Task Writer. Recommended course and why: Filter deleted and archived tickets out by default. What Valentin must decide: nothing. How to undo: revert the PR. Problem Valentin, 2026-11-10: review our RAG its day one can we improve rag performance and output and effect on results its so old now we never improved it Deleting a ticket does not update the search index. Chat and Task Writer search use no status filter. So deleted tickets can reach AI answers. Fix Update the search index at soft delete. Default the chat and Task Writer search to live tickets. Add a test. Done when AI search test shows zero deleted tickets returned. Delete a ticket, ask chat about it, it is not used. Risk Low. Undo: revert the PR. Decision None needed."
+  },
+  {
+   "id": 93244,
+   "ticketNumber": "HTPR-9015",
+   "title": "AI search: drop repeated lookups to make it faster",
+   "status": "Normal",
+   "text": "What's wrong or wanted: AI search repeats lookups. Who it affects: Everyone using AI chat and the Task Writer. Recommended course and why: Remember one lookup, drop a repeat search. What Valentin must decide: nothing. How to undo: revert the PR. Problem Valentin, 2026-11-10: review our RAG its day one can we improve rag performance and output and effect on results its so old now we never improved it Each AI search checks the team route 2 to 5 times. Each check reads the database. Task Writer runs the same ticket search twice. It lists memory files even with board memory off. Fix Remember the route choice per team for a minute. Reuse the first ticket search in the Task Writer. Skip the memory listing when board memory is off. Done when Speed before and after posted here. Fewer database calls per AI search. Risk Low. Undo: revert the PR. Decision None needed. Related:"
+  },
+  {
+   "id": 93245,
+   "ticketNumber": "HTPR-9016",
+   "title": "AI search: keep the index in sync with ticket edits",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Ticket edits can go missing from AI search. Who it affects: Everyone whose tickets AI search should find. Recommended course and why: Make index writes finish, and repair gaps nightly. What Valentin must decide: nothing. How to undo: revert the PR. Problem Valentin, 2026-11-10: review our RAG its day one can we improve rag performance and output and effect on results its so old now we never improved it The index update after a ticket edit is not awaited. The server can stop before it finishes. Failures are only logged. Nothing retries. No job repairs gaps. A title rename leaves old titles on its comments. Fix Re-index comments on a title change. Nightly job: compare edit times, re-index what drifted. Runs on Vercel or GitHub, never our server. Done when Drift count is zero on two nights in a row. Count posted here. Risk Low. Undo: revert the PR. Decision None needed."
+  },
+  {
+   "id": 93246,
+   "ticketNumber": "HTPR-9017",
+   "title": "Page search: use the smart search index we already pay for",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Page search only matches exact words. Who it affects: Everyone searching pages. Recommended course and why: Use the page index we already pay for. What Valentin must decide: nothing. How to undo: revert the PR. Problem Valentin, 2026-11-10: review our RAG its day one can we improve rag performance and output and effect on results its so old now we never improved it Pages are already sent to the search index. Nothing reads that index. Page search uses plain word matching instead. Fix Search pages with the same mixed search as tickets. Keep the access check per board. Add page cases to the AI search test. Done when A search with other words finds the right page. AI search test page scores posted here. Risk Low. Undo: revert the PR. Decision None needed."
+  },
+  {
+   "id": 93261,
+   "ticketNumber": "HTPR-9018",
+   "title": "Quick tips bar fits the style guide",
+   "status": "Normal",
+   "text": "What's wrong or wanted: The quick tips bar misses the new style. Who it affects: everyone on a new or empty board. Recommended course and why: Redesign the bar from the style guide. Why: he asked for it. What Valentin must decide: pick one design option. How to undo: roll back the change. Problem on a new board the quick tips dont fit our style overhaul them and bring them into the style guide pls Screenshot: Full-width bar along the bottom with dots between tips. Keycaps differ from keycaps elsewhere. Fix Two or three options in Figma, built from the style guide. Add the final bar to the style guide page. Corners 2 or 4px, no circles, no purple. Done when He picks an option. The bar matches it in Light, AMOLED and Graphite 2. The style guide page shows it. Risk Small. Look only. Decision Which option. Options follow in a comment."
+  },
+  {
+   "id": 93262,
+   "ticketNumber": "HTPR-9019",
+   "title": "Auto model: switch everyone's saved model choice to Auto",
+   "status": "Normal",
+   "text": "What's wrong or wanted: Saved model choices beat Auto. Who it affects: everyone who once picked a model. Recommended course and why: Switch every saved choice to Auto. Valentin asked. What Valentin must decide: nothing. How to undo: restore the saved choices from the backup. Problem Flag: (Everyone) Valentin, 2026-11-10: when is the auto model rollout for everyone coming i want to overwrite anyones model choice with the auto function there should be a ticket Auto is already on for everyone. But a saved model choice still wins over Auto. Valentin's own Ctrl+J box shows Haiku 5.5, not Auto. 12 of 1241 people have a choice saved on the server. The browser may also keep its own saved choice. Fix Back up every saved model choice first. Set every saved choice to Auto, every AI feature. Clear the choice the browser keeps, one time. People can still pick another model afterwards. Keep team-owned and own-key models working. Done when Every saved choice reads Auto. Ctrl+J, chat and Hyper show Auto for Valentin. Picking another model still works and sticks. Screenshot on this ticket. Risk Low. A backup keeps the old choices. Decision None needed. Valentin asked for it. Related: Related: Flag:"
+  },
+  {
+   "id": 93302,
+   "ticketNumber": "HTPR-9020",
+   "title": "QA fixture HTPR-8987 do not pick",
+   "status": "Normal",
+   "text": ""
+  }
+ ],
+ "canaries": [
+  {
+   "id": -1,
+   "ticketNumber": "CANARY-1",
+   "title": "Office kitchen rota rotation",
+   "status": "Deleted",
+   "canary": true,
+   "text": "Synthetic deleted row used by the search eval to check whether deleted tickets come back. It is not a real ticket and contains no board or client content.\nWeekly rotation of who cleans the kitchen at the Lisbon office, with a rota list, a swap rule and a reminder every Friday."
+  },
+  {
+   "id": -2,
+   "ticketNumber": "CANARY-2",
+   "title": "Badge printer queue and sticker colours",
+   "status": "Deleted",
+   "canary": true,
+   "text": "Synthetic deleted row used by the search eval to check whether deleted tickets come back. It is not a real ticket and contains no board or client content.\nThe badge printer at the side entrance jams on thick stickers; queue two jobs, amber stickers last, and reset the tray."
+  },
+  {
+   "id": -3,
+   "ticketNumber": "CANARY-3",
+   "title": "Winter coat rack and lost umbrella box",
+   "status": "Deleted",
+   "canary": true,
+   "text": "Synthetic deleted row used by the search eval to check whether deleted tickets come back. It is not a real ticket and contains no board or client content.\nThe coat rack by reception fell over twice; bolt it to the wall and keep a lost umbrella box underneath with two spare hangers."
+  }
+ ]
+}
