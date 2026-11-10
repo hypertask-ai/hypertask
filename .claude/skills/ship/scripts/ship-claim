@@ -28,8 +28,7 @@
 #   the unfinished-merged-work hold, the queue brake, infra first and the working-area check, because a live outage outranks
 #   the work a runner already holds. The flag counts only when the ticket is an HTPR ticket that really carries the incident
 #   label and is not Done or archived (re-read here, so a stray flag does nothing). The brain-extra-hard and design-pass
-#   refusals, the related-alert check and the claim race check all still apply. brain-extra-hard is refused unless
-#   the runner's engine file (SHIP_CLAIM_RUNNER_STATE/engine-N, default ~/.local/state/ht-or-runners) says codex or claude.
+#   refusals, the related-alert check and the claim race check all still apply.
 set -uo pipefail
 
 # decide <claim-id> <comments.json> [idle-ids] [assigned-ids] [self-resume]
