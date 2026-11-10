@@ -2,7 +2,6 @@ import type { IProject, ISection, ITask, ITaskLabel } from "@/models/model";
 import type { TableCreateTaskSection } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
 
 export type TableGroupBy = "column" | "tag" | "assignee" | "priority" | "size";
-
 export type TableGrouping = { mode: TableGroupBy; tagIds: string[]; allTags: boolean };
 
 export type TableTagGroupedSection = TableCreateTaskSection & { items: ITask[] };
@@ -13,16 +12,13 @@ export const OTHER_GROUP_TITLE = "Other";
 export const UNASSIGNED_GROUP_TITLE = "Unassigned";
 export const NO_PRIORITY_GROUP_TITLE = "No priority";
 export const NO_SIZE_GROUP_TITLE = "No size";
-
 const TABLE_GROUP_BY_VALUES = new Set<TableGroupBy>(["column", "tag", "assignee", "priority", "size"]);
 const TAG_PREFIX = "tag:";
 const TAG_ID = /^[A-Za-z0-9_-]+$/;
 const MAX_SELECTED_TAGS = 100;
 const LAST = Number.MAX_SAFE_INTEGER;
-
 const isTableGroupBy = (value: unknown): value is TableGroupBy =>
   typeof value === "string" && TABLE_GROUP_BY_VALUES.has(value as TableGroupBy);
-
 const cleanTagIds = (value: unknown): string[] => {
   const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
   const valid = list.filter((entry): entry is string => typeof entry === "string" && TAG_ID.test(entry));
@@ -57,27 +53,20 @@ export const sanitizeTableGroupBy = (value: unknown): TableGroupBy | null => {
   const sanitized = sanitizeTableGrouping(value);
   return sanitized ? parseTableGrouping(sanitized).mode : null;
 };
-
 export const effectiveTableGroupBy = (value: unknown): TableGroupBy =>
   sanitizeTableGroupBy(value) ?? "column";
-
 const activeView = (project?: IProject | null) => {
   const view = project?.project_view?.user_project_views?.[0];
   return view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
 };
-
 export const getActiveTableGroupingValueFromProject = (project?: IProject | null): string =>
   sanitizeTableGrouping(activeView(project)?.table_group_by) ?? "column";
-
 export const getActiveTableGroupingFromProject = (project?: IProject | null): TableGrouping =>
   parseTableGrouping(getActiveTableGroupingValueFromProject(project));
-
 export const getActiveTableGroupByFromProject = (project?: IProject | null): TableGroupBy =>
   getActiveTableGroupingFromProject(project).mode;
-
 type GroupSpec = { key: string; title: string; order: number };
 type Group = { title: string; order: number; items: ITask[] };
-
 const buildGroups = (sections: ISection[], specOf: (task: ITask) => GroupSpec): TableTagGroupedSection[] => {
   const groups = new Map<string, Group>();
   for (const section of sections) {
