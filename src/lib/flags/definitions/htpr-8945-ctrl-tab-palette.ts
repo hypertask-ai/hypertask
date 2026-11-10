@@ -6,6 +6,7 @@ export default {
   key: HTPR_8945_CTRL_TAB_PALETTE_FLAG,
   kind: "bugfix",
   defaultMode: "EVERYONE",
+  shippedOn: "2026-11-10",
   description:
     "In Ctrl+J and Ctrl+K, Tab switches between Search and New Task instead of focusing the plus menu, mic, or other composer controls.",
   releaseRisk: {
