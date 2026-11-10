@@ -93,24 +93,9 @@ export function useTableActions(context: Context) {
     async (task: ITask, index: number) => {
       setSelectedIndex(index);
       updateActiveItemAndItemInView(task);
-      const playlist =
-        tableGroupByTagEnabled &&
-        rows.some(
-          (row) => isTaskRow(row) && typeof row.sid === "string" && row.sid.startsWith("tag:"),
-        )
-          ? (() => {
-              const seenPlaylist = new Set<string>();
-              const next: { projectId: number; uniqueIndex: number }[] = [];
-              for (const row of rows) {
-                if (!isTaskRow(row)) continue;
-                const key = `${row.task.projectId}:${row.task.uniqueIndex}`;
-                if (seenPlaylist.has(key)) continue;
-                seenPlaylist.add(key);
-                next.push({ projectId: row.task.projectId, uniqueIndex: row.task.uniqueIndex });
-              }
-              return next;
-            })()
-          : rows.filter(isTaskRow).map(({ task }) => ({ projectId: task.projectId, uniqueIndex: task.uniqueIndex }));
+      const playlist = rows
+        .filter(isTaskRow)
+        .map(({ task }) => ({ projectId: task.projectId, uniqueIndex: task.uniqueIndex }));
       setTasksPlayList(playlist);
       navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
     },
@@ -120,7 +105,7 @@ export function useTableActions(context: Context) {
     (index: number) => {
       setSelectedIndex(index);
       const row = rows[index];
-      if (row && isTaskRow(row)) focusRowElement(row.task.id);
+      if (row && isTaskRow(row)) focusRowElement(row.rowKey);
     },
     [focusRowElement, rows],
   );

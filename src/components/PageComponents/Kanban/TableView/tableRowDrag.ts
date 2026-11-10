@@ -7,9 +7,11 @@ export const getTableRowDragData = (
   taskId: number,
   taskSectionId: number | null | undefined,
   currentProjectSectionIds: ReadonlySet<number>,
-  hasActiveSort: boolean
+  hasActiveSort: boolean,
+  tagGroupingActive = false,
 ): TableRowDragData | null => {
   if (
+    tagGroupingActive ||
     hasActiveSort ||
     typeof taskSectionId !== "number" ||
     !currentProjectSectionIds.has(taskSectionId)

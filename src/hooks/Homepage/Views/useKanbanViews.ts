@@ -53,6 +53,10 @@ import {
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
 import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
+import {
+  getActiveTableCollapsedSectionsFromProject,
+  serializeTableCollapsedSections,
+} from "@/lib/table-view/tableCollapsedSections";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -247,6 +251,9 @@ const useKanbanViews = (project: IProject | null) => {
     table_group_by: tableGroupByTagEnabled
       ? getActiveTableGroupByFromProject(queuedProject)
       : "column",
+    table_collapsed_sections: serializeTableCollapsedSections(
+      getActiveTableCollapsedSectionsFromProject(queuedProject),
+    ),
     board_layout: boardLayoutForRequest(queuedProject),
     ...overrides,
   });
@@ -428,6 +435,18 @@ const useKanbanViews = (project: IProject | null) => {
     );
   };
 
+  const setTableCollapsedSectionsViewAndReturn = async (
+    project: IProject,
+    collapsedSections: Set<string>,
+  ) =>
+    apiHandler(
+      (queuedProject) =>
+        buildUnsavedBody(queuedProject, {
+          table_collapsed_sections: serializeTableCollapsedSections(collapsedSections),
+        }),
+      project,
+    );
+
   const saveSubtaskSettingAPI = async (
     project: IProject,
     subTaskSetting: TBoardSubtaskSetting
@@ -608,6 +627,7 @@ const useKanbanViews = (project: IProject | null) => {
     setBoardSortingViewAndReturn,
     setTableSortViewAndReturn,
     setTableGroupByViewAndReturn,
+    setTableCollapsedSectionsViewAndReturn,
     saveFilterAPI,
     setBoardColumnsViewAPI,
     switchViewHandler,

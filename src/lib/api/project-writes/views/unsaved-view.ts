@@ -15,6 +15,7 @@ import {
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
+import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableCollapsedSections";
 import {
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
@@ -53,6 +54,7 @@ const route = taskWriteRoute({
       table_sort_column,
       table_sort_direction,
       table_group_by,
+      table_collapsed_sections,
       baseViewId,
     } = req.body;
     const hasBaseViewId = Object.prototype.hasOwnProperty.call(
@@ -72,6 +74,12 @@ const route = taskWriteRoute({
       "table_group_by",
     )
       ? await gatedTableGroupByForViewWrite(table_group_by, userId)
+      : undefined;
+    const sanitizedTableCollapsedSections = Object.prototype.hasOwnProperty.call(
+      req.body,
+      "table_collapsed_sections",
+    )
+      ? sanitizeTableCollapsedSectionsForWrite(table_collapsed_sections)
       : undefined;
     const project = await prisma.project.findFirst({
       where: {
@@ -103,6 +111,7 @@ const route = taskWriteRoute({
       table_sort_column: null,
       table_sort_direction: null,
       table_group_by: null,
+      table_collapsed_sections: null,
       board_layout: null,
     };
     try {
@@ -192,6 +201,7 @@ const route = taskWriteRoute({
         table_sort_column: sanitizedTableSort.column,
         table_sort_direction: sanitizedTableSort.direction,
         table_group_by: sanitizedTableGroupBy ?? null,
+        table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
         board_layout: resolvedBoardLayout,
       };
 
@@ -216,6 +226,7 @@ const route = taskWriteRoute({
               table_sort_column: baseView.table_sort_column,
               table_sort_direction: baseView.table_sort_direction,
               table_group_by: baseView.table_group_by,
+              table_collapsed_sections: baseView.table_collapsed_sections,
               board_layout: sanitizeBoardLayout(baseView.board_layout),
             }
           : superDefault;
@@ -258,6 +269,7 @@ const route = taskWriteRoute({
             table_sort_column: sanitizedTableSort.column,
             table_sort_direction: sanitizedTableSort.direction,
             table_group_by: sanitizedTableGroupBy ?? null,
+            table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
             board_layout: resolvedBoardLayout,
             visibility: "Private",
           },
@@ -354,6 +366,7 @@ const route = taskWriteRoute({
               table_sort_column: comparisonView.table_sort_column,
               table_sort_direction: comparisonView.table_sort_direction,
               table_group_by: comparisonView.table_group_by,
+              table_collapsed_sections: comparisonView.table_collapsed_sections,
               board_layout: sanitizeBoardLayout(comparisonView.board_layout),
             };
 
@@ -390,6 +403,7 @@ const route = taskWriteRoute({
                 table_sort_column: sanitizedTableSort.column,
                 table_sort_direction: sanitizedTableSort.direction,
                 table_group_by: sanitizedTableGroupBy ?? null,
+                table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
                 board_layout: resolvedBoardLayout,
               },
             }));

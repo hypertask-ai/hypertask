@@ -11,6 +11,10 @@ import { useTableKeyboard } from "./useTableKeyboard";
 import { createTableRowRenderer } from "./TableTaskRow";
 
 import { lazy, Suspense, useCallback, useRef, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
+import { tableTaskRowKey } from "@/lib/table-view/tableCollapsedSections";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 
@@ -174,7 +178,7 @@ const TableView = ({
   dragOverSectionId, setDragOverSectionId, moveTaskToSection, dragOverColumn, setDragOverColumn,
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
-  expanded, setExpanded, setExcludedTaskIds, sortState, setSortState,
+  expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
   setTableSortViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
@@ -182,6 +186,12 @@ const TableView = ({
     myTasksSnoozeActive, _currentProject, myTasksVisibleColumns, onMyTasksVisibleColumnsChange, currentUser,
     myTasksSort, myTasksSortKey, filteredSections, _sections,
   });
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const tagGroupingActive = Boolean(
+    _currentProject &&
+      tableGroupByTagEnabled &&
+      getActiveTableGroupByFromProject(_currentProject) === "tag",
+  );
   const {
   visibleColumns, getColumnWidth, frozenColumnOffset, setColumnWidth, freezeTitleWidth,
   gridTemplateColumns, tableMinWidth, reorderColumn, normalizedColumnOrder, storedColumnKeys,
@@ -195,7 +205,7 @@ const TableView = ({
   focusRowElement, focusTo, expandSection,
   } = useTableRows({
     sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
-    timeTotals, timeNow, sections, expanded, enableMyTasksBulkSelection,
+    timeTotals, timeNow, sections, expanded, collapsedSections, enableMyTasksBulkSelection,
     myTasksBulk, setExcludedTaskIds, persistedActiveItem, showArchivedOnBoard, isApple,
     myTasksSnoozeEnabled, setSelectedIndex, updateActiveItemAndItemInView, setExpanded,
   });
@@ -226,6 +236,7 @@ const TableView = ({
   renderTaskRow,
   } = createTableRowRenderer({
     snapshot: useFirstScreenSurface(currentUser?.id),
+    tagGroupingActive,
     selectedIndex, dragOverSectionId, currentProjectSectionIds, sortState, openTask,
     customFieldBySortColumn, frozenColumnOffset, getTicketText, _currentProject, sectionTitleBySid,
     timeTotals, timeNow, draggedTaskRef, clearTaskDrag, handleMouseEnter,
@@ -366,7 +377,9 @@ const TableView = ({
           ) || savedViewPrioritySort) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
-                {rows.filter(isTaskRow).map(({ task }, index) => renderTaskRow(task, index))}
+                {rows.filter(isTaskRow).map((row, index) =>
+                  renderTaskRow(row.task, index, row.rowKey, row.sid),
+                )}
               </ul>
             </div>
           ) : (
@@ -382,6 +395,7 @@ const TableView = ({
                   ? sectionRows.find((row) => row.type === "more")?.hidden ?? 0
                   : rawItems.length - shown.length;
                 const destinationSectionId = tableSectionNumber(section) ?? null;
+                const folded = collapsedSections.has(String(sid));
                 return (
                   <div
                     key={sid}
@@ -399,14 +413,47 @@ const TableView = ({
                     }}
                     className={`${destinationSectionId !== null && dragOverSectionId === destinationSectionId ? "bg-hover-active" : "bg-containerBackground"} shadow-md rounded-md py-2`}
                   >
-                    <div className="px-[10px] pt-1">
-                      <SplitTitle isSelected={true} onClick={() => {}} tab={{ idx: sectionIndex, project: section.section_title, length: rawItems.length, hasUnseen: false, overdueCount: myTasksSectionOverdueCounts?.[sectionIndex] ?? 0 }} />
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="flex cursor-pointer items-center gap-1 px-[10px] pt-1"
+                      onClick={() => toggleCollapsedSection(sid)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleCollapsedSection(sid);
+                        }
+                      }}
+                    >
+                      <ChevronDown
+                        size={14}
+                        strokeWidth={1.75}
+                        className={`shrink-0 text-text-light-gray transition-transform ${folded ? "-rotate-90" : ""}`}
+                        aria-hidden
+                      />
+                      <SplitTitle
+                        isSelected
+                        onClick={() => {}}
+                        tab={{
+                          idx: sectionIndex,
+                          project: section.section_title,
+                          length: rawItems.length,
+                          hasUnseen: false,
+                          overdueCount: myTasksSectionOverdueCounts?.[sectionIndex] ?? 0,
+                        }}
+                      />
                     </div>
+                    {!folded && (
                     <ul className="px-0">
                       {shown.map((task) => {
                         cursor += 1;
                         const flatIndex = cursor;
-                        return renderTaskRow(task, flatIndex);
+                        return renderTaskRow(
+                          task,
+                          flatIndex,
+                          tableTaskRowKey(task.id, sid),
+                          sid,
+                        );
                       })}
                       {hidden > 0 && (() => {
                         cursor += 1;
@@ -424,6 +471,7 @@ const TableView = ({
                         );
                       })()}
                     </ul>
+                    )}
                   </div>
                 );
               })}

@@ -1127,6 +1127,7 @@ model View {
   table_sort_column     String?
   table_sort_direction  String?
   table_group_by        String?
+  table_collapsed_sections String?
   // Optional saved surface preference. App-validated to Board/Table; null inherits
   // the user's persisted browser preference.
   board_layout          String?
