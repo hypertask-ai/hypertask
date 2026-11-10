@@ -25,6 +25,9 @@ const loadAttach = (runs) => {
   const calls = [];
   const { attachAgentStatus } = load("src/utils/controllers/tasks/attachAgentStatus.ts", {
     "@/lib/agentStatus/chip": load("src/lib/agentStatus/chip.ts"),
+    "@/lib/agents/visibility": load("src/lib/agents/visibility.ts", {
+      "@/lib/prisma": { __esModule: true, default: {} },
+    }),
     "@/lib/prisma": {
       __esModule: true,
       default: { agentRun: { findMany: async (args) => (calls.push(args), runs) } },
