@@ -75,7 +75,7 @@ jobs:
           AI_EVAL_WRONG_TOOL_THRESHOLD: "0"
       - run: node --test tests/rag-search-eval.test.cjs
       - run: node scripts/rag-eval.cjs --check-set
-      - if: hashFiles('tests/fixtures/rag-search/vectors.json') != ''
+      - if: github.event_name != 'workflow_dispatch' && hashFiles('tests/fixtures/rag-search/vectors.json') != ''
         run: node scripts/rag-eval.cjs --check-baseline
       - if: github.event_name == 'workflow_dispatch'
         run: node scripts/rag-eval.cjs --write-baseline

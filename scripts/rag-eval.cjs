@@ -259,6 +259,7 @@ function compareToBaseline(result) {
   const baseline = readJson("baseline.json");
   const measured = floors(result);
   const regressions = [];
+  if (baseline.fixtures !== result.fixtures) return { ok: false, regressions: ["baseline.floors were recorded for other fixtures, re-record with --write-baseline"] };
   for (const [key, floor] of Object.entries(baseline.floors ?? {})) {
     if (typeof measured.scores[key] !== "number" || measured.scores[key] + 0.001 < floor) regressions.push(`${key} fell from ${floor} to ${measured.scores[key]}`);
   }
