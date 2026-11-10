@@ -91,7 +91,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.doesNotMatch(workflow, /workflow_run|pull_request_target/);
   assert.deepEqual(parsed.on.schedule.map(entry => entry.cron), ["5 4 * * 1"]);
   const weeklyFiling = parsed.jobs["verify-qa"].steps.find(step => step.name === "File fleet-board weekly result");
-  assert.equal(weeklyFiling.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_MCP_TOKEN }}");
+  assert.equal(weeklyFiling.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}");
   const filesWeekly = (event, { journey = "", head = "" } = {}) => vm.runInNewContext(
     weeklyFiling.if.replace(/^\$\{\{\s*|\s*\}\}$/g, ""),
     { always: () => true, github: { event_name: event }, inputs: { journey, head } });
