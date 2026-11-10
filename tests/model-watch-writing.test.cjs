@@ -35,3 +35,21 @@ test("watcher ticket text satisfies the plain language block the board checks on
     assert.doesNotThrow(() => assertPlainLanguageTicketBlock(ticket.description), ticket.title);
   }
 });
+
+test("the decision field is a yes or no question, or the word nothing", () => {
+  const decisionOf = (description) => description.match(/What Valentin must decide:<\/strong>\s*([^<]+)</)[1].trim();
+  for (const ticket of watchTickets()) {
+    const decision = decisionOf(ticket.description);
+    assert.ok(["nothing.", "nothing for now."].includes(decision) || decision.endsWith("?"), `${ticket.title}: ${decision}`);
+  }
+});
+
+test("a stale entry tells nobody to add it back, and an unpriced finding waits for its price", () => {
+  const base = { current: ["kim"], inputPerMillion: null, provider: "openai", reason: "newer version in an existing class" };
+  const stale = ticketFor({ ...base, kind: "stale", model: "openai/gpt-6-luna", modelClass: "gpt-luna", current: ["gpt-6-luna"], action: "remove stale entry; migrate saved picks to the current model of its class" });
+  assert.match(stale.description, /Replace the stale entry and move saved picks/);
+  assert.doesNotMatch(stale.description, /once Valentin agrees/);
+  const unpriced = ticketFor({ ...base, kind: "new-version", model: "openai/gpt-6.2-luna", modelClass: "gpt-luna", action: "ship automatically when the gateway price is at most $5 per million" });
+  assert.match(unpriced.description, /Wait for a verified gateway price/);
+  assert.doesNotMatch(unpriced.description, /Replace the old version in every picker/);
+});

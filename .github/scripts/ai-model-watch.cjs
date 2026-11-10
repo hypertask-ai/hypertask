@@ -28,26 +28,54 @@ const price = (finding) => finding.inputPerMillion == null
   : `$${escapeHtml(finding.inputPerMillion)}`;
 const sentence = (text) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
+function planFor(finding, automatic, premium) {
+  if (finding.kind === "stale") return {
+    course: "Replace it with the current version of its class. Why: the old one no longer answers.",
+    decision: "nothing.",
+    fix: "Replace the stale entry and move saved picks to the new version.",
+    partsDecision: "Nothing. The replacement is already in its class.",
+  };
+  if (finding.inputPerMillion == null) return {
+    course: "Hold it until the gateway price is verified. Why: cost decides whether it can ship.",
+    decision: "nothing for now.",
+    fix: "Wait for a verified gateway price before any picker change.",
+    partsDecision: "No decision yet. The price is unverified.",
+  };
+  if (automatic) return {
+    course: "Ship it now and keep the old version as a fallback. Why: OpenAI and Anthropic classes always update.",
+    decision: "nothing.",
+    fix: "Replace the old version in every picker.",
+    partsDecision: "Nothing. This is an automatic update.",
+  };
+  if (premium) return {
+    course: "Hold it until the premium model policy is settled. Why: it costs more than five dollars per million tokens.",
+    decision: "nothing for now.",
+    fix: "Wait for the premium model policy before any picker change.",
+    partsDecision: "Valentin decides the premium policy first.",
+  };
+  return {
+    course: "Ask Valentin first, then replace the old version. Why: a new class changes what people can pick.",
+    decision: "Should this model go into the pickers?",
+    fix: "Add the model to every picker once Valentin agrees.",
+    partsDecision: `Valentin's yes on the new class. ${PREMIUM}`,
+  };
+}
+
 function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
-  const automatic = finding.action === "ship automatically";
-  const premium = finding.action === "waits for HTPR-7746";
+  const plan = planFor(finding, finding.action === "ship automatically", finding.action === "waits for HTPR-7746");
   const wrong = finding.kind === "stale" ? "One of our picker models is gone from the gateway."
     : finding.kind === "new-version" ? "A newer version of a model we offer is out."
     : "A model class we do not offer is new to the gateway.";
-  const course = automatic ? "Ship it now and keep the old version as a fallback. Why: OpenAI and Anthropic classes always update."
-    : premium ? "Hold it until the premium model policy is settled. Why: it costs more than five dollars per million tokens."
-    : "Ask Valentin first, then replace the old version. Why: a new class changes what people can pick.";
-  const decision = automatic ? "nothing." : premium ? "nothing for now." : "whether to add this model.";
   return {
     marker,
     title: `AI model ${finding.kind}: ${model} [${marker}]`,
-    description: opening({ wrong, course, decision }) + parts({
+    description: opening({ wrong, course: plan.course, decision: plan.decision }) + parts({
       problem: `<p>${sentence(escapeHtml(finding.reason))}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p>` +
         `<p>Gateway input price per million tokens: ${price(finding)}.</p><p>${sentence(escapeHtml(finding.action))}.</p>`,
-      fix: automatic ? "Replace the old version in every picker." : premium ? "Wait for the premium model policy before any picker change." : "Add the model to every picker once Valentin agrees.",
-      decision: automatic ? "Nothing. This is an automatic update." : premium ? "Valentin decides the premium policy first." : `Valentin's yes on the new class. ${PREMIUM}`,
+      fix: plan.fix,
+      decision: plan.partsDecision,
     }),
   };
 }
@@ -64,7 +92,7 @@ function rollupTicket(findings, now = new Date()) {
     description: opening({
       wrong: `${findings.length} new model classes are not in our catalog.`,
       course: "Add the classes Valentin approves to every picker. Why: they are new frontier releases.",
-      decision: "which new classes to add.",
+      decision: "Should these new classes go into the pickers?",
     }) + parts({
       problem: `<p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p><ul>${items}</ul>`,
       fix: "Add these classes to every picker once Valentin agrees. Move saved picks to the new version. Check the gateway input and output prices first.",
