@@ -69,7 +69,11 @@ function harness(options = {}) {
       { id: 25, publicId: 'deleted-board-page', projectId: 5, taskId: null, title: 'Deleted board page', archived: false },
       { id: 26, publicId: 'old-writer-page', projectId: 1, taskId: 11, title: 'Old writer', archived: false },
     ],
-    links: [{ id: 1, pageId: 20, taskId: 10, createdAt: new Date(0), removedAt: null }, { id: 2, pageId: 20, taskId: 11, createdAt: new Date(1), removedAt: null }],
+    links: [
+      { id: 1, pageId: 20, taskId: 10, createdAt: new Date(0), removedAt: null },
+      { id: 2, pageId: 20, taskId: 11, createdAt: new Date(1), removedAt: null },
+      { id: 3, pageId: 26, taskId: 11, createdAt: new Date(0), removedAt: null },
+    ],
   };
   const queries = [];
   let lock = false;
@@ -204,11 +208,11 @@ for (const [name, userId, visible] of [['ticket-only viewer omits linked page', 
     const { body, status } = await h.request('list', 'GET', undefined, 'task_id=10');
     assert.equal(status, 200);
     assert.equal(body.pages.some((p) => p.publicId === 'page'), visible);
-    assert.equal(body.pages.length, visible ? 2 : 1);
+    assert.equal(body.pages.length, visible ? 1 : 0);
     if (!visible) assert.doesNotMatch(JSON.stringify(body), /Page title/);
   });
 }
-test('legacy unlinked ticket page remains listed exactly once', async () => {
+test('reconciled origin link lists the page exactly once', async () => {
   const h = harness();
   const rows = await h.service.listPages({ taskId: 11, userId: 1 });
   assert.equal(rows.filter((p) => p.publicId === 'old-writer-page').length, 1);
@@ -248,7 +252,7 @@ for (const [name, userId, expected] of [['ticket-board-only writer refused', 2, 
       await h.request('[publicId]/links', 'DELETE', { task_id: 11 });
       assert.equal(h.state.pages[0].taskId, 10);
       assert.equal(h.state.links.filter((link) => link.pageId === 20).length, 2);
-      assert.ok(h.state.links.every((link) => link.removedAt instanceof Date));
+      assert.ok(h.state.links.filter((link) => link.pageId === 20).every((link) => link.removedAt instanceof Date));
     }
   });
 }
@@ -257,8 +261,8 @@ test('unlink flag off is refused without mutations / flag on is allowed', async 
     const h = harness({ flag: enabled });
     const result = await h.request('[publicId]/links', 'DELETE', { task_id: 10 });
     assert.equal(result.status, enabled ? 200 : 404);
-    assert.equal(h.state.links.length, 2);
-    assert.equal(h.state.links.filter((link) => link.removedAt === null).length, enabled ? 1 : 2);
+    assert.equal(h.state.links.length, 3);
+    assert.equal(h.state.links.filter((link) => link.pageId === 20 && link.removedAt === null).length, enabled ? 1 : 2);
   }
 });
 for (const [name, options, expected] of [['flag off refused', { flag: false }, 404], ['flag on board owner allowed', {}, 200], ['board outsider refused', { userId: 2 }, 404], ['board member allowed', { userId: 3 }, 200]]) {
