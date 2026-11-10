@@ -5,7 +5,7 @@ export const HTPR_8956_AI_CHAT_HEADER_MENUS_FLAG = "htpr-8956-ai-chat-header-men
 export default {
   key: HTPR_8956_AI_CHAT_HEADER_MENUS_FLAG,
   kind: "improvement",
-  defaultMode: "EVERYONE",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-09",
   description: "The AI chat header title and chevron form one button that opens a searchable chat history grouped by Today, Previous 7 days and Older, the clock icon is gone, and the three-dot menu lists one line per item with a Pin chat open and Keep chat closed pair.",
   releaseRisk: {
