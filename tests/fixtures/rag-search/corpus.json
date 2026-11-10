@@ -2,8 +2,8 @@
  "boardId": 15,
  "board": "Hypertask Product",
  "capturedAt": "2026-11-10",
- "embedModel": "text-embedding-3-small",
- "embedDim": 1536,
+ "embedModel": "Xenova/all-MiniLM-L6-v2",
+ "embedDim": 384,
  "embedTextCap": 4000,
  "source": "hypertask task list --project 15 (status Normal only)",
  "tasks": [

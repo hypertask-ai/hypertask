@@ -21,6 +21,8 @@ the deleted canary leaks. It measures only. Nothing here changes the product.
   (`CANARY-1` to `CANARY-3`). Real soft-deleted rows cannot be exported, so
   these probe whether a deleted row is ever returned. They contain no board or
   client content.
+- `vectors.json` — int8 vectors of every document and every query, recorded so
+  scoring runs offline with no key.
 - `baseline.json` — the numbers recorded on the ticket. Scoring fails when a
   number falls below its floor.
 
@@ -36,8 +38,17 @@ The three modes are the three ways the app can retrieve past tickets:
   `buildTaskBm25RankBy` (`src/utils/controllers/turbopuffer/turbopufferHelper.ts`):
   title x4, ticket number x2, search text x1, k1 1.2, b 0.75, prefix match on
   the last query token.
-- `semantic` — cosine over `text-embedding-3-small` vectors of the same search
-  text production embeds, truncated at 4,000 characters.
+- `semantic` — cosine over vectors of the same search text production embeds,
+  truncated at 4,000 characters.
+
+Production embeds with `openai/text-embedding-3-small`. That model is not
+reachable from a runner or from CI today: the Vercel gateway answers 403 to this
+host, and the repository `OPENAI_API_KEY` resolves empty on branch runs. The
+committed vectors are therefore `Xenova/all-MiniLM-L6-v2`. Same ranking shape,
+same metrics, different model. To re-record with the production model, delete
+`vectors.json` and run `--write-baseline` with `RAG_EVAL_EMBED_KEY` set to a
+funded key. The floors in `baseline.json` move when that happens, which is
+expected.
 - `hybrid` — reciprocal rank fusion (k 60, top 50 each) of the two lists above,
   the same shape as `rerank_by: ["RRF"]` in production.
 
@@ -48,14 +59,30 @@ deleted leak numbers show the real gap until HTPR-9014 lands.
 ## Run it
 
 ```bash
-RAG_EVAL_EMBED_KEY=<openai key> node scripts/rag-eval.cjs            # table
-RAG_EVAL_EMBED_KEY=<openai key> node scripts/rag-eval.cjs --json     # full numbers
-RAG_EVAL_EMBED_KEY=<openai key> node scripts/rag-eval.cjs --write-baseline
-node scripts/rag-eval.cjs --check-set                                # fixtures only, no key
+node scripts/rag-eval.cjs                 # table from the committed vectors
+node scripts/rag-eval.cjs --check-baseline # fails below a recorded floor
+node scripts/rag-eval.cjs --check-set      # fixtures only
 ```
 
-CI runs the harness tests and `--check-baseline` on every change that touches
-search, the RAG code, or this folder.
+CI runs the harness tests, `--check-set` and `--check-baseline` on every change
+that touches search, the RAG code, or this folder. Scoring needs no network and
+no key because the vectors are committed. A `workflow_dispatch` run of the
+`AI evals` workflow re-records the baseline and prints the vectors.
+
+## The recorded baseline (2026-11-10)
+
+| surface | mode | recall@10 | MRR@10 | nDCG@10 | deleted in top 10 | deleted canary leak |
+|---|---|---|---|---|---|---|
+| rag | keyword | 0.993 | 0.943 | 0.956 | 0.02 | 1 |
+| rag | semantic | 0.987 | 0.895 | 0.918 | 0.027 | 1 |
+| rag | hybrid | 0.987 | 0.938 | 0.95 | 0.027 | 1 |
+| search | keyword | 0.993 | 0.943 | 0.956 | 0 | 0 |
+| search | semantic | 0.987 | 0.895 | 0.918 | 0 | 0 |
+| search | hybrid | 0.987 | 0.938 | 0.95 | 0 | 0 |
+
+`rag` is `rag_retrieval`, which passes no status filter, so a deleted ticket
+comes back every time a probe matches. `search` is `hypertask_search_tasks`,
+which filters status Normal and never returns one. That gap is HTPR-9014.
 
 ## Refresh the corpus
 
