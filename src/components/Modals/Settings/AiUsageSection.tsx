@@ -367,10 +367,8 @@ const AllTeamsAiUsage = () => {
   const [error, setError] = useState<string | null>(null);
   const projectId = project?.id;
   const teamName = team?.title;
-
   useEffect(() => {
     let cancelled = false;
-
     axios
       .get<{ teams: TeamTarget[] }>("/api/settings/ai-usage/owned-teams")
       .then((response) => {
@@ -399,9 +397,7 @@ const AllTeamsAiUsage = () => {
   return (
     <SettingsSectionShell title="AI usage">
       {teams?.length ? (
-        teams.map((target) => (
-          <TeamAiUsageCard key={target.teamId} target={target} />
-        ))
+        teams.map((target) => <TeamAiUsageCard key={target.teamId} target={target} />)
       ) : (
         <SettingsCard title="Teams">
           <EmptyState>
