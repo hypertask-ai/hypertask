@@ -231,9 +231,6 @@ const nextConfig = {
     ];
   },
   webpack(config, options = {}) {
-    // Next keeps every production cache generation in RAM
-    // (maxMemoryGenerations: Infinity). That peak SIGKILL'd the 8 GB build
-    // container three times on 2026-11-10 (HYCI-220). Disk cache stays.
     if (!options.dev && config.cache && typeof config.cache === "object") {
       config.cache.maxMemoryGenerations = 0;
     }

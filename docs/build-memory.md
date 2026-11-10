@@ -271,3 +271,9 @@ That pattern is the free lever named in the parallelism 1 note: with parallelism
 The build script first set `--max-old-space-size=3840` in pull request 3087 (`0d635b84165`). Production deployment 7668278693 (`dpl_5G6Dae88e25UY24812esxUu2euVb`) failed on that merge while `bd6f21b8ec43` at 4096 MB still built, so 3840 was below the live compiler heap on the current tree.
 
 The cap is now 4000 MB: 192 MiB above 3840 for V8 and 4192 MiB for native memory on the 8192 MiB machine. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
+
+## Production cache generations (2026-11-10, HYCI-220)
+
+Production deployments 7670721960 (`3d601a0`), 7670916742 (`81c3458`) and 7671062041 (`7b9b66af`) failed. The last success was 7670519182 (`a40cd74`). CI Tests was green on each failed SHA. The first red commit is a hover-card change, and the next two commits are unrelated, so the failure is not one feature's code.
+
+Next 16.3.6 sets `cache.maxMemoryGenerations` to `Infinity` for production and calls the project webpack hook after that (`node_modules/next/dist/build/webpack-config.js`). `webpackMemoryOptimizations` only toggles string interning. It does not change the cache. The production hook now sets `maxMemoryGenerations` to 0, so the filesystem cache stays and the worker does not keep every generation in RAM. The 4000 MB heap cap and `NEXT_WEBPACK_PARALLELISM=1` stay. Dev builds are left as the hook receives them.
