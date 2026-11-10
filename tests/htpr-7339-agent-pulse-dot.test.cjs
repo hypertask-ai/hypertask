@@ -1,7 +1,5 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const React = require("react");
-const { renderToStaticMarkup } = require("react-dom/server");
 const { load } = require("./task-route-loader.cjs");
 
 const flagKey = "htpr-7339-agent-pulse-dot";
