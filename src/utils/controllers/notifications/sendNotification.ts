@@ -1,4 +1,5 @@
 import { canReadTaskNow } from "@/lib/access/canReadTaskNow";
+import { accountNotificationsBlocked } from "@/lib/auth/unverifiedEmailAccount";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { HTPR_7031_INVITE_EMAIL_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
@@ -17,6 +18,8 @@ export const sendEmailNotification = async (
   type: TNotification,
   body: INotificationBody
 ) => {
+  if (typeof body.userId === "number" && await accountNotificationsBlocked(body.userId)) return true;
+
   if (typeof body.userId === "number" && typeof body.taskId === "number") {
     if (await isTaskProjectMuted(body.userId, body.taskId)) return true;
 

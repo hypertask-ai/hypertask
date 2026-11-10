@@ -20,6 +20,7 @@ import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { consumeEmailLinkToken } from '@/lib/auth/emailLinkToken'
+import { revokeOtherUserSessions } from '@/lib/auth/sessionRevocation'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
@@ -145,6 +146,10 @@ export async function POST(request: NextRequest) {
 
     if (isVerificationToken && userData.UserSetting) {
       console.log('📧 Email verification token - setting isVerified to true')
+      const wasUnverified = !existingUser?.emailVerified && !existingUser?.UserSetting?.isVerified
+      if (wasUnverified && !(await revokeOtherUserSessions(userData.id))) {
+        console.error('Email verification could not end the earlier sessions for user', userData.id)
+      }
       await prisma.userSetting.update({
         where: { id: userData.UserSetting.id },
         data: { isVerified: true },
