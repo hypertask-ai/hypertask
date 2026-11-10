@@ -289,14 +289,14 @@ const InlineDraftAiFloat = ({
   const loadingRef = useRef(false);
   const wasEditableRef = useRef(true);
   const rootRef = useRef<HTMLDivElement>(null);
-  const promptInputRef = useRef<HTMLInputElement>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const boxShortcutsRef = useRef(false);
   const closeRef = useRef<() => void>(() => {});
   const recordingRef = useRef(false);
   const audioProcessingRef = useRef(false);
   const allowSuggestReplyRef = useRef(allowSuggestReply);
   const promptRef = useRef(prompt);
-  const mobilePromptInputRef = useRef<HTMLInputElement>(null);
+  const mobilePromptInputRef = useRef<HTMLTextAreaElement>(null);
   const mobileEditableSurfaceRef = useRef<HTMLDivElement>(null);
   const mobileEditableInputHtmlRef = useRef<string | null>(null);
   const mobileInternalDragRef = useRef(false);
@@ -609,6 +609,14 @@ const InlineDraftAiFloat = ({
     mobileReview.phase,
     mobileReview.showOriginal,
   ]);
+
+  useLayoutEffect(() => {
+    for (const field of [promptInputRef.current, mobilePromptInputRef.current]) {
+      if (!field) continue;
+      field.style.height = "auto";
+      field.style.height = `${field.scrollHeight}px`;
+    }
+  }, [prompt, isRecording, audioProcessing, isMobileAiSheet]);
 
   if (!editor || !scope) return null;
 
@@ -973,6 +981,12 @@ const InlineDraftAiFloat = ({
     );
   };
 
+  const keepTypingInsidePrompt = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.stopPropagation();
+    }
+  };
+
   const handlePanelKeyDown = (event: ReactKeyboardEvent) => {
     if (event.key !== "Enter") return;
     if (ticketEditorCtrlJ && !isMobileAiSheet && (isApple ? event.metaKey : event.ctrlKey)) {
@@ -988,15 +1002,17 @@ const InlineDraftAiFloat = ({
   const promptRow = (
     <div className="flex w-full min-w-0 items-center gap-2">
       <div className={dictationActive ? "hidden" : "min-w-[150px] flex-1"}>
-        <input
+        <textarea
           ref={promptInputRef}
+          rows={1}
+          onKeyDown={keepTypingInsidePrompt}
           autoFocus
           maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
           value={prompt}
           disabled={isLoading || audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={writeMode ? "Describe the task…" : inlineDraftAiWritePlaceholder(hasSelection, allowSuggestReply, editor.isEmpty)}
-          className="w-full border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
+          className="block max-h-40 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
         />
       </div>
 
@@ -1163,15 +1179,17 @@ const InlineDraftAiFloat = ({
       onKeyDown={handlePanelKeyDown}
     >
       {!dictationActive && (
-        <input
+        <textarea
           ref={mobilePromptInputRef}
+          rows={1}
+          onKeyDown={keepTypingInsidePrompt}
           autoFocus
           maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
           value={prompt}
           disabled={audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={mobilePromptPlaceholder}
-          className="min-h-11 w-full border-0 bg-transparent text-[16px] leading-6 text-white-black outline-none placeholder:text-text-light-gray"
+          className="block max-h-40 min-h-11 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[16px] leading-6 text-white-black outline-none placeholder:text-text-light-gray"
         />
       )}
       <div
