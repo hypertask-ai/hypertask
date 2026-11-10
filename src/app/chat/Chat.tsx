@@ -708,8 +708,12 @@ export default function Chat({ initialSessionId }: ChatProps) {
         {sectionsEnabled ? (
           <button
             type="button"
+            data-chat-rail-section=""
             aria-expanded={!shut}
-            onClick={() => toggleRailSection(group.title)}
+            onClick={() => {
+              if (searchQuery.trim().length > 0) return;
+              toggleRailSection(group.title);
+            }}
             className={sectionLabelClass}
           >
             <ChevronDown
