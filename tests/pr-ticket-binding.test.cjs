@@ -99,6 +99,19 @@ test('title guard passes when bind conflicts but the titled ticket already docum
   assert.equal(result.writes.length, 2);
 });
 
+test('409 fallback rejects a partial pull path or another repository URL', async () => {
+  for (const description of [
+    '<p>See /pull/1234 for context</p>',
+    '<p>https://github.com/other/repo/pull/123</p>',
+    '<p>/pull/123</p>',
+  ]) {
+    await assert.rejects(run({
+      status: 409,
+      taskLookup: { tasks: [{ ticketNumber: 'YPER4-731', pullRequests: [], description }] },
+    }), /HTTP 409/);
+  }
+});
+
 test('missing credentials and rejected or unproven bindings cannot pass', async () => {
   await assert.rejects(run({ token: '' }), /HYPERTASK_MCP_TOKEN/);
   await assert.rejects(run({ status: 403 }), /HTTP 403/);
