@@ -33,5 +33,5 @@ test("chosen tag order wins, Other holds the rest and other grouping modes work"
   assert.deepEqual(byMode("assignee"), ["Valentin", "Unassigned"]);
   assert.deepEqual(byMode("priority"), ["High", "No priority"]);
   assert.equal(serializeTableGrouping("tag", ["l2", "l1"]), "tag:l2,l1");
-  assert.deepEqual(parseTableGrouping("tag:l2,l1"), { mode: "tag", tagIds: ["l2", "l1"] });
+  assert.deepEqual(parseTableGrouping("tag:l2,l1"), { mode: "tag", tagIds: ["l2", "l1"], allTags: false });
 });

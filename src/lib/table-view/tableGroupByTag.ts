@@ -107,7 +107,7 @@ export function buildTableSectionsGroupedByTag(
       const id = labelId(taskLabel);
       if (id && !titles.has(id)) titles.set(id, taskLabel.label?.value?.trim() || id);
     }
-    selected = [...titles.entries()].sort(([, a], [, b]) => a.localeCompare(b, undefined, { sensitivity: "base" })).map(([id]) => id);
+    selected = [...titles.keys()].sort((a, b) => (titles.get(a) ?? a).localeCompare(titles.get(b) ?? b, undefined, { sensitivity: "base" }));
   }
   return buildGroups(sections, (task) => {
     const labels = task.taskLabels ?? [];

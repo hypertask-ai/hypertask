@@ -6,9 +6,11 @@ import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import { ModalContainerCustom, ModalFooterComp, ModalHeaderComp, ModalInput, ModalListContainer } from "@/components/Common/CommonModalComponents";
 import { countTableTags, getActiveTableGroupingFromProject } from "@/lib/table-view/tableGroupByTag";
 import type { IProject } from "@/models/model";
+import { useFlag } from "@/hooks/useFlag";
 const ACTION = "inline-flex min-h-7 items-center rounded-[4px] border-0 px-2 py-1 text-meta font-medium text-white-black hover:bg-hover-active";
 type Props = { project: IProject; onClose: () => void; onApply: (tagIds: string[]) => void };
 const TableTagGroupPicker = ({ project, onClose, onApply }: Props) => {
+  const enabled = useFlag("htpr-8974-table-group-modes");
   const counts = useMemo(
     () => countTableTags(project.filteredSections?.length ? project.filteredSections : project.sections ?? []),
     [project.filteredSections, project.sections],
@@ -37,6 +39,7 @@ const TableTagGroupPicker = ({ project, onClose, onApply }: Props) => {
       return next;
     });
   };
+  if (!enabled) return null;
   return (
     <ModalContainerCustom id="table-tag-group-picker" isOpen toggle={onClose} shouldCloseOnClickOutside className="xs:max-h-full sm:min-w-[480px] sm:top-[24%] sm:max-h-[520px]">
       <ModalHeaderComp header="Group by tags" />
