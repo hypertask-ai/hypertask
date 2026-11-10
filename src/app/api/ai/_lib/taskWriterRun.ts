@@ -1,5 +1,5 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
-import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7977_SHORT_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7977_SHORT_TASK_WRITER_FLAG, HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
@@ -229,6 +229,10 @@ export async function prepareTaskWriterRun(
       projectId: body.projectId,
     }),
   ]);
+  const brainTools = boardLabels && await isFeatureEnabled(HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG, userId)
+    ? await import("@/lib/ai/taskWriterBrainLabels")
+    : null;
+  const brainLabels = boardLabels ? brainTools?.brainLabelsFromBoard(boardLabels) ?? null : null;
   const composeSkillsEnabled = body.requestKind === "compose-task" && body.invokeSkills &&
     await isFeatureEnabled(HTPR_7312_CTRLJ_SKILLS_FLAG, userId);
   if (composeSkillsEnabled) {
@@ -375,6 +379,7 @@ export async function prepareTaskWriterRun(
   }
   if (boardLabels) {
     suffix += "\n\nChoose the existing label for the project the ticket is about, not a dependency or a project mentioned only as a comparison. Use only the board's provided label IDs; never invent a label, use a name as an ID, or fall back to the first label. If the project is unclear or ambiguous, suggest no project label. Preserve applicable existing generic labels. For HTML put comma-separated IDs in <span id=\"ai-generated-task-tags\" style=\"display:none\">. For structured tasks put each ticket's own IDs in its labelIds array; use an empty array when none apply.";
+    if (brainLabels && brainTools) suffix += `\n\n${brainTools.TASK_WRITER_BRAIN_RULE}`;
   }
   if (customFieldDefinitions?.length) {
     suffix += `\n\n${renderPrompt("task-writer-custom-fields-output")}`;
@@ -443,6 +448,7 @@ export async function prepareTaskWriterRun(
     ticketTypeEnabled,
     customFieldDefinitions,
     boardLabelIds: boardLabels?.map((label) => label.id),
+    brainLabels,
     tasksSchema,
   };
 }

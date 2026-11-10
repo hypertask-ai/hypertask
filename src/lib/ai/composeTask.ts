@@ -274,7 +274,7 @@ export async function createComposedTask({
         sectionId: placement?.sectionId, section_title: placement?.section,
         ranking: placement?.ranking, ...taskFields, ...writerFields, requestKind: "compose-task",
         ...(fillsExistingTask ? { existingTaskId } : {}),
-        ...(!taskFields.tags?.length && draft.writerLabelIds?.length ? { writerLabelIds: draft.writerLabelIds } : {}),
+        ...(draft.writerLabelIds?.length ? { writerLabelIds: draft.writerLabelIds } : {}),
         ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });

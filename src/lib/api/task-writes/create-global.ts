@@ -1,7 +1,7 @@
 import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
 import { isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
-import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
@@ -141,12 +141,20 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     const dueDate = writerDueDate ?? requestedDueDate;
     let writerLabelIds: string[] = [];
     let boardLabelIds: string[] = [];
-    if (!tags?.length && body.requestKind === "compose-task" && Array.isArray(body.writerLabelIds) && body.writerLabelIds.length &&
+    let brainTools: typeof import("@/lib/ai/taskWriterBrainLabels") | null = null;
+    let writerBrain: import("@/lib/ai/taskWriterBrainLabels").TaskWriterBrainLabels | null = null;
+    if (body.requestKind === "compose-task" && Array.isArray(body.writerLabelIds) && body.writerLabelIds.length &&
         await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId)) {
       const { validateTaskWriterLabelIds } = await import("@/app/api/ai/_lib/taskWriterProperties");
-      const boardLabels = await prisma.label.findMany({ where: { projectId }, select: { id: true } });
+      const boardLabels = await prisma.label.findMany({ where: { projectId }, select: { id: true, value: true } });
       boardLabelIds = boardLabels.map((label) => label.id);
-      writerLabelIds = validateTaskWriterLabelIds(body.writerLabelIds, boardLabelIds);
+      const validated = validateTaskWriterLabelIds(body.writerLabelIds, boardLabelIds);
+      if (await isFeatureEnabled(HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG, userId)) {
+        brainTools = await import("@/lib/ai/taskWriterBrainLabels");
+        writerBrain = brainTools.brainLabelsFromBoard(boardLabels);
+      }
+      if (!tags?.length) writerLabelIds = validated;
+      else if (writerBrain) writerLabelIds = validated.filter((id) => writerBrain!.ids.has(id));
     }
     if (body.existingTaskId != null) {
       const taskId = Number(body.existingTaskId);
@@ -217,7 +225,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         }, { status: 400, headers: responseHeaders });
       }
     }
-    if (!tagIds.length) tagIds = writerLabelIds;
+    if (writerLabelIds.length) {
+      tagIds = brainTools?.enforceBrainLabel([...tagIds, ...writerLabelIds], writerBrain) ?? [...new Set([...tagIds, ...writerLabelIds])];
+    }
     const initializeWriterDefaults = body.initializeWriterDefaults === true &&
       await isFeatureEnabled(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, session.userId);
     const initialPriority = initializeWriterDefaults ? { priority_index: 0, Priority_Value: "No Priority" } : priority;

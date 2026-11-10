@@ -26,6 +26,7 @@ export async function generateTaskWriterDraft(
     validateDraft,
     customFieldDefinitions,
     boardLabelIds,
+    brainLabels,
   } = await prepareTaskWriterRun(body, userId, agentId, teamScope);
   const preparedAt = Date.now();
 
@@ -66,6 +67,7 @@ export async function generateTaskWriterDraft(
     body.aiMode === "AiTaskWriter"
       ? extractTaskWriterProperties(draftHtml, {
           boardLabelIds,
+          brainLabels,
           fallbackTitle:
             body.taskTitle.trim() || taskTitleFromBrief(body.PROMPT),
         })
