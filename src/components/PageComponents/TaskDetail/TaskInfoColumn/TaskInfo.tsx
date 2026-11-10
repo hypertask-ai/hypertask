@@ -3,6 +3,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7868_EMPTY_FIELD_LABELS_FLAG } from "@/lib/flags/definitions/htpr-7868-empty-field-labels";
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-sticky-title";
 import { HTPR_8997_ID_ROW_FLAG } from "@/lib/flags/definitions/htpr-8997-id-row";
 import {
   ADD_FIELD_EVENT,
@@ -188,6 +189,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     : undefined;
   const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
   const idRowFlag = useFlag(HTPR_8997_ID_ROW_FLAG);
+  const stickyTitleFlag = useFlag(HTPR_8992_STICKY_TITLE_FLAG);
   const [revealedCustomField, setRevealedCustomField] = useState<{
     taskId: number;
     fieldId: string;
@@ -482,8 +484,9 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         _mbl
           ? { top: dynamicTopValue }
           : {
-              top: dynamicTopValue,
-              maxHeight: `calc(100dvh - ${dynamicTopValue}px - 16px)`,
+              ...(stickyTitleFlag
+                ? { top: dynamicTopValue + 16, maxHeight: `calc(100dvh - ${dynamicTopValue}px - 32px)` }
+                : { top: dynamicTopValue, maxHeight: `calc(100dvh - ${dynamicTopValue}px - 16px)` }),
               overflowY: "auto",
               scrollbarGutter: cachedLayout ? "stable" : undefined,
               overscrollBehavior: "contain",
