@@ -50,3 +50,17 @@ export const nextSelectableMentionIndex = (
 
   return -1;
 };
+
+const isMentionHeading = (item: MentionNavigationItem): boolean =>
+  (item.type ?? "").endsWith("Heading");
+
+export const moveAgentMentionsFirst = <T extends MentionNavigationItem>(
+  items: T[],
+): T[] => {
+  const start = items.findIndex((item) => item.type === "agentHeading");
+  if (start <= 0) return items;
+  let end = start + 1;
+  while (end < items.length && !isMentionHeading(items[end])) end += 1;
+  if (end === start + 1) return items;
+  return [...items.slice(start, end), ...items.slice(0, start), ...items.slice(end)];
+};
