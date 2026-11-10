@@ -1,10 +1,10 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
-const { createJiti } = require("jiti");
 const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 let emptyViews = [];
 let boardColumns = new Map();
@@ -21,7 +21,12 @@ const prisma = {
     updates.push({ columns: JSON.parse(values[0]), viewId: values[1] });
     return 1;
   },
-  task: { findFirst: async ({ where }) => (assert.equal(where.projectId, 15), existingTicket) },
+  task: {
+    findFirst: async ({ where }) => {
+      assert.equal(where.projectId, 15);
+      return existingTicket;
+    },
+  },
   project: {
     findFirst: async () => ({
       uniqueIdentifier: "HTPR",
@@ -32,30 +37,31 @@ const prisma = {
 };
 
 const redis = {
-  set: async (...args) => (redisSets.push(args), redisSetResult),
-  del: async (key) => (redisDeletes.push(key), 1),
+  set: async (...args) => {
+    redisSets.push(args);
+    return redisSetResult;
+  },
+  del: async (key) => {
+    redisDeletes.push(key);
+    return 1;
+  },
 };
 
-function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
-}
-
-stubModule("src/lib/prisma.ts", { __esModule: true, default: prisma });
-stubModule("src/lib/redis.ts", { getRedis: async () => redis });
-stubModule("src/utils/controllers/section/viewHelpers.ts", {
-  boardColumnsForProject: async (projectId) => boardColumns.get(projectId) ?? [],
-});
-stubModule("src/utils/controllers/tasks/createTaskCore.ts", {
-  createProvisionedTaskCore: async (options) => {
-    filed.push(options);
-    return { task: { id: 4711, uniqueIndex: 9001 } };
+const { GET, REPAIR_TICKET_TITLE, repairTicketDescription, repairTicketMarker } = loadModule(
+  "src/app/api/cron/saved-view-columns/route.ts",
+  {
+    "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/redis": { getRedis: async () => redis },
+    "@/utils/controllers/section/viewHelpers": {
+      boardColumnsForProject: async (projectId) => boardColumns.get(projectId) ?? [],
+    },
+    "@/utils/controllers/tasks/createTaskCore": {
+      createProvisionedTaskCore: async (options) => {
+        filed.push(options);
+        return { task: { id: 4711, uniqueIndex: 9001 } };
+      },
+    },
   },
-});
-
-const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
-const { GET, REPAIR_TICKET_TITLE, repairTicketDescription, repairTicketMarker } = jiti(
-  path.join(root, "src/app/api/cron/saved-view-columns/route.ts"),
 );
 
 const columnsFor = (projectId) => [
