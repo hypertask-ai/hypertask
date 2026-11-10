@@ -347,10 +347,16 @@ const useCreateTaskModalGlobalStates = () => {
   const recordTaskWriterDraft = useCallback(
     (note: string, draft: TaskWriterSnapshotSource) => {
       if (!taskWriterMemoryEnabled) return;
+      const form = formValuesRef.current;
+      const generated = Object.fromEntries(
+        Object.entries(draft).filter(
+          ([, value]) => value !== undefined && value !== null && value !== "",
+        ),
+      );
       taskWriterFieldDiffTrackerRef.current.record(
         note,
-        draft,
-        formValuesRef.current.currentProject?.id,
+        { ...form, ...generated },
+        form.currentProject?.id,
       );
     },
     [taskWriterMemoryEnabled],
