@@ -19,9 +19,7 @@ type TeamTarget = { projectId?: number; teamId: string; teamName: string };
 
 const UsageGroup = ({ children, title }: { children: React.ReactNode; title: string }) => (
   <div className="flex flex-col gap-1">
-    <p className="px-2 pt-2 text-meta font-semibold uppercase tracking-wide text-text-light-gray">
-      {title}
-    </p>
+    <p className="px-2 pt-2 text-meta font-semibold uppercase tracking-wide text-text-light-gray">{title}</p>
     {children}
   </div>
 );
@@ -56,14 +54,13 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
         { rows: members, title: "By member" },
       ]
     : [];
+  const pct = allowance ? Math.min(allowance.pct, 100) : 0;
 
   return (
     <SettingsCard title={target.teamName}>
       {!error && data && allowance ? null : (
         <EmptyState>
-          {error ??
-            data?.usageMessage ??
-            (data ? "Monthly AI allowance is currently unavailable." : "Loading AI usage")}
+          {error ?? data?.usageMessage ?? (data ? "Monthly AI allowance is currently unavailable." : "Loading AI usage")}
         </EmptyState>
       )}
 
@@ -71,31 +68,25 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
         <div className="flex flex-col gap-4">
           <div>
             <div className="flex items-end gap-2">
-              <span className="text-[32px] font-semibold leading-none text-white-black">
-                {allowance.pct}%
-              </span>
-              <span className="pb-0.5 text-dense font-medium text-text-light-gray">
-                used this month
-              </span>
+              <span className="text-[32px] font-semibold leading-none text-white-black">{allowance.pct}%</span>
+              <span className="pb-0.5 text-dense font-medium text-text-light-gray">used this month</span>
             </div>
             <div
               aria-label={`${allowance.pct}% of monthly AI allowance used`}
               aria-valuemax={100}
               aria-valuemin={0}
-              aria-valuenow={Math.min(allowance.pct, 100)}
+              aria-valuenow={pct}
               className="mt-4 h-2 w-full overflow-hidden rounded-full bg-hover-active"
               role="progressbar"
             >
               <div
                 className={`h-full rounded-full transition-[width] ${allowanceBarColor(allowance.pct, allowance.capped)}`}
-                style={{ width: `${Math.min(allowance.pct, 100)}%` }}
+                style={{ width: `${pct}%` }}
               />
             </div>
             <p className="mt-3 text-dense font-medium text-text-light-gray">
               Resets on {formatResetDate(allowance.resetsOn)}
-              {allowance.projectedPct !== null
-                ? ` · on track to use ~${allowance.projectedPct}% this month`
-                : ""}
+              {allowance.projectedPct !== null ? ` · on track to use ~${allowance.projectedPct}% this month` : ""}
             </p>
           </div>
 
@@ -161,9 +152,7 @@ const TeamAiUsageBreakdown = () => {
         teams.map((target) => <TeamAiUsageCard key={target.teamId} target={target} />)
       ) : (
         <SettingsCard title="Teams">
-          <EmptyState>
-            {error ?? (teams ? "Open a team board before viewing AI usage." : "Loading AI usage")}
-          </EmptyState>
+          <EmptyState>{error ?? (teams ? "Open a team board before viewing AI usage." : "Loading AI usage")}</EmptyState>
         </SettingsCard>
       )}
     </SettingsSectionShell>
