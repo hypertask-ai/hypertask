@@ -1,34 +1,16 @@
-const { withStubs } = require("./helpers/stub-map.cjs");
+const { loadModule } = require("./helpers/loadModule.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const vm = require("node:vm");
-const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
 const reasoning = load(path.join(root, "src/app/api/ai/_lib/reasoningEffort.ts"));
 const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
 const preference = load(path.join(root, "src/lib/aiThinkingPreference.ts"));
 
-function loadTs(relativePath, stubs) {
-  const filename = path.join(root, relativePath);
-  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const loadedModule = { exports: {} };
-  vm.runInNewContext(code, {
-    module: loadedModule,
-    exports: loadedModule.exports,
-    require: (id) => stubs[id] ?? require(id),
-    process, performance, console,
-  }, { filename });
-  return loadedModule.exports;
-}
-
 function loadProvider({ flag7854 }) {
-  const extra = {};
-  const stubs = withStubs({
+  const stubs = {
     "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("Unexpected network request"); } },
     "@/lib/flags": { isFeatureEnabled: async (key) => flag7854 && key === "htpr-7854-ai-thinking-opt-in" },
     "@/lib/flags/definitions/htpr-7854-ai-thinking-opt-in": reasoning,
@@ -48,9 +30,8 @@ function loadProvider({ flag7854 }) {
     "@/lib/aiAllowancePolicy": {},
     "@/lib/aiUsageClassification": { INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: "included", isSystemAiFeature: () => false },
     "@/lib/ai/customEndpoint": { isCustomEndpointConfig: () => false, normalizeCustomEndpointConfig: (value) => value },
-  }, extra);
-  extra["@/app/api/ai/_lib/reasoningEffort"] = loadTs("src/app/api/ai/_lib/reasoningEffort.ts", stubs);
-  return loadTs("src/app/api/ai/_lib/modelProvider.ts", stubs);
+  };
+  return loadModule("src/app/api/ai/_lib/modelProvider.ts", stubs);
 }
 
 async function sent(api, { context, modelId, params = {} }) {
