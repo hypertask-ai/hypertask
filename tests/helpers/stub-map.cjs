@@ -29,6 +29,15 @@ function enforcementFor(guard) {
 
 const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
 
+const agentPulseDotStubs = {
+  "@/utils/controllers/tasks/attachAgentStatus": {
+    attachAgentStatus: async (tasks) => tasks.map((task) => ({ ...task, agentStatus: null })),
+  },
+  "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": {
+    HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot",
+  },
+};
+
 const straightBoardGuardStubs = {
   "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed", accountNotificationsBlocked: async () => false },
 };
@@ -58,11 +67,12 @@ function withStubs(base = {}, extra = {}) {
     defaults[USER_COMMENT_COUNTS] = { userCommentCountsByTaskId: async () => new Map() }
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base || request in defaults || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
+    has: (_target, request) => request in extra || request in base || request in defaults || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
     get: (_target, request) =>
       request in extra ? extra[request]
       : request in base ? base[request]
       : request in defaults ? defaults[request]
+      : request in agentPulseDotStubs ? agentPulseDotStubs[request]
       : request in emailStraightBoardStubs ? emailStraightBoardStubs[request]
       : plainLanguageTicketStubs[request],
   });

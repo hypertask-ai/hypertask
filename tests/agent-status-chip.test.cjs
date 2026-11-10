@@ -25,6 +25,9 @@ const loadAttach = (runs) => {
   const calls = [];
   const { attachAgentStatus } = load("src/utils/controllers/tasks/attachAgentStatus.ts", {
     "@/lib/agentStatus/chip": load("src/lib/agentStatus/chip.ts"),
+    "@/lib/agents/visibility": load("src/lib/agents/visibility.ts", {
+      "@/lib/prisma": { __esModule: true, default: {} },
+    }),
     "@/lib/prisma": {
       __esModule: true,
       default: { agentRun: { findMany: async (args) => (calls.push(args), runs) } },
@@ -32,6 +35,25 @@ const loadAttach = (runs) => {
   });
   return { attachAgentStatus, calls };
 };
+
+test("private agent runs stay hidden from other board members", async () => {
+  const { attachAgentStatus } = loadAttach([
+    {
+      taskId: 1,
+      lastActivityAt: minutesAgo(1),
+      agent: {
+        displayName: "SECRET RUNNER",
+        userId: 99,
+        visibility: "PRIVATE",
+        members: [],
+      },
+    },
+  ]);
+  assert.deepEqual(
+    await attachAgentStatus([{ id: 1 }], NOW, { userId: 6, projectId: 15 }),
+    [{ id: 1, agentStatus: null }],
+  );
+});
 
 test("one batched run query serves any number of cards, newest run per task wins", async () => {
   const { attachAgentStatus, calls } = loadAttach([
@@ -172,11 +194,25 @@ test("the rendered chip keeps fresh status, hides stale or absent status, and su
   const subscriptions = [];
   const LabelWrapper = ({ children, ...props }) => React.createElement("span", props, children);
   const Empty = () => null;
+  const chip = load("src/lib/agentStatus/chip.ts");
+  const dot = load("src/lib/agentStatus/dot.ts", { "@/lib/agentStatus/chip": chip });
+  const AgentStatusChip = load("src/lib/agentStatus/AgentStatusChip.tsx", {
+    react: React,
+    "react/jsx-runtime": require("react/jsx-runtime"),
+    "react-icons/fa6": { FaRobot: Empty },
+    "@/components/Labels/LabelWrapper": { __esModule: true, default: LabelWrapper },
+    "@/lib/agentStatus/minuteClock": { useMinuteClock: (enabled) => { subscriptions.push(enabled); return Math.floor(NOW / 60_000); } },
+    "@/lib/agentStatus/chip": chip,
+    "@/lib/agentStatus/dot": dot,
+    "@/lib/agentStatus/AgentStatusDot": { __esModule: true, default: Empty },
+  }).default;
   const mocks = {
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "react-icons/fa6": { FaRobot: Empty },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" },
+    "@/lib/agentStatus/AgentStatusChip": { __esModule: true, default: AgentStatusChip },
     "@/lib/flags/definitions/htpr-7677-board-card-data-once": {},
     "./BoardCardData": { useBoardCardData: () => null },
     "@/hooks/Task Detail/useTimeTracking": {
