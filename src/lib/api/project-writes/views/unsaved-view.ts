@@ -15,7 +15,9 @@ import {
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
-import { gatedTableCollapsedSectionsForViewWrite } from "./gate-table-collapsed-sections";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
+import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableCollapsedSections";
 import {
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
