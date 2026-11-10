@@ -68,7 +68,7 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
-  editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, activeSession,
+  editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, showGeneralChatInHistory, activeSession,
   navigationKey, currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
@@ -85,14 +85,14 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
 
   const sessionContext = {
     navigationKey, parallelStreams, agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
-    createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
+    createSession, showGeneralChatInHistory, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
     deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, scopedProjectId, taskId, manualChat, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
     setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
   };
   const {
-  selectSession, startNewSession, deleteSession, fileUpload, handleSendMessageRef,
+  selectSession, startNewSession, showGeneralChat, deleteSession, fileUpload, handleSendMessageRef,
   removeQueuedMessage, drainQueuedMessage, billing, isApple, isByokBlocked,
   isDemo, chatRoute, ensureSessionForCurrentBoard,
   } = useAiChatSessions(pagingRequested ? sessionContext : { ...sessionContext, sessionPagingEnabled: false });
@@ -216,6 +216,7 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
     audioTiptapCallback,
     toggleRecording,
     startNewSession,
+    showGeneralChat,
     selectSession,
     toggleRenameChatModal,
     renameChat,
