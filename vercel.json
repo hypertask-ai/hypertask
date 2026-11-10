@@ -67,7 +67,7 @@
     },
     {
       "path": "/api/cron/saved-view-columns",
-      "schedule": "50 0 * * *"
+      "schedule": "20 1 * * *"
     }
   ]
 }
