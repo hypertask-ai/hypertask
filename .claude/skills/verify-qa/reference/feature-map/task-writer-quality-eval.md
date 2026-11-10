@@ -44,3 +44,12 @@ or a matching template request that layout. Flag off keeps the previous prompt.
 
 Only run-created QA Sandbox 7049 tickets are soft-deleted and read back.
 A failed cleanup leaves IDs in the status artifact for recovery.
+
+### Brain tag eval (HTPR-9044)
+
+`scripts/brain-tag-eval.cjs` compares Jev against Haiku on 200 board 15 tickets
+that already carry a brain label, and scores exact match, the confident subset,
+latency and cost. It is offline: no workflow, no app behaviour, no production
+data written. `node scripts/brain-tag-eval.cjs --replay=<scores.json>` rebuilds
+the report from a saved run. Method and the first result are in
+[docs/brain-tag-eval.md](../../../../../docs/brain-tag-eval.md).
