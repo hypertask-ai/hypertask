@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import {
   buildTableSectionsGroupedByTag,
@@ -41,6 +42,7 @@ export function useTableState(context: Context) {
   } = context;
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
+  const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
@@ -171,13 +173,13 @@ export function useTableState(context: Context) {
         const next = new Set(previous);
         if (next.has(key)) next.delete(key);
         else next.add(key);
-        if (_currentProject) {
+        if (_currentProject && tableGroupFoldEnabled) {
           void setTableCollapsedSectionsViewAndReturn(_currentProject, next);
         }
         return next;
       });
     },
-    [_currentProject, setTableCollapsedSectionsViewAndReturn],
+    [_currentProject, setTableCollapsedSectionsViewAndReturn, tableGroupFoldEnabled],
   );
   const sortedSections = useMemo(() => {
     const base = filteredSections ?? _sections ?? [];

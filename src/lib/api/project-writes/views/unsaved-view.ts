@@ -15,7 +15,7 @@ import {
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
-import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableCollapsedSections";
+import { gatedTableCollapsedSectionsForViewWrite } from "./gate-table-collapsed-sections";
 import {
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
@@ -79,7 +79,7 @@ const route = taskWriteRoute({
       req.body,
       "table_collapsed_sections",
     )
-      ? sanitizeTableCollapsedSectionsForWrite(table_collapsed_sections)
+      ? await gatedTableCollapsedSectionsForViewWrite(table_collapsed_sections, userId)
       : undefined;
     const project = await prisma.project.findFirst({
       where: {
