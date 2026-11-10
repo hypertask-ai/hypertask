@@ -123,7 +123,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
             body.assistant_message_id,
           );
           if (!completionFenceToken) {
-            state.recordTurnOutcome("cancelled");
             state.finish("error", {
               cancelled: true,
               content: "Stream cancelled.",
