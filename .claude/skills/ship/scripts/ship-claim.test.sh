@@ -603,7 +603,7 @@ eq "human-assigned Backlog infra ticket never blocks an app claim" "$(holdrc 'RU
 prs 5; free_infra YPER4-4 free
 eq "picked by the launcher, free infra waits -> app claim allowed" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 0
 eq "picked by the launcher, board 11514 unreadable -> app claim still held" "$(SHIP_CLAIM_PICKED=1 SHIP_CLAIM_HYPERTASK=$D/ht11514fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 4
-prs 21; eq "picked by the launcher, queue full -> app claim still held" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 4
+prs 21; eq "picked by the launcher, queue over 20 -> fleet/pick WIP cap decides, app claim allowed" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 0
 # Incident lane (YPER4-1375): SHIP_CLAIM_INCIDENT=1 skips every hold, but only for a real open incident ticket.
 inc_task() { jq -n --arg l "$1" --arg s "${2:-Bugs}" --argjson done "${3:-false}" \
   '{success:true,tasks:[{ticketNumber:"HTPR-5000",projectId:15,section:$s,status:"Normal",sectionIsDone:$done,labels:[{name:$l}],assignees:[]}]}' > "$D/inc.json"; }
