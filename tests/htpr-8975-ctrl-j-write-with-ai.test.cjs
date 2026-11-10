@@ -209,11 +209,11 @@ function panel(t, enabled, { onClose = () => {}, onParentKeyDown } = {}) {
     });
   const rewrite = async (instruction) => {
     const input = container.querySelector('[aria-label="Write with AI"] input');
-    const setValue = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set;
+    const propsKey = Object.keys(input).find((name) => name.startsWith("__reactProps$"));
     React.act(() => {
-      setValue.call(input, instruction);
-      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      input[propsKey].onChange({ target: { value: instruction } });
     });
+    assert.equal(input.value, instruction);
     await React.act(async () => {
       input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
