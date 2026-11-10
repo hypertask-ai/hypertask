@@ -347,7 +347,11 @@ const useCreateTaskModalGlobalStates = () => {
   const recordTaskWriterDraft = useCallback(
     (note: string, draft: TaskWriterSnapshotSource) => {
       if (!taskWriterMemoryEnabled) return;
-      taskWriterFieldDiffTrackerRef.current.record(note, draft);
+      taskWriterFieldDiffTrackerRef.current.record(
+        note,
+        draft,
+        formValuesRef.current.currentProject?.id,
+      );
     },
     [taskWriterMemoryEnabled],
   );
@@ -495,7 +499,6 @@ const useCreateTaskModalGlobalStates = () => {
     saveEpochRef.current += 1;
     setIsGeneratingTitle(false);
     generatedTitleTrackerRef.current.reset();
-    taskWriterFieldDiffTrackerRef.current.reset();
     const clearGeneratedTitle = autoTitleCoordinator.boardChanged();
     const viewDefaults = getNewTaskViewDefaults(getActiveFiltersFromProject(project));
     const boardChanged = formValuesRef.current.currentProject?.id !== project.id;
@@ -724,10 +727,10 @@ const useCreateTaskModalGlobalStates = () => {
         titleEditSignal
       );
     }
-    const fieldDiffSignal = taskWriterFieldDiffTrackerRef.current.takeSignal({
-      ...formValuesAtSave,
-      title: savedTitle,
-    });
+    const fieldDiffSignal = taskWriterFieldDiffTrackerRef.current.takeSignal(
+      { ...formValuesAtSave, title: savedTitle },
+      formValuesAtSave.currentProject?.id,
+    );
     if (fieldDiffSignal && taskWriterMemoryEnabled) {
       void recordBoardMemorySignal(
         formValuesAtSave.currentProject?.id,

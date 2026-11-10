@@ -36,3 +36,18 @@ To refresh a baseline, run the live script with a QA storage-state file in
 outside the committed fixture folder. Review the full output, promote it to
 `recorded.json`, then run `node scripts/task-writer-eval.cjs --save-baseline`.
 The offline replay binds the complete corpus hash and recomputes every score.
+
+### Model-pinned quality eval
+
+The live workflow cannot choose a model, so it cannot compare Haiku with Sonnet. The
+`task-writer-pinned` job in the same workflow runs
+`node scripts/task-writer-eval.cjs --pinned` on manual dispatch from production only, with the
+`pinned` input set to true. It never runs on a schedule. It builds the real writer
+prompt from the product's own prompt builders, calls Anthropic directly with
+`ANTHROPIC_API_KEY` for Haiku 5.5 at low effort and Sonnet 5.5 thinking, and scores
+each draft against the real ticket: label F1, brain, priority and size exact match
+with always-blank baselines and abstain precision, plus a blind Sonnet judge that
+runs both orders and counts a win or loss only when both agree. It reports input
+tokens and p50 latency per model. It is report only: one trial on twenty-two cases
+is noisy, so nothing gates on it. Expected fields come from the frozen
+`tests/fixtures/task-writer-eval/gold.json`, taken from our own boards only.

@@ -125,22 +125,30 @@ export function createTaskWriterFieldDiffTracker() {
   let pending: {
     note: string;
     draft: Required<TaskWriterFieldSnapshot>;
+    projectId: number | undefined;
   } | null = null;
 
   return {
-    record(note: string, draft: TaskWriterSnapshotSource) {
+    record(
+      note: string,
+      draft: TaskWriterSnapshotSource,
+      projectId?: number,
+    ) {
       const trimmed = note.trim().slice(0, TASK_WRITER_NOTE_MAX_LENGTH);
       pending = trimmed
-        ? { note: trimmed, draft: snapshotTaskWriterFields(draft) }
+        ? { note: trimmed, draft: snapshotTaskWriterFields(draft), projectId }
         : null;
     },
     reset() {
       pending = null;
     },
-    takeSignal(saved: TaskWriterSnapshotSource): BoardMemoryClientSignal | null {
+    takeSignal(
+      saved: TaskWriterSnapshotSource,
+      projectId?: number,
+    ): BoardMemoryClientSignal | null {
       const current = pending;
       pending = null;
-      if (!current) return null;
+      if (!current || current.projectId !== projectId) return null;
       const diff = diffTaskWriterFields(
         current.draft,
         snapshotTaskWriterFields(saved),
