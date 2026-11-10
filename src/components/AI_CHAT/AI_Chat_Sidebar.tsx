@@ -133,7 +133,7 @@ export const AI_Chat_Sidebar = ({
     } finally { loadingAgentPages.current.delete(agent.id); }
   };
 
-  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, options?: { createFallbackSession?: boolean; sessionId?: string; newSession?: boolean; getMentionDraft?: () => { html: string; text: string } }) => {
+  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string, options?: { sessionId?: string; newSession?: boolean; getMentionDraft?: () => { html: string; text: string } }) => {
     const intent = ++intentRef.current;
     if (next.kind !== "ai" && !sidebarEnabled) return;
     let nativeSessionId: string | null = null;
@@ -160,10 +160,6 @@ export const AI_Chat_Sidebar = ({
         if (agentSessionsEnabled) toast.error(message);
         return;
       }
-    } else if (options?.createFallbackSession !== false && target.kind === "native-agent" && !aiSessionRef.current && !aiSessionId) {
-      setNativeSidebarChat(null);
-      await chat.startNewSession();
-    }
     if (intent !== intentRef.current) return;
     if (agentSessionsEnabled) setRosterError(null);
     const mentionDraft = options?.getMentionDraft?.();
@@ -246,7 +242,7 @@ export const AI_Chat_Sidebar = ({
     onNewChat: async () => {
       resolvingGeneralChat.current = true;
       try {
-        await selectTarget({ kind: "ai" }, undefined, { createFallbackSession: false });
+        await selectTarget({ kind: "ai" });
         await chat.startNewSession();
       } finally {
         resolvingGeneralChat.current = false;
@@ -270,11 +266,17 @@ export const AI_Chat_Sidebar = ({
   useEffect(() => {
     if (!generalChatPending || resolvingGeneralChat.current) return;
     if (pastChatsFirst && aiSessionRef.current) return;
+    const sessions = chat.sessionPagingEnabled ? chat.historySessions : chat.sessions;
+    const existing = (sessions ?? []).find((session) => {
+      if (session.agentId) return false;
+      if ("hasMessages" in session && typeof session.hasMessages === "boolean") return session.hasMessages;
+      if ("messages" in session && Array.isArray(session.messages)) return session.messages.length > 0;
+      return false;
+    });
+    if (!existing) return;
     resolvingGeneralChat.current = true;
-    void chat.startNewSession().catch((error) => {
-      setRosterError(error instanceof Error ? error.message : "Could not open AI chat");
-    }).finally(() => { resolvingGeneralChat.current = false; });
-  }, [generalChatPending, chat.currentSession?.id]);
+    void Promise.resolve(chat.selectSession(existing.id)).finally(() => { resolvingGeneralChat.current = false; });
+  }, [generalChatPending, chat.currentSession?.id, chat.sessionPagingEnabled, chat.historySessions, chat.sessions]);
 
   useEffect(() => {
     if (!sidebarEnabled) return;

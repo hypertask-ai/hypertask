@@ -174,12 +174,14 @@ test('out-of-range cursor offsets are rejected rather than restarting or creatin
   assert.equal(f.writes.length, 0);
 });
 
-test('initial empty history creates a blank session', async () => {
+test('initial empty history stays empty', async () => {
   const f = fixture({ rows: [] });
   const body = await (await f.get('compat=htpr-6924')).json();
-  assert.equal(f.writes.length, 1);
-  assert.equal(body.sessions.length, 1);
-  assert.equal(body.sessions[0].hasMessages, false);
+  assert.equal(f.writes.length, 0);
+  assert.deepEqual(body.sessions, []);
+  const legacy = await (await f.get()).json();
+  assert.equal(f.writes.length, 0);
+  assert.deepEqual(legacy.sessions, []);
 });
 
 test('auth and internal error retain exact original response bodies', async () => {

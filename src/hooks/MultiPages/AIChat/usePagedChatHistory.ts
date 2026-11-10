@@ -249,11 +249,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
           });
           if (!page.data.success) throw new Error("Could not resolve task chat");
           const id = page.data.sessions.find((session) => session.taskId === initialTaskId)?.id;
-          if (id) return id;
-          if (identityRef.current !== identity || activeRef.current || newChatRef.current) return;
-          const response = await AI_Chat_API.createSessionNext(initialTaskId, nameBoardRef.current);
-          if (!response.data.success || !response.data.session?.id) throw new Error("Could not create task chat");
-          return response.data.session;
+          return id;
         })();
         taskInitRef.current = { identity, promise };
       }

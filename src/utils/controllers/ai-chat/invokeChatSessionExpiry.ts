@@ -48,20 +48,26 @@ export async function invokeChatSessionExpiry(job: ChatSessionExpiryJobPayload) 
   return "deleted";
 }
 
+const EMPTY_AI_CHAT_GRACE_MS = 15 * 60 * 1000;
+
 export async function recreateSessionIfEmpty(userId: number) {
-  const remainingSessions = await prisma.chatSession.count({
-    where: { userId },
+  void userId;
+}
+
+export async function purgeEmptyAiChats(now = new Date(), limit = 100) {
+  const cutoff = new Date(now.getTime() - EMPTY_AI_CHAT_GRACE_MS);
+  const stale = await prisma.chatSession.findMany({
+    where: { agentId: null, updatedAt: { lt: cutoff }, messages: { none: {} } },
+    select: { id: true },
+    take: limit,
   });
-
-  console.log(`[recreateSessionIfEmpty] Remaining sessions for user ${userId}: ${remainingSessions}`);
-
-  if (remainingSessions === 0) {
-    console.log(`[recreateSessionIfEmpty] No remaining sessions for user ${userId}. Creating a new empty session...`);
-    await prisma.chatSession.create({
-      data: {
-        userId,
-      },
-    });
-    console.log(`[recreateSessionIfEmpty] New empty chat session created for user ${userId}`);
-  }
+  if (stale.length === 0) return 0;
+  const deleted = await prisma.chatSession.deleteMany({
+    where: {
+      id: { in: stale.map((session) => session.id) },
+      agentId: null,
+      messages: { none: {} },
+    },
+  });
+  return deleted.count;
 }

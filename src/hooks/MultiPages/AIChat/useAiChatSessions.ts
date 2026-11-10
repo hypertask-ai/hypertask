@@ -174,7 +174,7 @@ export function useAiChatSessions(context: Context) {
     ? "/api/demo/chat/stream"
     : globalConstants.sendAiChatMessageRoute;
 
-  const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000) => {
+  const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000, createIfMissing = false) => {
     const projectId = currentProject?.id;
     const userId = currentUser?.id;
     const sidebarNative = context.agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
@@ -195,6 +195,7 @@ export function useAiChatSessions(context: Context) {
         if (!chatHistoryReadyRef.current || sessionIntentGenerationRef.current !== generation) return undefined;
         const selected = getDisplayedSession();
         if (selected) return selected.userId === userId ? selected : undefined;
+        if (!createIfMissing) return undefined;
         const created = await createSession(() => sessionIntentGenerationRef.current === generation);
         return sessionIntentGenerationRef.current === generation ? created : undefined;
       }
@@ -246,11 +247,12 @@ export function useAiChatSessions(context: Context) {
       if (navigationKey) {
         const selected = getDisplayedSession();
         if (selected) return selected.userId === userId ? selected : undefined;
+        if (!createIfMissing) return undefined;
         const created = await createSession(isCurrentIntent);
         return isCurrentIntent() ? created : undefined;
       }
       if (!currentSessions[0]) {
-        if (!chatHistoryReadyRef.current) return undefined;
+        if (!chatHistoryReadyRef.current || !createIfMissing) return undefined;
         const createdSession = await createSession(isCurrentIntent);
         if (!isCurrentIntent()) return undefined;
         if (createdSession && needsBoardSession && typeof projectId === "number") {
@@ -348,6 +350,7 @@ export function useAiChatSessions(context: Context) {
         return sessionPagingEnabled ? getDisplayedSession() : emptySession;
       }
 
+      if (!createIfMissing) return undefined;
       const createdSession = await createSession(isCurrentIntent);
       if (!isCurrentIntent()) return undefined;
       if (createdSession) {

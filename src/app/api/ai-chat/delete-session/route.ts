@@ -104,17 +104,6 @@ export async function DELETE(req: NextRequest) {
       });
     });
 
-    try {
-      const numSessions = await prisma.chatSession.count({
-        where: { userId: user.id },
-      });
-      if (numSessions === 0) {
-        await prisma.chatSession.create({ data: { userId: user.id } });
-      }
-    } catch (error) {
-      console.error("[ai-chat/delete-session] replacement session creation failed after deletion", error);
-    }
-
     return NextResponse.json(
       { message: `Session ${toDelete} deleted successfully` },
       { status: 200 }

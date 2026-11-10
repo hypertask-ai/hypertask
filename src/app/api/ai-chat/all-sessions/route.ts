@@ -107,9 +107,6 @@ async function pagedSessions(request: NextRequest, userId: number, ticketRowsEna
     const row = byId.get(id);
     return row ? [row] : [];
   });
-  if (!ids.length && !cursor && !Object.keys(scope).length && !emptyOnly) {
-    page.push(await prisma.chatSession.create({ data: { userId }, select: summarySelect }));
-  }
   const sessions = page.map(({ _count, ...session }) => ({
     ...session, hasMessages: _count.messages > 0,
   }));
@@ -170,27 +167,6 @@ export async function GET(request: NextRequest) {
         updatedAt: "desc",
       },
     });
-
-    if (sessions.length === 0) {
-      console.warn("No sessions found, creating new session");
-      const session = await prisma.chatSession.create({
-        data: {
-          userId,
-        },
-        include: {
-          messages: {
-            orderBy: {
-              createdAt: "asc",
-            },
-            include: {
-              attachments: true,
-              authorAgent: { select: { displayName: true } },
-            },
-          },
-        },
-      });
-      sessions.push(session);
-    }
 
     return NextResponse.json({ success: true, sessions: await Promise.all(sessions.map((session) => hydrateChatTicketMessages(session, userId, ticketRowsEnabled))) });
   } catch (error) {

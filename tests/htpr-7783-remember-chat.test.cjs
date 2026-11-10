@@ -279,7 +279,9 @@ test("an empty board waits for an explicit send without leaving the welcome scre
     assert.equal(view.chatState().showWelcomeScreen, true);
     assert.equal(view.chatState().isSessionPending, false);
     assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
-    await React.act(async () => { const selected = await view.resolver().ensureSessionForCurrentBoard(); assert.equal(selected.id, "explicit-new"); }); await view.flush();
+    await React.act(async () => { assert.equal(await view.resolver().ensureSessionForCurrentBoard(), undefined); }); await view.flush();
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+    await React.act(async () => { const selected = await view.resolver().ensureSessionForCurrentBoard(5000, true); assert.equal(selected.id, "explicit-new"); }); await view.flush();
     assert.equal(view.history().currentSession.id, "explicit-new");
     assert.equal(view.calls.filter(([type]) => type === "create").length, 1);
   });
@@ -330,6 +332,9 @@ for (const paged of [false, true]) test(`${paged ? "paged" : "legacy"}: a failed
       assert.equal(selected, undefined);
       assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
     } else {
+      assert.equal(selected, undefined);
+      assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
+      await React.act(async () => { selected = await view.resolver().ensureSessionForCurrentBoard(0, true); }); await view.flush();
       assert.equal(selected.id, "explicit-new");
       assert.equal(view.calls.filter(([type]) => type === "create").length, 1);
     }

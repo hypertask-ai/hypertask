@@ -190,7 +190,7 @@ export function useAiChatAttachments(context: Context) {
   };
 
   const waitForChatSession = async (timeoutMs = 5000) => {
-    return ensureSessionForCurrentBoard(timeoutMs);
+    return ensureSessionForCurrentBoard(timeoutMs, true);
   };
   return {
   handleCancelStream, audioTiptapCallback, toggleRecording, processAttachments, buildGuestBoard,

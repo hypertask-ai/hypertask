@@ -145,9 +145,9 @@ test('fresh answered chat deletion removes messages and attachments', async () =
   assert.equal(f.rows.flatMap((row) => row.messages).length, 0);
   assert.deepEqual(f.files, []);
   assert.deepEqual(f.removedObjects, ['owned.png']);
-  assert.deepEqual(f.calls, ['attachments', 'storage', 'transaction', 'deleteAttachments', 'delete', 'count', 'create']);
+  assert.deepEqual(f.calls, ['attachments', 'storage', 'transaction', 'deleteAttachments', 'delete']);
   assert.deepEqual(f.storageSnapshots, [expected], 'storage cleanup precedes any database deletion');
-  assert.equal(f.rows.length, 1, 'last-chat deletion still seeds an empty replacement');
+  assert.equal(f.rows.length, 0, 'last-chat deletion does not seed an empty replacement');
 });
 
 test("another user's session is refused before attachment side effects", async () => {
@@ -184,19 +184,17 @@ test('own session is still allowed through the same ownership boundary', async (
   assert.deepEqual(f.removedObjects, ['owned.png']);
 });
 
-for (const failure of ['countError', 'createError']) {
-  test(`committed deletion stays successful when ${failure} throws`, () => withLogs(async ({ errors }) => {
-    const error = new Error('replacement bookkeeping failed');
-    const f = fixture({ [failure]: error, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
-    const response = await f.remove();
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { message: `Session ${id(1)} deleted successfully` });
-    assert.equal(f.rows.some((row) => row.id === id(1)), false);
-    assert.deepEqual(f.files, []);
-    assert.deepEqual(f.removedObjects, ['owned.png']);
-    assert.ok(errors.some(([message, cause]) => message.includes('after deletion') && cause === error));
-  }));
-}
+test('committed deletion does not book a replacement chat', () => withLogs(async ({ errors }) => {
+  const f = fixture({ files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+  const response = await f.remove();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { message: `Session ${id(1)} deleted successfully` });
+  assert.equal(f.rows.some((row) => row.id === id(1)), false);
+  assert.equal(f.rows.length, 0);
+  assert.deepEqual(f.files, []);
+  assert.deepEqual(f.removedObjects, ['owned.png']);
+  assert.equal(errors.length, 0);
+}));
 
 for (const failure of ['attachmentDeleteError', 'deleteError', 'transactionError']) {
   test(`failed database deletion rolls back session and attachment rows after storage cleanup (${failure})`, () => withLogs(async () => {
@@ -241,7 +239,7 @@ for (const toDelete of [id(1), 'ALL']) {
       assert.equal(f.rows.some((row) => row.id === id(1)), false);
       assert.deepEqual(f.files, []);
       assert.deepEqual(f.removedObjects, ['removed.png', 'retained.png', 'removed.png', 'retained.png']);
-      assert.deepEqual(f.calls, ['attachments', 'storage', 'storage', 'attachments', 'storage', 'storage', 'transaction', 'deleteAttachments', 'delete', 'count', 'create']);
+      assert.deepEqual(f.calls, ['attachments', 'storage', 'storage', 'attachments', 'storage', 'storage', 'transaction', 'deleteAttachments', 'delete']);
     }));
   }
 }
@@ -311,7 +309,7 @@ test('delete ALL removes only owned sessions and attachments', async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { message: 'Session ALL deleted successfully' });
   assert.deepEqual(f.rows.find((row) => row.id === id(2)), expectedForeign);
-  assert.deepEqual(f.rows.filter((row) => row.userId === 985).map((row) => row.messages), [[]]);
+  assert.deepEqual(f.rows.filter((row) => row.userId === 985), []);
   assert.deepEqual(f.files, [{ id: 8, chatMessageId: 'message-2', fileSource: 'foreign.png' }]);
   assert.deepEqual(f.removedObjects, ['owned-1.png', 'owned-3.png']);
 });
@@ -331,13 +329,13 @@ test('nonexistent session has no attachment or mutation side effects', async () 
   assert.deepEqual(f.removedObjects, []);
 });
 
-test('delete ALL with no owned sessions leaves foreign files untouched and seeds a replacement', async () => {
+test('delete ALL with no owned sessions leaves foreign files untouched and creates nothing', async () => {
   const foreign = session(2, { userId: 986 });
   const expectedForeign = structuredClone(foreign);
   const f = fixture({ rows: [foreign], files: [{ id: 8, chatMessageId: 'message-2', fileSource: 'foreign.png' }] });
   assert.equal((await f.remove('ALL')).status, 200);
   assert.deepEqual(f.rows.find((row) => row.id === id(2)), expectedForeign);
-  assert.deepEqual(f.rows.filter((row) => row.userId === 985).map((row) => row.messages), [[]]);
+  assert.deepEqual(f.rows.filter((row) => row.userId === 985), []);
   assert.deepEqual(f.files, [{ id: 8, chatMessageId: 'message-2', fileSource: 'foreign.png' }]);
   assert.deepEqual(f.removedObjects, []);
 });

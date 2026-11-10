@@ -262,7 +262,12 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const { today, previous7Days, older } = useMemo(() => {
     const query = headerMenus ? historyQuery.trim().toLowerCase() : "";
     const matchesQuery = (session: HistorySession) => !query || `${session.title ?? ""} ${session.agentName ?? ""}`.toLowerCase().includes(query);
-    const personal = ((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId).filter(matchesQuery);
+    const chatHasMessages = (session: { hasMessages?: boolean; messages?: unknown[] }) => {
+      if (typeof session.hasMessages === "boolean") return session.hasMessages;
+      if (Array.isArray(session.messages)) return session.messages.length > 0;
+      return true;
+    };
+    const personal = ((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId).filter(matchesQuery).filter(chatHasMessages);
     const agentChats: HistorySession[] = hasAgentSessions ? (sidebarChats?.agents ?? []).flatMap((agent) =>
       (agent.sessions ?? []).map((session) => ({ ...session, agentId: agent.id, agentName: agent.displayName }))).filter(matchesQuery) : [];
     return partitionSessionsByRecency(hasAgentSessions ? [...personal, ...agentChats].sort((a, b) => getSessionUpdatedTime(b) - getSessionUpdatedTime(a)) : personal, headerMenus);

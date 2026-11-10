@@ -10,6 +10,7 @@ import {
 } from "@/utils/controllers/tasks/invokeTaskDelete";
 import {
   CHAT_SESSION_EXPIRY_DAYS,
+  purgeEmptyAiChats,
   recreateSessionIfEmpty,
 } from "@/utils/controllers/ai-chat/invokeChatSessionExpiry";
 import type { IReminder } from "@/models/model";
@@ -176,6 +177,15 @@ async function sweepChatExpiries(): Promise<number> {
   return deleted.count;
 }
 
+async function sweepEmptyAiChats(): Promise<number> {
+  try {
+    return await purgeEmptyAiChats();
+  } catch (error) {
+    console.log("🚀 ~ sweepEmptyAiChats ~ error:", error);
+    return 0;
+  }
+}
+
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   let haveLease = true;
   let redis: Awaited<ReturnType<typeof getRedis>> | undefined;
@@ -238,6 +248,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     try {
       summary.chatExpiries = await sweepChatExpiries();
+      await sweepEmptyAiChats();
     } catch (error) {
       console.log("🚀 ~ sweep ~ chatExpiries error:", error);
     }

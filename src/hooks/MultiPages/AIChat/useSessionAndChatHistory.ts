@@ -87,9 +87,6 @@ export const useSessionAndChatHistory = (
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);
   const queryClient = useQueryClient();
-  const startingSessionForTaskRef = useRef<number | null>(null);
-  const currentTaskIdRef = useRef<number | undefined>(taskId);
-  currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
   const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, taskScopedHistory, nameBoardRef, { key: selectionScope, restoreSelection: !hasExplicitTask, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId }, navigationKey, scopedBoardId, pinnedSessionId);
@@ -544,16 +541,6 @@ export const useSessionAndChatHistory = (
           setActiveSession(existingTaskSession.id);
           return;
         }
-
-        if (startingSessionForTaskRef.current === taskId) return;
-        const requestedTaskId = taskId;
-        startingSessionForTaskRef.current = requestedTaskId;
-        const created = await startNewSession(
-          () => currentTaskIdRef.current === requestedTaskId
-        );
-        if (!created && startingSessionForTaskRef.current === requestedTaskId) {
-          startingSessionForTaskRef.current = null;
-        }
       } catch (error) {
         console.error("Error initializing session:", error);
       }
@@ -570,7 +557,7 @@ export const useSessionAndChatHistory = (
     taskScopedHistory,
     sessionsData,
     taskId,
-    startNewSession, paged, preserveSessionSelection, followsTaskNavigation, hasExplicitTask, activeSession, navigationKey, setActiveSession, scopedBoardId,
+    paged, preserveSessionSelection, followsTaskNavigation, hasExplicitTask, activeSession, navigationKey, setActiveSession, scopedBoardId,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];

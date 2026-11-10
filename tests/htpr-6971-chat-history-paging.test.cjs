@@ -519,21 +519,18 @@ test('optimistic message/title/create writes update summary metadata without inv
   });
 });
 
-test('failed task creation ends pending state and explicit retry recovers readiness', async () => {
-  const config = { taskId: 93, createError: new Error('429') };
-  const log = console.log; console.log = () => {};
-  try {
-    await withHistory(config, async ({ history, requests, flush }) => {
-      assert.equal(history().isSessionPending, false);
-      assert.equal(history().isError, true);
-      assert.equal(history().isSuccess, false);
-      assert.equal(requests.filter(([type]) => type === 'create').length, 1);
-      config.createError = null;
-      await React.act(async () => history().startNewSession()); await flush();
-      assert.equal(history().isSuccess, true);
-      assert.equal(history().currentSession.taskId, 93);
-    });
-  } finally { console.log = log; }
+test('opening a task does not create a chat; New chat still does', async () => {
+  await withHistory({ taskId: 93 }, async ({ history, requests, flush }) => {
+    assert.equal(history().isSessionPending, false);
+    assert.equal(history().isError, false);
+    assert.equal(history().isSuccess, true);
+    assert.equal(history().currentSession, undefined);
+    assert.equal(requests.filter(([type]) => type === 'create').length, 0);
+    await React.act(async () => history().startNewSession()); await flush();
+    assert.equal(history().isSuccess, true);
+    assert.equal(history().currentSession.taskId, 93);
+    assert.equal(requests.filter(([type]) => type === 'create').length, 1);
+  });
 });
 
 test('429 delete and rename retain transcript; failed optimistic title is restored in both caches', async () => {
@@ -684,27 +681,26 @@ test('newer summaries preserve only pending local writes during refresh, then ac
   });
 });
 
-test('task initialization remains single-flight when paging and summary refresh finish during creation', async () => {
-  const creating = deferred();
-  await withHistory({ taskId: 93, create: () => creating.promise }, async ({ history, requests, client, flush }) => {
-    assert.equal(requests.filter(([type]) => type === 'create').length, 1);
+test('opening a task stays quiet while history pages refresh', async () => {
+  await withHistory({ taskId: 93 }, async ({ history, requests, client, flush }) => {
+    assert.equal(requests.filter(([type]) => type === 'create').length, 0);
     await React.act(async () => history().loadMoreSessions()); await flush();
     await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
     assert.equal(history().isError, false);
-    assert.equal(requests.filter(([type]) => type === 'create').length, 1);
-    await React.act(async () => creating.resolve(response({ success: true, session: session(50, { taskId: 93, messages: [] }) }))); await flush();
-    assert.equal(history().currentSession?.taskId, 93);
+    assert.equal(history().currentSession, undefined);
+    assert.equal(requests.filter(([type]) => type === 'create').length, 0);
     assert.equal(history().isSuccess, true);
     assert.equal(history().isLoading, false);
   });
 });
 
-test('task initialization rejects an old creation after navigation without disturbing the new task', async () => {
-  const creating = deferred();
-  await withHistory({ taskId: 93, rows: [session(9), session(2, { taskId: 92 })], create: () => creating.promise }, async ({ history, setTask, render, flush }) => {
+test('task navigation selects the destination chat without creating one', async () => {
+  await withHistory({ taskId: 93, rows: [session(9), session(2, { taskId: 92 })] }, async ({ history, requests, setTask, render }) => {
+    assert.equal(history().currentSession, undefined);
+    assert.equal(requests.filter(([type]) => type === 'create').length, 0);
     setTask(92); await render();
-    await React.act(async () => creating.resolve(response({ success: true, session: session(50, { taskId: 93, messages: [] }) }))); await flush();
     assert.equal(history().currentSession.taskId, 92);
+    assert.equal(requests.filter(([type]) => type === 'create').length, 0);
     assert.equal(history().isSuccess, true);
   });
 });
@@ -857,13 +853,12 @@ test('navigation never exposes another cached task conversation as ready before 
   });
 });
 
-test('deleting the active task conversation starts exactly one replacement task initialization', async () => {
-  await withHistory({ taskId: 93 }, async ({ history, requests, flush }) => {
+test('deleting the active task conversation does not start a replacement', async () => {
+  await withHistory({ taskId: 93, rows: [session(9, { taskId: 93 })] }, async ({ history, requests, flush }) => {
     assert.equal(history().currentSession.taskId, 93);
     await React.act(async () => history().deleteSession(history().currentSession.id)); await flush();
-    assert.equal(history().currentSession?.taskId, 93);
-    assert.equal(history().isSuccess, true);
-    assert.equal(requests.filter(([type]) => type === 'create').length, 2);
+    assert.equal(requests.filter(([type]) => type === 'create').length, 0);
+    assert.notEqual(history().currentSession?.taskId, 93);
   });
 });
 
@@ -1310,15 +1305,12 @@ for (const paging of [true, false]) {
   });
 }
 
-test('a pending explicit ticket introduction cannot send into the previous legacy chat', async () => {
-  const creating = deferred();
-  await withHistory({ on: false, followsTask: true, compose: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [session(1, { taskId: 91 })], create: () => creating.promise }, async ({ history, resolver, setTask, setIntro, render, flush }) => {
+test('a pending explicit ticket introduction does not create a chat or reuse the previous one', async () => {
+  await withHistory({ on: false, followsTask: true, compose: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [session(1, { taskId: 91 })] }, async ({ history, resolver, requests, setTask, setIntro, render }) => {
     setTask(92); setIntro({ taskId: 92, content: 'Created this ticket' }); await render();
     assert.equal(history().currentSession, undefined);
     assert.equal(await resolver().ensureSessionForCurrentBoard(), undefined);
-    await React.act(async () => creating.resolve(response({ success: true, session: session(2, { taskId: 92, messages: [] }) }))); await flush();
-    assert.equal(history().currentSession.id, id(2));
-    assert.equal((await resolver().ensureSessionForCurrentBoard()).id, id(2));
+    assert.equal(requests.filter(([type]) => type === 'create').length, 0);
   });
 });
 
@@ -1334,10 +1326,12 @@ test('leaving task detail restores legacy latest-chat selection', async () => {
 });
 
 for (const paging of [true, false]) {
-  test(`following tasks still creates the first conversation on an empty account (paging ${paging})`, async () => {
-    await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [] }, async ({ history, resolver }) => {
-      assert.equal(history().currentSession.taskId, 91);
-      assert.equal((await resolver().ensureSessionForCurrentBoard()).id, history().currentSession.id);
+  test(`following tasks does not create a conversation on an empty account (paging ${paging})`, async () => {
+    await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [] }, async ({ history, requests, resolver }) => {
+      assert.equal(history().currentSession, undefined);
+      assert.equal(requests.filter(([type]) => type === 'create').length, 0);
+      assert.equal(await resolver().ensureSessionForCurrentBoard(), undefined);
+      assert.equal(requests.filter(([type]) => type === 'create').length, 0);
     });
   });
 }
@@ -1350,9 +1344,9 @@ for (const empty of [false, true]) {
       assert.equal(history().currentSession, undefined);
       assert.equal(requests.some(([type]) => type === 'create'), false);
       setTask(91); await render();
-      assert.ok(history().currentSession, 'resolving the ticket must initialize its conversation');
-      assert.equal(history().currentSession.taskId, 91);
-      assert.equal(requests.filter(([type]) => type === 'create').length, empty ? 1 : 0);
+      if (empty) assert.equal(history().currentSession, undefined);
+      else assert.equal(history().currentSession.taskId, 91);
+      assert.equal(requests.filter(([type]) => type === 'create').length, 0);
     });
   });
 }
