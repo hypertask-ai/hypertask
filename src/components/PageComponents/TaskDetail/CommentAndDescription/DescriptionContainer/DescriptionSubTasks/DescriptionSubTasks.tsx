@@ -17,6 +17,9 @@ import { preserveInboxFlowOnTaskHref, shouldFollowLinkNatively } from "@/lib/tas
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/General/useAuth";
 import { openCachedTaskDetail } from "@/lib/navigation/cachedTaskDetail";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import { QuietAddLink } from "@/components/PageComponents/TaskDetail/MainPageComponents";
 
 const DescriptionSubTask = () => {
   const { currentTask, editMode, toggleSubtaskLinkingModal, cachedLayout } = useTaskContext();
@@ -27,6 +30,7 @@ const DescriptionSubTask = () => {
   const currentUser = useRecoilValue(currentUserAtom);
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const isApple = useDeviceContext();
+  const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
   var cmdControl = useMemo(
     () => (isApple && "CMD") || (!isApple && "CTRL"),
     [isApple]
@@ -98,28 +102,43 @@ const DescriptionSubTask = () => {
 
       <div className="flex items-center justify-between text-meta text-text-light-gray">
         <div className="flex items-center gap-4">
-          <span
-            onClick={toggleSubtaskLinkingModal}
-            className="w-fit inline-flex items-center text-meta text-text-light-gray hover:text-white-black mt-2 mb-3 group cursor-pointer relative"
-          >
-            <Plus size={8} className="mr-1" strokeWidth={1.75} />
-            Add sub-tasks
-            <Tooltip
-              left={0}
-              bottom={-40}
-              keyCombination={[cmdControl, "SHIFT", "+"]}
-              text={"Create sub-task"}
-            />
-          </span>
-
-          {(cachedLayout || (!loading && !hasPages)) && (
+          {rightColumnFlag ? (
+            <QuietAddLink label="Add sub-tasks" onClick={toggleSubtaskLinkingModal} className="mt-2 mb-3">
+              <Tooltip
+                left={0}
+                bottom={-40}
+                keyCombination={[cmdControl, "SHIFT", "+"]}
+                text={"Create sub-task"}
+              />
+            </QuietAddLink>
+          ) : (
             <span
-              onClick={() => void createAndOpenPage()}
+              onClick={toggleSubtaskLinkingModal}
               className="w-fit inline-flex items-center text-meta text-text-light-gray hover:text-white-black mt-2 mb-3 group cursor-pointer relative"
             >
               <Plus size={8} className="mr-1" strokeWidth={1.75} />
-              Add page
+              Add sub-tasks
+              <Tooltip
+                left={0}
+                bottom={-40}
+                keyCombination={[cmdControl, "SHIFT", "+"]}
+                text={"Create sub-task"}
+              />
             </span>
+          )}
+
+          {(cachedLayout || (!loading && !hasPages)) && (
+            rightColumnFlag ? (
+              <QuietAddLink label="Add page" onClick={() => void createAndOpenPage()} className="mt-2 mb-3" />
+            ) : (
+              <span
+                onClick={() => void createAndOpenPage()}
+                className="w-fit inline-flex items-center text-meta text-text-light-gray hover:text-white-black mt-2 mb-3 group cursor-pointer relative"
+              >
+                <Plus size={8} className="mr-1" strokeWidth={1.75} />
+                Add page
+              </span>
+            )
           )}
         </div>
 

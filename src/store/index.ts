@@ -55,7 +55,7 @@ export interface IGlobalNotificationFocus {
 export interface IShowHypertaskHTC {
     mode: CommandMode,
     show: boolean,
-    scope?: "board",
+    scope?: "board" | "add-field",
     paletteTab?: "search" | "compose",
     composeProject?: IProject,
     composeOnCreated?: () => void | Promise<void>,

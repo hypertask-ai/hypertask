@@ -9,6 +9,13 @@ import { HTPR_8947_CTRLK_NO_FOOTER_FLAG } from "@/lib/flags/definitions/htpr-894
 import { HTPR_7871_CTRLK_ELLIPSIS_FLAG } from "@/lib/flags/definitions/htpr-7871-ctrlk-ellipsis";
 import { HTPR_8954_CTRLK_FILLED_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8954-ctrlk-filled-search";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
+import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import {
+  ADD_FIELD_COMMAND_PREFIX,
+  ADD_FIELD_EVENT,
+  type AddFieldEventDetail,
+  type AddFieldPalettePayload,
+} from "@/lib/taskDetail/rightColumnFields";
 import {
   useCallback,
   useContext,
@@ -39,7 +46,7 @@ import { HTPR_8241_PAGES_INTENT_HOLD_FLAG } from "@/lib/flags/definitions/htpr-8
 import { Search, Sparkles } from "lucide-react";
 import { ModalBody } from "reactstrap";
 import styles from "@/styles/linksModal.module.scss";
-import { ICommandList } from "./HTCTypes";
+import { CommandGroup, ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
 import type { CommandFocusProxy } from "@/components/commandTypes";
@@ -104,7 +111,7 @@ type Props = {
   contextOptions?: IAllCommands;
   showByokApiKeys?: boolean;
   appShellRailOn?: boolean;
-  scope?: "board";
+  scope?: "board" | "add-field";
   focusProxy?: CommandFocusProxy;
 };
 
@@ -131,6 +138,7 @@ const Commands = (props: Props) => {
   const noFooterFlag = useFlag(HTPR_8947_CTRLK_NO_FOOTER_FLAG);
   const ellipsisFlag = useFlag(HTPR_7871_CTRLK_ELLIPSIS_FLAG);
   const filledSearchFlag = useFlag(HTPR_8954_CTRLK_FILLED_SEARCH_FLAG);
+  const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -450,6 +458,22 @@ const Commands = (props: Props) => {
     isTicketPrefixCommandVisible,
   ])
 
+  const addFieldPayload = showCommands.payload as AddFieldPalettePayload | undefined;
+  const addFieldCommands = useMemo<CommandGroup[]>(
+    () => [
+      {
+        group: "Add field",
+        commandLists: (addFieldPayload?.options ?? []).map((option) => ({
+          key: `${ADD_FIELD_COMMAND_PREFIX}${option.key}`,
+          name: option.label,
+          commandMode: CommandMode.Command,
+          keywords: `add field set ${option.label}`,
+        })),
+      },
+    ],
+    [addFieldPayload],
+  );
+
   const emptyQueryCommands = useMemo(() => {
     if (scope !== "board") return allCommands_;
     return getBoardMenuCommands(allCommands_, boardLayout);
@@ -462,7 +486,12 @@ const Commands = (props: Props) => {
     filterCommands,
     handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex,
     setSelectedCommand,
-  } = useHTC(allCommands_, emptyQueryCommands, !isMobile, refreshSearchOnCommandsChange);
+  } = useHTC(
+    rightColumnFlag && scope === "add-field" ? addFieldCommands : allCommands_,
+    rightColumnFlag && scope === "add-field" ? addFieldCommands : emptyQueryCommands,
+    !isMobile,
+    refreshSearchOnCommandsChange,
+  );
   const hoveredCommand = useRef<CommandIdentity | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const commandRef = useRef<HTMLDivElement>(null);
@@ -627,6 +656,16 @@ const Commands = (props: Props) => {
       if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()
       if(isInteractive) return callback(command)
+      if (rightColumnFlag && scope === "add-field" && addFieldPayload &&
+          command.key.startsWith(ADD_FIELD_COMMAND_PREFIX)) {
+        resetShowCommands();
+        const detail: AddFieldEventDetail = {
+          taskId: addFieldPayload.taskId,
+          key: command.key.slice(ADD_FIELD_COMMAND_PREFIX.length),
+        };
+        setTimeout(() => window.dispatchEvent(new CustomEvent(ADD_FIELD_EVENT, { detail })), 1);
+        return;
+      }
       setFrequentlyUsed((previousUsage) =>
         recordHTCCommandUsage(previousUsage, command)
       );

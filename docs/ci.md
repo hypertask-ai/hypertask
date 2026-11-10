@@ -525,6 +525,9 @@ The separately installed user timer performs bounded source-only Codex reads and
 files at most one drift ticket per ISO week on board 11514 (labels `CI` and
 `Hypertask CI`). It never drives the app. The Monday live run and board filing
 are documented in [docs/ci.md](../ci.md#feature-map-citation-check-yper4-610).
+The `File fleet-board weekly result` step uses `HYPERTASK_FLEET_BOARD_MCP_TOKEN`,
+the CI Boss board credential, because `HYPERTASK_MCP_TOKEN` is Error Alerts on
+board 15 only. CI Boss is already a member of board 11514.
 The same job files on a manual dispatch with `head=production` and
 `journey=inbox-cycle`, which is how a week's live proof is re-run on demand.
 A runner ships documentation repairs through `/ship` and executes only the listed

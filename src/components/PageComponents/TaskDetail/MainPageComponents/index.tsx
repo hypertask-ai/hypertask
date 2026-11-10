@@ -8,6 +8,7 @@ import { TaskInfoLabel } from "./TaskInfoLabel";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import UserAvatar from "@/components/Common/UserAvatar";
 import { ParentPersonHovercard } from "@/components/Common/PersonHovercard";
+import { Plus } from "lucide-react";
 
 export { TaskInfoColumnContainer } from "./TaskInfoColumnContainer";
 export { TaskInfoLabel } from "./TaskInfoLabel";
@@ -143,6 +144,30 @@ export const ClickableSpan = (
     </span>
   )
 }
+
+export const QuietAddLink = ({
+  label,
+  onClick,
+  className,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+  children?: React.ReactNode;
+}) => (
+  <span
+    onClick={onClick}
+    className={cn(
+      "w-fit inline-flex items-center text-meta text-text-light-gray hover:text-white-black group cursor-pointer relative",
+      className,
+    )}
+  >
+    <Plus size={8} className="mr-1" strokeWidth={1.75} />
+    {label}
+    {children}
+  </span>
+);
 
 export const RightSideInfoTitle = (
   {
