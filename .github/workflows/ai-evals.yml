@@ -82,4 +82,4 @@ jobs:
         env:
           RAG_EVAL_EMBED_KEY: ${{ secrets.OPENAI_API_KEY }}
       - if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
-        run: cat tests/fixtures/rag-search/vectors.json
+        run: cat tests/fixtures/rag-search/vectors.json tests/fixtures/rag-search/baseline.json
