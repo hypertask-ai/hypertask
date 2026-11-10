@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
+const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 const { loadModule: load } = require("./helpers/loadModule.cjs");
 const { loader } = require("./helpers/htpr-7260-ui.cjs");
@@ -22,7 +23,7 @@ function editorContainer({ enabled, mode, isEditModeActive = true }) {
   const panels = [];
   const Provider = () => ({
     mode,
-    editor: {},
+    editor: { getText: () => "", getHTML: () => "" },
     newCommentAttachments: [],
     isEditModeActive,
     id: "editor",
@@ -127,7 +128,7 @@ test("Ctrl+J that reaches comment, comment edit and description editors opens Wr
   }
 });
 
-function panel(enabled) {
+function panel(t, enabled) {
   const micProps = [];
   const arrow = () => React.createElement("svg", { "data-arrow": "" });
   const { default: InlineDraftAiFloat } = load("src/components/RTE/Components/InlineDraftAiFloat.tsx", {
@@ -148,45 +149,69 @@ function panel(enabled) {
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "react-hot-toast": { default: { dismiss: () => {}, error: () => {} } },
   });
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>");
+  const globals = {
+    window: dom.window,
+    document: dom.window.document,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    Event: dom.window.Event,
+    MouseEvent: dom.window.MouseEvent,
+    CustomEvent: dom.window.CustomEvent,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]));
+  for (const [name, value] of Object.entries(globals)) Object.defineProperty(global, name, { value, configurable: true, writable: true });
   const editor = {
     state: { selection: { from: 1, to: 1 }, doc: { content: { size: 2 } } },
     isEmpty: true,
     isEditable: true,
+    view: { dom: dom.window.document.createElement("div") },
     commands: { setTextSelection: () => {}, unsetHighlight: () => {}, focus: () => {} },
     on: () => {},
     off: () => {},
     setEditable: () => {},
   };
-  const html = renderToStaticMarkup(React.createElement(InlineDraftAiFloat, {
+  const container = dom.window.document.getElementById("root");
+  const reactRoot = createRoot(container);
+  React.act(() => reactRoot.render(React.createElement(InlineDraftAiFloat, {
     editor,
     onClose: () => {},
     toggleRecording: () => {},
     matchCommentRowControls: enabled,
-  }));
-  return { document: new JSDOM(html).window.document, mic: micProps.at(-1) };
+  })));
+  t.after(() => {
+    React.act(() => reactRoot.unmount());
+    dom.window.close();
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(global, name, descriptor);
+      else delete global[name];
+    }
+  });
+  return { container, mic: micProps.at(-1) };
 }
 
-test("Write with AI box shows one white mic, a Rewrite word and the comment box colour with the flag on", () => {
-  const { document, mic } = panel(true);
-  assert.equal(document.querySelectorAll("[data-mic]").length, 1);
+test("Write with AI box shows one white mic, a Rewrite word and the comment box colour with the flag on", (t) => {
+  const { container, mic } = panel(t, true);
+  assert.equal(container.querySelectorAll("[data-mic]").length, 1);
   assert.equal(mic.primaryMic, true);
   assert.equal(mic.compactListeningPill, true);
   assert.equal(mic.hideDevicePicker, true);
   assert.deepEqual(mic.hoverTooltip, { text: "Dictate", keyCombination: ["ALT", "V"] });
-  const rewrite = [...document.querySelectorAll("button")].filter((button) => button.textContent.trim() === "Rewrite");
+  const rewrite = [...container.querySelectorAll("button")].filter((button) => button.textContent.trim() === "Rewrite");
   assert.equal(rewrite.length, 1);
-  assert.equal(document.querySelector("[data-arrow]"), null);
+  assert.equal(container.querySelector("[data-arrow]"), null);
   assert.doesNotMatch(rewrite[0].className, /purple|rounded-full/);
-  const box = document.querySelector('[aria-label="Write with AI"]');
+  const box = container.querySelector('[aria-label="Write with AI"]');
   assert.match(box.className, /bg-newcomment-well/);
   assert.doesNotMatch(box.className, /purple|shadow-md/);
 });
 
-test("flag off keeps today's purple arrow, plain mic and purple border in the Write with AI box", () => {
-  const { document, mic } = panel(false);
+test("flag off keeps today's purple arrow, plain mic and purple border in the Write with AI box", (t) => {
+  const { container, mic } = panel(t, false);
   assert.equal(mic.primaryMic, undefined);
   assert.equal(mic.hoverTooltip, undefined);
-  assert.ok(document.querySelector('[aria-label="Send AI instruction"] [data-arrow]'));
-  assert.equal([...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Rewrite"), false);
-  assert.match(document.querySelector('[aria-label="Write with AI"]').className, /border-hypertasks-ai-purple\/70 bg-comment-description/);
+  assert.ok(container.querySelector('[aria-label="Send AI instruction"] [data-arrow]'));
+  assert.equal([...container.querySelectorAll("button")].some((button) => button.textContent.trim() === "Rewrite"), false);
+  assert.match(container.querySelector('[aria-label="Write with AI"]').className, /border-hypertasks-ai-purple\/70 bg-comment-description/);
 });
