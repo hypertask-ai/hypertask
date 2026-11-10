@@ -69,7 +69,7 @@ function harness({ boardSettings = undefined, enabled = true } = {}) {
 }
 
 const ai = (aiChat) => ({ featureToggles: { aiChat } });
-const ran = (calls) => calls.filter(([kind]) => kind !== "project");
+const ran = (calls) => calls.map(([kind]) => kind).filter((kind) => kind !== "project");
 
 test("a board team with AI chat off never reads a chat message or calls the model", async () => {
   const off = harness({ boardSettings: ai(false) });
