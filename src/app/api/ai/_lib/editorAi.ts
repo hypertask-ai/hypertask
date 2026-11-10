@@ -710,14 +710,12 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  const pickerAutoEnabled = await isFeatureEnabled(
-    HTPR_8995_PICKER_AUTO_FLAG,
-    typeof args.userId === "number" ? args.userId : 0,
-  );
-  const pickerAutoOn = args.aiFeature === "taskWriter" && typeof args.userId === "number" && pickerAutoEnabled;
-  const pickerSelection = pickerAutoOn
-    ? taskWriterPickerOption(args.modelOptionId, args.modelSelected, haiku55Enabled)
-    : null;
+  let pickerSelection = null;
+  if (args.aiFeature === "taskWriter" && typeof args.userId === "number") {
+    if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, args.userId)) {
+      pickerSelection = taskWriterPickerOption(args.modelOptionId, args.modelSelected, haiku55Enabled);
+    }
+  }
   const namedPickerOption = pickerSelection && pickerSelection !== "auto" ? pickerSelection : null;
   const requestAuto = pickerSelection === "auto";
   const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))

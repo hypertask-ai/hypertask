@@ -145,10 +145,11 @@ export function useAiModelPreference(
 
   const setAiOption = useCallback(
     (option: TAiModal) => {
-      const autoPick = option.id === AUTO_MODEL_OPTION_ID && (
-        (autoModelEnabled && surface === "aiChat") ||
-        (taskWriterAuto && surface === "taskWriter")
-      );
+      let saveTaskWriterAuto = false;
+      if (taskWriterAuto && surface === "taskWriter" && option.id === AUTO_MODEL_OPTION_ID) {
+        saveTaskWriterAuto = true;
+      }
+      const autoPick = saveTaskWriterAuto || (autoModelEnabled && surface === "aiChat" && option.id === AUTO_MODEL_OPTION_ID);
       const validOption = autoPick ? toAutoModelOption(resolveOption()) : getAiModelOptionById(option.id, haiku55Enabled);
       if (!validOption) return;
 

@@ -329,7 +329,10 @@ export async function POST(request: NextRequest) {
       }
 
       const preferenceUpdates = Object.entries(body.aiModelPreferences);
-      const taskWriterAuto = await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id);
+      let taskWriterAuto = false;
+      if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id)) {
+        taskWriterAuto = true;
+      }
       const invalidPreference = preferenceUpdates.find(([surface, optionId]) => {
         if (!isAiModelPreferenceSurface(surface) || typeof optionId !== "string") return true;
         if (surface === "imageGeneration") {
