@@ -186,9 +186,7 @@ export const getSharedTaskInfo = async (shareId: string) => {
   if (shared?.task) {
     shared.task = stripForeignTaskRelations(shared.task);
     const summaryRow = shared.task.Task_Summary?.[0];
-    if (summaryRow?.content) {
-      summaryRow.content = await scrubStoredTaskSummary(summaryRow.content, shared.task.id, 0, shared.task.projectId) ?? summaryRow.content;
-    }
+    if (summaryRow?.content) summaryRow.content = await scrubStoredTaskSummary(summaryRow.content, shared.task.id, 0, shared.task.projectId) ?? summaryRow.content;
   }
   return redactAgentIdentitiesForPublicShare(shared);
 };

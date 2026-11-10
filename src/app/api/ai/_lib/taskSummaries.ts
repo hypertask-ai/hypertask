@@ -252,12 +252,7 @@ async function generateAndStoreTaskSummaryWithLease(
       storedSummary &&
       extractSummaryFingerprint(storedSummary) === fingerprint
     ) {
-      return (await scrubStoredTaskSummary(
-        stripSummaryFingerprint(storedSummary),
-        task.id,
-        0,
-        task.projectId,
-      )) ?? stripSummaryFingerprint(storedSummary);
+      return (await scrubStoredTaskSummary(stripSummaryFingerprint(storedSummary), task.id, 0, task.projectId)) ?? stripSummaryFingerprint(storedSummary);
     }
   }
 

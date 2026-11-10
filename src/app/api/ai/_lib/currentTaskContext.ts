@@ -73,20 +73,11 @@ export async function loadCurrentTaskContext(
       )
     : tasks;
 
-  const visibleTasks = await Promise.all(tasksWithBlockers.map(async (task) => {
+  return (await Promise.all(tasksWithBlockers.map(async (task) => {
     const summary = task.Task_Summary?.[0];
-    const content = summary?.content
-      ? await scrubStoredTaskSummary(summary.content, task.id, userId, task.projectId)
-      : summary?.content;
-    return {
-      ...task,
-      comments: await withPublicWaitingActivities(task.comments, userId, task.projectId),
-      ...(summary ? { Task_Summary: [{ ...summary, content: content ?? null }] } : {}),
-    };
-  }));
-  return visibleTasks
-    .map((task) => formatTaskContext(task, options?.role ?? "primary", compact, blockersEnabled))
-    .join("\n\n");
+    const content = summary?.content ? await scrubStoredTaskSummary(summary.content, task.id, userId, task.projectId) : summary?.content;
+    return { ...task, comments: await withPublicWaitingActivities(task.comments, userId, task.projectId), ...(summary ? { Task_Summary: [{ ...summary, content: content ?? null }] } : {}) };
+  }))).map((task) => formatTaskContext(task, options?.role ?? "primary", compact, blockersEnabled)).join("\n\n");
 }
 
 export async function resolveAiUsageTaskId(args: {

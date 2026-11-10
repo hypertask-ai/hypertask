@@ -521,9 +521,7 @@ export async function fetchTaskDetail(
     );
   }
   const summaryRow = task.Task_Summary?.[0];
-  if (summaryRow?.content) {
-    summaryRow.content = await scrubStoredTaskSummary(summaryRow.content, task.id, userId, task.projectId) ?? summaryRow.content;
-  }
+  if (summaryRow?.content) summaryRow.content = await scrubStoredTaskSummary(summaryRow.content, task.id, userId, task.projectId) ?? summaryRow.content;
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
   const waitingAgent = publicWaitingAgent(task.waitingOnAgent, userId, task.projectId);
