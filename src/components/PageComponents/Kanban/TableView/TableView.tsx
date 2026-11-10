@@ -178,13 +178,14 @@ const TableView = ({
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
   expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
-  setTableSortViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
+  setTableSortViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
   } = useTableState({
     myTasksSnoozeActive, _currentProject, myTasksVisibleColumns, onMyTasksVisibleColumnsChange, currentUser,
     myTasksSort, myTasksSortKey, filteredSections, _sections,
   });
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
@@ -213,7 +214,7 @@ const TableView = ({
   closeAssignModal, runTaskShortcut,
   } = useTableActions({
     customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
-    _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
+    _currentProject, setTableSortViewAndReturn, setSortAccount, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
     rows, navigateToTask, focusRowElement, draggedTaskRef, setDragOverSectionId,
     currentProjectSectionIds, moveTaskToSection, timerToggling, queryClient, removeFromListWithStatus,
     setExcludedTaskIds, router, updateTaskInCache, starTask, currentUser,
@@ -240,6 +241,7 @@ const TableView = ({
     timeTotals, timeNow, draggedTaskRef, clearTaskDrag, handleMouseEnter,
     handleMouseLeave, gridTemplateColumns, enableMyTasksBulkSelection, myTasksBulk, visibleColumns,
   });
+  if (tableSortColumnsEnabled) queryClient.getQueryData(["projectsAll"]);
 
   const selectedAssignees = splitAssignees(assignTask?.assignees);
   let cursor = -1;
