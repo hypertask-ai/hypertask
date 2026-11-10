@@ -90,6 +90,7 @@ function mergedPullRequestPayload() {
 const DEFAULT_GITHUB_REPO_MAPPING = {
   projectId: 15,
   fullName: "hypertask-ai/hypertask",
+  repositoryId: null,
   provenance: "legacy",
   installationId: null,
   revokedAt: null,
@@ -100,9 +101,23 @@ function prismaWithGithubBoardRouting(prisma, mapping = DEFAULT_GITHUB_REPO_MAPP
     ...prisma,
     boardGithubRepository: {
       findMany: async ({ where } = {}) => {
-        if (where?.fullName === "hypertask-ai/hypertask" && where?.revokedAt === null) {
-          return [mapping];
+        if (!where || where.revokedAt !== null) return [];
+        const fullName =
+          typeof where.fullName === "string"
+            ? where.fullName
+            : where.OR?.find((clause) => typeof clause.fullName === "string")?.fullName;
+        const repositoryId = where.OR?.find(
+          (clause) => typeof clause.repositoryId === "string",
+        )?.repositoryId;
+        if (mapping.revokedAt !== null) return [];
+        if (repositoryId !== undefined) {
+          if (mapping.repositoryId === repositoryId) return [mapping];
+          if (mapping.repositoryId === null && mapping.fullName === fullName) {
+            return [mapping];
+          }
+          return [];
         }
+        if (mapping.fullName === fullName) return [mapping];
         return [];
       },
     },
@@ -1197,6 +1212,7 @@ test("PR author id, not sender, login, association or fork flags, controls autho
 const INSTALLED_REPO_MAPPING = {
   projectId: 15,
   fullName: "hypertask-ai/hypertask",
+  repositoryId: "123",
   provenance: "installed",
   installationId: "123",
   revokedAt: null,

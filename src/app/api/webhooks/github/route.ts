@@ -65,6 +65,7 @@ interface GithubPullRequestPayload {
 interface GithubCheckSuitePayload {
   action: string;
   repository: {
+    id: number;
     full_name: string;
     private: boolean;
     fork: boolean;
@@ -421,6 +422,7 @@ export async function POST(request: NextRequest) {
     const repositoryFullName = payload.repository.full_name;
     const routing = await lookupBoardForGithubRepository({
       fullName: repositoryFullName,
+      id: payload.repository?.id,
       isPrivate: payload.repository?.private,
       isFork: payload.repository?.fork,
     });
