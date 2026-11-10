@@ -6,6 +6,7 @@ export default {
   key: HTPR_7339_AGENT_PULSE_DOT_FLAG,
   kind: "feature",
   defaultMode: "OWNER_AND_QA",
+  shippedOn: "2026-11-10",
   description:
     "A small dot on the agent status chip pulses blue while an agent is working and stays orange while it waits for you.",
   releaseRisk: {
