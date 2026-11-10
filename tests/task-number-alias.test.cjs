@@ -7,6 +7,11 @@ const Module = require("node:module");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const {
+  attachOpenBlockingTasksStub,
+  blockingTasksMapperStub,
+  blockedByRelationsIncludeStub,
+} = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 const oldSlug = { projectId: 15, uniqueIndex: 6641 };
 const currentTask = {
   id: 44769, projectId: 20, uniqueIndex: 6814, ticketNumber: "NEW-6814", status: "Normal",
@@ -35,6 +40,10 @@ function load(relativePath, stubs) {
     if (request === "@/utils/controllers/notifications/inboxZero") {
       return { loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])) };
     }
+    if (request === "@/utils/controllers/tasks/attachOpenBlockingTasks") {
+      return attachOpenBlockingTasksStub;
+    }
+    if (request === "@/lib/blockingTasks") return blockingTasksMapperStub;
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
   };
@@ -92,6 +101,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/pullRequests/taskPullRequests": { refreshTaskPullRequests: async (_taskId, pullRequests) => pullRequests },
     "@/utils/controllers/projects/getAllIncludes": {
+      blockedByRelationsInclude: blockedByRelationsIncludeStub,
       projectContentAccessWhere: require("./task-route-loader.cjs").load("src/utils/controllers/projects/getAllIncludes.ts", {
         "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
         "@/utils/controllers/notifications/visibleInboxScope": {},
