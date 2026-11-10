@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { execFileSync, spawnSync } = require("node:child_process");
-const { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
+const { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 
@@ -33,16 +33,29 @@ function commit(directory, name, body) {
   git(directory, "commit", "-qm", `change ${name}`);
 }
 
-function makeStubs({ eslintExit = 0, tscExit = 0, tscKilled = false, tscSleeps = 0, rewrite = null } = {}) {
+function makeStubs({
+  eslintExit = 0,
+  tscExit = 0,
+  tscKilled = false,
+  tscSleeps = 0,
+  tscSlowRuns = 0,
+  rewrite = null,
+} = {}) {
   const directory = mkdtempSync(path.join(tmpdir(), "quick-check-bin-"));
   const log = path.join(directory, "calls.log");
+  const counter = path.join(directory, "tsc-runs");
   const rewriteLine = rewrite ? `printf 'written by eslint\\n' >> "${path.join(rewrite.repository, rewrite.file)}"\n` : "";
   writeFileSync(
     path.join(directory, "eslint"),
     `#!/bin/sh\nprintf 'eslint %s\\n' "$*" >> "${log}"\n${rewriteLine}exit ${eslintExit}\n`,
   );
-  const tscBody = tscKilled ? "kill -9 $$\n" : tscSleeps ? `sleep ${tscSleeps}\nexit ${tscExit}\n` : `exit ${tscExit}\n`;
-  writeFileSync(path.join(directory, "tsc"), `#!/bin/sh\nprintf 'tsc %s\\n' "$*" >> "${log}"\n${tscBody}`);
+  const runs = `runs=$(cat "${counter}" 2>/dev/null || echo 0)\nruns=$((runs + 1))\necho "$runs" > "${counter}"\n`;
+  const tscBody = tscKilled
+    ? "kill -9 $$\n"
+    : tscSleeps
+      ? `${tscSlowRuns ? `if [ "$runs" -le ${tscSlowRuns} ]; then sleep ${tscSleeps}; fi\n` : `sleep ${tscSleeps}\n`}exit ${tscExit}\n`
+      : `exit ${tscExit}\n`;
+  writeFileSync(path.join(directory, "tsc"), `#!/bin/sh\nprintf 'tsc %s\\n' "$*" >> "${log}"\n${runs}${tscBody}`);
   chmodSync(path.join(directory, "eslint"), 0o755);
   chmodSync(path.join(directory, "tsc"), 0o755);
   return {
@@ -55,7 +68,12 @@ function run(directory, stubs, { cwd = directory, args = [], env = {} } = {}) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, PATH: `${stubs.directory}:${process.env.PATH}`, ...env },
+    env: {
+      ...process.env,
+      PATH: `${stubs.directory}:${process.env.PATH}`,
+      QUICK_CHECK_BIN_DIR: stubs.directory,
+      ...env,
+    },
   });
 }
 
@@ -108,40 +126,85 @@ test("formatting fixes stop the push until they are committed", () => {
   assert.equal(git(repository, "diff", "--name-only"), "src/one.ts");
 });
 
-test("a killed type check warns instead of blocking the push", () => {
+test("a machine-killed type check prints a loud line and goes through", () => {
   const repository = makeRepository(TWO_FILES);
   commit(repository, "src/one.ts", "export const one = 11;\n");
   const stubs = makeStubs({ tscKilled: true });
   const result = run(repository, stubs);
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /tsc was killed, so this push skips it/);
+  assert.match(result.stdout, /quick check: NOT TYPE CHECKED: src\/one\.ts/);
   assert.match(result.stdout, /skipped types/);
+  assert.equal(stubs.calls().filter((call) => call.startsWith("tsc")).length, 1);
 });
 
-test("a type check over its budget is skipped instead of blocking", () => {
+test("a type check over its budget reruns once with the longer budget and passes", () => {
   const repository = makeRepository(TWO_FILES);
   commit(repository, "src/one.ts", "export const one = 11;\n");
-  const stubs = makeStubs({ tscSleeps: 10 });
-  const started = Date.now();
-  const result = run(repository, stubs, { env: { QUICK_CHECK_TYPE_BUDGET_MS: "300" } });
-  const waited = Date.now() - started;
+  const stubs = makeStubs({ tscSleeps: 5, tscSlowRuns: 1 });
+  const result = run(repository, stubs, {
+    env: { QUICK_CHECK_TYPE_BUDGET_MS: "300", QUICK_CHECK_FULL_TYPE_BUDGET_MS: "20000" },
+  });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /tsc passed its time budget/);
-  assert.match(result.stdout, /skipped types/);
-  assert.ok(waited < 5000, `the hook waited ${waited}ms on a 300ms budget`);
+  assert.match(result.stdout, /tsc passed its 0s budget; running it once more with 20s/);
+  assert.match(result.stdout, /format, lint and types passed/);
+  assert.equal(stubs.calls().filter((call) => call.startsWith("tsc")).length, 2);
 });
 
-test("the skip variable passes the push without running any tool", () => {
+test("a type check that stays over budget stops the push with the rerun command", () => {
+  const repository = makeRepository(TWO_FILES);
+  commit(repository, "src/one.ts", "export const one = 11;\n");
+  const stubs = makeStubs({ tscSleeps: 30 });
+  const result = run(repository, stubs, {
+    env: { QUICK_CHECK_TYPE_BUDGET_MS: "300", QUICK_CHECK_FULL_TYPE_BUDGET_MS: "500" },
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(
+    result.stderr,
+    /quick check: tsc did not finish for src\/one\.ts; push blocked\. Run: node scripts\/quick-check\.mjs --files src\/one\.ts/,
+  );
+  assert.doesNotMatch(result.stdout, /NOT TYPE CHECKED/);
+  assert.equal(stubs.calls().filter((call) => call.startsWith("tsc")).length, 2);
+});
+
+test("the rerun command quotes a path with a space", () => {
+  const spaced = "src/tutorial space/one.ts";
+  const repository = makeRepository({ ...TWO_FILES, [spaced]: "export const one = 1;\n" });
+  commit(repository, spaced, "export const one = 11;\n");
+  const stubs = makeStubs({ tscSleeps: 30 });
+  const result = run(repository, stubs, {
+    env: { QUICK_CHECK_TYPE_BUDGET_MS: "300", QUICK_CHECK_FULL_TYPE_BUDGET_MS: "500" },
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(
+    result.stderr,
+    /Run: node scripts\/quick-check\.mjs --files 'src\/tutorial space\/one\.ts'/,
+  );
+});
+
+test("a missing type checker stops the push instead of skipping it", () => {
+  const repository = makeRepository(TWO_FILES);
+  commit(repository, "src/one.ts", "export const one = 11;\n");
+  const stubs = makeStubs();
+  rmSync(path.join(stubs.directory, "tsc"));
+  const result = run(repository, stubs);
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /tsc is not installed in this checkout; run npm install and push again/);
+});
+
+test("the old skip variable no longer bypasses the check", () => {
   const repository = makeRepository(TWO_FILES);
   commit(repository, "src/one.ts", "export const one = 11;\n");
   const stubs = makeStubs({ eslintExit: 1 });
   const result = run(repository, stubs, { env: { HYPERTASK_SKIP_QUICK_CHECK: "1" } });
 
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /quick check: skipped/);
-  assert.deepEqual(stubs.calls(), []);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /lint failed; the push was stopped/);
+  assert.ok(stubs.calls().length > 0);
 });
 
 test("a lint configuration change runs the full lint without rewriting files", () => {
@@ -190,7 +253,11 @@ test("a push of another commit is not checked and not blocked", () => {
     cwd: repository,
     encoding: "utf8",
     input: `refs/heads/feature ${other} refs/heads/feature ${"0".repeat(40)}\n`,
-    env: { ...process.env, PATH: `${stubs.directory}:${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${stubs.directory}:${process.env.PATH}`,
+      QUICK_CHECK_BIN_DIR: stubs.directory,
+    },
   });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);

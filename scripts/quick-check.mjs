@@ -6,6 +6,7 @@ import { join, relative } from "node:path";
 const BUDGET_MS = 10_000;
 const FULL_BUDGET_MS = 60_000;
 const typeBudgetMs = Number(process.env.QUICK_CHECK_TYPE_BUDGET_MS) || BUDGET_MS;
+const fullTypeBudgetMs = Number(process.env.QUICK_CHECK_FULL_TYPE_BUDGET_MS) || FULL_BUDGET_MS;
 const LINTABLE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const TYPED = /\.(?:ts|tsx|mts|cts)$/;
 const COMPILER = /^(?:tsconfig[^/]*\.json|package(?:-lock)?\.json)$/;
@@ -42,8 +43,7 @@ function changedAgainstBase(root) {
 }
 
 function binary(root, name) {
-  const local = join(root, "node_modules", ".bin", name);
-  return existsSync(local) ? local : name;
+  return join(process.env.QUICK_CHECK_BIN_DIR || join(root, "node_modules", ".bin"), name);
 }
 
 function pushedElsewhere(root) {
@@ -109,11 +109,6 @@ function start(root, command, args, timeoutMs) {
 
 const started = Date.now();
 
-if (process.env.HYPERTASK_SKIP_QUICK_CHECK) {
-  console.log("quick check: skipped (HYPERTASK_SKIP_QUICK_CHECK is set)");
-  process.exit(0);
-}
-
 const root = repoRoot();
 if (!root) {
   console.log("quick check: not a git checkout, nothing to check");
@@ -163,36 +158,66 @@ if (dirty.length) {
   blocked(`uncommitted changes to ${dirty.join(", ")}; commit them so the push carries what was checked`);
 }
 
-let lintRun = null;
-const lintStarted = Date.now();
-if (fullLint || lintTargets.length) {
-  const cacheDirectory = join(root, ".cache", "eslint");
-  mkdirSync(cacheDirectory, { recursive: true });
-  lintRun = start(
-    root,
-    binary(root, "eslint"),
-    [
+const typeDirectory = join(root, ".cache", "tsc");
+const typeConfig = join(typeDirectory, "quick-check.json");
+const typeCache = join(typeDirectory, "quick-check.tsbuildinfo");
+const fullTypeCache = join(typeDirectory, "full.tsbuildinfo");
+
+function lintLabel() {
+  return fullLint ? "the whole repository" : lintTargets.join(", ");
+}
+
+function typeLabel() {
+  return typeTargets.length ? typeTargets.join(", ") : "the whole project";
+}
+
+function shellArgument(file) {
+  return /^[\w./@+-]+$/.test(file) ? file : `'${file.replace(/'/g, "'\\''")}'`;
+}
+
+function rerunCommand(name) {
+  if (name === "eslint") {
+    return fullLint || !lintTargets.length
+      ? "node scripts/quick-check.mjs"
+      : `node scripts/quick-check.mjs --files ${lintTargets.map(shellArgument).join(" ")}`;
+  }
+  return typeTargets.length
+    ? `node scripts/quick-check.mjs --files ${typeTargets.map(shellArgument).join(" ")}`
+    : "node scripts/quick-check.mjs";
+}
+
+async function runTool(name, command, args, budgetMs, retryBudgetMs) {
+  const toolStarted = Date.now();
+  const first = start(root, command, args, budgetMs);
+  let result = await first.result;
+  let output = first.output;
+  if (result.timedOut && retryBudgetMs > budgetMs) {
+    console.log(
+      `quick check: ${name} passed its ${Math.round(budgetMs / 1000)}s budget; running it once more with ${Math.round(retryBudgetMs / 1000)}s`,
+    );
+    const second = start(root, command, args, retryBudgetMs);
+    result = await second.result;
+    output += second.output;
+  }
+  return { output, result, seconds: ((Date.now() - toolStarted) / 1000).toFixed(1) };
+}
+
+const lintArgs = fullLint || lintTargets.length
+  ? [
       ...(fullLint ? [] : ["--fix"]),
       "--cache",
       "--cache-location",
-      join(cacheDirectory, "quick-check"),
+      join(root, ".cache", "eslint", "quick-check"),
       "--suppressions-location",
       "eslint-local-rules/style-guide-suppressions.json",
       "--pass-on-unpruned-suppressions",
       "--no-warn-ignored",
       "--",
       ...(fullLint ? ["."] : lintTargets),
-    ],
-    fullLint ? FULL_BUDGET_MS : BUDGET_MS,
-  );
-}
+    ]
+  : null;
 
-const typeDirectory = join(root, ".cache", "tsc");
-const typeConfig = join(typeDirectory, "quick-check.json");
-const typeCache = join(typeDirectory, "quick-check.tsbuildinfo");
-const fullTypeCache = join(typeDirectory, "full.tsbuildinfo");
-let typeRun = null;
-const typeStarted = Date.now();
+let typeArgs = null;
 if (!typeTargets.length && !fullTypecheck) {
   console.log("quick check: no changed TypeScript files, skipping the type check");
   skipped.push("types");
@@ -221,37 +246,44 @@ if (!typeTargets.length && !fullTypecheck) {
       2,
     )}\n`,
   );
-  typeRun = start(root, binary(root, "tsc"), ["-p", configPath], fullTypecheck ? FULL_BUDGET_MS : typeBudgetMs);
+  typeArgs = ["-p", configPath];
 }
 
-const lintResult = lintRun ? await lintRun.result : null;
-const lintSeconds = lintResult ? ((lintResult.finishedAt - lintStarted) / 1000).toFixed(1) : "0.0";
-if (lintRun) process.stdout.write(lintRun.output);
-const typeResult = typeRun ? await typeRun.result : null;
-const typeSeconds = typeResult ? ((typeResult.finishedAt - typeStarted) / 1000).toFixed(1) : "0.0";
-if (typeRun) process.stdout.write(typeRun.output);
+if (lintArgs) {
+  mkdirSync(join(root, ".cache", "eslint"), { recursive: true });
+}
+
+const lintPromise = lintArgs
+  ? runTool("eslint", binary(root, "eslint"), lintArgs, fullLint ? FULL_BUDGET_MS : BUDGET_MS, FULL_BUDGET_MS)
+  : null;
+const typePromise = typeArgs
+  ? runTool("tsc", binary(root, "tsc"), typeArgs, fullTypecheck ? fullTypeBudgetMs : typeBudgetMs, fullTypeBudgetMs)
+  : null;
 
 function outcome(result, name) {
   if (result.error) {
     if (result.error.code === "ENOENT") {
-      console.log(`quick check: ${name} is not installed in this checkout (npm install), skipping it`);
-      return "skipped";
+      blocked(`${name} is not installed in this checkout; run npm install and push again`);
     }
     blocked(`${name} could not run: ${result.error.message}`);
   }
+  const files = name === "eslint" ? lintLabel() : typeLabel();
+  if (result.timedOut) {
+    blocked(`${name} did not finish for ${files}; push blocked. Run: ${rerunCommand(name)}`);
+  }
   if (result.signal || result.status === 137) {
-    skipped.push(name === "eslint" ? "lint" : "types");
     console.log(
-      result.timedOut
-        ? `quick check: ${name} passed its time budget, so this push skips it`
-        : `quick check: ${name} was killed, so this push skips it`,
+      `quick check: NOT ${name === "tsc" ? "TYPE CHECKED" : "LINTED"}: ${files} (the machine killed ${name}; this push goes through unchecked)`,
     );
+    skipped.push(name === "eslint" ? "lint" : "types");
     return "skipped";
   }
   return result.status === 0 ? "passed" : "failed";
 }
 
-const lintOutcome = lintResult ? outcome(lintResult, "eslint") : "skipped";
+const lintRun = lintPromise ? await lintPromise : null;
+if (lintRun) process.stdout.write(lintRun.output);
+const lintOutcome = lintRun ? outcome(lintRun.result, "eslint") : "skipped";
 const rewritten = lintTargets.length ? uncommitted(root, lintTargets) : [];
 if (lintOutcome === "failed") {
   if (rewritten.length) {
@@ -263,7 +295,9 @@ if (rewritten.length) {
   blocked(`formatting fixes applied to ${rewritten.join(", ")}; commit them and push again (${elapsed(started)}s)`);
 }
 
-const typeOutcome = typeResult ? outcome(typeResult, "tsc") : "skipped";
+const typeRun = typePromise ? await typePromise : null;
+if (typeRun) process.stdout.write(typeRun.output);
+const typeOutcome = typeRun ? outcome(typeRun.result, "tsc") : "skipped";
 if (typeOutcome === "failed") {
   blocked(`the type check failed; the push was stopped after ${elapsed(started)}s`);
 }
@@ -271,6 +305,6 @@ if (typeOutcome === "failed") {
 const total = Date.now() - started;
 const skippedNote = skipped.length ? `, skipped ${skipped.join(" and ")}` : "";
 console.log(
-  `quick check: format, lint and types passed in ${(total / 1000).toFixed(1)}s (lint ${lintSeconds}s, types ${typeSeconds}s)${skippedNote}`,
+  `quick check: format, lint and types passed in ${(total / 1000).toFixed(1)}s (lint ${lintRun ? lintRun.seconds : "0.0"}s, types ${typeRun ? typeRun.seconds : "0.0"}s)${skippedNote}`,
 );
 if (total > BUDGET_MS) console.log(`quick check: over the ${BUDGET_MS / 1000}s budget for this change`);
