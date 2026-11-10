@@ -5,6 +5,7 @@ import { useRecoilValue } from "@/lib/state";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
+import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import {
   AUTO_MODEL_OPTION_ID,
@@ -19,6 +20,7 @@ import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib
 import {
   getAiModelPreferenceIds,
   mergeAiModelPreferenceUpdates,
+  storedAutoModelRequested,
   teamAiFeatureModelsQueryKey,
   type TAiModelPreferenceSurface,
 } from "@/lib/aiModelPreferences";
@@ -58,6 +60,7 @@ export function useAiModelPreference(
   const queryClient = useQueryClient();
   const autoModelEnabled = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
   const taskWriterAuto = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
+  const savedModelAutoEnabled = useFlag(HTPR_9019_SAVED_MODEL_AUTO_FLAG);
   const { data: userPreferences } = useGetUserPreferences();
   const currentTeamId =
     teamId === undefined ? currentProject?.teamId : teamId;
@@ -114,23 +117,34 @@ export function useAiModelPreference(
   const agentSessionAiOption = openAiOnlyDefaultApplies
     ? planDefaultFor({ ...defaultContext, openaiOnlyDefaultEnabled: false })
     : null;
+  const autoModelRequested = autoModelEnabled &&
+    storedAutoModelRequested(
+      userPreferences.aiModelPreferences,
+      surface,
+      currentTeamId,
+    ) &&
+    !teamFeatureModels.data?.[surface]?.model;
   const resolveOption = useCallback(
     () =>
-      resolveAiModelOption(
-        [
-          storedOptionIds.teamScoped,
-          storedOptionIds.global,
-          teamFeatureModels.data?.[surface]?.model,
-          includeBoardFallback ? boardDefaultId : undefined,
-        ],
-        planDefault,
-        haiku55Enabled,
-      ),
+      savedModelAutoEnabled && autoModelRequested
+        ? toAutoModelOption(planDefault)
+        : resolveAiModelOption(
+            [
+              storedOptionIds.teamScoped,
+              storedOptionIds.global,
+              teamFeatureModels.data?.[surface]?.model,
+              includeBoardFallback ? boardDefaultId : undefined,
+            ],
+            planDefault,
+            haiku55Enabled,
+          ),
     [
+      autoModelRequested,
       haiku55Enabled,
       boardDefaultId,
       includeBoardFallback,
       planDefault,
+      savedModelAutoEnabled,
       storedOptionIds.global,
       storedOptionIds.teamScoped,
       surface,
@@ -149,7 +163,8 @@ export function useAiModelPreference(
       if (taskWriterAuto && surface === "taskWriter" && option.id === AUTO_MODEL_OPTION_ID) {
         saveTaskWriterAuto = true;
       }
-      const autoPick = saveTaskWriterAuto || (autoModelEnabled && surface === "aiChat" && option.id === AUTO_MODEL_OPTION_ID);
+      const autoPick = saveTaskWriterAuto || (autoModelEnabled && surface !== "imageGeneration" && option.id === AUTO_MODEL_OPTION_ID &&
+        (surface === "aiChat" || savedModelAutoEnabled));
       const validOption = autoPick ? toAutoModelOption(resolveOption()) : getAiModelOptionById(option.id, haiku55Enabled);
       if (!validOption) return;
 
@@ -199,7 +214,7 @@ export function useAiModelPreference(
           console.log("useAiModelPreference update error:", error);
         });
     },
-    [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, resolveOption, surface, taskWriterAuto, userPreferences],
+    [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, resolveOption, savedModelAutoEnabled, surface, taskWriterAuto, userPreferences],
   );
 
   return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption };

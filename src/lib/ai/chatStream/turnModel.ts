@@ -1,5 +1,6 @@
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, HTPR_7796_DISABLED_PROVIDER_PICK_FLAG, HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7681_AGENT_TEAM_OPENAI_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr-7681-agent-team-openai-default";
+import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { NextResponse } from "next/server";
 
@@ -10,9 +11,9 @@ import { type AiProviderOptions, type AiModelCredential, type AiGatewayTags, isC
 import { type TAiModelOption, type AiDefaultModelContext, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, getAiModelDefinition, isOpenAiOnlyPaidTeam, isGrokGemini4ModelKey } from "@/lib/aiModelOptions";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
-import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
+import { getAiFeatureModelOverride, isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { getAiProviderInfo, resolveTeamProviderEnabled } from "@/lib/aiProviders";
-import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
+import { getAiModelPreferenceIds, isAutoModelChoice, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
@@ -169,14 +170,20 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       : null;
     const usesTeamOpenAiDefault = Boolean(teamOpenAiOnlyContext && isOpenAiOnlyPaidTeam(teamOpenAiOnlyContext));
     const selectionLookupContext = usesTeamOpenAiDefault ? teamKeyLookupContext : keyLookupContext;
-    const autoRequested = isAutoRequest(body.modelOptionId);
+    const autoRequested = isAutoRequest(body.modelOptionId) ||
+      (!body.modelOptionId && !body.model &&
+        isAutoModelChoice(personalModelOptionId) &&
+        !getAiFeatureModelOverride(body.aiFeature, teamProviderSettings, haiku55Enabled) &&
+        await import("@/lib/flags")
+          .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, dbUser.id))
+          .catch(() => false));
     const requestedModel = autoRequested || isBrowserLunaDefaultUnqualifiedHere(body, defaultContext, storePlanId)
       ? { modelOptionId: null, model: null, provider: null }
       : body;
     const modelOptionIdForTurn = resolveAgentModelPin({
       requestedModelOptionId: requestedModel.modelOptionId,
       requestedModel: requestedModel.model,
-      agentModelOptionId: isServerChosenDefaultTurn(body, requestedModel) ? null : actingAgent?.modelOptionId,
+      agentModelOptionId: !autoRequested && isServerChosenDefaultTurn(body, requestedModel) ? null : actingAgent?.modelOptionId,
     });
     let selection = resolveModelSelection(
       requestedModel.provider,

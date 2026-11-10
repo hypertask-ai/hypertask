@@ -80,7 +80,7 @@ test("chat and every editor saved-model surface await reset before reading and s
       const stubs = {
         [resetModule]: { ensureHtpr7038ModelReset: async (id) => { assert.equal(id, 7); events.push("reset"); await Promise.resolve(); events.push("reset-done"); return "done"; } },
         "@/lib/prisma": defaultExport({ userSetting: { findUnique: async () => { events.push("read"); return { aiModelPreferences: preferences }; } } }),
-        "@/lib/aiModelPreferences": { getAiModelPreferenceIds: (value, requested, team) => {
+        "@/lib/aiModelPreferences": { isAutoModelChoice: () => false, getAiModelPreferenceIds: (value, requested, team) => {
           assert.equal(value, preferences); assert.equal(requested, surface); assert.equal(team, "team");
           return { global: value[surface], teamScoped: value.teams.team[surface] };
         } },

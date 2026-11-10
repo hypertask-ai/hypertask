@@ -575,9 +575,10 @@ export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
 export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
 
 export const AUTO_MODEL_OPTION_ID = "auto";
+export const AUTO_MODEL_TITLE = "Auto";
 
 export function toAutoModelOption(base: TAiModelOption): TAiModelOption {
-  return { ...base, id: AUTO_MODEL_OPTION_ID as string as TAiModelOptionId, title: "Auto", desc: "Picks the right model for each job" };
+  return { ...base, id: AUTO_MODEL_OPTION_ID as string as TAiModelOptionId, title: AUTO_MODEL_TITLE, desc: "Picks the right model for each job" };
 }
 
 export type AiDefaultModelContext = {
@@ -726,7 +727,7 @@ export function getMobileAiChatModelLabel(
   option: { id: string } | undefined,
 ): string {
   const catalogOption = getAiModelOptionById(option?.id);
-  if (option?.id === AUTO_MODEL_OPTION_ID) return "Auto";
+  if (option?.id === AUTO_MODEL_OPTION_ID) return AUTO_MODEL_TITLE;
   if (!catalogOption) return "Select model";
   const modelLabel = getAiModelDefinition(catalogOption.modelKey)?.label;
   let effortLabel: string | null = null;

@@ -15,10 +15,18 @@ const javascript = ts.transpileModule(source, {
     target: ts.ScriptTarget.ES2020,
   },
 }).outputText;
+const autoModelOptionId = fs.readFileSync(
+  path.join(root, "src/lib/aiModelOptions.ts"),
+  "utf8",
+).match(/AUTO_MODEL_OPTION_ID = "([^"]+)"/)[1];
 const preferenceModule = { exports: {} };
-new Function("module", "exports", javascript)(
+new Function("module", "exports", "require", javascript)(
   preferenceModule,
   preferenceModule.exports,
+  (id) =>
+    id === "@/lib/aiModelOptions"
+      ? { AUTO_MODEL_OPTION_ID: autoModelOptionId }
+      : require(id),
 );
 
 const {

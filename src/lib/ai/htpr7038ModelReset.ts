@@ -1,10 +1,11 @@
 import { cache } from "react";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
+import { ensureHtpr9019ModelChoiceAuto } from "@/lib/ai/htpr9019ModelChoiceAuto";
 
 export type Htpr7038ModelResetResult = "done" | "reset" | "failed";
 
-export const ensureHtpr7038ModelReset = cache(async (userId: number): Promise<Htpr7038ModelResetResult> => {
+const resetSavedHaikuChoicesOnce = cache(async (userId: number): Promise<Htpr7038ModelResetResult> => {
   try {
     const done = await prisma.htpr7038ModelChoiceResetDone.findUnique({
       where: { userId },
@@ -68,4 +69,10 @@ export const ensureHtpr7038ModelReset = cache(async (userId: number): Promise<Ht
     console.warn("[HTPR-7038] Saved-choice reset failed; continuing with existing preferences");
     return "failed";
   }
+});
+
+export const ensureHtpr7038ModelReset = cache(async (userId: number): Promise<Htpr7038ModelResetResult> => {
+  const result = await resetSavedHaikuChoicesOnce(userId);
+  const switched = await ensureHtpr9019ModelChoiceAuto(userId).catch(() => "failed" as const);
+  return switched === "failed" ? "failed" : result;
 });

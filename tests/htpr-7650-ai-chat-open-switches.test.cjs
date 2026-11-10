@@ -374,6 +374,7 @@ function preferencesApi(enabled, body, stored = { aiChatOpenNewTickets: null, ai
   const empty = {};
   const api = load("src/app/api/users/preferences/route.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "done" },
+    "@/lib/ai/htpr9019ModelChoiceAuto": { ensureHtpr9019ModelChoiceAuto: async () => "done" },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => ({ userId: 7 }) },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(id, 7); flagReads.push(key); return enabled; } },
     "@/lib/mcp/readJsonBody": { readJsonBody: async () => ({ ok: true, body }) },
@@ -392,6 +393,7 @@ function preferencesApi(enabled, body, stored = { aiChatOpenNewTickets: null, ai
     "@/lib/configs/boardSortMode.config": empty, "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": empty,
     "@/lib/flags/definitions/htpr-8971-card-settings": { HTPR_8971_CARD_SETTINGS_FLAG: "htpr-8971-card-settings" },
     "@/lib/flags/definitions/htpr-8995-picker-auto": { HTPR_8995_PICKER_AUTO_FLAG: "htpr-8995-picker-auto" },
+    "@/lib/flags/definitions/htpr-9019-saved-model-auto": empty,
   });
   return { post: () => api.POST({ headers: {} }), writes, flagReads, fills, stored };
 }
@@ -534,6 +536,7 @@ test("preferences reader selects all switches and upgrades pre-release cached pr
   for (const cached of [null, JSON.stringify({ playGifs: true })]) {
     const controller = load("src/utils/controllers/users/fetch_preferences.ts", {
       "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "done" },
+    "@/lib/ai/htpr9019ModelChoiceAuto": { ensureHtpr9019ModelChoiceAuto: async () => "done" },
       "@/lib/redis": { getRedis: async () => ({ get: async () => cached, setex: async () => {} }) },
       "@/lib/prisma": { __esModule: true, default: { userSetting: { findUnique: async ({ where, select }) => {
         assert.deepEqual(where, { userId: 7 });

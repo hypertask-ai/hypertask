@@ -3,6 +3,7 @@ import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { currentProjectAtom, uploadingStateCreateTaskModalAtom, type CurrentBoardBilling } from "@/store";
 import { TAiMode, TAiModal } from "@/models/AI_Task_writer_model";
 import { aiOptions } from "@/lib/constants/constants";
+import { AUTO_MODEL_OPTION_ID } from "@/lib/aiModelOptions";
 import useAITaskWriter from "@/hooks/MultiPages/AiWriter/useAiTaskWriter";
 import { ITask } from "@/models/model";
 import { processFiles } from "@/utils/helperFunctions/helperFunctions";
@@ -725,7 +726,9 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     if (item) {
       setAiOption(item);
       setDisplayAiOptions([item, ...aiOptions.filter(option => option.id !== item.id)]);
+      return;
     }
+    if (selected.id === AUTO_MODEL_OPTION_ID) setAiOption(selected);
   }, [setAiOption]);
 
 

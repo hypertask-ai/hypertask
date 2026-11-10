@@ -297,6 +297,7 @@ function preferencesApi(enabled = true, stored = null) {
   } };
   const controller = load("src/utils/controllers/users/fetch_preferences.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
+    "@/lib/ai/htpr9019ModelChoiceAuto": { ensureHtpr9019ModelChoiceAuto: async () => "done" },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/redis": { getRedis: async () => ({
       get: async (key) => cache.get(key) ?? null,
@@ -305,6 +306,7 @@ function preferencesApi(enabled = true, stored = null) {
   });
   const route = load("src/app/api/users/preferences/route.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
+    "@/lib/ai/htpr9019ModelChoiceAuto": { ensureHtpr9019ModelChoiceAuto: async () => "done" },
     "@/lib/mcp/readJsonBody": { readJsonBody: async (request) => ({ ok: true, body: await request.json() }) },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => null },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => {
@@ -332,6 +334,7 @@ function preferencesApi(enabled = true, stored = null) {
     "@/lib/configs/allTasks.config": load("src/lib/configs/allTasks.config.ts"),
     "@/lib/configs/boardSortMode.config": config,
     "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": flag,
+    "@/lib/flags/definitions/htpr-9019-saved-model-auto": { HTPR_9019_SAVED_MODEL_AUTO_FLAG: "htpr-9019-saved-model-auto" },
     "@/lib/flags/definitions/htpr-8971-card-settings": { HTPR_8971_CARD_SETTINGS_FLAG: "htpr-8971-card-settings" },
     "@/lib/flags/definitions/htpr-8995-picker-auto": { HTPR_8995_PICKER_AUTO_FLAG: "htpr-8995-picker-auto" },
     "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": {},
@@ -441,6 +444,7 @@ test("copy requests are validated and skipped with the flag off", async () => {
 test("shared preferences controller exposes the choice to bootstrap and GET", async () => {
   const controller = load("src/utils/controllers/users/fetch_preferences.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
+    "@/lib/ai/htpr9019ModelChoiceAuto": { ensureHtpr9019ModelChoiceAuto: async () => "done" },
     "@/lib/prisma": { __esModule: true, default: { userSetting: { findUnique: async ({ where, select }) => {
       assert.equal(where.userId, 7);
       assert.equal(select.boardSortMode, true);

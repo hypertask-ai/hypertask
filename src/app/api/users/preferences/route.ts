@@ -38,6 +38,7 @@ import { HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG } from "@/lib/flags/definitions/htpr-
 import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
 import { isAiThinkingEffort } from "@/lib/aiThinkingPreference";
 import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
+import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { isAllTasksDateRange } from "@/lib/configs/allTasks.config";
 import type { ISnippet } from "@/lib/snippets";
 import type { Prisma } from "@prisma/client";
@@ -333,15 +334,17 @@ export async function POST(request: NextRequest) {
       if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id)) {
         taskWriterAuto = true;
       }
+      const savedModelAutoEnabled = await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, user.id);
       const invalidPreference = preferenceUpdates.find(([surface, optionId]) => {
         if (!isAiModelPreferenceSurface(surface) || typeof optionId !== "string") return true;
         if (surface === "imageGeneration") {
           return !aiImageModelDefinitions.some((model) => model.key === optionId);
         }
         if (getAiModelOptionById(optionId)) return false;
-        if (surface === "aiChat" && optionId === AUTO_MODEL_OPTION_ID) return false;
-        if (surface === "taskWriter" && optionId === AUTO_MODEL_OPTION_ID && taskWriterAuto) return false;
-        return true;
+        if (optionId !== AUTO_MODEL_OPTION_ID) return true;
+        if (surface === "aiChat") return false;
+        if (surface === "taskWriter") return !taskWriterAuto;
+        return !savedModelAutoEnabled;
       });
 
       if (invalidPreference) {
@@ -363,7 +366,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (preferenceUpdates.length > 0 && modelReset === "failed") {
+      if (preferenceUpdates.length > 0 && (modelReset === "failed")) {
         return NextResponse.json(
           { success: false, error: "Model preferences are temporarily unavailable. Please retry." },
           { status: 503 },
