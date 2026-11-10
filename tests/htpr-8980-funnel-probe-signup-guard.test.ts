@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 import { activationHarness } from "./helpers/activation-harness";
 
-test("stranger probe instant signup is forbidden", async () => {
+function probeHarness() {
   const h = activationHarness();
   const counters = new Map<string, number>();
   h.mocks["@/lib/redis"] = {
@@ -14,31 +12,31 @@ test("stranger probe instant signup is forbidden", async () => {
       expire: async () => 1,
     }),
   };
-  const { POST } = h.load("src/app/api/auth/instant-signup/route.ts");
-  const email = "attacker-1@funnel-probe.hypertask.app";
-  const response = await POST(
-    new Request("http://localhost/api/auth/instant-signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    }) as any,
+  h.mocks["@/lib/cronAuthorization"] = {
+    hasValidCronAuthorization: (auth: string | null | undefined, secret: string | undefined) =>
+      Boolean(secret && auth === `Bearer ${secret}`),
+  };
+  return { h, counters };
+}
+
+test("stranger probe instant signup is forbidden", async () => {
+  const { h, counters } = probeHarness();
+  const { gateProbeInstantSignup } = h.load("src/lib/funnelProbe/signupGuard.ts");
+  const gate = await gateProbeInstantSignup(
+    null,
+    "attacker-1@funnel-probe.hypertask.app",
+    "probe-test-secret",
   );
-  assert.equal(response.status, 403);
-  const body = await response.json();
-  assert.equal(body.code, "PROBE_SIGNUP_FORBIDDEN");
+  assert.equal(gate.ok, false);
+  if (!gate.ok) {
+    assert.equal(gate.status, 403);
+    assert.equal(gate.code, "PROBE_SIGNUP_FORBIDDEN");
+  }
   assert.equal(counters.size, 0);
 });
 
 test("probe signup hourly limit is shared across emails", async () => {
-  const h = activationHarness();
-  const counters = new Map<string, number>();
-  h.mocks["@/lib/redis"] = {
-    getRedis: async () => ({
-      incr: async (key: string) => (counters.set(key, (counters.get(key) ?? 0) + 1), counters.get(key)!),
-      decr: async (key: string) => (counters.set(key, Math.max(0, (counters.get(key) ?? 0) - 1)), counters.get(key)!),
-      expire: async () => 1,
-    }),
-  };
+  const { h } = probeHarness();
   process.env.CRON_SECRET = "probe-test-secret";
   process.env.FUNNEL_PROBE_SIGNUPS_PER_HOUR = "2";
   const { gateProbeInstantSignup, probeSignupHourlyLimit } = h.load("src/lib/funnelProbe/signupGuard.ts");
