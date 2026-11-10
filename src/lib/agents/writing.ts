@@ -140,6 +140,16 @@ function labelPattern(label: string): RegExp {
   return new RegExp(`(?:^|\\s)${label.replace(/\s+/g, '\\s+')}\\s*:`, 'i')
 }
 
+function contextPointsBeforeQuestion(html: string): number {
+  const beforeQuestion = html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '').split(/Question\s*:/i)[0] ?? ''
+  const lists = beforeQuestion.split(/<\/(?:ul|ol)\s*>/i)
+  const closed = lists.slice(0, -1).join(' ').match(/<li\b/gi)?.length ?? 0
+  const lastList = lists[lists.length - 1] ?? ''
+  const opens = lastList.match(/<li\b/gi)?.length ?? 0
+  const closes = lastList.match(/<\/li>/gi)?.length ?? 0
+  return closed + (opens > closes ? opens - 1 : opens)
+}
+
 function questionHit(html: string): Hit | null {
   const textLines = lines(html)
   if (!textLines.some((line) => labelPattern('Question').test(line))) return null
@@ -161,9 +171,7 @@ function questionHit(html: string): Hit | null {
   const questionLine = textLines.find((line) => labelPattern('Question').test(line)) ?? ''
   const asked = questionLine.replace(/^[\s\S]*\bQuestion\s*:\s*/i, '').trim()
   if (!asked.endsWith('?')) return { reason: 'the question must end with a question mark', offender: questionLine }
-  const beforeQuestion = html.split(/Question\s*:/i)[0] ?? ''
-  const bullets = beforeQuestion.match(/<li\b/gi)?.length ?? 0
-  if (bullets > 3) return { reason: 'keep the context to three points', offender: 'Question:' }
+  if (contextPointsBeforeQuestion(html) > 3) return { reason: 'keep the context to three points', offender: 'Question:' }
   return null
 }
 
