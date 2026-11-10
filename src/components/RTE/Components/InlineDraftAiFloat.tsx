@@ -1172,7 +1172,7 @@ const InlineDraftAiFloat = ({
           disabled={audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={mobilePromptPlaceholder}
-          className="block max-h-40 min-h-11 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[16px] leading-6 text-white-black outline-none placeholder:text-text-light-gray"
+          className="block max-h-40 min-h-11 w-full resize-none overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-emphasis leading-6 text-white-black outline-none placeholder:text-text-light-gray"
         />
       )}
       <div
