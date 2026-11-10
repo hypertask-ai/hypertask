@@ -34,6 +34,8 @@ import RichTextPersonHovercards from "@/components/Common/RichTextPersonHovercar
 import AgentRunActivityRow from "./AgentRunActivityRow";
 import { TicketChatSessionsReminder } from "./TicketChatSessionsReminder";
 import { HTPR_7318_TICKET_CHAT_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder";
+import { HTPR_8998_JUMP_TO_TOP_FLAG } from "@/lib/flags/definitions/htpr-8998-jump-to-top";
+import JumpToTopButton from "./JumpToTopButton";
 
 const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const {
@@ -82,6 +84,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     showLiveRows,
   } = useTaskContext();
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
+  const jumpToTop = useFlag(HTPR_8998_JUMP_TO_TOP_FLAG);
   let ticketChatSessionsReminder: React.ReactNode = null;
   if (ticketChatReminder) {
     ticketChatSessionsReminder = secondaryPanelsReady !== false && currentTask
@@ -284,6 +287,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       {!_mbl && (
         <div aria-hidden className="shrink-0 @sm:h-6 @lg:h-16 @xl:h-48" />
       )}
+      {jumpToTop && !_mbl && <JumpToTopButton />}
     </BaseCommentAndDescriptionContainer>
   );
   return cachedLayout ? <TaskPagesProvider>{content}</TaskPagesProvider> : content;
