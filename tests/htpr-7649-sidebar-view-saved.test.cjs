@@ -325,6 +325,8 @@ function preferencesApi(enabled = true, stored = null) {
     },
     "@/lib/aiModelPreferences": {},
     "@/lib/aiModelOptions": {},
+    "@/lib/aiThinkingPreference": {},
+    "@/lib/flags/definitions/htpr-9004-thinking-effort": {},
     "@/utils/helperFunctions/sanitizeRichHtml": {},
     "@/lib/dictationProvider": {},
     "@/lib/configs/allTasks.config": load("src/lib/configs/allTasks.config.ts"),

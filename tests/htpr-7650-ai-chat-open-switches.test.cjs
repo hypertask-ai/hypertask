@@ -386,6 +386,7 @@ function preferencesApi(enabled, body, stored = { aiChatOpenNewTickets: null, ai
     "@prisma/client": empty,
     "@/utils/controllers/users/fetch_preferences": { invalidateUserPreferenceCache: async () => {} },
     "@/lib/aiModelPreferences": empty, "@/lib/aiModelOptions": empty,
+    "@/lib/aiThinkingPreference": empty, "@/lib/flags/definitions/htpr-9004-thinking-effort": empty,
     "@/utils/helperFunctions/sanitizeRichHtml": empty, "@/lib/dictationProvider": empty,
     "@/lib/configs/allTasks.config": empty, "@/models/Calendar/model": empty,
     "@/lib/configs/boardSortMode.config": empty, "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": empty,
