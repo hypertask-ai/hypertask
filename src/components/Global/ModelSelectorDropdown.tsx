@@ -6,6 +6,13 @@ import { forcedByokProvider, modelOptionMatchesForcedKey } from "@/lib/ai/forced
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
+import {
+  AI_THINKING_EFFORTS,
+  modelSupportsThinkingControl,
+  type TAiThinkingEffort,
+} from "@/lib/aiThinkingPreference";
+import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
@@ -40,7 +47,7 @@ import {
 } from "@/store";
 import { getSettingsPath } from "@/components/Modals/Settings/settingsNavigation";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
+import { useAiModelPreference, useAiThinkingPreference } from "@/hooks/General/useAiModelPreference";
 import { aiOptions } from "@/lib/constants/constants";
 import { resolveTaskWriterBoardContext } from "@/lib/ai/taskWriterBoardContext";
 import type { IProject } from "@/models/model";
@@ -70,6 +77,12 @@ const MENU_WIDTH_PX = 250;
 const MOBILE_MENU_WIDTH_PX = 210;
 const VIEWPORT_GUTTER_PX = 8;
 
+const thinkingEffortLabels: Record<TAiThinkingEffort, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
 const effortNotes: Record<TAiEffort, string> = {
   light: "fastest",
   standard: "balanced",
@@ -94,6 +107,7 @@ const AIModelDropDownList = ({
   keyboardNavigation = false,
   onKeyboardClose,
   shortcutHint,
+  thinkingControls = false,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -112,6 +126,7 @@ const AIModelDropDownList = ({
   keyboardNavigation?: boolean;
   onKeyboardClose?: () => void;
   shortcutHint?: string;
+  thinkingControls?: boolean;
 }) => {
   const alwaysUseThisKey = useFlag(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG);
   const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
@@ -196,6 +211,8 @@ const AIModelDropDownList = ({
     ]
   );
   const autoFlag = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
+  const thinkingFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
+  const { preference: thinkingPreference, setPreference: setThinkingPreference } = useAiThinkingPreference();
   const autoOption = autoFlag ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID) : undefined;
   const autoSelected = Boolean(autoOption) && aiSelected?.id === AUTO_MODEL_OPTION_ID;
   const defaultContext = useAiDefaultModelContext(settingsTeamId);
@@ -231,6 +248,10 @@ const AIModelDropDownList = ({
     selectedOption.modelKey,
     availableOptions
   );
+  const thinkingModelSupported =
+    thinkingControls &&
+    !autoSelected &&
+    modelSupportsThinkingControl(selectedOption.modelKey);
 
   const isByokPlan =
     respectTeamAvailability && scopedBilling?.storePlanId === "BYOK";
@@ -346,11 +367,16 @@ const AIModelDropDownList = ({
   const selectModel = (modelKey: TAiModelKey) => {
     const nextOption = getNearestAiModelOption(
       modelKey,
-      selectedOption.effort,
+      thinkingFlag && thinkingModelSupported ? "standard" : selectedOption.effort,
       availableOptions
     );
     if (!nextOption) return;
     optionCallback(nextOption);
+    setSubmenu(null);
+  };
+
+  const selectThinkingEffort = (effort: TAiThinkingEffort) => {
+    setThinkingPreference({ effort });
     setSubmenu(null);
   };
 
@@ -592,7 +618,7 @@ const AIModelDropDownList = ({
         }}
       >
         <span className="truncate font-medium">{selectedModelLabel}</span>
-        {selectedOption.effort && !autoSelected ? (
+        {selectedOption.effort && !autoSelected && !(thinkingFlag && thinkingModelSupported) ? (
           <span
             className={cn(
               "ml-1.5 flex-none text-text-light-gray",
@@ -747,7 +773,44 @@ const AIModelDropDownList = ({
               ) : null}
             </div>
           ) : null}
-          {selectedEfforts.length > 0 && !autoSelected ? (
+          {thinkingFlag && thinkingModelSupported ? (
+            <>
+              <SettingsToggle
+                square
+                inputId="ai-model-thinking-toggle"
+                label="Thinking"
+                checked={thinkingPreference.enabled}
+                onChange={() => setThinkingPreference({ enabled: !thinkingPreference.enabled })}
+              />
+              <MenuRow
+                label="Effort"
+                value={thinkingEffortLabels[thinkingPreference.effort]}
+                expanded={submenu === "effort"}
+                disabled={!thinkingPreference.enabled}
+                onClick={() => openSubmenu("effort")}
+              />
+              {submenu === "effort" && thinkingPreference.enabled ? (
+                <div
+                  className={cn(
+                    "z-10 rounded-[4px] bg-modalBackground p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.45)]",
+                    stackSubmenus
+                      ? "relative mt-1 w-full"
+                      : cn("absolute w-[210px] max-w-[calc(100vw-16px)]", submenuPositionClass)
+                  )}
+                >
+                  {AI_THINKING_EFFORTS.map((effort) => (
+                    <SubmenuRow
+                      key={effort}
+                      label={thinkingEffortLabels[effort]}
+                      selected={effort === thinkingPreference.effort}
+                      onClick={() => selectThinkingEffort(effort)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          {selectedEfforts.length > 0 && !autoSelected && !(thinkingFlag && thinkingModelSupported) ? (
             <>
               <MenuRow
                 label="Effort"
@@ -818,18 +881,21 @@ function MenuRow({
   label,
   value,
   expanded,
+  disabled = false,
   onClick,
 }: {
   label: string;
   value: string;
   expanded: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       aria-expanded={expanded}
-      className="flex w-full items-center justify-between gap-2 rounded-[4px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground"
+      disabled={disabled}
+      className="flex w-full items-center justify-between gap-2 rounded-[4px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground disabled:cursor-not-allowed disabled:opacity-45"
       onClick={onClick}
     >
       <span className="flex-none font-semibold">{label}</span>

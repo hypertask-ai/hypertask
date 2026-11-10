@@ -21,9 +21,11 @@ const cardPartsWith = (pick: (part: CardPart) => boolean): CardParts =>
 
 export const ALL_CARD_PARTS = cardPartsWith(() => true);
 export const EMPTY_CARD_PARTS = cardPartsWith(() => false);
+const DEFAULT_ON: readonly CardPart[] = ["ticketNumber", "tags", "inboxIcon"];
+export const DEFAULT_CARD_PARTS = cardPartsWith((part) => DEFAULT_ON.includes(part));
 
 export const parseCardParts = (raw: unknown): CardParts => {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return EMPTY_CARD_PARTS;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return DEFAULT_CARD_PARTS;
   const saved = raw as Record<string, unknown>;
   return cardPartsWith((part) => saved[part] === true);
 };

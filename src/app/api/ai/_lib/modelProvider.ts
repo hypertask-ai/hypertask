@@ -319,6 +319,7 @@ type ModelUsageContext = Partial<Pick<AiUsageRecord,
   directPromptCachingEnabled?: Promise<boolean>;
   reasoningFeature?: string | null;
   reasoningEffort?: ReasoningEffort | null;
+  userReasoning?: boolean;
 };
 
 const modelUsageContexts = new WeakMap<object, ModelUsageContext>();
@@ -518,7 +519,9 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
     specificationVersion: "v4",
     transformParams: async ({ params }) => {
       const reasoning = reasoningApi();
-      const optIn = reasoning ? await reasoning.aiThinkingOptInEnabled(context.userId) : false;
+      const optIn = reasoning
+        ? context.userReasoning === true || await reasoning.aiThinkingOptInEnabled(context.userId)
+        : false;
       if (!isHaiku55Model(modelId)) {
         return optIn && reasoning ? reasoning.applyReasoningToParams(params, context, modelId) : params;
       }

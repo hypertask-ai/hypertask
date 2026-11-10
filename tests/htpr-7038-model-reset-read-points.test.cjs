@@ -141,7 +141,7 @@ test("server saved-choice readers are covered, and the UI fetches the shared pre
   visit(path.join(root, "src"));
   assert.deepEqual(readers.sort(), [
     "src/app/api/ai/_lib/editorAi.ts", "src/app/api/users/preferences/route.ts",
-    "src/lib/ai/chatStream/turnModel.ts", preferenceFile,
+    "src/lib/ai/chatStream/thinkingChoice.ts", "src/lib/ai/chatStream/turnModel.ts", preferenceFile,
   ].sort());
   const requested = [];
   const hook = load("src/hooks/General/useGetUserPreferences.tsx", {

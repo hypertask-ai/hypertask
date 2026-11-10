@@ -34,6 +34,8 @@ import {
   type BoardSortMode,
 } from "@/lib/configs/boardSortMode.config";
 import { HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG } from "@/lib/flags/definitions/htpr-7649-sidebar-view-saved";
+import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
+import { isAiThinkingEffort } from "@/lib/aiThinkingPreference";
 import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import { isAllTasksDateRange } from "@/lib/configs/allTasks.config";
 import type { ISnippet } from "@/lib/snippets";
@@ -373,6 +375,31 @@ export async function POST(request: NextRequest) {
         ) as TAiModelPreferencesBySurface,
         teamId as string | number | undefined,
       ) as Prisma.InputJsonValue;
+    }
+
+    if (
+      body.aiThinkingPreference !== undefined &&
+      (await isFeatureEnabled(HTPR_9004_THINKING_EFFORT_FLAG, user.id))
+    ) {
+      const { enabled, effort } = (body.aiThinkingPreference ?? {}) as Record<string, unknown>;
+      if (typeof enabled !== "boolean" || !isAiThinkingEffort(effort)) {
+        return NextResponse.json(
+          { success: false, error: "Invalid AI thinking preference" },
+          { status: 400 },
+        );
+      }
+      const stored =
+        (data.aiModelPreferences as unknown as TAiModelPreferences | undefined) ??
+        ((
+          await prisma.userSetting.findUnique({
+            where: { userId: user.id },
+            select: { aiModelPreferences: true },
+          })
+        )?.aiModelPreferences as TAiModelPreferences | null | undefined);
+      data.aiModelPreferences = {
+        ...(stored ?? {}),
+        thinking: { enabled, effort },
+      } as Prisma.InputJsonValue;
     }
 
     if (body.snippets !== undefined) {
