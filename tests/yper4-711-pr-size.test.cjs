@@ -181,10 +181,11 @@ test('narrow config excludes generated, lock, snapshot and listed fixtures only'
   await run([
     file('package-lock.json', 900), file('src/generated/client.ts', 900),
     file('src/flags.generated.ts', 900), file('tests/view.snap', 900),
+    file('eslint-local-rules/style-guide-suppressions.json', 900),
     file('tests/fixtures/context.json', 900), file('src/fixtures/real-code.ts', 100),
     file('tests/other-fixtures/real-test.cjs', 100), file('src/package-lock.json', 100),
   ], {}, (result, f) => {
-    assert.deepEqual([result.counted, result.ignored, result.total, result.overCap], [300, 4500, 4800, false]);
+    assert.deepEqual([result.counted, result.ignored, result.total, result.overCap], [300, 5400, 5700, false]);
     assert.equal(f.artifact().counted, 300);
   });
 });
