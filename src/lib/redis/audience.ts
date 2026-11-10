@@ -26,5 +26,3 @@ export async function isUpstashAudienceRoutingEnabled(): Promise<boolean> {
   routingExpiresAt = Date.now() + 30_000;
   return routingEnabled;
 }
-
-void isUpstashAudienceRoutingEnabled();
