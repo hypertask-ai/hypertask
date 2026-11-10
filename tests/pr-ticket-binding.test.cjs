@@ -10,7 +10,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const repo = 'hypertask-ai/hypertask';
 
 async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base = repo,
-  login = 'runner', dispatch = false, prNumber = 123, state = 'open', token = 'fixture-token', status = 200, result, fetchError } = {}) {
+  login = 'runner', dispatch = false, prNumber = 123, state = 'open', token = 'fixture-token', status = 200, result, fetchError, taskLookup } = {}) {
   const writes = [];
   const failures = [];
   const outputs = {};
@@ -31,6 +31,9 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
       fetchImpl: async (endpoint, options) => {
         writes.push({ endpoint, options });
         if (fetchError) throw fetchError;
+        if (endpoint.startsWith('https://app.hypertask.ai/api/mcp/tasks?')) {
+          return { ok: true, status: 200, json: async () => taskLookup ?? { tasks: [] } };
+        }
         return { ok: status === 200, status, json: async () => result ?? {
           success: true, tasks: [{ ticketNumber: ticket, pullRequests: [{ url }] }],
         } };
@@ -79,6 +82,34 @@ test('outside and wrong-base PRs never receive board credentials', async () => {
   const invalid = await run({ title: 'No ticket' });
   assert.deepEqual(invalid.writes, []);
   assert.equal(invalid.failures.length, 1);
+});
+
+test('title guard passes when bind conflicts but the titled ticket already documents the pull request', async () => {
+  const result = await run({
+    status: 409,
+    taskLookup: {
+      tasks: [{
+        ticketNumber: 'YPER4-731',
+        pullRequests: [],
+        description: '<p>Work sits in https://github.com/hypertask-ai/hypertask/pull/123</p>',
+      }],
+    },
+  });
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.writes.length, 2);
+});
+
+test('409 fallback rejects a partial pull path or another repository URL', async () => {
+  for (const description of [
+    '<p>See /pull/1234 for context</p>',
+    '<p>https://github.com/other/repo/pull/123</p>',
+    '<p>/pull/123</p>',
+  ]) {
+    await assert.rejects(run({
+      status: 409,
+      taskLookup: { tasks: [{ ticketNumber: 'YPER4-731', pullRequests: [], description }] },
+    }), /HTTP 409/);
+  }
 });
 
 test('missing credentials and rejected or unproven bindings cannot pass', async () => {

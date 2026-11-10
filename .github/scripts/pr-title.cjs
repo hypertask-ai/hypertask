@@ -46,14 +46,34 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
     if (!token) throw new Error('HYPERTASK_MCP_TOKEN is missing; ticket binding cannot run.');
     const ticket = pr.title.split(' ')[0];
     const url = `https://github.com/${repository}/pull/${pr.number}`;
+    const authHeaders = { Authorization: `Bearer ${token}` };
+    const ticketDocumentsPull = async () => {
+      const lookup = await fetchImpl(
+        `https://app.hypertask.ai/api/mcp/tasks?ticket_number=${encodeURIComponent(ticket)}`,
+        { redirect: 'error', signal: AbortSignal.timeout(30_000), headers: authHeaders },
+      );
+      if (!lookup.ok) return false;
+      const body = await lookup.json();
+      const row = body.tasks?.[0];
+      if (!row || row.ticketNumber !== ticket) return false;
+      if (row.pullRequests?.some((link) => link.url === url)) return true;
+      const description = row.description ?? '';
+      return description.includes(url);
+    };
     const response = await fetchImpl('https://app.hypertask.ai/api/mcp/tasks/update', {
       method: 'POST',
       redirect: 'error',
       signal: AbortSignal.timeout(30_000),
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ticket_number: ticket, pull_request_url: url }),
     });
-    if (!response.ok) throw new Error(`Ticket binding returned HTTP ${response.status}`);
+    if (!response.ok) {
+      if (response.status === 409 && await ticketDocumentsPull()) {
+        core.info(`Title OK: ${pr.title}; ${ticket} already documents ${url}`);
+        return;
+      }
+      throw new Error(`Ticket binding returned HTTP ${response.status}`);
+    }
     const result = await response.json();
     if (result.success !== true || result.tasks?.length !== 1 ||
         result.tasks[0].ticketNumber !== ticket ||
