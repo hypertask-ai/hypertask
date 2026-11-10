@@ -244,8 +244,9 @@ test("multi chat windows: a new window picks up the session only after the open 
   assert.ok(openNew.indexOf("selectSession") < openNew.indexOf("windowController.open"));
 });
 
-test("multi chat windows: sidebar mode hides the new chat control", () => {
+test("multi chat windows: sidebar mode still starts a chat in the sidebar instead of opening a window", () => {
   const header = read("src/components/AI_CHAT/ChatHeader.tsx");
-  assert.match(header, /!isSidebarMode && \(\s*\n\s*<button/);
-  assert.ok((header.match(/!isSidebarMode && \(\s*\n\s*<button/g) ?? []).length >= 2);
+  const startNew = header.slice(header.indexOf("handleStartNewSession"), header.indexOf("handleStartNewSession") + 260);
+  assert.match(startNew, /if \(chatWindowControls\) \{/);
+  assert.match(startNew, /await startNewSession\(\);/);
 });

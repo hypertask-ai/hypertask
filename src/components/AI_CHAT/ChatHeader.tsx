@@ -426,7 +426,6 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           {historyButton}
           {renderSessionMenu("right-0")}
         </div>
-        {!isSidebarMode && (
         <button
           type="button"
           onClick={handleStartNewSession}
@@ -436,7 +435,6 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
         >
           <SquarePen size={20} strokeWidth={1.75} />
         </button>
-        )}
       </div>
     );
   }
@@ -495,7 +493,6 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
       <div className="flex shrink-0 items-center space-x-2">
         {agentsButton}
         {sidebarChats && historyButton}
-        {!isSidebarMode && (
         <button
           onClick={handleStartNewSession}
           disabled={isStartingNewSession}
@@ -508,7 +505,6 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             ) as any)}
           />
         </button>
-        )}
         <div className="relative place-items-center" ref={overflowRef}>
           <button
             type="button"
