@@ -45,7 +45,6 @@ async function runHandsFreeDrives(base, out) {
     for (const name of await readdir(folder)) if (name.endsWith('.png')) screenshots.push(path.relative(out, path.join(folder, name)))
     const pass = child.status === 0 && output.includes(drive.expect)
     steps.push({ name: drive.label, pass, detail: { exit: child.status, expected: drive.expect, output: output.split('\n').filter(Boolean).slice(-6) } })
-    if (!pass) break
   }
   const failed = steps.filter(step => !step.pass)
   return {
