@@ -18,6 +18,23 @@ export function isoWeek(now = new Date()) {
 
 export const weeklyLiveTitle = (week = isoWeek()) => `Weekly feature-map live ${week}`
 
+export function ticketIndexFromNumber(ticketNumber) {
+  const match = /(\d+)\s*$/.exec(String(ticketNumber ?? ''))
+  return match ? Number(match[1]) : null
+}
+
+export function ticketIndex(ticket) {
+  const index = Number.isSafeInteger(ticket?.uniqueIndex) && ticket.uniqueIndex > 0
+    ? ticket.uniqueIndex
+    : ticketIndexFromNumber(ticket?.ticketNumber)
+  if (!Number.isSafeInteger(index) || index <= 0) throw new Error('Weekly live ticket returned no ticket link')
+  return index
+}
+
+export function ticketUrl(ticket) {
+  return `${APP}/detail/project-${PROJECT_ID}/${ticketIndex(ticket)}`
+}
+
 export function countSteps(result) {
   const steps = Array.isArray(result?.steps) ? result.steps : []
   const pass = steps.filter((step) => step.pass).length
@@ -149,12 +166,13 @@ export async function fileWeeklyLiveResult({
   }
   const ticketNumber = ticket?.ticketNumber || (Number.isSafeInteger(ticket?.uniqueIndex) ? `HYCI-${ticket.uniqueIndex}` : null)
   if (!ticketNumber) throw new Error('Weekly live ticket returned no ticket number')
+  const url = ticketUrl(ticket)
   await api('comments', {
     ...options,
     method: 'POST',
     body: { ticket_number: ticketNumber, project_id: PROJECT_ID, text: `<p>${body.replace(/\n/g, '<br>')}</p>`, content_type: 'html' },
   })
-  return { ticketNumber, uniqueIndex: ticket.uniqueIndex, counts }
+  return { ticketNumber, uniqueIndex: ticketIndex(ticket), url, counts }
 }
 
 async function main() {
@@ -170,7 +188,7 @@ async function main() {
   const summary = [
     '## Weekly feature-map live',
     '',
-    `Ticket: ${APP}/detail/project-${PROJECT_ID}/${outcome.uniqueIndex}`,
+    `Ticket: ${outcome.url}`,
     `Pass: ${outcome.counts.pass}`,
     `Fail: ${outcome.counts.fail}`,
     `Verdict: ${outcome.counts.verdict}`,
