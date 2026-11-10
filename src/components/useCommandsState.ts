@@ -35,7 +35,6 @@ import { taskTemplatePickerForProject, type TaskTemplatePickerState } from "@/li
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_8737_BULK_MOVE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8737-bulk-move-board";
-import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
 
@@ -52,7 +51,7 @@ export function useCommandsState(context: Context) {
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   const bulkMoveBoardFlag = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
   const myTasksViewsEnabled = true;
-  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksSnoozeEnabled = true;
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
