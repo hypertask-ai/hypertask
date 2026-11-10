@@ -304,7 +304,7 @@ function InlineToggle({
         className={cn(
           "relative h-[14px] w-[26px] shrink-0 rounded-full transition-colors",
           checked ? "bg-hypertasks-green" : "bg-hover-active",
-          checked && amoledToggle && "[.amoled_&]:bg-shadcn-primary"
+          amoledToggle && checked && "[.amoled_&]:bg-shadcn-primary"
         )}
       >
         <span

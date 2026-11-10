@@ -53,7 +53,7 @@ const SettingsToggle: React.FC<SettingsToggleProps> = ({
           className={cn(
             "absolute left-[3px] top-[3px] h-[18px] w-[34px] rounded-full border-[1px] border-border-light-gray-thin transition-colors",
             checked ? "bg-hypertasks-green" : "bg-hover-active",
-            checked && amoledToggle && "[.amoled_&]:bg-shadcn-primary"
+            amoledToggle && checked && "[.amoled_&]:bg-shadcn-primary"
           )}
         >
           <span

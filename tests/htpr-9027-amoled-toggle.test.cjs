@@ -21,7 +21,7 @@ for (const file of files) {
   test(`${path.basename(file)} swaps only the AMOLED on-state to the theme accent`, () => {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     assert.match(source, /useFlag\(HTPR_9027_AMOLED_TOGGLE_FLAG\)/);
-    assert.match(source, /checked && amoledToggle && "\[\.amoled_&\]:bg-shadcn-primary"/);
+    assert.match(source, /amoledToggle && checked && "\[\.amoled_&\]:bg-shadcn-primary"/);
     assert.match(source, /checked \? "bg-hypertasks-green" : "bg-hover-active"/);
   });
 }
