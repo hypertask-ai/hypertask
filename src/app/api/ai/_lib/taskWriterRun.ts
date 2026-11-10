@@ -44,7 +44,6 @@ import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { isFeatureEnabled, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
-import { HTPR_9015_SEARCH_LOOKUPS_FLAG } from "@/lib/flags/definitions/htpr-9015-search-lookups";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
@@ -279,9 +278,8 @@ export async function prepareTaskWriterRun(
     : effectivePrompt;
   const primaryTaskIds = body.taskIds.slice(0, 1);
   const relatedTaskIds = body.taskIds.slice(1);
-  const reuseTicketSearch = boardResearchEnabled &&
-    await isFeatureEnabled(HTPR_9015_SEARCH_LOOKUPS_FLAG, userId).catch(() => false);
-  const ticketSearch = reuseTicketSearch
+  const reuseLookups = await isFeatureEnabled("htpr-9015-search-lookups", userId);
+  const ticketSearch = reuseLookups && boardResearchEnabled
     ? searchTasks({
         searchQuery: retrievalQuery,
         projectIds: [body.projectId],
@@ -316,7 +314,7 @@ export async function prepareTaskWriterRun(
       reserveCommentBudget: boardResearchEnabled,
       taskSearch: ticketSearch ?? undefined,
     }),
-    reuseTicketSearch && ticketSearch
+    reuseLookups && ticketSearch
       ? relatedTicketCandidates(ticketSearch, userId, agentId, teamScope, body.taskIds)
       : boardResearchEnabled
         ? relatedTicketCandidates(searchTasks({

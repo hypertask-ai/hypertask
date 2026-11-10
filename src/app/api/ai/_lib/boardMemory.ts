@@ -18,7 +18,6 @@ import {
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_9015_SEARCH_LOOKUPS_FLAG } from "@/lib/flags/definitions/htpr-9015-search-lookups";
 import {
   BOARD_MEMORY_CONFIG_FILE_TYPE,
   BOARD_MEMORY_CONFIG_SOURCE,
@@ -79,7 +78,7 @@ export async function getBoardMemoryState(userId: number, projectId: number) {
 }
 
 async function loadBoardMemoryState(projectId: number, userId = 0) {
-  const skipMemoryList = await isFeatureEnabled(HTPR_9015_SEARCH_LOOKUPS_FLAG, userId).catch(() => false);
+  const skipMemoryList = await isFeatureEnabled("htpr-9015-search-lookups", userId);
   if (!skipMemoryList) {
     const [configRows, memoryRows] = await Promise.all([
       listCustomInstructionFileRows({
