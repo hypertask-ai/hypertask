@@ -8,6 +8,7 @@ import { HTPR_7919_ALLOWANCE_PERCENT_FLAG } from "@/lib/flags/definitions/htpr-7
 import { useEffect, useState } from "react";
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
+import type { TeamAiUsageBreakdownProps } from "./AiUsageTeamsBreakdown";
 import { useSettingsNavigation } from "./settingsNavigation";
 import { useSettingsTeam } from "./useSettingsTeam";
 
@@ -45,7 +46,7 @@ export type AiUsageData = {
   usageMessage: string | null;
 };
 
-const TeamAiUsageBreakdown = dynamic(
+const TeamAiUsageBreakdown = dynamic<TeamAiUsageBreakdownProps>(
   () => import("./AiUsageTeamsBreakdown"),
   {
     ssr: false,

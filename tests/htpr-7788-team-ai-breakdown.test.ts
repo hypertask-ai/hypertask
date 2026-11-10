@@ -16,7 +16,7 @@ test("the team breakdown ships at Owner and QA behind its own flag", () => {
   assert.match(definition, /kind: "improvement"/);
   assert.match(definition, /defaultMode: "OWNER_AND_QA"/);
   assert.match(section, /useFlag\(HTPR_7788_TEAM_AI_BREAKDOWN_FLAG\)/);
-  assert.match(section, /dynamic\(\s*\(\) => import\("\.\/AiUsageTeamsBreakdown"\)/);
+  assert.match(section, /dynamic(?:<[^>]+>)?\(\s*\(\) => import\("\.\/AiUsageTeamsBreakdown"\)/);
   assert.match(section, /if \(teamBreakdown\) return <TeamAiUsageBreakdown \/>;/);
   assert.match(breakdown, /\/api\/settings\/ai-usage\/owned-teams/);
   assert.match(breakdown, /members\.length > 0/);
@@ -31,7 +31,6 @@ test("only the team owner reaches the team-wide list and member rows", () => {
   assert.match(usage, /isTeamOwner &&\s*\n\s*!customerFunded &&\s*\n\s*\(await isFeatureEnabled\(HTPR_7788_TEAM_AI_BREAKDOWN_FLAG/);
   assert.match(usage, /buildGatewayMemberSpendRows\(/);
 });
-
 test("member spend rows reconcile to the team total", async () => {
   const { buildGatewayMemberSpendRows } = await gatewayUsage();
   const tag = { results: [

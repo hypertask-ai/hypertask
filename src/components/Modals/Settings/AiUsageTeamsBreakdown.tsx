@@ -16,6 +16,7 @@ import {
 } from "./AiUsageSection";
 
 type TeamTarget = { projectId?: number; teamId: string; teamName: string };
+export type TeamAiUsageBreakdownProps = Record<string, never>;
 
 const UsageGroup = ({ children, title }: { children: React.ReactNode; title: string }) => (
   <div className="flex flex-col gap-1">
