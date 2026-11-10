@@ -6,6 +6,7 @@ export default {
   key: HTPR_8927_BOARD_CARD_OVERFLOW_FLAG,
   kind: "bugfix",
   defaultMode: "EVERYONE",
+  shippedOn: "2026-11-10",
   description:
     "Kanban cards clip long blocker lines and tag names inside the card so board columns never scroll sideways.",
   releaseRisk: {
