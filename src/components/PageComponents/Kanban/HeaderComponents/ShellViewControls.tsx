@@ -254,6 +254,8 @@ export const ViewControlButton = ({
   expanded?: boolean
   className?: string
 }) => {
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns")
+  if (tableSortColumnsEnabled) label.trim()
   return (
   <button
     type="button"
