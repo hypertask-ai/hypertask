@@ -24,7 +24,7 @@ on:
         description: Optional single pre-PR journey instead of visual comparison
         default: visual
         type: choice
-        options: [visual, inbox-cycle, inbox-cycle-broken]
+        options: [visual, inbox-cycle, inbox-cycle-broken, hands-free-drives]
 
 concurrency:
   group: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.journey == 'inbox-cycle' && inputs.head == 'production')) && 'feature-map-live-weekly' || (inputs.journey && inputs.journey != 'visual' && 'verify-qa' || format('visual-regression-{0}', github.event.pull_request.number || github.sha)) }}
@@ -379,6 +379,7 @@ jobs:
           VERIFY_QA_STATE_FILE: e2e/smoke/.state/smoke-state.json
           VERIFY_QA_FIXTURE: e2e/smoke/.state/inbox-cycle-fixture.json
           VERIFY_QA_REPORT_ONLY: '0'
+          PREMERGE_LOCAL: '1'
         run: |
           set -euo pipefail
           node scripts/premerge-local-search.mjs e2e/smoke/.state/card-fixture.json 53101 > verify-qa/search.log 2>&1 &
@@ -386,7 +387,7 @@ jobs:
           npx next start -H 127.0.0.1 -p 3100 > verify-qa/server.log 2>&1 &
           server=$!
           trap 'kill "$server" "$search" 2>/dev/null || true' EXIT
-          timeout --signal=TERM --kill-after=20s 240s node scripts/verify-qa-run.mjs 2>&1 | tee verify-qa/journey.log
+          timeout --signal=TERM --kill-after=20s 900s node scripts/verify-qa-run.mjs 2>&1 | tee verify-qa/journey.log
       - name: Summarize and sanitize evidence
         if: always()
         env:

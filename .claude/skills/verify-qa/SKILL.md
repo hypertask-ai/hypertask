@@ -15,7 +15,7 @@ Local launch and teardown: [recipe](reference/local-launch.md).
 
 ## Optional pre-PR check
 
-Push, then run `scripts/verify-qa <branch> inbox-cycle`. This uses GitHub-hosted disposable fixtures, not the VPS or production data. Mint a fresh `gh-app-token` for later GitHub commands; never fall back to human login. Follow the returned run URL with one `gh run watch <run-id> --exit-status --interval 300`, then download artifacts. `inbox-cycle-broken` proves failure propagation. This optional check never replaces live QA. See [the CI contract](../../../docs/ci.md) for limits.
+Push, then run `scripts/verify-qa <branch> inbox-cycle`. It uses GitHub-hosted fixtures, not the VPS or production data. Mint a fresh `gh-app-token` for GitHub; never fall back to human login. Follow the returned run URL with one `gh run watch`, then download artifacts. `inbox-cycle-broken` proves failure propagation. `hands-free-drives` adds both drive scripts and their broken-shortcut controls. This optional check never replaces live QA. See [CI limits](../../../docs/ci.md).
 
 ## Steps
 

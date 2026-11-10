@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { mkdir, readFile, readdir, writeFile, appendFile } from 'node:fs/promises'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { assertLoopback } from '../.github/scripts/verify-qa-premerge.mjs'
 
@@ -17,10 +17,34 @@ export function assertRunner(env) {
   if (!['127.0.0.1', 'localhost'].includes(new URL(env.REDIS_URL).hostname)) {
     throw new Error('verify-qa requires loopback Redis')
   }
-  if (!['inbox-cycle', 'inbox-cycle-broken'].includes(env.VERIFY_QA_JOURNEY)) {
+  if (!['inbox-cycle', 'inbox-cycle-broken', 'hands-free-drives'].includes(env.VERIFY_QA_JOURNEY)) {
     throw new Error('Unknown verify-qa journey')
   }
   return base
+}
+
+export const HANDS_FREE_DRIVES = [
+  { script: 'ai-chat-drive.mjs', label: 'AI chat drive', args: [], expect: 'ai-chat drive ok' },
+  { script: 'ai-chat-drive.mjs', label: 'AI chat drive, broken chat shortcut', args: ['--break', 'shortcut'], expect: 'negative control ok' },
+  { script: 'ctrl-j-drive.mjs', label: 'Ctrl+J drive', args: [], expect: 'ctrl-j drive ok' },
+  { script: 'ctrl-j-drive.mjs', label: 'Ctrl+J drive, broken Ctrl+J shortcut', args: ['--break', 'shortcut'], expect: 'negative control ok' },
+]
+
+async function runHandsFreeDrives(base, out) {
+  const steps = []
+  const screenshots = []
+  for (const drive of HANDS_FREE_DRIVES) {
+    const folder = path.join(out, `${drive.script.replace(/\.mjs$/, '')}${drive.args.length ? '-broken-shortcut' : ''}`)
+    await mkdir(folder, { recursive: true })
+    const args = [path.join('.claude/skills/verify-qa/scripts', drive.script), folder, '--base', base, '--state', process.env.VERIFY_QA_STATE_FILE, ...drive.args]
+    const child = spawnSync(process.execPath, args, { cwd: path.dirname(path.dirname(fileURLToPath(import.meta.url))), encoding: 'utf8', timeout: 150_000 })
+    const output = `${child.stdout ?? ''}${child.stderr ?? ''}`.trim()
+    await writeFile(path.join(folder, 'drive.log'), output)
+    for (const name of await readdir(folder)) if (name.endsWith('.png')) screenshots.push(path.relative(out, path.join(folder, name)))
+    steps.push({ name: drive.label, pass: child.status === 0 && output.includes(drive.expect), detail: { exit: child.status, expected: drive.expect, output: output.split('\n').filter(Boolean).slice(-6) } })
+  }
+  const failed = steps.filter(step => !step.pass)
+  return { steps, screenshots, verdict: failed.length ? 'FAIL' : 'PASS', failure: failed.length ? `drive failed: ${failed.map(step => step.name).join(', ')}` : null }
 }
 
 export function doctorIdentity(state, status, payload) {
@@ -114,6 +138,14 @@ async function main() {
   try {
     const diagnosis = await doctor(base, process.env.VERIFY_QA_STATE_FILE, out)
     await writeFile(path.join(out, 'doctor.json'), JSON.stringify(diagnosis, null, 2))
+    if (run.journey === 'hands-free-drives') {
+      const drives = await runHandsFreeDrives(base, out)
+      await writeFile(path.join(out, 'result.json'), `${JSON.stringify(drives, null, 2)}\n`)
+      if (drives.verdict !== 'PASS') throw new Error(drives.failure)
+      if (!drives.screenshots.length) throw new Error('Drives produced no screenshots')
+      run.verdict = 'PASS'
+      return
+    }
     let fixture = process.env.VERIFY_QA_FIXTURE
     if (run.journey === 'inbox-cycle-broken') {
       const broken = JSON.parse(await readFile(fixture, 'utf8'))
