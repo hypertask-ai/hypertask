@@ -11,7 +11,6 @@ import {
 } from "@/lib/ai/forcedTeamKey";
 import { fallbackRunsOnOurOwnGatewayKey } from "@/lib/ai/modelFundingGuard";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
-import { teamCompPlan } from "@/lib/teamComp";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   gatewayFundingSourceForApiKey,
@@ -204,11 +203,16 @@ async function resolveLookupPlan(lookup?: ByokLookupContext) {
 
 async function compedProTeam(teamId: string | null | undefined) {
   if (!teamId) return false;
-  const team = await prisma.team.findUnique({
-    where: { id: teamId },
-    select: { compedUntil: true, compedPlan: true },
-  });
-  return teamCompPlan(team) === "Pro";
+  try {
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      select: { compedUntil: true, compedPlan: true },
+    });
+    const until = team?.compedUntil ? new Date(team.compedUntil).getTime() : NaN;
+    return until > Date.now() && team?.compedPlan !== "BYOK";
+  } catch {
+    return false;
+  }
 }
 
 function getSharedIncludedAllowanceGatewayKey(plan: string | undefined) {

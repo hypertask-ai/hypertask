@@ -19,20 +19,20 @@ import {
 type FundingSource = "shared" | "managed" | "customer";
 const FLAT_TEAM_PRICE_IDS = new Set(["price_1U7MmqIhmcH60VccoCD7iFea"]);
 const POLICY_CACHE_TTL_MS = 5 * 60 * 1000;
-const owners = new Map<string, { userId: number; uid?: string; expiresAt: number }>();
+const owners = new Map<string, { userId: number; uid?: string; compedPro: boolean; expiresAt: number }>();
 const seatSnapshots = new Map<string, { seats: number; month: string; expiresAt: number }>();
 const seatHighWaters = new Map<string, { month: string; observedSeats: number; highWater: number; expiresAt: number }>();
 
-async function teamOwner(teamId: string): Promise<{ userId: number; uid?: string; expiresAt: number }> {
+async function teamOwner(teamId: string): Promise<{ userId: number; uid?: string; compedPro: boolean; expiresAt: number }> {
   const cached = owners.get(teamId);
   if (cached && cached.expiresAt > Date.now()) return cached;
   const team = await prisma.team.findUnique({
     where: { id: teamId },
-    select: { googleAccount: { select: { userId: true } } },
+    select: { googleAccount: { select: { userId: true } }, compedUntil: true, compedPlan: true },
   });
   if (!team?.googleAccount?.userId) throw new Error("AI allowance team owner is unavailable");
   const userId = team.googleAccount.userId;
-  const owner = { userId, expiresAt: Date.now() + POLICY_CACHE_TTL_MS };
+  const owner = { userId, compedPro: teamCompPlan(team) === "Pro", expiresAt: Date.now() + POLICY_CACHE_TTL_MS };
   owners.set(teamId, owner);
   return owner;
 }
@@ -44,14 +44,6 @@ async function planMode(teamId: string): Promise<"legacy" | "plan" | "strict"> {
   } catch {
     return "strict";
   }
-}
-
-async function compedProTeam(teamId: string) {
-  const team = await prisma.team.findUnique({
-    where: { id: teamId },
-    select: { compedUntil: true, compedPlan: true },
-  });
-  return teamCompPlan(team) === "Pro";
 }
 
 export async function teamPlanAllowanceEnabled(teamId: string): Promise<boolean> {
@@ -166,7 +158,7 @@ export async function resolveTeamAllowancePolicy(
       ? await storePlanIdForProject(null, teamId)
       : null;
     const byok = savedPlan === "BYOK";
-    const compedPro = savedPlan === "Pro" && await compedProTeam(teamId);
+    const compedPro = savedPlan === "Pro" && owner.compedPro;
     if ((fundingSource === "managed" || byok || compedPro) && !demoGlobal) {
       const month = aiAllowancePeriod();
       const seats = await cachedPaidSeats(teamId, month.key, byok);
