@@ -5,6 +5,7 @@ import type { ToggleSwitchProps } from "@/components/sidebars/RightSidebar/Singl
 
 type SettingsToggleProps = ToggleSwitchProps & {
   hideLabel?: boolean;
+  square?: boolean;
   onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>;
 };
 
@@ -13,6 +14,7 @@ const SettingsToggle: React.FC<SettingsToggleProps> = ({
   description,
   disabled = false,
   hideLabel = false,
+  square = false,
   inputId,
   label,
   onChange,
@@ -37,7 +39,10 @@ const SettingsToggle: React.FC<SettingsToggleProps> = ({
       <button
         aria-checked={checked}
         aria-label={label}
-        className="relative h-6 w-10 shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-container-outline disabled:cursor-not-allowed disabled:opacity-50"
+        className={cn(
+          "relative h-6 w-10 shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-container-outline disabled:cursor-not-allowed disabled:opacity-50",
+          square ? "rounded-[4px]" : "rounded-full"
+        )}
         disabled={disabled}
         id={inputId}
         onClick={onChange}
@@ -48,13 +53,15 @@ const SettingsToggle: React.FC<SettingsToggleProps> = ({
         <span
           aria-hidden="true"
           className={cn(
-            "absolute left-[3px] top-[3px] h-[18px] w-[34px] rounded-full border-[1px] border-border-light-gray-thin transition-colors",
+            "absolute left-[3px] top-[3px] h-[18px] w-[34px] border-[1px] border-border-light-gray-thin transition-colors",
+            square ? "rounded-[4px]" : "rounded-full",
             checked ? "bg-hypertasks-green" : "bg-hover-active"
           )}
         >
           <span
             className={cn(
-              "absolute left-[2px] top-[2px] h-3 w-3 rounded-full bg-white transition-transform",
+              "absolute left-[2px] top-[2px] h-3 w-3 bg-white transition-transform",
+              square ? "rounded-[2px]" : "rounded-full",
               checked && "translate-x-4"
             )}
           />

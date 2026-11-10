@@ -56,6 +56,7 @@ import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
@@ -115,9 +116,12 @@ export function AI_Tiptap_Container({
   const cleanupFlag = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const chatCleanupFlag = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const oneComposerFlag = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
+  const thinkingControlsFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
+  let thinkingControlsEnabled = false;
+  if (thinkingControlsFlag) thinkingControlsEnabled = true;
   const pathname = usePathname();
   const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
   const chatCleanupEnabled = chatCleanupFlag && !pathname?.startsWith("/chat");
@@ -292,6 +296,7 @@ export function AI_Tiptap_Container({
       currentOptions={displayAiOptions}
       className={oneComposer ? "bottom-[110%] right-0 left-auto top-auto" : "bottom-[110%] top-auto"}
       stackSubmenus
+      thinkingControls={thinkingControlsEnabled}
       effortLabelClassName={
         oneComposer || pathname?.startsWith("/chat") ? undefined : "hidden"
       }
