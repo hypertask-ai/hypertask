@@ -119,6 +119,7 @@ test('409 fallback rejects a partial pull path or another repository URL', async
     '<p>See /pull/1234 for context</p>',
     '<p>https://github.com/other/repo/pull/123</p>',
     '<p>/pull/123</p>',
+    '<p>https://github.com/hypertask-ai/hypertask/pull/1234</p>',
   ]) {
     await assert.rejects(run({
       status: 409,

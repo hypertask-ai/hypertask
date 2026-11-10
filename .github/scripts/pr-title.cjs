@@ -52,6 +52,9 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
     const projectQuery = boardIdByPrefix[ticketPrefix]
       ? `&project_id=${boardIdByPrefix[ticketPrefix]}`
       : '';
+    const pullUrlPattern = new RegExp(
+      String.raw`${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![0-9])`,
+    );
     const ticketDocumentsPull = async () => {
       const queries = [
         `ticket_number=${encodeURIComponent(ticket)}${projectQuery}`,
@@ -68,7 +71,7 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
         if (!row || row.ticketNumber !== ticket) continue;
         if (row.pullRequests?.some((link) => link.url === url)) return true;
         const description = row.description ?? '';
-        if (description.includes(url)) return true;
+        if (pullUrlPattern.test(description)) return true;
       }
       return false;
     };
