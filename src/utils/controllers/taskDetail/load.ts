@@ -24,6 +24,7 @@ import {
   type AgentVisibility,
 } from "@/lib/agents/visibility";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
+import { attachAgentStatus } from "@/utils/controllers/tasks/attachAgentStatus";
 
 type Db = Pick<PrismaClient, "$queryRaw">;
 
@@ -519,12 +520,14 @@ export async function fetchTaskDetail(
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
   const waitingAgent = publicWaitingAgent(task.waitingOnAgent, userId, task.projectId);
+  const [withAgentStatus] = await attachAgentStatus([{ id: task.id }]);
   return {
     ...stripForeignTaskRelations(task),
     waitingOnAgentId: waitingAgent ? task.waitingOnAgentId : null,
     waitingOnAgent: waitingAgent,
     agentId: visibleAgent ? task.agentId : null,
     agent: visibleAgent,
+    agentStatus: withAgentStatus.agentStatus,
     description_: task.description_
       ? { ...task.description_, reactions }
       : task.description_,

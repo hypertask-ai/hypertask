@@ -15,12 +15,14 @@ import React from 'react'
 import { useFlag } from '@/hooks/useFlag';
 import { agentStatusIsFresh, agentStatusText, agentStepFor } from '@/lib/agentStatus/chip';
 import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
+import AgentStatusChip from '@/components/agentStatus/AgentStatusChip';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 import { useBoardCardData } from './BoardCardData';
 import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from '@/lib/flags/definitions/htpr-7677-board-card-data-once';
 import { HTPR_8970_CALM_CARDS_FLAG } from '@/lib/flags/definitions/htpr-8970-calm-cards';
 import { cardLabels } from '@/lib/kanban/cardLabels';
 import { cn } from '@/utils/undoActions/helperFuncs';
+import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from '@/lib/flags/definitions/htpr-7339-agent-pulse-dot';
 
 interface ITaskTopRow {
     task:ITask;
@@ -84,6 +86,7 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
     dueDate,priority, estimate, taskLabels, hasDraft = false, blockingUser, agents = [],
     showTimeTotals, runningTimer, timeTotal, cardOverflowClamp = false}) => {
 
+      const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG)
       const agentMinute = useMinuteClock(Boolean(task.agentStatus))
       const agentStatusLine = task.agentStatus && agentStatusIsFresh(task.agentStatus.at, agentMinute)
         ? agentStatusText(
@@ -121,11 +124,23 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
         calm && "[&_.label-pill]:!h-5 [&_.label-pill]:!min-h-5 [&_.label-pill]:!py-0 [&_.label-pill]:!px-1.5 [&_.label-pill]:!rounded-[4px] [&_.label-pill]:!text-micro [&_.label-pill]:!leading-4 [&_.label-pill_.lucide-calendar]:!size-3 [&>span]:!h-5 [&>span]:!leading-5",
       )}
     >
-    {!calm && agentStatusLine && (
-      <LabelWrapper title={agentStatusLine} className="min-w-0 max-w-full overflow-hidden" data-testid="agent-status-chip">
-        <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
-        <span className="min-w-0 truncate">{agentStatusLine}</span>
-      </LabelWrapper>
+    {!calm && task.agentStatus && agentStatusLine && (
+      agentPulseDot ? (
+        <AgentStatusChip
+          agentName={task.agentStatus.agentName}
+          at={task.agentStatus.at}
+          sectionTitle={project?.sections?.find((section) => section.id === task.sectionId)?.section_title}
+          labelValues={(taskLabels ?? []).map((taskLabel) => taskLabel.label?.value ?? "")}
+          pulseDot
+          truncate
+          className="min-w-0 max-w-full overflow-hidden"
+        />
+      ) : (
+        <LabelWrapper title={agentStatusLine} className="min-w-0 max-w-full overflow-hidden" data-testid="agent-status-chip">
+          <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
+          <span className="min-w-0 truncate">{agentStatusLine}</span>
+        </LabelWrapper>
+      )
     )}
     {!calm && agents.map((agent) => (
       <AgentChip

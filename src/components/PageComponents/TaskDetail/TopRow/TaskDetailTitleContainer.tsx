@@ -16,6 +16,7 @@ import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-s
 import useCopyURL from "@/hooks/General/useCopyURL";
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
+import TaskDetailAgentStatusChip from "./TaskDetailAgentStatusChip";
 
 interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
@@ -88,6 +89,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
           </>
         }
       >
+        <TaskDetailAgentStatusChip />
         {cachedLayout && (_mbl || hasSummary) ? (
           <div data-task-summary-slot className={_mbl ? "h-10 w-full shrink-0" : "h-[21px] w-full shrink-0"}>
             {summary}
