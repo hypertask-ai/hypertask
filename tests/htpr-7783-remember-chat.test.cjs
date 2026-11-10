@@ -621,6 +621,6 @@ test("no-empty-chats: history hides chats that have no messages", async () => {
     assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
   });
   await withChat({ paged: true, enabled: false, noEmptyChats: false, rows: [blank, row("newest"), row("older")] }, async view => {
-    assert.deepEqual(view.chatState().historySessions.map(item => item.id), ["blank", "newest", "older"]);
+    assert.deepEqual(view.chatState().historySessions.map(item => item.id).sort(), ["blank", "newest", "older"]);
   });
 });

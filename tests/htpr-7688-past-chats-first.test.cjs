@@ -17,6 +17,7 @@ function load(file, mocks = {}) {
     if (name === "react/jsx-runtime") return require(name);
     if (name === "@/lib/flags/definitions/htpr-8048-agent-sessions") return { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" };
     if (name === "@/lib/flags/definitions/htpr-7737-agent-hover-chat") return { HTPR_7737_AGENT_HOVER_CHAT_FLAG: "htpr-7737-agent-hover-chat" };
+    if (name === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
     assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency ${name}`);
     return { __esModule: true, ...mocks[name] };
   }, loaded, loaded.exports);

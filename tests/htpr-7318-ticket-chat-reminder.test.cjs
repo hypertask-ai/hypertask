@@ -33,6 +33,7 @@ function load(file, mocks = {}) {
   const mod = { exports: {} };
   new Function("require", "module", "exports", compiled)((name) => {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
+    if (name === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
     if (name.startsWith("@/") || name.startsWith(".")) throw new Error(`Unstubbed dependency in ${file}: ${name}`);
     return require(name);
   }, mod, mod.exports);
