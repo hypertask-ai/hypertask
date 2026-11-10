@@ -207,17 +207,8 @@ const RAW_TOOL_METADATA = {
       "Gets a read-only board hygiene report (get_hygiene), or gets/sets a board's playbook or AI custom instructions. Hygiene reports untagged open tickets, possible duplicate tags, missing shared tag views and Title Case suggestions; it changes nothing.",
   },
 
-  LIST_BOARD_GITHUB_REPOS: {
-    name: buildToolName('list_board_github_repos'),
-    description:
-      'Lists the GitHub repositories connected to one board, the repositories you can still connect from your GitHub App installation, and the settings version. Board admins only, the same people the Connect GitHub page allows. Pass the version to set_board_github_repos.',
-  },
-
-  SET_BOARD_GITHUB_REPOS: {
-    name: buildToolName('set_board_github_repos'),
-    description:
-      'Replaces the GitHub repositories connected to one board, so pull requests from those repositories link to that board\'s tickets. Requires repository_ids and the version from list_board_github_repos; a stale version is refused, so read again and retry. Refuses repositories outside your GitHub App installation or already connected to another board. Board admins only.',
-  },
+  LIST_BOARD_GITHUB_REPOS: { name: buildToolName('list_board_github_repos'), description: 'Lists the GitHub repositories connected to one board, the ones you can still connect from your GitHub App installation, and the settings version. Board admins only. Pass the version to set_board_github_repos.' },
+  SET_BOARD_GITHUB_REPOS: { name: buildToolName('set_board_github_repos'), description: 'Replaces the GitHub repositories connected to one board. Requires repository_ids and the version from list_board_github_repos; a stale version is refused. Board admins only.' },
 
   CREATE_BOARD: {
     name: buildToolName('create_board'),

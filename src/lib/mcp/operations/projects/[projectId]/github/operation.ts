@@ -13,10 +13,7 @@ import {
 } from '@/lib/github/boardRepositories'
 
 function unauthorized() {
-  return NextResponse.json(
-    { success: false, error: 'Unauthorized. Invalid or missing authentication token.' },
-    { status: 401 }
-  )
+  return NextResponse.json({ success: false, error: 'Unauthorized. Invalid or missing authentication token.' }, { status: 401 })
 }
 
 function parseProjectId(raw: string): number | null {
