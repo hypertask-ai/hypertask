@@ -32,6 +32,12 @@ It demonstrates Fable 5.1, GPT 6 Astra, Kimi K3.1 Pro and Qwen 3.8 Plus. Never u
 
 ## Decide
 
+A finding reaches a ticket only when its family is listed in
+`.github/scripts/model-watch.allowlist.json` at or above the version recorded
+there. Everything else (another provider, a size, modality or coding side-line,
+an older version) stays in the run log. Watch another family by adding one line
+with the version we ship today.
+
 | Finding | Action |
 |---|---|
 | OpenAI or Anthropic version bump in an existing class, verified gateway input price at most $5/M tokens | **Ship automatically** through `/ship`; no new model-approval question. Replace, do not add a second version. |
