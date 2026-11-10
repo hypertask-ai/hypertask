@@ -4,13 +4,23 @@ const path = require("node:path");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const plainLanguageTicketStubs = require("./helpers/plain-language-ticket-stubs.cjs");
+const blockingStubs = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 
 function load(file, mocks = {}) {
   const cache = new Map();
   function requireSource(specifier, directory) {
     if (specifier in mocks) {
-      const mock = mocks[specifier];
+      let mock = mocks[specifier];
+      if (specifier === "@/utils/controllers/projects/getAllIncludes" && !mock.blockedByRelationsInclude) {
+        mock = { blockedByRelationsInclude: blockingStubs.blockedByRelationsIncludeStub, ...mock };
+      }
       return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
+    }
+    if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks") {
+      return blockingStubs.attachOpenBlockingTasksStub;
+    }
+    if (specifier === "@/lib/blockingTasks" && !file.endsWith("blockingTasks.ts")) {
+      return blockingStubs.blockingTasksMapperStub;
     }
     if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
     if (specifier === "@/utils/controllers/logs/quietPersonalLog") return quietPersonalLogStub();
