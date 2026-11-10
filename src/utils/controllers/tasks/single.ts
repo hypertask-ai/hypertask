@@ -20,10 +20,7 @@ import { sendTaskMoveNotificationIfNeeded } from "../activities/sendTaskMoveNoti
 import sendNotificationForTask from "../notifications/creation-service/createAndSendNotificationTaskMove";
 import upsertTaskDescription from "../description/common-description-create";
 import scheduleTaskSummaryGeneration from "@/pages/api/queues/FAST/generateSummary";
-import {
-  upsertAllCommentsToTurbopuffer,
-  upsertTaskToTurbopuffer,
-} from "../turbopuffer/turbopufferHelper";
+import { syncTaskEditSearchIndex } from "@/lib/search/indexDrift";
 import { autoAssignForSection } from "../assignees/autoAssignForSection";
 import { scheduleClassifyTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { sectionIsDone, spawnNextRecurrence } from "./spawnRecurrence";
@@ -770,17 +767,17 @@ export async function updateTaskSingle(
       }
     }
 
-    upsertTaskToTurbopuffer(task.id);
-    if (
-      requestedMutation.status ||
-      requestedMutation.ticketNumber ||
-      requestedMutation.uniqueIndex ||
-      requestedMutation.projectId
-    )
-      upsertAllCommentsToTurbopuffer(task.id);
     const titleChanged =
       requestedMutation.title !== undefined &&
       requestedMutation.title !== taskBeforeWrite.title;
+    await syncTaskEditSearchIndex({
+      taskId: task.id,
+      titleChanged,
+      status: requestedMutation.status,
+      ticketNumber: requestedMutation.ticketNumber,
+      uniqueIndex: requestedMutation.uniqueIndex,
+      projectId: requestedMutation.projectId,
+    });
     const descriptionChanged =
       requestedMutation.description !== undefined &&
       requestedMutation.description !==
