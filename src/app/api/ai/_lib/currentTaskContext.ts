@@ -1,8 +1,10 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7856_SUMMARY_CONTEXT_FLAG } from "@/lib/flags/keys";
+import type { IBlockingTask } from "@/models/model";
 import prisma from "@/lib/prisma";
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { blockedByRelationsInclude, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { attachOpenBlockingTasks, type TaskWithBlockingRelations } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 
 export async function loadCurrentTaskContext(
@@ -38,6 +40,7 @@ export async function loadCurrentTaskContext(
       title: true,
       ticketNumber: true,
       description_: { select: { content: true } },
+      relatedFromTasks: blockedByRelationsInclude(userId, agentId, options?.teamScope),
       ...(compact ? { Task_Summary: { take: 1, select: { content: true } } } : {}),
       comments: {
         orderBy: { createdAt: "desc" },
@@ -55,7 +58,11 @@ export async function loadCurrentTaskContext(
   });
   if (tasks.length === 0) return "";
 
-  return tasks
+  const tasksWithBlockers = await attachOpenBlockingTasks(
+    tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
+  );
+
+  return tasksWithBlockers
     .map((task) => formatTaskContext(task, options?.role ?? "primary", compact))
     .join("\n\n");
 }
@@ -164,6 +171,7 @@ export function formatTaskContext(
     title: string;
     ticketNumber: string | null;
     description_: { content: string | null } | null;
+    blockingTasks?: IBlockingTask[];
     Task_Summary?: Array<{ content: string | null }>;
     comments: Array<{
       text: string | null;
@@ -202,6 +210,10 @@ export function formatTaskContext(
   const label = task.ticketNumber
     ? `${task.ticketNumber}: ${task.title}`
     : task.title;
+  const blockerLines = (task.blockingTasks ?? []).map((blocker) => {
+    const ticket = blocker.ticketNumber || `project-${blocker.projectId}/${blocker.uniqueIndex}`;
+    return `- ${ticket}: ${blocker.title} (${blocker.section})`;
+  });
   const heading =
     role === "primary"
       ? `=== THIS TICKET (${label}) — a ticket the user is asking about; use it as primary context ===`
@@ -212,6 +224,9 @@ export function formatTaskContext(
     compact
       ? `Ticket ${summary ? "summary" : "description"} (fetch full ticket before editing): ${summary || htmlToText(description) || "(empty)"}`
       : `Description HTML (preserve this block structure when editing): ${description || "(empty)"}`,
+    "",
+    "Open blockers (BlockedBy):",
+    blockerLines.length ? blockerLines.join("\n") : "(none)",
     "",
     compact ? "Latest 20 comments (oldest first):" : "Comments (oldest first):",
     comments.length ? comments.join("\n") : "(no comments)",

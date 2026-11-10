@@ -14,7 +14,13 @@ function lookup({ enabled = true, tasks = [task], sendResult = true, sendError =
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { flags.push([key, userId]); return enabled; } },
     "@/lib/flags/keys": { HTPR_7756_CHAT_OPENS_TASK_FLAG: flag },
     "@/lib/prisma": { default: { task: { findMany: async (query) => { queries.push(query); return tasks; } } } },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (userId) => { assert.equal(userId, user.id); return access; } },
+    "@/utils/controllers/projects/getAllIncludes": {
+      getProjectWhere: (userId) => { assert.equal(userId, user.id); return access; },
+      blockedByRelationsInclude: () => ({}),
+    },
+    "@/utils/controllers/tasks/attachOpenBlockingTasks": {
+      attachOpenBlockingTasks: async (tasks) => tasks.map((task) => ({ ...task, blockingTasks: [] })),
+    },
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}) },
     "@/lib/ai/tools/helpers": { sanitizeForJson: (value) => value, mapTaskToMcpGetResponse: (value) => value },
   });

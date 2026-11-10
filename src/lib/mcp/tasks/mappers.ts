@@ -9,6 +9,7 @@ import {
 import { accessibleAgentWhere, isAgentVisibleToUser } from '@/lib/agents/visibility';
 import { taskStaleness } from '@/lib/staleness';
 import { derivePullRequestDisplayState } from '@/lib/pullRequests/githubPullRequests';
+import { mapOpenBlockingTasksForRead } from '@/lib/blockingTasks';
 import { McpTaskAssignee, TaskDetail } from './types';
 
 
@@ -325,6 +326,9 @@ export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: str
               }
             : undefined,
         sub_tasks: subTasks,
+        ...(Array.isArray(task.blockingTasks)
+            ? { blockingTasks: mapOpenBlockingTasksForRead(task.blockingTasks) }
+            : {}),
         projectId: task.projectId,
         status: task.status,
         priority: task.priority
