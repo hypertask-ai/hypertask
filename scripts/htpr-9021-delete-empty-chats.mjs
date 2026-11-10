@@ -9,9 +9,9 @@ export const EMPTY_CHAT_FILTER = `s."agentId" IS NULL
 
 export const COUNT_SQL = `SELECT count(*)::int AS count FROM "ChatSession" s WHERE ${EMPTY_CHAT_FILTER}`;
 
-export const DELETE_BATCH_SQL = `DELETE FROM "ChatSession" WHERE id IN (
-  SELECT s.id FROM "ChatSession" s WHERE ${EMPTY_CHAT_FILTER} ORDER BY s."createdAt" LIMIT $1
-)`;
+export const LOCK_BATCH_SQL = `SELECT s.id FROM "ChatSession" s WHERE ${EMPTY_CHAT_FILTER} ORDER BY s."createdAt" LIMIT $1 FOR UPDATE OF s SKIP LOCKED`;
+
+export const DELETE_BATCH_SQL = `DELETE FROM "ChatSession" s WHERE s.id = ANY($1::text[]) AND ${EMPTY_CHAT_FILTER}`;
 
 export const BATCH_SIZE = 500;
 
@@ -25,9 +25,20 @@ export async function run(db, apply, log = console.log) {
   }
   let deleted = 0;
   for (;;) {
-    const result = await db.query(DELETE_BATCH_SQL, [BATCH_SIZE]);
-    if (!result.rowCount) break;
-    deleted += result.rowCount;
+    await db.query("BEGIN");
+    let removed = 0;
+    let picked = 0;
+    try {
+      const locked = await db.query(LOCK_BATCH_SQL, [BATCH_SIZE]);
+      picked = locked.rows.length;
+      if (picked) removed = (await db.query(DELETE_BATCH_SQL, [locked.rows.map((row) => row.id)])).rowCount;
+      await db.query("COMMIT");
+    } catch (error) {
+      await db.query("ROLLBACK");
+      throw error;
+    }
+    if (!picked || !removed) break;
+    deleted += removed;
     log(`deleted ${deleted} of ${total}`);
   }
   const remaining = (await db.query(COUNT_SQL)).rows[0].count;

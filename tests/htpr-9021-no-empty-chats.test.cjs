@@ -60,29 +60,37 @@ test("expiry sweep falls back to the old behaviour when the flag lookup fails", 
   assert.equal(calls.length, 1);
 });
 
-test("cleanup script only matches old, unowned, message-free chats", async () => {
-  const { EMPTY_CHAT_FILTER, COUNT_SQL, DELETE_BATCH_SQL, BATCH_SIZE } = await import("../scripts/htpr-9021-delete-empty-chats.mjs");
+test("cleanup script only matches old, unowned, message-free chats and locks them before deleting", async () => {
+  const { EMPTY_CHAT_FILTER, COUNT_SQL, LOCK_BATCH_SQL, DELETE_BATCH_SQL, BATCH_SIZE } = await import("../scripts/htpr-9021-delete-empty-chats.mjs");
   assert.match(EMPTY_CHAT_FILTER, /s\."agentId" IS NULL/);
   assert.match(EMPTY_CHAT_FILTER, /s\."createdAt" < now\(\) - interval '1 hour'/);
   assert.match(EMPTY_CHAT_FILTER, /NOT EXISTS \(SELECT 1 FROM "ChatMessage" m WHERE m\."sessionId" = s\.id\)/);
   assert.match(EMPTY_CHAT_FILTER, /NOT EXISTS \(SELECT 1 FROM "AgentRun" r WHERE r\."chatSessionId" = s\.id\)/);
   assert.match(EMPTY_CHAT_FILTER, /NOT EXISTS \(SELECT 1 FROM "ChatSessionParticipant" p WHERE p\."sessionId" = s\.id\)/);
-  assert.ok(COUNT_SQL.includes(EMPTY_CHAT_FILTER));
-  assert.ok(DELETE_BATCH_SQL.includes(EMPTY_CHAT_FILTER));
+  for (const sql of [COUNT_SQL, LOCK_BATCH_SQL, DELETE_BATCH_SQL]) assert.ok(sql.includes(EMPTY_CHAT_FILTER));
+  assert.match(LOCK_BATCH_SQL, /FOR UPDATE OF s SKIP LOCKED$/);
+  assert.match(DELETE_BATCH_SQL, /WHERE s\.id = ANY\(\$1::text\[\]\) AND /);
   assert.ok(BATCH_SIZE > 0);
 });
 
 function fakeDb(total) {
   const queries = [];
   let left = total;
+  let next = 0;
   return {
     queries,
     query: async (sql, params) => {
       queries.push([sql, params]);
       if (sql.startsWith("SELECT count")) return { rows: [{ count: left }] };
-      const removed = Math.min(left, params[0]);
-      left -= removed;
-      return { rowCount: removed };
+      if (sql.startsWith("SELECT s.id")) {
+        const picked = Math.min(left, params[0]);
+        return { rows: Array.from({ length: picked }, () => ({ id: `session-${next++}` })) };
+      }
+      if (sql.startsWith("DELETE")) {
+        left -= params[0].length;
+        return { rowCount: params[0].length };
+      }
+      return { rows: [], rowCount: 0 };
     },
   };
 }
@@ -98,14 +106,30 @@ test("cleanup script dry run counts and deletes nothing", async () => {
   assert.match(logs.join("\n"), /dry run/);
 });
 
-test("cleanup script apply deletes in batches until none match", async () => {
-  const { run, DELETE_BATCH_SQL, BATCH_SIZE } = await import("../scripts/htpr-9021-delete-empty-chats.mjs");
+test("cleanup script apply locks then deletes each batch in its own transaction until none match", async () => {
+  const { run, LOCK_BATCH_SQL, DELETE_BATCH_SQL, BATCH_SIZE } = await import("../scripts/htpr-9021-delete-empty-chats.mjs");
   const db = fakeDb(BATCH_SIZE * 2 + 7);
   const result = await run(db, true, () => {});
   assert.deepEqual(result, { total: BATCH_SIZE * 2 + 7, deleted: BATCH_SIZE * 2 + 7, remaining: 0 });
+  const locks = db.queries.filter((query) => query[0] === LOCK_BATCH_SQL);
   const deletes = db.queries.filter((query) => query[0] === DELETE_BATCH_SQL);
-  assert.equal(deletes.length, 4);
-  assert.ok(deletes.every((query) => query[1][0] === BATCH_SIZE));
+  assert.equal(locks.length, 4);
+  assert.equal(deletes.length, 3);
+  assert.deepEqual(deletes.map((query) => query[1][0].length), [BATCH_SIZE, BATCH_SIZE, 7]);
+  const statements = db.queries.map((query) => query[0]).filter((sql) => ["BEGIN", "COMMIT", "ROLLBACK"].includes(sql));
+  assert.deepEqual(statements, ["BEGIN", "COMMIT", "BEGIN", "COMMIT", "BEGIN", "COMMIT", "BEGIN", "COMMIT"]);
+});
+
+test("cleanup script rolls back a batch that fails", async () => {
+  const { run, DELETE_BATCH_SQL } = await import("../scripts/htpr-9021-delete-empty-chats.mjs");
+  const db = fakeDb(3);
+  const original = db.query;
+  db.query = async (sql, params) => {
+    if (sql === DELETE_BATCH_SQL) throw new Error("delete failed");
+    return original(sql, params);
+  };
+  await assert.rejects(run(db, true, () => {}), /delete failed/);
+  assert.deepEqual(db.queries.map((query) => query[0]).filter((sql) => ["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)), ["BEGIN", "ROLLBACK"]);
 });
 
 test("sidebar shows the general chat instead of creating one when the flag is on", () => {
@@ -127,4 +151,10 @@ test("history hides chats that have no messages when the flag is on", () => {
   const source = read("src/hooks/MultiPages/AIChat/usePagedChatHistory.ts");
   assert.match(source, /noEmptyChats \? allHistorySessions\.filter\(\(session\) => session\.hasMessages !== false\) : allHistorySessions/);
   assert.match(source, /if \(noEmptyChats \|\| identityRef\.current !== identity/);
+});
+
+test("the non-paged fallback never creates a chat on its own when the flag is on", () => {
+  const source = read("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts");
+  assert.match(source, /if \(noEmptyChats \|\| startingSessionForTaskRef\.current === taskId\) return;/);
+  assert.match(source, /showGeneralChat: async \(\) => \{\s*if \(!noEmptyChats\) \{\s*await startNewSession\(\);\s*return;\s*\}\s*const latest = sessions\.find/);
 });

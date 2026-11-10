@@ -1,4 +1,5 @@
 import { HTPR_7736_CHAT_FOLLOWS_TASK_FLAG } from "@/lib/flags/definitions/htpr-7736-chat-follows-task";
+import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7783_REMEMBER_CHAT_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, fullScreenChatScopeAtom } from "@/store";
@@ -46,6 +47,7 @@ export const useSessionAndChatHistory = (
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
+  const noEmptyChats = useFlag(HTPR_9021_NO_EMPTY_CHATS_FLAG);
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
@@ -545,7 +547,7 @@ export const useSessionAndChatHistory = (
           return;
         }
 
-        if (startingSessionForTaskRef.current === taskId) return;
+        if (noEmptyChats || startingSessionForTaskRef.current === taskId) return;
         const requestedTaskId = taskId;
         startingSessionForTaskRef.current = requestedTaskId;
         const created = await startNewSession(
@@ -570,7 +572,7 @@ export const useSessionAndChatHistory = (
     taskScopedHistory,
     sessionsData,
     taskId,
-    startNewSession, paged, preserveSessionSelection, followsTaskNavigation, hasExplicitTask, activeSession, navigationKey, setActiveSession, scopedBoardId,
+    startNewSession, paged, preserveSessionSelection, followsTaskNavigation, hasExplicitTask, activeSession, navigationKey, setActiveSession, scopedBoardId, noEmptyChats,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
@@ -630,7 +632,14 @@ export const useSessionAndChatHistory = (
     sessions,
     setActiveSession,
     startNewSession,
-    showGeneralChat: async () => { await startNewSession(); },
+    showGeneralChat: async () => {
+      if (!noEmptyChats) {
+        await startNewSession();
+        return;
+      }
+      const latest = sessions.find((session) => !session.agentId);
+      if (latest) selectSession(latest.id);
+    },
     selectSession,
     addMessageToSessionQuery,
     updateLastMessageInSessionCache,

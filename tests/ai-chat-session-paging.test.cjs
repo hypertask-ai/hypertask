@@ -216,6 +216,13 @@ test('with the flag on, the legacy list does not create a session for a user wit
   assert.equal(f.writes.length, 0);
 });
 
+test('with the flag on, the legacy list hides chats that have no messages', async () => {
+  const f = fixture({ noEmptyChats: true, rows: [session(1), session(2, { messages: [] }), session(3)] });
+  const body = await (await f.get('')).json();
+  assert.deepEqual(body.sessions.map((row) => row.id).sort(), [id(1), id(3)]);
+  assert.equal(f.writes.length, 0);
+});
+
 test('with the flag off, the legacy list still creates a session for a user with none', async () => {
   const f = fixture({ rows: [] });
   assert.equal((await f.get('')).status, 200);

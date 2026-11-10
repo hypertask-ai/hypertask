@@ -158,6 +158,7 @@ export async function GET(request: NextRequest) {
         userId,
         ...chatAudienceWhere({ userId, agentId: currentUser?.agentId }),
         OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" } } }],
+        ...(noEmptyChats ? { messages: { some: {} } } : {}),
       },
       include: {
         messages: {
