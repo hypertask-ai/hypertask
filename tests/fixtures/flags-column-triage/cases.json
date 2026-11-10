@@ -1,0 +1,14 @@
+{
+  "ambiguousDescriptions": [
+    "<p>No flag declared.</p>",
+    "<p>htpr-9999-removed-flag</p>",
+    "<p>htpr-7511-signup-straight-to-board and htpr-2-other</p>"
+  ],
+  "failClosed": [
+    ["sectionsEmpty", "sections", [], "no Flag: columns"],
+    ["invalidMode", "ht-flag", "NEW_MODE", "Invalid live flag"],
+    ["incompleteTasks", "tasks", "shortTotal", "Incomplete tasks"],
+    ["incompleteComments", "comments", "hasMore", "Incomplete comments"],
+    ["repeatedCursor", "tasks", "sameCursor", "Repeated tasks cursor"]
+  ]
+}
