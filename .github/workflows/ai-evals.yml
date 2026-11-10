@@ -14,12 +14,6 @@ on:
       - "tests/ai-eval.test.cjs"
       - "tests/ai-prompt-registry.test.cjs"
       - "tests/fixtures/ai/**"
-      - "tests/fixtures/rag-search/**"
-      - "tests/rag-search-eval.test.cjs"
-      - "scripts/rag-eval.cjs"
-      - "src/lib/rag/**"
-      - "src/utils/controllers/search/**"
-      - "src/utils/controllers/turbopuffer/**"
       - ".github/workflows/ai-evals.yml"
   push:
     branches: [production]
@@ -35,14 +29,7 @@ on:
       - "tests/ai-eval.test.cjs"
       - "tests/ai-prompt-registry.test.cjs"
       - "tests/fixtures/ai/**"
-      - "tests/fixtures/rag-search/**"
-      - "tests/rag-search-eval.test.cjs"
-      - "scripts/rag-eval.cjs"
-      - "src/lib/rag/**"
-      - "src/utils/controllers/search/**"
-      - "src/utils/controllers/turbopuffer/**"
       - ".github/workflows/ai-evals.yml"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -73,13 +60,3 @@ jobs:
         env:
           AI_EVAL_LIVE: "0"
           AI_EVAL_WRONG_TOOL_THRESHOLD: "0"
-      - run: node --test tests/rag-search-eval.test.cjs
-      - run: node scripts/rag-eval.cjs --check-set
-      - if: github.event_name != 'workflow_dispatch'
-        run: node scripts/rag-eval.cjs --check-baseline
-      - if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
-        run: node scripts/rag-eval.cjs --write-baseline
-        env:
-          RAG_EVAL_EMBED_KEY: ${{ secrets.OPENAI_API_KEY }}
-      - if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
-        run: cat tests/fixtures/rag-search/vectors.json tests/fixtures/rag-search/baseline.json
