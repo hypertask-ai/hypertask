@@ -37,10 +37,12 @@ test("dot mode pulses only inside ten minutes while working, steady while waitin
 });
 
 test("the status dot renders working and waiting classes", () => {
+  const chip = load("src/lib/agentStatus/chip.ts");
   const AgentStatusDot = load("src/components/agentStatus/AgentStatusDot.tsx", {
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+    "@/lib/agentStatus/dot": load("src/lib/agentStatus/dot.ts", { "@/lib/agentStatus/chip": chip }),
   }).default;
   assert.match(renderToStaticMarkup(React.createElement(AgentStatusDot, { mode: "working" })), /--agent-status-dot-working/);
   assert.match(renderToStaticMarkup(React.createElement(AgentStatusDot, { mode: "waiting" })), /--agent-status-dot-waiting/);
