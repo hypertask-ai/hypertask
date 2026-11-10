@@ -109,6 +109,7 @@ function reservations(state) {
   const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: "htpr-7650-ai-chat-open-switches" },
     "@/hooks/General/useKeepAiChatClosed": { useKeepAiChatClosed: () => ({ keepAiChatClosed: state.keepAiChatClosed ?? false, ready: true }) },
     "@/lib/state": { useRecoilValue: (atom) => state[atom] },
@@ -127,6 +128,7 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
     "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "next/navigation": { usePathname: () => pathname },
     "lucide-react": { ChevronLeft: noop },
@@ -292,6 +294,7 @@ function renderTaskTitle(task, { descriptionStart, onSizing = noop } = {}) {
   const Title = load("src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", {
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/keys": {},
     "@/models/enums": { CommandMode: {} },
     react: React,
@@ -339,6 +342,7 @@ test("an unset priority stays null while its background query loads, keeping the
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/keys": {},
     "@/lib/taskDetailReads": {},
   });

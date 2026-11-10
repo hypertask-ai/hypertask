@@ -51,6 +51,7 @@ const HTCButton = loadComponent(
     "@/hooks/MultiPages/HTC/useDarkMode": () => ({ effectiveTheme: "light" }),
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/definitions/htpr-7749-header-icon-size": { HTPR_7749_HEADER_ICON_SIZE_FLAG: "htpr-7749-header-icon-size" },
     "@/models/enums": { CommandMode: { Command: "Command" } },
   },
@@ -72,6 +73,7 @@ const TaskTopRow = loadComponent(
     "../../TaskDetail/TaskOptions/HTCButton": HTCButton,
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
   },
 );
 const TaskDraggableContainer = loadComponent(
@@ -80,6 +82,7 @@ const TaskDraggableContainer = loadComponent(
     ...shared,
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/keys": {},
     "@/utils/undoActions/helperFuncs": { cn: (...args) => twMerge(clsx(args)) },
   },
@@ -179,13 +182,18 @@ test("hover layout bugfix defaults to everyone", () => {
 
 function loadCard(enabled, cleanup) {
   const cn = (...args) => twMerge(clsx(args));
-  const flags = key => key === hoverFlagKey ? enabled : key === "htpr-8255-kanban-cleanup" && cleanup;
+  const flags = (key) =>
+    (key === hoverFlagKey && enabled) ||
+    (key === "htpr-8255-kanban-cleanup" && cleanup) ||
+    key === "htpr-8927-board-card-overflow" ||
+    key === "htpr-8960-border-only-select";
   const mocks = {
     ...shared,
     "@/hooks/useFlag": { useFlag: flags },
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-8629-kanban-hover-layout": hoverFlag,
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/definitions/htpr-7975-column-work-limits": {},
     "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveStalenessFromProject: () => false },

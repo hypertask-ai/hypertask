@@ -11,6 +11,7 @@ const { loader, React, root } = require("./helpers/htpr-7260-ui.cjs");
 const flagKey = "htpr-7614-selected-card-border";
 const componentPath = "src/components/PageComponents/Kanban/KanbanTaskComponents/TaskDraggableContainer.tsx";
 const flag = loader()(`src/lib/flags/definitions/${flagKey}.ts`);
+const overflowFlag = loader()("src/lib/flags/definitions/htpr-8927-board-card-overflow.ts");
 const MobileViewContext = React.createContext(false);
 const noop = () => {};
 const cn = loader({
@@ -21,8 +22,12 @@ const cn = loader({
 
 function render(enabled, mobile, props = {}) {
   const Component = loader({
-    "@/hooks/useFlag": { useFlag: key => key === flagKey && enabled },
+    "@/hooks/useFlag": {
+      useFlag: (key) =>
+        (key === flagKey && enabled) || key === overflowFlag.HTPR_8927_BOARD_CARD_OVERFLOW_FLAG,
+    },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": overflowFlag,
     "@/lib/flags/keys": flag,
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/utils/undoActions/helperFuncs": { cn },
