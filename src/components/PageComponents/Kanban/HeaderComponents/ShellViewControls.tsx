@@ -28,8 +28,25 @@ import {
 import Tooltip from "@/components/Common/Tooltip"
 import TableTagGroupPicker from "./TableTagGroupPicker"
 import { applyTableSortClick } from "@/lib/table-view/tableViewSettings"
-import { initialDirection, tableColumns } from "@/components/PageComponents/Kanban/TableView/tableViewShared"
-import type { SortColumn } from "@/components/PageComponents/Kanban/TableView/tableViewShared"
+
+const SORT_OPTIONS = [
+  { key: "ticket", label: "Ticket" },
+  { key: "title", label: "Title" },
+  { key: "board", label: "Board" },
+  { key: "status", label: "Status" },
+  { key: "assignee", label: "Assignee" },
+  { key: "priority", label: "Priority" },
+  { key: "size", label: "Size" },
+  { key: "labels", label: "Labels" },
+  { key: "due", label: "Due" },
+  { key: "inColumn", label: "In column" },
+  { key: "noComment", label: "No comment" },
+  { key: "onBoard", label: "On board" },
+  { key: "time", label: "Time" },
+  { key: "created", label: "Created" },
+  { key: "updated", label: "Updated" },
+] as const
+const DESC_SORT = new Set<string>(["priority", "size", "time", "created", "updated", "inColumn", "noComment", "onBoard"])
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
   const isMbl = useContext(MobileViewContext)
@@ -113,7 +130,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
       {sortOpen && tableViewId && (
         <OptionPickerModal
           header="Sort"
-          options={tableColumns.filter((column) => column.key !== "time" || project.showTimeTotals).map((column) => {
+          options={SORT_OPTIONS.filter((column) => column.key !== "time" || project.showTimeTotals).map((column) => {
             const level = tableSort.findIndex((item) => item.column === column.key)
             const active = tableSort[level]
             return {
@@ -124,12 +141,12 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
             }
           })}
           onSelect={(option) => {
-            const column = option.id as SortColumn
+            const column = option.id
             const next = applyTableSortClick(
               tableSort,
               column,
               false,
-              initialDirection(column, new Map()),
+              DESC_SORT.has(column) ? "desc" : "asc",
               true,
             )
             setSortAccount({ viewId: tableViewId, sort: next })
