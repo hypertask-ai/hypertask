@@ -87,26 +87,9 @@ export interface BoardGithubReposResponse {
   projectId: number;
   version: string;
   canConnect: boolean;
-  installations: Array<{
-    id: string;
-    accountLogin: string;
-    accountType: string;
-    installedByMe: boolean;
-  }>;
-  connected: Array<{
-    repositoryId: string | null;
-    fullName: string;
-    provenance: string;
-    installationId: string | null;
-    isPrivate: boolean | null;
-  }>;
-  available: Array<{
-    repositoryId: string;
-    fullName: string;
-    installationId: string;
-    isPrivate: boolean;
-    onOtherBoard: boolean;
-  }>;
+  installations: Array<Record<string, unknown>>;
+  connected: Array<Record<string, unknown>>;
+  available: Array<Record<string, unknown>>;
   githubUnavailable: boolean;
 }
 
