@@ -536,6 +536,34 @@ test('HTPR-8945 plus-composer Tab from New Task switches to Search instead of Ad
   });
 });
 
+test('HTPR-8996 Tab from the plus row, mic or Send in New Task still switches to Search', async (t) => {
+  await withPalette(t, { tab: 'compose' }, async ({ flags, rerender, press, values }) => {
+    flags['htpr-8829-ctrlj-plus-composer'] = true;
+    flags['htpr-7313-ctrlj-always-board-chip'] = true;
+    flags['htpr-8945-ctrl-tab-palette'] = true;
+    await rerender();
+    const control = document.querySelector('[data-compose-plus-row] summary, [data-compose-plus-row] button');
+    assert.ok(control);
+    control.focus();
+    const forward = await press('Tab', {}, control);
+    assert.equal(forward.defaultPrevented, true);
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+  });
+});
+
+test('HTPR-8996 Shift+Tab from New Task switches back to Search', async (t) => {
+  await withPalette(t, { tab: 'compose' }, async ({ flags, rerender, press, values }) => {
+    flags['htpr-8829-ctrlj-plus-composer'] = true;
+    flags['htpr-7313-ctrlj-always-board-chip'] = true;
+    flags['htpr-8945-ctrl-tab-palette'] = true;
+    await rerender();
+    const textarea = document.querySelector('[data-compose-task-writer] textarea');
+    assert.ok(textarea);
+    await press('Tab', { shiftKey: true }, textarea);
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+  });
+});
+
 for (const modeOutline of [false, true]) for (const mobile of [false, true]) {
   test(`AMOLED mode outline flag ${modeOutline} preserves tab switching on ${mobile ? 'phone' : 'desktop'}`, async (t) => {
     await withPalette(t, { modeOutline, mobile }, async ({ press, input, values }) => {
