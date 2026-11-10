@@ -23,6 +23,7 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { BULK_MOVE_BOARD_LIMIT, getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
+import { HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG } from "@/lib/flags/definitions/htpr-8928-bulk-archive-instant-hide";
 
 type Assignee = IUser | IAgent;
 type AssigneeIntent = "assign" | "unassign" | "toggle";
@@ -63,6 +64,7 @@ interface KanbanBulkSelectionProviderProps {
   children: ReactNode;
   items: ITask[];
   onArchiveTask: (task: ITask, suppressUndo?: boolean) => Promise<void | boolean>;
+  onArchiveSelectedBatch?: (tasks: ITask[]) => Promise<ITask[]>;
   onArchiveUndo: (tasks: ITask[]) => void;
   onMoveTask: (task: ITask, section: ISection) => Promise<void>;
   onAssignTask: (
@@ -80,6 +82,7 @@ export const KanbanBulkSelectionProvider = ({
   children,
   items,
   onArchiveTask,
+  onArchiveSelectedBatch,
   onArchiveUndo,
   onMoveTask,
   onAssignTask,
@@ -94,6 +97,7 @@ export const KanbanBulkSelectionProvider = ({
     if (focusedTaskId != null) latestTaskIdRef.current = focusedTaskId;
   }, [focusedTaskId]);
   const bulkArchiveUndoAll = useFlag(HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG);
+  const bulkArchiveInstantHide = useFlag(HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -243,16 +247,60 @@ export const KanbanBulkSelectionProvider = ({
     [isProcessing, selectedTasks],
   );
 
-  const archiveSelected = useCallback(
-    () => bulkArchiveUndoAll
-      ? runTaskOperation(
-          (task) => onArchiveTask(task, true),
-          `${selectedTasks.length} tasks archived`,
-          onArchiveUndo,
-        )
-      : runTaskOperation(onArchiveTask, `${selectedTasks.length} tasks archived`),
-    [bulkArchiveUndoAll, onArchiveTask, onArchiveUndo, runTaskOperation, selectedTasks.length],
-  );
+  const archiveSelected = useCallback(async () => {
+    if (selectedTasks.length === 0 || isProcessing) return;
+
+    if (
+      bulkArchiveInstantHide
+      && selectedTasks.length > 1
+      && onArchiveSelectedBatch
+    ) {
+      const snapshot = selectedTasks;
+      clearSelection();
+      void onArchiveSelectedBatch(snapshot)
+        .then((failures) => {
+          if (failures.length === 0) return;
+          const nextFailedIds = new Set(failures.map((task) => task.id));
+          setSelectedIds(nextFailedIds);
+          setFailedIds(nextFailedIds);
+          toast.error(
+            `${failures.length} of ${snapshot.length} tasks could not be archived`,
+          );
+        })
+        .catch((error) => {
+          console.error("Kanban bulk archive failed", error);
+          toast.error("Bulk archive could not be completed");
+          const projectId = snapshot[0]?.projectId;
+          if (projectId) void reconcileActiveBoardQuery(queryClient, projectId);
+        });
+      return;
+    }
+
+    if (bulkArchiveUndoAll) {
+      await runTaskOperation(
+        (task) => onArchiveTask(task, true),
+        `${selectedTasks.length} tasks archived`,
+        onArchiveUndo,
+      );
+      return;
+    }
+
+    await runTaskOperation(
+      onArchiveTask,
+      `${selectedTasks.length} tasks archived`,
+    );
+  }, [
+    bulkArchiveInstantHide,
+    bulkArchiveUndoAll,
+    clearSelection,
+    isProcessing,
+    onArchiveSelectedBatch,
+    onArchiveTask,
+    onArchiveUndo,
+    queryClient,
+    runTaskOperation,
+    selectedTasks,
+  ]);
 
   const moveSelected = useCallback(
     (section: ISection) =>

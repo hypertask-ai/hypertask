@@ -44,6 +44,7 @@ type RemoveFromListOptions = {
   undoRedirectPath?: string;
   suppressUndo?: boolean;
   focusSections?: ISection[];
+  optimisticOnly?: boolean;
 }
 
 const getSectionCacheKey = (section: ISection) => section.sectionId ?? section.id;
@@ -546,6 +547,10 @@ const UpdateKanban = () => {
   
     try {
       await updateSections();
+
+      if (options.optimisticOnly) {
+        return false;
+      }
   
       console.time("refetchProject")
       await handleStatus();

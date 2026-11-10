@@ -24,6 +24,8 @@ import { useUndoContext } from "@/hooks/General/useUndo";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import globalAPIHandlers from "@/utils/api/global";
+import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
+import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import useGlobalFocusHandler from "@/hooks/Inbox/useGlobalFocusHandler";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import {
@@ -681,6 +683,81 @@ const HomePage = ({
     ],
   );
 
+  const archiveSelectedBatchForBulk = useCallback(
+    async (tasks: ITask[]) => {
+      const tasksBySection = new Map<number, number[]>();
+      for (const task of tasks) {
+        const sourceSectionId = getBulkSourceSectionId(task);
+        if (sourceSectionId == null) throw new Error("Task column is unavailable");
+        const taskIds = tasksBySection.get(sourceSectionId) ?? [];
+        taskIds.push(task.id);
+        tasksBySection.set(sourceSectionId, taskIds);
+      }
+
+      for (const [sectionId, taskIds] of tasksBySection) {
+        await removeFromListWithStatus(
+          sectionId,
+          _currentProject.id,
+          taskIds[0],
+          "Archive",
+          taskIds,
+          { suppressUndo: true, optimisticOnly: true },
+        );
+      }
+
+      const results = await Promise.allSettled(
+        tasks.map((task) => globalAPIHandlers.archiveTask(task.id, "Archive")),
+      );
+      const failures: ITask[] = [];
+      const successes: ITask[] = [];
+      results.forEach((result, index) => {
+        const task = tasks[index];
+        if (result.status === "rejected") {
+          console.error("Kanban bulk archive failed", task.id, result.reason);
+          failures.push(task);
+        } else {
+          successes.push(task);
+        }
+      });
+
+      if (currentUser?.id) {
+        for (const task of successes) {
+          refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, task.id, {
+            status: "Archive",
+          });
+        }
+      }
+
+      if (successes.length > 0) {
+        registerArchiveUndo(
+          `Undo archive of ${successes.length} tasks`,
+          {
+            taskIds: successes.map((task) => task.id),
+            projectId: _currentProject.id,
+          },
+        );
+      }
+
+      if (failures.length > 0 && currentUser?.id) {
+        await reconcileActiveBoardTasks(
+          queryClient,
+          _currentProject.id,
+          currentUser.id,
+        );
+      }
+
+      return failures;
+    },
+    [
+      _currentProject.id,
+      currentUser.id,
+      getBulkSourceSectionId,
+      queryClient,
+      registerArchiveUndo,
+      removeFromListWithStatus,
+    ],
+  );
+
   const moveTaskForBulk = useCallback(
     async (task: ITask, destination: ISection) => {
       const sourceSectionId = getBulkSourceSectionId(task);
@@ -883,6 +960,7 @@ const HomePage = ({
     <KanbanBulkSelectionProvider
       items={bulkSelectionItems}
       onArchiveTask={archiveTaskForBulk}
+      onArchiveSelectedBatch={archiveSelectedBatchForBulk}
       onArchiveUndo={(tasks) => registerArchiveUndo(
         `Undo archive of ${tasks.length} tasks`,
         { taskIds: tasks.map((task) => task.id), projectId: _currentProject.id },
