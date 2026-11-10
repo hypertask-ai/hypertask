@@ -36,23 +36,15 @@ async function runHandsFreeDrives(base, out) {
   for (const drive of HANDS_FREE_DRIVES) {
     const folder = path.join(out, `${drive.script.replace(/\.mjs$/, '')}${drive.args.length ? '-broken-shortcut' : ''}`)
     await mkdir(folder, { recursive: true })
-    const child = spawnSync(process.execPath, [
-      path.join('.claude/skills/verify-qa/scripts', drive.script), folder,
-      '--base', base, '--state', process.env.VERIFY_QA_STATE_FILE, ...drive.args,
-    ], { cwd: path.dirname(path.dirname(fileURLToPath(import.meta.url))), encoding: 'utf8', timeout: 150_000 })
+    const args = [path.join('.claude/skills/verify-qa/scripts', drive.script), folder, '--base', base, '--state', process.env.VERIFY_QA_STATE_FILE, ...drive.args]
+    const child = spawnSync(process.execPath, args, { cwd: path.dirname(path.dirname(fileURLToPath(import.meta.url))), encoding: 'utf8', timeout: 150_000 })
     const output = `${child.stdout ?? ''}${child.stderr ?? ''}`.trim()
     await writeFile(path.join(folder, 'drive.log'), output)
     for (const name of await readdir(folder)) if (name.endsWith('.png')) screenshots.push(path.relative(out, path.join(folder, name)))
-    const pass = child.status === 0 && output.includes(drive.expect)
-    steps.push({ name: drive.label, pass, detail: { exit: child.status, expected: drive.expect, output: output.split('\n').filter(Boolean).slice(-6) } })
+    steps.push({ name: drive.label, pass: child.status === 0 && output.includes(drive.expect), detail: { exit: child.status, expected: drive.expect, output: output.split('\n').filter(Boolean).slice(-6) } })
   }
   const failed = steps.filter(step => !step.pass)
-  return {
-    steps,
-    screenshots,
-    verdict: failed.length ? 'FAIL' : 'PASS',
-    failure: failed.length ? `drive failed: ${failed.map(step => step.name).join(', ')}` : null,
-  }
+  return { steps, screenshots, verdict: failed.length ? 'FAIL' : 'PASS', failure: failed.length ? `drive failed: ${failed.map(step => step.name).join(', ')}` : null }
 }
 
 export function doctorIdentity(state, status, payload) {
@@ -152,23 +144,23 @@ async function main() {
       if (drives.verdict !== 'PASS') throw new Error(drives.failure)
       if (!drives.screenshots.length) throw new Error('Drives produced no screenshots')
       run.verdict = 'PASS'
-    } else {
-      let fixture = process.env.VERIFY_QA_FIXTURE
-      if (run.journey === 'inbox-cycle-broken') {
-        const broken = JSON.parse(await readFile(fixture, 'utf8'))
-        broken.items[0].title = 'Deliberately missing verify-qa reminder'
-        fixture = path.join(process.env.RUNNER_TEMP, 'verify-qa-broken-fixture.json')
-        await writeFile(fixture, JSON.stringify(broken), { mode: 0o600 })
-      }
-      const child = spawnSync(process.execPath, ['.github/scripts/verify-qa-premerge.mjs'], {
-        stdio: 'inherit', timeout: 180_000,
-        env: { ...process.env, VERIFY_QA_FIXTURE: fixture, VERIFY_QA_OUT: out, VERIFY_QA_REPORT_ONLY: '0', VERIFY_QA_CHANGED_FILES: '', VERIFY_QA_NAMED_JOURNEY: 'inbox-cycle', GITHUB_STEP_SUMMARY: '' },
-      })
-      if (child.error || child.status !== 0) throw new Error(child.error?.message || 'Named journey failed; inspect result.json and screenshots')
-      const result = JSON.parse(await readFile(path.join(out, 'result.json'), 'utf8'))
-      if (result.verdict !== 'PASS' || !result.steps.length || !result.screenshots.length) throw new Error('Journey did not produce complete passing evidence')
-      run.verdict = 'PASS'
+      return
     }
+    let fixture = process.env.VERIFY_QA_FIXTURE
+    if (run.journey === 'inbox-cycle-broken') {
+      const broken = JSON.parse(await readFile(fixture, 'utf8'))
+      broken.items[0].title = 'Deliberately missing verify-qa reminder'
+      fixture = path.join(process.env.RUNNER_TEMP, 'verify-qa-broken-fixture.json')
+      await writeFile(fixture, JSON.stringify(broken), { mode: 0o600 })
+    }
+    const child = spawnSync(process.execPath, ['.github/scripts/verify-qa-premerge.mjs'], {
+      stdio: 'inherit', timeout: 180_000,
+      env: { ...process.env, VERIFY_QA_FIXTURE: fixture, VERIFY_QA_OUT: out, VERIFY_QA_REPORT_ONLY: '0', VERIFY_QA_CHANGED_FILES: '', VERIFY_QA_NAMED_JOURNEY: 'inbox-cycle', GITHUB_STEP_SUMMARY: '' },
+    })
+    if (child.error || child.status !== 0) throw new Error(child.error?.message || 'Named journey failed; inspect result.json and screenshots')
+    const result = JSON.parse(await readFile(path.join(out, 'result.json'), 'utf8'))
+    if (result.verdict !== 'PASS' || !result.steps.length || !result.screenshots.length) throw new Error('Journey did not produce complete passing evidence')
+    run.verdict = 'PASS'
   } catch (error) {
     run.failure = error.message
     process.exitCode = 1
