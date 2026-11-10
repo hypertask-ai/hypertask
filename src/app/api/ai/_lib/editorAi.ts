@@ -10,7 +10,6 @@ import type { LanguageModelV4 } from "@ai-sdk/provider";
 import { createOpenAI } from "@ai-sdk/openai";
 import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, type UserContent } from "ai";
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
-import { NON_LIVE_STATUSES } from "@/utils/controllers/turbopuffer/searchStatusFilter";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getTeamGatewayFunding, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
@@ -1161,13 +1160,13 @@ export async function retrieveTaskWriterContext(args: {
       searchTasks({
         searchQuery: args.prompt,
         projectIds,
-        excludeStatuses: NON_LIVE_STATUSES,
+        excludeStatuses: ["Deleted", "Archive"],
         topK: 50,
       }),
       searchComments({
         searchQuery: args.prompt,
         projectIds,
-        excludeStatuses: NON_LIVE_STATUSES,
+        excludeStatuses: ["Deleted", "Archive"],
         topK: 60,
         limit: 50,
       }),

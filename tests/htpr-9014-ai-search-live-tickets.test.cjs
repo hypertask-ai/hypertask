@@ -1,51 +1,11 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
-const vm = require("node:vm");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
-const { load } = require("./task-route-loader.cjs");
-
-function moduleWithStubs(file, stubs) {
-  const filename = path.join(root, file);
-  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-      jsx: ts.JsxEmit.React,
-    },
-  }).outputText;
-  const loadedModule = { exports: {} };
-  vm.runInNewContext(
-    code,
-    {
-      module: loadedModule,
-      exports: loadedModule.exports,
-      require: (id) => {
-        if (Object.hasOwn(stubs, id)) return stubs[id];
-        if (id.startsWith("@/") || id.startsWith("./") || id.startsWith("../")) return {};
-        return require(id);
-      },
-      ReadableStream,
-      Response,
-      Request,
-      TextEncoder,
-      TextDecoder,
-      Error,
-      AbortController,
-      URL,
-      console: { log() {}, info() {}, warn() {}, error() {} },
-    },
-    { filename }
-  );
-  return loadedModule.exports;
-}
-
-const statusFilter = load(
+const statusFilter = loadModule(
   "src/utils/controllers/turbopuffer/searchStatusFilter.ts"
 );
+const liveOnly = ["Deleted", "Archive"];
 
 test("a search with no status never keeps trashed tickets", () => {
   assert.deepEqual(statusFilter.buildSearchStatusFilter("status"), [
@@ -56,13 +16,9 @@ test("a search with no status never keeps trashed tickets", () => {
 });
 
 test("the AI surfaces exclude both trashed and archived tickets by default", () => {
-  assert.deepEqual(statusFilter.NON_LIVE_STATUSES, ["Deleted", "Archive"]);
+  assert.deepEqual(statusFilter.NON_LIVE_STATUSES, liveOnly);
   assert.deepEqual(
-    statusFilter.buildSearchStatusFilter(
-      "taskStatus",
-      undefined,
-      statusFilter.NON_LIVE_STATUSES
-    ),
+    statusFilter.buildSearchStatusFilter("taskStatus", undefined, liveOnly),
     [
       "And",
       [
@@ -73,7 +29,7 @@ test("the AI surfaces exclude both trashed and archived tickets by default", () 
   );
 });
 
-test("an explicit status still wins, and repeating an excluded status does not duplicate it", () => {
+test("an explicit status still wins, and a repeated excluded status is not duplicated", () => {
   assert.deepEqual(
     statusFilter.buildSearchStatusFilter("status", "Normal", ["Archive"]),
     ["status", "Eq", "Normal"]
@@ -97,16 +53,11 @@ test("an explicit status still wins, and repeating an excluded status does not d
 
 test("AI chat search asks the index for live tickets only and drops a Deleted status request", async () => {
   const calls = { tasks: [], comments: [] };
-  const knowledge = load("src/lib/rag/retrieveBoardKnowledge.ts", {
+  const knowledge = loadModule("src/lib/rag/retrieveBoardKnowledge.ts", {
     "@/lib/prisma": {
-      __esModule: true,
-      default: {
-        project: { findMany: async () => [{ id: 15 }] },
-      },
+      default: { project: { findMany: async () => [{ id: 15 }] } },
     },
-    "@/utils/controllers/projects/getAllIncludes": {
-      getProjectWhere: () => ({}),
-    },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/lib/auth/agentScope": { recordAgentBoardScopeMiss: () => {} },
     "./authorizeIndexedRows": {
       authorizeIndexedRows: async (tasks, comments) => ({
@@ -124,10 +75,9 @@ test("AI chat search asks the index for live tickets only and drops a Deleted st
         return [];
       },
     },
-    "@/utils/controllers/turbopuffer/searchStatusFilter": statusFilter,
   });
 
-  await knowledge.retrieveBoardKnowledge(
+  const response = await knowledge.retrieveBoardKnowledge(
     {
       query: "office kitchen rota",
       limit: 5,
@@ -136,17 +86,18 @@ test("AI chat search asks the index for live tickets only and drops a Deleted st
     { userId: 6 }
   );
 
+  assert.equal(response.success, true);
   assert.equal(calls.tasks.length, 1);
   assert.equal(calls.comments.length, 1);
   for (const args of [calls.tasks[0], calls.comments[0]]) {
-    assert.deepEqual(args.excludeStatuses, statusFilter.NON_LIVE_STATUSES);
+    assert.deepEqual(args.excludeStatuses, liveOnly);
     assert.equal(args.status, undefined);
   }
 });
 
 test("Task Writer context asks the index for live tickets only", async () => {
   const calls = { tasks: [], comments: [] };
-  const editor = moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {
+  const editor = loadModule("src/app/api/ai/_lib/editorAi.ts", {
     "@/utils/controllers/turbopuffer/turbopufferHelper": {
       searchTasks: async (args) => {
         calls.tasks.push(args);
@@ -157,18 +108,11 @@ test("Task Writer context asks the index for live tickets only", async () => {
         return [];
       },
     },
-    "@/utils/controllers/turbopuffer/searchStatusFilter": statusFilter,
     "@/lib/rag/authorizeIndexedRows": {
       authorizeIndexedRows: async () => ({ taskRows: [], commentRows: [] }),
     },
     "@/app/api/ai/_lib/customInstructions": {
       retrieveCustomInstructionFileContext: async () => "",
-    },
-    "@/app/api/ai/_lib/taskWriterPrompt": {
-      excludeLoadedTaskRows: ({ taskRows, commentRows }) => ({ taskRows, commentRows }),
-    },
-    "@/app/api/ai/_lib/taskWriterBoardResearch": {
-      mergeTaskWriterContextBudget: (rows) => rows,
     },
   });
 
@@ -180,17 +124,17 @@ test("Task Writer context asks the index for live tickets only", async () => {
   assert.equal(calls.tasks.length, 1);
   assert.equal(calls.comments.length, 1);
   for (const args of [calls.tasks[0], calls.comments[0]]) {
-    assert.deepEqual(args.excludeStatuses, statusFilter.NON_LIVE_STATUSES);
+    assert.deepEqual(args.excludeStatuses, liveOnly);
   }
 });
 
-function trashHarness({ status }) {
+function trashHarness(currentStatus) {
   const index = { deleted: [], restored: [] };
   let rawCall = 0;
   const treeIds = [{ id: 9014 }, { id: 9015 }];
   const lockRows = treeIds.map(({ id }) => ({
     id,
-    status: status === "Deleted" ? "Normal" : "Deleted",
+    status: currentStatus,
     sectionId: 1,
     hardDeleteProcessingAt: null,
   }));
@@ -207,13 +151,10 @@ function trashHarness({ status }) {
     notification: { deleteMany: async () => ({ count: 0 }) },
   };
 
-  const reminder = moduleWithStubs(
+  const reminder = loadModule(
     "src/pages/api/queues/tasks/taskDeleteReminder.ts",
     {
-      "@/lib/prisma": {
-        __esModule: true,
-        default: { $transaction: async (run) => run(tx) },
-      },
+      "@/lib/prisma": { default: { $transaction: async (run) => run(tx) } },
       "@/lib/planLimits": {
         assertProjectTicketRoom: async () => {},
         isPlanLimitsEnabled: async () => false,
@@ -241,16 +182,21 @@ function trashHarness({ status }) {
 }
 
 test("moving tickets to Trash removes them and their comments from the search index", async () => {
-  const { reminder, index } = trashHarness({ status: "Deleted" });
+  const { reminder, index } = trashHarness("Normal");
 
-  await reminder.updateTaskAndSubtasks({ id: 9014 }, "Deleted", new Date(), new Date());
+  await reminder.updateTaskAndSubtasks(
+    { id: 9014 },
+    "Deleted",
+    new Date(),
+    new Date()
+  );
 
   assert.deepEqual(index.deleted, [[9014, 9015]]);
   assert.deepEqual(index.restored, []);
 });
 
 test("restoring tickets from Trash puts them back in the search index", async () => {
-  const { reminder, index } = trashHarness({ status: "Normal" });
+  const { reminder, index } = trashHarness("Deleted");
 
   await reminder.updateTaskAndSubtasks({ id: 9014 }, "Normal");
 
