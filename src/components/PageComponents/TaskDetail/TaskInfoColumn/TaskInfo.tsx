@@ -3,6 +3,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7868_EMPTY_FIELD_LABELS_FLAG } from "@/lib/flags/definitions/htpr-7868-empty-field-labels";
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import { HTPR_8997_ID_ROW_FLAG } from "@/lib/flags/definitions/htpr-8997-id-row";
 import {
   ADD_FIELD_EVENT,
   addFieldOptions,
@@ -186,6 +187,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         ?.estimate_full_value
     : undefined;
   const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
+  const idRowFlag = useFlag(HTPR_8997_ID_ROW_FLAG);
   const [revealedCustomField, setRevealedCustomField] = useState<{
     taskId: number;
     fieldId: string;
@@ -323,6 +325,45 @@ const TaskInfo = (props: ITaskInfoContainer) => {
       hotDays: currentTask.project?.staleHotDays,
     },
   );
+  const idRow = currentTask?.ticketNumber && (
+    <TaskInfoRow>
+      <>
+        <LocalRightSideInfo
+          onClick={() => copyTicketNumber(currentTask.ticketNumber ?? "")}
+          title="ID"
+          left={0}
+          bottom={-40}
+          tooltipText="Copy task ID"
+          key={"ID"}
+          KeyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "I"]}
+        />
+
+        <TaskInfoValue
+          onClick={() => copyTicketNumber(currentTask.ticketNumber ?? "")}
+          className={cn(_mbl ? "text-white-black" : "w-full cursor-pointer", "group w-full")}
+        >
+          <ClickableSpan
+            className="task-ticket-id"
+            title={currentTask.ticketNumber.toUpperCase() ?? ""}
+          />
+          <Tooltip
+            portal
+            left={0}
+            bottom={-40}
+            keyCombination={[isApple ? "CMD" : "CTRL", "I"]}
+            text={"Copy task title & ID"}
+          />
+          <Tooltip
+            portal
+            left={0}
+            bottom={-75}
+            text="Copy task ID"
+            keyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "I"]}
+          />
+        </TaskInfoValue>
+      </>
+    </TaskInfoRow>
+  );
   const statusRow = (
     <TaskInfoRow>
       {(() => {
@@ -449,6 +490,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             }
       }
     >
+      {rightColumnFlag && idRowFlag && idRow}
       {rightColumnFlag && statusRow}
       {rightColumnFlag && projectRow}
 
@@ -502,45 +544,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
-      {!rightColumnFlag && currentTask?.ticketNumber && (
-        <TaskInfoRow>
-          <>
-            <LocalRightSideInfo
-              onClick={() => copyTicketNumber(currentTask.ticketNumber ?? "")}
-              title="ID"
-              left={0}
-              bottom={-40}
-              tooltipText="Copy task ID"
-              key={"ID"}
-              KeyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "I"]}
-            />
-
-            <TaskInfoValue
-              onClick={() => copyTicketNumber(currentTask.ticketNumber ?? "")}
-              className={`${_mbl ? "text-white-black" : "w-full cursor-pointer"} group w-full`}
-            >
-              <ClickableSpan
-                className="task-ticket-id"
-                title={currentTask.ticketNumber.toUpperCase() ?? ""}
-              />
-              <Tooltip
-                portal
-                left={0}
-                bottom={-40}
-                keyCombination={[isApple ? "CMD" : "CTRL", "I"]}
-                text={"Copy task title & ID"}
-              />
-              <Tooltip
-                portal
-                left={0}
-                bottom={-75}
-                text="Copy task ID"
-                keyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "I"]}
-              />
-            </TaskInfoValue>
-          </>
-        </TaskInfoRow>
-      )}
+      {!rightColumnFlag && idRow}
 
       {!rightColumnFlag && statusRow}
 

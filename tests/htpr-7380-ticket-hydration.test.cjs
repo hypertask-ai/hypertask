@@ -89,6 +89,7 @@ const TaskInfo = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/T
   "@/lib/waitingOn": load("src/lib/waitingOn.ts"),
   "@/hooks/useFlag": { useFlag: () => false },
   "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+  "@/lib/flags/definitions/htpr-8997-id-row": { HTPR_8997_ID_ROW_FLAG: "htpr-8997-id-row" },
   "@/lib/taskDetail/rightColumnFields": load("src/lib/taskDetail/rightColumnFields.ts"),
   "@/lib/assignees": load("src/lib/assignees.ts"),
   "@/lib/flags/definitions/htpr-8917-agent-waiting-person": { HTPR_8917_AGENT_WAITING_PERSON_FLAG: "htpr-8917-agent-waiting-person" },
