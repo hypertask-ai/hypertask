@@ -1,3 +1,5 @@
+import type { TAiThinkingPreference } from "@/lib/aiThinkingPreference";
+
 export const AI_MODEL_PREFERENCE_SURFACES = [
   "aiChat",
   "taskWriter",
@@ -16,6 +18,7 @@ export type TAiModelPreferencesBySurface = Partial<
 
 export type TAiModelPreferences = TAiModelPreferencesBySurface & {
   teams?: Record<string, TAiModelPreferencesBySurface>;
+  thinking?: TAiThinkingPreference;
 };
 
 export function isAiModelPreferenceSurface(
