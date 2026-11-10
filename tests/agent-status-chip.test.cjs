@@ -172,11 +172,25 @@ test("the rendered chip keeps fresh status, hides stale or absent status, and su
   const subscriptions = [];
   const LabelWrapper = ({ children, ...props }) => React.createElement("span", props, children);
   const Empty = () => null;
+  const chip = load("src/lib/agentStatus/chip.ts");
+  const dot = load("src/lib/agentStatus/dot.ts", { "@/lib/agentStatus/chip": chip });
+  const AgentStatusChip = load("src/components/agentStatus/AgentStatusChip.tsx", {
+    react: React,
+    "react/jsx-runtime": require("react/jsx-runtime"),
+    "react-icons/fa6": { FaRobot: Empty },
+    "@/components/Labels/LabelWrapper": { __esModule: true, default: LabelWrapper },
+    "@/lib/agentStatus/minuteClock": { useMinuteClock: (enabled) => { subscriptions.push(enabled); return Math.floor(NOW / 60_000); } },
+    "@/lib/agentStatus/chip": chip,
+    "@/lib/agentStatus/dot": dot,
+    "@/components/agentStatus/AgentStatusDot": { __esModule: true, default: Empty },
+  }).default;
   const mocks = {
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "react-icons/fa6": { FaRobot: Empty },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" },
+    "@/components/agentStatus/AgentStatusChip": { __esModule: true, default: AgentStatusChip },
     "@/lib/flags/definitions/htpr-7677-board-card-data-once": {},
     "./BoardCardData": { useBoardCardData: () => null },
     "@/hooks/Task Detail/useTimeTracking": {

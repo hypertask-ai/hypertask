@@ -46,7 +46,9 @@ test("board card and ticket header gate the dot on the ticket flag", () => {
   assert.match(tagsRow, /AgentStatusChip/);
   assert.match(title, /TaskDetailAgentStatusChip/);
   assert.match(headerChip, /HTPR_7339_AGENT_PULSE_DOT_FLAG/);
-  assert.match(read("src/utils/controllers/taskDetail/load.ts"), /attachAgentStatus/);
+  const loadTs = read("src/utils/controllers/taskDetail/load.ts");
+  assert.match(loadTs, /attachAgentStatus/);
+  assert.match(loadTs, /isFeatureEnabled\(HTPR_7339_AGENT_PULSE_DOT_FLAG/);
 });
 
 test("status dot uses approved size, colours and test id", () => {
