@@ -43,10 +43,14 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
     const ignoreItems: string[] = [...NON_SELECTABLE_MENTION_TYPES];
     const agentsFirst = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
     const sourceItems = props.items;
-    const items = useMemo(
-      () => (agentsFirst && sourceItems ? moveAgentMentionsFirst(sourceItems) : sourceItems),
-      [agentsFirst, sourceItems],
+    const agentFirstItems = useMemo(
+      () => (sourceItems ? moveAgentMentionsFirst(sourceItems) : sourceItems),
+      [sourceItems],
     );
+    let items = sourceItems;
+    if (agentsFirst) {
+      items = agentFirstItems;
+    }
     const [selectedIndex, setSelectedIndex] = useState<number>(() =>
       firstSelectableMentionIndex(items ?? []),
     );
