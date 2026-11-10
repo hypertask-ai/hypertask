@@ -68,7 +68,13 @@ function rememberRoute(key: string, load: () => Promise<(Route & { teamId?: stri
     }
     if (routeCache.size > 200) routeCache.clear();
   }
-  const value = load();
+  const value = load().then((route) => {
+    if (route !== "mixed-keyword" && (route.httpKey || route.allowanceKey)) {
+      const current = routeCache.get(key);
+      if (current?.value === value) routeCache.delete(key);
+    }
+    return route;
+  });
   routeCache.set(key, { at: now, value });
   value.catch(() => {
     const current = routeCache.get(key);
