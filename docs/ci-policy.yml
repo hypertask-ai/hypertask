@@ -450,7 +450,7 @@ on_demand_verify_qa:
   trigger: workflow_dispatch
   input_ref: head
   input_journey: journey
-  journeys: [inbox-cycle, inbox-cycle-broken]
+  journeys: [inbox-cycle, inbox-cycle-broken, hands-free-drives]
   helper: scripts/verify-qa
   runner: scripts/verify-qa-run.mjs
   runs_on: ubuntu-latest

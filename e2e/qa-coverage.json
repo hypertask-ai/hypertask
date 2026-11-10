@@ -112,6 +112,20 @@
         "file": ".github/workflows/prod-health.yml",
         "token": "# The merge (head) commit's associated pull request is the deploy's"
       }
+    },
+    {
+      "id": "on-demand-hands-free-drives",
+      "label": "On demand: AI chat and Ctrl+J hands-free drives",
+      "kind": "github-job",
+      "ticket": 8939,
+      "workflowFile": "visual-regression.yml",
+      "event": "workflow_dispatch",
+      "job": "verify-qa",
+      "freshHours": 168,
+      "source": {
+        "file": ".github/workflows/visual-regression.yml",
+        "token": "hands-free-drives"
+      }
     }
   ],
   "functions": [
@@ -376,6 +390,26 @@
           "file": "e2e/midscene/flows/signed-in-ai-answer.mjs",
           "token": "signed-in-ai-answer"
         }
+      ]
+    },
+    {
+      "id": "drive-ai-chat",
+      "label": "Drive AI chat hands-free",
+      "detail": "One loopback command drives the AI chat full page, docked sidebar, floating window and composer buttons, and a deliberately broken shortcut must fail it.",
+      "checkIds": ["on-demand-hands-free-drives"],
+      "sources": [
+        { "file": ".claude/skills/verify-qa/scripts/ai-chat-drive.mjs", "token": "ai-chat drive ok" },
+        { "file": ".claude/skills/verify-qa/reference/feature-map/ai-chat.md", "token": "ai-chat-drive.mjs" }
+      ]
+    },
+    {
+      "id": "drive-ctrl-j",
+      "label": "Drive the Ctrl+J popup hands-free",
+      "detail": "One loopback command drives the Ctrl+J popup: shortcut, composer buttons, send that creates one task, Escape, and a deliberately broken shortcut must fail it.",
+      "checkIds": ["on-demand-hands-free-drives"],
+      "sources": [
+        { "file": ".claude/skills/verify-qa/scripts/ctrl-j-drive.mjs", "token": "ctrl-j drive ok" },
+        { "file": ".claude/skills/verify-qa/reference/feature-map/command-palette.md", "token": "ctrl-j-drive.mjs" }
       ]
     }
   ]

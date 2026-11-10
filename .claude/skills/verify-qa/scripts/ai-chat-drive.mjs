@@ -1,0 +1,142 @@
+#!/usr/bin/env node
+// Hands-free drive for AI chat: the full page, the docked sidebar, the floating
+// window, the chat shortcut and the composer buttons. Prints PASS or FAIL per step.
+// Runs only against a disposable loopback stack (the browser-smoke seed), never production.
+import { createRequire } from 'node:module';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../..');
+const { chromium } = createRequire(path.join(root, 'package.json'))('playwright');
+
+const args = process.argv.slice(2);
+const flag = (name) => { const at = args.indexOf(`--${name}`); return at === -1 ? undefined : args[at + 1]; };
+const positional = args.filter((arg, index) => !arg.startsWith('--') && !(index > 0 && args[index - 1].startsWith('--')));
+const BASE = flag('base') || process.env.VERIFY_QA_BASE || '';
+const STATE = flag('state') || process.env.VERIFY_QA_STATE_FILE || '';
+const BROKEN = flag('break');
+const dir = positional[0] || path.join(os.tmpdir(), `ai-chat-drive-${Date.now()}`);
+const cardFixture = path.join(root, 'e2e/smoke/.state/card-fixture.json');
+
+if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(BASE)) {
+  console.error('ai-chat drive refuses a non-loopback base: it drives a disposable seeded stack, never production');
+  process.exit(2);
+}
+if (!STATE) {
+  console.error('ai-chat drive needs --state <storageState.json> (or VERIFY_QA_STATE_FILE)');
+  process.exit(2);
+}
+const fixture = flag('board') ? {} : JSON.parse(await fs.readFile(cardFixture, 'utf8').catch(() => '{}'));
+const seededBoard = fixture.boardPath
+  || (fixture.detailPath ? `/project?id=${/^\/detail\/project-(\d+)\//.exec(fixture.detailPath)?.[1]}&surface=board` : undefined);
+const BOARD = flag('board') || seededBoard;
+if (!BOARD) {
+  console.error('ai-chat drive needs --board <board path> or the browser-smoke card fixture');
+  process.exit(2);
+}
+
+await fs.mkdir(dir, { recursive: true });
+const result = { base: BASE, board: BOARD, broken: BROKEN || null, steps: [] };
+const step = (name, pass, detail) => {
+  result.steps.push({ name, pass, detail });
+  console.log(`${pass ? 'PASS' : 'FAIL'}: ${name} ${JSON.stringify(detail ?? '')}`);
+};
+const browser = await chromium.launch();
+const state = JSON.parse(await fs.readFile(STATE, 'utf8'));
+const newContext = (init) => browser.newContext({ baseURL: BASE, storageState: state, viewport: { width: 1440, height: 900 } })
+  .then(async (context) => { if (init) await context.addInitScript(init); return context; });
+const context = await newContext(BROKEN === 'shortcut' ? () => {
+  window.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'q') {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+} : undefined);
+const page = await context.newPage();
+const composer = page.locator('#ai-chat-tiptap-editor .ProseMirror:visible').first();
+const sidebar = page.getByTestId('ai-sidebar');
+const closeSidebar = async () => {
+  if (!(await sidebar.isVisible())) return;
+  const chevron = sidebar.locator('button:has(svg.lucide-chevron-right)');
+  if (await chevron.count()) { await chevron.first().click(); return; }
+  await page.getByRole('button', { name: 'Close AI chat', exact: true }).last().click();
+};
+
+try {
+  await page.goto('/chat', { waitUntil: 'domcontentloaded' });
+  await composer.waitFor({ state: 'visible', timeout: 30_000 });
+  const composerRoot = page.locator('[data-ai-chat-composer-root]:not([inert])').last();
+  const names = [];
+  for (const label of ['Attach screenshot', 'Add context']) {
+    const button = composerRoot.locator(`[aria-label="${label}"]`).first();
+    if (await button.isVisible().catch(() => false)) names.push(await button.getAttribute('aria-label'));
+  }
+  await page.screenshot({ path: path.join(dir, '01-full-page.png') });
+  step('the full-page chat shows its composer and named buttons', await composer.isVisible() && names.length === 2, { names });
+
+  const marker = `AI chat drive ${Date.now()}`;
+  const stream = page.waitForResponse((response) => response.url().includes('/api/ai/chat/stream'), { timeout: 60_000 }).catch(() => null);
+  await composer.click();
+  await page.keyboard.insertText(marker);
+  await page.keyboard.press('Enter');
+  const response = await stream;
+  await page.waitForTimeout(1_000);
+  await page.screenshot({ path: path.join(dir, '02-chat-sent.png') });
+  step('Enter sends the message and the stream answers', response?.status() === 200, { status: response?.status() ?? null });
+
+  await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 });
+  await closeSidebar();
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Control+q');
+  const opened = await sidebar.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
+  await page.screenshot({ path: path.join(dir, '03-sidebar.png') });
+  step('the chat shortcut opens the docked sidebar with its composer', opened && (await composer.isVisible()), { opened });
+  await closeSidebar();
+  await page.keyboard.press('Control+q');
+  step('the chat shortcut closes the docked sidebar again', await sidebar.isHidden({ timeout: 10_000 }).catch(() => false), {});
+} catch (error) {
+  step('run', false, error.message.split('\n')[0]);
+}
+
+try {
+  const floating = await newContext(() => {
+    const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}');
+    localStorage.setItem('recoil-persist', JSON.stringify({ ...saved, isAiChatSidebarMode: false, aiChatPinned: false, aiChatAutoOpenSuppressed: true }));
+  });
+  const floatingPage = await floating.newPage();
+  await floatingPage.route('**/api/flags', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    Object.assign(body.flags, { 'htpr-8334-multi-chat-windows': false });
+    await route.fulfill({ response, json: body });
+  });
+  const windowPanel = floatingPage.locator('.chatwindow').first();
+  await floatingPage.goto(BOARD, { waitUntil: 'domcontentloaded' });
+  await floatingPage.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 });
+  if (await windowPanel.isVisible()) await floatingPage.getByRole('button', { name: 'Close AI chat', exact: true }).last().click();
+  await floatingPage.evaluate(() => document.activeElement?.blur());
+  await floatingPage.keyboard.press('Control+q');
+  const shown = await windowPanel.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
+  await floatingPage.screenshot({ path: path.join(dir, '04-floating-window.png') });
+  step('the chat shortcut opens the floating window', shown && (await windowPanel.locator('[contenteditable="true"]').isVisible()), { shown });
+  await floating.close();
+} catch (error) {
+  step('floating window', false, error.message.split('\n')[0]);
+}
+
+await fs.writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
+await browser.close();
+
+const failed = result.steps.filter((entry) => !entry.pass);
+if (BROKEN) {
+  const target = result.steps.find((entry) => entry.name === 'the chat shortcut opens the docked sidebar with its composer');
+  const detected = Boolean(target) && !target.pass;
+  console.log(`negative control ${detected ? 'ok' : 'FAIL'}: ${BROKEN} break ${detected ? 'failed the shortcut step' : 'was not detected'}`);
+  process.exitCode = detected ? 0 : 1;
+} else {
+  console.log(failed.length ? `ai-chat drive FAIL: ${failed.map((entry) => entry.name).join('; ')}` : 'ai-chat drive ok');
+  process.exitCode = failed.length ? 1 : 0;
+}

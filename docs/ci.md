@@ -662,6 +662,8 @@ Before a PR exists, push a branch and run:
 
 ```bash
 scripts/verify-qa <branch> inbox-cycle
+# Or the hands-free AI chat and Ctrl+J drives with their broken-shortcut controls
+scripts/verify-qa <branch> hands-free-drives
 # Direct equivalent (helper resolves the pushed branch to an immutable SHA):
 token=$(gh-app-token) && test -n "$token" || exit 1
 GH_TOKEN="$token" gh workflow run visual-regression.yml -f head=<branch-or-sha> -f journey=inbox-cycle
@@ -690,10 +692,16 @@ secrets; checkout does not persist its read-only token. Services disappear with
 the runner, and an EXIT trap stops the app/search. AI/search/queue behavior is
 fixture-based, not proof of real model quality, ranking or delivery.
 
-Only `inbox-cycle` is supported initially. `inbox-cycle-broken` deliberately
-changes the expected reminder title after the doctor passes, proving that a real
-browser assertion fails and propagates a failed job. Unknown journeys fail
-closed, never silently fall back. Failures do not use report-only mode.
+Supported journeys are `inbox-cycle`, `inbox-cycle-broken` and
+`hands-free-drives`. `inbox-cycle-broken` deliberately changes the expected
+reminder title after the doctor passes, proving that a real browser assertion
+fails and propagates a failed job. `hands-free-drives` runs the AI chat and the
+Ctrl+J popup drives (`.claude/skills/verify-qa/scripts/ai-chat-drive.mjs` and
+`ctrl-j-drive.mjs`) against the same loopback app, then runs each again with a
+deliberately swallowed shortcut and requires that run to fail its shortcut step.
+A break the drives do not detect fails the job, so a drive cannot pass by doing
+nothing. Unknown journeys fail closed, never silently fall back. Failures do not
+use report-only mode.
 
 The `verify-qa-<run-id>-<attempt>` artifact is uploaded on success and failure,
 with doctor results/screenshot, journey results/screenshots, sanitized build,

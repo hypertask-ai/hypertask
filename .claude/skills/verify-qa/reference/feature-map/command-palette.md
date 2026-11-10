@@ -19,6 +19,19 @@ the same palette lists the commands but hides the key chips
 
 ## Driving it with agent-browser
 
+**Hands-free drive, every Ctrl+J change:**
+`node .claude/skills/verify-qa/scripts/ctrl-j-drive.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+presses Ctrl+J on a seeded board, requires the New Task popup and its focused
+composer, checks the composer button names, sends the note with the shortcut the
+footer names (Ctrl+Enter, or Enter with the flag off), requires exactly one
+`POST /api/tasks/create` and a closed popup, deletes that task, and reopens and
+closes with Escape. It prints `PASS` or `FAIL` per step and ends with
+`ctrl-j drive ok`. It refuses any base that is not loopback, so it never drives
+production: run it on the seeded browser-smoke stack
+(`scripts/verify-qa <branch> hands-free-drives` runs it hosted).
+`--break shortcut` swallows Ctrl+J on purpose; the run must then end with
+`negative control ok`, which proves the drive detects a broken shortcut.
+
 - Open any task at `/detail/project-<board>/<number>`, press `Ctrl+K`, type
   `copy private`, and read the key chips on the right of each row.
 - The shortcut help list lives in Settings → Shortcuts and in the `?` help

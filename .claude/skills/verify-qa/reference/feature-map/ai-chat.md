@@ -97,6 +97,18 @@ shows the ticket's own conversation.
 
 ## Driving it with agent-browser
 
+**Hands-free drive, every AI chat change:**
+`node .claude/skills/verify-qa/scripts/ai-chat-drive.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+opens the full-page chat, checks the composer buttons and their names, sends one
+message and requires the `/api/ai/chat/stream` answer, then opens and closes the
+docked sidebar with the chat shortcut and opens the floating window the same
+way. It prints `PASS` or `FAIL` per step and ends with `ai-chat drive ok`. It
+refuses any base that is not loopback, so it never drives production: run it on
+the seeded browser-smoke stack (`scripts/verify-qa <branch> hands-free-drives`
+runs it hosted with the AI stub, no model cost).
+`--break shortcut` swallows the chat shortcut on purpose; the run must then end
+with `negative control ok`, which proves the drive detects a broken shortcut.
+
 Use `agent-browser` headless for the request/reply check. On production,
 webdriver or a HeadlessChrome/PhantomJS user agent disables realtime before
 `?realtime=on` is considered. That override works earlier only on localhost
