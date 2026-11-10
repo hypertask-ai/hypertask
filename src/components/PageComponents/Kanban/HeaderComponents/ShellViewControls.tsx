@@ -91,6 +91,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   }, [])
 
   if (isMbl) return null
+  if (tableSortColumnsEnabled && boardLayout === "table") getActiveTableSortStackFromProject(project)
 
   const openModal = (mode: CommandMode) =>
     setShowCommands({ show: true, mode })
