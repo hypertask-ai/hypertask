@@ -88,10 +88,9 @@ function fixture(options = {}) {
     "@/utils/controllers/tasks/myTasksSnooze": { syncMyTasksSnoozeFromReminder: async () => {} },
     "@/lib/flags": { isFeatureEnabled: async (key) => {
       flags.push(key);
-      if (key === "my-tasks-snooze") return false;
       assert.equal(key, "htpr-8217-agent-follow-reminder");
       return options.trackingFlagEnabled !== false;
-    }, MY_TASKS_SNOOZE_FLAG: "my-tasks-snooze" },
+    } },
     "@/lib/realtime/server": { broadcastInboxChange: async () => {} },
     "@/pages/api/queues/inboxQueue": {
       cancelInboxReminderJob: async (userId, taskId) => { events.push({ type: "cancelJob", userId, taskId }); },

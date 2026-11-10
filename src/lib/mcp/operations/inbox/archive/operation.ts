@@ -14,7 +14,6 @@ import {
 } from '@/pages/api/queues/inboxQueue'
 import { nextReminderRevision } from '@/utils/controllers/reminders/revision'
 import { syncMyTasksSnoozeFromReminder } from '@/utils/controllers/tasks/myTasksSnooze'
-import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from '@/lib/flags'
 
 const MAX_NOTIFICATION_IDS = 100
 const MAX_REMINDER_DELAY_MS = 366 * 24 * 60 * 60 * 1000
@@ -114,7 +113,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const hideOnMyTasks = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, user.id)
+      const hideOnMyTasks = true
       const reminders = await prisma.$transaction(async (tx) => {
         const candidateTaskIds = [...new Set(notifications.map((item) => item.taskId!))].sort((a, b) => a - b)
         for (const candidateTaskId of candidateTaskIds) {
