@@ -5,6 +5,7 @@ import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from '@/lib/flags/definitions/htpr-7515-connect-github-per-board'
+import { HTPR_8951_BOARD_GITHUB_REPOS_FLAG } from '@/lib/flags/definitions/htpr-8951-board-github-repos'
 import {
   BoardGithubSettingsError,
   getBoardGithubSettings,
@@ -24,7 +25,9 @@ function parseProjectId(raw: string): number | null {
 }
 
 async function flagRefusal(userId: number) {
-  if (await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, userId)) return null
+  const page = await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, userId)
+  const agentDoor = await isFeatureEnabled(HTPR_8951_BOARD_GITHUB_REPOS_FLAG, userId)
+  if (page && agentDoor) return null
   return NextResponse.json({ success: false, error: 'not_found' }, { status: 404 })
 }
 

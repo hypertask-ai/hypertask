@@ -27,6 +27,9 @@ const operation = load("src/lib/mcp/operations/projects/[projectId]/github/opera
   "@/lib/flags/definitions/htpr-7515-connect-github-per-board": {
     HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG: "htpr-7515-connect-github-per-board",
   },
+  "@/lib/flags/definitions/htpr-8951-board-github-repos": {
+    HTPR_8951_BOARD_GITHUB_REPOS_FLAG: "htpr-8951-board-github-repos",
+  },
   "@/lib/github/boardRepositories": {
     BoardGithubSettingsError,
     getBoardGithubSettings: async () => {
