@@ -139,8 +139,8 @@ test('label scoring ignores process labels and counts abstaining on a blank gold
   ];
   const stats = pinned.labelStats(rows);
   assert.equal(stats.precision, 0.5);
-  assert.equal(stats.recall, 0.5);
-  assert.equal(stats.f1, 0.5);
+  assert.ok(Math.abs(stats.recall - 1 / 3) < 1e-9);
+  assert.ok(Math.abs(stats.f1 - 0.4) < 1e-9);
   assert.equal(stats.abstainCount, 2);
   assert.equal(stats.abstainPrecision, 0.5);
   const fields = pinned.scoreFields(

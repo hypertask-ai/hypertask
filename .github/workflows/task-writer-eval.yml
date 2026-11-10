@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   task-writer-pinned:
-    if: github.event_name == 'workflow_dispatch' && inputs.pinned
+    if: github.ref == 'refs/heads/production' && github.event_name == 'workflow_dispatch' && inputs.pinned
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

@@ -864,6 +864,7 @@ task_writer_pinned_eval:
   job: task-writer-pinned
   required: false
   triggers: [workflow_dispatch]
+  trusted_ref: production
   schedule: none
   credentials: [ANTHROPIC_API_KEY]
   new_provider_keys: false
