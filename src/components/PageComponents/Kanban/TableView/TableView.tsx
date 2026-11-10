@@ -185,6 +185,7 @@ const TableView = ({
     myTasksSnoozeActive, _currentProject, myTasksVisibleColumns, onMyTasksVisibleColumnsChange, currentUser,
     myTasksSort, myTasksSortKey, filteredSections, _sections,
   });
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
@@ -240,6 +241,7 @@ const TableView = ({
     timeTotals, timeNow, draggedTaskRef, clearTaskDrag, handleMouseEnter,
     handleMouseLeave, gridTemplateColumns, enableMyTasksBulkSelection, myTasksBulk, visibleColumns,
   });
+  if (tableSortColumnsEnabled) queryClient.getQueryData(["projectsAll"]);
 
   const selectedAssignees = splitAssignees(assignTask?.assignees);
   let cursor = -1;
