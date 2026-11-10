@@ -354,6 +354,23 @@ function placeholderFor(attribute, agentFlag = true) {
   return captured.placeholder({ editor });
 }
 
+test("arrow keys move the active agent row and Enter opens it", async () => {
+  const { container, openHistory, key, cleanup } = await mount();
+  try {
+    await openHistory();
+    const menu = container.querySelector("#ai-chat-session-history");
+    const search = container.querySelector('input[aria-label="Search chats"]');
+    await key(search, "ArrowDown");
+    assert.equal(container.querySelector('[data-agent-id="agent-0"]').getAttribute("aria-selected"), "true");
+    await key(menu, "ArrowDown");
+    assert.equal(container.querySelector('[data-agent-id="agent-1"]').getAttribute("aria-selected"), "true");
+    await key(menu, "Enter");
+    assert.ok(container.querySelector('[data-testid="ai-chat-agent-view"]'));
+  } finally {
+    await cleanup();
+  }
+});
+
 test("native agent chat reads Message <agent>; without an agent the default placeholder stays", () => {
   assert.equal(placeholderFor("Alpha"), "Message Alpha");
   assert.equal(placeholderFor(null), "Focus with CTRL + Q, @ for context");

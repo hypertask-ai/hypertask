@@ -221,6 +221,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const [historyQuery, setHistoryQuery] = useState("");
   const [agentViewId, setAgentViewId] = useState<string | null>(null);
   const [showAllAgents, setShowAllAgents] = useState(false);
+  const [agentOptionIndex, setAgentOptionIndex] = useState(-1);
   const agentViewRef = useRef<HTMLDivElement>(null);
   const hasAgentSessions = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const agentsInDropdown = hasAgentSessions && headerMenus && !isMbl && !!sidebarChats;
@@ -237,8 +238,9 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   useEffect(() => {
     const chatHeight = headerRef.current?.parentElement?.clientHeight;
     setHistoryMaxHeight(isDropdownOpen && chatHeight ? Math.round(chatHeight * 0.75) : undefined);
-    if (!isDropdownOpen) { setHistoryQuery(""); setAgentViewId(null); setShowAllAgents(false); }
+    if (!isDropdownOpen) { setHistoryQuery(""); setAgentViewId(null); setShowAllAgents(false); setAgentOptionIndex(-1); }
   }, [isDropdownOpen]);
+  useEffect(() => { setAgentOptionIndex(-1); }, [historyQuery, showAllAgents]);
   useEffect(() => {
     if (agentViewId) agentViewRef.current?.focus({ preventScroll: true });
   }, [agentViewId]);
@@ -404,6 +406,21 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             void loadMoreSessions();
           }
         }}
+        onKeyDown={(event) => {
+          if (agentViewId || (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter")) return;
+          const options = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-testid="ai-chat-agents-section"] button')];
+          if (!options.length) return;
+          if (event.key === "Enter") {
+            if (agentOptionIndex < 0) return;
+            event.preventDefault();
+            options[Math.min(agentOptionIndex, options.length - 1)]?.click();
+            return;
+          }
+          event.preventDefault();
+          const next = Math.max(0, Math.min(options.length - 1, (agentOptionIndex < 0 ? -1 : agentOptionIndex) + (event.key === "ArrowDown" ? 1 : -1)));
+          setAgentOptionIndex(next);
+          options[next]?.scrollIntoView?.({ block: "nearest" });
+        }}
       >
         {agentView && sidebarChats && (
           <div
@@ -456,9 +473,9 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           <div className="pt-1" data-testid="ai-chat-agents-section">
             <div className="px-2 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">Agents</div>
             <ul className="pb-1">
-              {dropdownAgents.map((agent) => (
+              {dropdownAgents.map((agent, index) => (
                 <li key={agent.id}>
-                  <button type="button" data-agent-id={agent.id} className={MENU_ROW_CLASS} onClick={() => setAgentViewId(agent.id)}>
+                  <button type="button" data-agent-id={agent.id} aria-selected={agentOptionIndex === index} className={cn(MENU_ROW_CLASS, agentOptionIndex === index && "bg-active-modal-element")} onMouseEnter={() => setAgentOptionIndex(index)} onClick={() => setAgentViewId(agent.id)}>
                     <Bot size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
                     <span className="min-w-0 flex-1 truncate">{agent.displayName}</span>
                     <ChevronRight size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
@@ -467,7 +484,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
               ))}
               {!historyQuery.trim() && totalAgentCount > RECENT_AGENT_COUNT && (
                 <li>
-                  <button type="button" aria-expanded={showAllAgents} className={cn(MENU_ROW_CLASS, "text-icon-dark-gray")} onClick={() => setShowAllAgents((open) => !open)}>
+                  <button type="button" aria-expanded={showAllAgents} aria-selected={agentOptionIndex === dropdownAgents.length} className={cn(MENU_ROW_CLASS, "text-icon-dark-gray", agentOptionIndex === dropdownAgents.length && "bg-active-modal-element")} onMouseEnter={() => setAgentOptionIndex(dropdownAgents.length)} onClick={() => setShowAllAgents((open) => !open)}>
                     <span className="min-w-0 flex-1 truncate">{showAllAgents ? "Fewer agents" : `All ${totalAgentCount} agents`}</span>
                   </button>
                 </li>
