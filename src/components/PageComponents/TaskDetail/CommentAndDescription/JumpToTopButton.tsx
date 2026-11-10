@@ -24,12 +24,12 @@ const JumpToTopButton = () => {
           scrollVirtualize("description");
         }}
         className={cn(
-          "group absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-[4px] bg-active-elementBg transition-opacity",
+          "group absolute bottom-0 left-4 flex h-8 w-8 items-center justify-center rounded-[4px] bg-active-elementBg transition-opacity",
           showScrollToTop ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       >
         <ArrowUp size={18} strokeWidth={1.75} className="text-text-light-gray transition-colors group-hover:text-white-black" />
-        <Tooltip left={-104} bottom={40} text="Jump to top" keyCombination={["G", "G"]} />
+        <Tooltip left={0} bottom={40} text="Jump to top" keyCombination={["G", "G"]} />
       </button>
     </div>
   );
