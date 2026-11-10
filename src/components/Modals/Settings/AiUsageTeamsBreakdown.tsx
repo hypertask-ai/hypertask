@@ -17,13 +17,7 @@ import {
 
 type TeamTarget = { projectId?: number; teamId: string; teamName: string };
 
-const UsageGroup = ({
-  children,
-  title,
-}: {
-  children: React.ReactNode;
-  title: string;
-}) => (
+const UsageGroup = ({ children, title }: { children: React.ReactNode; title: string }) => (
   <div className="flex flex-col gap-1">
     <p className="px-2 pt-2 text-meta font-semibold uppercase tracking-wide text-text-light-gray">
       {title}
@@ -35,16 +29,12 @@ const UsageGroup = ({
 const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
   const [data, setData] = useState<AiUsageData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const projectId = target.projectId;
-  const { teamId } = target;
+  const { projectId, teamId } = target;
 
   useEffect(() => {
     let cancelled = false;
-
     axios
-      .get<AiUsageData>("/api/settings/ai-usage", {
-        params: { teamId, projectId },
-      })
+      .get<AiUsageData>("/api/settings/ai-usage", { params: { teamId, projectId } })
       .then((response) => {
         if (!cancelled) setData(response.data);
       })
@@ -52,7 +42,6 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
         console.error(requestError);
         if (!cancelled) setError("AI usage is currently unavailable.");
       });
-
     return () => {
       cancelled = true;
     };
@@ -60,6 +49,13 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
 
   const members = data?.members ?? [];
   const allowance = data?.allowance ?? null;
+  const percentGroups = data
+    ? [
+        { rows: data.features.map((row) => ({ ...row, label: featureLabel(row.label) })), title: "By feature" },
+        { rows: data.boards, title: "Most active boards" },
+        { rows: members, title: "By member" },
+      ]
+    : [];
 
   return (
     <SettingsCard title={target.teamName}>
@@ -67,9 +63,7 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
         <EmptyState>
           {error ??
             data?.usageMessage ??
-            (data
-              ? "Monthly AI allowance is currently unavailable."
-              : "Loading AI usage")}
+            (data ? "Monthly AI allowance is currently unavailable." : "Loading AI usage")}
         </EmptyState>
       )}
 
@@ -93,10 +87,7 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
               role="progressbar"
             >
               <div
-                className={`h-full rounded-full transition-[width] ${allowanceBarColor(
-                  allowance.pct,
-                  allowance.capped,
-                )}`}
+                className={`h-full rounded-full transition-[width] ${allowanceBarColor(allowance.pct, allowance.capped)}`}
                 style={{ width: `${Math.min(allowance.pct, 100)}%` }}
               />
             </div>
@@ -116,32 +107,15 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
             </UsageGroup>
           ) : null}
 
-          {data.features.length > 0 ? (
-            <UsageGroup title="By feature">
-              {data.features.map((row, index) => (
-                <PercentageUsageRow
-                  key={`${row.label}-${index}`}
-                  row={{ ...row, label: featureLabel(row.label) }}
-                />
-              ))}
-            </UsageGroup>
-          ) : null}
-
-          {data.boards.length > 0 ? (
-            <UsageGroup title="Most active boards">
-              {data.boards.map((row, index) => (
-                <PercentageUsageRow key={`${row.label}-${index}`} row={row} />
-              ))}
-            </UsageGroup>
-          ) : null}
-
-          {members.length > 0 ? (
-            <UsageGroup title="By member">
-              {members.map((row, index) => (
-                <PercentageUsageRow key={`${row.label}-${index}`} row={row} />
-              ))}
-            </UsageGroup>
-          ) : null}
+          {percentGroups.map(({ rows, title }) =>
+            rows.length > 0 ? (
+              <UsageGroup key={title} title={title}>
+                {rows.map((row, index) => (
+                  <PercentageUsageRow key={`${row.label}-${index}`} row={row} />
+                ))}
+              </UsageGroup>
+            ) : null,
+          )}
         </div>
       ) : null}
     </SettingsCard>
@@ -152,12 +126,11 @@ const TeamAiUsageBreakdown = () => {
   const { teamId, project, team } = useSettingsTeam();
   const [teams, setTeams] = useState<TeamTarget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const projectId = project?.id;
+  const { id: projectId } = project ?? {};
   const teamName = team?.title;
 
   useEffect(() => {
     let cancelled = false;
-
     axios
       .get<{ teams: TeamTarget[] }>("/api/settings/ai-usage/owned-teams")
       .then((response) => {
@@ -177,7 +150,6 @@ const TeamAiUsageBreakdown = () => {
           setError("AI usage is currently unavailable.");
         }
       });
-
     return () => {
       cancelled = true;
     };
@@ -186,16 +158,11 @@ const TeamAiUsageBreakdown = () => {
   return (
     <SettingsSectionShell title="AI Usage">
       {teams?.length ? (
-        teams.map((target) => (
-          <TeamAiUsageCard key={target.teamId} target={target} />
-        ))
+        teams.map((target) => <TeamAiUsageCard key={target.teamId} target={target} />)
       ) : (
         <SettingsCard title="Teams">
           <EmptyState>
-            {error ??
-              (teams
-                ? "Open a team board before viewing AI usage."
-                : "Loading AI usage")}
+            {error ?? (teams ? "Open a team board before viewing AI usage." : "Loading AI usage")}
           </EmptyState>
         </SettingsCard>
       )}
