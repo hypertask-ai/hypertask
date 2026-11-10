@@ -11,8 +11,7 @@ export function visibleWaitingOnActivity(
       SELECT CASE
         WHEN activity_row.activity->>'type' = 'TaskWaitingOn'
           AND EXISTS (
-            SELECT 1
-            FROM "Agent" waiting_agent
+            SELECT 1 FROM "Agent" waiting_agent
             WHERE (
               waiting_agent.id = NULLIF(activity_row.activity #>> '{data,waitingOnAgentId}', '')
               OR (
@@ -20,13 +19,6 @@ export function visibleWaitingOnActivity(
                 AND waiting_agent.visibility = 'PRIVATE'::"AgentVisibility"
                 AND waiting_agent."displayName" <> ''
                 AND waiting_agent."displayName" = activity_row.activity #>> '{data,waitingOnDisplayName}'
-                AND EXISTS (
-                  SELECT 1
-                  FROM "Member" waiting_name_member
-                  WHERE waiting_name_member."agentId" = waiting_agent.id
-                    AND waiting_name_member."projectId" = ${projectId}
-                    AND waiting_name_member.status = 'Accepted'::"InviteStatus"
-                )
               )
             )
             AND waiting_agent."userId" <> ${userId}
@@ -43,8 +35,7 @@ export function visibleWaitingOnActivity(
                   AND (
                     visibility_project."ownerId" = ${userId}
                     OR EXISTS (
-                      SELECT 1
-                      FROM "Member" visibility_user_member
+                      SELECT 1 FROM "Member" visibility_user_member
                       WHERE visibility_user_member."projectId" = visibility_project.id
                         AND visibility_user_member."userId" = ${userId}
                         AND visibility_user_member."agentId" IS NULL
@@ -54,16 +45,8 @@ export function visibleWaitingOnActivity(
             )
           )
         THEN jsonb_set(
-          jsonb_set(
-            activity_row.activity,
-            '{data,waitingOnDisplayName}',
-            to_jsonb(${PRIVATE_AGENT_DISPLAY_NAME}::text),
-            true
-          ),
-          '{data,waitingOnAgentId}',
-          'null'::jsonb,
-          true
-        )
+          jsonb_set(activity_row.activity, '{data,waitingOnDisplayName}', to_jsonb(${PRIVATE_AGENT_DISPLAY_NAME}::text), true),
+          '{data,waitingOnAgentId}', 'null'::jsonb, true)
         ELSE activity_row.activity
       END
       FROM LATERAL (SELECT ${activity} AS activity) activity_row
