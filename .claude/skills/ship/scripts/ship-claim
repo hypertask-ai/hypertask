@@ -272,8 +272,9 @@ if [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
     (.section | type == "string") and (.labels | type == "array")
     and all(.labels[]; .name | type == "string"))' <<< "$task" >/dev/null \
     || { echo "ship-claim: cannot parse ticket eligibility before claiming" >&2; exit 2; }
-  if jq -e '.tasks[0].labels | any(.name == "brain-extra-hard")' <<< "$task" >/dev/null; then
-    echo "ship-claim: REFUSED. $T is brain-extra-hard; RUNNER n skips this ticket. Pick an eligible ticket." >&2
+  engine=$(cat "${SHIP_CLAIM_RUNNER_STATE:-$HOME/.local/state/ht-or-runners}/engine-${BASH_REMATCH[1]}" 2>/dev/null)
+  if [ "$engine" != claude ] && [ "$engine" != codex ] && jq -e '.tasks[0].labels | any(.name == "brain-extra-hard")' <<< "$task" >/dev/null; then
+    echo "ship-claim: REFUSED. $T is brain-extra-hard; only a RUNNER on the codex (Sol high) or claude engine takes it. Pick an eligible ticket." >&2
     exit 4
   fi
   if jq -e '.tasks[0] | .section != "QA" and any(.labels[]; .name == "design-pass")' <<< "$task" >/dev/null; then
