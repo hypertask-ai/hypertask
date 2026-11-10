@@ -344,7 +344,6 @@ test("CLI connection survives death after code consumption and the status log sa
   const h = harness();
   h.mocks["@/lib/redis"] = { getRedis: async () => ({ incr: async () => 1, expire: async () => 1, eval: async () => JSON.stringify({ userId: 123, email: "member@example.test" }) }) };
   h.mocks["@/lib/mcp/auth"] = { createMcpToken: () => token };
-  h.mocks["@/lib/rateLimit/localWindow"] = { consumeLocalWindow: () => 1 };
   h.mocks["@/utils/controllers/logs/createLog"] = { default: async ({ log, LoggedById }: any) => h.prisma.logs.create({ data: { log, LoggedById } }) };
   const response = await h.load("src/app/api/cli/token-exchange/route.ts").POST(new Request("http://localhost/api/cli/token-exchange", {
     method: "POST", body: JSON.stringify({ code: "one-use-code" }), headers: { "user-agent": "hypertask-cli/0.2.0" },
@@ -358,7 +357,6 @@ test("CLI login still returns its token when the connection intent cannot be wri
   const h = harness();
   h.mocks["@/lib/redis"] = { getRedis: async () => ({ incr: async () => 1, expire: async () => 1, eval: async () => JSON.stringify({ userId: 123, email: "member@example.test" }) }) };
   h.mocks["@/lib/mcp/auth"] = { createMcpToken: () => token };
-  h.mocks["@/lib/rateLimit/localWindow"] = { consumeLocalWindow: () => 1 };
   h.mocks["@/utils/controllers/logs/createLog"] = { default: async ({ log, LoggedById }: any) => h.prisma.logs.create({ data: { log, LoggedById } }) };
   h.prisma.analyticsIntent.createMany = async () => { throw Error("intent unavailable"); };
   const consoleError = console.error;

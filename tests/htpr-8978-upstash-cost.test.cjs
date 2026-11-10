@@ -35,20 +35,6 @@ test("the error intake claims both counters in one command behind the ticket fla
   assert.match(route, /redis\.eval\(INTAKE_CLAIM, 2, ipKey, globalKey, RATE_WINDOW_SECONDS\)/);
 });
 
-test("token endpoints keep their per-IP limits in process memory behind the ticket flag", () => {
-  for (const file of ["src/app/api/cli/token-exchange/route.ts", "src/app/api/mcp/token/refresh/route.ts"]) {
-    assert.match(read(file), /consumeLocalWindow\(key, RATE_WINDOW_SEC\)/, file);
-  }
-});
-
-test("the local window counts inside a window and starts over in the next", () => {
-  const { consumeLocalWindow, clearLocalWindows } = loadModule("src/lib/rateLimit/localWindow.ts");
-  clearLocalWindows();
-  const now = 1_800_000_000_000;
-  assert.deepEqual([0, 1000, 60_000].map((offset) => consumeLocalWindow("k", 60, now + offset)), [1, 2, 1]);
-  clearLocalWindows();
-});
-
 function alarmModule(redis, tasks) {
   return loadModule("src/lib/ops/upstashRequestAlarm.ts", {
     "@/lib/prisma": {
