@@ -22,6 +22,7 @@ import toast from "react-hot-toast";
 import { SendArrow } from "@/components/Common/SendArrow";
 import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
+import { keepTypingInsidePrompt, usePromptFieldGrowth } from "@/hooks/General/usePromptFieldGrowth";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { AppSheet } from "@/components/Modals/Sheets/AppSheet";
 import {
@@ -610,13 +611,7 @@ const InlineDraftAiFloat = ({
     mobileReview.showOriginal,
   ]);
 
-  useLayoutEffect(() => {
-    for (const field of [promptInputRef.current, mobilePromptInputRef.current]) {
-      if (!field) continue;
-      field.style.height = "auto";
-      field.style.height = `${field.scrollHeight}px`;
-    }
-  }, [prompt, isRecording, audioProcessing, isMobileAiSheet]);
+  usePromptFieldGrowth(promptInputRef, mobilePromptInputRef, prompt, `${isRecording}${audioProcessing}${isMobileAiSheet}`);
 
   if (!editor || !scope) return null;
 
@@ -981,12 +976,6 @@ const InlineDraftAiFloat = ({
     );
   };
 
-  const keepTypingInsidePrompt = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      event.stopPropagation();
-    }
-  };
-
   const handlePanelKeyDown = (event: ReactKeyboardEvent) => {
     if (event.key !== "Enter") return;
     if (ticketEditorCtrlJ && !isMobileAiSheet && (isApple ? event.metaKey : event.ctrlKey)) {
@@ -1003,10 +992,7 @@ const InlineDraftAiFloat = ({
     <div className="flex w-full min-w-0 items-center gap-2">
       <div className={dictationActive ? "hidden" : "min-w-[150px] flex-1"}>
         <textarea
-          ref={promptInputRef}
-          rows={1}
-          onKeyDown={keepTypingInsidePrompt}
-          autoFocus
+          ref={promptInputRef} rows={1} onKeyDown={keepTypingInsidePrompt} autoFocus
           maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
           value={prompt}
           disabled={isLoading || audioProcessing}
@@ -1180,10 +1166,7 @@ const InlineDraftAiFloat = ({
     >
       {!dictationActive && (
         <textarea
-          ref={mobilePromptInputRef}
-          rows={1}
-          onKeyDown={keepTypingInsidePrompt}
-          autoFocus
+          ref={mobilePromptInputRef} rows={1} onKeyDown={keepTypingInsidePrompt} autoFocus
           maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
           value={prompt}
           disabled={audioProcessing}
