@@ -125,3 +125,112 @@ test('addition targets exclude section names used only as placement references',
   assert.deepEqual(scoreWriter(simple, good + '<h2>ICE assessment (estimated)</h2><p>21/30</p>').violations, ['forbidden:ICE']);
   assert.deepEqual(scoreWriter(simple, good + '<h2>ICE score: 21/30</h2>').violations, ['forbidden:ICE']);
 });
+
+const pinned = require('../scripts/task-writer-eval-pinned.cjs');
+const gold = require('./fixtures/task-writer-eval/gold.json');
+const fs = require('node:fs');
+const path = require('node:path');
+
+test('label scoring ignores process labels and counts abstaining on a blank gold as right', () => {
+  const rows = [
+    { gold: ['Bug', 'INBOX'], predicted: ['Bug', 'Billing'] },
+    { gold: [], predicted: [] },
+    { gold: ['Billing'], predicted: [] },
+  ];
+  const stats = pinned.labelStats(rows);
+  assert.equal(stats.precision, 0.5);
+  assert.equal(stats.recall, 0.5);
+  assert.equal(stats.f1, 0.5);
+  assert.equal(stats.abstainCount, 2);
+  assert.equal(stats.abstainPrecision, 0.5);
+  const fields = pinned.scoreFields(
+    { labels: ['Bug', 'brain-hard', 'flag:x'], priority: 2, estimate: null },
+    { labels: [{ id: 'a', name: 'Bug' }, { id: 'b', name: 'brain-hard' }, { id: 'c', name: 'Billing' }] },
+    { labelIds: ['a', 'b', 'c'], priority: 0, estimate: 4 }
+  );
+  assert.deepEqual(fields.labels, { gold: ['Bug'], predicted: ['Billing', 'Bug'] });
+  assert.deepEqual(fields.brain, { gold: 'brain-hard', predicted: 'brain-hard' });
+  assert.deepEqual(fields.priority, { gold: 2, predicted: null });
+  assert.deepEqual(fields.size, { gold: null, predicted: 4 });
+});
+
+test('exact-match fields report the always-blank baseline and abstain precision', () => {
+  const stats = pinned.exactStats([
+    { gold: null, predicted: null },
+    { gold: 2, predicted: null },
+    { gold: 3, predicted: 3 },
+    { gold: null, predicted: 4 },
+  ]);
+  assert.equal(stats.n, 4);
+  assert.equal(stats.exact, 0.5);
+  assert.equal(stats.alwaysBlank, 0.5);
+  assert.equal(stats.abstainCount, 2);
+  assert.equal(stats.abstainPrecision, 0.5);
+  assert.equal(pinned.exactStats([]).exact, null);
+});
+
+test('late-added reference lines are stripped before judging', () => {
+  const html = '<p>Why. Real text.</p><p>Flag: <a href="https://x">f</a></p><p>Everyone: No.</p><p>On Everyone now.</p><p>Tech detail: see log.</p><p>Done when. Pairs with <a href="https://x/1">HTPR-1</a>. Keep.</p>';
+  assert.equal(text(pinned.stripLateAdditions(html)), 'Why. Real text. Done when. Keep.');
+});
+
+test('judge counts a win or loss only when both orders agree and parses strict JSON', async () => {
+  const verdict = (pick) => JSON.stringify({ faithful: pick, no_invented: pick, board_style: pick, actionable: pick, length: pick, overall: pick, invented_1: [], invented_2: [] });
+  const args = { notes: 'n', styleText: '', draft: '<p>draft</p>', reference: '<p>ref</p>' };
+  const always1 = await pinned.judgeCase(async () => ({ text: verdict('1') }), { key: 'judge' }, args);
+  assert.equal(always1.overall, 'tie');
+  const writerWins = await pinned.judgeCase(async (request) => ({ text: verdict(request.input.indexOf('draft') < request.input.indexOf('ref') ? '1' : '2') }), { key: 'judge' }, args);
+  assert.equal(writerWins.overall, 'writer');
+  assert.equal(writerWins.faithful, 'writer');
+  const broken = await pinned.judgeCase(async () => ({ text: 'not json' }), { key: 'judge' }, args);
+  assert.ok(broken.error);
+  assert.throws(() => pinned.parseVerdict('{"overall":"3"}'));
+  assert.equal(pinned.parseVerdict('```json\n' + verdict('tie') + '\n```').overall, 'tie');
+});
+
+test('judge flags invented facts per ticket in both orders', async () => {
+  const generate = async (request) => {
+    const draftFirst = request.input.indexOf('draft') < request.input.indexOf('ref');
+    return { text: JSON.stringify({ faithful: 'tie', no_invented: 'tie', board_style: 'tie', actionable: 'tie', length: 'tie', overall: 'tie', invented_1: draftFirst ? ['x'] : [], invented_2: draftFirst ? [] : ['x'] }) };
+  };
+  const result = await pinned.judgeCase(generate, { key: 'judge' }, { notes: 'n', styleText: '', draft: '<p>draft</p>', reference: '<p>ref</p>' });
+  assert.equal(result.inventedWriterBoth, true);
+  assert.equal(result.inventedRealEither, false);
+});
+
+test('gold fields cover exactly the real cases, come from our own boards and carry no client text', () => {
+  pinned.validateGold(corpus, gold);
+  assert.ok(Object.values(gold.cases).some((entry) => entry.fieldScored));
+  assert.ok(Object.values(gold.cases).every((entry) => !entry.fieldScored || entry.projectId === 15));
+});
+
+test('pinned run reports every metric with a fake model and survives failed cases', async () => {
+  const generate = async (request) => {
+    if (request.instructions.startsWith('You compare')) return { text: JSON.stringify({ faithful: 'tie', no_invented: 'tie', board_style: 'tie', actionable: 'tie', length: 'tie', overall: 'tie', invented_1: [], invented_2: [] }) };
+    if (request.model.key === 'sonnet') throw new Error('boom');
+    return { text: '<span id="ai-generated-task-title">T</span><h2>Why</h2><p>hi</p><span id="ai-generated-task-priority">2</span>', inputTokens: 1000, outputTokens: 50 };
+  };
+  const pins = { haiku: { key: 'haiku', label: 'Haiku', directModel: 'h' }, sonnet: { key: 'sonnet', label: 'Sonnet', directModel: 's' }, judge: { key: 'judge', label: 'Judge', directModel: 'j' } };
+  const result = await pinned.runPinned({ corpus, gold, generate, pins, models: ['haiku', 'sonnet'], limit: 4 });
+  assert.equal(result.models.haiku.summary.errors, 0);
+  assert.equal(result.models.haiku.summary.cost.inputTokensP50, 1000);
+  assert.equal(result.models.sonnet.summary.errors, 4);
+  assert.match(pinned.renderReport(result, null), /input tokens p50/);
+});
+
+test('the pinned prompt keeps the product label rule verbatim', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/app/api/ai/_lib/taskWriterRun.ts'), 'utf8');
+  const rule = pinned.LABEL_RULE.trim().replaceAll('"', '\\"');
+  assert.ok(source.includes(rule), 'taskWriterRun.ts label rule drifted from the pinned eval');
+});
+
+test('pinned prompt assembles from the real builders with the board vocabulary and leave-one-out examples', () => {
+  const fixture = corpus.cases.find((c) => c.id === 'HTPR-7982');
+  const prepared = pinned.assemble(corpus, gold, fixture, 'claude-haiku-5-5');
+  assert.ok(prepared.instructions.includes('Choose the existing label for the project'));
+  assert.ok(prepared.input.includes('<STYLE_EXAMPLES>'));
+  assert.ok(!prepared.input.includes('example:4'));
+  assert.ok(!prepared.styleText.includes('project-15/7982'));
+  assert.ok(prepared.visibleLabels > 0 && prepared.visibleLabels <= prepared.totalLabels);
+  assert.equal(pinned.assemble(corpus, gold, fixture, 'claude-haiku-5-5').input, prepared.input);
+});

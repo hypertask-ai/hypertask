@@ -2,6 +2,11 @@ name: Task writer live eval
 
 on:
   workflow_dispatch:
+    inputs:
+      pinned:
+        description: Run the model-pinned Haiku and Sonnet quality eval (calls the Anthropic API)
+        type: boolean
+        default: false
   schedule:
     - cron: "17 4 * * *"
 
@@ -13,6 +18,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  task-writer-pinned:
+    if: github.event_name == 'workflow_dispatch' && inputs.pinned
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run flags:generate
+      - run: npx prisma generate
+      - name: Score Haiku 5.5 low and Sonnet 5.5 thinking against the real tickets
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WRITER_EVAL_OUTPUT: ${{ runner.temp }}/writer-eval-pinned
+        run: node scripts/task-writer-eval.cjs --pinned
+      - name: Publish report
+        if: always()
+        run: |
+          if [ -f "$WRITER_EVAL_OUTPUT/pinned-report.md" ]; then cat "$WRITER_EVAL_OUTPUT/pinned-report.md" >> "$GITHUB_STEP_SUMMARY"; fi
+        env:
+          WRITER_EVAL_OUTPUT: ${{ runner.temp }}/writer-eval-pinned
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: task-writer-pinned-scores
+          path: ${{ runner.temp }}/writer-eval-pinned
+          if-no-files-found: error
+          retention-days: 14
+
   task-writer-live:
     if: github.ref == 'refs/heads/production' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest

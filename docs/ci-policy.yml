@@ -858,6 +858,22 @@ task_writer_quality_eval:
   artifacts: [scores, pending_fixture_ids]
   excluded_artifacts: [cookies, authentication_traffic, raw_drafts]
 
+task_writer_pinned_eval:
+  ticket: https://app.hypertask.ai/detail/project-15/9010
+  workflow: .github/workflows/task-writer-eval.yml
+  job: task-writer-pinned
+  required: false
+  triggers: [workflow_dispatch]
+  schedule: none
+  credentials: [ANTHROPIC_API_KEY]
+  new_provider_keys: false
+  script: scripts/task-writer-eval-pinned.cjs
+  command: node scripts/task-writer-eval.cjs --pinned
+  models: [claude-haiku-5-5 low, claude-sonnet-5-5 thinking, claude-sonnet-5-5 judge]
+  gate: report_only
+  timeout_minutes: 45
+  artifacts: [pinned_scores, pinned_report]
+
 changed_style_tokens:
   ticket: https://app.hypertask.ai/detail/project-4060/714
   job: ci-checks
