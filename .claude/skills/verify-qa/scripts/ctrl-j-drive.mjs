@@ -34,8 +34,7 @@ const popup = page.locator('#htc').first();
 const composer = page.locator('[aria-label="Describe the task"]').first();
 const writer = page.locator('[data-compose-task-writer]').first();
 const createTask = writer.locator('[aria-label="Create task"]').first();
-const visible = (locator) => locator.isVisible().catch(() => false);
-const openBoard = async () => {
+const visible = (locator) => locator.isVisible().catch(() => false);const openBoard = async () => {
   await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
   await page.locator('.kanban-column-title').first().waitFor({ timeout: 30_000 });
   await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 }).catch(() => {});
@@ -100,11 +99,11 @@ try {
 
   await openBoard();
   await pressCtrlJ();
-  await popup.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+  const reopened = await popup.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
   await page.keyboard.press('Escape');
   const escaped = await popup.waitFor({ state: 'hidden', timeout: 10_000 }).then(() => true, () => false);
   await page.screenshot({ path: path.join(dir, '03-ctrl-j-closed.png') });
-  step('Escape closes the popup', escaped, {});
+  step('Escape closes the reopened popup', reopened && escaped, { reopened });
 } catch (error) {
   step('run', false, error.message.split('\n')[0]);
 } finally {

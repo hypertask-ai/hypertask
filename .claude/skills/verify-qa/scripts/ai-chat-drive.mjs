@@ -44,8 +44,7 @@ const context = await newContext(BROKEN === 'shortcut' ? swallowChatShortcut : u
 const page = await context.newPage();
 const composer = page.locator('#ai-chat-tiptap-editor .ProseMirror:visible').first();
 const sidebar = page.getByTestId('ai-sidebar');
-const visible = (locator) => locator.isVisible().catch(() => false);
-const closeSidebar = async () => {
+const visible = (locator) => locator.isVisible().catch(() => false);const closeSidebar = async () => {
   if (!(await visible(sidebar))) return;
   const chevron = sidebar.locator('button:has(svg.lucide-chevron-right)');
   if (await chevron.count()) return chevron.first().click();
@@ -71,8 +70,9 @@ try {
   await page.screenshot({ path: path.join(dir, '01-full-page.png') });
   step('the full-page chat shows its composer and named buttons', (await visible(composer)) && names.length >= 2, { names });
 
+  const prompt = `AI chat drive ${Date.now()}`;
   await composer.click();
-  await page.keyboard.insertText(`AI chat drive ${Date.now()}`);
+  await page.keyboard.insertText(prompt);
   await page.keyboard.press('Enter');
   const answered = await page.waitForFunction(
     () => document.querySelectorAll('.submessage-container.delivered [data-chat-content-html]').length >= 2,
@@ -80,7 +80,7 @@ try {
   ).then(() => true, () => false);
   const reply = answered ? (await page.locator('.submessage-container.delivered [data-chat-content-html]').last().innerText()).trim() : '';
   await page.screenshot({ path: path.join(dir, '02-chat-sent.png') });
-  step('Enter sends the message and an assistant answer arrives', answered && reply.length > 0 && !/Premerge stubs require/.test(reply), { reply: reply.slice(0, 120) });
+  step('Enter sends the message and an assistant answer arrives', answered && reply.length > 0 && reply !== prompt && !/Premerge stubs require/.test(reply), { reply: reply.slice(0, 120) });
 
   await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 });
