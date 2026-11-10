@@ -291,7 +291,11 @@ completion_move() {
   [ -n "$section" ] || return 0
   [ -x "$checker" ] || { printf '%s\n' 'vcc: completion checker unavailable; refusing section change' >&2; exit 2; }
   out=$("$checker" move "${positional[2]:-}" "$section" "$project" "$destination") || { printf '%s\n' "$out" >&2; exit 2; }
+  # Valentin 2026-11-10: a solo dev or solo operator "needs to basically act like a runner and assign itself to all tickets".
+  # Whoever moves a ticket into a building column owns it from that move on.
+  case "$section" in 'In Progress'|Doing|'AI Review'|QA) SELF_ASSIGN_TICKET=${positional[2]:-} ;; esac
 }
+SELF_ASSIGN_TICKET=''
 
 # Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
 TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
@@ -474,6 +478,10 @@ review_move() {
 if [ "${1:-}" != activity ]; then
   blocker_entry "$@"
   review_move "$@"
+  if [ -n "$SELF_ASSIGN_TICKET" ]; then
+    hypertask task assign "$SELF_ASSIGN_TICKET" --self >/dev/null 2>&1 \
+      || printf 'vcc: could not assign %s to %s; assign it yourself\n' "$SELF_ASSIGN_TICKET" "$IDENTITY" >&2
+  fi
   exec /usr/bin/env -S hypertask "$@"
 fi
 
