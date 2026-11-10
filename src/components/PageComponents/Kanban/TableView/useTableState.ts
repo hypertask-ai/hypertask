@@ -44,7 +44,8 @@ export function useTableState(context: Context) {
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
-  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
+  const tableSortColumnsEnabled =
+    useFlag("htpr-8973-table-sort-columns");
   const tableViewId =
     _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
     _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
@@ -220,23 +221,23 @@ export function useTableState(context: Context) {
     changeBoardLayout,
   } = useKanbanViews(_currentProject);
   const lastSavedColumns = useRef("");
+  const pendingColumnsWrite = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!tableSortColumnsEnabled || myTasksColumnsControlled || !tableViewId || !_currentProject) return;
     if (!accountColumns || accountColumns.viewId !== tableViewId) return;
     const signature = JSON.stringify({ viewId: tableViewId, keys: accountColumns.keys, widths: accountColumns.widths });
     if (signature === lastSavedColumns.current) return;
     const write = () => {
+      pendingColumnsWrite.current = null;
       lastSavedColumns.current = signature;
       void setTableColumnsViewAndReturn(_currentProject, {
         keys: accountColumns.keys,
         widths: accountColumns.widths,
       });
     };
+    pendingColumnsWrite.current = write;
     const handle = setTimeout(write, 400);
-    return () => {
-      clearTimeout(handle);
-      if (lastSavedColumns.current !== signature) write();
-    };
+    return () => clearTimeout(handle);
   }, [
     accountColumns,
     myTasksColumnsControlled,
@@ -245,6 +246,9 @@ export function useTableState(context: Context) {
     tableViewId,
     _currentProject,
   ]);
+  useEffect(() => () => {
+    if (tableSortColumnsEnabled) pendingColumnsWrite.current?.();
+  }, [tableSortColumnsEnabled]);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
   const lastGAt = useRef<number | null>(null);
