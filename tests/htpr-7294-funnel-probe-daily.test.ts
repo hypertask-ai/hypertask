@@ -43,3 +43,46 @@ test("funnel probe cron and flag are registered", () => {
   assert.equal(def.key, "htpr-7294-daily-funnel-probe");
   assert.equal(def.defaultMode, "OWNER_AND_QA");
 });
+
+test("probe state reports the probe account, its saved steps and its recorded events", async () => {
+  const h = activationHarness();
+  const probeEmail = "daily-2026-11-10-abc-owner@funnel-probe.hypertask.app";
+  const processed = new Date();
+  const prisma = {
+    user: {
+      findFirst: async ({ where }: any) =>
+        where.email === probeEmail ? { id: 501, uid: "probe_501", email: probeEmail } : null,
+    },
+    project: { findFirst: async ({ where }: any) => (where.ownerId === 501 ? { id: 77 } : null) },
+    task: { count: async () => 3 },
+    member: { count: async () => 1 },
+    invite: { count: async () => 1 },
+    logs: { count: async ({ where }: any) => (where.log === "cli_token_exchange" ? 1 : 0) },
+    analyticsIntent: {
+      findMany: async () => [
+        { kind: "board_created", payload: { actor: { userId: 501 }, boardId: 77 }, processedAt: processed },
+        { kind: "task_created", payload: { taskId: 1, actor: { userId: 501 } }, processedAt: processed },
+        { kind: "invite_sent", payload: { inviterUserId: 501 }, processedAt: processed },
+        { kind: "board_created", payload: { actor: { userId: 999 } }, processedAt: processed },
+        { kind: "task_created", payload: { taskId: 2, actor: { userId: 501 } }, processedAt: null },
+      ],
+    },
+  };
+  h.mocks["@/lib/prisma"] = { default: prisma };
+  const { readProbeState } = h.load("src/lib/funnelProbe/state.ts");
+  const state = await readProbeState(probeEmail);
+  assert.equal(state.accountCategory, "probe");
+  assert.equal(state.boardId, 77);
+  assert.equal(state.taskCount, 3);
+  assert.equal(state.pendingInviteCount, 1);
+  assert.equal(state.connectionCount, 1);
+  assert.deepEqual(state.events.map((event: { kind: string }) => event.kind).sort(), [
+    "board_created",
+    "invite_sent",
+    "task_created",
+    "task_created",
+  ]);
+  assert.deepEqual(state.events.map((event: { processed: boolean }) => event.processed), [true, true, true, false]);
+  assert.equal(JSON.stringify(state).includes(probeEmail), false);
+  assert.equal(await readProbeState("someone@example.test"), null);
+});
