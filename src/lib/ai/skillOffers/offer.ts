@@ -1,5 +1,6 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7779_SKILL_OFFERS_FLAG } from "@/lib/flags/definitions/htpr-7779-skill-offers";
+import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import prisma from "@/lib/prisma";
 
 import { skillOfferLink, SKILL_OFFER_MIN_OCCURRENCES } from "./contract";
@@ -10,6 +11,7 @@ export async function maybeOfferRepeatedInstruction(args: {
   projectId: number | null | undefined;
   sessionId: string | null | undefined;
   actingAgentId?: string | null;
+  teamAiSettings?: unknown;
 }): Promise<string | null> {
   try {
     const projectId = args.projectId;
@@ -17,15 +19,22 @@ export async function maybeOfferRepeatedInstruction(args: {
     if (!projectId || !sessionId || args.actingAgentId) return null;
     if (!(await isFeatureEnabled(HTPR_7779_SKILL_OFFERS_FLAG, args.userId))) return null;
 
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { teamId: true, team: { select: { aiProviderSettings: true } } },
+    });
+    if (
+      !isAiFeatureEnabled("aiChat", args.teamAiSettings) ||
+      !isAiFeatureEnabled("aiChat", project?.team?.aiProviderSettings)
+    ) {
+      return null;
+    }
+
     const { detectRepeatedInstruction, loadInstructionSources } = await import("./detect");
     const sources = await loadInstructionSources(args.userId, projectId);
     if (sources.length < SKILL_OFFER_MIN_OCCURRENCES) return null;
     if (!(await claimSkillOfferScan(args.userId, projectId))) return null;
 
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { teamId: true },
-    });
     const offer = await detectRepeatedInstruction({
       userId: args.userId,
       projectId,
