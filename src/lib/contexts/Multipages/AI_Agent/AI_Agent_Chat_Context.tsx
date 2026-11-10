@@ -156,7 +156,7 @@ export const ChatRuntime = memo(function ChatRuntime({
   const windowController = useChatWindows();
   const creatingWindowRef = useRef(false);
   const chatWindows = useMemo<ChatWindowControls | undefined>(() => {
-    if (!windowController.enabled) return undefined;
+    if (!windowController.enabled || contextProps.isSidebarMode) return undefined;
     return {
       enabled: true,
       atCapacity: windowController.atCapacity,
@@ -169,9 +169,8 @@ export const ChatRuntime = memo(function ChatRuntime({
           const previousSessionId = contextProps.currentSession?.id ?? null;
           const created = await contextProps.startNewSession();
           if (!created) return false;
-          const opened = windowController.open(created.id);
           if (previousSessionId) contextProps.selectSession(previousSessionId);
-          return opened;
+          return windowController.open(created.id);
         } finally {
           creatingWindowRef.current = false;
         }
