@@ -330,6 +330,7 @@ function preferencesApi(enabled = true, stored = null) {
     "@/lib/configs/allTasks.config": load("src/lib/configs/allTasks.config.ts"),
     "@/lib/configs/boardSortMode.config": config,
     "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": flag,
+    "@/lib/flags/definitions/htpr-8971-card-settings": { HTPR_8971_CARD_SETTINGS_FLAG: "htpr-8971-card-settings" },
     "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": {},
     "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: ["aiChatOpenNewTickets", "aiChatOpenTickets", "aiChatOpenBoards"] },
     "@/models/Calendar/model": {},

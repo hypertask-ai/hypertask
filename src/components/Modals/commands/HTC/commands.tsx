@@ -59,9 +59,9 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import {
   getAllCommands,
   getBoardMenuCommands,
-  withCardSettingsCommand,
   getMobileCommandGroups,
 } from "./AllCommands";
+import { withCardSettingsCommand } from "./cardSettingsCommand";
 import { pinCommentGroupFirst } from "@/lib/htc/pinCommentGroupFirst";
 import {
   getActiveEmptySectionSettingFromProject,

@@ -1,11 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { QueryClient } = require("@tanstack/react-query");
 const { loader, React, root } = require("./helpers/htpr-7260-ui.cjs");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const flagKey = "htpr-8971-card-settings";
 const flag = loader()(`src/lib/flags/definitions/${flagKey}.ts`);
@@ -120,7 +119,10 @@ const jiti = require("jiti")(path.join(root, "tests/board-menu-entry.cjs"), {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
 });
-const commands = () => jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
+const commands = () => ({
+  ...jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts")),
+  ...jiti(path.join(root, "src/components/Modals/commands/HTC/cardSettingsCommand.ts")),
+});
 const names = (group) => group.commandLists.map((command) => command.name);
 
 test("Ctrl+K on the board: Card settings sits right under Board settings with no typing", () => {
@@ -180,18 +182,6 @@ test("Card settings is a Profile section made only of switches, one per part", (
   assert.equal(section(false), "");
 });
 
-function strictLoad(file, mocks) {
-  const loaded = { exports: {} };
-  const js = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  new Function("require", "module", "exports", js)((name) => {
-    assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency ${name}`);
-    return mocks[name];
-  }, loaded, loaded.exports);
-  return loaded.exports;
-}
-
 function preferencesApi(cardSettings = true) {
   const saved = {};
   const writes = [];
@@ -210,12 +200,12 @@ function preferencesApi(cardSettings = true) {
     updateMany: async () => ({ count: 0 }),
   } };
   const redis = { getRedis: async () => ({ get: async (key) => cache.get(key) ?? null, setex: async (key, _ttl, value) => { cache.set(key, value); } }) };
-  const controller = strictLoad("src/utils/controllers/users/fetch_preferences.ts", {
+  const controller = loadModule("src/utils/controllers/users/fetch_preferences.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/redis": redis,
   });
-  const route = strictLoad("src/app/api/users/preferences/route.ts", {
+  const route = loadModule("src/app/api/users/preferences/route.ts", {
     "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": {},
     "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: [] },
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },

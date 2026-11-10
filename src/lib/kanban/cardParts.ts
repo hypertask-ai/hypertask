@@ -30,29 +30,31 @@ export const parseCardParts = (raw: unknown): CardParts => {
 
 type CardTask = ITask & { customFieldValues?: unknown[] };
 
-export const cardPartsView = <Blocker>(task: CardTask, blockingUser: Blocker | undefined, parts: CardParts) => ({
-  task:
-    parts.blockedEdge && parts.tags
-      ? task
-      : {
-          ...task,
-          blockingTasks: parts.blockedEdge ? task.blockingTasks : [],
-          customFieldValues: parts.tags ? task.customFieldValues : [],
-        },
-  ticketNumber: parts.ticketNumber ? task.ticketNumber ?? "" : "",
-  notifications: parts.inboxIcon ? task.notifications : [],
-  notificationCount: parts.inboxIcon ? task._count?.notifications : 0,
-  commentCount: parts.comments ? task.totalComments ?? task._count?.comments : undefined,
-  subTasks: parts.subTasks ? task.subTasks : undefined,
-  subTaskCount: parts.subTasks ? task.subTasks?.length ?? 0 : 0,
-  priority: parts.priority ? task.priority : undefined,
-  estimate: parts.size ? task.estimate : undefined,
-  dueDate: parts.dueDate ? task.dueDate : undefined,
-  taskLabels: parts.tags ? task.taskLabels : [],
-  staleness: parts.staleness,
-  blocked:
-    parts.blockedEdge &&
-    ((task.waitingOnUserId !== null && task.waitingOnUserId !== undefined) ||
-      (task.blockingTasks?.length ?? 0) > 0),
-  blockingUser: parts.blockedEdge ? blockingUser : undefined,
-});
+export function cardPartsView<Blocker>(task: CardTask, blockingUser: Blocker | undefined, parts: CardParts) {
+  return {
+    task:
+      parts.blockedEdge && parts.tags
+        ? task
+        : {
+            ...task,
+            blockingTasks: parts.blockedEdge ? task.blockingTasks : [],
+            customFieldValues: parts.tags ? task.customFieldValues : [],
+          },
+    ticketNumber: parts.ticketNumber ? task.ticketNumber ?? "" : "",
+    notifications: parts.inboxIcon ? task.notifications : [],
+    notificationCount: parts.inboxIcon ? task._count?.notifications : 0,
+    commentCount: parts.comments ? task.totalComments ?? task._count?.comments : undefined,
+    subTasks: parts.subTasks ? task.subTasks : undefined,
+    subTaskCount: parts.subTasks ? task.subTasks?.length ?? 0 : 0,
+    priority: parts.priority ? task.priority : undefined,
+    estimate: parts.size ? task.estimate : undefined,
+    dueDate: parts.dueDate ? task.dueDate : undefined,
+    taskLabels: parts.tags ? task.taskLabels : [],
+    staleness: parts.staleness,
+    blocked:
+      parts.blockedEdge &&
+      ((task.waitingOnUserId !== null && task.waitingOnUserId !== undefined) ||
+        (task.blockingTasks?.length ?? 0) > 0),
+    blockingUser: parts.blockedEdge ? blockingUser : undefined,
+  };
+}

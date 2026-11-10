@@ -1373,7 +1373,8 @@
             "dictationLanguage": null,
             "inboxAdvanceOnSend": null,
             "emojiFrequency": null,
-            "calendarViews": null
+            "calendarViews": null,
+            "cardParts": null
           },
           "userPicture": {
             "id": "71",
@@ -1482,7 +1483,8 @@
               "dictationLanguage": null,
               "inboxAdvanceOnSend": null,
               "emojiFrequency": null,
-              "calendarViews": null
+              "calendarViews": null,
+              "cardParts": null
             },
             "userPicture": {
               "id": "71",
@@ -1614,7 +1616,8 @@
               "dictationLanguage": null,
               "inboxAdvanceOnSend": null,
               "emojiFrequency": null,
-              "calendarViews": null
+              "calendarViews": null,
+              "cardParts": null
             },
             "userPicture": {
               "id": "71",

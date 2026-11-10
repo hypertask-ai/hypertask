@@ -294,7 +294,8 @@
           "dictationLanguage": null,
           "inboxAdvanceOnSend": null,
           "emojiFrequency": null,
-          "calendarViews": null
+          "calendarViews": null,
+          "cardParts": null
         }
       }
     },
