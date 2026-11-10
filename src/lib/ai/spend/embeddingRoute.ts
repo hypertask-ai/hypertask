@@ -1,5 +1,7 @@
 import { getTeamGatewayFunding, isOurGatewayKey, resolveTeamByokApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { remainingSpendPathEnabled, resolveTeamAllowancePolicy } from "@/app/api/ai/_lib/planAllowancePolicy";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9015_SEARCH_LOOKUPS_FLAG } from "@/lib/flags/definitions/htpr-9015-search-lookups";
 import { reservePlanAllowance, settlePlanAllowance, teamAllowanceSnapshot, SharedAiAllowanceExceededError } from "@/app/api/ai/_lib/sharedAllowance";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import prisma from "@/lib/prisma";
@@ -86,7 +88,10 @@ async function resolveEmbeddingSpendMode(projectIds: number[], teamId?: string |
   return { ...(await routeForTeam(ids[0])), teamId: ids[0] };
 }
 
-export function embeddingSpendMode(projectIds: number[], teamId?: string | null) {
+export async function embeddingSpendMode(projectIds: number[], teamId?: string | null) {
+  if (!await isFeatureEnabled(HTPR_9015_SEARCH_LOOKUPS_FLAG, 0).catch(() => false)) {
+    return resolveEmbeddingSpendMode(projectIds, teamId);
+  }
   return rememberRoute(spendModeKey(projectIds, teamId), () => resolveEmbeddingSpendMode(projectIds, teamId));
 }
 export async function withSpendCharge<T>(route: Route, teamId: string, texts: string[], work: () => Promise<T>) {

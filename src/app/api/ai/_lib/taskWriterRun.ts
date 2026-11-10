@@ -44,6 +44,7 @@ import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { isFeatureEnabled, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
+import { HTPR_9015_SEARCH_LOOKUPS_FLAG } from "@/lib/flags/definitions/htpr-9015-search-lookups";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
@@ -141,6 +142,25 @@ export function missingRequiredFields(body: TaskWriterRequest) {
 
 export function projectAccessWhere(userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
   return projectContentAccessWhere(userId, agentId, teamScope);
+}
+
+function relatedTicketCandidates(
+  indexedRows: Promise<Awaited<ReturnType<typeof searchTasks>>>,
+  userId: number,
+  agentId: string | null | undefined,
+  teamScope: AgentTokenTeamScope | null | undefined,
+  taskIds: number[],
+) {
+  return indexedRows.then(async (found) => {
+    const { taskRows: rows } = await authorizeIndexedRows(found, [], { userId, agentId, teamScope });
+    const loaded = new Set(taskIds.map(String));
+    return formatRelatedTicketCandidates(
+      rows.filter((row) => !loaded.has(row.id)).slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT),
+    );
+  }).catch((error) => {
+    console.error("[ai/task-writer] related candidates failed", error);
+    return "<RELATED_TICKET_CANDIDATES>\nunavailable:search_failed Do not invent related tickets. Ask whether this might already exist on the board.\n</RELATED_TICKET_CANDIDATES>";
+  });
 }
 
 export async function prepareTaskWriterRun(
@@ -259,7 +279,9 @@ export async function prepareTaskWriterRun(
     : effectivePrompt;
   const primaryTaskIds = body.taskIds.slice(0, 1);
   const relatedTaskIds = body.taskIds.slice(1);
-  const ticketSearch = boardResearchEnabled
+  const reuseTicketSearch = boardResearchEnabled &&
+    await isFeatureEnabled(HTPR_9015_SEARCH_LOOKUPS_FLAG, userId).catch(() => false);
+  const ticketSearch = reuseTicketSearch
     ? searchTasks({
         searchQuery: retrievalQuery,
         projectIds: [body.projectId],
@@ -294,22 +316,19 @@ export async function prepareTaskWriterRun(
       reserveCommentBudget: boardResearchEnabled,
       taskSearch: ticketSearch ?? undefined,
     }),
-    ticketSearch
-      ? ticketSearch
-          .then(async (indexedRows) => {
-            const { taskRows: rows } = await authorizeIndexedRows(indexedRows, [], { userId, agentId, teamScope });
-            const loaded = new Set(body.taskIds.map(String));
-            return formatRelatedTicketCandidates(
-              rows
-                .filter((row) => !loaded.has(row.id))
-                .slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT)
-            );
-          })
-          .catch((error) => {
-            console.error("[ai/task-writer] related candidates failed", error);
-            return "<RELATED_TICKET_CANDIDATES>\nunavailable:search_failed Do not invent related tickets. Ask whether this might already exist on the board.\n</RELATED_TICKET_CANDIDATES>";
-          })
-      : Promise.resolve(""),
+    reuseTicketSearch && ticketSearch
+      ? relatedTicketCandidates(ticketSearch, userId, agentId, teamScope, body.taskIds)
+      : boardResearchEnabled
+        ? relatedTicketCandidates(searchTasks({
+            searchQuery: retrievalQuery,
+            projectIds: [body.projectId],
+            excludeStatuses: ["Deleted", "Archive"],
+            topK: Math.min(
+              TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
+              TASK_WRITER_RELATED_CANDIDATE_LIMIT + Math.min(body.taskIds.length, 8) + 5,
+            ),
+          }), userId, agentId, teamScope, body.taskIds)
+        : Promise.resolve(""),
     boardResearchEnabled
       ? loadTaskWriterStyleExamples(body.projectId, { userId, agentId, teamScope }).catch((error) => {
           console.error("[ai/task-writer] style examples failed", error);
