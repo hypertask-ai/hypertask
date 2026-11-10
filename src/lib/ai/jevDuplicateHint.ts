@@ -10,6 +10,7 @@ import {
   type JevDuplicateCandidate,
   type JevDuplicateDraft,
 } from "@/lib/ai/jevDuplicateCheck";
+import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 
 export const DUPLICATE_DECISION_MODEL_SLUG = "anthropic/claude-haiku-5.5";
@@ -58,7 +59,8 @@ export async function jevDuplicateHint(args: {
       agentId: args.agentId,
       teamScope: args.teamScope,
     });
-    if (!funding?.apiKey || funding.source === "customer") return "";
+    if (!funding?.apiKey) return "";
+    if (funding.source === "customer" && !isInternalCompTeam(args.teamId)) return "";
     const tags: AiGatewayTags = {
       teamId: args.teamId, projectId: args.projectId, userId: args.userId, agentId: args.agentId,
     };
