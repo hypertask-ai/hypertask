@@ -85,14 +85,14 @@ test("a mentioned name opens no card on mouse hover once the flag is on, and sti
     const window = view.container.ownerDocument.defaultView;
     try {
       const mention = view.container.querySelector(".mention");
-      assert.equal(mention.getAttribute("aria-haspopup"), "dialog");
+      assert.equal(mention.getAttribute("aria-haspopup"), "dialog", view.container.innerHTML);
       await fire(window, mention, "pointerover", "mouse");
       if (removeHover) {
-        assert.doesNotMatch(view.container.textContent, /Loading contact/);
+        assert.doesNotMatch(view.container.textContent, /Loading contact/, view.container.innerHTML);
         await fire(window, mention, "click");
-        assert.match(view.container.textContent, /Loading contact/);
+        assert.match(view.container.textContent, /Loading contact/, view.container.innerHTML);
       } else {
-        assert.match(view.container.textContent, /Loading contact/);
+        assert.match(view.container.textContent, /Loading contact/, `flag off hover did not open the card: ${view.container.innerHTML}`);
       }
     } finally {
       restoreObserver();
