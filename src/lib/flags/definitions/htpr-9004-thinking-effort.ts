@@ -13,5 +13,9 @@ export default {
     risk: "small",
     highRisk: "money",
     reason: "Thinking tokens are billed as model output. Thinking stays off until the user switches it on, and nothing changes for users without the flag.",
+    harmEvidence: {
+      harm: "charge",
+      scenario: "A user who switches Thinking on with High effort is billed for extra reasoning tokens on every reply until they switch it off.",
+    },
   },
 } as const satisfies FeatureFlagDefinition;

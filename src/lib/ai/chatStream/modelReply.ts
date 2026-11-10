@@ -89,7 +89,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const chunks: string[] = [];
   let ranTools = false;
   let reachedStepLimit = false;
-  const thinkingChoice = heartbeatExecutionId ? null : await userThinkingChoice(dbUser.id);
+  const thinkingChoice = heartbeatExecutionId ? null : await userThinkingChoice(dbUser.id, state.body?.modelOptionId);
   for (let attempt = 0; attempt < 2; attempt++) {
     ranTools = false;
     reachedStepLimit = false;
