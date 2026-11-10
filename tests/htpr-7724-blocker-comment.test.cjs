@@ -142,7 +142,11 @@ for (const enabled of [false, true]) {
       react: { useCallback: (fn) => fn },
       axios: { default: {} },
       "react-hot-toast": { default: {} },
-      "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, FLAG); return enabled; } },
+      "@/hooks/useFlag": { useFlag: (key) => {
+        if (key === "htpr-8994-clear-waiting-agent") return true;
+        assert.equal(key, FLAG);
+        return enabled;
+      } },
       "@/lib/configs/taskDetail.config": { default: { commandModes: { starComment: "StarComment" } } },
       "@/lib/constants/TaskDetail": {},
       "@/lib/constants/constants": {},
