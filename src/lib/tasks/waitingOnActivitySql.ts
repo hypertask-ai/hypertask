@@ -25,22 +25,17 @@ export function visibleWaitingOnActivity(
             AND NOT (
               waiting_agent.visibility = 'TEAM'::"AgentVisibility"
               AND EXISTS (
-                SELECT 1
-                FROM "Member" visibility_agent_member
-                INNER JOIN "Project" visibility_project
-                  ON visibility_project.id = visibility_agent_member."projectId"
+                SELECT 1 FROM "Member" visibility_agent_member
+                INNER JOIN "Project" visibility_project ON visibility_project.id = visibility_agent_member."projectId"
                 WHERE visibility_agent_member."agentId" = waiting_agent.id
                   AND visibility_agent_member."projectId" = ${projectId}
                   AND visibility_project.status = 'Normal'::"Status"
-                  AND (
-                    visibility_project."ownerId" = ${userId}
-                    OR EXISTS (
-                      SELECT 1 FROM "Member" visibility_user_member
-                      WHERE visibility_user_member."projectId" = visibility_project.id
-                        AND visibility_user_member."userId" = ${userId}
-                        AND visibility_user_member."agentId" IS NULL
-                    )
-                  )
+                  AND (visibility_project."ownerId" = ${userId} OR EXISTS (
+                    SELECT 1 FROM "Member" visibility_user_member
+                    WHERE visibility_user_member."projectId" = visibility_project.id
+                      AND visibility_user_member."userId" = ${userId}
+                      AND visibility_user_member."agentId" IS NULL
+                  ))
               )
             )
           )
