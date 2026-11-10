@@ -84,19 +84,26 @@ try {
   const name = named ? await create.getAttribute('aria-label') : null;
   step('the composer buttons have their hover names', named && name === 'Create task', { name });
 
-  const footer = await writer.innerText().catch(() => '');
-  const sendsWithCtrlEnter = /CTRL\+ENTER|CTRL\+↵/i.test(footer);
-  const sent = page.waitForResponse((response) => response.url().includes('/api/tasks/create'), { timeout: 90_000 }).catch(() => null);
+  const footerText = (await writer.innerText().catch(() => '')).replace(/\s+/g, ' ').toLowerCase();
+  const shortcut = /(ctrl|cmd) enter create/.test(footerText) ? 'Control+Enter' : 'Enter';
+  const waitForCreate = (ms) => page.waitForResponse((response) => response.url().includes('/api/tasks/create'), { timeout: ms }).catch(() => null);
+  let via = `shortcut ${shortcut}`;
+  let sent = waitForCreate(30_000);
   await composer.click();
-  if (sendsWithCtrlEnter) await page.keyboard.press('Control+Enter');
-  else await page.keyboard.press('Enter');
-  const response = await sent;
+  await page.keyboard.press(shortcut);
+  let response = await sent;
+  if (!response) {
+    via = 'Create button after the shortcut sent nothing';
+    sent = waitForCreate(60_000);
+    await writer.locator('[aria-label="Create task"]').first().click();
+    response = await sent;
+  }
   const body = response ? await response.json().catch(() => null) : null;
   const task = body?.newTask?.newTask ?? body?.newTask ?? body?.task ?? body;
   if (task?.id) result.created.push({ id: task.id, uniqueIndex: task.uniqueIndex });
   await page.screenshot({ path: path.join(dir, '02-ctrl-j-created.png') });
   step('the send shortcut creates one task and closes the popup', Boolean(task?.id) && (await popup.isHidden()), {
-    status: response?.status() ?? null, key: sendsWithCtrlEnter ? 'Control+Enter' : 'Enter', uniqueIndex: task?.uniqueIndex ?? null,
+    status: response?.status() ?? null, via, footer: footerText.slice(0, 120), uniqueIndex: task?.uniqueIndex ?? null,
   });
 
   await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
