@@ -31,8 +31,12 @@ function pages(run, args, field) {
     cursor = result.nextCursor;
     if (cursor && cursors.has(cursor)) throw new Error(`Repeated ${field} cursor`);
     if (cursor) cursors.add(cursor);
-    if (!cursor && (result.has_more === true || (Number.isInteger(result.total) && rows.length !== result.total))) {
-      throw new Error(`Incomplete ${field} list`);
+    if (!cursor) {
+      if (Number.isInteger(result.total)) {
+        if (rows.length !== result.total) throw new Error(`Incomplete ${field} list`);
+      } else if (result.has_more === true) {
+        throw new Error(`Incomplete ${field} list`);
+      }
     }
   } while (cursor);
   return rows;

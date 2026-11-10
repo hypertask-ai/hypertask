@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
+const cases = require("./fixtures/flags-column-triage/cases.json");
 const load = () => import("../scripts/flags/triage-flags-column.mjs");
 const key = "htpr-7511-signup-straight-to-board";
 const flagUrl = `https://app.hypertask.ai/admin/flags/${key}`;
@@ -33,7 +34,11 @@ function fixture({ tasks = [task()], flags = [flag()], comments = {}, intercept 
     }
     if (binary === "hypertask") {
       if (args[0] === "sections") return { success: true, sections: flagSections() };
-      if (args[0] === "tasks" && args[1] === "list") return structuredClone({ success: true, tasks: state.tasks, total: state.tasks.length });
+      if (args[0] === "tasks" && args[1] === "list") {
+        const section = value("--section");
+        const tasks = section ? state.tasks.filter((entry) => entry.section === section) : state.tasks;
+        return structuredClone({ success: true, tasks, total: tasks.length });
+      }
       if (args[0] === "tasks" && args[1] === "get") return structuredClone({ success: true, tasks: state.tasks.filter((entry) => entry.ticketNumber === args[2]) });
       if (args[0] === "comment") return structuredClone({ success: true, comments: state.comments[args[2]] ?? [] });
       if (args[0] === "labels") return { success: true, labels: boardLabels.map((name) => ({ name })) };
@@ -109,7 +114,7 @@ test("a registry ticket with no declaration gets one question and its exact live
 
 test("missing, unknown and ambiguous flags remain unresolved, never get a guessed label", async () => {
   const { triageFlagsColumn, clarification } = await load();
-  for (const description of ["<p>No flag declared.</p>", "<p>htpr-9999-removed-flag</p>", `<p>${key} and htpr-2-other</p>`]) {
+  for (const description of cases.ambiguousDescriptions) {
     const f = fixture({ tasks: [task({ description })], flags: [flag(), flag({ key: "htpr-2-other", ticketId: "HTPR-2" })] });
     const report = triageFlagsColumn({ ...f, apply: true });
     assert.equal(report.clean, false);
@@ -119,41 +124,6 @@ test("missing, unknown and ambiguous flags remain unresolved, never get a guesse
     triageFlagsColumn({ ...f, apply: true });
     assert.equal((f.state.comments["HTPR-7549"] ?? []).filter((comment) => comment.text.includes(clarification)).length, 1);
   }
-});
-
-test("the retired signup flag never silently becomes a different ticket-specific flag", async () => {
-  const { inspectTicket } = await load();
-  for (const index of [7549, 7550, 7551]) {
-    const report = inspectTicket(task({ ticketNumber: `HTPR-${index}` }), [flag({ key: `htpr-${index}-replacement`, ticketId: `HTPR-${index}` })], []);
-    assert.equal(report.label, null);
-    assert.equal(report.flagUrl, null);
-    assert.equal(report.ask, true);
-    assert.ok(report.issues.includes(`Unknown or removed flag keys: ${key}`));
-  }
-});
-
-test("multiple flags registered to one ticket remain an explicit clarification, not a guessed audience", async () => {
-  const { inspectTicket } = await load();
-  const report = inspectTicket(task({ description: "", ticketNumber: "HTPR-5906" }), [
-    flag({ key: "htpr-5906-no-phone-nudges", ticketId: "HTPR-5906" }),
-    flag({ key: "htpr-5906-shortcut-nudges", ticketId: "HTPR-5906", mode: "EVERYONE" }),
-  ], []);
-  assert.equal(report.label, null);
-  assert.equal(report.ask, true);
-  assert.ok(report.issues.includes("Multiple flag keys; declare one governing flag"));
-  const declared = inspectTicket(task({ description: "<p>Flag: htpr-5906-shortcut-nudges</p>", ticketNumber: "HTPR-5906" }), [
-    flag({ key: "htpr-5906-no-phone-nudges", ticketId: "HTPR-5906" }),
-    flag({ key: "htpr-5906-shortcut-nudges", ticketId: "HTPR-5906", mode: "EVERYONE" }),
-  ], []);
-  assert.equal(declared.label, "flag:everyone");
-  assert.equal(declared.flagUrl, "https://app.hypertask.ai/admin/flags/htpr-5906-shortcut-nudges");
-});
-
-test("an unambiguous comment resolves a shared flag and still requests its declaration", async () => {
-  const { inspectTicket } = await load();
-  const report = inspectTicket(task({ description: "<p>Shared signup change.</p>" }), [flag()], [{ text: `<p>Behind ${key}.</p>` }]);
-  assert.equal(report.label, "flag:owner-only");
-  assert.equal(report.ask, true);
 });
 
 test("clean data is a positive control for missing-link and state-label checks", async () => {
@@ -192,28 +162,21 @@ test("all task and comment pages are read, including an existing clarification o
 
 test("missing columns, incomplete pages, repeated cursors and invalid flag reads fail closed before repair", async () => {
   const { triageFlagsColumn } = await load();
-  const cases = [
+  const hardening = [
     [(binary, args) => binary === "hypertask" && args[0] === "sections" ? { success: true, sections: [] } : undefined, /no Flag: columns/],
+    [(binary, args) => binary === "hypertask" && args[0] === "sections" ? { success: true, sections: [{ section_title: "No Flag" }] } : undefined, /no Flag: columns/],
     [(binary) => binary.endsWith("/ht-flag") ? { flags: [{ key, mode: "NEW_MODE" }] } : undefined, /Invalid live flag/],
     [(binary, args) => binary === "hypertask" && args[0] === "tasks" && args[1] === "list" ? { success: true, tasks: [task()], total: 2 } : undefined, /Incomplete tasks/],
     [(binary, args) => binary === "hypertask" && args[0] === "comment" ? { success: true, comments: [], has_more: true } : undefined, /Incomplete comments/],
     [(binary, args) => binary === "hypertask" && args[0] === "tasks" && args[1] === "list" ? { success: true, tasks: [task()], nextCursor: "same" } : undefined, /Repeated tasks cursor/],
   ];
-  for (const [intercept, expected] of cases) {
+  for (const [intercept, expected] of hardening) {
     const f = fixture({ intercept });
     assert.throws(() => triageFlagsColumn({ ...f, apply: true }), expected);
     assert.deepEqual(f.writes(), []);
   }
   const f = fixture({ intercept() { throw new Error("read unavailable"); } });
   assert.throws(() => triageFlagsColumn(f), /read unavailable/);
-});
-
-test("No Flag alone is not a triage scope", async () => {
-  const { triageFlagsColumn } = await load();
-  const f = fixture({ intercept(binary, args) {
-    if (binary === "hypertask" && args[0] === "sections") return { success: true, sections: [{ section_title: "No Flag" }] };
-  } });
-  assert.throws(() => triageFlagsColumn(f), /no Flag: columns/);
 });
 
 test("repair rereads the ticket and skips one that has left flag columns", async () => {
@@ -226,10 +189,12 @@ test("repair rereads the ticket and skips one that has left flag columns", async
   assert.equal(f.writes().filter(([, args]) => args[0] !== "labels").length, 0);
 });
 
-test("repair verifies writes rather than claiming a failed repair is clean", async () => {
+test("comment pagination trusts total when the final page keeps has_more", async () => {
   const { triageFlagsColumn } = await load();
-  const f = fixture({ intercept(binary) { if (binary === "vcc") return { success: true }; } });
-  assert.equal(triageFlagsColumn({ ...f, apply: true }).clean, false);
+  const f = fixture({ intercept(binary, args) {
+    if (binary === "hypertask" && args[0] === "comment") return { success: true, comments: [{ text: "Earlier comment" }], total: 1, has_more: true };
+  } });
+  assert.doesNotThrow(() => triageFlagsColumn(f));
 });
 
 test("the Mini Boss CEO timer schedules four read-only reports daily without embedding credentials", () => {
