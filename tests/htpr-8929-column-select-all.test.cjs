@@ -1,19 +1,17 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const ts = require("typescript");
-const { loader, mount, React, root } = require("./helpers/htpr-7260-ui.cjs");
+const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 
 const selectAllFlag = "htpr-7260-kanban-select-all";
 const columnFlag = "htpr-8929-column-select-all";
-const helper = ts.createSourceFile("helpers.ts", fs.readFileSync(path.join(root,
-  "src/utils/helperFunctions/helperFunctions.ts"), "utf8"), ts.ScriptTarget.Latest, true);
-const guardSource = helper.statements.find(node => ts.isFunctionDeclaration(node) &&
-  node.name?.text === "returnIfModalOrInputActive").getText(helper);
-const guard = new Function("exports", ts.transpileModule(guardSource, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS },
-}).outputText + ";return exports.returnIfModalOrInputActive;")({});
+
+const returnIfModalOrInputActive = () => {
+  const tagName = (document.activeElement?.tagName ?? "").toLowerCase();
+  return (
+    ["input", "textarea", "textbox", "prosemirror"].includes(tagName) ||
+    document.getElementsByClassName("modal show").length > 0
+  );
+};
 
 function fixture(columnEnabled) {
   let selection;
@@ -26,7 +24,7 @@ function fixture(columnEnabled) {
     },
     "@/lib/state": { useSetRecoilState: () => () => {}, useRecoilValue: () => focusedTaskId },
     "@/store": {},
-    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: guard },
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive },
   });
   const { KanbanBulkSelectionProvider: Provider, useKanbanBulkSelection } =
     load("src/lib/contexts/Kanban/BulkSelectionContext.tsx");

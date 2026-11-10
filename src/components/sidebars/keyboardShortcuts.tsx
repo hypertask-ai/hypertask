@@ -42,22 +42,6 @@ const KeyboardShortcuts = () => {
     true,
     true,
   );
-  const boardShortcuts = columnSelectAllEnabled
-    ? mainData.map((group) =>
-        group.title === "Board"
-          ? {
-              ...group,
-              sub: [
-                ...group.sub,
-                {
-                  shortTitle: "Select all in this column",
-                  pressKey: ["SHIFT", "A"],
-                },
-              ],
-            }
-          : group,
-      )
-    : mainData;
 
   const onKeyChange = (e: any) => {
     setKeyword(e.target.value);
@@ -78,7 +62,21 @@ const KeyboardShortcuts = () => {
   };
 
   const searchTermLower = keyword.toLowerCase();
-  const filteredShortcuts = boardShortcuts
+  const filteredShortcuts = mainData
+      .map((group) =>
+        columnSelectAllEnabled && group.title === "Board"
+          ? {
+              ...group,
+              sub: [
+                ...group.sub,
+                {
+                  shortTitle: "Select all in this column",
+                  pressKey: ["SHIFT", "A"],
+                },
+              ],
+            }
+          : group,
+      )
       .map((group) => {
         if (group.sub) {
           const sectionTitleMatches = group.title
