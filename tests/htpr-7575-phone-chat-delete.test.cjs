@@ -47,7 +47,7 @@ async function withHistory({ enabled = true, mobile = true, paging = false } = {
     "./AgentSidebarChatCommands": { AgentSidebarChatCommands: () => null },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => state },
     "@/hooks/useFlag": { useFlag: (key) => key === phoneFlag ? enabled : key === pagingFlag && paging },
-    "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) },
+    "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) }, "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: [], AI_CHAT_AUTO_OPEN_DEFAULTS: {} },
     "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: pagingFlag },
     "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: phoneFlag },
     "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },

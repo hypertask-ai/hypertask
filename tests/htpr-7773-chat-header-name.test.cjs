@@ -48,7 +48,7 @@ for (const mobile of [false, true]) {
       "date-fns": require("date-fns"),
       "next/navigation": { usePathname: () => "/chat", useRouter: () => ({ push: noop }), useSearchParams: () => new URLSearchParams() },
       "@/hooks/useFlag": { useFlag: (key) => key === flag.HTPR_7773_CHAT_HEADER_NAME_FLAG && enabled },
-      "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) },
+      "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) }, "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: [], AI_CHAT_AUTO_OPEN_DEFAULTS: {} },
       "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "htpr-6971-chat-history-paging" },
       "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
       "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
