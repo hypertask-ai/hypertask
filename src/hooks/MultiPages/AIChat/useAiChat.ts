@@ -125,7 +125,7 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
     appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, ...(ticketRowsEnabled ? { ticketRowsEnabled } : {}), progressiveChatCreateEnabled, connectionRetry, chipSendSignal,
-    navigateToTask: chatOpensTask ? navigateToTask : undefined,
+    navigateToTask,
   }, askAiFullscreenEnabled ? {
     preserveComposer: true,
     onSettled: () => setSendSettledVersion((version) => version + 1),
