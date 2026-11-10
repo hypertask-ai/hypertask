@@ -10,7 +10,7 @@ const { loader, React, root } = require("./helpers/htpr-7260-ui.cjs");
 const flagKey = "htpr-8971-card-settings";
 const flag = loader()(`src/lib/flags/definitions/${flagKey}.ts`);
 const parts = loader()("src/lib/kanban/cardParts.ts");
-const { CommandMode } = loader()("src/models/enums.ts");
+const { CommandMode } = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } })(path.join(root, "src/models/enums.ts"));
 const cn = loader({
   "@/lib/constants/APIRouteConstants": {},
   "@/lib/realtime/client": {},
@@ -116,7 +116,11 @@ test("flag off: the card is exactly today's full card whatever is saved", () => 
   assert.equal(seen.container.blocked, true);
 });
 
-const commands = () => loader()("src/components/Modals/commands/HTC/AllCommands.ts");
+const jiti = require("jiti")(path.join(root, "tests/board-menu-entry.cjs"), {
+  interopDefault: true,
+  alias: { "@": path.join(root, "src") },
+});
+const commands = () => jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
 const names = (group) => group.commandLists.map((command) => command.name);
 
 test("Ctrl+K on the board: Card settings sits right under Board settings with no typing", () => {
@@ -136,6 +140,20 @@ test("Ctrl+K on the board: Card settings sits right under Board settings with no
   assert.equal(elsewhere[elsewhere.indexOf("Board settings") + 1], "Card settings");
 });
 
+test("a frequently used Board settings does not move or duplicate Card settings", () => {
+  const { getAllCommands, withCardSettingsCommand } = commands();
+  const groups = getAllCommands({ context: "Kanban" });
+  const boardSettings = groups.flatMap((group) => group.commandLists).find((command) => command.key === "boardSettings");
+  const frequent = { group: "Frequently used", commandLists: [{ ...boardSettings, frequency: 4 }] };
+  const kanban = withCardSettingsCommand([frequent, ...groups], "Kanban");
+  assert.deepEqual(names(kanban[0]), ["Board settings"], "shortcut group untouched");
+  assert.deepEqual(names(kanban.find((group) => group.group === "Board")).slice(0, 2), ["Board settings", "Card settings"]);
+  assert.ok(!names(kanban.find((group) => group.group === "Help")).includes("Board settings"));
+  const others = withCardSettingsCommand([frequent, ...getAllCommands({ context: "Others" })], "Others");
+  assert.deepEqual(names(others[0]), ["Board settings"]);
+  assert.equal(others.flatMap(names).filter((name) => name === "Card settings").length, 1);
+});
+
 test("Card settings is a Profile section made only of switches, one per part", () => {
   const nav = loader({
     "next/navigation": {}, nookies: {}, "@/lib/state": {}, "@/store": {}, "@/lib/demo/isGuestClient": {},
@@ -148,6 +166,7 @@ test("Card settings is a Profile section made only of switches, one per part", (
       "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
       "@/hooks/General/useCardParts": { useCardParts: () => parts.parseCardParts({ tags: true }), useSetCardPart: () => () => {} },
       "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
+      "@/utils/undoActions/helperFuncs": { cn },
     })("src/components/Modals/Settings/CardSettingsSection.tsx").default;
     return renderToStaticMarkup(React.createElement(Section));
   };
@@ -155,7 +174,7 @@ test("Card settings is a Profile section made only of switches, one per part", (
   assert.ok(html.includes("Only affects you. Every board."));
   const switches = [...html.matchAll(/<button[^>]*role="switch"[^>]*>/g)].map(([tag]) => tag);
   assert.equal(switches.length, 12);
-  assert.ok(switches.slice(0, 2).every((tag) => /disabled/.test(tag)), "name and people are always shown");
+  assert.ok(switches.slice(0, 2).every((tag) => / disabled=""/.test(tag)), "name and people are always shown");
   const states = [...html.matchAll(/aria-checked="(true|false)"[^>]*aria-label="([^"]+)"/g)].map(([, on, label]) => [label, on]);
   assert.deepEqual(states.slice(2).filter(([, on]) => on === "true"), [["Tags", "true"]]);
   assert.equal(section(false), "");

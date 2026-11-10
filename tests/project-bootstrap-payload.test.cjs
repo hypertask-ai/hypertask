@@ -122,7 +122,8 @@ test("Board and Table wire blocker chips into the title and blocked-card paths",
 
   assert.match(boardTaskTagsSource, /task\.blockingTasks\?\.map/);
   assert.match(boardTaskTagsSource, /<BlockerTaskChip/);
-  assert.match(boardTaskCardSource, /task\.blockingTasks\?\.length/);
+  assert.match(boardTaskCardSource, /blocked=\{card\.blocked\}/);
+  assert.match(read("src/lib/kanban/cardParts.ts"), /task\.blockingTasks\?\.length/);
   assert.match(tableTitleCell, /<TableTitleCell [^>]*task=\{task\}/);
   const sharedTitleCell = boardTableSource.slice(boardTableSource.indexOf("export function TableTitleCell"), boardTableSource.indexOf("export function TableStatusCell"));
   assert.match(sharedTitleCell, /task\.blockingTasks\?\.map/);

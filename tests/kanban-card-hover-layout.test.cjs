@@ -191,6 +191,7 @@ function loadCard(enabled, cleanup) {
   const mocks = {
     ...shared,
     "@/hooks/useFlag": { useFlag: flags },
+    "@/hooks/General/useCardParts": { useCardParts: () => ({}) },
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-8629-kanban-hover-layout": hoverFlag,
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },

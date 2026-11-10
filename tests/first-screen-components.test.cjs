@@ -55,6 +55,7 @@ const mocks = {
   '@/utils/helperFunctions/helperFunctions': { convertToPlain: html => { const div = document.createElement('div'); div.innerHTML = html; return div.textContent; } },
   '@/lib/contexts/Inbox/BulkSelectionContext': { useBulkSelectionContext: () => ({ selectedNotifications: [] }) },
   '@/hooks/General/useGetUserDrafts': { USER_DRAFTS_QUERY_KEY: id => ['userDrafts', id] },
+  '@/hooks/General/useCardParts': { useCardParts: () => ({}) },
 };
 function load(file) {
   if (cache.has(file)) return cache.get(file).exports;

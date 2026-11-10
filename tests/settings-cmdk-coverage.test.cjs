@@ -72,6 +72,7 @@ function labelValues(node, file) {
     return labels;
   }
   if (text === "label" && file.endsWith("NotificationMatrix.tsx")) return labelsFrom(file, "notificationRows");
+  if (text === "part.label" && file.endsWith("CardSettingsSection.tsx")) return labelsFrom("src/lib/kanban/cardParts.ts", "CARD_PARTS");
   if (ts.isTemplateExpression(node)) {
     let values = [node.head.text];
     for (const span of node.templateSpans) {
