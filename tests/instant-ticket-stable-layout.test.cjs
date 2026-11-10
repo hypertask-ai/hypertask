@@ -57,6 +57,7 @@ const title = load("src/components/PageComponents/TaskDetail/TopRow/TaskDetailTi
   "./MobileTaskDueDate": { default: marker("due") },
   "@/hooks/useFlag": { useFlag: key => key !== "htpr-8991-right-column" && cachedLayout },
   "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+  "@/lib/flags/definitions/htpr-8992-sticky-title": { HTPR_8992_STICKY_TITLE_FLAG: "htpr-8992-sticky-title" },
   "@/hooks/General/useCopyURL": { default: () => ({ copyTicketNumber: noop }) },
   "@/components/Common/Tooltip": { default: () => null },
   "@/lib/contexts/deviceContext": { useDeviceContext: () => false },

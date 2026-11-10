@@ -4,13 +4,14 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8955_CHAT_OVER_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8955-chat-over-title";
+import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-sticky-title";
 
 interface BaseTitleContainerProps {
   dataAttribute: string;
   containerRef?: React.RefObject<HTMLDivElement | null>;
   containerClassName?: string;
   titleRowClassName?: string;
-  showScrollShadow?: boolean;
+  showScrollDivider?: boolean;
   hasSummary?: boolean;
   titleRowContent: ReactNode;
   children?: ReactNode;
@@ -24,7 +25,7 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
   containerRef,
   containerClassName,
   titleRowClassName,
-  showScrollShadow = false,
+  showScrollDivider = false,
   hasSummary,
   titleRowContent,
   children,
@@ -34,6 +35,7 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
 }) => {
   const _mbl = useContext(MobileViewContext);
   const chatOverTitle = useFlag(HTPR_8955_CHAT_OVER_TITLE_FLAG);
+  const stickyTitleLine = useFlag(HTPR_8992_STICKY_TITLE_FLAG);
   const zIndex = zIndexOverride ?? (chatOverTitle ? "var(--z-sticky)" : 50);
 
   const baseContainerClasses = cn(
@@ -42,12 +44,14 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
     _mbl
       ?
         cn(
-          "items-start sticky top-[env(safe-area-inset-top)] border-b border-light-black-border-1",
+          "items-start sticky top-[env(safe-area-inset-top)] border-b",
+          stickyTitleLine && dataAttribute === "task-detail" ? "border-border-light-gray-thin" : "border-light-black-border-1",
           dataAttribute === "task-detail" ? "pt-2" : "pt-4"
         )
       : "pt-9 items-baseline pb-[8px]",
     _mbl && dataAttribute === "task-detail" && "task-detail-title-safe-fill",
     !hasSummary && "pb-3",
+    stickyTitleLine && !_mbl && showScrollDivider && "shadow-[0_1px_0_0_var(--border-light-gray-thin)]",
     containerClassName
   );
 

@@ -21,6 +21,7 @@ function loadTitleContainer({ mobile = false } = {}) {
     if (name === "@/lib/contexts/mobileContext") return { MobileViewContext };
     if (name === "@/hooks/useFlag") return { useFlag: () => false };
     if (name === "@/lib/flags/definitions/htpr-8955-chat-over-title") return { HTPR_8955_CHAT_OVER_TITLE_FLAG: "htpr-8955-chat-over-title" };
+    if (name === "@/lib/flags/definitions/htpr-8992-sticky-title") return { HTPR_8992_STICKY_TITLE_FLAG: "htpr-8992-sticky-title" };
     throw new Error(`Unexpected dependency ${name}`);
   }, loaded, loaded.exports);
   return loaded.exports.default;
