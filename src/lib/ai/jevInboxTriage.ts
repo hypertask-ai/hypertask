@@ -52,9 +52,7 @@ export const parseJevTriageBatch = (text: string | null | undefined, items: JevT
 };
 
 export const selectJevNoiseIds = (verdicts: JevTriageVerdict[]) =>
-  verdicts
-    .filter((verdict) => !verdict.needsYou && typeof verdict.confidence === "number" && verdict.confidence >= JEV_TRIAGE_MIN_CONFIDENCE)
-    .map((verdict) => verdict.id);
+  verdicts.filter((verdict) => !verdict.needsYou && typeof verdict.confidence === "number" && verdict.confidence >= JEV_TRIAGE_MIN_CONFIDENCE).map((verdict) => verdict.id);
 
 export const jevTriageBatches = <T,>(items: T[], size = JEV_TRIAGE_BATCH_SIZE): T[][] =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
