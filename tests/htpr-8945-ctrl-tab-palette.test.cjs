@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
