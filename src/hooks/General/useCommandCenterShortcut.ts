@@ -19,13 +19,13 @@ export function useCommandCenterShortcut(
   const inboxCtrlKClose = useFlag(HTPR_7571_INBOX_CTRLK_CLOSE_FLAG);
   const ticketEditorCtrlJ = useFlag(HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG);
   const setShowCommands = useSetRecoilState(showCommandsAtom);
-  useEffect(() => {
+  const listen = (passTicketEditorCtrlJ: boolean) => {
     const handleCommandCenterShortcut = (e: KeyboardEvent) => {
       if (authenticatedUserId === null) return;
       if (showTrialModal || showEmailVerificationModal) return;
       if (isComposePaletteShortcut(e, isApple, pathname)) {
         e.preventDefault();
-        if (ticketEditorCtrlJ && isTicketEditorWriteWithAiShortcut(e)) return;
+        if (passTicketEditorCtrlJ && isTicketEditorWriteWithAiShortcut(e)) return;
         e.stopImmediatePropagation();
         const fromPendingSearchProxy = lazyClosedSearchCommands && pathname === "/search" && e.code === "KeyK" &&
           (e.target as HTMLElement | null)?.id === "search-command-focus-proxy";
@@ -48,7 +48,8 @@ export function useCommandCenterShortcut(
     document.addEventListener("keydown", handleCommandCenterShortcut, true);
     return () =>
       document.removeEventListener("keydown", handleCommandCenterShortcut, true);
-  }, [
+  };
+  useEffect(ticketEditorCtrlJ ? () => listen(true) : () => listen(false), [
     authenticatedUserId,
     isApple,
     pathname,

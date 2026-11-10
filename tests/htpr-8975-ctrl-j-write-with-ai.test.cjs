@@ -77,11 +77,10 @@ test("flag off keeps today's Ctrl+J New task inside ticket editors", () => {
   assert.deepEqual(calls, [["palette", { show: true, mode: "command", paletteTab: "compose" }]]);
 });
 
-function editorKeyboard(enabled, mode) {
+function editorKeyboard(mode) {
   const actions = [];
   const { useTaskDetailEditorKeyboard } = loader({
-    "@/hooks/useFlag": { useFlag: (key) => key === flagKey ? enabled : false },
-    [flagModule]: flagStub,
+    "@/hooks/useFlag": { useFlag: (key) => ["htpr-7393-comment-inline-ai", "htpr-8173-description-inline-drafts"].includes(key) },
     "@/lib/state": { useSetRecoilState: () => (value) => actions.push(["commands", value]) },
     "@/store": { showCommandsAtom: "commands" },
     "@/models/enums": { CommandMode: { Command: "command" } },
@@ -89,13 +88,13 @@ function editorKeyboard(enabled, mode) {
   })("src/components/RTE/useTaskDetailEditorKeyboard.tsx");
   const context = { mode, isApple: false, shouldShowInlineDraftAiRef: {}, toggleAiTaskWriter: () => actions.push(["write-with-ai"]) };
   let prevented = false;
-  useTaskDetailEditorKeyboard(() => context).handleKeydown({ key: "J", code: "KeyJ", keyCode: 74, ctrlKey: true, preventDefault: () => { prevented = true; } });
+  useTaskDetailEditorKeyboard(() => context).handleKeydown({ key: "j", code: "KeyJ", keyCode: 74, ctrlKey: true, preventDefault: () => { prevented = true; } });
   return { actions, prevented };
 }
 
-test("Ctrl+J in comment, comment edit and description editors opens Write with AI with the flag on", () => {
+test("Ctrl+J that reaches comment, comment edit and description editors opens Write with AI", () => {
   for (const mode of ["create-comment", "read-edit-comments", "read-edit-description"]) {
-    const { actions, prevented } = editorKeyboard(true, mode);
+    const { actions, prevented } = editorKeyboard(mode);
     assert.equal(prevented, true);
     assert.deepEqual(actions, [["write-with-ai"]], mode);
   }

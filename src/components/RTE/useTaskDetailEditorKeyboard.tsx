@@ -1,5 +1,4 @@
 import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
-import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7393_COMMENT_INLINE_AI_FLAG } from "@/lib/flags/keys";
@@ -20,7 +19,6 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
   const { isInboxFlow, isApple, isRecording, isReadOnlyContent, mode, shouldShowInlineDraftAiRef, editor, mobileExistingEditOpen, discardDraft, inInbox, setFilesDropped, allowEdit, shouldShowAiTaskWriter, isMbl, handleTaskOptions, editMode, scrollVirtualize } = getContext();
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
-  const ticketEditorCtrlJ = useFlag(HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG);
   const sidebarEditWithAi = !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
 
 
@@ -156,10 +154,7 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
         ?.click();
     }
 
-    if (ticketEditorCtrlJ && e.code === "KeyJ" && cmdControl && !e.shiftKey && !e.altKey) {
-      e.preventDefault();
-      toggleAiTaskWriter();
-    } else if (!ticketEditorCtrlJ && e.key === "j" && cmdControl) {
+    if (e.key === "j" && cmdControl) {
       e.preventDefault();
       if (sidebarEditWithAi) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       else toggleAiTaskWriter();
