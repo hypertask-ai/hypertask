@@ -252,6 +252,7 @@ export const KanbanBulkSelectionProvider = ({
 
     if (
       bulkArchiveInstantHide
+      && bulkArchiveUndoAll
       && selectedTasks.length > 1
       && onArchiveSelectedBatch
     ) {

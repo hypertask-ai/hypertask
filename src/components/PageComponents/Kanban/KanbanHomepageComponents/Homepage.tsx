@@ -1,4 +1,5 @@
 import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
+import { HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG } from "@/lib/flags/definitions/htpr-8928-bulk-archive-instant-hide";
 import { HTPR_8427_KANBAN_ARCHIVE_SHORTCUT_FLAG } from "@/lib/flags/definitions/htpr-8427-kanban-archive-shortcut";
 import { useFlag } from "@/hooks/useFlag";
 import { BoardCardDataProvider } from "../KanbanTaskComponents/BoardCardData";
@@ -112,6 +113,7 @@ const HomePage = ({
   const { secondaryStartupEnabled } = useBoardStartup();
   const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG);
   const archiveShortcutAlwaysRuns = useFlag(HTPR_8427_KANBAN_ARCHIVE_SHORTCUT_FLAG);
+  const bulkArchiveInstantHide = useFlag(HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG);
   const store = useStore();
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
   const getFocusedTaskId = useCallback(
@@ -705,20 +707,17 @@ const HomePage = ({
         );
       }
 
-      const results = await Promise.allSettled(
-        tasks.map((task) => globalAPIHandlers.archiveTask(task.id, "Archive")),
-      );
       const failures: ITask[] = [];
       const successes: ITask[] = [];
-      results.forEach((result, index) => {
-        const task = tasks[index];
-        if (result.status === "rejected") {
-          console.error("Kanban bulk archive failed", task.id, result.reason);
-          failures.push(task);
-        } else {
+      for (const task of tasks) {
+        try {
+          await globalAPIHandlers.archiveTask(task.id, "Archive");
           successes.push(task);
+        } catch (error) {
+          console.error("Kanban bulk archive failed", task.id, error);
+          failures.push(task);
         }
-      });
+      }
 
       if (currentUser?.id) {
         for (const task of successes) {
@@ -960,7 +959,9 @@ const HomePage = ({
     <KanbanBulkSelectionProvider
       items={bulkSelectionItems}
       onArchiveTask={archiveTaskForBulk}
-      onArchiveSelectedBatch={archiveSelectedBatchForBulk}
+      onArchiveSelectedBatch={
+        bulkArchiveInstantHide ? archiveSelectedBatchForBulk : undefined
+      }
       onArchiveUndo={(tasks) => registerArchiveUndo(
         `Undo archive of ${tasks.length} tasks`,
         { taskIds: tasks.map((task) => task.id), projectId: _currentProject.id },
