@@ -24,7 +24,6 @@
 # Resume command: 2nd argument (or --resume <cmd>), else SHIP_CLAIM_RESUME, else CLAUDE_CODE_SESSION_ID, else CODEX_SESSION_ID / CODEX_THREAD_ID.
 # Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
 # SHIP_CLAIM_PICKED=1 (set by fleet/pick, which already chose the ticket and the order): skips the queue brake and the infra-first check.
-#   fleet/pick enforces the house-rule WIP cap (live runners; solo dev and design PRs excluded), so the raw PR count does not apply.
 # SHIP_CLAIM_INCIDENT=1 (set by fleet/pick for an open board 15 ticket labelled incident, YPER4-1375): skips the open-PR hold,
 #   the unfinished-merged-work hold, the queue brake, infra first and the working-area check, because a live outage outranks
 #   the work a runner already holds. The flag counts only when the ticket is an HTPR ticket that really carries the incident
