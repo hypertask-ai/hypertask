@@ -136,6 +136,18 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const mounted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const composer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!tabPaletteCycleActive || !active) return;
+    const root = composer.current;
+    if (!root) return;
+    const tabOut = "[data-compose-plus-row] summary, [data-compose-plus-row] button, #compose-task-audio-button, [data-compose-below-row] [data-compose-board-chip]";
+    for (const node of root.querySelectorAll<HTMLElement>(tabOut)) node.tabIndex = -1;
+    return () => {
+      for (const node of root.querySelectorAll<HTMLElement>(tabOut)) {
+        if (node.tabIndex === -1) node.tabIndex = 0;
+      }
+    };
+  }, [tabPaletteCycleActive, active, text, dictating, addingImages, boardPickerOpen]);
   const [writingHeight, setWritingHeight] = useState<number>();
   const user = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);

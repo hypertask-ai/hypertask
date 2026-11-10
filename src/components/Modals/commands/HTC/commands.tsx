@@ -781,7 +781,7 @@ const Commands = (props: Props) => {
       if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || writing) return;
       if (skillMenuOwnsKeys && document.querySelector("[data-compose-skill-menu-open]")) return;
       const target = event.target as HTMLElement;
-      if (!tabPaletteCycle && isCompose && target.matches("[data-compose-task-writer] textarea") &&
+      if (!(tabPaletteCycle && !isMobile) && isCompose && target.matches("[data-compose-task-writer] textarea") &&
           document.querySelector("[data-compose-board-chip]")) return;
       if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
@@ -790,7 +790,7 @@ const Commands = (props: Props) => {
     };
     document.addEventListener("keydown", switchTab, true);
     return () => document.removeEventListener("keydown", switchTab, true);
-  }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys, plusComposerEnabled, tabPaletteCycle]);
+  }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys, plusComposerEnabled, tabPaletteCycle, isMobile]);
 
   const integratedTabs = newTaskWindow && !isMobile && !isDemo && !isInteractive;
   const modeSwitch = !isDemo && !isInteractive ? (
