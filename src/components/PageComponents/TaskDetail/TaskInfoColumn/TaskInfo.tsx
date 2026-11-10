@@ -484,10 +484,9 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         _mbl
           ? { top: dynamicTopValue }
           : {
-              top: stickyTitleFlag ? dynamicTopValue + 16 : dynamicTopValue,
-              maxHeight: stickyTitleFlag
-                ? `calc(100dvh - ${dynamicTopValue}px - 32px)`
-                : `calc(100dvh - ${dynamicTopValue}px - 16px)`,
+              ...(stickyTitleFlag
+                ? { top: dynamicTopValue + 16, maxHeight: `calc(100dvh - ${dynamicTopValue}px - 32px)` }
+                : { top: dynamicTopValue, maxHeight: `calc(100dvh - ${dynamicTopValue}px - 16px)` }),
               overflowY: "auto",
               scrollbarGutter: cachedLayout ? "stable" : undefined,
               overscrollBehavior: "contain",
