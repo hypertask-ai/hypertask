@@ -59,6 +59,8 @@ import {
   shouldLearnBoardMemoryFromAiMode,
 } from "@/lib/ai/boardMemoryClient";
 import toast from "react-hot-toast";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9010_TASK_WRITER_MEMORY_FLAG } from "@/lib/flags/definitions/htpr-9010-task-writer-memory";
 
 const AITaskWriterContainer: React.FC<
   IAITaskWriterContainerProps & {
@@ -95,6 +97,7 @@ const AITaskWriterContainer: React.FC<
   onTurnOffTask,
   onTurnOffPermanently,
 }) => {
+  const taskWriterMemoryEnabled = useFlag(HTPR_9010_TASK_WRITER_MEMORY_FLAG);
   const {
     aiMode,
     userPrompt,
@@ -362,7 +365,7 @@ const AITaskWriterContainer: React.FC<
         case "AcceptDescTitle": {
           const result = extractTitleAndDescription(currentDisplayResponse);
           AISaveHandler(result.description, currentItem?.attachments);
-          returnTitleAndDescription?.(result.title ?? "", result.description, undefined, firstBrief ?? userPrompt);
+          returnTitleAndDescription?.(result.title ?? "", result.description, undefined, taskWriterMemoryEnabled ? firstBrief ?? userPrompt : undefined);
           clearHistory();
           break;
         }
@@ -382,7 +385,7 @@ const AITaskWriterContainer: React.FC<
             assignees: result.assignees,
             dueDate: result.dueDate,
             startDate: result.startDate,
-          }, firstBrief ?? userPrompt);
+          }, taskWriterMemoryEnabled ? firstBrief ?? userPrompt : undefined);
           clearHistory();
           break;
         }
@@ -407,6 +410,7 @@ const AITaskWriterContainer: React.FC<
       returnTitleAndDescription,
       firstBrief,
       userPrompt,
+      taskWriterMemoryEnabled,
       sendAIRequest,
       projectId,
       projectLabels,

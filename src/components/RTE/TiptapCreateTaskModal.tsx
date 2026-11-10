@@ -1,6 +1,7 @@
 import { PlanLimitRefusal } from "@/lib/planLimitsClient";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 import { HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
+import { HTPR_9010_TASK_WRITER_MEMORY_FLAG } from "@/lib/flags/definitions/htpr-9010-task-writer-memory";
 import { HTPR_8028_MOBILE_WRITER_SAVE_FLAG } from "@/lib/flags/definitions/htpr-8028-mobile-writer-save";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
@@ -197,6 +198,7 @@ const TiptapCreateTaskModal = () => {
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
   const mobileWriterSaveFlag = useFlag(HTPR_8028_MOBILE_WRITER_SAVE_FLAG);
   const mobileWriterSave = Boolean(isMbl && mobileWriterSaveFlag);
+  const taskWriterMemoryEnabled = useFlag(HTPR_9010_TASK_WRITER_MEMORY_FLAG);
   const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
   const newTaskCtrlJFlag = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
   let composeShortcutCapture = true;
@@ -1154,7 +1156,7 @@ const TiptapCreateTaskModal = () => {
                 }}
                 returnTitleAndDescription={(title, description, props, note) => {
                   if (title) applyTaskWriterTitle(title);
-                  recordTaskWriterDraft(note ?? "", { title, ...props });
+                  if (taskWriterMemoryEnabled) recordTaskWriterDraft(note ?? "", { title, ...props });
                   if (props?.priority) handleChange("priority", props.priority);
                   if (props?.estimate) handleChange("estimate", props.estimate);
                   if (props?.tags) handleChange("tags", props.tags);

@@ -84,7 +84,9 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  return withUser(async (userId) => {
+  try {
+    const userId = await currentUserId();
+    if (!userId) return unauthorized();
     const input = learnSchema.parse(await request.json());
     const { projectId, ...parsedSignal } = input;
     if (
@@ -103,7 +105,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       await learnBoardMemoryFromSignal({ projectId, signal, userId }),
     );
-  });
+  } catch (error) {
+    return failureResponse(error);
+  }
 }
 
 export async function DELETE(request: NextRequest) {
@@ -120,49 +124,60 @@ export async function DELETE(request: NextRequest) {
   });
 }
 
+async function currentUserId() {
+  const user = await getCurrentUserFromCookies();
+  return user?.id ?? null;
+}
+
+function unauthorized() {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+
 async function withUser(handler: (userId: number) => Promise<NextResponse>) {
   try {
-    const user = await getCurrentUserFromCookies();
-    if (!user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    return await handler(user.id);
+    const userId = await currentUserId();
+    if (!userId) return unauthorized();
+    return await handler(userId);
   } catch (error) {
-    if (error instanceof BoardMemoryRateLimitError) {
-      return NextResponse.json(
-        { error: error.message },
-        {
-          status: 429,
-          headers: { "Retry-After": String(error.retryAfterSeconds) },
-        },
-      );
-    }
-    if (error instanceof BoardMemoryBusyError) {
-      return NextResponse.json(
-        { error: error.message },
-        {
-          status: 503,
-          headers: { "Retry-After": String(error.retryAfterSeconds) },
-        },
-      );
-    }
-    if (error instanceof z.ZodError || error instanceof SyntaxError) {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-    }
-    if (error instanceof BoardMemoryProjectAccessError) {
-      return NextResponse.json(
-        { error: "Project not found or access denied" },
-        { status: 404 },
-      );
-    }
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
-      url: "/api/ai/project/memory",
-      source: "handled",
-      extra: { stage: "request" },
-    });
-    console.error("Board memory request failed", error);
-    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+    return failureResponse(error);
   }
+}
+
+async function failureResponse(error: unknown) {
+  if (error instanceof BoardMemoryRateLimitError) {
+    return NextResponse.json(
+      { error: error.message },
+      {
+        status: 429,
+        headers: { "Retry-After": String(error.retryAfterSeconds) },
+      },
+    );
+  }
+  if (error instanceof BoardMemoryBusyError) {
+    return NextResponse.json(
+      { error: error.message },
+      {
+        status: 503,
+        headers: { "Retry-After": String(error.retryAfterSeconds) },
+      },
+    );
+  }
+  if (error instanceof z.ZodError || error instanceof SyntaxError) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  if (error instanceof BoardMemoryProjectAccessError) {
+    return NextResponse.json(
+      { error: "Project not found or access denied" },
+      { status: 404 },
+    );
+  }
+  await reportError({
+    message: error instanceof Error ? error.message : "AI request failed",
+    stack: error instanceof Error ? error.stack : undefined,
+    url: "/api/ai/project/memory",
+    source: "handled",
+    extra: { stage: "request" },
+  });
+  console.error("Board memory request failed", error);
+  return NextResponse.json({ error: "Request failed" }, { status: 500 });
 }
