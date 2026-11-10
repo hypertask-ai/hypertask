@@ -9,11 +9,14 @@ import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
 import { getSortComparator, Row, SECTION_CAP, isTaskRow } from "./tableViewShared";
 import { tableTaskRowKey } from "@/lib/table-view/tableCollapsedSections";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 
 type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableState>, "sortState" | "customFieldBySortColumnRef" | "sectionOrderBySid" | "timeTotals" | "timeNow" | "sections" | "expanded" | "collapsedSections" | "myTasksBulk" | "setExcludedTaskIds" | "persistedActiveItem" | "showArchivedOnBoard" | "isApple" | "myTasksSnoozeEnabled" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setExpanded">;
 
 export function useTableRows(context: Context) {
+  const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const snapshot = useFirstScreenSurface();
   const {
   sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
@@ -25,14 +28,17 @@ export function useTableRows(context: Context) {
 
   const isPrioritySort = sortState[0]?.column === "priority";
   const savedViewPrioritySort = myTasksSort?.field === "priority";
+  const effectiveCollapsed = tableGroupFoldEnabled ? collapsedSections : new Set<string>();
 
   const rows = useMemo(() => {
     if (sortState.length > 0) {
-      const flattenSort = shouldFlattenSortedRows(
-        Boolean(_currentProject),
-        true,
-        isPrioritySort
-      ) || savedViewPrioritySort;
+      const flattenSort = (
+        shouldFlattenSortedRows(
+          Boolean(_currentProject),
+          true,
+          isPrioritySort,
+        ) || savedViewPrioritySort
+      ) && !tableGroupFoldEnabled;
       const comparators = sortState.map(({ column, direction }, index) =>
         getSortComparator(
           column,
@@ -70,7 +76,7 @@ export function useTableRows(context: Context) {
       const next: Row[] = [];
       sections.forEach((section, index) => {
         const sid = tableSectionKey(section) ?? `i${index}`;
-        if (collapsedSections.has(String(sid))) return;
+        if (effectiveCollapsed.has(String(sid))) return;
         const items = sortTasks(section.items || []);
         const shown = expanded.has(sid) ? items : items.slice(0, SECTION_CAP);
         shown.forEach((task) =>
@@ -108,7 +114,8 @@ export function useTableRows(context: Context) {
   }, [
     sections,
     expanded,
-    collapsedSections,
+    effectiveCollapsed,
+    tableGroupFoldEnabled,
     sortState,
     sectionOrderBySid,
     _currentProject,

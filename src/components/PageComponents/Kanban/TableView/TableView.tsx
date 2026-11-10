@@ -13,6 +13,7 @@ import { createTableRowRenderer } from "./TableTaskRow";
 import { lazy, Suspense, useCallback, useRef, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
 import { tableTaskRowKey } from "@/lib/table-view/tableCollapsedSections";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -187,6 +188,7 @@ const TableView = ({
     myTasksSort, myTasksSortKey, filteredSections, _sections,
   });
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tagGroupingActive = Boolean(
     _currentProject &&
       tableGroupByTagEnabled &&
@@ -236,7 +238,7 @@ const TableView = ({
   renderTaskRow,
   } = createTableRowRenderer({
     snapshot: useFirstScreenSurface(currentUser?.id),
-    tagGroupingActive,
+    tagGroupingActive: tagGroupingActive && tableGroupFoldEnabled,
     selectedIndex, dragOverSectionId, currentProjectSectionIds, sortState, openTask,
     customFieldBySortColumn, frozenColumnOffset, getTicketText, _currentProject, sectionTitleBySid,
     timeTotals, timeNow, draggedTaskRef, clearTaskDrag, handleMouseEnter,
@@ -370,11 +372,13 @@ const TableView = ({
               );
             })}
           </div>
-          {(shouldFlattenSortedRows(
-            Boolean(_currentProject),
-            sortState.length > 0,
-            isPrioritySort
-          ) || savedViewPrioritySort) ? (
+          {(
+            (shouldFlattenSortedRows(
+              Boolean(_currentProject),
+              sortState.length > 0,
+              isPrioritySort,
+            ) || savedViewPrioritySort) && !tableGroupFoldEnabled
+          ) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
                 {rows.filter(isTaskRow).map((row, index) =>
@@ -395,7 +399,7 @@ const TableView = ({
                   ? sectionRows.find((row) => row.type === "more")?.hidden ?? 0
                   : rawItems.length - shown.length;
                 const destinationSectionId = tableSectionNumber(section) ?? null;
-                const folded = collapsedSections.has(String(sid));
+                const folded = tableGroupFoldEnabled && collapsedSections.has(String(sid));
                 return (
                   <div
                     key={sid}
@@ -417,7 +421,9 @@ const TableView = ({
                       role="button"
                       tabIndex={0}
                       className="flex cursor-pointer items-center gap-1 px-[10px] pt-1"
-                      onClick={() => toggleCollapsedSection(sid)}
+                      onClick={() => {
+                        if (tableGroupFoldEnabled) toggleCollapsedSection(sid);
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
