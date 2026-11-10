@@ -162,9 +162,16 @@ const HomePage = ({
       return searchedSections;
     }
 
-    return searchedSections.map((section) => ({
+    const runningFiltered = searchedSections.map((section) => ({
       ...section,
       items: (section.items ?? []).filter((task) => runningTimers.has(task.id)),
+    }));
+    if (pendingBulkArchiveIds.size === 0) return runningFiltered;
+    return runningFiltered.map((section) => ({
+      ...section,
+      items: (section.items ?? []).filter(
+        (task) => !pendingBulkArchiveIds.has(task.id),
+      ),
     }));
   }, [
     _currentProject.id,
@@ -175,6 +182,7 @@ const HomePage = ({
     sectionsToDisplay,
     searchKeyword,
     searchProjectId,
+    pendingBulkArchiveIds,
   ]);
   const hiddenSectionIndexes = useMemo(() => {
     const kw = searchProjectId === _currentProject.id ? searchKeyword.trim() : "";
@@ -230,6 +238,9 @@ const HomePage = ({
   });
   const [loading, setLoading] = useState<boolean>(false)
   const [renderAllTasks, setRenderAllTasks] = useState(false);
+  const [pendingBulkArchiveIds, setPendingBulkArchiveIds] = useState<Set<number>>(
+    () => new Set(),
+  );
 
   const showCommands = useRecoilValue(showCommandsAtom);
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
@@ -687,6 +698,8 @@ const HomePage = ({
 
   const archiveSelectedBatchForBulk = useCallback(
     async (tasks: ITask[]) => {
+      const pendingIds = new Set(tasks.map((task) => task.id));
+      setPendingBulkArchiveIds(pendingIds);
       const tasksBySection = new Map<number, number[]>();
       for (const task of tasks) {
         const sourceSectionId = getBulkSourceSectionId(task);
@@ -737,15 +750,22 @@ const HomePage = ({
         );
       }
 
-      if (failures.length > 0 && currentUser?.id) {
-        await reconcileActiveBoardTasks(
-          queryClient,
-          _currentProject.id,
-          currentUser.id,
-        );
+      try {
+        if (failures.length > 0 && currentUser?.id) {
+          await reconcileActiveBoardTasks(
+            queryClient,
+            _currentProject.id,
+            currentUser.id,
+          );
+        }
+        return failures;
+      } finally {
+        setPendingBulkArchiveIds((current) => {
+          const next = new Set(current);
+          for (const id of pendingIds) next.delete(id);
+          return next;
+        });
       }
-
-      return failures;
     },
     [
       _currentProject.id,
