@@ -46,6 +46,7 @@ export async function fetchUserPreferenceController(userId: number) {
         aiChatOpenNewTickets: true,
         aiChatOpenTickets: true,
         aiChatOpenBoards: true,
+        cardParts: true,
       },
     });
 

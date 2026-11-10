@@ -82,6 +82,7 @@ function card(enabled, task) {
     "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => ({ now: new Date(NOW).toISOString() }) },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveStalenessFromProject: () => true },
     "@/lib/flags/keys": {},
+    "@/hooks/General/useCardParts": { useCardParts: () => ({}) },
     "./TaskDraggableContainer": { default: ({ children }) => React.createElement("div", null, children) },
     "./TaskTopRow": { default: ({ staleClock }) => React.createElement("header", null, staleClock) },
     "./TaskTagsRow": { default: empty },

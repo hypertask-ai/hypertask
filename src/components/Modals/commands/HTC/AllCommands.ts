@@ -1418,8 +1418,42 @@ export const getAllCommands = (
   return groups;
 };
 
+const CARD_SETTINGS_COMMAND: ICommandList = {
+  key: "cardSettings",
+  name: "Card settings",
+  commandMode: CommandMode.Setting,
+  payload: "card-settings",
+  keywords: "card settings show hide parts ticket number inbox comments sub-tasks priority size due date tags staleness blocked empty cards",
+};
+
+export const withCardSettingsCommand = (
+  commandGroups: CommandGroup[],
+  context: IAllCommands["context"] | null,
+): CommandGroup[] => {
+  if (context === null) return commandGroups;
+  const boardSettings = commandGroups
+    .flatMap((group) => group.commandLists)
+    .find((command) => command.commandMode === CommandMode.BoardSettings);
+  if (!boardSettings) return commandGroups;
+  const pair = [boardSettings, CARD_SETTINGS_COMMAND];
+  if (context === "Kanban" && commandGroups.some((group) => group.group === "Board")) {
+    return commandGroups.map((group) => ({
+      ...group,
+      commandLists:
+        group.group === "Board"
+          ? [...pair, ...group.commandLists]
+          : group.commandLists.filter((command) => command !== boardSettings),
+    }));
+  }
+  return commandGroups.map((group) => ({
+    ...group,
+    commandLists: group.commandLists.flatMap((command) => (command === boardSettings ? pair : [command])),
+  }));
+};
+
 const BOARD_MENU_COMMAND_TARGETS = [
   { commandMode: CommandMode.BoardSettings },
+  { key: "cardSettings" },
   { commandMode: CommandMode.SortKanbanBoard, key: "sortBoard" },
   { commandMode: CommandMode.ShowFilterHTC, key: "ShowFilterHtc" },
   { commandMode: CommandMode.ManageColumn },
