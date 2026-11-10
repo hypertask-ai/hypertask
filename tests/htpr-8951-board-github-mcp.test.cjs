@@ -50,7 +50,6 @@ const put = (body) => operation.PUT({ json: async () => body }, props);
 test.beforeEach(() => {
   world.flagOn = true;
   world.error = null;
-  world.writeRoleRefusal = null;
   world.saved = null;
 });
 
