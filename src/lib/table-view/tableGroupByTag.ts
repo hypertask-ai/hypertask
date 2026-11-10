@@ -126,7 +126,6 @@ export function countTableTags(sections: ISection[]): { id: string; title: strin
     (a, b) => b.count - a.count || a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
   );
 }
-
 export const buildTableSectionsGroupedByAssignee = (sections: ISection[]) =>
   buildGroups(sections, (task) => {
     const assignee = task.assignees?.[0];

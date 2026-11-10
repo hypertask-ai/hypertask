@@ -43,8 +43,8 @@ export function useTableState(context: Context) {
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
-  const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes") || legacyTableGroupEnabled;
   const queryClient = useQueryClient();
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
@@ -203,7 +203,7 @@ export function useTableState(context: Context) {
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
   }
-  if (_currentProject && tableGroupByTagEnabled) {
+  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled)) {
     const grouping = getActiveTableGroupingFromProject(_currentProject);
     if (grouping.mode !== "column") {
       sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
