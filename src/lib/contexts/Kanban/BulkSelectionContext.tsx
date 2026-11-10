@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 import { HTPR_8737_BULK_MOVE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8737-bulk-move-board";
+import { HTPR_8976_MOUSE_MULTISELECT_FLAG } from "@/lib/flags/definitions/htpr-8976-mouse-multiselect";
 import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 import { CommandMode } from "@/models/enums";
@@ -87,6 +88,7 @@ export const KanbanBulkSelectionProvider = ({
 }: KanbanBulkSelectionProviderProps) => {
   const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const bulkMoveBoardEnabled = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
+  const mouseMultiselect = useFlag(HTPR_8976_MOUSE_MULTISELECT_FLAG);
   const queryClient = useQueryClient();
   const focusedTaskId = useRecoilValue(activeItemAtom);
   const latestTaskIdRef = useRef<number | null>(null);
@@ -110,6 +112,7 @@ export const KanbanBulkSelectionProvider = ({
     }
     return result;
   }, [items]);
+  const boardOrderIds = useMemo(() => items.map((task) => task.id), [items]);
 
   const selectedTasks = useMemo(
     () => items.filter((task) => selectedIds.has(task.id)),
@@ -164,24 +167,22 @@ export const KanbanBulkSelectionProvider = ({
     ) => {
       if (sectionId == null) return;
       latestTaskIdRef.current = taskId;
-      setSelectedIds((current) => {
-        if (withRange && anchorRef.current?.sectionId === sectionId) {
-          const taskIds = taskIdsBySection.get(sectionId) ?? [];
-          const range = getInclusiveRange(
-            taskIds,
-            anchorRef.current.taskId,
-            taskId,
-          );
-          const next = new Set(current);
-          range.forEach((id) => next.add(id));
-          return next;
-        }
-
-        return toggleId(current, taskId);
-      });
-      if (!withRange || anchorRef.current?.sectionId !== sectionId) {
-        anchorRef.current = { sectionId, taskId };
+      const anchor = anchorRef.current;
+      let rangeIds: number[] | undefined;
+      if (withRange && anchor) {
+        if (mouseMultiselect) rangeIds = boardOrderIds;
+        else if (anchor.sectionId === sectionId) rangeIds = taskIdsBySection.get(sectionId) ?? [];
       }
+      const range = anchor && rangeIds
+        ? getInclusiveRange(rangeIds, anchor.taskId, taskId)
+        : undefined;
+      setSelectedIds((current) => {
+        if (!range) return toggleId(current, taskId);
+        const next = new Set(current);
+        range.forEach((id) => next.add(id));
+        return next;
+      });
+      if (!range) anchorRef.current = { sectionId, taskId };
       setFailedIds((current) => {
         if (!current.has(taskId)) return current;
         const next = new Set(current);
@@ -189,7 +190,29 @@ export const KanbanBulkSelectionProvider = ({
         return next;
       });
     },
-    [items, taskIdsBySection],
+    [boardOrderIds, items, mouseMultiselect, taskIdsBySection],
+  );
+
+  const hasSelection = selectedIds.size > 0;
+  useEffect(
+    mouseMultiselect && hasSelection
+      ? () => {
+          const onBoardClick = (event: MouseEvent) => {
+            if (event.defaultPrevented || event.button !== 0) return;
+            if (!(event.target instanceof HTMLElement)) return;
+            if (!event.target.closest("#sectionsContainer")) return;
+            if (
+              event.target.closest(
+                ".kanban-task-card, [id^='task-'], button, a, input, textarea, select, [role='button'], [role='menu'], [role='menuitem'], [contenteditable='true']",
+              )
+            ) return;
+            clearSelection();
+          };
+          document.addEventListener("click", onBoardClick);
+          return () => document.removeEventListener("click", onBoardClick);
+        }
+      : () => {},
+    [clearSelection, hasSelection, mouseMultiselect],
   );
 
   const openBulkCommand = useCallback(
