@@ -225,14 +225,18 @@ export function useTableState(context: Context) {
     if (!accountColumns || accountColumns.viewId !== tableViewId) return;
     const signature = JSON.stringify({ viewId: tableViewId, keys: accountColumns.keys, widths: accountColumns.widths });
     if (signature === lastSavedColumns.current) return;
-    const handle = setTimeout(() => {
+    const write = () => {
       lastSavedColumns.current = signature;
       void setTableColumnsViewAndReturn(_currentProject, {
         keys: accountColumns.keys,
         widths: accountColumns.widths,
       });
-    }, 400);
-    return () => clearTimeout(handle);
+    };
+    const handle = setTimeout(write, 400);
+    return () => {
+      clearTimeout(handle);
+      if (lastSavedColumns.current !== signature) write();
+    };
   }, [
     accountColumns,
     myTasksColumnsControlled,
