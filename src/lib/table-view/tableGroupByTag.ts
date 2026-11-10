@@ -64,6 +64,20 @@ export const getActiveTableGroupingFromProject = (project?: IProject | null): Ta
   parseTableGrouping(getActiveTableGroupingValueFromProject(project));
 export const getActiveTableGroupByFromProject = (project?: IProject | null): TableGroupBy =>
   getActiveTableGroupingFromProject(project).mode;
+export const effectiveTableGrouping = (
+  project: IProject | null | undefined,
+  modesEnabled: boolean,
+  legacyTagEnabled: boolean,
+): TableGrouping => {
+  const grouping = getActiveTableGroupingFromProject(project);
+  if (modesEnabled) return grouping;
+  if (legacyTagEnabled && grouping.mode === "tag") return { mode: "tag", tagIds: [], allTags: true };
+  return { mode: "column", tagIds: [], allTags: false };
+};
+export const serializeEffectiveTableGrouping = (grouping: TableGrouping): string =>
+  grouping.mode === "tag" && grouping.allTags
+    ? "tag"
+    : serializeTableGrouping(grouping.mode, grouping.tagIds);
 type GroupSpec = { key: string; title: string; order: number };
 type Group = { title: string; order: number; items: ITask[] };
 const buildGroups = (sections: ISection[], specOf: (task: ITask) => GroupSpec): TableTagGroupedSection[] => {
@@ -122,13 +136,19 @@ export function countTableTags(sections: ISection[]): { id: string; title: strin
   }
   return [...counts.values()].sort((a, b) => b.count - a.count || a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
 }
+const assigneeKeys = (task: ITask): { key: string; title: string }[] =>
+  (task.assignees ?? [])
+    .map((assignee) =>
+      typeof assignee.agentId === "string"
+        ? { key: `assignee:agent:${assignee.agentId}`, title: assignee.agent?.displayName || "Agent" }
+        : { key: `assignee:user:${assignee.userId}`, title: assignee.user?.displayName || "Member" },
+    )
+    .sort((a, b) => a.key.localeCompare(b.key));
 export const buildTableSectionsGroupedByAssignee = (sections: ISection[]) =>
   buildGroups(sections, (task) => {
-    const assignee = task.assignees?.[0];
-    if (!assignee) return { key: "assignee:none", title: UNASSIGNED_GROUP_TITLE, order: LAST };
-    return typeof assignee.agentId === "string"
-      ? { key: `assignee:agent:${assignee.agentId}`, title: assignee.agent?.displayName || "Agent", order: 0 }
-      : { key: `assignee:user:${assignee.userId}`, title: assignee.user?.displayName || "Member", order: 0 };
+    const first = assigneeKeys(task)[0];
+    if (!first) return { key: "assignee:none", title: UNASSIGNED_GROUP_TITLE, order: LAST };
+    return { ...first, order: 0 };
   });
 
 export const buildTableSectionsGroupedByPriority = (sections: ISection[]) =>

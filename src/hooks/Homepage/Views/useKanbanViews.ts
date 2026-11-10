@@ -53,8 +53,9 @@ import {
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
 import {
+  effectiveTableGrouping,
   getActiveTableGroupByFromProject,
-  getActiveTableGroupingValueFromProject,
+  serializeEffectiveTableGrouping,
   serializeTableGrouping,
 } from "@/lib/table-view/tableGroupByTag";
 import {
@@ -88,7 +89,7 @@ const useKanbanViews = (project: IProject | null) => {
   const deletedViewLeavesTabs = useFlag(HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG);
   const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG);
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
-  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled;
+  const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const router = useRouter();
   const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom);
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
@@ -253,9 +254,9 @@ const useKanbanViews = (project: IProject | null) => {
     board_show_archived: getActiveShowArchivedOverrideFromProject(queuedProject),
     table_sort_column: getActiveTableSortFromProject(queuedProject)?.column ?? null,
     table_sort_direction: getActiveTableSortFromProject(queuedProject)?.direction ?? null,
-    table_group_by: tableGroupByTagEnabled || tableGroupModesEnabled
-      ? getActiveTableGroupingValueFromProject(queuedProject)
-      : "column",
+    table_group_by: serializeEffectiveTableGrouping(
+      effectiveTableGrouping(queuedProject, tableGroupModesEnabled, legacyTableGroupEnabled),
+    ),
     table_collapsed_sections: serializeTableCollapsedSections(
       getActiveTableCollapsedSectionsFromProject(queuedProject),
     ),
@@ -432,8 +433,11 @@ const useKanbanViews = (project: IProject | null) => {
     tableGroupBy: ReturnType<typeof getActiveTableGroupByFromProject>,
     tagIds: string[] = [],
   ) => {
-    if (tableGroupBy !== "column" && !tableGroupByTagEnabled && !tableGroupModesEnabled) return;
-    const value = serializeTableGrouping(tableGroupBy, tagIds);
+    if (tableGroupBy !== "column" && !legacyTableGroupEnabled && !tableGroupModesEnabled) return;
+    if (!tableGroupModesEnabled && tableGroupBy !== "column" && tableGroupBy !== "tag") return;
+    const value = tableGroupBy === "tag" && !tableGroupModesEnabled
+      ? "tag"
+      : serializeTableGrouping(tableGroupBy, tagIds);
     return apiHandler(
       (queuedProject) => buildUnsavedBody(queuedProject, {
         table_group_by: value,
@@ -574,14 +578,16 @@ const useKanbanViews = (project: IProject | null) => {
   };
   const saveAsDefaultHandler = async (body: TCreate_view_body) => {
     const requestBody =
-      (tableGroupByTagEnabled || tableGroupModesEnabled) &&
+      (legacyTableGroupEnabled || tableGroupModesEnabled) &&
       body.view_settings.table_group_by === undefined &&
       project?.id === body.projectId
         ? {
             ...body,
             view_settings: {
               ...body.view_settings,
-              table_group_by: getActiveTableGroupingValueFromProject(project),
+              table_group_by: serializeEffectiveTableGrouping(
+                effectiveTableGrouping(project, tableGroupModesEnabled, legacyTableGroupEnabled),
+              ),
             },
           }
         : body;

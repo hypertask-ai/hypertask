@@ -24,7 +24,7 @@ import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-89
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import {
   buildTableSectionsForGrouping,
-  getActiveTableGroupingFromProject,
+  effectiveTableGrouping,
 } from "@/lib/table-view/tableGroupByTag";
 import { getActiveTableCollapsedSectionsFromProject } from "@/lib/table-view/tableGroupByTag";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
@@ -203,8 +203,8 @@ export function useTableState(context: Context) {
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
   }
-  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled)) {
-    const grouping = getActiveTableGroupingFromProject(_currentProject);
+  if (_currentProject) {
+    const grouping = effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled);
     if (grouping.mode !== "column") sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
   }
 

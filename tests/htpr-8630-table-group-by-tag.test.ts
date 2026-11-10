@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ITask } from "../src/models/model";
-import { buildTableSectionsForGrouping, buildTableSectionsGroupedByTag, parseTableGrouping, sanitizeTableGroupBy, serializeTableGrouping, OTHER_GROUP_TITLE } from "../src/lib/table-view/tableGroupByTag";
+import type { IProject, ITask } from "../src/models/model";
+import { buildTableSectionsForGrouping, buildTableSectionsGroupedByTag, effectiveTableGrouping, parseTableGrouping, sanitizeTableGroupBy, serializeEffectiveTableGrouping, serializeTableGrouping, OTHER_GROUP_TITLE } from "../src/lib/table-view/tableGroupByTag";
 
 test("tag grouping and sanitize", () => {
   assert.equal(sanitizeTableGroupBy("tag"), "tag");
@@ -34,4 +34,36 @@ test("chosen tag order wins, Other holds the rest and other grouping modes work"
   assert.deepEqual(byMode("priority"), ["High", "No priority"]);
   assert.equal(serializeTableGrouping("tag", ["l2", "l1"]), "tag:l2,l1");
   assert.deepEqual(parseTableGrouping("tag:l2,l1"), { mode: "tag", tagIds: ["l2", "l1"], allTags: false });
+});
+
+test("each flag keeps its own grouping and the legacy flag turns off cleanly", () => {
+  const project = (value: string) =>
+    ({
+      project_view: {
+        user_project_views: [{ appliedView: { table_group_by: value } }],
+      },
+    }) as unknown as IProject;
+  assert.deepEqual(effectiveTableGrouping(project("assignee"), false, true), { mode: "column", tagIds: [], allTags: false });
+  assert.equal(serializeEffectiveTableGrouping(effectiveTableGrouping(project("assignee"), false, true)), "column");
+  assert.deepEqual(effectiveTableGrouping(project("tag"), false, true), { mode: "tag", tagIds: [], allTags: true });
+  assert.equal(serializeEffectiveTableGrouping(effectiveTableGrouping(project("tag"), false, true)), "tag");
+  assert.deepEqual(effectiveTableGrouping(project("tag:l2,l1"), false, true), { mode: "tag", tagIds: [], allTags: true });
+  assert.deepEqual(effectiveTableGrouping(project("tag:l2,l1"), true, false), { mode: "tag", tagIds: ["l2", "l1"], allTags: false });
+  assert.equal(serializeEffectiveTableGrouping(effectiveTableGrouping(project("tag:l2,l1"), true, false)), "tag:l2,l1");
+  assert.equal(serializeEffectiveTableGrouping(effectiveTableGrouping(project("priority"), true, false)), "priority");
+});
+
+test("a ticket with several assignees lands in one deterministic assignee group", () => {
+  const people = [
+    { userId: 9, user: { displayName: "Zoe" } },
+    { userId: 3, user: { displayName: "Ada" } },
+  ];
+  const rows = (assignees: typeof people) =>
+    buildTableSectionsForGrouping([{ section_title: "Backlog", items: [{ id: 1, assignees } as unknown as ITask] }], {
+      mode: "assignee",
+      tagIds: [],
+      allTags: false,
+    }).map((section) => section.section_title);
+  assert.deepEqual(rows(people), ["Ada"]);
+  assert.deepEqual(rows([...people].reverse()), ["Ada"]);
 });
