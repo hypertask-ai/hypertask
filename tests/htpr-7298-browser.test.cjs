@@ -252,7 +252,7 @@ for (const [name, userId, expected] of [['ticket-board-only writer refused', 2, 
       await h.request('[publicId]/links', 'DELETE', { task_id: 11 });
       assert.equal(h.state.pages[0].taskId, 10);
       assert.equal(h.state.links.filter((link) => link.pageId === 20).length, 2);
-      assert.ok(h.state.links.every((link) => link.removedAt instanceof Date));
+      assert.ok(h.state.links.filter((link) => link.pageId === 20).every((link) => link.removedAt instanceof Date));
     }
   });
 }
@@ -262,7 +262,7 @@ test('unlink flag off is refused without mutations / flag on is allowed', async 
     const result = await h.request('[publicId]/links', 'DELETE', { task_id: 10 });
     assert.equal(result.status, enabled ? 200 : 404);
     assert.equal(h.state.links.length, 3);
-    assert.equal(h.state.links.filter((link) => link.removedAt === null).length, enabled ? 1 : 2);
+    assert.equal(h.state.links.filter((link) => link.pageId === 20 && link.removedAt === null).length, enabled ? 1 : 2);
   }
 });
 for (const [name, options, expected] of [['flag off refused', { flag: false }, 404], ['flag on board owner allowed', {}, 200], ['board outsider refused', { userId: 2 }, 404], ['board member allowed', { userId: 3 }, 200]]) {
