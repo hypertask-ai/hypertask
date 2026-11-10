@@ -155,6 +155,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       }
       if (!tags?.length) writerLabelIds = validated;
       else if (writerBrain) writerLabelIds = validated.filter((id) => writerBrain!.ids.has(id));
+      if (brainTools && writerBrain && writerLabelIds.length) writerLabelIds = brainTools.enforceBrainLabel(writerLabelIds, writerBrain);
     }
     if (body.existingTaskId != null) {
       const taskId = Number(body.existingTaskId);
@@ -184,9 +185,12 @@ const route = (requestStartedAt: number) => taskWriteRoute({
           where: { id: agentId },
           select: { id: true, userId: true, displayName: true, photoURL: true },
         }) : null;
-        await mutateTaskLabels(taskId, projectId, { add: writerLabelIds, skipIfPresent: boardLabelIds }, {
-          id: userId, email: currentUser.email ?? "", displayName: currentUser.displayName, photoURL: currentUser.photoURL,
-        }, actingAgent);
+        const labelActor = { id: userId, email: currentUser.email ?? "", displayName: currentUser.displayName, photoURL: currentUser.photoURL };
+        await mutateTaskLabels(taskId, projectId, { add: writerLabelIds, skipIfPresent: boardLabelIds }, labelActor, actingAgent);
+        const writerBrainIds = writerBrain ? writerLabelIds.filter((id) => writerBrain!.ids.has(id)) : [];
+        if (writerBrain && writerBrainIds.length) {
+          await mutateTaskLabels(taskId, projectId, { add: writerBrainIds, skipIfPresent: [...writerBrain.ids] }, labelActor, actingAgent);
+        }
         result.json.taskLabels = await prisma.taskLabel.findMany({ where: { taskId }, include: { label: true } });
       }
       if (customFields.length) {

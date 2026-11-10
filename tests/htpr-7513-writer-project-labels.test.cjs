@@ -496,10 +496,32 @@ test("chat: brain flag off or a board without brain labels keeps the old labels 
   }
 });
 
-test("chat: explicit labels from the caller are not touched", async () => {
-  const h = harness({ enabled: true, brain: true, boardLabels: brainBoard, output: output + labelMarker(["wazig-id"]) });
+test("chat: explicit labels from the caller are kept and get the writer's brain label unless they already have one", async () => {
+  const h = harness({ enabled: true, brain: true, boardLabels: brainBoard, output: output + labelMarker(["wazig-id", "b-hard"]) });
   await h.execute({ project_id: 15, brief: "Fix Wazig", labels: ["bug-id"] });
-  assert.deepEqual(savedIds(h, "chat"), [["bug-id"]]);
+  assert.deepEqual(sorted(savedIds(h, "chat")[0]), ["b-hard", "bug-id"]);
+  const own = harness({ enabled: true, brain: true, boardLabels: brainBoard, output: output + labelMarker(["wazig-id", "b-hard"]) });
+  await own.execute({ project_id: 15, brief: "Fix Wazig", labels: ["bug-id", "b-light"] });
+  assert.deepEqual(savedIds(own, "chat"), [["bug-id", "b-light"]]);
+  const off = harness({ enabled: true, brain: false, boardLabels: brainBoard, output: output + labelMarker(["wazig-id", "b-hard"]) });
+  await off.execute({ project_id: 15, brief: "Fix Wazig", labels: ["bug-id"] });
+  assert.deepEqual(savedIds(off, "chat"), [["bug-id"]]);
+});
+
+test("filling an empty Ctrl+J task on a brain board adds the brain label even when the task already has labels", async () => {
+  const tasks = [{ title: "Fix Wazig", description: "<p>Wazig body</p>", labelIds: ["wazig-id", "b-hard"] }];
+  const labeled = harness({ brain: true, boardLabels: brainBoard, existingLabels: ["bug-id"], tasks });
+  assert.equal((await labeled.compose({ existingTaskId: 52 })).writerFailed, false);
+  assert.deepEqual(labeled.labelSaves.flat().map((entry) => entry.labelId), ["b-hard"]);
+  const bare = harness({ brain: true, boardLabels: brainBoard, tasks: [{ title: "Fix Wazig", description: "<p>Wazig body</p>", labelIds: [] }] });
+  assert.equal((await bare.compose({ existingTaskId: 52 })).writerFailed, false);
+  assert.deepEqual(bare.labelSaves.flat().map((entry) => entry.labelId), ["b-medium"]);
+  const own = harness({ brain: true, boardLabels: brainBoard, existingLabels: ["b-light"], tasks });
+  assert.equal((await own.compose({ existingTaskId: 52 })).writerFailed, false);
+  assert.deepEqual(own.labelSaves.flat(), []);
+  const off = harness({ brain: false, boardLabels: brainBoard, existingLabels: ["bug-id"], tasks });
+  assert.equal((await off.compose({ existingTaskId: 52 })).writerFailed, false);
+  assert.deepEqual(off.labelSaves.flat(), []);
 });
 
 test("structured write: every split ticket gets its own single brain label", async () => {

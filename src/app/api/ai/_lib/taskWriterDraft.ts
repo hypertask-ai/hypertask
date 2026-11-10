@@ -93,6 +93,7 @@ export async function generateTaskWriterDraft(
     success: true as const,
     ...(fieldDraft && customFieldDefinitions?.length ? { customFields: fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, fieldDraft.customFields) } : {}),
     ...("labelIds" in properties && properties.labelIds ? { labelIds: properties.labelIds } : {}),
+    ...(brainLabels ? { brainLabelIds: [...brainLabels.ids] } : {}),
     html: properties.description,
     title: properties.title,
     priority: "priority" in properties ? properties.priority : undefined,
