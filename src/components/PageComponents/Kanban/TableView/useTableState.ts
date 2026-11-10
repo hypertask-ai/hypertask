@@ -23,10 +23,10 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import {
-  buildTableSectionsGroupedByTag,
-  getActiveTableGroupByFromProject,
+  buildTableSectionsForGrouping,
+  effectiveTableGrouping,
+  getActiveTableCollapsedSectionsFromProject,
 } from "@/lib/table-view/tableGroupByTag";
-import { getActiveTableCollapsedSectionsFromProject } from "@/lib/table-view/tableGroupByTag";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
@@ -43,7 +43,8 @@ export function useTableState(context: Context) {
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
-  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
+  const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
   const myTasksSnoozeEnabled = Boolean(myTasksSnoozeActive);
   const router = useRouter();
@@ -201,12 +202,9 @@ export function useTableState(context: Context) {
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
   }
-  if (
-    _currentProject &&
-    tableGroupByTagEnabled &&
-    getActiveTableGroupByFromProject(_currentProject) === "tag"
-  ) {
-    sections = buildTableSectionsGroupedByTag(sections) as typeof sections;
+  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled)) {
+    const grouping = effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled);
+    if (grouping.mode !== "column") sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
   }
 
   useEffect(() => {

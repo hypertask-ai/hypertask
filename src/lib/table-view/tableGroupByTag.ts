@@ -1,75 +1,166 @@
-import type { IProject, ISection, ITask } from "@/models/model";
+import type { IProject, ISection, ITask, ITaskLabel } from "@/models/model";
 import type { TableCreateTaskSection } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
 
-export type TableGroupBy = "column" | "tag";
-
+export type TableGroupBy = "column" | "tag" | "assignee" | "priority" | "size";
+export type TableGrouping = { mode: TableGroupBy; tagIds: string[]; allTags: boolean };
 export type TableTagGroupedSection = TableCreateTaskSection & { items: ITask[] };
-
 export const TABLE_GROUP_BY_TAG_NONE = "tag:none" as const;
 export const NO_TAG_SECTION_TITLE = "No tag";
+export const OTHER_GROUP_TITLE = "Other";
+export const UNASSIGNED_GROUP_TITLE = "Unassigned";
+export const NO_PRIORITY_GROUP_TITLE = "No priority";
+export const NO_SIZE_GROUP_TITLE = "No size";
+const TABLE_GROUP_BY_VALUES = new Set<TableGroupBy>(["column", "tag", "assignee", "priority", "size"]);
+const TAG_PREFIX = "tag:";
+const TAG_ID = /^[A-Za-z0-9_-]+$/;
+const MAX_SELECTED_TAGS = 100;
+const LAST = Number.MAX_SAFE_INTEGER;
+const isTableGroupBy = (value: unknown): value is TableGroupBy => typeof value === "string" && TABLE_GROUP_BY_VALUES.has(value as TableGroupBy);
+const cleanTagIds = (value: unknown): string[] => {
+  const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  const valid = list.filter((entry): entry is string => typeof entry === "string" && TAG_ID.test(entry));
+  return [...new Set(valid)].slice(0, MAX_SELECTED_TAGS);
+};
 
-const TABLE_GROUP_BY_VALUES = new Set<TableGroupBy>(["column", "tag"]);
+export const serializeTableGrouping = (mode: TableGroupBy, tagIds: unknown = []): string => {
+  if (mode !== "tag") return mode;
+  const ids = cleanTagIds(tagIds);
+  return ids.length > 0 ? `${TAG_PREFIX}${ids.join(",")}` : TABLE_GROUP_BY_TAG_NONE;
+};
 
-export const sanitizeTableGroupBy = (value: unknown): TableGroupBy | null =>
-  typeof value === "string" && TABLE_GROUP_BY_VALUES.has(value as TableGroupBy)
-    ? (value as TableGroupBy)
-    : null;
+export const sanitizeTableGrouping = (value: unknown): string | null => {
+  if (isTableGroupBy(value) || value === TABLE_GROUP_BY_TAG_NONE) return value as string;
+  if (typeof value !== "string" || !value.startsWith(TAG_PREFIX)) return null;
+  const ids = cleanTagIds(value.slice(TAG_PREFIX.length));
+  return ids.length > 0 ? `${TAG_PREFIX}${ids.join(",")}` : null;
+};
 
+export const parseTableGrouping = (value: unknown): TableGrouping => {
+  const sanitized = sanitizeTableGrouping(value);
+  if (!sanitized) return { mode: "column", tagIds: [], allTags: false };
+  if (sanitized === "tag") return { mode: "tag", tagIds: [], allTags: true };
+  if (sanitized === TABLE_GROUP_BY_TAG_NONE) return { mode: "tag", tagIds: [], allTags: false };
+  if (sanitized.startsWith(TAG_PREFIX)) return { mode: "tag", tagIds: cleanTagIds(sanitized.slice(TAG_PREFIX.length)), allTags: false };
+  return { mode: sanitized as TableGroupBy, tagIds: [], allTags: false };
+};
+
+export const sanitizeTableGroupBy = (value: unknown): TableGroupBy | null => {
+  const sanitized = sanitizeTableGrouping(value);
+  return sanitized ? parseTableGrouping(sanitized).mode : null;
+};
 export const effectiveTableGroupBy = (value: unknown): TableGroupBy =>
   sanitizeTableGroupBy(value) ?? "column";
 
-export const getActiveTableGroupByFromProject = (
-  project?: IProject | null,
-): TableGroupBy => {
+export const getActiveTableGroupingValueFromProject = (project?: IProject | null): string => {
   const view = project?.project_view?.user_project_views?.[0];
-  const activeView =
-    view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
-  return effectiveTableGroupBy(activeView?.table_group_by);
+  const activeView = view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
+  return sanitizeTableGrouping(activeView?.table_group_by) ?? "column";
 };
+export const getActiveTableGroupingFromProject = (project?: IProject | null): TableGrouping =>
+  parseTableGrouping(getActiveTableGroupingValueFromProject(project));
+export const getActiveTableGroupByFromProject = (project?: IProject | null): TableGroupBy =>
+  getActiveTableGroupingFromProject(project).mode;
+export const effectiveTableGrouping = (project: IProject | null | undefined, modesEnabled: boolean, legacyTagEnabled: boolean): TableGrouping => {
+  const grouping = getActiveTableGroupingFromProject(project);
+  if (modesEnabled) return grouping;
+  if (legacyTagEnabled && grouping.mode === "tag") return { mode: "tag", tagIds: [], allTags: true };
+  return { mode: "column", tagIds: [], allTags: false };
+};
+export const serializeEffectiveTableGrouping = (grouping: TableGrouping): string =>
+  grouping.mode === "tag" && grouping.allTags ? "tag" : serializeTableGrouping(grouping.mode, grouping.tagIds);
 
-export function buildTableSectionsGroupedByTag(sections: ISection[]): TableTagGroupedSection[] {
-  const groups = new Map<string, { title: string; items: ITask[] }>();
-
-  const pushTask = (key: string, title: string, task: ITask) => {
-    const existing = groups.get(key);
-    if (existing) {
-      existing.items.push(task);
-      return;
-    }
-    groups.set(key, { title, items: [task] });
-  };
-
+type GroupSpec = { key: string; title: string; order: number };
+const byTitle = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
+const buildGroups = (sections: ISection[], specOf: (task: ITask) => GroupSpec): TableTagGroupedSection[] => {
+  const groups = new Map<string, { title: string; order: number; items: ITask[] }>();
   for (const section of sections) {
     for (const task of section.items ?? []) {
-      const labels = task.taskLabels ?? [];
-      if (labels.length === 0) {
-        pushTask(TABLE_GROUP_BY_TAG_NONE, NO_TAG_SECTION_TITLE, task);
-        continue;
+      const spec = specOf(task);
+      const group = groups.get(spec.key);
+      if (group) group.items.push(task);
+      else groups.set(spec.key, { title: spec.title, order: spec.order, items: [task] });
+    }
+  }
+  return [...groups.entries()]
+    .sort(([, a], [, b]) => a.order - b.order || byTitle(a.title, b.title))
+    .map(([key, group]) => ({ section_title: group.title, sectionId: key, id: key, items: group.items }));
+};
+
+const labelId = (taskLabel: ITaskLabel) => taskLabel.label?.id ?? taskLabel.labelId;
+export function buildTableSectionsGroupedByTag(sections: ISection[], selectedTagIds: string[] = [], allTags = false): TableTagGroupedSection[] {
+  if (allTags) {
+    const groups = new Map<string, { title: string; items: ITask[] }>();
+    const push = (key: string, title: string, task: ITask) => {
+      const group = groups.get(key);
+      if (group) group.items.push(task);
+      else groups.set(key, { title, items: [task] });
+    };
+    for (const section of sections) for (const task of section.items ?? []) {
+      const seen = new Set<string>();
+      for (const taskLabel of task.taskLabels ?? []) {
+        const id = labelId(taskLabel);
+        if (id && !seen.has(id)) { seen.add(id); push(`tag:${id}`, taskLabel.label?.value?.trim() || id, task); }
       }
-      const seenForTask = new Set<string>();
-      for (const taskLabel of labels) {
-        const labelId = taskLabel.label?.id ?? taskLabel.labelId;
-        if (!labelId || seenForTask.has(labelId)) continue;
-        seenForTask.add(labelId);
-        const title = taskLabel.label?.value?.trim() || labelId;
-        pushTask(`tag:${labelId}`, title, task);
+      if (seen.size === 0) push(TABLE_GROUP_BY_TAG_NONE, NO_TAG_SECTION_TITLE, task);
+    }
+    return [...groups.entries()]
+      .sort(([, a], [, b]) => (a.title === NO_TAG_SECTION_TITLE ? 1 : b.title === NO_TAG_SECTION_TITLE ? -1 : byTitle(a.title, b.title)))
+      .map(([key, group]) => ({ section_title: group.title, sectionId: key, id: key, items: group.items }));
+  }
+  const selected = cleanTagIds(selectedTagIds);
+  return buildGroups(sections, (task) => {
+    const labels = task.taskLabels ?? [];
+    const index = selected.findIndex((id) => labels.some((taskLabel) => labelId(taskLabel) === id));
+    if (index === -1) return { key: "tag:other", title: OTHER_GROUP_TITLE, order: LAST };
+    const id = selected[index];
+    const label = labels.find((taskLabel) => labelId(taskLabel) === id)?.label;
+    return { key: `tag:${id}`, title: label?.value?.trim() || id, order: index };
+  });
+}
+export function countTableTags(sections: ISection[]): { id: string; title: string; count: number }[] {
+  const counts = new Map<string, { id: string; title: string; count: number }>();
+  for (const section of sections) {
+    for (const task of section.items ?? []) {
+      const seen = new Set<string>();
+      for (const taskLabel of task.taskLabels ?? []) {
+        const id = labelId(taskLabel);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const existing = counts.get(id);
+        if (existing) existing.count += 1;
+        else counts.set(id, { id, title: taskLabel.label?.value?.trim() || id, count: 1 });
       }
     }
   }
-
-  const ordered = [...groups.entries()].sort(([, a], [, b]) => {
-    const aNone = a.title === NO_TAG_SECTION_TITLE;
-    const bNone = b.title === NO_TAG_SECTION_TITLE;
-    if (aNone !== bNone) return aNone ? 1 : -1;
-    return a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+  return [...counts.values()].sort((a, b) => b.count - a.count || byTitle(a.title, b.title));
+}
+const assigneeKeys = (task: ITask): { key: string; title: string }[] =>
+  (task.assignees ?? [])
+    .map((assignee) => typeof assignee.agentId === "string"
+      ? { key: `assignee:agent:${assignee.agentId}`, title: assignee.agent?.displayName || "Agent" }
+      : { key: `assignee:user:${assignee.userId}`, title: assignee.user?.displayName || "Member" })
+    .sort((a, b) => a.key.localeCompare(b.key));
+export const buildTableSectionsGroupedByAssignee = (sections: ISection[]) =>
+  buildGroups(sections, (task) => {
+    const first = assigneeKeys(task)[0];
+    return first ? { ...first, order: 0 } : { key: "assignee:none", title: UNASSIGNED_GROUP_TITLE, order: LAST };
   });
-
-  return ordered.map(([key, group]) => ({
-    section_title: group.title,
-    sectionId: key,
-    id: key,
-    items: group.items,
-  }));
+export const buildTableSectionsGroupedByPriority = (sections: ISection[]) =>
+  buildGroups(sections, (task) => {
+    const index = task.priority?.priority_index ?? 0;
+    return { key: `priority:${index}`, title: task.priority?.Priority_Value?.trim() || NO_PRIORITY_GROUP_TITLE, order: index === 0 ? LAST : index };
+  });
+export const buildTableSectionsGroupedBySize = (sections: ISection[]) =>
+  buildGroups(sections, (task) => {
+    const index = task.estimate?.estimate_index ?? 0;
+    return { key: `size:${index}`, title: task.estimate?.estimate_value?.trim() || NO_SIZE_GROUP_TITLE, order: index === 0 ? LAST : index };
+  });
+export function buildTableSectionsForGrouping(sections: ISection[], grouping: TableGrouping): TableTagGroupedSection[] {
+  if (grouping.mode === "assignee") return buildTableSectionsGroupedByAssignee(sections);
+  if (grouping.mode === "priority") return buildTableSectionsGroupedByPriority(sections);
+  if (grouping.mode === "size") return buildTableSectionsGroupedBySize(sections);
+  if (grouping.mode === "tag") return buildTableSectionsGroupedByTag(sections, grouping.tagIds, grouping.allTags);
+  return sections as TableTagGroupedSection[];
 }
 
 export function parseTableCollapsedSections(value: unknown): Set<string> {

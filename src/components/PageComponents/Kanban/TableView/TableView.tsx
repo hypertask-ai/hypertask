@@ -10,13 +10,11 @@ import { useTableActions } from "./useTableActions";
 import { useTableKeyboard } from "./useTableKeyboard";
 import { createTableRowRenderer } from "./TableTaskRow";
 
-import { lazy, Suspense, useCallback, useRef, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
-import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
-import { tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { effectiveTableGrouping, tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 
 
 
@@ -187,13 +185,11 @@ const TableView = ({
     myTasksSnoozeActive, _currentProject, myTasksVisibleColumns, onMyTasksVisibleColumnsChange, currentUser,
     myTasksSort, myTasksSortKey, filteredSections, _sections,
   });
-  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
-  const tagGroupingActive = Boolean(
-    _currentProject &&
-      tableGroupByTagEnabled &&
-      getActiveTableGroupByFromProject(_currentProject) === "tag",
-  );
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
+  const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
+  let tagGroupingActive = false;
+  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled) && effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled).mode !== "column") tagGroupingActive = true;
   const {
   visibleColumns, getColumnWidth, frozenColumnOffset, setColumnWidth, freezeTitleWidth,
   gridTemplateColumns, tableMinWidth, reorderColumn, normalizedColumnOrder, storedColumnKeys,
