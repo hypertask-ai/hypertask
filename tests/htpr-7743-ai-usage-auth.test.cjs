@@ -37,7 +37,6 @@ function fixture(t, options = {}) {
       project: { findMany: async () => [] },
       task: { findMany: async () => [] },
       agent: { findMany: async () => [] },
-      user: { findMany: async () => [] },
     } },
     "@/utils/controllers/teams/hasTeamOwnerOrProjectAdminAccess": { default: async () => options.access !== false },
     "@/app/api/ai/_lib/byokKeys": { getTeamGatewayFunding: async () => ({ apiKey: credential, source: options.source ?? "managed" }) },
