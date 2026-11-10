@@ -79,7 +79,14 @@ test("lazy rail controls reserve their final 56px before cached board content pa
 });
 
 test("empty inbox split titles reserve the loaded 32px row and remain hidden on phones", () => {
-  const SplitTitles = load("src/app/inbox/Inbox.tsx", { ButtonGroup: noop }, "SplitTitlesContainer");
+  const SplitTitles = load("src/app/inbox/Inbox.tsx", {
+    ButtonGroup: noop,
+    useFlag: () => false,
+    useRef: React.useRef,
+    useState: React.useState,
+    useEffect: React.useEffect,
+    HTPR_9029_STICKY_SPLITS_FLAG: "htpr-9029-sticky-splits",
+  }, "SplitTitlesContainer");
   const SplitTitle = load("src/components/notifications/inboxSplit/SplitTitle.tsx", {
     "@/hooks/Inbox/useInboxZeroStyling": { useInboxZeroStyling: () => ({ classes: {} }) },
     "lucide-react": { Circle: noop },
