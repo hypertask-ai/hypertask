@@ -192,7 +192,7 @@ function strictLoad(file, mocks) {
   return loaded.exports;
 }
 
-function preferencesApi() {
+function preferencesApi(cardSettings = true) {
   const saved = {};
   const writes = [];
   const cache = new Map();
@@ -221,7 +221,7 @@ function preferencesApi() {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
     "@/lib/mcp/readJsonBody": { readJsonBody: async (request) => ({ ok: true, body: await request.json() }) },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => null },
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags": { isFeatureEnabled: async (key) => cardSettings && key === "htpr-8971-card-settings" },
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     "next/headers": { cookies: async () => ({ get: () => ({ value: '{"id":7}' }) }) },
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -233,6 +233,7 @@ function preferencesApi() {
     "@/lib/dictationProvider": {},
     "@/lib/configs/boardSortMode.config": {},
     "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": {},
+    "@/lib/flags/definitions/htpr-8971-card-settings": { HTPR_8971_CARD_SETTINGS_FLAG: "htpr-8971-card-settings" },
     "@/lib/configs/allTasks.config": {},
     "@/models/Calendar/model": {},
   });
@@ -253,6 +254,13 @@ test("a switched part persists: POST saves it and a fresh read brings it back", 
     assert.equal((await api.post({ cardParts: bad })).status, 400);
   }
   assert.equal(api.writes.length, 1);
+});
+
+test("flag off: POST ignores card parts and saves nothing", async () => {
+  const api = preferencesApi(false);
+  const saved = await api.post({ cardParts: { ...parts.EMPTY_CARD_PARTS, comments: true } });
+  assert.equal(saved.status, 200);
+  assert.ok(api.writes.every((write) => write.data.cardParts === undefined));
 });
 
 test("toggling a switch updates the board at once and posts the whole card setting", async () => {

@@ -34,6 +34,7 @@ import {
   type BoardSortMode,
 } from "@/lib/configs/boardSortMode.config";
 import { HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG } from "@/lib/flags/definitions/htpr-7649-sidebar-view-saved";
+import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import { isAllTasksDateRange } from "@/lib/configs/allTasks.config";
 import type { ISnippet } from "@/lib/snippets";
 import type { Prisma } from "@prisma/client";
@@ -280,7 +281,7 @@ export async function POST(request: NextRequest) {
       }
       data.allTasksDateRange = body.allTasksDateRange;
     }
-    if (body.cardParts !== undefined) {
+    if (body.cardParts !== undefined && (await isFeatureEnabled(HTPR_8971_CARD_SETTINGS_FLAG, user.id))) {
       const parts = body.cardParts;
       const valid =
         !!parts &&
