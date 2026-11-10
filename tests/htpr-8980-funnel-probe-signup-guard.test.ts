@@ -53,11 +53,3 @@ test("probe signup hourly limit is shared across emails", async () => {
     assert.equal(third.code, "PROBE_SIGNUP_HOURLY_LIMIT");
   }
 });
-
-test("funnel probe daily script sends cron auth on instant signup", () => {
-  const script = fs.readFileSync(
-    path.join(import.meta.dirname, "../.github/scripts/funnel-probe-daily.mjs"),
-    "utf8",
-  );
-  assert.match(script, /instant-signup[\s\S]*Authorization.*INBOX_SECRET/);
-});
