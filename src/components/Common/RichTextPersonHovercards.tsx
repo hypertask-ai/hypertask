@@ -1,6 +1,8 @@
 "use client";
 
 import { PersonHovercardSurface } from "@/components/Common/PersonHovercard";
+import { HTPR_8964_REMOVE_PERSON_HOVER_FLAG } from "@/lib/flags/definitions/htpr-8964-remove-person-hover";
+import { useFlag } from "@/hooks/useFlag";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
@@ -40,6 +42,7 @@ const RichTextPersonHovercards = ({
     subject: PersonHovercardSubject;
   } | null>(null);
   const [open, setOpen] = useState(false);
+  const hovercardDisabled = useFlag(HTPR_8964_REMOVE_PERSON_HOVER_FLAG);
 
   const cancelClose = () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
@@ -59,7 +62,7 @@ const RichTextPersonHovercards = ({
 
   useEffect(() => {
     const root = children ? rootRef.current : rootRef.current?.parentElement;
-    if (!root) return;
+    if (!root || !projectId) return;
 
     const prepareMentions = () => {
       root.querySelectorAll<HTMLElement>(".mention[data-label]").forEach((mention) => {
@@ -102,18 +105,6 @@ const RichTextPersonHovercards = ({
     });
 
     const fromMouse = (event: PointerEvent | MouseEvent) => (event as PointerEvent).pointerType === "mouse";
-    const onPointerOver = (event: PointerEvent) => {
-      if (!fromMouse(event)) return;
-      activate(event.target);
-    };
-    const onPointerOut = (event: PointerEvent) => {
-      if (!fromMouse(event)) return;
-      const mention = mentionFromTarget(event.target);
-      const next = event.relatedTarget;
-      if (mention && (!(next instanceof Node) || !mention.element.contains(next))) {
-        scheduleClose();
-      }
-    };
     const onTap = (event: MouseEvent) => {
       if (fromMouse(event)) return;
       const mention = mentionFromTarget(event.target);
@@ -135,20 +126,44 @@ const RichTextPersonHovercards = ({
       }
     };
 
-    root.addEventListener("pointerover", onPointerOver);
-    root.addEventListener("pointerout", onPointerOut);
     root.addEventListener("click", onTap);
     root.addEventListener("focusin", onFocusIn);
     root.addEventListener("focusout", onFocusOut);
     return () => {
       observer.disconnect();
-      root.removeEventListener("pointerover", onPointerOver);
-      root.removeEventListener("pointerout", onPointerOut);
       root.removeEventListener("click", onTap);
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
     };
   }, [children, projectId]);
+
+  useEffect(hovercardDisabled ? () => {} : () => {
+    const root = children ? rootRef.current : rootRef.current?.parentElement;
+    if (!root || !projectId) return;
+    const fromMouse = (event: PointerEvent | MouseEvent) => (event as PointerEvent).pointerType === "mouse";
+    const onPointerOver = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      const mention = mentionFromTarget(event.target);
+      if (!mention) return;
+      cancelClose();
+      setActive(mention);
+      setOpen(true);
+    };
+    const onPointerOut = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      const mention = mentionFromTarget(event.target);
+      const next = event.relatedTarget;
+      if (mention && (!(next instanceof Node) || !mention.element.contains(next))) {
+        scheduleClose();
+      }
+    };
+    root.addEventListener("pointerover", onPointerOver);
+    root.addEventListener("pointerout", onPointerOut);
+    return () => {
+      root.removeEventListener("pointerover", onPointerOver);
+      root.removeEventListener("pointerout", onPointerOut);
+    };
+  }, [children, projectId, hovercardDisabled]);
 
   useEffect(() => () => cancelClose(), []);
 
