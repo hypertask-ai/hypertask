@@ -82,7 +82,7 @@ export type BoardGithubReposInput = z.infer<typeof BoardGithubReposInputSchema>;
 export function getSetBoardGithubReposInputSchema() {
   return z.object({
     project_id: z.number().int().positive().max(2_147_483_647),
-    repository_ids: z.array(z.string().regex(/^[1-9][0-9]{0,19}$/)).max(50),
+    repository_ids: z.array(z.string().min(1).max(20)).max(50),
     version: z.string().min(1).max(256),
   }).strict();
 }
