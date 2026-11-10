@@ -15,6 +15,8 @@ export type TableViewSettingsWrite = {
   table_sort_direction: string | null;
   table_sort_stack: TableSortLevel[] | null;
   table_columns: TableColumnSettings | null;
+  persistStack: boolean;
+  persistColumns: boolean;
 };
 
 export const toJsonField = (value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull =>
@@ -23,8 +25,18 @@ export const toJsonField = (value: unknown): Prisma.InputJsonValue | typeof Pris
 export const tableViewWriteData = (settings: TableViewSettingsWrite) => ({
   table_sort_column: settings.table_sort_column,
   table_sort_direction: settings.table_sort_direction,
-  table_sort_stack: toJsonField(settings.table_sort_stack),
-  table_columns: toJsonField(settings.table_columns),
+  ...tableViewChangedJson(settings),
+  ...(!settings.persistStack && settings.table_sort_stack != null
+    ? { table_sort_stack: settings.table_sort_stack }
+    : {}),
+  ...(!settings.persistColumns && settings.table_columns != null
+    ? { table_columns: settings.table_columns }
+    : {}),
+});
+
+export const tableViewChangedJson = (settings: TableViewSettingsWrite) => ({
+  ...(settings.persistStack ? { table_sort_stack: toJsonField(settings.table_sort_stack) } : {}),
+  ...(settings.persistColumns ? { table_columns: toJsonField(settings.table_columns) } : {}),
 });
 
 export const tableViewCompareData = (settings: TableViewSettingsWrite) => ({
@@ -40,21 +52,25 @@ export async function tableViewSettingsForWrite(
   inherited: { table_sort_stack?: unknown; table_columns?: unknown } | null | undefined,
 ): Promise<TableViewSettingsWrite> {
   const primary = sanitizeTableSort(body.table_sort_column, body.table_sort_direction);
-  const enabled = await isFeatureEnabled(HTPR_8973_TABLE_SORT_COLUMNS_FLAG, userId);
+  const hasStack = Object.prototype.hasOwnProperty.call(body, "table_sort_stack");
+  const hasColumns = Object.prototype.hasOwnProperty.call(body, "table_columns");
+  const enabled = hasStack || hasColumns
+    ? await isFeatureEnabled(HTPR_8973_TABLE_SORT_COLUMNS_FLAG, userId)
+    : false;
   if (!enabled) {
     return {
       table_sort_column: primary.column,
       table_sort_direction: primary.direction,
       table_sort_stack: storedTableSortStack(inherited?.table_sort_stack),
       table_columns: sanitizeTableColumns(inherited?.table_columns),
+      persistStack: false,
+      persistColumns: false,
     };
   }
-  const hasStack = Object.prototype.hasOwnProperty.call(body, "table_sort_stack");
   const stack = hasStack
     ? sanitizeTableSortStack(body.table_sort_stack)
     : sanitizeTableSortStack(inherited?.table_sort_stack);
   const head = stack[0];
-  const hasColumns = Object.prototype.hasOwnProperty.call(body, "table_columns");
   return {
     table_sort_column: hasStack ? head?.column ?? null : primary.column,
     table_sort_direction: hasStack ? head?.direction ?? null : primary.direction,
@@ -62,5 +78,7 @@ export async function tableViewSettingsForWrite(
     table_columns: hasColumns
       ? sanitizeTableColumns(body.table_columns)
       : sanitizeTableColumns(inherited?.table_columns),
+    persistStack: hasStack,
+    persistColumns: hasColumns,
   };
 }
