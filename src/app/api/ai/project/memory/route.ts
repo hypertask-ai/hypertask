@@ -84,28 +84,67 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  return withUser((userId) => learnSignal(request, userId));
-}
-
-async function learnSignal(request: NextRequest, userId: number) {
-  const input = learnSchema.parse(await request.json());
-  const { projectId, ...parsedSignal } = input;
-  if (
-    parsedSignal.type === "task_writer_field_diff" &&
-    !(await isFeatureEnabled(HTPR_9010_TASK_WRITER_MEMORY_FLAG, userId))
-  ) {
-    return NextResponse.json({ enabled: false, learned: [] as string[] });
+  try {
+    const user = await getCurrentUserFromCookies();
+    if (!user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const input = learnSchema.parse(await request.json());
+    const { projectId, ...parsedSignal } = input;
+    if (
+      parsedSignal.type === "task_writer_field_diff" &&
+      !(await isFeatureEnabled(HTPR_9010_TASK_WRITER_MEMORY_FLAG, user.id))
+    ) {
+      return NextResponse.json({ enabled: false, learned: [] as string[] });
+    }
+    const signal =
+      parsedSignal.type === "task_writer_field_diff"
+        ? prepareTaskWriterFieldDiffSignal(parsedSignal)
+        : parsedSignal;
+    if (!signal) {
+      return NextResponse.json({ enabled: false, learned: [] as string[] });
+    }
+    return NextResponse.json(
+      await learnBoardMemoryFromSignal({ projectId, signal, userId: user.id }),
+    );
+  } catch (error) {
+    if (error instanceof BoardMemoryRateLimitError) {
+      return NextResponse.json(
+        { error: error.message },
+        {
+          status: 429,
+          headers: { "Retry-After": String(error.retryAfterSeconds) },
+        },
+      );
+    }
+    if (error instanceof BoardMemoryBusyError) {
+      return NextResponse.json(
+        { error: error.message },
+        {
+          status: 503,
+          headers: { "Retry-After": String(error.retryAfterSeconds) },
+        },
+      );
+    }
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+    if (error instanceof BoardMemoryProjectAccessError) {
+      return NextResponse.json(
+        { error: "Project not found or access denied" },
+        { status: 404 },
+      );
+    }
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/project/memory",
+      source: "handled",
+      extra: { stage: "request" },
+    });
+    console.error("Board memory request failed", error);
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
   }
-  const signal =
-    parsedSignal.type === "task_writer_field_diff"
-      ? prepareTaskWriterFieldDiffSignal(parsedSignal)
-      : parsedSignal;
-  if (!signal) {
-    return NextResponse.json({ enabled: false, learned: [] as string[] });
-  }
-  return NextResponse.json(
-    await learnBoardMemoryFromSignal({ projectId, signal, userId }),
-  );
 }
 
 export async function DELETE(request: NextRequest) {
