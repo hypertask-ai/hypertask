@@ -52,11 +52,7 @@ import {
   TTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
-import { effectiveTableGrouping, getActiveTableGroupByFromProject, serializeEffectiveTableGrouping, serializeTableGrouping } from "@/lib/table-view/tableGroupByTag";
-import {
-  getActiveTableCollapsedSectionsFromProject,
-  serializeTableCollapsedSections,
-} from "@/lib/table-view/tableGroupByTag";
+import { effectiveTableGrouping, getActiveTableCollapsedSectionsFromProject, getActiveTableGroupByFromProject, serializeEffectiveTableGrouping, serializeTableCollapsedSections, serializeTableGrouping } from "@/lib/table-view/tableGroupByTag";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import toast from "react-hot-toast";

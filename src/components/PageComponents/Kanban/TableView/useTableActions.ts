@@ -1,5 +1,4 @@
-import { useCallback, useEffect } from "react";
-import type { DragEvent as ReactDragEvent } from "react";
+import { useCallback, useEffect, type DragEvent as ReactDragEvent } from "react";
 import { IAssignees, ITask } from "@/models/model";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import globalConstants from "@/lib/constants";

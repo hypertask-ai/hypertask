@@ -10,13 +10,11 @@ import { useTableActions } from "./useTableActions";
 import { useTableKeyboard } from "./useTableKeyboard";
 import { createTableRowRenderer } from "./TableTaskRow";
 
-import { lazy, Suspense, useCallback, useRef, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
-import { effectiveTableGrouping } from "@/lib/table-view/tableGroupByTag";
-import { tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { effectiveTableGrouping, tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 
 
 

@@ -25,8 +25,8 @@ import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/f
 import {
   buildTableSectionsForGrouping,
   effectiveTableGrouping,
+  getActiveTableCollapsedSectionsFromProject,
 } from "@/lib/table-view/tableGroupByTag";
-import { getActiveTableCollapsedSectionsFromProject } from "@/lib/table-view/tableGroupByTag";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
