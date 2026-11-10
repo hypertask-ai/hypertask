@@ -17,6 +17,7 @@ const NEWLY_GUARDED = [
   `PATCH ${API}/flags/route.ts`,
   `POST ${API}/flags/reviews/route.ts`,
   `POST ${API}/manager-leases/route.ts`,
+  `PUT ${OPS}/projects/[projectId]/github/operation.ts`,
   `PUT ${OPS}/projects/[projectId]/instructions/operation.ts`,
   `POST ${OPS}/projects/[projectId]/labels/operation.ts`,
   `PUT ${OPS}/projects/[projectId]/playbook/operation.ts`,
