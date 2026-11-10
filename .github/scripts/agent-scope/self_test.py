@@ -14,6 +14,10 @@ FIXTURES = HERE / 'fixtures'
 ROUTE = 'src/app/api/mcp/chat/rooms/pending/route.ts'
 CALL = 'prisma.task.findFirst({ where: { id } })'
 COUNT_WHERE_CALL = 'prisma.task.count({ where })'
+CONDITIONAL_WHERE_CALL = (
+    'prisma.task.findMany({ where: filtered.paged || rankedResults && !sortField'
+    ' ? { ...where, id: { in: primaryIds } } : where, select: { id: true }, })'
+)
 
 
 def run(output):
@@ -95,5 +99,23 @@ def run(output):
         route.write_bytes(weakened)
         invoke('external-where-shorthand-stale', 1, 'Stale exception:')
 
-    print('Self-tests passed: 9 (eight negatives, scoped positive; exception prerequisite also passed)', flush=True)
+        conditional_source = (FIXTURES / 'conditional-where.ts.fixture').read_bytes()
+        route.write_bytes(conditional_source)
+        conditional_exception = dict(
+            path=ROUTE,
+            call=normalize(CONDITIONAL_WHERE_CALL),
+            occurrence=1,
+            sha256=hashlib.sha256(conditional_source).hexdigest(),
+            reason='Self-test preauthorized conditional-where control, not a production exception.',
+            approvedIn='https://app.hypertask.ai/detail/project-15/7496',
+        )
+        exceptions.write_text(json.dumps([conditional_exception]))
+        weakened = conditional_source.replace(
+            b'projectId: { in: [1] }',
+            b'projectId: { in: [] }',
+        )
+        route.write_bytes(weakened)
+        invoke('conditional-where-stale', 1, 'Stale exception:')
+
+    print('Self-tests passed: 10 (nine negatives, scoped positive; exception prerequisite also passed)', flush=True)
     return 0

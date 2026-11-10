@@ -1,0 +1,15 @@
+import { prisma } from '@/lib/prisma';
+
+export async function listTasks() {
+  const where = { projectId: { in: [1] } };
+  const filtered = { paged: false };
+  const rankedResults = false;
+  const sortField = null as string | null;
+  const primaryIds = [1];
+  return prisma.task.findMany({
+    where: filtered.paged || rankedResults && !sortField
+      ? { ...where, id: { in: primaryIds } }
+      : where,
+    select: { id: true },
+  });
+}
