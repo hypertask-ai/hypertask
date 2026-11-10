@@ -483,15 +483,6 @@ export default function Chat({ initialSessionId }: ChatProps) {
   }, [paged, refreshHistorySessions]);
 
   useEffect(() => {
-    if (!paged || !hasMoreSessions || isLoadingMoreSessions || pagingError || !historyEndRef.current) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMoreSessions();
-    }, { root: historyEndRef.current.parentElement });
-    observer.observe(historyEndRef.current);
-    return () => observer.disconnect();
-  }, [paged, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
-
-  useEffect(() => {
     if (
       hasSelectedInitialSession.current ||
       !initialSessionId ||
@@ -579,6 +570,19 @@ export default function Chat({ initialSessionId }: ChatProps) {
   ], [pinnedSessions, sessionGroups]);
 
   const displayedSessions = displayedSessionGroups.flatMap((group) => group.sessions);
+  const allRailGroupsShut = sectionsEnabled
+    && searchQuery.trim().length === 0
+    && displayedSessionGroups.length > 0
+    && displayedSessionGroups.every((group) => collapsedRailSections.includes(group.title));
+
+  useEffect(() => {
+    if (!paged || allRailGroupsShut || !hasMoreSessions || isLoadingMoreSessions || pagingError || !historyEndRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreSessions();
+    }, { root: historyEndRef.current.parentElement });
+    observer.observe(historyEndRef.current);
+    return () => observer.disconnect();
+  }, [paged, allRailGroupsShut, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(

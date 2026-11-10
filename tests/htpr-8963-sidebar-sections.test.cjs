@@ -40,6 +40,7 @@ test("the chat rail toggles sections behind the flag and pins survive reload", (
   assert.match(chat, /<h2 className=/);
   assert.match(chat, /sectionsEnabled && isPinned && \(/);
   assert.match(chat, /aria-label=\{isPinned \? "Unpin chat" : "Pin chat"\}/);
+  assert.match(chat, /if \(!paged \|\| allRailGroupsShut \|\| !hasMoreSessions/);
   const store = read("src/store/index.ts");
   assert.match(
     store,
