@@ -287,10 +287,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       {!_mbl && (
         <div aria-hidden className="shrink-0 @sm:h-6 @lg:h-16 @xl:h-48" />
       )}
-      {jumpToTop && !_mbl && <JumpToTopButton />}
     </BaseCommentAndDescriptionContainer>
   );
-  return cachedLayout ? <TaskPagesProvider>{content}</TaskPagesProvider> : content;
+  const thread = jumpToTop && !_mbl ? <>{content}<JumpToTopButton /></> : content;
+  return cachedLayout ? <TaskPagesProvider>{thread}</TaskPagesProvider> : thread;
 };
 
 type DescriptionAuthor = {
