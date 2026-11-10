@@ -6,7 +6,6 @@ import { forcedByokProvider, modelOptionMatchesForcedKey } from "@/lib/ai/forced
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
-import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
 import {
   AI_THINKING_EFFORTS,
@@ -19,7 +18,6 @@ import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib
 import {
   aiModelDefinitions,
   AUTO_MODEL_OPTION_ID,
-  toAutoModelOption,
   aiModelOptions,
   isAiModelOptionVisible,
   isGrokGemini4ModelKey,
@@ -50,9 +48,6 @@ import {
 import { getSettingsPath } from "@/components/Modals/Settings/settingsNavigation";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useAiModelPreference, useAiThinkingPreference } from "@/hooks/General/useAiModelPreference";
-import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
-import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
-import { taskWriterShowsAuto, withTaskWriterAutoOption } from "@/lib/taskWriterPickerAuto";
 import { aiOptions } from "@/lib/constants/constants";
 import { resolveTaskWriterBoardContext } from "@/lib/ai/taskWriterBoardContext";
 import type { IProject } from "@/models/model";
@@ -216,12 +211,9 @@ const AIModelDropDownList = ({
     ]
   );
   const autoFlag = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
-  const pickerAutoFlag = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
   const thinkingFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
   const { preference: thinkingPreference, setPreference: setThinkingPreference } = useAiThinkingPreference();
-  const autoOption = autoFlag || pickerAutoFlag
-    ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID)
-    : undefined;
+  const autoOption = autoFlag ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID) : undefined;
   const autoSelected = Boolean(autoOption) && aiSelected?.id === AUTO_MODEL_OPTION_ID;
   const defaultContext = useAiDefaultModelContext(settingsTeamId);
   const freePlan = scopedBilling?.storePlanId === "Free";
@@ -996,29 +988,9 @@ function useTaskWriterBoardContext(destinationProject: IProject | null | undefin
   return resolveTaskWriterBoardContext({ destinationProject: destinationProject ?? undefined, openProject, openBilling });
 }
 
-function useTaskWriterPicker(destinationProject: IProject | null | undefined) {
-  const pickerAuto = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
-  const { teamId, billing, boardDefaultId } = useTaskWriterBoardContext(destinationProject);
-  const preference = useAiModelPreference("taskWriter", { teamId, billing, boardDefaultId });
-  const { data: userPreferences } = useGetUserPreferences();
-  const [override, setOverride] = useState<{ teamId: typeof teamId; auto: boolean } | null>(null);
-  const stored = getAiModelPreferenceIds(userPreferences.aiModelPreferences, "taskWriter", teamId);
-  const storedPick = stored.teamScoped ?? stored.global;
-  const autoOverride = override?.teamId === teamId ? override.auto : null;
-  const showAuto = pickerAuto && (autoOverride ?? taskWriterShowsAuto(storedPick, preference.usesPlanDefault));
-  const currentAiOption = showAuto ? toAutoModelOption(preference.currentAiOption) : preference.currentAiOption;
-  const currentOptions = pickerAuto
-    ? withTaskWriterAutoOption(aiOptions, preference.currentAiOption)
-    : aiOptions;
-  const setAiOption = (option: TAiModal) => {
-    if (pickerAuto) setOverride({ teamId, auto: option.id === AUTO_MODEL_OPTION_ID });
-    preference.setAiOption(option);
-  };
-  return { teamId, billing, currentAiOption, setAiOption, currentOptions };
-}
-
 export function useTaskWriterModel(destinationProject: IProject | null | undefined) {
-  const { currentAiOption } = useTaskWriterPicker(destinationProject);
+  const { teamId, billing, boardDefaultId } = useTaskWriterBoardContext(destinationProject);
+  const { currentAiOption } = useAiModelPreference("taskWriter", { teamId, billing, boardDefaultId });
   return currentAiOption
     ? { id: currentAiOption.id, source: currentAiOption.source }
     : undefined;
@@ -1033,12 +1005,13 @@ export const TaskWriterModelPicker = ({
   mobile?: boolean;
   className?: ClassNameValue;
 }) => {
-  const { teamId, billing, currentAiOption, setAiOption, currentOptions } = useTaskWriterPicker(project);
+  const { teamId, billing, boardDefaultId } = useTaskWriterBoardContext(project);
+  const { currentAiOption, setAiOption } = useAiModelPreference("taskWriter", { teamId, billing, boardDefaultId });
   return (
     <AIModelDropDownButton
       optionCallback={setAiOption}
       aiSelected={currentAiOption}
-      currentOptions={currentOptions}
+      currentOptions={aiOptions}
       modelTeamId={teamId}
       modelBilling={billing}
       stackSubmenus
