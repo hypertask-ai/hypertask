@@ -524,7 +524,7 @@ export async function embedText(text: string): Promise<number[]> {
   return embedding;
 }
 
-export async function upsertTaskToTurbopuffer(taskId: number) {
+export async function upsertTaskToTurbopuffer(taskId: number, options?: { strict?: boolean }) {
   try {
     const task = await prisma.task.findFirst({
       where: {
@@ -537,6 +537,7 @@ export async function upsertTaskToTurbopuffer(taskId: number) {
     return upsertTaskRowsToTurbopuffer([buildTurbopufferTaskRow(task)]);
   } catch (error) {
     console.log("turbopuffer upsertTaskToTurbopuffer error:", error);
+    if (options?.strict) throw error;
   }
 }
 
@@ -668,7 +669,7 @@ export async function upsertPageRowsToTurbopuffer(
   } as any);
 }
 
-export async function upsertAllCommentsToTurbopuffer(taskId: number) {
+export async function upsertAllCommentsToTurbopuffer(taskId: number, options?: { strict?: boolean }) {
   try {
     const allComments = await prisma.comment.findMany({
       where: { taskId },
@@ -683,6 +684,7 @@ export async function upsertAllCommentsToTurbopuffer(taskId: number) {
     return upsertCommentRowsToTurbopuffer(commentRows);
   } catch (error) {
     console.log("turbopuffer upsertAllCommentsToTurbopuffer error:", error);
+    if (options?.strict) throw error;
   }
 }
 

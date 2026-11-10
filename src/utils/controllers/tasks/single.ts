@@ -773,7 +773,7 @@ export async function updateTaskSingle(
     const titleChanged =
       requestedMutation.title !== undefined &&
       requestedMutation.title !== taskBeforeWrite.title;
-    await upsertTaskToTurbopuffer(task.id);
+    await upsertTaskToTurbopuffer(task.id, { strict: true });
     if (
       titleChanged ||
       requestedMutation.status ||
@@ -781,7 +781,7 @@ export async function updateTaskSingle(
       requestedMutation.uniqueIndex ||
       requestedMutation.projectId
     ) {
-      await upsertAllCommentsToTurbopuffer(task.id);
+      await upsertAllCommentsToTurbopuffer(task.id, { strict: true });
     }
     const descriptionChanged =
       requestedMutation.description !== undefined &&

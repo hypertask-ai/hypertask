@@ -88,7 +88,7 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
     if (task.commentCount === 0) continue;
     const [row] = await queryRows(turbopufferNamespaces.comment.name, {
       filters: ["taskId", "Eq", String(task.id)],
-      rank_by: ["createdAt", "desc"],
+      rank_by: ["taskUpdatedAt", "asc"],
       top_k: 1,
       include_attributes: ["taskTitle", "taskUpdatedAt"],
       consistency: { level: "strong" },
@@ -104,8 +104,8 @@ export async function runIndexDriftRepair(
   state: DriftState = emptyDriftState(),
   deps: DriftDeps = {
     loadPage: loadIndexDriftPage,
-    reindexTask: upsertTaskToTurbopuffer,
-    reindexComments: upsertAllCommentsToTurbopuffer,
+    reindexTask: (taskId) => upsertTaskToTurbopuffer(taskId, { strict: true }),
+    reindexComments: (taskId) => upsertAllCommentsToTurbopuffer(taskId, { strict: true }),
     today: () => new Date().toISOString().slice(0, 10),
   },
 ) {

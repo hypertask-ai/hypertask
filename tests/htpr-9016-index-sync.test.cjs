@@ -23,9 +23,7 @@ test("a title edit waits for the task index before comment copies update", async
     taskId: 41,
     titleChanged: true,
     upsertTask: () => taskWrite.promise,
-    upsertComments: async () => {
-      commentsStarted = true;
-    },
+    upsertComments: async () => { commentsStarted = true; },
   });
   await Promise.resolve();
   assert.equal(commentsStarted, false);
@@ -64,9 +62,7 @@ test("a stale comment title is repaired and a failed reindex stays put", async (
     batchFull: true,
     maxReindex: 10,
     state: lib.emptyDriftState(),
-    reindexTask: async () => {
-      throw new Error("index down");
-    },
+    reindexTask: async () => { throw new Error("index down"); },
     reindexComments: async () => {},
   });
   assert.equal(failed.stopped, true);
@@ -88,10 +84,7 @@ test("a finished pass records one drift count for that date", async () => {
       today: () => "2026-11-10",
     },
   );
-  assert.deepEqual(result.state.results, [
-    { date: "2026-11-09", found: 4 },
-    { date: "2026-11-10", found: 2 },
-  ]);
+  assert.deepEqual(result.state.results, [{ date: "2026-11-09", found: 4 }, { date: "2026-11-10", found: 2 }]);
   assert.equal(result.state.afterId, 0);
   assert.equal(drift().recordDriftPass(result.state.results, "2026-11-10", 0)[1].found, 0);
 });
