@@ -1483,12 +1483,11 @@ const InlineDraftAiFloat = ({
       aria-label="Write with AI"
       aria-modal="false"
       tabIndex={ticketEditorCtrlJ ? -1 : undefined}
-      className={cn(
+      className={
         matchCommentRowControls
-          ? "my-2 flex outline-none w-full min-w-0 flex-col gap-2 rounded-[4px] bg-newcomment-well px-2 py-1.5 text-content"
-          : "my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md",
-        aiBoxOutline && matchCommentRowControls && "border-thin border-border-light-gray-thin",
-      )}
+          ? cn("my-2 flex outline-none w-full min-w-0 flex-col gap-2 rounded-[4px] bg-newcomment-well px-2 py-1.5 text-content", aiBoxOutline && "border-thin border-border-light-gray-thin")
+          : "my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
+      }
       onClick={(event) => event.stopPropagation()}
       onKeyDown={handlePanelKeyDown}
     >
