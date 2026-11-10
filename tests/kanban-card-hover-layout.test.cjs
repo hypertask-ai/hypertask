@@ -74,6 +74,9 @@ const TaskTopRow = loadComponent(
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
+    "@/lib/flags/definitions/htpr-8970-calm-cards": { HTPR_8970_CALM_CARDS_FLAG: "htpr-8970-calm-cards" },
+    "@/lib/agentStatus/cardStatus": { useCardAgentStatus: () => null, stackFaces: (users, agents) => ({ users, agents }) },
+    "@/utils/undoActions/helperFuncs": { cn: (...args) => twMerge(clsx(args)) },
   },
 );
 const TaskDraggableContainer = loadComponent(

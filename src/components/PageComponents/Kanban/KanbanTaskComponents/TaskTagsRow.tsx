@@ -18,6 +18,9 @@ import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 import { useBoardCardData } from './BoardCardData';
 import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from '@/lib/flags/definitions/htpr-7677-board-card-data-once';
+import { HTPR_8970_CALM_CARDS_FLAG } from '@/lib/flags/definitions/htpr-8970-calm-cards';
+import { cardLabels } from '@/lib/kanban/cardLabels';
+import { cn } from '@/utils/undoActions/helperFuncs';
 
 interface ITaskTopRow {
     task:ITask;
@@ -92,6 +95,8 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
             task.agentStatus.at,
           )
         : null
+      const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG)
+      const calmLabels = cardLabels(taskLabels ?? [], (taskLabel) => taskLabel.label?.value ?? "")
       const customFieldValues = (task as ITask & { customFieldValues?: CustomFieldValue[] }).customFieldValues
 
 
@@ -109,19 +114,20 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
 
   return (
 
-    agentStatusLine||agents.length>0||blockingUser||(task.blockingTasks?.length ?? 0)>0||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(taskLabels&&taskLabels?.length>0)||hasCustomFieldValues?
+    (!calm && (agentStatusLine||agents.length>0))||blockingUser||(task.blockingTasks?.length ?? 0)>0||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(calm ? calmLabels.shown.length>0 : (taskLabels&&taskLabels?.length>0))||hasCustomFieldValues?
     <div
-      className={cardOverflowClamp
-        ? "basis-full flex min-w-0 max-w-full flex-wrap gap-1 overflow-x-hidden"
-        : "basis-full flex gap-1 flex-wrap"}
+      className={cn(
+        cardOverflowClamp ? "basis-full flex min-w-0 max-w-full flex-wrap gap-1 overflow-x-hidden" : "basis-full flex gap-1 flex-wrap",
+        calm && "[&_.label-pill]:!h-5 [&_.label-pill]:!min-h-5 [&_.label-pill]:!py-0 [&_.label-pill]:!px-1.5 [&_.label-pill]:!rounded-[4px] [&_.label-pill]:!text-micro [&_.label-pill]:!leading-4 [&_.label-pill_.lucide-calendar]:!size-3 [&>span]:!h-5 [&>span]:!leading-5",
+      )}
     >
-    {agentStatusLine && (
+    {!calm && agentStatusLine && (
       <LabelWrapper title={agentStatusLine} className="min-w-0 max-w-full overflow-hidden" data-testid="agent-status-chip">
         <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
         <span className="min-w-0 truncate">{agentStatusLine}</span>
       </LabelWrapper>
     )}
-    {agents.map((agent) => (
+    {!calm && agents.map((agent) => (
       <AgentChip
         key={`agent-${agent.id}`}
         agent={agent}
@@ -199,7 +205,19 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
           }
 
 
-          {(() => {
+          {calm ? (
+            <>
+              {calmLabels.shown.map((taskLabel) => (
+                <TaskLabelComponent key={`Label-component-${taskLabel.id}`} stopPropogation={true} fontWeight={500}
+                  onClick={() => handleClick("TaskLabels")} flexBasis={false} nowrap={cardOverflowClamp} labelValue={taskLabel.label?.value ?? ""} />
+              ))}
+              {calmLabels.more > 0 && (
+                <span onClick={() => handleClick("TaskLabels")} className="opacity-60 cursor-pointer text-micro leading-5">
+                  +{calmLabels.more}
+                </span>
+              )}
+            </>
+          ) : (() => {
             const MAX_LABELS = 3;
             const labels = (taskLabels ?? []).filter(l => l.label?.value);
             const extra = labels.length - MAX_LABELS;
