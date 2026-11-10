@@ -259,6 +259,14 @@ export async function prepareTaskWriterRun(
     : effectivePrompt;
   const primaryTaskIds = body.taskIds.slice(0, 1);
   const relatedTaskIds = body.taskIds.slice(1);
+  const ticketSearch = boardResearchEnabled
+    ? searchTasks({
+        searchQuery: retrievalQuery,
+        projectIds: [body.projectId],
+        excludeStatuses: ["Deleted", "Archive"],
+        topK: 50,
+      })
+    : null;
   const [
     currentTaskContext,
     relatedTaskContext,
@@ -284,19 +292,10 @@ export async function prepareTaskWriterRun(
       aiMode: body.aiMode,
       taskIds: body.taskIds,
       reserveCommentBudget: boardResearchEnabled,
+      taskSearch: ticketSearch ?? undefined,
     }),
-    boardResearchEnabled
-      ? searchTasks({
-          searchQuery: retrievalQuery,
-          projectIds: [body.projectId],
-          excludeStatuses: ["Deleted", "Archive"],
-          topK: Math.min(
-            TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
-            TASK_WRITER_RELATED_CANDIDATE_LIMIT +
-              Math.min(body.taskIds.length, 8) +
-              5
-          ),
-        })
+    ticketSearch
+      ? ticketSearch
           .then(async (indexedRows) => {
             const { taskRows: rows } = await authorizeIndexedRows(indexedRows, [], { userId, agentId, teamScope });
             const loaded = new Set(body.taskIds.map(String));

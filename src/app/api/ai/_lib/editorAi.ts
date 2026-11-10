@@ -1146,6 +1146,7 @@ export async function retrieveTaskWriterContext(args: {
   aiMode?: string | null;
   taskIds?: number[];
   reserveCommentBudget?: boolean;
+  taskSearch?: Promise<TurbopufferTaskRow[]>;
 }) {
   if (args.principal?.teamScope != null) {
     await (await import("./customInstructions")).assertProjectAccess(args.principal.userId, args.projectId, args.principal.agentId, args.principal.teamScope);
@@ -1157,6 +1158,7 @@ export async function retrieveTaskWriterContext(args: {
 
   const [taskRowsRaw, commentRowsRaw, customInstructionFileContext] =
     await Promise.all([
+      args.taskSearch ??
       searchTasks({
         searchQuery: args.prompt,
         projectIds,

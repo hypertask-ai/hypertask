@@ -77,23 +77,24 @@ export async function getBoardMemoryState(userId: number, projectId: number) {
 }
 
 async function loadBoardMemoryState(projectId: number) {
-  const [configRows, memoryRows] = await Promise.all([
-    listCustomInstructionFileRows({
-      projectId,
-      fileType: BOARD_MEMORY_CONFIG_FILE_TYPE,
-      topK: 1,
-    }),
-    listCustomInstructionFileRows({
-      projectId,
-      fileType: BOARD_MEMORY_FILE_TYPE,
-      topK: BOARD_MEMORY_MAX_FACTS_PER_BOARD,
-    }),
-  ]);
+  const configRows = await listCustomInstructionFileRows({
+    projectId,
+    fileType: BOARD_MEMORY_CONFIG_FILE_TYPE,
+    topK: 1,
+  });
+  const enabled = configRows.some(
+    (row) => row.source === BOARD_MEMORY_CONFIG_SOURCE,
+  );
+  if (!enabled) return { enabled: false, memories: [] as BoardMemoryEntry[] };
+
+  const memoryRows = await listCustomInstructionFileRows({
+    projectId,
+    fileType: BOARD_MEMORY_FILE_TYPE,
+    topK: BOARD_MEMORY_MAX_FACTS_PER_BOARD,
+  });
 
   return {
-    enabled: configRows.some(
-      (row) => row.source === BOARD_MEMORY_CONFIG_SOURCE,
-    ),
+    enabled: true,
     memories: memoryRows
       .filter((row) => row.chunkIndex === 0 && isBoardMemoryFactRow(row))
       .map<BoardMemoryEntry>((row) => ({
