@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
+import { markPrivateWaitingActivities } from '@/lib/tasks/waitingOnActivitySql'
 
 export type OwnedAgentRow = {
   id: string
@@ -401,6 +402,7 @@ export async function deleteOwnedAgent(
             where: { agentId: agent.id },
             data: { agentId: null },
           })
+          await markPrivateWaitingActivities(transaction, agent.id, userId)
           await transaction.agent.delete({ where: { id: agent.id } })
 
           return {

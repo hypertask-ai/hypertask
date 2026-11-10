@@ -41,7 +41,7 @@ const agentPulseDotStubs = {
 const passRows = async (rows) => rows;
 const waitingActivityStubs = {
   "@/lib/tasks/redactWaitingActivities": { withPublicWaitingActivities: passRows, redactSharedPrivateWaitingActivities: passRows },
-  "@/lib/tasks/waitingOnActivitySql": { visibleWaitingOnActivity: () => ({}) },
+  "@/lib/tasks/waitingOnActivitySql": { visibleWaitingOnActivity: () => ({}), markPrivateWaitingActivities: async () => {} },
   "@/lib/tasks/waitingAgentPrivacy": { presentWaitingAgent: (task) => task, collectWaitingTargets: () => ({ ids: [], names: [] }), hiddenWaitingAgents: () => ({ hiddenIds: new Set(), hiddenNames: new Set() }), redactWaitingOnActivity: (activity) => activity },
 };
 

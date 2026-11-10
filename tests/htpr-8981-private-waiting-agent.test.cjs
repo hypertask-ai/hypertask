@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const createJiti = require("jiti");
@@ -46,6 +47,12 @@ test("a deleted private agent stays hidden, and a person with the same name does
   assert.equal(redact(stored, [], 9).data.waitingOnDisplayName, "Private agent");
   assert.equal(redact(stored, [], 6).data.waitingOnDisplayName, "Secret helper");
   assert.equal(redact(waiting({ waitingOnDisplayName: "Secret helper" }), [], 9).data.waitingOnDisplayName, "Secret helper");
+});
+
+test("making an agent private or deleting it stamps waits that already name that agent", () => {
+  const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
+  assert.equal(read("src/lib/agents/visibility.ts").includes("markPrivateWaitingActivities(tx, agentId, userId)"), true);
+  assert.equal(read("src/lib/mcp/agents/ownedAgents.ts").includes("markPrivateWaitingActivities(transaction, agent.id, userId)"), true);
 });
 
 test.after(() => {
