@@ -14,6 +14,7 @@ import {
   canUseViewAsTabBase,
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
+import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableGroupByTag";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import { gatedTableCollapsedSectionsForViewWrite } from "./gate-table-collapsed-sections";
 import {
@@ -226,7 +227,7 @@ const route = taskWriteRoute({
               table_sort_column: baseView.table_sort_column,
               table_sort_direction: baseView.table_sort_direction,
               table_group_by: baseView.table_group_by,
-              table_collapsed_sections: baseView.table_collapsed_sections,
+              table_collapsed_sections: sanitizeTableCollapsedSectionsForWrite(baseView.table_collapsed_sections),
               board_layout: sanitizeBoardLayout(baseView.board_layout),
             }
           : superDefault;
@@ -366,7 +367,7 @@ const route = taskWriteRoute({
               table_sort_column: comparisonView.table_sort_column,
               table_sort_direction: comparisonView.table_sort_direction,
               table_group_by: comparisonView.table_group_by,
-              table_collapsed_sections: comparisonView.table_collapsed_sections,
+              table_collapsed_sections: sanitizeTableCollapsedSectionsForWrite(comparisonView.table_collapsed_sections),
               board_layout: sanitizeBoardLayout(comparisonView.board_layout),
             };
 
