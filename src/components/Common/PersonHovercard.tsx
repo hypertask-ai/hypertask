@@ -290,7 +290,7 @@ const ParentPersonHovercard = ({
 
   useEffect(() => {
     const parent = markerRef.current?.parentElement;
-    if (!parent || !projectId || !subject || hovercardDisabled) return;
+    if (!parent || !projectId || !subject) return;
     setAnchor(parent);
     parent.tabIndex = parent.tabIndex >= 0 ? parent.tabIndex : 0;
     parent.setAttribute("aria-haspopup", "dialog");
@@ -299,14 +299,6 @@ const ParentPersonHovercard = ({
     const show = () => {
       cancelClose();
       setOpen(true);
-    };
-    const showOnHover = (event: PointerEvent) => {
-      if (!fromMouse(event)) return;
-      show();
-    };
-    const hideOnLeave = (event: PointerEvent) => {
-      if (!fromMouse(event)) return;
-      scheduleClose();
     };
     const showOnTap = (event: MouseEvent) => {
       if (fromMouse(event)) return;
@@ -321,20 +313,37 @@ const ParentPersonHovercard = ({
       if (event.key === "Escape") setOpen(false);
     };
 
-    parent.addEventListener("pointerenter", showOnHover);
-    parent.addEventListener("pointerleave", hideOnLeave);
     parent.addEventListener("click", showOnTap);
     parent.addEventListener("focusin", showOnFocus);
     parent.addEventListener("focusout", scheduleClose);
     parent.addEventListener("keydown", dismissOnEscape);
     return () => {
       cancelClose();
-      parent.removeEventListener("pointerenter", showOnHover);
-      parent.removeEventListener("pointerleave", hideOnLeave);
       parent.removeEventListener("click", showOnTap);
       parent.removeEventListener("focusin", showOnFocus);
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [projectId, subject]);
+
+  useEffect(hovercardDisabled ? () => {} : () => {
+    const parent = markerRef.current?.parentElement;
+    if (!parent || !projectId || !subject) return;
+    const fromMouse = (event: PointerEvent | MouseEvent) => (event as PointerEvent).pointerType === "mouse";
+    const showOnHover = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      cancelClose();
+      setOpen(true);
+    };
+    const hideOnLeave = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      scheduleClose();
+    };
+    parent.addEventListener("pointerenter", showOnHover);
+    parent.addEventListener("pointerleave", hideOnLeave);
+    return () => {
+      parent.removeEventListener("pointerenter", showOnHover);
+      parent.removeEventListener("pointerleave", hideOnLeave);
     };
   }, [projectId, subject, hovercardDisabled]);
 
@@ -359,7 +368,7 @@ const ParentPersonHovercard = ({
   return (
     <>
       <span ref={markerRef} hidden />
-      {!hovercardDisabled && anchor && subject && <PersonHovercardSurface {...surfaceProps} />}
+      {anchor && subject && <PersonHovercardSurface {...surfaceProps} />}
     </>
   );
 };

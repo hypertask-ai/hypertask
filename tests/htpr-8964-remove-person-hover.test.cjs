@@ -27,30 +27,33 @@ const mocks = (removeHover) => ({
   "@floating-ui/react": floating,
 });
 
-const mouseEvent = (window, type) => {
+const mouseEvent = (window, type, pointerType) => {
   const event = new window.MouseEvent(type, { bubbles: type !== "pointerenter" && type !== "pointerleave" });
-  Object.defineProperty(event, "pointerType", { value: "mouse" });
+  if (pointerType) Object.defineProperty(event, "pointerType", { value: pointerType });
   return event;
 };
 
-const hover = (window, target, type = "pointerenter") =>
-  React.act(async () => { target.dispatchEvent(mouseEvent(window, type)); });
+const fire = (window, target, type, pointerType) =>
+  React.act(async () => { target.dispatchEvent(mouseEvent(window, type, pointerType)); });
 
-test("hovering a name or agent opens no card once the hovercard is removed", async () => {
+test("an assignee or agent row opens no card on mouse hover once the flag is on, and still opens on tap", async () => {
   for (const removeHover of [false, true]) {
     const view = mount();
     const source = loader(mocks(removeHover));
     const { ParentPersonHovercard } = source("src/components/Common/PersonHovercard.tsx");
     view.render(React.createElement(ParentPersonHovercard, { projectId: 7049, subject: { kind: "agent", id: AGENT } }));
+    const window = view.container.ownerDocument.defaultView;
     try {
-      await hover(view.container.ownerDocument.defaultView, view.container);
+      await fire(window, view.container, "pointerenter", "mouse");
       if (removeHover) {
         assert.doesNotMatch(view.container.textContent, /Loading contact/);
-        assert.equal(view.container.querySelector("[aria-haspopup]"), null);
-        assert.equal(view.container.querySelector("[aria-expanded]"), null);
+        assert.equal(view.container.getAttribute("aria-expanded"), "false");
+        await fire(window, view.container, "click");
+        assert.match(view.container.textContent, /Loading contact/);
+        assert.equal(view.container.getAttribute("aria-expanded"), "true");
       } else {
         assert.match(view.container.textContent, /Loading contact/);
-        assert.equal(view.container.querySelector("[aria-haspopup]"), "dialog");
+        assert.equal(view.container.getAttribute("aria-expanded"), "true");
       }
     } finally {
       view.close();
@@ -58,22 +61,24 @@ test("hovering a name or agent opens no card once the hovercard is removed", asy
   }
 });
 
-test("hovering a mentioned name opens no card once the hovercard is removed", async () => {
+test("a mentioned name opens no card on mouse hover once the flag is on, and still opens on tap", async () => {
   for (const removeHover of [false, true]) {
     const view = mount();
     const source = loader(mocks(removeHover));
     const RichTextPersonHovercards = source("src/components/Common/RichTextPersonHovercards.tsx").default;
     view.render(React.createElement(RichTextPersonHovercards, { projectId: 7049 },
       React.createElement("span", { className: "mention", "data-label": `agent-${AGENT}` }, "Runner")));
+    const window = view.container.ownerDocument.defaultView;
     try {
       const mention = view.container.querySelector(".mention");
-      await hover(view.container.ownerDocument.defaultView, mention, "pointerover");
+      assert.equal(mention.getAttribute("aria-haspopup"), "dialog");
+      await fire(window, mention, "pointerover", "mouse");
       if (removeHover) {
         assert.doesNotMatch(view.container.textContent, /Loading contact/);
-        assert.equal(mention.getAttribute("aria-haspopup"), null);
+        await fire(window, mention, "click");
+        assert.match(view.container.textContent, /Loading contact/);
       } else {
         assert.match(view.container.textContent, /Loading contact/);
-        assert.equal(mention.getAttribute("aria-haspopup"), "dialog");
       }
     } finally {
       view.close();
@@ -81,12 +86,9 @@ test("hovering a mentioned name opens no card once the hovercard is removed", as
   }
 });
 
-test("the hovercard removal ships at Owner + QA as the ticket's own improvement flag", () => {
-  const source = require("node:fs").readFileSync(
-    require("node:path").join(__dirname, "../src/lib/flags/definitions/htpr-8964-remove-person-hover.ts"),
-    "utf8",
-  );
-  assert.match(source, /HTPR_8964_REMOVE_PERSON_HOVER_FLAG = "htpr-8964-remove-person-hover"/);
-  assert.match(source, /kind: "improvement"/);
-  assert.match(source, /defaultMode: "OWNER_AND_QA"/);
+test("the hovercard removal ships as the ticket's own improvement flag at Owner + QA", () => {
+  const definition = loader()("src/lib/flags/definitions/htpr-8964-remove-person-hover.ts").default;
+  assert.equal(definition.key, FLAG);
+  assert.equal(definition.kind, "improvement");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
 });
