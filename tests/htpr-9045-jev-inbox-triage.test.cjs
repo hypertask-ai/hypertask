@@ -65,10 +65,9 @@ test("300 labelled notifications: a hostile Jev that calls everything noise stil
 });
 
 test("agent asks, money, access and agent-message bodies never reach Jev", () => {
-  const ask = row({ type: "AgentMessage", author: "agent", title: "Runner 3", text: "" }, 900, { message: "I need your approval to give Maria admin access before I continue." });
-  const note = row({ type: "AgentMessage", author: "agent", title: "Runner 3", text: "" }, 901, { message: "Merge deployed. All production checks are green." });
-  assert.deepEqual(candidatesOf([ask]), []);
-  assert.equal(candidatesOf([note]).length, 1);
+  const message = (text, id) => row({ type: "AgentMessage", author: "agent", title: "Runner 3", text: "" }, id, { message: text });
+  assert.deepEqual(candidatesOf([message("I need your approval to give Maria admin access before I continue.", 900)]), []);
+  assert.equal(candidatesOf([message("Merge deployed. All production checks are green.", 901)]).length, 1);
 });
 
 test("only noise at 0.9 or higher is suggested, and a garbled answer keeps", () => {
@@ -86,17 +85,14 @@ test("500 notifications clear in about a second", async () => {
   const fake = runtime({ delayMs: 100 });
   const started = Date.now();
   const result = await fake.run.jevInboxTriage({ items: items(500), userId });
-  assert.equal(fake.calls.length, 50);
-  assert.deepEqual([result.checked, result.noiseIds.length], [500, 500]);
-  assert.ok(fake.peak() <= 8, `at most 8 calls in flight, saw ${fake.peak()}`);
-  assert.ok(Date.now() - started < 2000, `500 notifications took ${Date.now() - started} ms`);
+  const elapsed = Date.now() - started;
+  assert.deepEqual([fake.calls.length, result.checked, result.noiseIds.length, fake.peak() <= 8, elapsed < 2000], [50, 500, 500, true, true], `500 notifications took ${elapsed} ms`);
 });
 
 test("Jev silent means the proven gateway model answers; a customer key means no call at all", async () => {
   const silent = runtime({ jevAnswer: () => "" });
   const result = await silent.run.jevInboxTriage({ items: items(2), userId });
-  assert.deepEqual(silent.calls, [pure.JEV_TRIAGE_MODEL_SLUG, "anthropic/claude-haiku-5.5"]);
-  assert.equal(result.noiseIds.length, 2);
+  assert.deepEqual([...silent.calls, result.noiseIds.length], [pure.JEV_TRIAGE_MODEL_SLUG, "anthropic/claude-haiku-5.5", 2]);
   const customer = runtime({ fundingSource: "customer" });
   assert.deepEqual(await customer.run.jevInboxTriage({ items: items(1), userId }), { noiseIds: [], checked: 0, skipped: "customer_funding" });
   const none = runtime({ fundingSource: "none" });
