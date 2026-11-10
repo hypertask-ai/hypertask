@@ -680,6 +680,14 @@ for ticket in HTPR-8264 HYFA-1 YPER4-999 HYCI-30; do
   eq "$ticket extra-hard refuses runner even in QA" "$rc" 4
   [[ $out == *'brain-extra-hard'* ]] && ok 'refusal explains brain restriction' || bad "unclear brain refusal: $out"
   [ ! -s "$D/log" ] && [ ! -s "$HOLD_READS" ] && ok 'brain refusal precedes writes and hold reads' || bad 'extra-hard claim reached hold or writes'
+  mkdir -p "$D/rstate"; echo claude > "$D/rstate/engine-6"
+  : > "$D/log"
+  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1)
+  [[ $out != *'is brain-extra-hard'* ]] && ok "$ticket extra-hard passes the brain gate on a claude runner" || bad "claude runner refused extra-hard: $out"
+  echo codex > "$D/rstate/engine-6"
+  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1); rc=$?
+  eq "$ticket extra-hard still refuses a codex runner" "$rc" 4
+  rm -rf "$D/rstate"
 done
 for identity in 'RUNNER 6' 'HT Design Builder' 'Infra Runner 2'; do
   for label in design-pass brain-extra-hard; do
