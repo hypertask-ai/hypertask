@@ -1181,12 +1181,17 @@ it never replaces a required check and adds no required context.
 
 Both gates stay inside the time budget. ESLint and tsc are killed, with their
 process group, at 10 seconds for a normal change and 60 seconds for a full lint or
-full type check; a killed or skipped gate never blocks the push, because a killed
-process is not a verdict. `npm install` is
-required for the hook to run: without `node_modules` it reports the missing tool
-and passes. `HYPERTASK_SKIP_QUICK_CHECK=1` skips the hook for one push. The hook reads Git's
-ref updates and passes the push without checking when the pushed commit is not
-the checked-out one, because the tools read the working copy.
+full type check. A gate that overruns its budget reruns once with the longer
+limit; if it still cannot finish, the push stops and the message names the files
+and the command that reruns the check. Only a kill from outside the hook (a
+SIGKILL or exit 137 from the machine) still passes the push, and it prints
+`NOT TYPE CHECKED: <files>` so the gap is loud. Timeouts and a missing tool never
+pass: without `node_modules` the hook stops the push and asks for `npm install`.
+No environment variable switches the check off.
+
+The hook reads Git's ref updates and passes the push without checking when the
+pushed commit is not the checked-out one, because the tools read the working
+copy.
 
 `.github/workflows/quick-check-proof.yml` measures the real hook on hosted
 Ubuntu, is path-filtered to the hook files, and adds no job to ordinary pull

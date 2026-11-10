@@ -69,3 +69,14 @@ jobs:
             exit 1
           fi
           echo "the hook refused the push with a type error"
+
+      - name: Blocks a push with a duplicate import
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'import { join } from "node:path";\nimport { join } from "node:path";\nexport const quickCheckProofDuplicate = join("a", "b");\n' > src/lib/quick-check-proof-duplicate.ts
+          if node scripts/quick-check.mjs --files src/lib/quick-check-proof-duplicate.ts; then
+            echo "the hook let a duplicate import through" >&2
+            exit 1
+          fi
+          echo "the hook refused the push with a duplicate import"
