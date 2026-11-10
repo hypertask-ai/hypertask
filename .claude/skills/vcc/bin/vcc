@@ -219,7 +219,7 @@ brain_label_check() {
     esac
   done
   case "${args[0]:-} ${args[1]:-}" in 'task create'|'tasks create') ;; *) return 0 ;; esac
-  local arg label labels='' other_brain=0
+  local arg label labels='' other_brain=0 section='' assigned=0
   local -a brain=()
   set -- "${args[@]:2}"
   while [ "$#" -gt 0 ]; do
@@ -228,9 +228,19 @@ brain_label_check() {
       --help|-h) return 0 ;;
       --labels) labels+=",${2:-}"; [ "$#" -ge 2 ] && shift ;;
       --labels=*) labels+=",${arg#*=}" ;;
+      --section) section=${2:-}; [ "$#" -ge 2 ] && shift ;;
+      --section=*) section=${arg#*=} ;;
+      --assignee|--assignee=*) assigned=1 ;;
     esac
     shift
   done
+  # An unassigned ticket in a building column is an orphan to the picker: a runner takes it over at once.
+  case "${section,,}" in 'in progress'|doing|'ai review'|qa)
+    if [ "$assigned" = 0 ]; then
+      printf 'vcc: task create refused: a ticket created in %s needs --assignee, or the runner picker takes it as an orphan. Create it in its home column, or pass --assignee <your agent id>.\n' "$section" >&2
+      exit 5
+    fi ;;
+  esac
   local IFS=,
   for label in $labels; do
     label=${label#"${label%%[![:space:]]*}"}
