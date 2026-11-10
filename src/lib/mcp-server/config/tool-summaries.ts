@@ -34,6 +34,8 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   BOARD_MANIFEST: 'Returns the board manifest.',
   GET_BOARD_PLAYBOOK: 'Returns the board playbook.',
   BOARD_CONFIG: 'Returns board instructions.',
+  LIST_BOARD_GITHUB_REPOS: 'Returns the connected and available repositories and the settings version.',
+  SET_BOARD_GITHUB_REPOS: 'Returns the saved repository settings.',
   CREATE_BOARD: 'Returns the new board.',
   RENAME_BOARD: 'Returns the renamed board.',
   LIST_PROJECT_MEMBERS: 'Returns board members.',

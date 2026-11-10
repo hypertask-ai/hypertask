@@ -305,25 +305,10 @@
         "hyperai": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$", "^hypertask_list_board_github_repos$"]
       },
       "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8951",
-          "expires": "2026-12-05",
-          "entries": ["GET /api/mcp/projects/[projectId]/github"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8951",
-          "expires": "2026-12-05",
-          "entries": ["hypertask_list_board_github_repos"]
-        },
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/8951",
           "expires": "2026-12-05",
           "entries": ["project github"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8951",
-          "expires": "2026-12-05",
-          "entries": ["hypertask_list_board_github_repos"]
         }
       }
     },
@@ -336,23 +321,6 @@
         "cli": ["^project (create-board|archive|invite|instructions)( |$)", "^project delete$", "^project update$"],
         "ai_chat": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"],
         "hyperai": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$", "^hypertask_set_board_github_repos$"]
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8951",
-          "expires": "2026-12-05",
-          "entries": ["PUT /api/mcp/projects/[projectId]/github"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8951",
-          "expires": "2026-12-05",
-          "entries": ["hypertask_set_board_github_repos"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8951",
-          "expires": "2026-12-05",
-          "entries": ["hypertask_set_board_github_repos"]
-        }
       }
     },
     {
