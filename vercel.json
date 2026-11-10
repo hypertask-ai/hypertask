@@ -64,6 +64,10 @@
     {
       "path": "/api/cron/abandoned-work",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/saved-view-columns",
+      "schedule": "50 0 * * *"
     }
   ]
 }
