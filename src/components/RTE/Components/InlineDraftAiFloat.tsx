@@ -268,9 +268,7 @@ const InlineDraftAiFloat = ({
   const newTaskCtrlJ = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
   const newTaskWriter = newTaskCtrlJ ? taskWriter : undefined;
   const ticketEditorCtrlJ = ticketEditorCtrlJFlag || Boolean(newTaskWriter);
-  const [selectedWriteChipKey, setSelectedWriteChipKey] = useState<
-    string | null
-  >(null);
+  const [selectedWriteChipKey, setSelectedWriteChipKey] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<InlineDraftAiRange | null>(null);
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
@@ -631,6 +629,7 @@ const InlineDraftAiFloat = ({
   const hasSelection = scope.to > scope.from;
   const writeMode =
     Boolean(newTaskWriter) && !isMobileAiSheet && editor.isEmpty && !hasSelection;
+  const sendLabel = writeMode ? "Write" : "Rewrite";
   const showEditChips =
     (isMobileAiSheet && Boolean(mobileSourceDraft)) ||
     shouldShowInlineDraftAiChips(hasSelection, prompt);
@@ -989,15 +988,7 @@ const InlineDraftAiFloat = ({
           value={prompt}
           disabled={isLoading || audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
-          placeholder={
-            writeMode
-              ? "Describe the task…"
-              : inlineDraftAiWritePlaceholder(
-                  hasSelection,
-                  allowSuggestReply,
-                  editor.isEmpty,
-                )
-          }
+          placeholder={writeMode ? "Describe the task…" : inlineDraftAiWritePlaceholder(hasSelection, allowSuggestReply, editor.isEmpty)}
           className="w-full border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
         />
       </div>
@@ -1015,12 +1006,9 @@ const InlineDraftAiFloat = ({
       {matchCommentRowControls ? (
         <span className={dictationActive ? "hidden" : "flex shrink-0 items-center"}>
           <SendMessageButton
-            label={writeMode ? "Write" : "Rewrite"}
+            label={sendLabel}
             textButton
-            shortcut={{
-              text: writeMode ? "Write" : "Rewrite",
-              keyCombination: ["ENTER"],
-            }}
+            shortcut={{ text: sendLabel, keyCombination: ["ENTER"] }}
             mobile={false}
             disabled={!prompt.trim() || isLoading || audioProcessing}
             onClick={submitPrompt}
@@ -1053,17 +1041,9 @@ const InlineDraftAiFloat = ({
             type="button"
             aria-pressed={selectedWriteChipKey === chip.key}
             disabled={isLoading}
-            className={cn(
-              matchCommentRowControls ? APP_CHIP_LINK_CLASS : CHIP_LINK_CLASS,
-              selectedWriteChipKey === chip.key &&
-                "bg-hover-active text-white-black",
-            )}
+            className={cn(matchCommentRowControls ? APP_CHIP_LINK_CLASS : CHIP_LINK_CLASS, selectedWriteChipKey === chip.key && "bg-hover-active text-white-black")}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() =>
-              setSelectedWriteChipKey((current) =>
-                current === chip.key ? null : chip.key,
-              )
-            }
+            onClick={() => setSelectedWriteChipKey((current) => (current === chip.key ? null : chip.key))}
           >
             {chip.label}
           </button>

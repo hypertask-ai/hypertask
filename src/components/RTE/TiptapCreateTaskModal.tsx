@@ -195,11 +195,11 @@ const TiptapCreateTaskModal = () => {
   const mobileWriterSaveFlag = useFlag(HTPR_8028_MOBILE_WRITER_SAVE_FLAG);
   const mobileWriterSave = Boolean(isMbl && mobileWriterSaveFlag);
   const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
+  const newTaskCtrlJFlag = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
   let composeShortcutCapture = true;
   if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
+  if (newTaskCtrlJFlag && !isMbl) composeShortcutCapture = false;
   const newTaskWindow = !mobileWriterSave;
-  const ctrlJInlineWrite =
-    useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG) && newTaskWindow && !isMbl;
   const [inlineAiOpen, setInlineAiOpen] = useState(false);
   const setCommands = useSetRecoilState(showCommandsAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
@@ -237,10 +237,6 @@ const TiptapCreateTaskModal = () => {
       : closeHandler(true);
   const toggleAiTaskWriterVisibility = () => {
     if (newTaskWindow) {
-      if (ctrlJInlineWrite) {
-        setInlineAiOpen((open) => !open);
-        return;
-      }
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
       return;
     }
@@ -283,7 +279,7 @@ const TiptapCreateTaskModal = () => {
     formValues.currentProject ?? _currentProject ?? undefined;
   const projectId = projectForContext?.id;
   useEffect(() => {
-    if (!newTaskWindow || ctrlJInlineWrite) return;
+    if (!newTaskWindow) return;
     const openNewTask = (event: KeyboardEvent) => {
       if (event.code !== "KeyJ" || !isComposePaletteShortcut(event, isApple, pathname)) return;
       event.preventDefault();
@@ -292,9 +288,9 @@ const TiptapCreateTaskModal = () => {
     };
     window.addEventListener("keydown", openNewTask, composeShortcutCapture);
     return () => window.removeEventListener("keydown", openNewTask, composeShortcutCapture);
-  }, [newTaskWindow, ctrlJInlineWrite, composeShortcutCapture, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
+  }, [newTaskWindow, composeShortcutCapture, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
   useEffect(() => {
-    if (!ctrlJInlineWrite) return;
+    if (!newTaskCtrlJFlag || !newTaskWindow || isMbl) return;
     const toggleInlineWrite = (event: KeyboardEvent) => {
       if (!isNewTaskCtrlJ(event, isApple) || showCommands.show || showAssignModal) return;
       event.preventDefault();
@@ -304,7 +300,7 @@ const TiptapCreateTaskModal = () => {
     };
     window.addEventListener("keydown", toggleInlineWrite, true);
     return () => window.removeEventListener("keydown", toggleInlineWrite, true);
-  }, [ctrlJInlineWrite, isApple, showCommands.show, showAssignModal]);
+  }, [newTaskCtrlJFlag, newTaskWindow, isMbl, isApple, showCommands.show, showAssignModal]);
   const { data: projectLabels } = useGetAllProjectLabels(
     projectId ?? undefined,
   );
@@ -351,12 +347,12 @@ const TiptapCreateTaskModal = () => {
     if (defaultDescriptionPlaceholderRef.current === null) {
       defaultDescriptionPlaceholderRef.current = placeholder.options.placeholder;
     }
-    placeholder.options.placeholder = ctrlJInlineWrite
+    placeholder.options.placeholder = newTaskCtrlJFlag && newTaskWindow && !isMbl
       ? `Add a description, or press ${isApple ? "Cmd" : "Ctrl"}+J to write it with AI`
       : defaultDescriptionPlaceholderRef.current;
     editor.view.dispatch(editor.state.tr);
-  }, [editor, ctrlJInlineWrite, isApple]);
-  const writeChips = useNewTaskWriteChips(projectId, ctrlJInlineWrite && inlineAiOpen);
+  }, [editor, newTaskCtrlJFlag, newTaskWindow, isMbl, isApple]);
+  const writeChips = useNewTaskWriteChips(projectId, inlineAiOpen);
   const newTaskWriter = React.useMemo<NewTaskWriter>(
     () => ({
       chips: writeChips,
@@ -764,10 +760,6 @@ const TiptapCreateTaskModal = () => {
 
   const toggleAiTaskWriter = () => {
     if (newTaskWindow) {
-      if (ctrlJInlineWrite) {
-        setInlineAiOpen((open) => !open);
-        return;
-      }
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
       return;
     }
@@ -780,6 +772,14 @@ const TiptapCreateTaskModal = () => {
     toggleAiTaskWriterVisibility();
     if (editMode === "Description" && !shouldShowAiTaskWriter)
       setEditMode("Description-ai");
+  };
+
+  const inlineWriteOr = (fallback: () => void) => () => {
+    if (newTaskCtrlJFlag && newTaskWindow && !isMbl) {
+      setInlineAiOpen((open) => !open);
+      return;
+    }
+    fallback();
   };
 
   const showClassicForm = useCallback(() => {
@@ -1219,7 +1219,7 @@ const TiptapCreateTaskModal = () => {
             ) : (
               <div className="h-[21px]"></div>
             )}
-            {ctrlJInlineWrite && inlineAiOpen && editor && (
+            {newTaskCtrlJFlag && newTaskWindow && !isMbl && inlineAiOpen && editor && (
               <InlineDraftAiFloat
                 editor={editor}
                 onClose={() => setInlineAiOpen(false)}
@@ -1247,7 +1247,7 @@ const TiptapCreateTaskModal = () => {
               toggleRecording={toggleRecording}
               isRecording={isRecording}
               dictationCoordinator={dictationCoordinator}
-              toggleAiTaskWriter={toggleAiTaskWriter}
+              toggleAiTaskWriter={inlineWriteOr(toggleAiTaskWriter)}
               isAiTaskWriterOpen={shouldShowAiTaskWriter}
               backgroundTaskUploads
             />
@@ -1256,12 +1256,12 @@ const TiptapCreateTaskModal = () => {
       }
       <button
         className="hidden"
-        onClick={toggleAiTaskWriterVisibility}
+        onClick={inlineWriteOr(toggleAiTaskWriterVisibility)}
         id={divIds.popoverTriggerButtonId}
       />
       <button
         className="hidden"
-        onClick={toggleAiTaskWriter}
+        onClick={inlineWriteOr(toggleAiTaskWriter)}
         id={aiTaskWriterConfig.elementIds.createTaskModalTrigger}
       />
     </>

@@ -44,10 +44,10 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     } = useContextCreateTaskModal()
     const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG)
     const keepTaskAiNavigation = useFlag(HTPR_8172_NEW_TASK_AI_NAVIGATION_FLAG)
-    const ctrlJWritesInDescription = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG) && !_mbl
+    const newTaskCtrlJFlag = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG)
     const router = useRouter()
     const sidebarHandoffPending = useRef(false)
-    useEffect(ctrlJSidebarOnNewTask && !ctrlJWritesInDescription ? () => {
+    useEffect(ctrlJSidebarOnNewTask && !(newTaskCtrlJFlag && !_mbl) ? () => {
         const openNewTaskSidebar = async (event: KeyboardEvent) => {
             const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey)
             if (!document.getElementById("createTaskModal") || event.key.toLowerCase() !== "j" || !cmdControl || event.shiftKey || event.altKey || event.isComposing || isRecording || showAssignModal || showConfirmationModal) return
@@ -75,7 +75,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         }
         window.addEventListener("keydown", openNewTaskSidebar, true)
         return () => window.removeEventListener("keydown", openNewTaskSidebar, true)
-    } : () => {}, [ctrlJSidebarOnNewTask, ctrlJWritesInDescription, keepTaskAiNavigation, _mbl, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
+    } : () => {}, [ctrlJSidebarOnNewTask, newTaskCtrlJFlag, keepTaskAiNavigation, _mbl, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
 
     const {
         toggleMoveModal, toggleShowSizeModal, toggleDueDateModal,

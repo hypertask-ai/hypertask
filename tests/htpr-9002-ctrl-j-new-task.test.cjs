@@ -90,12 +90,12 @@ test("a template chip overrides priority, estimate and labels", () => {
 
 test("flag off keeps the old Ctrl+J paths", () => {
   const body = read("src/components/Modals/CreateTaskGloballyModal/CreateTaskModalBody.tsx");
-  assert.match(body, /ctrlJSidebarOnNewTask && !ctrlJWritesInDescription/);
+  assert.match(body, /ctrlJSidebarOnNewTask && !\(newTaskCtrlJFlag && !_mbl\)/);
   const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
-  assert.match(modal, /useFlag\(HTPR_9002_CTRL_J_NEW_TASK_FLAG\)/);
-  assert.match(modal, /if \(!newTaskWindow \|\| ctrlJInlineWrite\) return;/);
-  assert.match(modal, /ctrlJInlineWrite && inlineAiOpen && editor/);
+  assert.match(modal, /const newTaskCtrlJFlag = useFlag\(HTPR_9002_CTRL_J_NEW_TASK_FLAG\)/);
+  assert.match(modal, /if \(newTaskCtrlJFlag && !isMbl\) composeShortcutCapture = false;/);
+  assert.match(modal, /newTaskCtrlJFlag && newTaskWindow && !isMbl && inlineAiOpen && editor/);
   const float = read("src/components/RTE/Components/InlineDraftAiFloat.tsx");
   assert.match(float, /useFlag\(HTPR_9002_CTRL_J_NEW_TASK_FLAG\)/);
-  assert.match(float, /writeMode \? "Write" : "Rewrite"/);
+  assert.match(float, /sendLabel = writeMode \? "Write" : "Rewrite"/);
 });
