@@ -1,3 +1,17 @@
+const SERVER_ERRORS = new Set([500, 502, 503, 504]);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchWithServerRetries(fetchImpl, url, options, log) {
+  let serverRetries = 0;
+  for (;;) {
+    const response = await fetchImpl(url, options);
+    if (response.ok || !SERVER_ERRORS.has(response.status) || serverRetries >= 2) return response;
+    serverRetries += 1;
+    log(`Ticket binding got HTTP ${response.status}; retry ${serverRetries}/2 after ${serverRetries}s`);
+    await sleep(serverRetries * 1000);
+  }
+}
+
 module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
   const PREFIXES = ['HTPR', 'HYFA', 'YPER4', 'HYCI'];
   const TAGS = [
@@ -48,9 +62,11 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
     const url = `https://github.com/${repository}/pull/${pr.number}`;
     const authHeaders = { Authorization: `Bearer ${token}` };
     const ticketDocumentsPull = async () => {
-      const lookup = await fetchImpl(
+      const lookup = await fetchWithServerRetries(
+        fetchImpl,
         `https://app.hypertask.ai/api/mcp/tasks?ticket_number=${encodeURIComponent(ticket)}`,
         { redirect: 'error', signal: AbortSignal.timeout(30_000), headers: authHeaders },
+        (message) => core.info(message),
       );
       if (!lookup.ok) return false;
       const body = await lookup.json();
@@ -60,15 +76,20 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
       const description = row.description ?? '';
       return description.includes(url);
     };
-    const response = await fetchImpl('https://app.hypertask.ai/api/mcp/tasks/update', {
-      method: 'POST',
-      redirect: 'error',
-      signal: AbortSignal.timeout(30_000),
-      headers: { ...authHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticket_number: ticket, pull_request_url: url }),
-    });
+    const response = await fetchWithServerRetries(
+      fetchImpl,
+      'https://app.hypertask.ai/api/mcp/tasks/update',
+      {
+        method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(30_000),
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_number: ticket, pull_request_url: url }),
+      },
+      (message) => core.info(message),
+    );
     if (!response.ok) {
-      if (response.status === 409 && await ticketDocumentsPull()) {
+      if ((response.status === 409 || SERVER_ERRORS.has(response.status)) && await ticketDocumentsPull()) {
         core.info(`Title OK: ${pr.title}; ${ticket} already documents ${url}`);
         return;
       }

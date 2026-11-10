@@ -10,7 +10,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const repo = 'hypertask-ai/hypertask';
 
 async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base = repo,
-  login = 'runner', dispatch = false, prNumber = 123, state = 'open', token = 'fixture-token', status = 200, result, fetchError, taskLookup } = {}) {
+  login = 'runner', dispatch = false, prNumber = 123, state = 'open', token = 'fixture-token', status = 200, result, fetchError, taskLookup, bindStatuses } = {}) {
   const writes = [];
   const failures = [];
   const outputs = {};
@@ -34,7 +34,9 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
         if (endpoint.startsWith('https://app.hypertask.ai/api/mcp/tasks?')) {
           return { ok: true, status: 200, json: async () => taskLookup ?? { tasks: [] } };
         }
-        return { ok: status === 200, status, json: async () => result ?? {
+        let nextStatus = status;
+        if (bindStatuses?.length) nextStatus = bindStatuses[writes.filter((row) => row.endpoint.endsWith('/tasks/update')).length - 1] ?? status;
+        return { ok: nextStatus === 200, status: nextStatus, json: async () => result ?? {
           success: true, tasks: [{ ticketNumber: ticket, pullRequests: [{ url }] }],
         } };
       },
@@ -82,6 +84,26 @@ test('outside and wrong-base PRs never receive board credentials', async () => {
   const invalid = await run({ title: 'No ticket' });
   assert.deepEqual(invalid.writes, []);
   assert.equal(invalid.failures.length, 1);
+});
+
+test('bind POST retries transient 502 then succeeds', async () => {
+  const result = await run({ bindStatuses: [502, 502, 200] });
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.writes.filter((row) => row.endpoint.endsWith('/tasks/update')).length, 3);
+});
+
+test('persistent 502 after retries fails unless the ticket already documents the pull request', async () => {
+  await assert.rejects(run({ bindStatuses: [502, 502, 502] }), /HTTP 502/);
+  const bound = await run({
+    bindStatuses: [502, 502, 502],
+    taskLookup: {
+      tasks: [{
+        ticketNumber: 'YPER4-731',
+        pullRequests: [{ url: `https://github.com/${repo}/pull/123` }],
+      }],
+    },
+  });
+  assert.deepEqual(bound.failures, []);
 });
 
 test('title guard passes when bind conflicts but the titled ticket already documents the pull request', async () => {
