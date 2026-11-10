@@ -5,7 +5,9 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { blockedByRelationsInclude, getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { attachOpenBlockingTasks, type TaskWithBlockingRelations } from '@/utils/controllers/tasks/attachOpenBlockingTasks'
+import { mapOpenBlockingTasksForRead } from '@/lib/blockingTasks'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { accessibleAgentWhere } from '@/lib/agents/visibility'
@@ -109,6 +111,7 @@ export interface TaskListItem {
   agent?: McpAgentSummary
   uniqueIndex?: number
   url?: string
+  blockingTasks?: ReturnType<typeof mapOpenBlockingTasksForRead>
   link?: {
     url: string
     format: string
@@ -806,6 +809,7 @@ export async function GET(request: NextRequest) {
             createdAt: "asc",
           },
         },
+        relatedFromTasks: blockedByRelationsInclude(user.id, ctx.agentId, ctx.teamScope),
       },
       orderBy,
       take: limit,
@@ -823,7 +827,11 @@ export async function GET(request: NextRequest) {
     const doneTitlesByProject = await loadDoneTitlesByProject(uniqueProjects, mcpDoneNameFallback)
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
 
-    const taskList: TaskListItem[] = tasks.map(task => {
+    const tasksWithBlockers = await attachOpenBlockingTasks(
+      tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
+    )
+
+    const taskList: TaskListItem[] = tasksWithBlockers.map(task => {
       recordAgentBoardScopeMiss(task.projectId, "read");
       task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
@@ -858,6 +866,7 @@ export async function GET(request: NextRequest) {
           title: st.title,
           uniqueIndex: st.uniqueIndex
         })),
+        blockingTasks: mapOpenBlockingTasksForRead(task.blockingTasks),
         projectId: task.projectId,
         status: task.status,
         priority: task.priority?.Priority_Value || undefined,
