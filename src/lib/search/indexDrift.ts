@@ -3,38 +3,17 @@ import {
   upsertTaskToTurbopuffer,
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 
-export type DriftState = {
-  afterId: number;
-  found: number;
-  results: DriftPass[];
-};
-
-export type DriftPass = {
-  date: string;
-  found: number;
-};
-
-export type DriftTask = {
-  id: number;
-  title: string;
-  updatedAt: string;
-  commentCount: number;
-};
-
-export type IndexedTaskTime = {
-  updatedAt: string;
-};
-
-export type IndexedCommentCopy = {
-  taskTitle: string;
-  taskUpdatedAt: string;
-};
+export type DriftPass = { date: string; found: number };
+export type DriftState = { afterId: number; found: number; results: DriftPass[] };
+export type DriftTask = { id: number; title: string; updatedAt: string; commentCount: number };
+export type IndexedTaskTime = { updatedAt: string };
+export type IndexedCommentCopy = { taskTitle: string; taskUpdatedAt: string };
 
 export function emptyDriftState(): DriftState {
   return { afterId: 0, found: 0, results: [] };
 }
 
-export function laterEdit(editedAt: string, indexedAt: string | null): boolean {
+function laterEdit(editedAt: string, indexedAt: string | null): boolean {
   if (!indexedAt) return true;
   const edited = Date.parse(editedAt);
   const indexed = Date.parse(indexedAt);
@@ -42,21 +21,13 @@ export function laterEdit(editedAt: string, indexedAt: string | null): boolean {
   return edited > indexed;
 }
 
-export function taskRowDrifted(
-  task: { updatedAt: string },
-  indexed: IndexedTaskTime | null,
-): boolean {
-  if (!indexed) return true;
-  return laterEdit(task.updatedAt, indexed.updatedAt);
+export function taskRowDrifted(task: { updatedAt: string }, indexed: IndexedTaskTime | null): boolean {
+  return !indexed || laterEdit(task.updatedAt, indexed.updatedAt);
 }
 
-export function commentCopyDrifted(
-  task: DriftTask,
-  indexed: IndexedCommentCopy | null,
-): boolean {
+export function commentCopyDrifted(task: DriftTask, indexed: IndexedCommentCopy | null): boolean {
   if (task.commentCount === 0) return false;
-  if (!indexed) return true;
-  if (indexed.taskTitle !== task.title) return true;
+  if (!indexed || indexed.taskTitle !== task.title) return true;
   return laterEdit(task.updatedAt, indexed.taskUpdatedAt);
 }
 
@@ -67,13 +38,7 @@ export function commentsFollowTaskEdit(args: {
   uniqueIndex?: unknown;
   projectId?: unknown;
 }): boolean {
-  return Boolean(
-    args.titleChanged ||
-      args.status ||
-      args.ticketNumber ||
-      args.uniqueIndex ||
-      args.projectId,
-  );
+  return Boolean(args.titleChanged || args.status || args.ticketNumber || args.uniqueIndex || args.projectId);
 }
 
 export async function syncTaskEditSearchIndex(args: {
@@ -86,17 +51,11 @@ export async function syncTaskEditSearchIndex(args: {
   upsertTask?: (taskId: number) => Promise<unknown>;
   upsertComments?: (taskId: number) => Promise<unknown>;
 }): Promise<void> {
-  const upsertTask = args.upsertTask ?? upsertTaskToTurbopuffer;
-  const upsertComments = args.upsertComments ?? upsertAllCommentsToTurbopuffer;
-  await upsertTask(args.taskId);
-  if (commentsFollowTaskEdit(args)) await upsertComments(args.taskId);
+  await (args.upsertTask ?? upsertTaskToTurbopuffer)(args.taskId);
+  if (commentsFollowTaskEdit(args)) await (args.upsertComments ?? upsertAllCommentsToTurbopuffer)(args.taskId);
 }
 
-export function recordDriftPass(
-  results: DriftPass[],
-  date: string,
-  found: number,
-): DriftPass[] {
+export function recordDriftPass(results: DriftPass[], date: string, found: number): DriftPass[] {
   return [...results.filter((pass) => pass.date !== date), { date, found }].slice(-8);
 }
 
@@ -107,37 +66,17 @@ export async function advanceIndexDrift(args: {
   batchFull: boolean;
   maxReindex: number;
   state: DriftState;
-  reindexTask: (taskId: number) => Promise<void>;
-  reindexComments: (taskId: number) => Promise<void>;
-}): Promise<{
-  state: DriftState;
-  reindexed: number;
-  passComplete: boolean;
-  stopped: boolean;
-  passFound: number | null;
-}> {
-  const state = {
-    afterId: args.state.afterId,
-    found: args.state.found,
-    results: args.state.results,
-  };
+  reindexTask: (taskId: number) => Promise<unknown>;
+  reindexComments: (taskId: number) => Promise<unknown>;
+}): Promise<{ state: DriftState; reindexed: number; passComplete: boolean; stopped: boolean; passFound: number | null }> {
+  const state = { afterId: args.state.afterId, found: args.state.found, results: args.state.results };
   let reindexed = 0;
   if (args.tasks.length === 0) {
-    return {
-      state,
-      reindexed,
-      passComplete: true,
-      stopped: false,
-      passFound: state.found,
-    };
+    return { state, reindexed, passComplete: true, stopped: false, passFound: state.found };
   }
-
   for (const task of args.tasks) {
     const taskDrift = taskRowDrifted(task, args.indexedTasks.get(task.id) ?? null);
-    const commentDrift = commentCopyDrifted(
-      task,
-      args.indexedComments.get(task.id) ?? null,
-    );
+    const commentDrift = commentCopyDrifted(task, args.indexedComments.get(task.id) ?? null);
     const drifted = taskDrift || commentDrift;
     if (drifted && reindexed >= args.maxReindex) {
       return { state, reindexed, passComplete: false, stopped: true, passFound: null };
@@ -157,13 +96,6 @@ export async function advanceIndexDrift(args: {
     if (drifted) state.found += 1;
     state.afterId = task.id;
   }
-
   const passComplete = !args.batchFull;
-  return {
-    state,
-    reindexed,
-    passComplete,
-    stopped: false,
-    passFound: passComplete ? state.found : null,
-  };
+  return { state, reindexed, passComplete, stopped: false, passFound: passComplete ? state.found : null };
 }

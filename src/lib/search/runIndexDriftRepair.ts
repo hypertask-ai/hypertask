@@ -12,12 +12,8 @@ import {
   type IndexedTaskTime,
 } from "@/lib/search/indexDrift";
 import {
-  buildTurbopufferCommentRow,
-  buildTurbopufferTaskRow,
-  turbopufferCommentInclude,
-  turbopufferTaskInclude,
-  upsertCommentRowsToTurbopuffer,
-  upsertTaskRowsToTurbopuffer,
+  upsertAllCommentsToTurbopuffer,
+  upsertTaskToTurbopuffer,
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 
 export const DRIFT_SCAN_BATCH = 50;
@@ -25,15 +21,17 @@ export const DRIFT_MAX_BATCHES = 8;
 export const DRIFT_MAX_REINDEX = 100;
 export const DRIFT_STATE_KEY = "search-index-drift:htpr-9016";
 
+type Page = {
+  tasks: DriftTask[];
+  indexedTasks: Map<number, IndexedTaskTime | null>;
+  indexedComments: Map<number, IndexedCommentCopy | null>;
+  batchFull: boolean;
+};
+
 type DriftDeps = {
-  loadPage: (afterId: number, take: number) => Promise<{
-    tasks: DriftTask[];
-    indexedTasks: Map<number, IndexedTaskTime | null>;
-    indexedComments: Map<number, IndexedCommentCopy | null>;
-    batchFull: boolean;
-  }>;
-  reindexTask: (taskId: number) => Promise<void>;
-  reindexComments: (taskId: number) => Promise<void>;
+  loadPage: (afterId: number, take: number) => Promise<Page>;
+  reindexTask: (taskId: number) => Promise<unknown>;
+  reindexComments: (taskId: number) => Promise<unknown>;
   today: () => string;
 };
 
@@ -42,12 +40,12 @@ function textAttr(row: { [key: string]: unknown } | undefined, key: string) {
   return value == null ? "" : String(value);
 }
 
-function rowId(row: { id?: unknown }) {
-  const id = Number(row.id);
-  return Number.isInteger(id) ? id : null;
+async function queryRows(name: string, body: Record<string, unknown>) {
+  const response = await turbopuffer.namespace(name).query(body as any);
+  return (response.rows ?? []) as { id?: unknown; [key: string]: unknown }[];
 }
 
-export async function loadIndexDriftPage(afterId: number, take: number) {
+export async function loadIndexDriftPage(afterId: number, take: number): Promise<Page> {
   const rows = await prisma.task.findMany({
     where: { id: { gt: afterId }, status: { not: Status.Deleted } },
     orderBy: { id: "asc" },
@@ -55,121 +53,65 @@ export async function loadIndexDriftPage(afterId: number, take: number) {
     select: { id: true, title: true, updatedAt: true },
   });
   const ids = rows.map((row) => row.id);
-  const commentGroups = ids.length
+  const groups = ids.length
     ? await prisma.comment.groupBy({
         by: ["taskId"],
-        where: {
-          taskId: { in: ids },
-          activity: { equals: Prisma.DbNull },
-        },
+        where: { taskId: { in: ids }, activity: { equals: Prisma.DbNull } },
         _count: { _all: true },
       })
     : [];
-  const commentCounts = new Map(
-    commentGroups.map((group) => [group.taskId, group._count._all]),
-  );
+  const counts = new Map(groups.map((group) => [group.taskId, group._count._all]));
   const tasks: DriftTask[] = rows.map((row) => ({
     id: row.id,
     title: row.title ?? "",
-    updatedAt: row.updatedAt.toISOString(),
-    commentCount: commentCounts.get(row.id) ?? 0,
+    updatedAt: row.updatedAt?.toISOString() ?? "",
+    commentCount: counts.get(row.id) ?? 0,
   }));
-  const indexedTasks = await readIndexedTasks(tasks.map((task) => String(task.id)));
-  const indexedComments = await readIndexedComments(
-    tasks.filter((task) => task.commentCount > 0).map((task) => String(task.id)),
-  );
-  return { tasks, indexedTasks, indexedComments, batchFull: rows.length === take };
-}
-
-async function readIndexedTasks(ids: string[]) {
-  const indexed = new Map<number, IndexedTaskTime | null>();
-  if (ids.length === 0) return indexed;
-  const response = await turbopuffer.namespace(turbopufferNamespaces.task.name).query({
-    filters: ["id", "In", ids],
-    rank_by: ["id", "asc"],
-    top_k: ids.length,
-    include_attributes: ["updatedAt"],
-    consistency: { level: "strong" },
-  } as any);
-  for (const id of ids) indexed.set(Number(id), null);
-  for (const row of response.rows ?? []) {
-    const id = rowId(row);
-    if (id == null) continue;
-    indexed.set(id, { updatedAt: textAttr(row as { [key: string]: unknown }, "updatedAt") });
-  }
-  return indexed;
-}
-
-async function readIndexedComments(ids: string[]) {
-  const indexed = new Map<number, IndexedCommentCopy | null>();
-  const pending = [...ids];
-  const workers = Array.from({ length: Math.min(8, pending.length) }, async () => {
-    while (pending.length > 0) {
-      const id = pending.pop();
-      if (!id) return;
-      const response = await turbopuffer.namespace(turbopufferNamespaces.comment.name).query({
-        filters: ["taskId", "Eq", id],
-        rank_by: ["createdAt", "desc"],
-        top_k: 1,
-        include_attributes: ["taskTitle", "taskUpdatedAt"],
-        consistency: { level: "strong" },
-      } as any);
-      const row = response.rows?.[0] as { [key: string]: unknown } | undefined;
-      indexed.set(
-        Number(id),
-        row
-          ? {
-              taskTitle: textAttr(row, "taskTitle"),
-              taskUpdatedAt: textAttr(row, "taskUpdatedAt"),
-            }
-          : null,
-      );
+  const indexedTasks = new Map<number, IndexedTaskTime | null>();
+  const taskIds = tasks.map((task) => String(task.id));
+  if (taskIds.length) {
+    for (const id of taskIds) indexedTasks.set(Number(id), null);
+    for (const row of await queryRows(turbopufferNamespaces.task.name, {
+      filters: ["id", "In", taskIds],
+      rank_by: ["id", "asc"],
+      top_k: taskIds.length,
+      include_attributes: ["updatedAt"],
+      consistency: { level: "strong" },
+    })) {
+      const id = Number(row.id);
+      if (!Number.isInteger(id)) continue;
+      indexedTasks.set(id, { updatedAt: textAttr(row, "updatedAt") });
     }
-  });
-  await Promise.all(workers);
-  return indexed;
-}
-
-export async function reindexDriftedTask(taskId: number) {
-  const task = await prisma.task.findFirst({
-    where: { id: taskId },
-    include: turbopufferTaskInclude,
-  });
-  if (!task || task.status === Status.Deleted) return;
-  await upsertTaskRowsToTurbopuffer([buildTurbopufferTaskRow(task)]);
-}
-
-export async function reindexDriftedComments(taskId: number) {
-  const comments = await prisma.comment.findMany({
-    where: { taskId },
-    include: turbopufferCommentInclude,
-  });
-  const rows = comments
-    .map((comment) => buildTurbopufferCommentRow(comment))
-    .filter((row): row is NonNullable<typeof row> => row !== null);
-  if (rows.length === 0) return;
-  await upsertCommentRowsToTurbopuffer(rows);
+  }
+  const indexedComments = new Map<number, IndexedCommentCopy | null>();
+  for (const task of tasks) {
+    if (task.commentCount === 0) continue;
+    const [row] = await queryRows(turbopufferNamespaces.comment.name, {
+      filters: ["taskId", "Eq", String(task.id)],
+      rank_by: ["createdAt", "desc"],
+      top_k: 1,
+      include_attributes: ["taskTitle", "taskUpdatedAt"],
+      consistency: { level: "strong" },
+    });
+    indexedComments.set(task.id, row
+      ? { taskTitle: textAttr(row, "taskTitle"), taskUpdatedAt: textAttr(row, "taskUpdatedAt") }
+      : null);
+  }
+  return { tasks, indexedTasks, indexedComments, batchFull: rows.length === take };
 }
 
 export async function runIndexDriftRepair(
   state: DriftState = emptyDriftState(),
   deps: DriftDeps = {
     loadPage: loadIndexDriftPage,
-    reindexTask: reindexDriftedTask,
-    reindexComments: reindexDriftedComments,
+    reindexTask: upsertTaskToTurbopuffer,
+    reindexComments: upsertAllCommentsToTurbopuffer,
     today: () => new Date().toISOString().slice(0, 10),
   },
 ) {
-  let current = {
-    afterId: state.afterId,
-    found: state.found,
-    results: state.results ?? [],
-  };
+  let current = { afterId: state.afterId, found: state.found, results: state.results ?? [] };
   let scanned = 0;
   let reindexed = 0;
-  let passComplete = false;
-  let passFound: number | null = null;
-
   for (let batch = 0; batch < DRIFT_MAX_BATCHES && reindexed < DRIFT_MAX_REINDEX; batch += 1) {
     const page = await deps.loadPage(current.afterId, DRIFT_SCAN_BATCH);
     scanned += page.tasks.length;
@@ -186,17 +128,19 @@ export async function runIndexDriftRepair(
     current = outcome.state;
     reindexed += outcome.reindexed;
     if (outcome.passComplete && outcome.passFound != null) {
-      passComplete = true;
-      passFound = outcome.passFound;
-      current = {
-        afterId: 0,
-        found: 0,
-        results: recordDriftPass(current.results, deps.today(), outcome.passFound),
+      return {
+        state: {
+          afterId: 0,
+          found: 0,
+          results: recordDriftPass(current.results, deps.today(), outcome.passFound),
+        },
+        scanned,
+        reindexed,
+        passComplete: true,
+        passFound: outcome.passFound,
       };
-      break;
     }
     if (outcome.stopped || page.tasks.length === 0) break;
   }
-
-  return { state: current, scanned, reindexed, passComplete, passFound };
+  return { state: current, scanned, reindexed, passComplete: false, passFound: null };
 }

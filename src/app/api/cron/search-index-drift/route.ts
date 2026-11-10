@@ -16,7 +16,7 @@ function readState(raw: string | null): DriftState {
     return {
       afterId: Number.isInteger(parsed.afterId) ? Number(parsed.afterId) : 0,
       found: Number.isInteger(parsed.found) ? Number(parsed.found) : 0,
-      results: Array.isArray(parsed.results) ? parsed.results : [],
+      results: Array.isArray(parsed.results) ? parsed.results.filter((row) => row && typeof row.date === "string") : [],
     };
   } catch {
     return emptyDriftState();
@@ -27,21 +27,12 @@ export async function GET(request: NextRequest) {
   if (!hasValidCronAuthorization(request.headers.get("authorization"), process.env.CRON_SECRET)) {
     return NextResponse.json({ message: "unauthorized" }, { status: 401 });
   }
-
   const redis = await getRedis();
-  const state = readState(await redis.get(DRIFT_STATE_KEY));
-  const result = await runIndexDriftRepair(state);
+  const result = await runIndexDriftRepair(readState(await redis.get(DRIFT_STATE_KEY)));
   await redis.set(DRIFT_STATE_KEY, JSON.stringify(result.state));
-  console.log(
-    `[search-index-drift] scanned ${result.scanned} reindexed ${result.reindexed} pass ${result.passComplete ? result.passFound : "open"}`,
-  );
+  console.log(`[search-index-drift] scanned ${result.scanned} reindexed ${result.reindexed} pass ${result.passComplete ? result.passFound : "open"}`);
   return NextResponse.json({
-    scanned: result.scanned,
-    reindexed: result.reindexed,
-    passComplete: result.passComplete,
-    passFound: result.passFound,
-    afterId: result.state.afterId,
-    found: result.state.found,
-    results: result.state.results,
+    scanned: result.scanned, reindexed: result.reindexed, passComplete: result.passComplete,
+    passFound: result.passFound, afterId: result.state.afterId, found: result.state.found, results: result.state.results,
   });
 }
