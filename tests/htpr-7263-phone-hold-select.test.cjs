@@ -23,12 +23,7 @@ function fixture(t, { enabled = true, mobile = true, selectAll = true, overview 
   let currentMobile = mobile;
   let currentEnabled = enabled;
   const load = loader({
-    "@/hooks/useFlag": {
-      useFlag: (key) =>
-        (key === flag && currentEnabled) ||
-        (key === selectAllFlag && selectAll) ||
-        key === "htpr-8960-border-only-select",
-    },
+    "@/hooks/useFlag": { useFlag: (key) => (key === flag && currentEnabled) || (key === selectAllFlag && selectAll) },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/keys": {

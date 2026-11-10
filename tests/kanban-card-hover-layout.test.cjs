@@ -184,8 +184,7 @@ function loadCard(enabled, cleanup) {
   const cn = (...args) => twMerge(clsx(args));
   const flags = (key) =>
     (key === hoverFlagKey && enabled) ||
-    (key === "htpr-8255-kanban-cleanup" && cleanup) ||
-    key === "htpr-8960-border-only-select";
+    (key === "htpr-8255-kanban-cleanup" && cleanup);
   const mocks = {
     ...shared,
     "@/hooks/useFlag": { useFlag: flags },
