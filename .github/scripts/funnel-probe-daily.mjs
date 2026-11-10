@@ -118,9 +118,7 @@ async function walkFunnel(browser, email, teammateEmail, runId) {
     record("email verify navigation", verified, verifyDetail);
     if (!verified) return {};
 
-    const codeResponse = await page.request.post(`${BASE}/api/cli/generate-code`, {
-      headers: { Accept: "application/json" },
-    });
+    const codeResponse = await page.request.post(`${BASE}/api/cli/generate-code`, { headers: { Accept: "application/json" } });
     const codeJson = await codeResponse.json().catch(() => ({}));
     record("connect code", codeResponse.ok() && Boolean(codeJson.code), `HTTP ${codeResponse.status()}`);
     if (!codeJson.code) return {};
@@ -180,15 +178,9 @@ async function walkFunnel(browser, email, teammateEmail, runId) {
     );
     record("customer numbers clean", saved?.accountCategory === "probe", saved?.accountCategory ?? "unknown");
 
-    const removed = await api("/api/mcp/projects/archive", {
-      method: "POST",
-      token,
-      body: { project_id: boardId, status: "Deleted" },
-    });
+    const removed = await api("/api/mcp/projects/archive", { method: "POST", token, body: { project_id: boardId, status: "Deleted" } });
     record("cleanup", removed.ok, removed.ok ? "probe board deleted" : `HTTP ${removed.status}`);
-    const revoked = await page.request.post(`${BASE}/api/connections/revoke-all`, {
-      headers: { Accept: "application/json" },
-    });
+    const revoked = await page.request.post(`${BASE}/api/connections/revoke-all`, { headers: { Accept: "application/json" } });
     record("tool disconnected", revoked.ok(), `HTTP ${revoked.status()}`);
     return { token, verified: true };
   } finally {
