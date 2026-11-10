@@ -222,20 +222,18 @@ const layoutOf = (h) => [...h.card.classList, ...h.link.classList].filter(name =
 
 for (const cleanup of [false, true]) {
   for (const blocked of [false, true]) {
-    for (const active of [false, true]) {
-      test(`flag on, cleanup ${cleanup ? "on" : "off"}, ${blocked ? "blocked" : "plain"}, ${active ? "active" : "idle"}: selecting never changes card padding or border width`, () => {
-        const h = harness(true, { active }, blocked ? { blockingTasks: [{ id: 1 }] } : {}, true, cleanup);
-        try {
-          h.render({});
-          const before = layoutOf(h);
-          h.render({ selected: true, selectionMode: true });
-          assert.equal(layoutOf(h), before);
-          h.render({ selectionMode: true });
-          assert.equal(layoutOf(h), before);
-        } finally {
-          h.close();
+    test(`flag on, cleanup ${cleanup ? "on" : "off"}, ${blocked ? "blocked" : "plain"}: becoming active or selected never changes card padding or border width`, () => {
+      const h = harness(true, {}, blocked ? { blockingTasks: [{ id: 1 }] } : {}, true, cleanup);
+      try {
+        h.render({});
+        const rest = layoutOf(h);
+        for (const state of [{ active: true }, { selected: true, selectionMode: true }, { selected: true, active: true, selectionMode: true }, { selectionMode: true }]) {
+          h.render(state);
+          assert.equal(layoutOf(h), rest, JSON.stringify(state));
         }
-      });
-    }
+      } finally {
+        h.close();
+      }
+    });
   }
 }
