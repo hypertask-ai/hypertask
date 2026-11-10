@@ -770,17 +770,23 @@ export async function updateTaskSingle(
       }
     }
 
-    upsertTaskToTurbopuffer(task.id);
-    if (
-      requestedMutation.status ||
-      requestedMutation.ticketNumber ||
-      requestedMutation.uniqueIndex ||
-      requestedMutation.projectId
-    )
-      upsertAllCommentsToTurbopuffer(task.id);
     const titleChanged =
       requestedMutation.title !== undefined &&
       requestedMutation.title !== taskBeforeWrite.title;
+    try {
+      await upsertTaskToTurbopuffer(task.id, { strict: true });
+      if (
+        titleChanged ||
+        requestedMutation.status ||
+        requestedMutation.ticketNumber ||
+        requestedMutation.uniqueIndex ||
+        requestedMutation.projectId
+      ) {
+        await upsertAllCommentsToTurbopuffer(task.id, { strict: true });
+      }
+    } catch (error) {
+      console.log("🤔 ~ updateTaskSingle ~ search index error:", error);
+    }
     const descriptionChanged =
       requestedMutation.description !== undefined &&
       requestedMutation.description !==
