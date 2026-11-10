@@ -2,6 +2,17 @@ import type { LabelResponse } from "@/lib/api/contracts/taskWrites";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7868_EMPTY_FIELD_LABELS_FLAG } from "@/lib/flags/definitions/htpr-7868-empty-field-labels";
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
+import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import {
+  ADD_FIELD_EVENT,
+  addFieldOptions,
+  customFieldIdFromOptionKey,
+  filledRightColumnFields,
+  isCustomFieldFilled,
+  type AddFieldEventDetail,
+  type RightColumnFieldValues,
+} from "@/lib/taskDetail/rightColumnFields";
+import { splitAssignees } from "@/lib/assignees";
 import React, {
   Suspense,
   useContext,
@@ -18,6 +29,7 @@ import {
   AssigneeCard,
   ClickableSpan,
   LocalRightSideInfo,
+  QuietAddLink,
   TaskInfoColumnContainer,
   TaskInfoLabel,
   TaskInfoRow,
@@ -172,6 +184,71 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     ? EstimateConstants.find((x) => x.estimate_index === estimate_?.estimate_index)
         ?.estimate_full_value
     : undefined;
+  const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
+  const [revealedCustomField, setRevealedCustomField] = useState<{
+    taskId: number;
+    fieldId: number;
+  } | null>(null);
+  const revealedCustomFieldId =
+    revealedCustomField?.taskId === currentTask.id
+      ? revealedCustomField.fieldId
+      : null;
+  const { humanAssignees, agentAssignees } = splitAssignees(currentTask.assignees);
+  const fieldValues: RightColumnFieldValues = {
+    assigneeCount: humanAssignees.length,
+    agentCount: agentAssignees.length,
+    dueDate: currentTask.dueDate,
+    cyclesEnabled: Boolean(currentTask.project?.cyclesEnabled),
+    cycle: currentTask.cycle,
+    priority: priority_,
+    size: sizeValue,
+    tagValues: (labelsFromTQ ?? []).map(
+      (taskLabel: ITaskLabel) => taskLabel.label?.value
+    ),
+  };
+  const filled = filledRightColumnFields(fieldValues);
+  const emptyFieldOptions = addFieldOptions(
+    fieldValues,
+    currentTask.project?.customFields ?? [],
+    currentTask.customFieldValues
+  );
+  const openAddField = () =>
+    setShowCommands({
+      show: true,
+      mode: CommandMode.Command,
+      scope: "add-field",
+      payload: { taskId: currentTask.id, options: emptyFieldOptions },
+    });
+  useEffect(
+    rightColumnFlag
+      ? () => {
+          const openers: Partial<Record<string, () => void>> = {
+            dueDate: () => toggleDueDate(),
+            cycle: () => setShowCyclePicker(true),
+            priority: () => togglePriorityModal(),
+            size: () => toggleEstimateModal(),
+            tags: () => toggleLabelModal(),
+          };
+          const onAddField = (event: Event) => {
+            const { taskId, key } = (event as CustomEvent<AddFieldEventDetail>).detail;
+            if (taskId !== currentTask.id) return;
+            const fieldId = customFieldIdFromOptionKey(key);
+            if (fieldId !== null) setRevealedCustomField({ taskId, fieldId });
+            else openers[key]?.();
+          };
+          window.addEventListener(ADD_FIELD_EVENT, onAddField);
+          return () => window.removeEventListener(ADD_FIELD_EVENT, onAddField);
+        }
+      : () => {},
+    [
+      rightColumnFlag,
+      currentTask.id,
+      toggleDueDate,
+      togglePriorityModal,
+      toggleEstimateModal,
+      toggleLabelModal,
+    ]
+  );
   const waitingOnUser = useMemo(() => {
     const users: IUser[] = [
       ...(membersAndOwner?.owner ? [membersAndOwner.owner] : []),
@@ -230,6 +307,117 @@ const TaskInfo = (props: ITaskInfoContainer) => {
       hotDays: currentTask.project?.staleHotDays,
     },
   );
+  const statusRow = (
+    <TaskInfoRow>
+      {(() => {
+        const i = sectionsForProjectTQ?.findIndex(
+          (s: { id: number | undefined }) => s.id === currentTask.sectionId
+        ) ?? -1;
+        const next =
+          i >= 0 && i < (sectionsForProjectTQ?.length ?? 0) - 1
+            ? sectionsForProjectTQ?.[i + 1]
+            : null;
+
+        return (
+          <>
+            <LocalRightSideInfo
+              onClick={toggleMoveModal}
+              title="Status"
+              left={0}
+              bottom={-40}
+              tooltipText="Change Status"
+              key="Status"
+              KeyCombination={["M"]}
+            />
+            <TaskInfoValue className="w-full">
+              <span className="inline-flex max-w-full flex-wrap gap-1.5 items-center">
+                <span
+                  onClick={toggleMoveModal}
+                  className="relative group inline-flex max-w-full min-w-0 cursor-pointer"
+                >
+                  <Tooltip
+                    portal
+                    left={0}
+                    bottom={-40}
+                    text="Change Status"
+                    keyCombination={["M"]}
+                  />
+                  <ClickableSpan title={currentTask?.section ?? ""} />
+                </span>
+                {next && (
+                  <span
+                    onClick={() => moveTaskToNextColumn(next)}
+                    className="relative group ml-1 inline-block align-text-bottom cursor-pointer"
+                  >
+                    <ArrowRight
+                      size={11}
+                      className="mb-[2px] hover:text-white-black"
+                     strokeWidth={1.75}/>
+                  <Tooltip
+                    portal
+                    left={0}
+                      bottom={-40}
+                      text={`Move task to ${next.section_title}`}
+                      keyCombination={["SHIFT", "L, →"]}
+                    />
+                  </span>
+                )}
+              </span>
+            </TaskInfoValue>
+          </>
+        );
+      })()}
+    </TaskInfoRow>
+  );
+  const projectRow = (
+    <TaskInfoRow>
+      <LocalRightSideInfo
+        onClick={() => toggleMoveToBoardModal()}
+        title={"Project"}
+        left={0}
+        bottom={-40}
+        tooltipText="Change Project"
+        key={"Change Project"}
+        KeyCombination={["SHIFT", "M"]}
+        className=""
+      />
+
+      <TaskInfoValue className="w-full cursor-pointer">
+        <span className="inline-flex max-w-full flex-wrap items-center gap-1.5">
+          <span
+            onClick={() => toggleMoveToBoardModal()}
+            className="relative group inline-flex max-w-full min-w-0"
+          >
+            <Tooltip
+              portal
+              left={0}
+              bottom={-40}
+              text="Change Project"
+              keyCombination={["SHIFT", "M"]}
+            />
+            <ClickableSpan title={_parsedTask?.project?.title ?? ""} />
+          </span>
+          {} {}
+          <span
+            onClick={() => goToProjectShortcut(_parsedTask.projectId, true)}
+            className="relative group inline-block align-text-bottom"
+          >
+            <CornerLeftUp
+              size={11}
+              className="mb-[2px] scale-x-[-1] hover:text-white-black"
+             strokeWidth={1.75}/>
+            <Tooltip
+              portal
+              left={0}
+              bottom={-40}
+              text="Go to Project"
+              keyCombination={["G", null, "B"]}
+            />
+          </span>
+        </span>
+      </TaskInfoValue>
+    </TaskInfoRow>
+  );
   return (
     <TaskInfoColumnContainer
       heightVariant="fit"
@@ -245,6 +433,8 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             }
       }
     >
+      {rightColumnFlag && statusRow}
+      {rightColumnFlag && projectRow}
 
       <AssigneesContainer
         showAssigneeModal={showAssignModal}
@@ -296,7 +486,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
-      {currentTask?.ticketNumber && (
+      {!rightColumnFlag && currentTask?.ticketNumber && (
         <TaskInfoRow>
           <>
             <LocalRightSideInfo
@@ -336,69 +526,11 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
-      <TaskInfoRow>
-        {(() => {
-          const i = sectionsForProjectTQ?.findIndex(
-            (s: { id: number | undefined }) => s.id === currentTask.sectionId
-          ) ?? -1;
-          const next =
-            i >= 0 && i < (sectionsForProjectTQ?.length ?? 0) - 1
-              ? sectionsForProjectTQ?.[i + 1]
-              : null;
-
-          return (
-            <>
-              <LocalRightSideInfo
-                onClick={toggleMoveModal}
-                title="Status"
-                left={0}
-                bottom={-40}
-                tooltipText="Change Status"
-                key="Status"
-                KeyCombination={["M"]}
-              />
-              <TaskInfoValue className="w-full">
-                <span className="inline-flex max-w-full flex-wrap gap-1.5 items-center">
-                  <span
-                    onClick={toggleMoveModal}
-                    className="relative group inline-flex max-w-full min-w-0 cursor-pointer"
-                  >
-                    <Tooltip
-                      portal
-                      left={0}
-                      bottom={-40}
-                      text="Change Status"
-                      keyCombination={["M"]}
-                    />
-                    <ClickableSpan title={currentTask?.section ?? ""} />
-                  </span>
-                  {next && (
-                    <span
-                      onClick={() => moveTaskToNextColumn(next)}
-                      className="relative group ml-1 inline-block align-text-bottom cursor-pointer"
-                    >
-                      <ArrowRight
-                        size={11}
-                        className="mb-[2px] hover:text-white-black"
-                       strokeWidth={1.75}/>
-                    <Tooltip
-                      portal
-                      left={0}
-                        bottom={-40}
-                        text={`Move task to ${next.section_title}`}
-                        keyCombination={["SHIFT", "L, →"]}
-                      />
-                    </span>
-                  )}
-                </span>
-              </TaskInfoValue>
-            </>
-          );
-        })()}
-      </TaskInfoRow>
+      {!rightColumnFlag && statusRow}
 
       {!cachedLayout && <PullRequestRows pullRequests={pullRequests} />}
-      {(currentTask.project?.cyclesEnabled || currentTask.cycle) && (
+      {(currentTask.project?.cyclesEnabled || currentTask.cycle) &&
+        (!rightColumnFlag || filled.cycle || showCyclePicker) && (
         <TaskInfoRow>
           <LocalRightSideInfo
             onClick={() => setShowCyclePicker(true)}
@@ -425,6 +557,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
+      {(!rightColumnFlag || filled.dueDate) && (
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={toggleDueDate}
@@ -466,6 +599,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           </Suspense>
         </TaskInfoValue>
       </TaskInfoRow>
+      )}
 
       {currentTask?.startDate && (
         <TaskInfoRow>
@@ -534,54 +668,9 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         />
       )}
 
-      <TaskInfoRow>
-        <LocalRightSideInfo
-          onClick={() => toggleMoveToBoardModal()}
-          title={"Project"}
-          left={0}
-          bottom={-40}
-          tooltipText="Change Project"
-          key={"Change Project"}
-          KeyCombination={["SHIFT", "M"]}
-          className=""
-        />
+      {!rightColumnFlag && projectRow}
 
-        <TaskInfoValue className="w-full cursor-pointer">
-          <span className="inline-flex max-w-full flex-wrap items-center gap-1.5">
-            <span
-              onClick={() => toggleMoveToBoardModal()}
-              className="relative group inline-flex max-w-full min-w-0"
-            >
-              <Tooltip
-                portal
-                left={0}
-                bottom={-40}
-                text="Change Project"
-                keyCombination={["SHIFT", "M"]}
-              />
-              <ClickableSpan title={_parsedTask?.project?.title ?? ""} />
-            </span>
-            {} {}
-            <span
-              onClick={() => goToProjectShortcut(_parsedTask.projectId, true)}
-              className="relative group inline-block align-text-bottom"
-            >
-              <CornerLeftUp
-                size={11}
-                className="mb-[2px] scale-x-[-1] hover:text-white-black"
-               strokeWidth={1.75}/>
-              <Tooltip
-                portal
-                left={0}
-                bottom={-40}
-                text="Go to Project"
-                keyCombination={["G", null, "B"]}
-              />
-            </span>
-          </span>
-        </TaskInfoValue>
-      </TaskInfoRow>
-
+      {(!rightColumnFlag || filled.priority) && (
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={togglePriorityModal}
@@ -617,7 +706,9 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           </Suspense>
         </TaskInfoValue>
       </TaskInfoRow>
+      )}
 
+      {(!rightColumnFlag || filled.size) && (
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={toggleEstimateModal}
@@ -649,7 +740,9 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           </Suspense>
         </TaskInfoValue>
       </TaskInfoRow>
+      )}
 
+      {(!rightColumnFlag || filled.tags) && (
       <TaskInfoRow alignTop>
         <LocalRightSideInfo
           onClick={toggleLabelModal}
@@ -696,9 +789,14 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           </TaskInfoValue>
         )}
       </TaskInfoRow>
+      )}
 
 
-      <CustomFieldRows task={currentTask} />
+      <CustomFieldRows
+        task={currentTask}
+        onlyFilled={rightColumnFlag}
+        revealedFieldId={rightColumnFlag ? revealedCustomFieldId : null}
+      />
 
       {followers.length > 0 && (
         <TaskInfoRow alignTop>
@@ -729,6 +827,10 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             )}
           </TaskInfoValue>
         </TaskInfoRow>
+      )}
+
+      {rightColumnFlag && emptyFieldOptions.length > 0 && (
+        <QuietAddLink label="Add field" onClick={openAddField} />
       )}
 
       {staleLevel !== "none" && (
@@ -894,15 +996,30 @@ function TaskRelations({ currentTask, removeRelationHandler }: Pick<ITaskInfoCon
 
 function CustomFieldRows({
   task,
+  onlyFilled,
+  revealedFieldId,
 }: {
   task: ITaskInfoContainer["currentTask"];
+  onlyFilled: boolean;
+  revealedFieldId: number | null;
 }) {
   const customFields = task.project?.customFields ?? [];
   const [expanded, setExpanded] = useState(false);
   if (customFields.length === 0) return null;
 
-  const shownFields = customFields.filter((field) => field.showInRail !== false);
-  const hiddenFields = customFields.filter((field) => field.showInRail === false);
+  const visibleFields = onlyFilled
+    ? customFields.filter(
+        (field) =>
+          field.id === revealedFieldId ||
+          isCustomFieldFilled(field.id, task.customFieldValues)
+      )
+    : customFields;
+  const shownFields = visibleFields.filter(
+    (field) => field.showInRail !== false || field.id === revealedFieldId
+  );
+  const hiddenFields = visibleFields.filter(
+    (field) => field.showInRail === false && field.id !== revealedFieldId
+  );
 
   const renderField = (field: ICustomField) => {
     const existing = task.customFieldValues?.find(
@@ -914,6 +1031,7 @@ function CustomFieldRows({
         field={field}
         existing={existing ?? null}
         taskId={task.id}
+        startEditing={field.id === revealedFieldId}
       />
     );
   };
@@ -951,15 +1069,20 @@ function CustomFieldRow({
   field,
   existing,
   taskId,
+  startEditing: openInEditMode = false,
 }: {
   field: ICustomField;
   existing: ICustomFieldValue | null;
   taskId: number;
+  startEditing?: boolean;
 }) {
   const [savedValue, setSavedValue] = useState(existing?.value ?? "");
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(openInEditMode);
   const [inputValue, setInputValue] = useState(existing?.value ?? "");
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  useEffect(() => {
+    if (openInEditMode) (inputRef.current as HTMLElement | null)?.focus();
+  }, [openInEditMode]);
 
   async function save(val: string) {
     setEditing(false);
