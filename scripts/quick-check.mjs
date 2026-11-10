@@ -1,8 +1,20 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { evaluateFlagDefinitionChanges, touchesFlagDefinitions } from "../.github/scripts/feature-flag-gate.mjs";
+
+const require = createRequire(import.meta.url);
+const FLAG_DEFINITION_PATHS = new Set([
+  "src/lib/flags/keys.ts",
+  "src/lib/flags.ts",
+  "src/lib/flags/definitions.ts",
+  "src/lib/flags/releaseRisk.ts",
+]);
+
+function touchesFlagDefinitions(changedFiles) {
+  return changedFiles.some((path) => FLAG_DEFINITION_PATHS.has(path) || path.startsWith("src/lib/flags/definitions/"));
+}
 
 const BUDGET_MS = 10_000;
 const FULL_BUDGET_MS = 60_000;
@@ -276,6 +288,10 @@ if (flagScope.length && touchesFlagDefinitions(flagScope)) {
   const head = (git(root, ["rev-parse", "HEAD"]) ?? "").trim();
   if (mergeBase && head) {
     console.log("quick check: running the feature-flag definition gate");
+    if (!process.env.FEATURE_FLAG_TYPESCRIPT_PATH) {
+      process.env.FEATURE_FLAG_TYPESCRIPT_PATH = require.resolve("typescript");
+    }
+    const { evaluateFlagDefinitionChanges } = await import("../.github/scripts/feature-flag-gate.mjs");
     const result = evaluateFlagDefinitionChanges({
       baseSha: mergeBase.trim(),
       headSha: head,
