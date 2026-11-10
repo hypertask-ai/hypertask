@@ -47,18 +47,30 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
     const ticket = pr.title.split(' ')[0];
     const url = `https://github.com/${repository}/pull/${pr.number}`;
     const authHeaders = { Authorization: `Bearer ${token}` };
+    const boardIdByPrefix = { HYCI: '11514', HTPR: '15', HYFA: '2060', YPER4: '15' };
+    const ticketPrefix = ticket.split('-')[0];
+    const projectQuery = boardIdByPrefix[ticketPrefix]
+      ? `&project_id=${boardIdByPrefix[ticketPrefix]}`
+      : '';
     const ticketDocumentsPull = async () => {
-      const lookup = await fetchImpl(
-        `https://app.hypertask.ai/api/mcp/tasks?ticket_number=${encodeURIComponent(ticket)}`,
-        { redirect: 'error', signal: AbortSignal.timeout(30_000), headers: authHeaders },
-      );
-      if (!lookup.ok) return false;
-      const body = await lookup.json();
-      const row = body.tasks?.[0];
-      if (!row || row.ticketNumber !== ticket) return false;
-      if (row.pullRequests?.some((link) => link.url === url)) return true;
-      const description = row.description ?? '';
-      return description.includes(url);
+      const queries = [
+        `ticket_number=${encodeURIComponent(ticket)}${projectQuery}`,
+        `ticket_number=${encodeURIComponent(ticket)}`,
+      ];
+      for (const query of queries) {
+        const lookup = await fetchImpl(
+          `https://app.hypertask.ai/api/mcp/tasks?${query}`,
+          { redirect: 'error', signal: AbortSignal.timeout(30_000), headers: authHeaders },
+        );
+        if (!lookup.ok) continue;
+        const body = await lookup.json();
+        const row = body.tasks?.[0];
+        if (!row || row.ticketNumber !== ticket) continue;
+        if (row.pullRequests?.some((link) => link.url === url)) return true;
+        const description = row.description ?? '';
+        if (description.includes(url)) return true;
+      }
+      return false;
     };
     const response = await fetchImpl('https://app.hypertask.ai/api/mcp/tasks/update', {
       method: 'POST',
