@@ -1,7 +1,5 @@
 import { useCallback, useEffect, type DragEvent as ReactDragEvent } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { useSetRecoilState } from "@/lib/state";
-import { tableSortAccountAtom } from "@/store";
 import { IAssignees, ITask } from "@/models/model";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import globalConstants from "@/lib/constants";
@@ -20,19 +18,18 @@ import type { useTableRows } from "./useTableRows";
 import { SortColumn, initialDirection, SortState, myTasksSortFromTable, isTaskRow, Row, TASK_SHORTCUT_COMMAND_MODES } from "./tableViewShared";
 
 type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_currentProject" | "currentUser"> &
-  Pick<ReturnType<typeof useTableState>, "customFieldBySortColumn" | "sortState" | "setSortState" | "setTableSortViewAndReturn" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setTasksPlayList" | "navigateToTask" | "draggedTaskRef" | "setDragOverSectionId" | "currentProjectSectionIds" | "moveTaskToSection" | "timerToggling" | "queryClient" | "removeFromListWithStatus" | "setExcludedTaskIds" | "router" | "updateTaskInCache" | "starTask" | "assignTask" | "setAssignTask" | "myTasksSnoozeEnabled" | "lastGAt" | "setShowCommands" | "isApple" | "didRestore" | "persistedActiveItem" | "selectedIndex"> &
+  Pick<ReturnType<typeof useTableState>, "customFieldBySortColumn" | "sortState" | "setSortState" | "setTableSortViewAndReturn" | "setSortAccount" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setTasksPlayList" | "navigateToTask" | "draggedTaskRef" | "setDragOverSectionId" | "currentProjectSectionIds" | "moveTaskToSection" | "timerToggling" | "queryClient" | "removeFromListWithStatus" | "setExcludedTaskIds" | "router" | "updateTaskInCache" | "starTask" | "assignTask" | "setAssignTask" | "myTasksSnoozeEnabled" | "lastGAt" | "setShowCommands" | "isApple" | "didRestore" | "persistedActiveItem" | "selectedIndex"> &
   Pick<ReturnType<typeof useTableRows>, "rows" | "focusRowElement" | "focusTo">;
 
 export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
   if (tableSortColumnsEnabled) initialDirection("updated", new Map());
-  const setSortAccount = useSetRecoilState(tableSortAccountAtom);
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes") || legacyTableGroupEnabled;
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
-  _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
+  _currentProject, setTableSortViewAndReturn, setSortAccount, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
   rows, navigateToTask, focusRowElement, draggedTaskRef, setDragOverSectionId,
   currentProjectSectionIds, moveTaskToSection, timerToggling, queryClient, removeFromListWithStatus,
   setExcludedTaskIds, router, updateTaskInCache, starTask, currentUser,

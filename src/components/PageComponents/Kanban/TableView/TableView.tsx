@@ -178,7 +178,7 @@ const TableView = ({
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
   expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
-  setTableSortViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
+  setTableSortViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
   } = useTableState({
@@ -213,7 +213,7 @@ const TableView = ({
   closeAssignModal, runTaskShortcut,
   } = useTableActions({
     customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
-    _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
+    _currentProject, setTableSortViewAndReturn, setSortAccount, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
     rows, navigateToTask, focusRowElement, draggedTaskRef, setDragOverSectionId,
     currentProjectSectionIds, moveTaskToSection, timerToggling, queryClient, removeFromListWithStatus,
     setExcludedTaskIds, router, updateTaskInCache, starTask, currentUser,

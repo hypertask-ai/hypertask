@@ -69,6 +69,7 @@ export function useTableState(context: Context) {
   const [atomVisibleColumns, setAtomVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
   const [accountColumns, setAccountColumns] = useRecoilState(tableColumnsAccountAtom);
   const sortAccount = useRecoilValue(tableSortAccountAtom);
+  const setSortAccount = useSetRecoilState(tableSortAccountAtom);
   const savedTableColumns = tableSortColumnsEnabled && !myTasksColumnsControlled
     ? getActiveTableColumnsFromProject(_currentProject)
     : null;
@@ -377,7 +378,7 @@ export function useTableState(context: Context) {
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
   expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
-  setTableSortViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
+  setTableSortViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
   };
