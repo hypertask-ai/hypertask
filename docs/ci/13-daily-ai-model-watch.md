@@ -9,12 +9,13 @@ Vercel AI Gateway and authenticated OpenAI / Anthropic lists. Gateway failures
 warn and fall back; unknown pricing never authorizes unconditional automatic
 shipping. No usable sources fails the watch.
 
-Only the families in
-[model-watch.allowlist.json](../.github/scripts/model-watch.allowlist.json)
-file tickets, and only at or above the version recorded for each family. Another
-provider, a size, modality or coding side-line, or an older version stays in the
-run log. Watching a family is one line in that file. A day where everything
-watched is premium files nothing, so models held for
+A new class files a ticket only when its family is in
+[model-watch.allowlist.json](https://github.com/hypertask-ai/hypertask/blob/production/.github/scripts/model-watch.allowlist.json)
+at or above the version recorded there. Another provider, a size, modality or
+coding side-line, or an older version stays in the run log. Watching a family is
+one line in that file. A newer version of a class we already ship, or a stale
+entry, is always filed. A day where everything watched is premium files nothing,
+so models held for
 [HTPR-7746](https://app.hypertask.ai/detail/project-15/7746) ride along with a
 cheaper finding instead of filing their own ticket.
 

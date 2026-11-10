@@ -32,10 +32,11 @@ It demonstrates Fable 5.1, GPT 6 Astra, Kimi K3.1 Pro and Qwen 3.8 Plus. Never u
 
 ## Decide
 
-A finding reaches a ticket only when its family is listed in
+A new class reaches a ticket only when its family is listed in
 `.github/scripts/model-watch.allowlist.json` at or above the version recorded
 there. Everything else (another provider, a size, modality or coding side-line,
-an older version) stays in the run log. Watch another family by adding one line
+an older version) stays in the run log. A newer version of a class we already
+ship, or a stale entry, is always filed. Watch another family by adding one line
 with the version we ship today.
 
 | Finding | Action |
