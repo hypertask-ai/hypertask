@@ -110,6 +110,7 @@ function makeHarness(redis = makeRedis()) {
     '@/lib/funnelProbe/inbox': { storeProbeVerificationLink: async () => {} },
     '@/lib/funnelProbe/inbox': { isProbeRecipientEmail: () => false, storeProbeVerificationLink: async () => {} },
     '@/lib/funnelProbe/signupGuard': { gateProbeInstantSignup: async () => ({ ok: true }) },
+    '@/lib/auth/sessionRevocation': { revokeOtherUserSessions: async () => true },
   }
   if (fs.existsSync(path.join(root, 'src/lib/auth/emailLinkToken.ts'))) {
     aliases['@/lib/auth/emailLinkToken'] = loadTs('src/lib/auth/emailLinkToken.ts', {

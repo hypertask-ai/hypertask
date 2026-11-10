@@ -33,6 +33,6 @@ export async function accountNotificationsBlocked(userId: number) {
     });
     return isUnverifiedStraightBoardAccount(user);
   } catch {
-    return true;
+    return false;
   }
 }

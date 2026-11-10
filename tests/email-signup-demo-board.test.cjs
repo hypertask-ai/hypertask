@@ -107,7 +107,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
       verifySession: (token) => token === 'guest-session' ? { id: guestId } : null,
       signSession: () => 'new-session', sessionCookieOptions: () => ({}), clearBetterAuthSessionCookies: () => {},
     },
-    '@/lib/auth/sessionRevocation': { isSessionTokenRevoked: async () => false, revokeSessionToken: async () => {} },
+    '@/lib/auth/sessionRevocation': { isSessionTokenRevoked: async () => false, revokeSessionToken: async () => {}, revokeOtherUserSessions: async () => true },
     '@/lib/demo/guest': { GUEST_UID_PREFIX: 'guest_' },
     '@/lib/configs/auth.config': { onboarding: { skipOnboarding, shouldSkipInteractive: true } },
     '@/lib/constants/constants': { companySizeOptions: ['Just me'], companyRoleOptions: ['Founder'] },

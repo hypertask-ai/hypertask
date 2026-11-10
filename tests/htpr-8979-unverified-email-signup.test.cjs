@@ -25,12 +25,19 @@ function prismaWithUser(user) {
   return { user: { findUnique: async () => user } }
 }
 
-function notificationFixture(user, { notificationPreference = 'all' } = {}) {
+function notificationFixture(user) {
   const sent = []
-  const modules = load('src/utils/controllers/notifications/sendNotification.ts', {
+  const guard = load('src/lib/auth/unverifiedEmailAccount.ts', {
     '@/lib/prisma': prismaWithUser(user),
+  })
+  const modules = load('src/utils/controllers/notifications/sendNotification.ts', {
+    '@/lib/auth/unverifiedEmailAccount': guard,
+    '@/lib/prisma': prismaWithUser(user),
+    '@/lib/flags': {
+      HTPR_7031_INVITE_EMAIL_FLAG: 'htpr-7031-invite-email',
+      isFeatureEnabled: async () => false,
+    },
     '@/lib/access/canReadTaskNow': { canReadTaskNow: async () => true },
-    '@/lib/flags': { HTPR_7031_INVITE_EMAIL_FLAG: 'htpr-7031-invite-email', isFeatureEnabled: async () => false },
     './emailTemplates': {
       renderNotificationEmail: () => ({ subject: 'Task moved', html: '<p>moved</p>' }),
     },
@@ -41,13 +48,14 @@ function notificationFixture(user, { notificationPreference = 'all' } = {}) {
     '@/lib/email/inboundReply': { createNotificationReplyAddress: () => 'reply@hypertask.ai' },
   })
   const shouldNotify = load('src/utils/controllers/notifications/shouldNotify.ts', {
+    '@/lib/auth/unverifiedEmailAccount': guard,
     '@/lib/prisma': {
       user: { findUnique: async () => user },
       userSetting: {
         findUnique: async () => ({
           notification: true,
           notificationMatrix: null,
-          notificationPreference,
+          notificationPreference: 'all',
         }),
       },
     },
@@ -104,45 +112,70 @@ function memoryRedis() {
   const values = new Map()
   return {
     values,
-    async set(key, value, _mode, ttl) {
+    async set(key, value) {
       values.set(key, value)
       return 'OK'
     },
     async get(key) {
       return values.get(key) ?? null
     },
-    async mget(...keys) {
-      return keys.map((key) => values.get(key) ?? null)
-    },
   }
 }
 
-test('verifying the address ends the earlier sign-in and keeps the fresh one', async () => {
+async function atOffset(offsetSeconds, run) {
+  const realNow = Date.now
+  const realClock = realNow()
+  Date.now = () => realClock + offsetSeconds * 1000
+  try {
+    return await run()
+  } finally {
+    Date.now = realNow
+  }
+}
+
+test('confirming the address ends the earlier sign-in and keeps a later one', async () => {
   const redis = memoryRedis()
   const session = load('src/lib/auth/session.ts')
   const revocation = load('src/lib/auth/sessionRevocation.ts', {
     '@/lib/redis': { getRedis: async () => redis },
   })
 
-  const earlierSignIn = session.signSession({ id: 6, email: 'signup@example.com' })
+  const earlierSignIn = await atOffset(-600, async () => session.signSession({ id: 6, email: 'signup@example.com' }))
+
   assert.equal(await revocation.isSessionTokenRevoked(earlierSignIn, { failClosed: true }), false)
-
-  const generation = await revocation.rotateUserSessionGeneration(6)
-  const verifyingSignIn = session.signSession({ id: 6, email: 'signup@example.com', sessionGeneration: generation })
-
+  assert.equal(await revocation.revokeOtherUserSessions(6), true)
   assert.equal(await revocation.isSessionTokenRevoked(earlierSignIn, { failClosed: true }), true)
-  assert.equal(await revocation.isSessionTokenRevoked(verifyingSignIn, { failClosed: true }), false)
+
+  const laterSignIn = await atOffset(120, async () => session.signSession({ id: 6, email: 'signup@example.com' }))
+  assert.equal(await revocation.isSessionTokenRevoked(laterSignIn, { failClosed: true }), false)
 })
 
-test('another account keeps its sign-in when one account verifies', async () => {
+test('another account keeps its sign-in when one account confirms', async () => {
   const redis = memoryRedis()
   const session = load('src/lib/auth/session.ts')
   const revocation = load('src/lib/auth/sessionRevocation.ts', {
     '@/lib/redis': { getRedis: async () => redis },
   })
 
-  const otherAccount = session.signSession({ id: 7, email: 'teammate@example.com' })
-  await revocation.rotateUserSessionGeneration(6)
+  const otherAccount = await atOffset(-600, async () => session.signSession({ id: 7, email: 'teammate@example.com' }))
+  assert.equal(await revocation.revokeOtherUserSessions(6), true)
 
   assert.equal(await revocation.isSessionTokenRevoked(otherAccount, { failClosed: true }), false)
+})
+
+test('ending the earlier sessions reports failure when the store refuses', async () => {
+  const revocation = load('src/lib/auth/sessionRevocation.ts', {
+    '@/lib/redis': {
+      getRedis: async () => ({
+        async set() {
+          throw new Error('redis unavailable')
+        },
+        async get() {
+          throw new Error('redis unavailable')
+        },
+      }),
+    },
+  })
+
+  assert.equal(await revocation.revokeOtherUserSessions(6), false)
 })

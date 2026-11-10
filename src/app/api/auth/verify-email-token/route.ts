@@ -20,7 +20,7 @@ import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { consumeEmailLinkToken } from '@/lib/auth/emailLinkToken'
-import { rotateUserSessionGeneration } from '@/lib/auth/sessionRevocation'
+import { revokeOtherUserSessions } from '@/lib/auth/sessionRevocation'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
@@ -132,7 +132,6 @@ export async function POST(request: NextRequest) {
     }
 
     let userData = userUpdateResult.res.user
-    let sessionGeneration: string | undefined
     if (!userData) {
       console.error('❌ User data not found in response')
       return NextResponse.json(
@@ -148,6 +147,9 @@ export async function POST(request: NextRequest) {
     if (isVerificationToken && userData.UserSetting) {
       console.log('📧 Email verification token - setting isVerified to true')
       const wasUnverified = !existingUser?.emailVerified && !existingUser?.UserSetting?.isVerified
+      if (wasUnverified && !(await revokeOtherUserSessions(userData.id))) {
+        console.error('Email verification could not end the earlier sessions for user', userData.id)
+      }
       await prisma.userSetting.update({
         where: { id: userData.UserSetting.id },
         data: { isVerified: true },
@@ -156,7 +158,6 @@ export async function POST(request: NextRequest) {
         where: { id: userData.id },
         data: { emailVerified: true },
       })
-      if (wasUnverified) sessionGeneration = await rotateUserSessionGeneration(userData.id)
       try {
         await autoJoinByEmailDomain(userData.id, userData.email)
       } catch (error) {
@@ -222,10 +223,7 @@ export async function POST(request: NextRequest) {
       })
       response.cookies.set(
         SESSION_COOKIE,
-        signSession(
-          { id: userData!.id, email: userData!.email, ...(sessionGeneration ? { sessionGeneration } : {}) },
-          SESSION_TTL_SECONDS,
-        ),
+        signSession({ id: userData!.id, email: userData!.email }, SESSION_TTL_SECONDS),
         sessionCookieOptions(SESSION_TTL_SECONDS)
       )
       clearBetterAuthSessionCookies(response)

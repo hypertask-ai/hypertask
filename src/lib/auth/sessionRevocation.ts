@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto'
+import { createHash } from 'crypto'
 
 import { SESSION_TTL_SECONDS, sessionRevocationClaims } from '@/lib/auth/session'
 import { getRedis } from '@/lib/redis'
@@ -7,7 +7,7 @@ const revokedTokens = new Map<string, number>()
 const READ_DEADLINE_MS = 300
 const WRITE_DEADLINE_MS = 500
 
-const userGenerationKey = (userId: number) => `ht_session:user-generation:${userId}`
+const userRevokedBeforeKey = (userId: number) => `ht_session:user-revoked-before:${userId}`
 
 function verifiedToken(token: string | undefined) {
   const claims = sessionRevocationClaims(token)
@@ -18,7 +18,7 @@ function verifiedToken(token: string | undefined) {
     fingerprint,
     exp: claims.expiresAt,
     userId: claims.userId,
-    sessionGeneration: claims.sessionGeneration,
+    issuedAt: claims.issuedAt,
   }
 }
 
@@ -68,19 +68,22 @@ export async function revokeSessionToken(token: string | undefined): Promise<voi
   }
 }
 
-export async function rotateUserSessionGeneration(userId: number): Promise<string> {
-  const generation = randomBytes(16).toString('base64url')
+export async function revokeOtherUserSessions(userId: number): Promise<boolean> {
+  const revokedBefore = Math.floor(Date.now() / 1000)
 
-  try {
-    await withDeadline(async () => {
-      const redis = await getRedis()
-      await redis.set(userGenerationKey(userId), generation, 'EX', SESSION_TTL_SECONDS)
-    }, WRITE_DEADLINE_MS)
-  } catch {
-    console.error('Session generation rotation failed')
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await withDeadline(async () => {
+        const redis = await getRedis()
+        await redis.set(userRevokedBeforeKey(userId), String(revokedBefore), 'EX', SESSION_TTL_SECONDS)
+      }, WRITE_DEADLINE_MS)
+      return true
+    } catch {
+      if (attempt === 1) console.error('Ending other sessions failed after retry')
+    }
   }
 
-  return generation
+  return false
 }
 
 export async function isSessionTokenRevoked(
@@ -97,14 +100,14 @@ export async function isSessionTokenRevoked(
   }
 
   try {
-    const [revoked, generation] = await withDeadline(async () => {
+    const [revoked, revokedBefore] = await withDeadline(async () => {
       const redis = await getRedis()
-      return await redis.mget(
-        `ht_session:revoked:${verified.fingerprint}`,
-        userGenerationKey(verified.userId),
-      )
+      return await Promise.all([
+        redis.get(`ht_session:revoked:${verified.fingerprint}`),
+        redis.get(userRevokedBeforeKey(verified.userId)),
+      ])
     }, READ_DEADLINE_MS)
-    if (generation !== null && generation !== verified.sessionGeneration) return true
+    if (revokedBefore !== null && verified.issuedAt < Number(revokedBefore)) return true
     if (revoked !== null) {
       cacheRevocation(verified.fingerprint, verified.exp)
       return true

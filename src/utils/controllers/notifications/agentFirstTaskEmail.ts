@@ -2,7 +2,6 @@ import { waitUntil } from "@vercel/functions";
 import type { Task } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { accountNotificationsBlocked } from "@/lib/auth/unverifiedEmailAccount";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { unsubscribeHeaders } from "@/lib/email/unsubscribe";
@@ -50,7 +49,6 @@ async function sendAgentFirstTaskEmail(
   userId: number,
   agentId: string,
 ): Promise<void> {
-  if (await accountNotificationsBlocked(userId)) return;
   if (await prisma.logs.findFirst({ where: { LoggedById: userId, log: marker }, select: { id: true } })) return;
 
   const sectionIds = [...new Set(candidates.flatMap(({ before, after }) =>

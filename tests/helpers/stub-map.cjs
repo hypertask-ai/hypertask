@@ -29,7 +29,7 @@ function enforcementFor(guard) {
 const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
 
 const straightBoardGuardStubs = {
-  "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed" },
+  "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed", accountNotificationsBlocked: async () => false },
 };
 
 const emailStraightBoardStubs = {

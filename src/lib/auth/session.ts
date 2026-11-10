@@ -16,13 +16,12 @@ type SessionPayload = {
   agentId?: string
   teamScope?: AgentTokenTeamScope | null
   agentTokenGeneration?: string | null
-  sessionGeneration?: string | null
 }
 
 export type SessionRevocationClaims = {
   userId: number
   expiresAt: number
-  sessionGeneration?: string
+  issuedAt: number
 }
 
 type SignedSessionPayload = SessionPayload & {
@@ -72,7 +71,6 @@ export function signSession(
     ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
     ...(payload.teamScope !== undefined ? { teamScope: payload.teamScope } : {}),
     ...(payload.agentTokenGeneration !== undefined ? { agentTokenGeneration: payload.agentTokenGeneration } : {}),
-    ...(payload.sessionGeneration != null ? { sessionGeneration: payload.sessionGeneration } : {}),
     iat: now,
     jti: randomBytes(12).toString('base64url'),
     exp: now + ttlSeconds,
@@ -124,7 +122,6 @@ function verifiedSessionPayload(token: string | undefined): SignedSessionPayload
         (typeof payload.teamScope.teamId !== 'string' || !payload.teamScope.teamId.trim() ||
           typeof payload.teamScope.accessBinding !== 'string' || !payload.teamScope.accessBinding.trim())) ||
       (payload.agentTokenGeneration != null && typeof payload.agentTokenGeneration !== 'string') ||
-      (payload.sessionGeneration != null && typeof payload.sessionGeneration !== 'string') ||
       ((!payload.agentId) && (payload.teamScope != null || payload.agentTokenGeneration != null)) ||
       typeof payload.exp !== 'number' ||
       !Number.isFinite(payload.exp) ||
@@ -162,7 +159,7 @@ export function sessionRevocationClaims(token: string | undefined): SessionRevoc
   return {
     userId: payload.id,
     expiresAt: payload.exp,
-    ...(payload.sessionGeneration ? { sessionGeneration: payload.sessionGeneration } : {}),
+    issuedAt: payload.iat,
   }
 }
 

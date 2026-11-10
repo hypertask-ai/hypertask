@@ -526,6 +526,7 @@ test('verify-code requires email, reserves capacity, and verifies the bound pair
     '@/lib/telemetry/signupAnalytics': {
       signupAttributionFromHeaders: () => ({ signupMethod: 'email' }),
     },
+    '@/lib/auth/sessionRevocation': { revokeOtherUserSessions: async () => true },
   }
   const { POST } = loadTypescriptModule(
     'src/app/api/auth/verify-code/route.ts',
