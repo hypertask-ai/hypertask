@@ -10,6 +10,7 @@ import {
   filledRightColumnFields,
   isCustomFieldFilled,
   type AddFieldEventDetail,
+  type CustomFieldValueEdits,
   type RightColumnFieldValues,
 } from "@/lib/taskDetail/rightColumnFields";
 import { splitAssignees } from "@/lib/assignees";
@@ -187,12 +188,26 @@ const TaskInfo = (props: ITaskInfoContainer) => {
   const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
   const [revealedCustomField, setRevealedCustomField] = useState<{
     taskId: number;
-    fieldId: number;
+    fieldId: string;
   } | null>(null);
   const revealedCustomFieldId =
     revealedCustomField?.taskId === currentTask.id
       ? revealedCustomField.fieldId
       : null;
+  const [customValueEdits, setCustomValueEdits] = useState<{
+    taskId: number;
+    edits: CustomFieldValueEdits;
+  }>({ taskId: currentTask.id, edits: {} });
+  const customEdits =
+    customValueEdits.taskId === currentTask.id ? customValueEdits.edits : {};
+  const recordCustomValue = (fieldId: number | string, value: string) =>
+    setCustomValueEdits((previous) => ({
+      taskId: currentTask.id,
+      edits: {
+        ...(previous.taskId === currentTask.id ? previous.edits : {}),
+        [String(fieldId)]: value,
+      },
+    }));
   const { humanAssignees, agentAssignees } = splitAssignees(currentTask.assignees);
   const fieldValues: RightColumnFieldValues = {
     assigneeCount: humanAssignees.length,
@@ -210,7 +225,8 @@ const TaskInfo = (props: ITaskInfoContainer) => {
   const emptyFieldOptions = addFieldOptions(
     fieldValues,
     currentTask.project?.customFields ?? [],
-    currentTask.customFieldValues
+    currentTask.customFieldValues,
+    customEdits
   );
   const openAddField = () =>
     setShowCommands({
@@ -796,6 +812,8 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         task={currentTask}
         onlyFilled={rightColumnFlag}
         revealedFieldId={rightColumnFlag ? revealedCustomFieldId : null}
+        customEdits={customEdits}
+        onValueSaved={rightColumnFlag ? recordCustomValue : undefined}
       />
 
       {followers.length > 0 && (
@@ -998,10 +1016,14 @@ function CustomFieldRows({
   task,
   onlyFilled,
   revealedFieldId,
+  customEdits,
+  onValueSaved,
 }: {
   task: ITaskInfoContainer["currentTask"];
   onlyFilled: boolean;
-  revealedFieldId: number | null;
+  revealedFieldId: string | null;
+  customEdits: CustomFieldValueEdits;
+  onValueSaved?: (fieldId: number | string, value: string) => void;
 }) {
   const customFields = task.project?.customFields ?? [];
   const [expanded, setExpanded] = useState(false);
@@ -1010,15 +1032,15 @@ function CustomFieldRows({
   const visibleFields = onlyFilled
     ? customFields.filter(
         (field) =>
-          field.id === revealedFieldId ||
-          isCustomFieldFilled(field.id, task.customFieldValues)
+          String(field.id) === revealedFieldId ||
+          isCustomFieldFilled(field.id, task.customFieldValues, customEdits)
       )
     : customFields;
   const shownFields = visibleFields.filter(
-    (field) => field.showInRail !== false || field.id === revealedFieldId
+    (field) => field.showInRail !== false || String(field.id) === revealedFieldId
   );
   const hiddenFields = visibleFields.filter(
-    (field) => field.showInRail === false && field.id !== revealedFieldId
+    (field) => field.showInRail === false && String(field.id) !== revealedFieldId
   );
 
   const renderField = (field: ICustomField) => {
@@ -1031,7 +1053,8 @@ function CustomFieldRows({
         field={field}
         existing={existing ?? null}
         taskId={task.id}
-        startEditing={field.id === revealedFieldId}
+        startEditing={String(field.id) === revealedFieldId}
+        onSaved={onValueSaved}
       />
     );
   };
@@ -1070,11 +1093,13 @@ function CustomFieldRow({
   existing,
   taskId,
   startEditing: openInEditMode = false,
+  onSaved,
 }: {
   field: ICustomField;
   existing: ICustomFieldValue | null;
   taskId: number;
   startEditing?: boolean;
+  onSaved?: (fieldId: number | string, value: string) => void;
 }) {
   const [savedValue, setSavedValue] = useState(existing?.value ?? "");
   const [editing, setEditing] = useState(openInEditMode);
@@ -1094,6 +1119,7 @@ function CustomFieldRow({
         taskId,
         value: val,
       });
+      onSaved?.(field.id, val);
     } catch (err) {
       console.error("CustomField upsert error:", err);
       setSavedValue(savedValue);

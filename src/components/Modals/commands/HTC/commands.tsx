@@ -458,25 +458,19 @@ const Commands = (props: Props) => {
     isTicketPrefixCommandVisible,
   ])
 
-  const addFieldPayload =
-    rightColumnFlag && scope === "add-field"
-      ? (showCommands.payload as AddFieldPalettePayload | undefined)
-      : undefined;
-  const addFieldCommands = useMemo<CommandGroup[] | null>(
-    () =>
-      addFieldPayload
-        ? [
-            {
-              group: "Add field",
-              commandLists: addFieldPayload.options.map((option) => ({
-                key: `${ADD_FIELD_COMMAND_PREFIX}${option.key}`,
-                name: option.label,
-                commandMode: CommandMode.Command,
-                keywords: `add field set ${option.label}`,
-              })),
-            },
-          ]
-        : null,
+  const addFieldPayload = showCommands.payload as AddFieldPalettePayload | undefined;
+  const addFieldCommands = useMemo<CommandGroup[]>(
+    () => [
+      {
+        group: "Add field",
+        commandLists: (addFieldPayload?.options ?? []).map((option) => ({
+          key: `${ADD_FIELD_COMMAND_PREFIX}${option.key}`,
+          name: option.label,
+          commandMode: CommandMode.Command,
+          keywords: `add field set ${option.label}`,
+        })),
+      },
+    ],
     [addFieldPayload],
   );
 
@@ -493,8 +487,8 @@ const Commands = (props: Props) => {
     handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex,
     setSelectedCommand,
   } = useHTC(
-    addFieldCommands ?? allCommands_,
-    addFieldCommands ?? emptyQueryCommands,
+    rightColumnFlag && scope === "add-field" ? addFieldCommands : allCommands_,
+    rightColumnFlag && scope === "add-field" ? addFieldCommands : emptyQueryCommands,
     !isMobile,
     refreshSearchOnCommandsChange,
   );
@@ -662,7 +656,8 @@ const Commands = (props: Props) => {
       if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()
       if(isInteractive) return callback(command)
-      if (addFieldPayload && command.key.startsWith(ADD_FIELD_COMMAND_PREFIX)) {
+      if (rightColumnFlag && scope === "add-field" && addFieldPayload &&
+          command.key.startsWith(ADD_FIELD_COMMAND_PREFIX)) {
         resetShowCommands();
         const detail: AddFieldEventDetail = {
           taskId: addFieldPayload.taskId,

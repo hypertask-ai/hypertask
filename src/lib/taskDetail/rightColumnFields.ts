@@ -50,21 +50,28 @@ export function filledRightColumnFields(
   ) as FilledRightColumnFields;
 }
 
+export type CustomFieldId = string | number;
+
 export interface CustomFieldEntry {
-  id: number;
+  id: CustomFieldId;
   name: string;
 }
 
 export interface CustomFieldValueEntry {
-  fieldId: number;
+  fieldId: CustomFieldId;
   value: string;
 }
 
+export type CustomFieldValueEdits = Readonly<Record<string, string>>;
+
 export function isCustomFieldFilled(
-  fieldId: number,
+  fieldId: CustomFieldId,
   values: ReadonlyArray<CustomFieldValueEntry> | undefined,
+  edits: CustomFieldValueEdits = {},
 ): boolean {
-  return Boolean(values?.find((entry) => entry.fieldId === fieldId)?.value);
+  const id = String(fieldId);
+  if (id in edits) return Boolean(edits[id]);
+  return Boolean(values?.find((entry) => String(entry.fieldId) === id)?.value);
 }
 
 export interface AddFieldOption {
@@ -72,24 +79,27 @@ export interface AddFieldOption {
   label: string;
 }
 
-export const customFieldOptionKey = (fieldId: number) => `custom:${fieldId}`;
+const CUSTOM_FIELD_OPTION_PREFIX = "custom:";
 
-export function customFieldIdFromOptionKey(key: string): number | null {
-  if (!key.startsWith("custom:")) return null;
-  const id = Number(key.slice("custom:".length));
-  return Number.isInteger(id) ? id : null;
+export const customFieldOptionKey = (fieldId: CustomFieldId) =>
+  `${CUSTOM_FIELD_OPTION_PREFIX}${fieldId}`;
+
+export function customFieldIdFromOptionKey(key: string): string | null {
+  if (!key.startsWith(CUSTOM_FIELD_OPTION_PREFIX)) return null;
+  return key.slice(CUSTOM_FIELD_OPTION_PREFIX.length) || null;
 }
 
 export function addFieldOptions(
   values: RightColumnFieldValues,
   customFields: ReadonlyArray<CustomFieldEntry>,
   customValues: ReadonlyArray<CustomFieldValueEntry> | undefined,
+  customEdits: CustomFieldValueEdits = {},
 ): AddFieldOption[] {
   const builtIn = RIGHT_COLUMN_FIELDS.filter(
     (field) => (field.isAvailable?.(values) ?? true) && !field.isFilled(values),
   ).map((field) => ({ key: field.key, label: field.label }));
   const custom = customFields
-    .filter((field) => !isCustomFieldFilled(field.id, customValues))
+    .filter((field) => !isCustomFieldFilled(field.id, customValues, customEdits))
     .map((field) => ({ key: customFieldOptionKey(field.id), label: field.name }));
   return [...builtIn, ...custom];
 }

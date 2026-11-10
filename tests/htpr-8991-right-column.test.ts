@@ -31,8 +31,8 @@ const fullTicket: RightColumnFieldValues = {
 };
 
 const customFields = [
-  { id: 7, name: "ICE" },
-  { id: 9, name: "Owner team" },
+  { id: "cf-ice", name: "ICE" },
+  { id: "cf-team", name: "Owner team" },
 ];
 
 test("an empty ticket hides every optional row and offers each one in Add field", () => {
@@ -55,8 +55,8 @@ test("a full ticket shows every filled row and offers nothing to add", () => {
   assert.deepEqual(Object.values(filled), Object.values(filled).map(() => true));
   assert.deepEqual(
     addFieldOptions(fullTicket, customFields, [
-      { fieldId: 7, value: "8" },
-      { fieldId: 9, value: "Growth" },
+      { fieldId: "cf-ice", value: "8" },
+      { fieldId: "cf-team", value: "Growth" },
     ]),
     [],
   );
@@ -65,7 +65,7 @@ test("a full ticket shows every filled row and offers nothing to add", () => {
 test("Add field lists only the empty fields of a half-filled ticket", () => {
   const values = { ...emptyTicket, assigneeCount: 1, priority: { priority_index: 2 } };
   assert.deepEqual(
-    addFieldOptions(values, customFields, [{ fieldId: 7, value: "8" }]).map(
+    addFieldOptions(values, customFields, [{ fieldId: "cf-ice", value: "8" }]).map(
       (option) => option.label,
     ),
     ["Agent", "Due date", "Size", "Tags", "Owner team"],
@@ -81,7 +81,7 @@ test("placeholder values count as empty", () => {
   assert.equal(filled.size, false);
   assert.equal(filled.tags, false);
   assert.deepEqual(
-    addFieldOptions(emptyTicket, customFields, [{ fieldId: 7, value: "" }])
+    addFieldOptions(emptyTicket, customFields, [{ fieldId: "cf-ice", value: "" }])
       .filter((option) => option.label === "ICE").length,
     1,
   );
@@ -100,7 +100,18 @@ test("Cycle is offered only on boards with cycles", () => {
   );
 });
 
-test("custom field option keys round-trip to their field id", () => {
-  assert.equal(customFieldIdFromOptionKey(customFieldOptionKey(7)), 7);
+test("custom field option keys round-trip to their string field id", () => {
+  const id = "5c1d2a4e-8f0b-4c47-9a51-0f7e3d2b1a90";
+  assert.equal(customFieldIdFromOptionKey(customFieldOptionKey(id)), id);
   assert.equal(customFieldIdFromOptionKey("dueDate"), null);
+});
+
+test("a value saved in the column updates Add field without a reload", () => {
+  const labels = (edits: Record<string, string>) =>
+    addFieldOptions(emptyTicket, customFields, [{ fieldId: "cf-team", value: "Growth" }], edits)
+      .map((option) => option.label)
+      .filter((label) => label === "ICE" || label === "Owner team");
+  assert.deepEqual(labels({}), ["ICE"]);
+  assert.deepEqual(labels({ "cf-ice": "8" }), []);
+  assert.deepEqual(labels({ "cf-team": "" }), ["ICE", "Owner team"]);
 });

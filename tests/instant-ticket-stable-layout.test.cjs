@@ -55,6 +55,11 @@ const title = load("src/components/PageComponents/TaskDetail/TopRow/TaskDetailTi
   "./SubtaskLink": { default: marker("parent") },
   "./BaseTitleContainer": { default: ({ hasSummary, children }) => React.createElement("header", { "data-summary-space": String(hasSummary) }, children) },
   "./MobileTaskDueDate": { default: marker("due") },
+  "@/hooks/useFlag": { useFlag: key => key !== "htpr-8991-right-column" && cachedLayout },
+  "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+  "@/hooks/General/useCopyURL": { default: () => ({ copyTicketNumber: noop }) },
+  "@/components/Common/Tooltip": { default: () => null },
+  "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
 }).default;
 const info = marker("info");
 const lateInfo = marker("late-info");
@@ -161,6 +166,10 @@ test("flag-off title and mobile virtual rows retain the original layout and page
 
 const rail = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx", {
   ...common,
+  "@/hooks/useFlag": { useFlag: key => key !== "htpr-8991-right-column" && cachedLayout },
+  "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+  "@/lib/taskDetail/rightColumnFields": require("jiti").createJiti(__filename)(path.join(root, "src/lib/taskDetail/rightColumnFields.ts")),
+  "@/lib/assignees": require("jiti").createJiti(__filename)(path.join(root, "src/lib/assignees.ts")),
   "@/lib/api/typedClient": { getTaskCycle: noop },
   axios: { default: {} },
   "react-hot-toast": { default: {} },
