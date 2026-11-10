@@ -52,6 +52,7 @@ function loadRoute(tasks = []) {
     },
     "@/utils/controllers/projects/getAllIncludes": {
       getProjectWhere: () => ({}),
+      blockedByRelationsInclude: require("./helpers/mcp-task-list-blocking-stubs.cjs").blockedByRelationsIncludeStub,
     },
     "@/lib/mcp/agents": {
       mapVisibleMcpAgent: () => undefined,
