@@ -190,8 +190,7 @@ const TableView = ({
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
-  let tagGroupingActive = false;
-  if (_currentProject && effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled).mode !== "column") tagGroupingActive = true;
+  const tagGroupingActive = Boolean(_currentProject && effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled).mode !== "column");
   const {
   visibleColumns, getColumnWidth, frozenColumnOffset, setColumnWidth, freezeTitleWidth,
   gridTemplateColumns, tableMinWidth, reorderColumn, normalizedColumnOrder, storedColumnKeys,

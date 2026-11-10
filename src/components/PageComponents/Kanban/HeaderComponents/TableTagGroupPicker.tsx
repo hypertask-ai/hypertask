@@ -7,18 +7,17 @@ import { ModalContainerCustom, ModalFooterComp, ModalHeaderComp, ModalInput, Mod
 import { countTableTags, getActiveTableGroupingFromProject } from "@/lib/table-view/tableGroupByTag";
 import type { IProject } from "@/models/model";
 import { useFlag } from "@/hooks/useFlag";
+
 const ACTION = "inline-flex min-h-7 items-center rounded-[4px] border-0 px-2 py-1 text-meta font-medium text-white-black hover:bg-hover-active";
+const byTitle = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
+
 const TableTagGroupPicker = ({ project, onClose, onApply }: { project: IProject; onClose: () => void; onApply: (tagIds: string[]) => void }) => {
   const enabled = useFlag("htpr-8974-table-group-modes");
   const counts = useMemo(() => countTableTags(project.filteredSections ?? project.sections ?? []), [project.filteredSections, project.sections]);
   const [selected, setSelected] = useState<string[]>(() => {
     const grouping = getActiveTableGroupingFromProject(project);
+    if (grouping.allTags) return [...counts].sort((a, b) => byTitle(a.title, b.title)).map((tag) => tag.id);
     const available = counts.map((tag) => tag.id);
-    if (grouping.allTags) {
-      return [...counts]
-        .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }))
-        .map((tag) => tag.id);
-    }
     return grouping.tagIds.filter((id) => available.includes(id));
   });
   const [keyword, setKeyword] = useState("");
@@ -30,8 +29,7 @@ const TableTagGroupPicker = ({ project, onClose, onApply }: { project: IProject;
     const rest = counts.filter((tag) => !selected.includes(tag.id)).map((tag) => ({ ...tag, selected: false }));
     return [...selectedRows, ...rest].filter((row) => !query || row.title.toLowerCase().includes(query));
   }, [byId, counts, selected, keyword]);
-  const toggle = (id: string) =>
-    setSelected((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
+  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   const dropOn = (targetId: string) => {
     if (!dragId || dragId === targetId || !selected.includes(targetId)) return;
     setSelected((current) => {

@@ -254,9 +254,7 @@ const useKanbanViews = (project: IProject | null) => {
     board_show_archived: getActiveShowArchivedOverrideFromProject(queuedProject),
     table_sort_column: getActiveTableSortFromProject(queuedProject)?.column ?? null,
     table_sort_direction: getActiveTableSortFromProject(queuedProject)?.direction ?? null,
-    table_group_by: serializeEffectiveTableGrouping(
-      effectiveTableGrouping(queuedProject, tableGroupModesEnabled, legacyTableGroupEnabled),
-    ),
+    table_group_by: serializeEffectiveTableGrouping(effectiveTableGrouping(queuedProject, tableGroupModesEnabled, legacyTableGroupEnabled)),
     table_collapsed_sections: serializeTableCollapsedSections(
       getActiveTableCollapsedSectionsFromProject(queuedProject),
     ),
@@ -435,9 +433,7 @@ const useKanbanViews = (project: IProject | null) => {
   ) => {
     if (tableGroupBy !== "column" && !legacyTableGroupEnabled && !tableGroupModesEnabled) return;
     if (!tableGroupModesEnabled && tableGroupBy !== "column" && tableGroupBy !== "tag") return;
-    const value = tableGroupBy === "tag" && !tableGroupModesEnabled
-      ? "tag"
-      : serializeTableGrouping(tableGroupBy, tagIds);
+    const value = tableGroupBy === "tag" && !tableGroupModesEnabled ? "tag" : serializeTableGrouping(tableGroupBy, tagIds);
     return apiHandler(
       (queuedProject) => buildUnsavedBody(queuedProject, {
         table_group_by: value,
@@ -585,9 +581,7 @@ const useKanbanViews = (project: IProject | null) => {
             ...body,
             view_settings: {
               ...body.view_settings,
-              table_group_by: serializeEffectiveTableGrouping(
-                effectiveTableGrouping(project, tableGroupModesEnabled, legacyTableGroupEnabled),
-              ),
+              table_group_by: serializeEffectiveTableGrouping(effectiveTableGrouping(project, tableGroupModesEnabled, legacyTableGroupEnabled)),
             },
           }
         : body;

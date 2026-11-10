@@ -41,13 +41,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const { timers: runningTimers } = useBoardRunningTimers(project.id)
   const tableGroupBy = effectiveTableGrouping(project, tableGroupModesEnabled, legacyTableGroupEnabled).mode
-  const groupByLabel: Record<TableGroupBy, string> = {
-    column: "Column",
-    tag: "Tags",
-    assignee: "Assignee",
-    priority: "Priority",
-    size: "Size",
-  }
+  const groupByLabel: Record<TableGroupBy, string> = { column: "Column", tag: "Tags", assignee: "Assignee", priority: "Priority", size: "Size" }
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
   const hasActiveSort = getActiveSortingModeFromProject(project) !== "Manual"
