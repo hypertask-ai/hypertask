@@ -24,16 +24,23 @@ export function countSteps(result) {
   return { pass, fail: steps.length - pass, total: steps.length, verdict: result?.verdict || 'FAIL' }
 }
 
-async function api(route, { token, fetchImpl = fetch, method = 'GET', body } = {}) {
+async function api(route, { token, fetchImpl = fetch, method = 'GET', body, idempotencyKey } = {}) {
   if (!token) throw new Error('HYPERTASK_MCP_TOKEN is missing')
   const response = await fetchImpl(`${APP}/api/mcp/${route}`, {
     method,
     signal: AbortSignal.timeout(30_000),
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(`Hypertask ${route} returned HTTP ${response.status}`)
+  if (!response.ok) {
+    const reason = payload?.message || payload?.error || 'no message'
+    throw new Error(`Hypertask ${route} returned HTTP ${response.status}: ${reason}`)
+  }
   if (payload.success !== true) throw new Error(`Hypertask ${route} rejected the operation`)
   return payload
 }
@@ -87,6 +94,29 @@ function activityBody({ week, counts, sha, runUrl, artifactUrl }) {
   ].filter(Boolean).join('\n')
 }
 
+export function weeklyDescription({ week, counts }) {
+  const failed = counts.fail === 1 ? '1 step failed' : `${counts.fail} steps failed`
+  return [
+    `<p><strong>What's wrong or wanted:</strong> the weekly live check result for week ${week}.</p>`,
+    `<p><strong>Who it affects:</strong> internal only. Nobody else reads this.</p>`,
+    `<p><strong>Recommended course and why:</strong> read the result below. A failed step names the page to fix next.</p>`,
+    `<p><strong>What Valentin must decide:</strong> nothing.</p>`,
+    `<p><strong>How to undo:</strong> switch the Monday schedule off.</p>`,
+    '<hr>',
+    '<h2>Problem</h2>',
+    `<p>The weekly live check ran on a seeded copy and reported ${counts.verdict}.</p>`,
+    `<p>Passed steps: ${counts.pass}. ${failed}.</p>`,
+    '<h2>Fix</h2>',
+    '<p>Fix the failing step named in the run evidence, then rerun.</p>',
+    '<h2>Done when</h2>',
+    '<p>Every step passes in one weekly run.</p>',
+    '<h2>Risk</h2>',
+    '<p>A red week can mean a real break in the app. Undo: switch the schedule off.</p>',
+    '<h2>Decision</h2>',
+    '<p>None.</p>',
+  ].join('')
+}
+
 export async function fileWeeklyLiveResult({
   evidenceDir = 'verify-qa',
   runUrl = '',
@@ -102,22 +132,15 @@ export async function fileWeeklyLiveResult({
   const body = activityBody({ week, counts, sha: result.sha, runUrl, artifactUrl })
   let ticket = await findOpenWeeklyTicket(title, options)
   if (!ticket) {
-    const description = [
-      `<p>What's wrong or wanted: weekly live feature-map check for week ${week} on a disposable seeded copy, never production.</p>`,
-      `<p>Who it affects: internal only; this is the weekly behavior record.</p>`,
-      `<p>Recommended course and why: read the run below. A failed step names the page or journey to fix next.</p>`,
-      `<p>What Valentin must decide: nothing.</p>`,
-      `<p>How to undo: switch the Monday 04:05 UTC schedule off.</p>`,
-      `<hr><p>${body.replace(/\n/g, '<br>')}</p>`,
-    ].join('')
     const created = await api('tasks/create', {
       ...options,
       method: 'POST',
+      idempotencyKey: `feature-map-live-weekly-${week}`,
       body: {
         project_id: PROJECT_ID,
         section_id: BACKLOG_SECTION_ID,
         title,
-        description,
+        description: weeklyDescription({ week, counts }),
         content_type: 'html',
         labels: LABELS,
       },
