@@ -69,7 +69,11 @@ function harness(options = {}) {
       { id: 25, publicId: 'deleted-board-page', projectId: 5, taskId: null, title: 'Deleted board page', archived: false },
       { id: 26, publicId: 'old-writer-page', projectId: 1, taskId: 11, title: 'Old writer', archived: false },
     ],
-    links: [{ id: 1, pageId: 20, taskId: 10, createdAt: new Date(0), removedAt: null }, { id: 2, pageId: 20, taskId: 11, createdAt: new Date(1), removedAt: null }],
+    links: [
+      { id: 1, pageId: 20, taskId: 10, createdAt: new Date(0), removedAt: null },
+      { id: 2, pageId: 20, taskId: 11, createdAt: new Date(1), removedAt: null },
+      { id: 3, pageId: 26, taskId: 11, createdAt: new Date(0), removedAt: null },
+    ],
   };
   const queries = [];
   let lock = false;
@@ -208,7 +212,7 @@ for (const [name, userId, visible] of [['ticket-only viewer omits linked page', 
     if (!visible) assert.doesNotMatch(JSON.stringify(body), /Page title/);
   });
 }
-test('legacy unlinked ticket page remains listed exactly once', async () => {
+test('reconciled origin link lists the page exactly once', async () => {
   const h = harness();
   const rows = await h.service.listPages({ taskId: 11, userId: 1 });
   assert.equal(rows.filter((p) => p.publicId === 'old-writer-page').length, 1);

@@ -228,7 +228,6 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
         select: { task: { select: pageTaskSelect } },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       },
-      _count: { select: { links: true } },
       subPages: {
         where: { archived: false, ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}) },
         select: { id: true, title: true, publicId: true, projectId: true },
@@ -236,9 +235,8 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
     },
   })
   if (!page) return null
-  const { links, subPages, _count, ...visiblePage } = page
-  const followsOrigin = args.standalonePagesEnabled === false || _count.links === 0
-  const linkedTasks = followsOrigin
+  const { links, subPages, ...visiblePage } = page
+  const linkedTasks = args.standalonePagesEnabled === false
     ? (page.task ? [page.task] : [])
     : links.map(({ task }) => task)
   return {
@@ -364,7 +362,7 @@ export async function listPages({
     where: {
       archived,
       ...(standalonePagesEnabled
-        ? (taskId === undefined ? {} : { OR: [{ links: { some: { taskId, removedAt: null } } }, { taskId, links: { none: {} } }] })
+        ? (taskId === undefined ? {} : { links: { some: { taskId, removedAt: null } } })
         : { taskId: taskId ?? { not: null } }),
       ...(projectId === undefined ? {} : { projectId }),
       project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)) },

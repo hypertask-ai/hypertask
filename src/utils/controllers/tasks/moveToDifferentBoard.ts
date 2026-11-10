@@ -129,7 +129,7 @@ async function syncTaskPagesInTx(
   after: Task,
 ) {
   const affected = await tx.page.findMany({
-    where: { OR: [{ taskId: after.id, links: { none: {} } }, { links: { some: { taskId: after.id, removedAt: null } } }] },
+    where: { links: { some: { taskId: after.id, removedAt: null } } },
     select: { id: true, parentPageId: true },
   });
   if (affected.length === 0) return [];
@@ -150,16 +150,6 @@ async function syncTaskPagesInTx(
     where: { id: { in: pageIds } },
     include: { links: true },
   });
-  for (const page of pages) {
-    if (page.taskId != null && page.links.length === 0) {
-      const link = await tx.pageTaskLink.upsert({
-        where: { pageId_taskId: { pageId: page.id, taskId: page.taskId } },
-        create: { pageId: page.id, taskId: page.taskId, createdAt: page.createdAt },
-        update: {},
-      });
-      page.links.push(link);
-    }
-  }
   const movingIds = pages
     .filter((page) => {
       const activeLinks = page.links.filter((link) => link.removedAt === null);
@@ -179,7 +169,7 @@ async function syncTaskPagesInTx(
 async function detachSplitPageHierarchy(taskIds: number[]) {
   await prisma.$transaction(async (tx) => {
     const affected = await tx.page.findMany({
-      where: { OR: [{ taskId: { in: taskIds }, links: { none: {} } }, { links: { some: { taskId: { in: taskIds }, removedAt: null } } }] },
+      where: { links: { some: { taskId: { in: taskIds }, removedAt: null } } },
       select: { id: true, parentPageId: true },
     });
     if (affected.length === 0) return;
