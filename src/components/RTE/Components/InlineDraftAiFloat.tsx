@@ -58,6 +58,7 @@ import {
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
+import { HTPR_9025_AI_BOX_OUTLINE_FLAG } from "@/lib/flags/definitions/htpr-9025-ai-box-outline";
 import { HTPR_9002_CTRL_J_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-9002-ctrl-j-new-task";
 import type { NewTaskWriteChip, NewTaskWriter } from "@/lib/ai/newTaskWrite";
 
@@ -1481,11 +1482,12 @@ const InlineDraftAiFloat = ({
       aria-label="Write with AI"
       aria-modal="false"
       tabIndex={ticketEditorCtrlJ ? -1 : undefined}
-      className={
+      className={cn(
         matchCommentRowControls
           ? "my-2 flex outline-none w-full min-w-0 flex-col gap-2 rounded-[4px] bg-newcomment-well px-2 py-1.5 text-content"
-          : "my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
-      }
+          : "my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md",
+        matchCommentRowControls && aiBoxOutline && "border-thin border-border-light-gray-thin",
+      )}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={handlePanelKeyDown}
     >
