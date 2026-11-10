@@ -1083,7 +1083,7 @@ const SplitTitlesContainer: FC<IProps> = ({
         setListScrolled(window.scrollY > 0);
         return;
       }
-      if (target instanceof HTMLElement && target.contains(bar)) {
+      if (target instanceof HTMLElement && (target.contains(bar) || target.matches('[data-testid="inbox-list"]'))) {
         setListScrolled(target.scrollTop > 0);
       }
     };

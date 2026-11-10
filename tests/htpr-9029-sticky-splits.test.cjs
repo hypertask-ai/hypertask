@@ -26,6 +26,7 @@ test("flag on: the split bar pins to the top with an opaque page background", ()
 test("the thin line shows only once the list is scrolled", () => {
   assert.match(container, /\$\{listScrolled \? "shadow-\[0_1px_0_0_var\(--border-light-gray-thin\)\]" : ""\}/);
   assert.match(container, /if \(!stickySplits\) return;/);
+  assert.match(container, /target\.contains\(bar\) \|\| target\.matches\('\[data-testid="inbox-list"\]'\)/);
   assert.match(container, /document\.addEventListener\("scroll", onScroll, \{ capture: true, passive: true \}\)/);
   assert.match(container, /document\.removeEventListener\("scroll", onScroll, \{ capture: true \}\)/);
 });
