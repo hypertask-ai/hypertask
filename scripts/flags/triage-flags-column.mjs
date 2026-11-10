@@ -149,7 +149,6 @@ export function triageFlagsColumn({ run = command, apply = false } = {}) {
       task = readTask(run, task.ticketNumber);
       if (!isFlagColumnTitle(task.section) || task.projectId !== 15 || task.status !== "Normal") continue;
       inspection = inspectTicket(task, readFlags(run), commentsFor(task.ticketNumber));
-      if (inspection.ask) run("vcc", ["comment", "add", task.ticketNumber, "--kind", "qa", "--text", clarificationBody, "--json"]);
       if (inspection.label) {
         const args = ["task", "update", task.ticketNumber, "--project", "15"];
         const stale = (task.labels ?? []).map((label) => label.name).filter((name) => labels.includes(name) && name !== inspection.label);

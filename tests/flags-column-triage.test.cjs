@@ -34,22 +34,25 @@ test("repair removes stale state labels, keeps unrelated labels and content, and
   assert.equal(f.writes().length, writes);
 });
 
-test("a registry ticket with no declaration gets one question and its exact live card", async () => {
-  const { triageFlagsColumn, clarificationBody, clarificationMarker } = await load();
+test("a registry ticket with no declaration still repairs the link and keeps ask in the report", async () => {
+  const { triageFlagsColumn } = await load();
   const f = fixture({ tasks: [task({ ticketNumber: "HTPR-7511", description: "<p>Existing description.</p>" })] });
-  assert.equal(triageFlagsColumn({ ...f, apply: true }).clean, true);
-  assert.equal(f.state.comments["HTPR-7511"][0].text, clarificationBody);
+  const report = triageFlagsColumn({ ...f, apply: true });
+  assert.equal(report.clean, true);
+  assert.equal(report.tickets[0].ask, true);
+  assert.ok(f.state.tasks[0].description.includes("/admin/flags/"));
+  assert.deepEqual(f.writes().filter(([, args]) => args[0] === "comment"), []);
 });
 
 test("missing, unknown and ambiguous flags remain unresolved, never get a guessed label", async () => {
-  const { triageFlagsColumn, clarificationMarker } = await load();
+  const { triageFlagsColumn } = await load();
   for (const description of cases.ambiguousDescriptions) {
     const f = fixture({ tasks: [task({ description })], flags: [flag(), flag({ key: "htpr-2-other", ticketId: "HTPR-2" })] });
     const report = triageFlagsColumn({ ...f, apply: true });
     assert.equal(report.clean, false);
     assert.equal(report.tickets[0].label, null);
-    triageFlagsColumn({ ...f, apply: true });
-    assert.equal((f.state.comments["HTPR-7549"] ?? []).filter((comment) => comment.text.includes(clarificationMarker)).length, 1);
+    assert.equal(report.tickets[0].ask, true);
+    assert.deepEqual(f.writes().filter(([, args]) => args[0] === "comment"), []);
   }
 });
 
