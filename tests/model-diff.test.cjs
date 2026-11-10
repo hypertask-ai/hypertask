@@ -205,16 +205,29 @@ test("watcher creates one board-15 ticket, then deduplicates by stable title eve
   assert.equal(ticketFor(finding).title, ticketFor({ ...finding, action: "changed", current: [], model: "claude-sonnet-5-6-20261024" }).title);
 });
 
-test("rollup uses the exact UTC-day marker, lists prices and actions, and escapes HTML", () => {
+test("rollup marker and title come from the sorted model set, and the check date is in the description", () => {
   const findings = [
     { kind: "new-class", provider: "new<provider>", model: "new<provider>/model-1", inputPerMillion: 0, action: "ask <Valentin> & verify" },
     { kind: "new-class", provider: "other", model: "other/model-2", inputPerMillion: null, action: "waits for HTPR-7746" },
     { kind: "new-class", provider: "unknown", model: "unknown/model-3", action: "ask Valentin before shipping" },
   ];
   const ticket = rollupTicket(findings, new Date("2026-10-24T23:30:00-02:00"));
-  assert.equal(ticket.marker, "modelwatchrollup-2026-10-25");
-  assert.equal(ticket.title, "AI model watch new classes [modelwatchrollup-2026-10-25]");
-  assert.ok(ticket.description.startsWith("<p><strong>3 new model classes are not in our catalog.</strong></p><ul>"));
+  assert.match(ticket.marker, /^modelwatchrollup-model-3-\d{1,9}$/);
+  assert.equal(ticket.title, `AI model watch new classes [${ticket.marker}]`);
+  const families = [
+    { kind: "new-class", provider: "spacexai", model: "spacexai/grok-4.20", inputPerMillion: 2, action: "ask Valentin before shipping" },
+    { kind: "new-class", provider: "google", model: "google/gemini-4-pro", inputPerMillion: 2, action: "ask Valentin before shipping" },
+    { kind: "new-class", provider: "zai", model: "zai/glm-5.4", inputPerMillion: 1, action: "ask Valentin before shipping" },
+  ];
+  const named = rollupTicket(families, new Date("2026-10-25T00:00:00Z"));
+  assert.match(named.marker, /^modelwatchrollup-gemini-pro-glm-grok-3-\d{1,9}$/);
+  assert.equal(rollupTicket([...families].reverse(), new Date("2027-01-02T00:00:00Z")).marker, named.marker);
+  assert.notEqual(rollupTicket(families.slice(0, 2)).marker, named.marker);
+  assert.notEqual(rollupTicket([...families, { kind: "new-class", provider: "deepseek", model: "deepseek/deepseek-v5", inputPerMillion: 1 }]).marker, named.marker);
+  const older = { ...families[0], model: "spacexai/grok-4.19" };
+  assert.notEqual(rollupTicket([older, ...families.slice(1)]).marker, named.marker);
+  assert.notEqual(rollupTicket([families[0], ...families.slice(1, 2), { ...families[2], model: "zai/glm-5.5" }]).marker, named.marker);
+  assert.ok(ticket.description.startsWith(`<p><strong>3 new model classes are not in our catalog.</strong></p><p>Gateway check 2026-10-25.`));
   assert.equal((ticket.description.match(/<li>/g) || []).length, 3);
   assert.match(ticket.description, /<code>new&lt;provider&gt;\/model-1<\/code>\. Gateway input price per million tokens: \$0\. ask &lt;Valentin&gt; &amp; verify\.<\/li>/);
   assert.equal((ticket.description.match(/unknown; verify pricing before shipping/g) || []).length, 2);
@@ -267,7 +280,7 @@ test("watcher creates one rollup for three new classes and one separate new-vers
   ]);
 });
 
-test("watcher creates a rollup once per UTC day even when the findings change", async () => {
+test("watcher files one rollup per pending model set, not one per day", async () => {
   const findings = report().findings.filter((finding) => finding.kind === "new-class").slice(0, 3);
   const existing = [];
   const markers = [];
@@ -284,37 +297,41 @@ test("watcher creates a rollup once per UTC day even when the findings change", 
   };
   const first = await fileFindings({ sourcesUsed: ["gateway"], findings },
     { token: "fixture", fetchImpl, now: new Date("2026-10-24T23:30:00-02:00") });
-  const second = await fileFindings({ sourcesUsed: ["gateway"], findings: findings.slice(0, 2) },
+  const second = await fileFindings({ sourcesUsed: ["gateway"], findings },
     { token: "fixture", fetchImpl, now: new Date("2026-10-26T00:30:00+02:00") });
+  const marker = existing[0].title.match(/\[([^\]]+)\]/)[1];
   assert.equal(creates, 1);
-  assert.deepEqual(markers, ["modelwatchrollup-2026-10-25", "modelwatchrollup-2026-10-25"]);
+  assert.deepEqual(markers, [marker, marker]);
   assert.deepEqual(first, [{ title: existing[0].title, action: "created", ticket: "HTPR-fixture" }]);
   assert.deepEqual(second, [{ title: existing[0].title, action: "exists" }]);
 });
 
-test("watcher creates a new rollup on the next UTC date", async () => {
+test("watcher files a new rollup when a model joins the pending set", async () => {
   const findings = report().findings.filter((finding) => finding.kind === "new-class").slice(0, 3);
   const existing = [];
-  const markers = [];
+  const searches = [];
+  const creates = [];
   const fetchImpl = async (url, options) => {
     if (options.method === "GET") {
       const marker = new URL(url).searchParams.get("q");
+      searches.push(marker);
       const tasks = existing.filter((ticket) => ticket.title.includes(`[${marker}]`));
       return response({ success: true, tasks, total: tasks.length });
     }
-    markers.push(options.headers["Idempotency-Key"]);
+    creates.push(options.headers["Idempotency-Key"]);
     const ticket = { title: JSON.parse(options.body).title, ticketNumber: `HTPR-fixture-${existing.length + 1}` };
     existing.push(ticket);
     return response({ success: true, task: ticket });
   };
   const results = [];
-  for (const date of ["2026-10-25T23:59:59Z", "2026-10-26T00:00:00Z"]) {
-    results.push(...await fileFindings({ sourcesUsed: ["gateway"], findings }, { token: "fixture", fetchImpl, now: new Date(date) }));
+  for (const set of [findings.slice(0, 2), findings.slice(0, 2), findings]) {
+    results.push(...await fileFindings({ sourcesUsed: ["gateway"], findings: set }, { token: "fixture", fetchImpl }));
   }
   assert.equal(existing.length, 2);
-  assert.deepEqual(markers, ["modelwatchrollup-2026-10-25", "modelwatchrollup-2026-10-26"]);
-  assert.deepEqual(results, existing.map((ticket) => ({ title: ticket.title, action: "created", ticket: ticket.ticketNumber })));
-  assert.notEqual(existing[0].title, existing[1].title);
+  assert.equal(searches[0], searches[1]);
+  assert.notEqual(searches[0], searches[2]);
+  assert.deepEqual(creates, [searches[0], searches[2]]);
+  assert.deepEqual(results.map((result) => result.action), ["created", "exists", "created"]);
 });
 
 test("watcher does not search or create an empty rollup", async () => {

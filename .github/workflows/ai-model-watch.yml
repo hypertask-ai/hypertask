@@ -27,7 +27,9 @@ jobs:
           node-version: ^24.22.1
           check-latest: true
       - name: Check offline discovery and deduplication fixtures
-        run: node --test tests/model-diff.test.cjs
+        run: |
+          node --test tests/model-diff.test.cjs
+          node --test tests/model-watch-allowlist.test.cjs
       - name: Discover model changes
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
