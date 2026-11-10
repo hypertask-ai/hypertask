@@ -20,10 +20,19 @@ import SearchFilter from "./SearchFilter"
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
 import {
-  getActiveTableGroupByFromProject,
+  getActiveTableGroupingFromProject,
   type TableGroupBy,
 } from "@/lib/table-view/tableGroupByTag"
 import Tooltip from "@/components/Common/Tooltip"
+import TableTagGroupPicker from "./TableTagGroupPicker"
+
+const GROUP_BY_LABEL: Record<TableGroupBy, string> = {
+  column: "Column",
+  tag: "Tags",
+  assignee: "Assignee",
+  priority: "Priority",
+  size: "Size",
+}
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
   const isMbl = useContext(MobileViewContext)
@@ -35,8 +44,9 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag")
   const { setTableGroupByViewAndReturn } = useKanbanViews(project)
   const [groupOpen, setGroupOpen] = useState(false)
+  const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const { timers: runningTimers } = useBoardRunningTimers(project.id)
-  const tableGroupBy = getActiveTableGroupByFromProject(project)
+  const tableGroupBy = getActiveTableGroupingFromProject(project).mode
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
   const hasActiveSort = getActiveSortingModeFromProject(project) !== "Manual"
@@ -81,9 +91,9 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
         <>
           <ViewControlButton
             label="Group table"
-            tooltipText={`Group: ${tableGroupBy === "tag" ? "Tag" : "Column"}`}
+            tooltipText={`Group: ${GROUP_BY_LABEL[tableGroupBy]}`}
             tooltipLeft={-88}
-            active={tableGroupBy === "tag"}
+            active={tableGroupBy !== "column"}
             onClick={() => setGroupOpen(true)}
           >
             <Layers size={18} strokeWidth={1.75} />
@@ -93,14 +103,31 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
               header="Group by"
               options={[
                 { id: "column", label: "Column", hint: "Board columns", checked: tableGroupBy === "column" },
-                { id: "tag", label: "Tag", hint: "One group per label", checked: tableGroupBy === "tag" },
+                { id: "assignee", label: "Assignee", hint: "Who owns the ticket", checked: tableGroupBy === "assignee" },
+                { id: "priority", label: "Priority", hint: "Urgent first", checked: tableGroupBy === "priority" },
+                { id: "size", label: "Size", hint: "Ticket estimate", checked: tableGroupBy === "size" },
+                { id: "tag", label: "Tags", hint: "Choose which tags", checked: tableGroupBy === "tag" },
               ]}
               onSelect={(option) => {
-                if (option.id !== "column" && option.id !== "tag") return
+                if (option.id !== "column" && option.id !== "tag" && option.id !== "assignee" && option.id !== "priority" && option.id !== "size") return
                 setGroupOpen(false)
+                if (option.id === "tag") {
+                  setTagPickerOpen(true)
+                  return
+                }
                 void setTableGroupByViewAndReturn(project, option.id as TableGroupBy)
               }}
               onClose={() => setGroupOpen(false)}
+            />
+          )}
+          {tagPickerOpen && (
+            <TableTagGroupPicker
+              project={project}
+              onClose={() => setTagPickerOpen(false)}
+              onApply={(tagIds) => {
+                setTagPickerOpen(false)
+                void setTableGroupByViewAndReturn(project, "tag", tagIds)
+              }}
             />
           )}
         </>

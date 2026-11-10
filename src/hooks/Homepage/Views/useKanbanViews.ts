@@ -52,7 +52,11 @@ import {
   TTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
-import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
+import {
+  getActiveTableGroupByFromProject,
+  getActiveTableGroupingValueFromProject,
+  serializeTableGrouping,
+} from "@/lib/table-view/tableGroupByTag";
 import {
   getActiveTableCollapsedSectionsFromProject,
   serializeTableCollapsedSections,
@@ -249,7 +253,7 @@ const useKanbanViews = (project: IProject | null) => {
     table_sort_column: getActiveTableSortFromProject(queuedProject)?.column ?? null,
     table_sort_direction: getActiveTableSortFromProject(queuedProject)?.direction ?? null,
     table_group_by: tableGroupByTagEnabled
-      ? getActiveTableGroupByFromProject(queuedProject)
+      ? getActiveTableGroupingValueFromProject(queuedProject)
       : "column",
     table_collapsed_sections: serializeTableCollapsedSections(
       getActiveTableCollapsedSectionsFromProject(queuedProject),
@@ -425,11 +429,13 @@ const useKanbanViews = (project: IProject | null) => {
   const setTableGroupByViewAndReturn = async (
     project: IProject,
     tableGroupBy: ReturnType<typeof getActiveTableGroupByFromProject>,
+    tagIds: string[] = [],
   ) => {
-    if (tableGroupBy === "tag" && !tableGroupByTagEnabled) return;
+    if (tableGroupBy !== "column" && !tableGroupByTagEnabled) return;
+    const value = serializeTableGrouping(tableGroupBy, tagIds);
     return apiHandler(
       (queuedProject) => buildUnsavedBody(queuedProject, {
-        table_group_by: tableGroupBy,
+        table_group_by: value,
       }),
       project,
     );
@@ -574,7 +580,7 @@ const useKanbanViews = (project: IProject | null) => {
             ...body,
             view_settings: {
               ...body.view_settings,
-              table_group_by: getActiveTableGroupByFromProject(project),
+              table_group_by: getActiveTableGroupingValueFromProject(project),
             },
           }
         : body;

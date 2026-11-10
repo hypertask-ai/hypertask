@@ -14,7 +14,7 @@ import { lazy, Suspense, useCallback, useRef, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
-import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
+import { getActiveTableGroupingFromProject } from "@/lib/table-view/tableGroupByTag";
 import { tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
@@ -192,7 +192,7 @@ const TableView = ({
   const tagGroupingActive = Boolean(
     _currentProject &&
       tableGroupByTagEnabled &&
-      getActiveTableGroupByFromProject(_currentProject) === "tag",
+      getActiveTableGroupingFromProject(_currentProject).mode !== "column",
   );
   const {
   visibleColumns, getColumnWidth, frozenColumnOffset, setColumnWidth, freezeTitleWidth,

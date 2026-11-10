@@ -23,8 +23,8 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import {
-  buildTableSectionsGroupedByTag,
-  getActiveTableGroupByFromProject,
+  buildTableSectionsForGrouping,
+  getActiveTableGroupingFromProject,
 } from "@/lib/table-view/tableGroupByTag";
 import { getActiveTableCollapsedSectionsFromProject } from "@/lib/table-view/tableGroupByTag";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
@@ -202,12 +202,11 @@ export function useTableState(context: Context) {
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
   }
-  if (
-    _currentProject &&
-    tableGroupByTagEnabled &&
-    getActiveTableGroupByFromProject(_currentProject) === "tag"
-  ) {
-    sections = buildTableSectionsGroupedByTag(sections) as typeof sections;
+  if (_currentProject && tableGroupByTagEnabled) {
+    const grouping = getActiveTableGroupingFromProject(_currentProject);
+    if (grouping.mode !== "column") {
+      sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
+    }
   }
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { ITask } from "../src/models/model";
-import { buildTableSectionsGroupedByTag, sanitizeTableGroupBy, NO_TAG_SECTION_TITLE } from "../src/lib/table-view/tableGroupByTag";
+import { buildTableSectionsForGrouping, buildTableSectionsGroupedByTag, parseTableGrouping, sanitizeTableGroupBy, serializeTableGrouping, OTHER_GROUP_TITLE } from "../src/lib/table-view/tableGroupByTag";
 
 test("tag grouping and sanitize", () => {
   assert.equal(sanitizeTableGroupBy("tag"), "tag");
@@ -14,8 +14,24 @@ test("tag grouping and sanitize", () => {
   } as ITask;
   const sections = buildTableSectionsGroupedByTag([
     { section_title: "Backlog", items: [{ id: 1, taskLabels: [{ label: { id: "l1", value: "Beta" } }] } as ITask, taskB, { id: 3, taskLabels: [] } as unknown as ITask] },
-  ]);
+  ], ["l1", "l2"]);
   const byTitle = new Map(sections.map((section) => [section.section_title, section]));
   assert.equal(byTitle.get("Beta")?.items?.length, 2);
-  assert.equal(sections.at(-1)?.section_title, NO_TAG_SECTION_TITLE);
+  assert.equal(sections.at(-1)?.section_title, OTHER_GROUP_TITLE);
+});
+
+test("chosen tag order wins, Other holds the rest and other grouping modes work", () => {
+  const task = (id: number, value: Partial<ITask>) => ({ id, taskLabels: [], ...value }) as ITask;
+  const items = [
+    task(1, { taskLabels: [{ label: { id: "l1", value: "Mobile" } }] as unknown as ITask["taskLabels"], assignees: [{ userId: 7, user: { displayName: "Valentin" } }] as unknown as ITask["assignees"] }),
+    task(2, { taskLabels: [{ label: { id: "l1", value: "Mobile" } }, { label: { id: "l2", value: "Desktop" } }] as unknown as ITask["taskLabels"], priority: { priority_index: 2, Priority_Value: "High" } as unknown as ITask["priority"] }),
+    task(3, {}),
+  ];
+  const tags = buildTableSectionsGroupedByTag([{ section_title: "Backlog", items }], ["l2", "l1"]);
+  assert.deepEqual(tags.map((section) => [section.section_title, section.items.length]), [["Desktop", 1], ["Mobile", 1], ["Other", 1]]);
+  const byMode = (mode: "assignee" | "priority") => buildTableSectionsForGrouping([{ section_title: "Backlog", items }], { mode, tagIds: [] }).map((section) => section.section_title);
+  assert.deepEqual(byMode("assignee"), ["Valentin", "Unassigned"]);
+  assert.deepEqual(byMode("priority"), ["High", "No priority"]);
+  assert.equal(serializeTableGrouping("tag", ["l2", "l1"]), "tag:l2,l1");
+  assert.deepEqual(parseTableGrouping("tag:l2,l1"), { mode: "tag", tagIds: ["l2", "l1"] });
 });

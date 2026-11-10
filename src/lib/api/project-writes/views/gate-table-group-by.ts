@@ -1,9 +1,14 @@
 import { isFeatureEnabled } from "@/lib/flags";
-import { sanitizeTableGroupBy, type TableGroupBy } from "@/lib/table-view/tableGroupByTag";
+import { sanitizeTableGroupBy, sanitizeTableGrouping } from "@/lib/table-view/tableGroupByTag";
 
-export async function gatedTableGroupByForViewWrite(value: unknown, userId: number): Promise<TableGroupBy | null> {
-  const sanitized = sanitizeTableGroupBy(value);
+const TABLE_GROUP_BY_TAG_FLAG = "htpr-8630-table-group-by-tag";
+
+export async function gatedTableGroupByForViewWrite(value: unknown, userId: number): Promise<string | null> {
+  const sanitized = sanitizeTableGrouping(value);
   if (!sanitized) return sanitized;
-  if (sanitized === "tag" && !(await isFeatureEnabled("htpr-8630-table-group-by-tag", userId))) return "column";
+  const mode = sanitizeTableGroupBy(sanitized);
+  if (mode && mode !== "column" && !(await isFeatureEnabled(TABLE_GROUP_BY_TAG_FLAG, userId))) {
+    return "column";
+  }
   return sanitized;
 }
