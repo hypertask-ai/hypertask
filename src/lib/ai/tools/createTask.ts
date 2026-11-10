@@ -122,7 +122,6 @@ export function createCreateTaskTool(context: ToolContext) {
           let description = "description" in input ? input.description : undefined;
           let estimateIndex = 0;
           let labels = input.labels || [];
-          let writerBrainLabel: string | undefined;
           const projectCheck = await validateProjectAccess(input.project_id, user.id);
           if (projectCheck.error) {
             return { success: false, error: projectCheck.error.message };
@@ -253,7 +252,7 @@ export function createCreateTaskTool(context: ToolContext) {
                   await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, user.id)) {
                 labels = draft.labelIds;
               } else if (input.labels?.length && draft.brainLabelIds?.length && !input.labels.some((id) => draft.brainLabelIds!.includes(id))) {
-                writerBrainLabel = draft.labelIds?.find((id) => draft.brainLabelIds!.includes(id));
+                const writerBrainLabel = draft.labelIds?.find((id) => draft.brainLabelIds!.includes(id));
                 if (writerBrainLabel) labels = [...labels, writerBrainLabel];
               }
               customFields = draft.customFields;
@@ -272,7 +271,7 @@ export function createCreateTaskTool(context: ToolContext) {
                 description,
                 priority: z.enum(["No Priority", "Urgent", "High", "Medium", "Low"]).parse(PriorityConstants.find((p) => p.priority_index === priorityIndex)?.Priority_Value ?? "No Priority"),
                 estimate: estimateIndex,
-                ...(!input.labels?.length && labels.length ? { add_labels: labels } : writerBrainLabel ? { add_labels: [writerBrainLabel] } : {}),
+                ...(labels.some((id) => !input.labels?.includes(id)) ? { add_labels: labels.filter((id) => !input.labels?.includes(id)) } : {}),
                 image_urls: input.image_urls,
                 inline_images: input.inline_images,
               }, {
