@@ -238,8 +238,8 @@ const readerWiring = [
   ["src/utils/controllers/tasks/getAll.ts", /json:tasks\.map\(stripForeignTaskRelations\)/],
   ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\)\)/],
   ["src/lib/mcp/tasks/mappers.ts", /mapTaskToMcpGetResponse[\s\S]*task = stripForeignTaskRelations\(task\)/],
-  ["src/lib/mcp/operations/tasks/operation.ts", /tasks\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
-  ["src/lib/ai/tools/listTasks.ts", /tasks\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
+  ["src/lib/mcp/operations/tasks/operation.ts", /tasksWithBlockers\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
+  ["src/lib/ai/tools/listTasks.ts", /tasksWithBlockers\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
   ["src/utils/controllers/tasks/getSharedTask.ts", /shared\.task = stripForeignTaskRelations\(shared\.task\)/],
   ["src/utils/controllers/share/getProject.ts", /project\.tasks = project\.tasks\.map\(stripForeignTaskRelations\)/],
 ];
