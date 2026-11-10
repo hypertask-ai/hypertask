@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -102,6 +103,7 @@ def run(output):
         new_route.parent.mkdir(parents=True)
         new_route.write_bytes(id_source)
         invoke('brand-new-agent-route', 1, f'New unscoped query: {new_path}')
+        shutil.rmtree(new_route.parent)
 
         count_source = (FIXTURES / 'external-where-count.ts.fixture').read_bytes()
         route.write_bytes(count_source)
@@ -114,7 +116,9 @@ def run(output):
             approvedIn='https://app.hypertask.ai/detail/project-15/7496',
         )
         exceptions.write_text(json.dumps([count_exception]))
-        weakened = count_source.replace(b'const where = { id: 1 };', b'const where = {};')
+        route.write_bytes(count_source + b'\n// unrelated edit\n')
+        invoke('external-where-shorthand-survives-unrelated', 0, 'findings=1, excepted=1, debt=0, new=0')
+        weakened = count_source.replace(b'count({ where })', b'count({ where, take: 1 })')
         route.write_bytes(weakened)
         invoke('external-where-shorthand-stale', 1, 'Stale exception:')
 
@@ -130,8 +134,8 @@ def run(output):
         )
         exceptions.write_text(json.dumps([conditional_exception]))
         weakened = conditional_source.replace(
-            b'projectId: { in: [1] }',
-            b'projectId: { in: [] }',
+            b'id: { in: primaryIds }',
+            b'id: { in: [] }',
         )
         route.write_bytes(weakened)
         invoke('conditional-where-stale', 1, 'Stale exception:')
@@ -148,11 +152,11 @@ def run(output):
         )
         exceptions.write_text(json.dumps([findmany_exception]))
         weakened = findmany_source.replace(
-            b'projectId: { in: [1] }',
-            b'projectId: { in: [] }',
+            b'findMany({ where, include })',
+            b'findMany({ where })',
         )
         route.write_bytes(weakened)
         invoke('external-where-findmany-stale', 1, 'Stale exception:')
 
-    print('Self-tests passed: 12 (eleven negatives, scoped positive; exception prerequisite also passed)', flush=True)
+    print('Self-tests passed: 13 (twelve negatives, scoped positive; exception prerequisite also passed)', flush=True)
     return 0

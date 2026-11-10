@@ -1,12 +1,14 @@
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
+import { validateMcpRouteAuth } from '@/lib/mcp/routeWrapper';
 
-export async function listTasks() {
+export async function GET(request: Request) {
+  await validateMcpRouteAuth(request);
   const where = { projectId: { in: [1] } };
   const filtered = { paged: false };
   const rankedResults = false;
   const sortField = null as string | null;
   const primaryIds = [1];
-  return prisma.task.findMany({
+  return await prisma.task.findMany({
     where: filtered.paged || rankedResults && !sortField
       ? { ...where, id: { in: primaryIds } }
       : where,

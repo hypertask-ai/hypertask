@@ -29,14 +29,8 @@ def key(entry):
     return (entry['path'], entry['call'], entry['occurrence'])
 
 
-def uses_external_auth_context(call):
-    if re.search(r'\{\s*where\s*[,}]', call):
-        return True
-    if re.search(r'\bwhere:\s*[A-Za-z_]\w*\s*[,}]', call):
-        return True
-    if re.search(r'\bwhere:\s*\{\s*[A-Za-z_]\w+\s*[,}]', call):
-        return True
-    return bool(re.search(r'\bwhere:\s*[^,}]+\?', call))
+def requires_file_sha(call):
+    return bool(re.search(r'\bwhere:\s*\{\s*[A-Za-z_]\w+\s*\}', call))
 
 
 def read_entries(path, kind):
@@ -80,7 +74,7 @@ def check_findings(findings, exceptions, baseline):
         identity = key(entry)
         if identity in actual:
             finding = actual[identity]
-            if uses_external_auth_context(entry['call']) and finding['sha256'] != entry['sha256']:
+            if requires_file_sha(entry['call']) and finding['sha256'] != entry['sha256']:
                 errors.append(f'Stale exception: {entry["path"]} occurrence={entry["occurrence"]}')
             else:
                 excepted.add(identity)
