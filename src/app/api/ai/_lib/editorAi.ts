@@ -12,7 +12,7 @@ import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, typ
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { isFeatureEnabled } from "@/lib/flags";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
@@ -34,10 +34,9 @@ import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
 async function nativeSearchForSelection(provider: string, apiKey: unknown, userId?: number | null) {
   const key = typeof apiKey === "string" ? apiKey.trim() : "";
-  const ours = [process.env.AI_GATEWAY_API_KEY, process.env.DEMO_AI_GATEWAY_API_KEY, process.env.TURBOPUFFER_EMBEDDINGS_API_KEY, ...(key.startsWith("vck_") ? ["GATEWAY_KEY_HYPERTASK", "GATEWAY_KEY_INNE", "GATEWAY_KEY_VETSAK", "GATEWAY_KEY_BAYBELLA", "GATEWAY_KEY_RODRIGO", "GATEWAY_KEY_D2LAW", "GATEWAY_KEY_PERRY", "GATEWAY_KEY_PUROLOGIX", "GATEWAY_KEY_KVWULP", "GATEWAY_KEY_ALLOCATOR", "GATEWAY_KEY_VALENTIN"].map((name) => process.env[name]) : [])].some((value) => value?.trim() === key);
   let on = false;
   try { if (typeof isFeatureEnabled === "function" && userId && await isFeatureEnabled("htpr-7394-remaining-ai-spend", userId)) on = true; } catch { on = false; }
-  const pays = Boolean(key) && !ours;
+  const pays = Boolean(key) && !isOurGatewayKey(key);
   return (provider === "claude" || provider === "openai") && !(on && !pays);
 }
 
