@@ -390,6 +390,7 @@ function preferencesApi(enabled, body, stored = { aiChatOpenNewTickets: null, ai
     "@/utils/helperFunctions/sanitizeRichHtml": empty, "@/lib/dictationProvider": empty,
     "@/lib/configs/allTasks.config": empty, "@/models/Calendar/model": empty,
     "@/lib/configs/boardSortMode.config": empty, "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": empty,
+    "@/lib/flags/definitions/htpr-8971-card-settings": { HTPR_8971_CARD_SETTINGS_FLAG: "htpr-8971-card-settings" },
   });
   return { post: () => api.POST({ headers: {} }), writes, flagReads, fills, stored };
 }

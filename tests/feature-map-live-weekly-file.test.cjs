@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const {
-  isoWeek, weeklyLiveTitle, countSteps, findOpenWeeklyTicket, fileWeeklyLiveResult, weeklyDescription,
+  isoWeek, weeklyLiveTitle, countSteps, findOpenWeeklyTicket, fileWeeklyLiveResult, weeklyDescription, ticketUrl,
 } = require('../.github/scripts/feature-map-live-weekly-file.mjs')
 
 test('countSteps and weekly title', () => {
@@ -74,6 +74,32 @@ test('fileWeeklyLiveResult creates a board 11514 ticket then comments', async ()
   assert.match(comment.body.text, /feature-map-live-weekly 2026-W45/)
 })
 
+test('fileWeeklyLiveResult prints a real link when the create response only has a ticket number', async () => {
+  const week = '2026-W46'
+  const title = weeklyLiveTitle(week)
+  const created = await fileWeeklyLiveResult({
+    week,
+    evidenceDir: '/missing',
+    token: 'test-token',
+    fetchImpl: fetchFor([
+      { when: (url) => url.startsWith('/api/mcp/tasks/search'), body: { success: true, total: 0, tasks: [] } },
+      {
+        when: (url) => url === '/api/mcp/tasks/create',
+        body: { success: true, task: { id: 42, title, ticketNumber: 'HYCI-239' } },
+      },
+      { when: (url) => url === '/api/mcp/comments', body: { success: true } },
+    ]),
+  })
+  assert.equal(created.uniqueIndex, 239)
+  assert.equal(created.url, 'https://app.hypertask.ai/detail/project-11514/239')
+})
+
+test('ticketUrl reads a uniqueIndex and refuses a ticket with no number', () => {
+  assert.equal(ticketUrl({ uniqueIndex: 87, ticketNumber: 'HYCI-87' }), 'https://app.hypertask.ai/detail/project-11514/87')
+  assert.equal(ticketUrl({ ticketNumber: 'HYCI-239' }), 'https://app.hypertask.ai/detail/project-11514/239')
+  assert.throws(() => ticketUrl({ id: 42 }), /no ticket link/)
+})
+
 test('weekly description keeps every sentence within twelve words', () => {
   for (const counts of [{ pass: 5, fail: 0, verdict: 'PASS' }, { pass: 3, fail: 2, verdict: 'FAIL' }, { pass: 4, fail: 1, verdict: 'FAIL' }]) {
     const text = weeklyDescription({ week: '2026-W46', counts }).replace(/<\/[^>]+>/g, '\n').replace(/<[^>]+>/g, ' ')
@@ -101,5 +127,6 @@ test('fileWeeklyLiveResult reuses an open weekly ticket', async () => {
     ], calls),
   })
   assert.equal(outcome.ticketNumber, 'HYCI-205')
+  assert.equal(outcome.url, 'https://app.hypertask.ai/detail/project-11514/205')
   assert.equal(calls.some((call) => call.url.endsWith('/api/mcp/tasks/create')), false)
 })

@@ -36,6 +36,7 @@ import {
 import { HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG } from "@/lib/flags/definitions/htpr-7649-sidebar-view-saved";
 import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
 import { isAiThinkingEffort } from "@/lib/aiThinkingPreference";
+import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import { isAllTasksDateRange } from "@/lib/configs/allTasks.config";
 import type { ISnippet } from "@/lib/snippets";
 import type { Prisma } from "@prisma/client";
@@ -177,6 +178,7 @@ export async function POST(request: NextRequest) {
       aiChatOpenNewTickets?: boolean;
       aiChatOpenTickets?: boolean;
       aiChatOpenBoards?: boolean;
+      cardParts?: Prisma.InputJsonValue;
     } = {};
 
     for (const key of AI_CHAT_AUTO_OPEN_KEYS) {
@@ -280,6 +282,24 @@ export async function POST(request: NextRequest) {
         );
       }
       data.allTasksDateRange = body.allTasksDateRange;
+    }
+    if (body.cardParts !== undefined && (await isFeatureEnabled(HTPR_8971_CARD_SETTINGS_FLAG, user.id))) {
+      const parts = body.cardParts;
+      const valid =
+        !!parts &&
+        typeof parts === "object" &&
+        !Array.isArray(parts) &&
+        Object.keys(parts).length <= 20 &&
+        Object.entries(parts).every(
+          ([part, shown]) => part.length <= 40 && typeof shown === "boolean",
+        );
+      if (!valid) {
+        return NextResponse.json(
+          { success: false, error: "Invalid card parts" },
+          { status: 400 },
+        );
+      }
+      data.cardParts = parts as Prisma.InputJsonValue;
     }
     if (body.dictationLanguage !== undefined) {
       if (!isDictationLanguage(body.dictationLanguage)) {
@@ -530,6 +550,7 @@ export async function POST(request: NextRequest) {
       aiChatOpenNewTickets: true,
       aiChatOpenTickets: true,
       aiChatOpenBoards: true,
+      cardParts: true,
     } as const;
     const updateWithCalendarOperation = async () => {
       for (

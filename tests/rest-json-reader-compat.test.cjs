@@ -143,7 +143,8 @@ const baseline = {
                 "boardSortMode": true,
                 "aiChatOpenNewTickets": true,
                 "aiChatOpenTickets": true,
-                "aiChatOpenBoards": true
+                "aiChatOpenBoards": true,
+                "cardParts": true
               }
             }
           ]
@@ -295,7 +296,8 @@ const baseline = {
                 "boardSortMode": true,
                 "aiChatOpenNewTickets": true,
                 "aiChatOpenTickets": true,
-                "aiChatOpenBoards": true
+                "aiChatOpenBoards": true,
+                "cardParts": true
               }
             }
           ]

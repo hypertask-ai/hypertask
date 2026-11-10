@@ -262,7 +262,7 @@ const SECONDARY = [
   {
     id: "settings.pane",
     person: "Settings panes, AI model picks, API keys, notifications and plans",
-    commands: /^(settings|billing|manageSubscriptions|manageTeamAIAPIKeys|profilePicture|shortcuts|quickTips|helpCenter|latestUpdates|onboardingTour|startKanbanTutorial|startTaskWriterTutorial|goToWelcome|sendFeedback|logout|switchAccount|generateMcpToken|cliInstall|restApi|speechToText|undoLatest|reloadApp|subtaskSettings)/,
+    commands: /^(settings|billing|manageSubscriptions|manageTeamAIAPIKeys|profilePicture|shortcuts|quickTips|helpCenter|latestUpdates|onboardingTour|startKanbanTutorial|startTaskWriterTutorial|goToWelcome|sendFeedback|logout|switchAccount|generateMcpToken|cliInstall|restApi|speechToText|undoLatest|reloadApp|subtaskSettings|cardSettings)/,
   },
   {
     id: "navigate",

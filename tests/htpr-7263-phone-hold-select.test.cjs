@@ -36,6 +36,7 @@ function fixture(t, { enabled = true, mobile = true, selectAll = true, overview 
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/utils/undoActions/helperFuncs": { cn: (...values) => twMerge(clsx(values)) },
     "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
+    "@/hooks/General/useCardParts": { useCardParts: () => ({}) },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveStalenessFromProject: () => false },
     "@/components/PageComponents/MyTasks/MyTasksBulkActionBar": { BulkActionButtons: empty },
     "./CardSubTasks": { default: empty },

@@ -1418,8 +1418,17 @@ export const getAllCommands = (
   return groups;
 };
 
+export const CARD_SETTINGS_COMMAND: ICommandList = {
+  key: "cardSettings",
+  name: "Card settings",
+  commandMode: CommandMode.Setting,
+  payload: "card-settings",
+  keywords: "card settings show hide parts name people ticket number inbox icon comments sub-tasks priority size due date tags staleness blocked edge empty cards",
+};
+
 const BOARD_MENU_COMMAND_TARGETS = [
   { commandMode: CommandMode.BoardSettings },
+  { key: "cardSettings" },
   { commandMode: CommandMode.SortKanbanBoard, key: "sortBoard" },
   { commandMode: CommandMode.ShowFilterHTC, key: "ShowFilterHtc" },
   { commandMode: CommandMode.ManageColumn },

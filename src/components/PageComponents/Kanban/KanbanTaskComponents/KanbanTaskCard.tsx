@@ -4,6 +4,9 @@ import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255
 import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-8927-board-card-overflow";
 import { HTPR_8960_BORDER_ONLY_SELECT_FLAG } from "@/lib/flags/definitions/htpr-8960-border-only-select";
 import { HTPR_8970_CALM_CARDS_FLAG } from "@/lib/flags/definitions/htpr-8970-calm-cards";
+import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
+import { ALL_CARD_PARTS, cardPartsView } from "@/lib/kanban/cardParts";
+import { useCardParts } from "@/hooks/General/useCardParts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React, { useContext } from "react";
@@ -117,7 +120,10 @@ const KanbanTaskCard = ({
   const borderOnlySelect = useFlag(HTPR_8960_BORDER_ONLY_SELECT_FLAG);
   const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
   const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG);
-  const subTasks = <CardSubTasks subTasks={task.subTasks} currentSetting={currentSetting} onClick={onSubtaskClick} />;
+  const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
+  const savedParts = useCardParts();
+  const card = cardPartsView(task, blockingUser, cardSettings ? savedParts : ALL_CARD_PARTS);
+  const subTasks = <CardSubTasks subTasks={card.subTasks} currentSetting={currentSetting} onClick={onSubtaskClick} />;
   return (
   <div
     ref={cardRef}
@@ -169,10 +175,7 @@ const KanbanTaskCard = ({
       _currentProject={project}
       openDetail={openDetail}
       active={active}
-      blocked={
-        (task.waitingOnUserId !== null && task.waitingOnUserId !== undefined) ||
-        (task.blockingTasks?.length ?? 0) > 0
-      }
+      blocked={card.blocked}
       linkClassName={cn(
         calm && "px-3 py-2 gap-2",
         !stableHoverLayout && !borderOnlySelect && "group-hover/kanban-selection:pl-7",
@@ -191,13 +194,13 @@ const KanbanTaskCard = ({
         updateActiveItemAndItemInView={updateActiveItemAndItemInView}
         setShowAssignModal={setShowAssignModal}
         eHandler={eHandler}
-        _count={task.totalComments ?? task._count?.comments}
-        notifications={task.notifications}
-        ticketNumber={task.ticketNumber ?? ""}
+        _count={card.commentCount}
+        notifications={card.notifications}
+        ticketNumber={card.ticketNumber}
         assignees={assignedUsers}
         agentAssignees={agentAssignees}
-        countNotifications={task._count?.notifications}
-        countSubtasks={task.subTasks?.length ?? 0}
+        countNotifications={card.notificationCount}
+        countSubtasks={card.subTaskCount}
         subTaskSetting={currentSetting}
         toggleDelete={toggleDelete}
         markTaskAsDone={markTaskAsDone}
@@ -205,7 +208,7 @@ const KanbanTaskCard = ({
         hover={hover}
         handleStarTask={handleStarTask}
         avatarSize={cleanup ? (isMobile ? 18 : 20) : undefined}
-        staleClock={calm ? (
+        staleClock={calm && card.staleness ? (
           <TaskStaleClock
             enabled={getActiveStalenessFromProject(project)}
             project={project}
@@ -215,7 +218,7 @@ const KanbanTaskCard = ({
       />
       <TaskTitle title={task.title} cardOverflowClamp={cardOverflowClamp} />
       <TaskTagsRow
-        task={task}
+        task={card.task}
         project={project}
         setShowEstimateModal={setShowEstimateModal}
         setShowPriorityModal={setShowPriorityModal}
@@ -223,17 +226,17 @@ const KanbanTaskCard = ({
         setShowAssignModal={setShowAssignModal}
         toggleDueDate={toggleDueDate}
         updateActiveItemAndItemInView={updateActiveItemAndItemInView}
-        dueDate={task.dueDate}
-        estimate={task.estimate!}
-        priority={task.priority!}
-        taskLabels={task.taskLabels}
+        dueDate={card.dueDate}
+        estimate={card.estimate!}
+        priority={card.priority!}
+        taskLabels={card.taskLabels}
         hasDraft={hasDraft}
-        blockingUser={blockingUser}
+        blockingUser={card.blockingUser}
         agents={agentAssignees}
         cardOverflowClamp={cardOverflowClamp}
       />
       {calm ? <div className="contents [&>div]:gap-1 [&>div>div]:gap-1 [&_span]:!text-micro [&_span]:leading-4">{subTasks}</div> : subTasks}
-      {!calm && (
+      {!calm && card.staleness && (
         <TaskStalenessLine
           enabled={getActiveStalenessFromProject(project)}
           project={project}

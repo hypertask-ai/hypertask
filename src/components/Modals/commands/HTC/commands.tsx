@@ -17,6 +17,7 @@ import {
   type AddFieldEventDetail,
   type AddFieldPalettePayload,
 } from "@/lib/taskDetail/rightColumnFields";
+import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import {
   useCallback,
   useContext,
@@ -60,6 +61,7 @@ import {
   getBoardMenuCommands,
   getMobileCommandGroups,
 } from "./AllCommands";
+import { withCardSettingsCommand } from "./cardSettingsCommand";
 import { pinCommentGroupFirst } from "@/lib/htc/pinCommentGroupFirst";
 import {
   getActiveEmptySectionSettingFromProject,
@@ -117,6 +119,11 @@ type Props = {
 };
 
 const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
+
+const useCardSettingsCommands = (
+  commandGroups: CommandGroup[],
+  context: IAllCommands["context"] | null,
+) => useMemo(() => withCardSettingsCommand(commandGroups, context), [commandGroups, context]);
 
 const Commands = (props: Props) => {
   const {
@@ -182,6 +189,7 @@ const Commands = (props: Props) => {
   const pathname = usePathname();
   const router = useRouter();
   const refreshSearchOnCommandsChange = useFlag(HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG);
+  const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
   const amoledModeOutline = useFlag(HTPR_8015_AMOLED_MODE_OUTLINE_FLAG);
   const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
@@ -476,10 +484,14 @@ const Commands = (props: Props) => {
     [addFieldPayload],
   );
 
+  const paletteCommands = useCardSettingsCommands(
+    allCommands_,
+    cardSettings ? contextOptions?.context ?? "Others" : null,
+  );
   const emptyQueryCommands = useMemo(() => {
-    if (scope !== "board") return allCommands_;
-    return getBoardMenuCommands(allCommands_, boardLayout);
-  }, [allCommands_, scope, boardLayout]);
+    if (scope !== "board") return paletteCommands;
+    return getBoardMenuCommands(paletteCommands, boardLayout);
+  }, [paletteCommands, scope, boardLayout]);
 
   const {
     keyword,
@@ -489,7 +501,7 @@ const Commands = (props: Props) => {
     handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex,
     setSelectedCommand,
   } = useHTC(
-    rightColumnFlag && scope === "add-field" ? addFieldCommands : allCommands_,
+    rightColumnFlag && scope === "add-field" ? addFieldCommands : paletteCommands,
     rightColumnFlag && scope === "add-field" ? addFieldCommands : emptyQueryCommands,
     !isMobile,
     refreshSearchOnCommandsChange,
