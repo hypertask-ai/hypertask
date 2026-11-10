@@ -63,6 +63,8 @@ const mocks = {
   "./AgentRunActivityRow": { default: noop },
   "./TicketChatSessionsReminder": { TicketChatSessionsReminder: noop },
   "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
+  "@/lib/flags/definitions/htpr-8998-jump-to-top": { HTPR_8998_JUMP_TO_TOP_FLAG: "htpr-8998-jump-to-top" },
+  "./JumpToTopButton": { default: noop },
 };
 const Thread = load("src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx", mocks).default;
 

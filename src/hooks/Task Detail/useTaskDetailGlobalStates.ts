@@ -69,7 +69,6 @@ import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
-import { HTPR_8998_JUMP_TO_TOP_FLAG } from "@/lib/flags/definitions/htpr-8998-jump-to-top";
 import { commentsStackedSetting, foldCommentsFromFirstPaintNow } from "@/lib/taskDetailCommentsStacked";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG, HTPR_7531_ESCAPE_OWN_BOARD_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
@@ -178,7 +177,6 @@ const useTaskDetailGlobalStates = (
     useState<boolean>(false);
   const [carousalItems, setCarousalItems] = useState<TCarousalItems>(undefined);
   const [showScrollToTop, setShowScrollToTop] = useState<boolean>(false);
-  const jumpToTop = useFlag(HTPR_8998_JUMP_TO_TOP_FLAG);
   const _mbl = useContext(MobileViewContext);
 
   const [currentTask, setCurrentTask] = useState<ITask | null>(_parsedTask);
@@ -331,7 +329,7 @@ const useTaskDetailGlobalStates = (
     : windowVirtualizer;
 
   useEffect(() => {
-    if (!_mbl && !jumpToTop) return;
+    if (!_mbl) return;
 
     const syncScrollToTop = () =>
       setShowScrollToTop((virtualizer.scrollOffset ?? 0) > 200);
@@ -343,7 +341,7 @@ const useTaskDetailGlobalStates = (
     return () => {
       scrollTarget.removeEventListener("scroll", syncScrollToTop);
     };
-  }, [_mbl, jumpToTop, scrollElementRef, virtualizer]);
+  }, [_mbl, scrollElementRef, virtualizer]);
 
   const currentItemInTasksPlaylist = {
     projectId: _parsedTask.projectId,
