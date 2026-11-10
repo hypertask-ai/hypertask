@@ -148,6 +148,9 @@ const HomePage = ({
     }
     return members;
   }, [membersAndOwner]);
+  const [pendingBulkArchiveIds, setPendingBulkArchiveIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const displaySections = useMemo(() => {
     const kw = searchProjectId === _currentProject.id ? searchKeyword.trim() : "";
     const searchedSections = kw
