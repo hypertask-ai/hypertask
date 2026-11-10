@@ -23,11 +23,7 @@ export const BATCH_MAX_REQUESTS = 1000;
 export const BATCH_STALE_MS = 25 * 60 * 60 * 1000;
 export const BATCH_USAGE_PROVIDER = "gateway-batch";
 
-export function batchEligibleFunding(
-  source: "customer" | "managed" | "shared",
-  planMode = false,
-  holdsOn = false,
-): boolean {
+export function batchEligibleFunding(source: "customer" | "managed" | "shared", planMode = false, holdsOn = false): boolean {
   return batchEligibleWhenCapped(source, planMode, holdsOn);
 }
 

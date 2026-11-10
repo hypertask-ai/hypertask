@@ -1419,9 +1419,7 @@ export async function reservePlanAllowance(args: {
   const amount = args.amountMicroUsd ?? usdToMicroUsd(args.amountUsd);
   const originalScopes = scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds }));
   const reservationId = args.billedCall?.reservationId ?? args.reservationId ?? randomUUID();
-  const call: BilledCall | undefined = billed
-    ? { ...(args.billedCall ?? { teamId: args.teamId ?? "demo", userId: args.userId ?? 0 }), reservationId }
-    : undefined;
+  const call: BilledCall | undefined = billed ? { ...(args.billedCall ?? { teamId: args.teamId ?? "demo", userId: args.userId ?? 0 }), reservationId } : undefined;
   const id = `${reservationId}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds, ...(call ? [amount, call] : [])]))}|${amount}`;
   const holdUntilMs = args.holdUntilMs ?? Date.now() + RESERVATION_TTL_MS;
   const redis = await getRedis();

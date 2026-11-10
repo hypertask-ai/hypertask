@@ -52,11 +52,8 @@ export async function teamPlanAllowanceEnabled(teamId: string): Promise<boolean>
 }
 
 export async function remainingSpendPathEnabled(teamId: string): Promise<boolean> {
-  try {
-    return await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, (await teamOwner(teamId)).userId);
-  } catch {
-    return false;
-  }
+  try { return await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, (await teamOwner(teamId)).userId); }
+  catch { return false; }
 }
 
 const SEATS_HIGH_WATER_SCRIPT = `

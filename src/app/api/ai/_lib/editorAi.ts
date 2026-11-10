@@ -19,6 +19,7 @@ import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/a
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
 import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, isGrokGemini4ModelKey, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
+import { remainingSpendPathEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
@@ -31,17 +32,13 @@ import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardR
 import prisma from "@/lib/prisma";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
-async function nativeSearchForSelection(provider: string, apiKey: unknown, userId?: number | null, teamId?: string | null) {
+async function nativeSearchForSelection(provider: string, apiKey: unknown, teamId?: unknown) {
   const key = typeof apiKey === "string" ? apiKey.trim() : "";
-  let on = false;
-  try { if (typeof isFeatureEnabled === "function" && userId && await isFeatureEnabled("htpr-7394-remaining-ai-spend", userId)) on = true; } catch { on = false; }
-  let ours = isOurGatewayKey(key);
-  if (!ours && key && teamId) {
-    const funding = await getTeamGatewayFunding({ trustedTeamId: teamId }).catch(() => undefined);
-    ours = Boolean(funding && funding.apiKey === key && funding.source !== "customer");
-  }
-  const pays = Boolean(key) && !ours;
-  return (provider === "claude" || provider === "openai") && !(on && !pays);
+  const team = typeof teamId === "string" ? teamId : "";
+  const on = Boolean(team) && typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(team).catch(() => false);
+  const funding = key && team && !isOurGatewayKey(key) ? await getTeamGatewayFunding({ trustedTeamId: team }).catch(() => undefined) : undefined;
+  const ours = isOurGatewayKey(key) || Boolean(funding && funding.apiKey === key && funding.source !== "customer");
+  return (provider === "claude" || provider === "openai") && !(on && !(Boolean(key) && !ours));
 }
 
 export const SSE_HEADERS = {
@@ -871,7 +868,7 @@ export async function selectTaskWriterModel(args: {
       feature: args.feature ?? "task-writer",
       tags,
       modelOption: selection.modelOption,
-      includeNativeWebSearch: await nativeSearchForSelection(selection.provider, byokApiKey, args.userId, teamContext.teamId ?? args.teamId),
+      includeNativeWebSearch: await nativeSearchForSelection(selection.provider, byokApiKey, teamContext.teamId ?? args.teamId),
     }
   );
   const selected = {

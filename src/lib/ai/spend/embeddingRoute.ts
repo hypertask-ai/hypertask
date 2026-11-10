@@ -6,7 +6,6 @@ import prisma from "@/lib/prisma";
 import { embeddingCostUsd, embeddingDecision, upperBoundTokens, type EmbeddingDecision } from "@/lib/ai/spend/remainingSpend";
 
 type Route = { mode: EmbeddingDecision; httpKey?: string; allowanceKey?: string; fundingSource?: "shared" | "managed" };
-
 async function routeForTeam(teamId: string): Promise<Route> {
   if (!await remainingSpendPathEnabled(teamId).catch(() => false)) return { mode: "current" };
   const [plan, openai, gateway, funding] = await Promise.all([
@@ -28,7 +27,6 @@ async function routeForTeam(teamId: string): Promise<Route> {
   if (mode === "vector" && source && funding) return { mode, allowanceKey: funding.apiKey, fundingSource: source };
   return { mode: mode === "vector" ? "keyword" : mode };
 }
-
 async function charge<T>(teamId: string, texts: string[], key: string, source: "shared" | "managed", work: () => Promise<T>) {
   const policy = await resolveTeamAllowancePolicy(teamId, source);
   if (policy.mode !== "plan") return work();
@@ -37,14 +35,12 @@ async function charge<T>(teamId: string, texts: string[], key: string, source: "
   try { const result = await work(); await settlePlanAllowance(reservation, micro / 1_000_000, "finish"); return result; }
   catch (error) { await settlePlanAllowance(reservation, 0, "error").catch(() => undefined); throw error; }
 }
-
 async function teamIds(projectIds: number[]) {
   const ids = [...new Set(projectIds.filter((id) => Number.isInteger(id)))];
   if (ids.length === 0) return [];
   const projects = await prisma.project.findMany({ where: { id: { in: ids } }, select: { teamId: true } });
   return [...new Set(projects.map((project) => project.teamId).filter((id): id is string => Boolean(id)))];
 }
-
 export async function embeddingSpendMode(projectIds: number[], teamId?: string | null): Promise<(Route & { teamId?: string }) | "mixed-keyword"> {
   const ids = teamId ? [teamId] : await teamIds(projectIds);
   if (ids.length !== 1) {
@@ -54,7 +50,6 @@ export async function embeddingSpendMode(projectIds: number[], teamId?: string |
   }
   return { ...(await routeForTeam(ids[0])), teamId: ids[0] };
 }
-
 export async function withSpendCharge<T>(route: Route, teamId: string, texts: string[], work: () => Promise<T>) {
   if (route.mode === "vector" && route.allowanceKey && route.fundingSource) {
     try { return await charge(teamId, texts, route.allowanceKey, route.fundingSource, work); }

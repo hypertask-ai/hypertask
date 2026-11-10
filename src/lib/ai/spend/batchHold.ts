@@ -5,7 +5,6 @@ import type { BatchItemOutcome, BatchTextRequest } from "@/lib/ai/batch/batchJob
 import { batchHoldMicroUsd, halfPriceMicroUsd, monthEndHoldUntilMs, upperBoundTokens } from "@/lib/ai/spend/remainingSpend";
 import { aiAllowancePeriod } from "@/lib/aiAllowancePolicy";
 import { getRedis } from "@/lib/redis";
-
 const intentKey = (id: string) => `ai-batch-hold:v1:${id}`;
 const gatewayKey = (id: string) => `ai-batch-gateway:v1:${id}`;
 type Intent = { status: "held" | "settled"; reservation: PlanAllowanceReservation; estimateMicroUsd: number };
@@ -21,7 +20,6 @@ async function readIntent(id: string): Promise<Intent | null> {
 async function writeIntent(id: string, intent: Intent) {
   await (await getRedis()).set(intentKey(id), JSON.stringify(intent), "EX", aiAllowancePeriod().ttlSeconds);
 }
-
 export async function holdPlanBatch(args: {
   idempotencyKey: string; teamId: string; userId: number; gatewayKey: string; model: string; requests: BatchTextRequest[];
 }): Promise<void> {

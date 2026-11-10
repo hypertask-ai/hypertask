@@ -432,14 +432,12 @@ function isPlatformManagedGatewayKey(apiKey: string): boolean {
 }
 
 export function isOurGatewayKey(apiKey: unknown): boolean {
-  if (typeof apiKey !== "string") return false;
-  const normalized = apiKey.trim();
-  if (!normalized) return false;
-  if (normalized === process.env.AI_GATEWAY_API_KEY?.trim()) return true;
-  if (normalized === process.env.DEMO_AI_GATEWAY_API_KEY?.trim()) return true;
-  if (normalized === process.env.TURBOPUFFER_EMBEDDINGS_API_KEY?.trim()) return true;
-  if (gatewayFundingSourceForApiKey(normalized) === "managed") return true;
-  return isPlatformManagedGatewayKey(normalized);
+  const normalized = typeof apiKey === "string" ? apiKey.trim() : "";
+  return Boolean(normalized) && (
+    normalized === process.env.AI_GATEWAY_API_KEY?.trim() || normalized === process.env.DEMO_AI_GATEWAY_API_KEY?.trim() ||
+    normalized === process.env.TURBOPUFFER_EMBEDDINGS_API_KEY?.trim() || gatewayFundingSourceForApiKey(normalized) === "managed" ||
+    isPlatformManagedGatewayKey(normalized)
+  );
 }
 
 type GatewayKeyProvenance = { managedKeyId: string; managedKeyUpdatedAt: string };
