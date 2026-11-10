@@ -2,7 +2,6 @@ import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7324_PLAN_AI_CAPS_FLAG } from "@/lib/flags/definitions/htpr-7324-plan-ai-caps";
-import { HTPR_7394_REMAINING_AI_SPEND_FLAG } from "@/lib/flags/definitions/htpr-7394-remaining-ai-spend";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { isTeamComped } from "@/lib/teamComp";
@@ -52,8 +51,9 @@ export async function teamPlanAllowanceEnabled(teamId: string): Promise<boolean>
 }
 
 export async function remainingSpendPathEnabled(teamId: string): Promise<boolean> {
-  try { return await isFeatureEnabled(HTPR_7394_REMAINING_AI_SPEND_FLAG, (await teamOwner(teamId)).userId); }
+  try { if (await isFeatureEnabled("htpr-7394-remaining-ai-spend", (await teamOwner(teamId)).userId)) return true; }
   catch { return false; }
+  return false;
 }
 
 const SEATS_HIGH_WATER_SCRIPT = `

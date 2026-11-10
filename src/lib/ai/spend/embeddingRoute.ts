@@ -32,8 +32,11 @@ async function charge<T>(teamId: string, texts: string[], key: string, source: "
   if (policy.mode !== "plan") return work();
   const micro = Math.max(1, Math.ceil(texts.reduce((sum, text) => sum + embeddingCostUsd(upperBoundTokens(text)), 0) * 1_000_000));
   const reservation = await reservePlanAllowance({ teamId, policy, gatewayApiKey: key, fundingSource: source, amountUsd: micro / 1_000_000, amountMicroUsd: micro, lane: "visible", userId: 0 });
-  try { const result = await work(); await settlePlanAllowance(reservation, micro / 1_000_000, "finish"); return result; }
+  let result!: T;
+  try { result = await work(); }
   catch (error) { await settlePlanAllowance(reservation, 0, "error").catch(() => undefined); throw error; }
+  await settlePlanAllowance(reservation, micro / 1_000_000, "finish");
+  return result;
 }
 async function teamIds(projectIds: number[]) {
   const ids = [...new Set(projectIds.filter((id) => Number.isInteger(id)))];

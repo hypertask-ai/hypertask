@@ -66,7 +66,8 @@ export async function releasePlanBatch(idempotencyKey: string): Promise<void> {
 }
 
 export async function settleHeldBatch(args: { gatewayBatchId: string; model: string; outcomes: BatchItemOutcome[] }): Promise<void> {
-  const redis = await getRedis();
+  let redis: Awaited<ReturnType<typeof getRedis>>;
+  try { redis = await getRedis(); } catch { return; }
   const idempotencyKey = await redis.get(gatewayKey(args.gatewayBatchId));
   const intent = idempotencyKey ? await readIntent(idempotencyKey) : null;
   if (!idempotencyKey || !intent || intent.status !== "held") return;

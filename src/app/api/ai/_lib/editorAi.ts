@@ -19,7 +19,6 @@ import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/a
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
 import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, isGrokGemini4ModelKey, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
-import { remainingSpendPathEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
@@ -35,9 +34,13 @@ import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 async function nativeSearchForSelection(provider: string, apiKey: unknown, teamId?: unknown) {
   const key = typeof apiKey === "string" ? apiKey.trim() : "";
   const team = typeof teamId === "string" ? teamId : "";
-  const on = Boolean(team) && typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(team).catch(() => false);
-  const funding = key && team && !isOurGatewayKey(key) ? await getTeamGatewayFunding({ trustedTeamId: team }).catch(() => undefined) : undefined;
-  const ours = isOurGatewayKey(key) || Boolean(funding && funding.apiKey === key && funding.source !== "customer");
+  let on = false;
+  try { if (team) { const { remainingSpendPathEnabled } = await import("@/app/api/ai/_lib/planAllowancePolicy"); on = typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(team); } } catch { on = false; }
+  let ours = typeof isOurGatewayKey === "function" && isOurGatewayKey(key);
+  if (on && !ours && key && team && typeof getTeamGatewayFunding === "function") {
+    const funding = await getTeamGatewayFunding({ trustedTeamId: team }).catch(() => undefined);
+    ours = Boolean(funding && funding.apiKey === key && funding.source !== "customer");
+  }
   return (provider === "claude" || provider === "openai") && !(on && !(Boolean(key) && !ours));
 }
 
