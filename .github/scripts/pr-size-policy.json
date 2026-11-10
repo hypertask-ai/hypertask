@@ -11,7 +11,14 @@
     "ticket": "HYCI-51",
     "guardWorkflow": "pr-guards-trusted.yml"
   },
-  "excludedFiles": ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "Cargo.lock"],
+  "excludedFiles": [
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "bun.lockb",
+    "Cargo.lock",
+    "eslint-local-rules/style-guide-suppressions.json"
+  ],
   "excludedDirectories": ["src/generated/", "tests/fixtures/", ".claude/skills/ship/scripts/fixtures/", "e2e/smoke/__snapshots__/"],
   "excludedSuffixes": [".snap", ".generated.ts", ".generated.tsx"]
 }

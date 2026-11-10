@@ -1,7 +1,7 @@
 ## PR size check (HYCI-29)
 
 - Trusted production code counts additions and deletions.
-- One config excludes generated and fixture files.
+- One config excludes generated and fixture files, including the ESLint-generated style-guide suppressions baseline.
 - Renames crossing exclusion boundaries still count.
 - Incomplete measurements produce errors, never passing counts.
 - An error warns and never blocks a merge.
