@@ -1,14 +1,17 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const path = require("node:path");
 const React = require("react");
+const { act } = React;
+const { createRoot } = require("react-dom/client");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
 const { loadModule: load } = require("./helpers/loadModule.cjs");
 const { loader } = require("./helpers/htpr-7260-ui.cjs");
 
+const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-8975-ctrl-j-write-with-ai";
-const flagModule = "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
-const flagStub = { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG: flagKey };
+const empty = () => null;
 
 test("HTPR-8975 flag ships at Owner + QA as an improvement", () => {
   const { default: flag, HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG: key } = load("src/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai.ts");
@@ -19,18 +22,45 @@ test("HTPR-8975 flag ships at Owner + QA as an improvement", () => {
   assert.equal(flag.releaseRisk.risk, "small");
 });
 
-function globalShortcut(enabled) {
+function editorContainer({ enabled, mode, isEditModeActive = true }) {
+  const Provider = () => ({ mode, editor: null, newCommentAttachments: [], isEditModeActive, id: "editor" });
+  const { default: TiptapMainContainer } = load("src/components/RTE/Components/TiptapMainContainer.tsx", {
+    "@/lib/contexts/TaskDetail/TiptapProvider": { useTiptapGlobalContext: Provider },
+    "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
+    "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
+    "@/styles/tiptap.module.scss": { default: {} },
+    "./CreatedInfoTiptap": { default: empty },
+    "./TiptapEditor": { default: empty },
+    "@/components/Common/AttachmentsUpload": { default: empty },
+    "@/components/Common/FileDragAndDrop": { default: ({ children }) => children },
+    "./InlineDraftAiFloat": { default: empty },
+    "lucide-react": { X: empty },
+  });
+  return new JSDOM(renderToStaticMarkup(React.createElement(TiptapMainContainer))).window.document;
+}
+
+test("editable ticket editors carry the Ctrl+J marker only with the flag on", () => {
+  for (const mode of ["create-comment", "read-edit-comments", "read-edit-description"]) {
+    assert.ok(editorContainer({ enabled: true, mode }).querySelector("[data-ctrl-j-write-with-ai]"), mode);
+    assert.equal(editorContainer({ enabled: false, mode }).querySelector("[data-ctrl-j-write-with-ai]"), null, mode);
+  }
+  assert.equal(
+    editorContainer({ enabled: true, mode: "read-edit-description", isEditModeActive: false }).querySelector("[data-ctrl-j-write-with-ai]"),
+    null,
+    "a description that is not being edited keeps today's Ctrl+J",
+  );
+});
+
+function globalShortcut() {
   const dom = new JSDOM(
     '<div data-ctrl-j-write-with-ai=""><div contenteditable="true" id="comment-editor"></div><input id="panel-input"></div><div id="board"></div>',
   );
   const calls = [];
-  const cleanups = [];
   const { useCommandCenterShortcut } = load("src/hooks/General/useCommandCenterShortcut.ts", {
-    react: { useEffect: (effect) => cleanups.push(effect()) },
+    react: { useEffect: (effect) => effect() },
     "@/lib/constants/commandCenterShortcut": load("src/lib/constants/commandCenterShortcut.ts"),
-    "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
+    "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/keys": { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG: "a", HTPR_7571_INBOX_CTRLK_CLOSE_FLAG: "b" },
-    [flagModule]: flagStub,
     "@/lib/state": { useSetRecoilState: () => (value) => calls.push(["palette", value]) },
     "@/store": { showCommandsAtom: "commands" },
     "@/models/enums": { CommandMode: { Command: "command" } },
@@ -42,125 +72,155 @@ function globalShortcut(enabled) {
   } finally {
     global.document = previous;
   }
-  const press = (id) => {
-    const reached = [];
+  const press = (id, code = "KeyJ") => {
+    let reached = false;
     const target = dom.window.document.getElementById(id);
-    target.addEventListener("keydown", () => reached.push(id));
-    const event = new dom.window.KeyboardEvent("keydown", { key: "j", code: "KeyJ", ctrlKey: true, bubbles: true, cancelable: true });
-    target.dispatchEvent(event);
-    return { reached: reached.length > 0, prevented: event.defaultPrevented };
+    target.addEventListener("keydown", () => { reached = true; });
+    target.dispatchEvent(new dom.window.KeyboardEvent("keydown", { code, ctrlKey: true, bubbles: true, cancelable: true }));
+    return reached;
   };
   return { calls, press };
 }
 
-test("Ctrl+J inside a ticket editor or its Write with AI box reaches the editor with the flag on", () => {
+test("Ctrl+J inside a marked ticket editor or its Write with AI box reaches the editor", () => {
   for (const id of ["comment-editor", "panel-input"]) {
-    const { calls, press } = globalShortcut(true);
-    const result = press(id);
-    assert.equal(result.reached, true, `${id} receives Ctrl+J`);
-    assert.equal(result.prevented, true, `${id} blocks the browser's own Ctrl+J`);
+    const { calls, press } = globalShortcut();
+    assert.equal(press(id), true, `${id} receives Ctrl+J`);
     assert.deepEqual(calls, [], `${id} does not open New task`);
   }
 });
 
-test("Ctrl+J outside a ticket editor still opens New task with the flag on", () => {
-  const { calls, press } = globalShortcut(true);
-  const result = press("board");
-  assert.equal(result.reached, false);
-  assert.deepEqual(calls, [["palette", { show: true, mode: "command", paletteTab: "compose" }]]);
+test("Ctrl+J outside a ticket editor still opens New task, and Ctrl+K is unchanged inside one", () => {
+  const outside = globalShortcut();
+  assert.equal(outside.press("board"), false);
+  assert.deepEqual(outside.calls, [["palette", { show: true, mode: "command", paletteTab: "compose" }]]);
+  const search = globalShortcut();
+  assert.equal(search.press("comment-editor", "KeyK"), false);
+  assert.deepEqual(search.calls, [["palette", { show: true, mode: "command", paletteTab: "search" }]]);
 });
-
-test("flag off keeps today's Ctrl+J New task inside ticket editors", () => {
-  const { calls, press } = globalShortcut(false);
-  const result = press("comment-editor");
-  assert.equal(result.reached, false);
-  assert.deepEqual(calls, [["palette", { show: true, mode: "command", paletteTab: "compose" }]]);
-});
-
-function editorKeyboard(mode) {
-  const actions = [];
-  const { useTaskDetailEditorKeyboard } = loader({
-    "@/hooks/useFlag": { useFlag: (key) => ["htpr-7393-comment-inline-ai", "htpr-8173-description-inline-drafts"].includes(key) },
-    "@/lib/state": { useSetRecoilState: () => (value) => actions.push(["commands", value]) },
-    "@/store": { showCommandsAtom: "commands" },
-    "@/models/enums": { CommandMode: { Command: "command" } },
-    "@/lib/taskDetailInboxFlow": { resolveCommentEnterShortcutAction: () => null },
-  })("src/components/RTE/useTaskDetailEditorKeyboard.tsx");
-  const context = { mode, isApple: false, shouldShowInlineDraftAiRef: {}, toggleAiTaskWriter: () => actions.push(["write-with-ai"]) };
-  let prevented = false;
-  useTaskDetailEditorKeyboard(() => context).handleKeydown({ key: "j", code: "KeyJ", keyCode: 74, ctrlKey: true, preventDefault: () => { prevented = true; } });
-  return { actions, prevented };
-}
 
 test("Ctrl+J that reaches comment, comment edit and description editors opens Write with AI", () => {
   for (const mode of ["create-comment", "read-edit-comments", "read-edit-description"]) {
-    const { actions, prevented } = editorKeyboard(mode);
-    assert.equal(prevented, true);
+    const actions = [];
+    const { useTaskDetailEditorKeyboard } = loader({
+      "@/hooks/useFlag": { useFlag: (key) => ["htpr-7393-comment-inline-ai", "htpr-8173-description-inline-drafts"].includes(key) },
+      "@/lib/state": { useSetRecoilState: () => (value) => actions.push(["commands", value]) },
+      "@/store": { showCommandsAtom: "commands" },
+      "@/models/enums": { CommandMode: { Command: "command" } },
+      "@/lib/taskDetailInboxFlow": { resolveCommentEnterShortcutAction: () => null },
+    })("src/components/RTE/useTaskDetailEditorKeyboard.tsx");
+    const context = { mode, isApple: false, shouldShowInlineDraftAiRef: {}, toggleAiTaskWriter: () => actions.push(["write-with-ai"]) };
+    let prevented = false;
+    useTaskDetailEditorKeyboard(() => context).handleKeydown({ key: "j", code: "KeyJ", keyCode: 74, ctrlKey: true, preventDefault: () => { prevented = true; } });
+    assert.equal(prevented, true, mode);
     assert.deepEqual(actions, [["write-with-ai"]], mode);
   }
 });
 
-const cn = (...values) => values.flat().filter(Boolean).join(" ");
+const micProps = [];
+const originalCache = new Map(Object.entries(require.cache));
+const stubSourceModule = (relativePath, exports) => {
+  const filename = path.join(root, relativePath);
+  require.cache[filename] = { id: filename, filename, loaded: true, exports };
+};
+stubSourceModule("src/components/Common/SendArrow.tsx", {
+  SendArrow: () => React.createElement("svg", { "data-arrow": "" }),
+});
+stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
+  AudioButton: (props) => {
+    micProps.push(props);
+    return React.createElement("button", { type: "button", "data-mic": "" });
+  },
+});
+stubSourceModule("src/components/Modals/Sheets/AppSheet.tsx", {
+  AppSheet: ({ children }) => React.createElement("div", null, children),
+});
+stubSourceModule("src/hooks/General/useMobileVisualViewport.ts", { useMobileVisualViewport: () => null });
+stubSourceModule("src/styles/tiptap.module.scss", { editorContainer: "editor-container" });
+stubSourceModule("src/utils/undoActions/helperFuncs.ts", { cn: (...values) => values.filter(Boolean).join(" ") });
+const previousGlobalReact = global.React;
+global.React = React;
+const jiti = require("jiti")(__filename, { interopDefault: true, jsx: true, alias: { "@": path.join(root, "src") } });
+const InlineDraftAiFloat = jiti(path.join(root, "src/components/RTE/Components/InlineDraftAiFloat.tsx")).default;
+for (const filename of Object.keys(require.cache)) {
+  if (!originalCache.has(filename)) delete require.cache[filename];
+}
+for (const [filename, cachedModule] of originalCache) require.cache[filename] = cachedModule;
+test.after(() => {
+  if (previousGlobalReact === undefined) delete global.React;
+  else global.React = previousGlobalReact;
+});
 
-function panel(enabled) {
-  const micProps = [];
-  const { default: InlineDraftAiFloat } = loader({
-    "@/components/Common/SendArrow": { SendArrow: () => React.createElement("svg", { "data-arrow": true }) },
-    "@/components/RTE/Components/AudioButton": {
-      AudioButton: (props) => {
-        micProps.push(props);
-        return React.createElement("button", { "data-mic": true });
-      },
-    },
-    "@/components/Modals/Sheets/AppSheet": { AppSheet: ({ children }) => React.createElement("div", null, children) },
-    "@/hooks/General/useMobileVisualViewport": { useMobileVisualViewport: () => null },
-    "@/utils/undoActions/helperFuncs": { cn },
-    "@/utils/helperFunctions/sanitizeHtml": { sanitizeAiHtml: (html) => html },
-    "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
-    "../Common/Tooltip": { default: () => null },
-    "react-hot-toast": { default: { dismiss: () => {}, promise: async (promise) => promise } },
-  })("src/components/RTE/Components/InlineDraftAiFloat.tsx");
+async function panel(t, enabled) {
+  micProps.length = 0;
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>");
+  const keys = ["window", "document", "HTMLElement", "Node", "Event", "MouseEvent", "CustomEvent", "IS_REACT_ACT_ENVIRONMENT"];
+  const previous = Object.fromEntries(keys.map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]));
+  Object.assign(global, {
+    window: dom.window,
+    document: dom.window.document,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    Event: dom.window.Event,
+    MouseEvent: dom.window.MouseEvent,
+    CustomEvent: dom.window.CustomEvent,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
   const editor = {
     state: { selection: { from: 1, to: 1 }, doc: { content: { size: 2 } } },
     isEmpty: true,
     isEditable: true,
+    view: { dom: dom.window.document.createElement("div") },
     commands: { setTextSelection: () => {}, unsetHighlight: () => {}, focus: () => {} },
     on: () => {},
     off: () => {},
     setEditable: () => {},
   };
-  const html = renderToStaticMarkup(
-    React.createElement(InlineDraftAiFloat, {
+  const container = dom.window.document.getElementById("root");
+  const reactRoot = createRoot(container);
+  t.after(async () => {
+    await act(async () => reactRoot.unmount());
+    for (const key of keys) {
+      if (previous[key]) Object.defineProperty(global, key, previous[key]);
+      else delete global[key];
+    }
+    dom.window.close();
+  });
+  await act(async () => {
+    reactRoot.render(React.createElement(InlineDraftAiFloat, {
       editor,
       onClose: () => {},
       toggleRecording: () => {},
       matchCommentRowControls: enabled,
-    }),
-  );
-  return { doc: new JSDOM(html).window.document, micProps };
+    }));
+  });
+  return container;
 }
 
-test("Write with AI box shows one white mic and a Rewrite word with the flag on", () => {
-  const { doc, micProps } = panel(true);
-  assert.equal(doc.querySelectorAll("[data-mic]").length, 1);
-  assert.equal(micProps[0].primaryMic, true);
-  assert.equal(micProps[0].compactListeningPill, true);
-  assert.equal(micProps[0].hideDevicePicker, true);
-  assert.deepEqual(micProps[0].hoverTooltip, { text: "Dictate", keyCombination: ["ALT", "V"] });
-  const buttons = [...doc.querySelectorAll("button")].filter((button) => button.textContent.trim() === "Rewrite");
-  assert.equal(buttons.length, 1);
-  assert.equal(doc.querySelector("[data-arrow]"), null);
-  assert.doesNotMatch(buttons[0].className, /purple|rounded-full/);
-  const box = doc.querySelector('[aria-label="Write with AI"]');
+test("Write with AI box shows one white mic, a Rewrite word and the comment box colour with the flag on", async (t) => {
+  const container = await panel(t, true);
+  assert.equal(container.querySelectorAll("[data-mic]").length, 1);
+  const mic = micProps.at(-1);
+  assert.equal(mic.primaryMic, true);
+  assert.equal(mic.compactListeningPill, true);
+  assert.equal(mic.hideDevicePicker, true);
+  assert.equal(mic.hoverTooltip.text, "Dictate");
+  assert.equal(mic.hoverTooltip.keyCombination.at(-1), "V");
+  const rewrite = [...container.querySelectorAll("button")].filter((button) => button.textContent.trim() === "Rewrite");
+  assert.equal(rewrite.length, 1);
+  assert.equal(container.querySelector("[data-arrow]"), null);
+  assert.doesNotMatch(rewrite[0].className, /purple|rounded-full/);
+  const box = container.querySelector('[aria-label="Write with AI"]');
   assert.match(box.className, /bg-newcomment-well/);
   assert.doesNotMatch(box.className, /purple|shadow-md/);
 });
 
-test("flag off keeps today's purple arrow and plain mic in the Write with AI box", () => {
-  const { doc, micProps } = panel(false);
-  assert.equal(micProps[0].primaryMic, undefined);
-  assert.equal(micProps[0].hoverTooltip, undefined);
-  assert.ok(doc.querySelector('[aria-label="Send AI instruction"] [data-arrow]'));
-  assert.equal([...doc.querySelectorAll("button")].some((button) => button.textContent.trim() === "Rewrite"), false);
-  assert.match(doc.querySelector('[aria-label="Write with AI"]').className, /border-hypertasks-ai-purple\/70 bg-comment-description/);
+test("flag off keeps today's purple arrow, plain mic and purple border in the Write with AI box", async (t) => {
+  const container = await panel(t, false);
+  const mic = micProps.at(-1);
+  assert.equal(mic.primaryMic, undefined);
+  assert.equal(mic.hoverTooltip, undefined);
+  assert.ok(container.querySelector('[aria-label="Send AI instruction"] [data-arrow]'));
+  assert.equal([...container.querySelectorAll("button")].some((button) => button.textContent.trim() === "Rewrite"), false);
+  assert.match(container.querySelector('[aria-label="Write with AI"]').className, /border-hypertasks-ai-purple\/70 bg-comment-description/);
 });

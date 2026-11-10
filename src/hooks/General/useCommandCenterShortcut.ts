@@ -1,8 +1,7 @@
 import { useEffect } from "react";
-import { isCommandCenterShortcut, isComposePaletteShortcut, isTicketEditorWriteWithAiShortcut } from "@/lib/constants/commandCenterShortcut";
+import { isCommandCenterShortcut, isComposePaletteShortcut } from "@/lib/constants/commandCenterShortcut";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7571_INBOX_CTRLK_CLOSE_FLAG } from "@/lib/flags/keys";
-import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -17,15 +16,13 @@ export function useCommandCenterShortcut(
 ) {
   const lazyClosedSearchCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const inboxCtrlKClose = useFlag(HTPR_7571_INBOX_CTRLK_CLOSE_FLAG);
-  const ticketEditorCtrlJ = useFlag(HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG);
   const setShowCommands = useSetRecoilState(showCommandsAtom);
-  const listen = (passTicketEditorCtrlJ: boolean) => {
+  useEffect(() => {
     const handleCommandCenterShortcut = (e: KeyboardEvent) => {
       if (authenticatedUserId === null) return;
       if (showTrialModal || showEmailVerificationModal) return;
       if (isComposePaletteShortcut(e, isApple, pathname)) {
         e.preventDefault();
-        if (passTicketEditorCtrlJ && isTicketEditorWriteWithAiShortcut(e)) return;
         e.stopImmediatePropagation();
         const fromPendingSearchProxy = lazyClosedSearchCommands && pathname === "/search" && e.code === "KeyK" &&
           (e.target as HTMLElement | null)?.id === "search-command-focus-proxy";
@@ -48,8 +45,7 @@ export function useCommandCenterShortcut(
     document.addEventListener("keydown", handleCommandCenterShortcut, true);
     return () =>
       document.removeEventListener("keydown", handleCommandCenterShortcut, true);
-  };
-  useEffect(ticketEditorCtrlJ ? () => listen(true) : () => listen(false), [
+  }, [
     authenticatedUserId,
     isApple,
     pathname,
@@ -58,7 +54,6 @@ export function useCommandCenterShortcut(
     toggleShowCommands,
     lazyClosedSearchCommands,
     inboxCtrlKClose,
-    ticketEditorCtrlJ,
     setShowCommands,
   ]);
 }

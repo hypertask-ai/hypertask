@@ -11,7 +11,6 @@ import { X } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8962-one-send-clears-inbox";
 import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
-import { TICKET_EDITOR_CTRL_J_ATTRIBUTE } from "@/lib/constants/commandCenterShortcut";
 
 interface TiptapMainContainerProps {
   mobileEditOpen?: boolean;
@@ -326,7 +325,7 @@ const TiptapMainContainer = ({
           `}
         onFocus={handleFocus}
         id={id}
-        {...(ticketEditorCtrlJ && !isReadOnlyExistingContent ? { [TICKET_EDITOR_CTRL_J_ATTRIBUTE]: "" } : {})}
+        {...(ticketEditorCtrlJ && !isReadOnlyExistingContent ? { "data-ctrl-j-write-with-ai": "" } : {})}
         tabIndex={mode === "read-edit-comments" && !isEditModeActive ? -1 : 0}
         onKeyDown={handleKeydown}
         onClick={toggleExpansion}

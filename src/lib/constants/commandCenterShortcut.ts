@@ -1,7 +1,13 @@
 type CommandCenterKeyboardEvent = Pick<
   KeyboardEvent,
   "altKey" | "code" | "ctrlKey" | "metaKey" | "shiftKey"
->;
+> & { target?: EventTarget | null };
+
+const TICKET_EDITOR_CTRL_J_SELECTOR = "[data-ctrl-j-write-with-ai]";
+
+const isInsideTicketEditorWriteWithAi = (target: EventTarget | null | undefined) =>
+  typeof (target as Element | null | undefined)?.closest === "function" &&
+  Boolean((target as Element).closest(TICKET_EDITOR_CTRL_J_SELECTOR));
 
 export const COMMAND_MENU_ROUTE_HOSTS = [
   "/project",
@@ -75,15 +81,8 @@ export const isComposePaletteShortcut = (
 ) =>
   !event.isComposing &&
   (event.code === "KeyJ" || event.code === "KeyK") &&
+  !(event.code === "KeyJ" && isInsideTicketEditorWriteWithAi(event.target)) &&
   !event.altKey && !event.shiftKey &&
   (event.ctrlKey || (isApple && event.metaKey)) &&
   (isCommandMenuRoute(pathname) || pathname === "/new");
 
-export const TICKET_EDITOR_CTRL_J_ATTRIBUTE = "data-ctrl-j-write-with-ai";
-
-export const isTicketEditorWriteWithAiShortcut = (
-  event: CommandCenterKeyboardEvent & { target: EventTarget | null },
-) =>
-  event.code === "KeyJ" &&
-  typeof (event.target as Element | null)?.closest === "function" &&
-  Boolean((event.target as Element).closest(`[${TICKET_EDITOR_CTRL_J_ATTRIBUTE}]`));

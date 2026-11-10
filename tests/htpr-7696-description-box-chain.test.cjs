@@ -30,6 +30,7 @@ const mocks = {
   "@/hooks/useFlag": { useFlag: () => false },
   "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
   "@/lib/flags/definitions/htpr-8962-one-send-clears-inbox": { HTPR_8962_ONE_SEND_CLEARS_INBOX_FLAG: "htpr-8962-one-send-clears-inbox" },
+  "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai": { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG: "htpr-8975-ctrl-j-write-with-ai" },
   "@/lib/flags/keys": {},
   "@/lib/state": { useRecoilValue: () => false, useSetRecoilState: () => empty },
   "@/store": {},
