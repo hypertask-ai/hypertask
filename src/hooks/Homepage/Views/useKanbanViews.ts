@@ -87,7 +87,8 @@ const useKanbanViews = (project: IProject | null) => {
   const queryClient = useQueryClient();
   const deletedViewLeavesTabs = useFlag(HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG);
   const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG);
-  const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes");
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled;
   const router = useRouter();
   const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom);
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
@@ -252,7 +253,7 @@ const useKanbanViews = (project: IProject | null) => {
     board_show_archived: getActiveShowArchivedOverrideFromProject(queuedProject),
     table_sort_column: getActiveTableSortFromProject(queuedProject)?.column ?? null,
     table_sort_direction: getActiveTableSortFromProject(queuedProject)?.direction ?? null,
-    table_group_by: tableGroupByTagEnabled
+    table_group_by: tableGroupByTagEnabled || tableGroupModesEnabled
       ? getActiveTableGroupingValueFromProject(queuedProject)
       : "column",
     table_collapsed_sections: serializeTableCollapsedSections(
@@ -431,7 +432,7 @@ const useKanbanViews = (project: IProject | null) => {
     tableGroupBy: ReturnType<typeof getActiveTableGroupByFromProject>,
     tagIds: string[] = [],
   ) => {
-    if (tableGroupBy !== "column" && !tableGroupByTagEnabled) return;
+    if (tableGroupBy !== "column" && !tableGroupByTagEnabled && !tableGroupModesEnabled) return;
     const value = serializeTableGrouping(tableGroupBy, tagIds);
     return apiHandler(
       (queuedProject) => buildUnsavedBody(queuedProject, {
@@ -573,7 +574,7 @@ const useKanbanViews = (project: IProject | null) => {
   };
   const saveAsDefaultHandler = async (body: TCreate_view_body) => {
     const requestBody =
-      tableGroupByTagEnabled &&
+      (tableGroupByTagEnabled || tableGroupModesEnabled) &&
       body.view_settings.table_group_by === undefined &&
       project?.id === body.projectId
         ? {

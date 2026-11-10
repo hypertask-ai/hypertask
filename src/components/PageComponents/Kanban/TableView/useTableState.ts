@@ -43,7 +43,7 @@ export function useTableState(context: Context) {
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
-  const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes");
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || useFlag("htpr-8974-table-group-modes");
   const queryClient = useQueryClient();
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);

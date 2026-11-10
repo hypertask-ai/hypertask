@@ -5,8 +5,7 @@ export async function gatedTableGroupByForViewWrite(value: unknown, userId: numb
   const sanitized = sanitizeTableGrouping(value);
   if (!sanitized) return sanitized;
   const mode = sanitizeTableGroupBy(sanitized);
-  if (mode && mode !== "column" && !(await isFeatureEnabled("htpr-8974-table-group-modes", userId))) {
-    return "column";
-  }
-  return sanitized;
+  if (!mode || mode === "column") return sanitized;
+  const flag = sanitized === "tag" ? "htpr-8630-table-group-by-tag" : "htpr-8974-table-group-modes";
+  return (await isFeatureEnabled(flag, userId)) ? sanitized : "column";
 }

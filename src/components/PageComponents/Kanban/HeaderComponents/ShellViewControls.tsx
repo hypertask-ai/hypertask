@@ -33,7 +33,8 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const setShowCommands = useSetRecoilState(showCommandsAtom)
   const [runningOnly, setRunningOnly] = useRecoilState(kanbanRunningOnlyAtom)
   const boardLayout = useRecoilValue(boardLayoutAtom)
-  const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes")
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes")
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled
   const { setTableGroupByViewAndReturn } = useKanbanViews(project)
   const [groupOpen, setGroupOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
@@ -101,15 +102,17 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
               header="Group by"
               options={[
                 { id: "column", label: "Column", hint: "Board columns", checked: tableGroupBy === "column" },
-                { id: "assignee", label: "Assignee", hint: "Who owns the ticket", checked: tableGroupBy === "assignee" },
-                { id: "priority", label: "Priority", hint: "Urgent first", checked: tableGroupBy === "priority" },
-                { id: "size", label: "Size", hint: "Ticket estimate", checked: tableGroupBy === "size" },
+                ...(tableGroupModesEnabled ? [
+                  { id: "assignee", label: "Assignee", hint: "Who owns the ticket", checked: tableGroupBy === "assignee" },
+                  { id: "priority", label: "Priority", hint: "Urgent first", checked: tableGroupBy === "priority" },
+                  { id: "size", label: "Size", hint: "Ticket estimate", checked: tableGroupBy === "size" },
+                ] : []),
                 { id: "tag", label: "Tags", hint: "Choose which tags", checked: tableGroupBy === "tag" },
               ]}
               onSelect={(option) => {
                 if (option.id !== "column" && option.id !== "tag" && option.id !== "assignee" && option.id !== "priority" && option.id !== "size") return
                 setGroupOpen(false)
-                if (option.id === "tag") {
+                if (option.id === "tag" && tableGroupModesEnabled) {
                   setTagPickerOpen(true)
                   return
                 }
