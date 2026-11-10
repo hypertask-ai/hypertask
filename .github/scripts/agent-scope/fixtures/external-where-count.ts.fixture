@@ -1,0 +1,7 @@
+import prisma from '@/lib/prisma';
+import { validateMcpRouteAuth } from '@/lib/mcp/routeWrapper';
+export async function GET(request: Request) {
+  await validateMcpRouteAuth(request);
+  const where = { id: 1 };
+  return prisma.task.count({ where });
+}
