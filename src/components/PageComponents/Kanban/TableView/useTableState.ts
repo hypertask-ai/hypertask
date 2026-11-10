@@ -223,7 +223,7 @@ export function useTableState(context: Context) {
   useEffect(() => {
     if (!tableSortColumnsEnabled || myTasksColumnsControlled || !tableViewId || !_currentProject) return;
     if (!accountColumns || accountColumns.viewId !== tableViewId) return;
-    const signature = JSON.stringify({ keys: accountColumns.keys, widths: accountColumns.widths });
+    const signature = JSON.stringify({ viewId: tableViewId, keys: accountColumns.keys, widths: accountColumns.widths });
     if (signature === lastSavedColumns.current) return;
     const handle = setTimeout(() => {
       lastSavedColumns.current = signature;
