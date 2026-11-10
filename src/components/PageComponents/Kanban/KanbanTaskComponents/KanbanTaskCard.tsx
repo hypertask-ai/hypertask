@@ -1,6 +1,7 @@
 import { HTPR_8629_KANBAN_HOVER_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8629-kanban-hover-layout";
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
+import { HTPR_8960_BORDER_ONLY_SELECT_FLAG } from "@/lib/flags/definitions/htpr-8960-border-only-select";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React, { useContext } from "react";
@@ -62,7 +63,7 @@ interface KanbanTaskCardProps {
   onSubtaskClick: (uniqueIndex: number) => void;
   onSelectionClick?: (
     id: number,
-    event?: React.MouseEvent<HTMLButtonElement>,
+    event?: React.MouseEvent<HTMLElement>,
   ) => void;
   selectionMode?: boolean;
   phoneHoldSelect?: boolean;
@@ -109,6 +110,7 @@ const KanbanTaskCard = ({
   const isMobile = useContext(MobileViewContext);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   const stableHoverLayout = useFlag(HTPR_8629_KANBAN_HOVER_LAYOUT_FLAG);
+  const borderOnlySelect = useFlag(HTPR_8960_BORDER_ONLY_SELECT_FLAG);
   return (
   <div
     ref={cardRef}
@@ -125,8 +127,14 @@ const KanbanTaskCard = ({
       provided={provided}
       snapshot={snapshot}
       selected={selected}
+      selectionMode={selectionMode}
+      onSelectToggle={
+        borderOnlySelect && onSelectionClick
+          ? (event) => onSelectionClick(task.id, event)
+          : undefined
+      }
       selectionControl={
-        onSelectionClick ? (
+        onSelectionClick && !borderOnlySelect ? (
           <SelectionCheckbox
             id={task.id}
             isChecked={selected}
@@ -155,8 +163,8 @@ const KanbanTaskCard = ({
         (task.blockingTasks?.length ?? 0) > 0
       }
       linkClassName={cn(
-        !stableHoverLayout && "group-hover/kanban-selection:pl-7",
-        (selectionMode || selected) && "pl-7",
+        !stableHoverLayout && !borderOnlySelect && "group-hover/kanban-selection:pl-7",
+        !borderOnlySelect && (selectionMode || selected) && "pl-7",
       )}
       parentClassName={isArchivedOnBoard ? "opacity-50" : undefined}
     >

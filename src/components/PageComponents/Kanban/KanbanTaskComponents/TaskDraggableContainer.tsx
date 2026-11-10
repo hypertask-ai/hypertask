@@ -13,6 +13,8 @@ interface ITaskDraggableContainer {
   provided?: DraggableProvided;
   active: boolean;
   selected?: boolean;
+  selectionMode?: boolean;
+  onSelectToggle?: (event: React.MouseEvent<HTMLElement>) => void;
   blocked?: boolean;
   snapshot?: DraggableStateSnapshot;
   _currentProject?: IProject;
@@ -29,6 +31,8 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   provided,
   active,
   selected = false,
+  selectionMode = false,
+  onSelectToggle,
   blocked,
   _currentProject,
   snapshot,
@@ -54,9 +58,10 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         ? "blocked"
         : "plain";
   const legacyStroke = blocked ? "border-l-[3px]" : "border-l-4";
+  const selectedKeepsLayout = Boolean(onSelectToggle) && active && !blocked;
   const cleanupStroke = {
     "selected-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
-    selected: "border-l-0",
+    selected: selectedKeepsLayout ? "border-l-4 border-transparent" : "border-l-0",
     "active-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
     active: "border-l-4 border-white-black",
     blocked: "border-l-4 border-[hsl(0_62.8%_30.6%)]",
@@ -82,7 +87,8 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
     cardState === "blocked" ||
     cardState === "active" ||
     cardState === "active-blocked" ||
-    cardState === "selected-blocked";
+    cardState === "selected-blocked" ||
+    (cardState === "selected" && selectedKeepsLayout);
   const cardBody =
     "kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer";
 
@@ -113,7 +119,11 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         cardBody,
         parentClassName
       )}
-      onClick={openDetail}
+      onClick={(event) =>
+        onSelectToggle && (event.shiftKey || selectionMode)
+          ? onSelectToggle(event)
+          : openDetail()
+      }
       {...provided?.draggableProps}
       {...provided?.dragHandleProps}
       style={getStyle(
@@ -136,6 +146,12 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         )}
         href={taskHref}
         onClick={(event) => {
+          const shiftSelects =
+            onSelectToggle && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && event.button === 0;
+          if (shiftSelects) {
+            event.preventDefault();
+            return;
+          }
           if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
             event.stopPropagation();
             return;
