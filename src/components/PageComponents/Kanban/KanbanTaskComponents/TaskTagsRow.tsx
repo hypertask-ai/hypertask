@@ -35,6 +35,7 @@ interface ITaskTopRow {
     hasDraft?: boolean;
     blockingUser?: BlockerUser;
     agents?: IAgent[];
+    cardOverflowClamp?: boolean;
 }
 type TaskTimeOnCard = {
     showTimeTotals: boolean;
@@ -78,7 +79,7 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
     toggleDueDate,
     updateActiveItemAndItemInView:updateTaskFocus,
     dueDate,priority, estimate, taskLabels, hasDraft = false, blockingUser, agents = [],
-    showTimeTotals, runningTimer, timeTotal}) => {
+    showTimeTotals, runningTimer, timeTotal, cardOverflowClamp = false}) => {
 
       const agentMinute = useMinuteClock(Boolean(task.agentStatus))
       const agentStatusLine = task.agentStatus && agentStatusIsFresh(task.agentStatus.at, agentMinute)
@@ -109,7 +110,11 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
   return (
 
     agentStatusLine||agents.length>0||blockingUser||(task.blockingTasks?.length ?? 0)>0||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(taskLabels&&taskLabels?.length>0)||hasCustomFieldValues?
-    <div className={`basis-full flex gap-1 flex-wrap`}>
+    <div
+      className={cardOverflowClamp
+        ? "basis-full flex min-w-0 max-w-full flex-wrap gap-1 overflow-x-hidden"
+        : "basis-full flex gap-1 flex-wrap"}
+    >
     {agentStatusLine && (
       <LabelWrapper title={agentStatusLine} className="min-w-0 max-w-full overflow-hidden" data-testid="agent-status-chip">
         <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
@@ -120,12 +125,25 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
       <AgentChip
         key={`agent-${agent.id}`}
         agent={agent}
+        cardOverflowClamp={cardOverflowClamp}
         onClick={() => handleClick("Assignees")}
       />
     ))}
-    {blockingUser && <BlockerChip user={blockingUser} />}
+    {blockingUser && (cardOverflowClamp ? (
+      <span className="inline-flex min-w-0 max-w-full overflow-hidden">
+        <BlockerChip user={blockingUser} />
+      </span>
+    ) : (
+      <BlockerChip user={blockingUser} />
+    ))}
     {task.blockingTasks?.map((blockingTask) => (
-      <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
+      cardOverflowClamp ? (
+        <span key={blockingTask.id} className="inline-flex min-w-0 max-w-full overflow-hidden">
+          <BlockerTaskChip task={blockingTask} />
+        </span>
+      ) : (
+        <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
+      )
     ))}
     {(runningTimer || (showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)) && (
       <TaskTimeBadge
@@ -194,6 +212,7 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
                     fontWeight={500}
                     onClick={() => handleClick("TaskLabels")}
                     flexBasis={false}
+                    nowrap={cardOverflowClamp}
                     labelValue={taskLabel.label?.value ?? ""} />
                 ))}
                 {extra > 0 && (
@@ -209,7 +228,7 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
             );
           })()}
 
-          {hasCustomFieldValues && <CustomFieldChips projectId={task.projectId} values={customFieldValues} />}
+          {hasCustomFieldValues && <CustomFieldChips projectId={task.projectId} values={customFieldValues} cardOverflowClamp={cardOverflowClamp} />}
 
     </div>
     :<></>
@@ -219,21 +238,37 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
 type TCustomField = { id: string; name: string; type: CustomFieldType };
 type CustomFieldValue = { fieldId: string; value: string; numericValue: number | null };
 
-const AgentChip = ({ agent, onClick }: { agent: IAgent; onClick: () => void }) => (
+const AgentChip = ({
+  agent,
+  onClick,
+  cardOverflowClamp,
+}: {
+  agent: IAgent;
+  onClick: () => void;
+  cardOverflowClamp: boolean;
+}) => (
   <LabelWrapper
     onClick={(e) => {
       e.preventDefault();
       e.stopPropagation();
       onClick();
     }}
-    className="cursor-pointer"
+    className={cardOverflowClamp ? "min-w-0 max-w-full cursor-pointer overflow-hidden" : "cursor-pointer"}
   >
     <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
-    <span className="truncate">{agent.displayName}</span>
+    <span className={cardOverflowClamp ? "min-w-0 truncate" : "truncate"}>{agent.displayName}</span>
   </LabelWrapper>
 );
 
-const CustomFieldChips = ({ projectId, values }: { projectId: number; values?: CustomFieldValue[] }) => {
+const CustomFieldChips = ({
+  projectId,
+  values,
+  cardOverflowClamp,
+}: {
+  projectId: number;
+  values?: CustomFieldValue[];
+  cardOverflowClamp: boolean;
+}) => {
   const { data: customFields = [] } = useQuery<TCustomField[]>({
     queryKey: ["customFields", projectId],
     queryFn: async () => (await axios.get(`/api/customFields?projectId=${projectId}`)).data,
@@ -265,6 +300,7 @@ const CustomFieldChips = ({ projectId, values }: { projectId: number; values?: C
           key={`custom-field-${field.id}`}
           fontWeight={500}
           flexBasis={false}
+          nowrap={cardOverflowClamp}
           labelValue={`${field.name} ${display}`}
         />
       ))}
