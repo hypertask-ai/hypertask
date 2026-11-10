@@ -190,7 +190,7 @@ test("watcher creates one board-15 ticket, then deduplicates by stable title eve
     const body = JSON.parse(options.body);
     assert.equal(body.project_id, 15);
     assert.equal(body.section_id, 4389);
-    assert.match(body.description, /ship automatically/);
+    assert.match(body.description, /Ship automatically/);
     assert.ok(options.headers["Idempotency-Key"].startsWith("modelwatch"));
     existing = [{ title: body.title, ticketNumber: "HTPR-fixture" }];
     return response({ success: true, task: existing[0] });
