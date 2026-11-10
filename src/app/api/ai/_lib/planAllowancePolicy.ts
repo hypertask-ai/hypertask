@@ -50,6 +50,12 @@ export async function teamPlanAllowanceEnabled(teamId: string): Promise<boolean>
   return await planMode(teamId) !== "legacy";
 }
 
+export async function remainingSpendPathEnabled(teamId: string): Promise<boolean> {
+  try { if (await isFeatureEnabled("htpr-7394-remaining-ai-spend", (await teamOwner(teamId)).userId)) return true; }
+  catch { return false; }
+  return false;
+}
+
 const SEATS_HIGH_WATER_SCRIPT = `
 local previous = tonumber(redis.call("GET", KEYS[1]) or "0")
 local seats = math.max(previous, tonumber(ARGV[1]))

@@ -1131,6 +1131,8 @@ export function createSharedAllowanceMiddleware(args: {
     }),
     wrapGenerate: async ({ doGenerate, params }) => {
       const reservation = await beforeCall(params);
+      const beat = setInterval(() => { void renewLiveReservation(reservation).catch(() => undefined); }, LIVE_HOLD_RENEW_MS);
+      (beat as { unref?: () => void }).unref?.();
       try {
         const result = await doGenerate();
         await settleAfterInference(reservation, result.usage);
@@ -1142,14 +1144,16 @@ export function createSharedAllowanceMiddleware(args: {
           await settleAfterInference(reservation, undefined, true, "error");
         }
         throw error;
-      }
+      } finally { clearInterval(beat); }
     },
     wrapStream: async ({ doStream, params }) => {
       const reservation = await beforeCall(params);
       let settled = false;
       let hasOutput = false;
       let terminal: Promise<void> | undefined;
-      const cleanup = () => params.abortSignal?.removeEventListener("abort", onAbort);
+      const beat = setInterval(() => { if (!settled) void renewLiveReservation(reservation).catch(() => undefined); }, LIVE_HOLD_RENEW_MS);
+      (beat as { unref?: () => void }).unref?.();
+      const cleanup = () => { clearInterval(beat); params.abortSignal?.removeEventListener("abort", onAbort); };
       const release = (reason: HoldReleaseReason, usage?: GatewayUsage, beforeOutput = false) => {
         if (settled) return terminal;
         settled = true;
@@ -1354,6 +1358,8 @@ export async function reservePlanAllowance(args: {
   observe?: boolean;
   billed?: boolean;
   billedCall?: BilledCall;
+  reservationId?: string;
+  holdUntilMs?: number;
 }, retry = false): Promise<PlanAllowanceReservation> {
   if (args.policy.mode !== "plan" || !Number.isFinite(args.amountUsd) || args.amountUsd < 0 ||
     (args.amountMicroUsd !== undefined && (!Number.isSafeInteger(args.amountMicroUsd) || args.amountMicroUsd < 0))) {
@@ -1414,19 +1420,21 @@ export async function reservePlanAllowance(args: {
   }));
   const amount = args.amountMicroUsd ?? usdToMicroUsd(args.amountUsd);
   const originalScopes = scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds }));
-  const call: BilledCall | undefined = billed ? args.billedCall ?? { teamId: args.teamId ?? "demo", userId: args.userId ?? 0, reservationId: randomUUID() } : undefined;
-  const id = `${call?.reservationId ?? randomUUID()}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds, ...(call ? [amount, call] : [])]))}|${amount}`;
+  const reservationId = args.billedCall?.reservationId ?? args.reservationId ?? randomUUID();
+  const call: BilledCall | undefined = billed ? { ...(args.billedCall ?? { teamId: args.teamId ?? "demo", userId: args.userId ?? 0 }), reservationId } : undefined;
+  const id = `${reservationId}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds, ...(call ? [amount, call] : [])]))}|${amount}`;
+  const holdUntilMs = args.holdUntilMs ?? Date.now() + RESERVATION_TTL_MS;
   const redis = await getRedis();
   const followsRealSpend = await allowanceFollowsRealSpend(args.userId ?? null);
   const reserve = async () => {
     const decision = await redis.eval(RESERVE_SCOPES_SCRIPT, keys.length, ...keys,
-      JSON.stringify(encoded), String(Date.now()), String(amount), String(Date.now() + RESERVATION_TTL_MS), id, ...(observe ? ["1"] : []));
+      JSON.stringify(encoded), String(Date.now()), String(amount), String(holdUntilMs), id, ...(observe ? ["1"] : []));
     if (Array.isArray(decision) && decision[3]) {
       for (const call of JSON.parse(String(decision[3])) as BilledCall[]) logBilledRelease(call, "expiry");
     }
     return decision;
   };
-  let billedDecision = call ? await reserveBilledScopes({ keys, encoded, amount, id, call, month: month.key, day: month.endDate }) : null;
+  let billedDecision = call ? await reserveBilledScopes({ keys, encoded, amount, id, call, month: month.key, day: month.endDate, holdUntilMs }) : null;
   if (billedDecision?.retry) {
     if (retry) throw new Error(`AI allowance unavailable: ${billedDecision.retry}`);
     return reservePlanAllowance({ ...args, billed }, true);
@@ -1447,7 +1455,7 @@ export async function reservePlanAllowance(args: {
       resynced = changed || resynced;
     }
     if (resynced) {
-      billedDecision = call ? await reserveBilledScopes({ keys, encoded, amount, id, call, month: month.key, day: month.endDate }) : null;
+      billedDecision = call ? await reserveBilledScopes({ keys, encoded, amount, id, call, month: month.key, day: month.endDate, holdUntilMs }) : null;
       decision = billedDecision?.decision ?? await reserve();
       accepted = Number(Array.isArray(decision) ? decision[0] : decision);
     }
@@ -1481,4 +1489,11 @@ export async function settlePlanAllowance(reservation: PlanAllowanceReservation,
   const removed = await redis.eval(SETTLE_SCOPES_SCRIPT, keys.length, ...keys, JSON.stringify(scopes), reservation.id, String(usdToMicroUsd(actualUsd)),
     String(now), String(now - GATEWAY_REPORT_DELAY_WINDOW_MS));
   if (Number(removed) > 0 && reservation.billedCall) logBilledRelease(reservation.billedCall, reason);
+}
+
+const RENEW_HOLD_SCRIPT = `local n=0 for i=1,#KEYS do n=n+redis.call("ZADD",KEYS[i],"XX","CH",ARGV[1],ARGV[2]) end return n`;
+const LIVE_HOLD_RENEW_MS = 240_000;
+export async function renewLiveReservation(reservation: { id: string; reservationsKey?: string; scopes?: { scopes: Array<{ reservationsKey: string }> } }): Promise<boolean> {
+  const keys = [...new Set([...(reservation.scopes?.scopes.map((scope) => scope.reservationsKey) ?? []), ...(reservation.reservationsKey ? [reservation.reservationsKey] : [])])];
+  return keys.length > 0 && Number(await (await getRedis()).eval(RENEW_HOLD_SCRIPT, keys.length, ...keys, String(Date.now() + RESERVATION_TTL_MS), reservation.id)) > 0;
 }

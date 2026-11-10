@@ -821,7 +821,7 @@ export async function searchTasks({
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks");
+    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks", projectIds.length ? projectIds : projectId ? [projectId] : []);
 
   if (queryVector) {
     try {
@@ -892,7 +892,7 @@ export async function searchComments({
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchComments");
+    : await embedQueryForSearch(query, "turbopuffer searchComments", projectIds);
 
   if (queryVector) {
     try {
@@ -952,7 +952,7 @@ export async function searchCustomInstructionFiles({
   );
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles");
+    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles", [projectId]);
 
   if (queryVector) {
     try {
@@ -1132,34 +1132,46 @@ async function ensureNamespaceSchema(
   });
 }
 
-async function embedRowsForWrite<T extends { searchText: string }>(
+async function embedRowsForWrite<T extends { searchText: string; projectId?: number; teamId?: string }>(
   rows: T[],
   context: string
-): Promise<{ rows: Array<TurbopufferVectorRow<T>>; hasVectors: boolean }> {
-  try {
-    const embeddings = await embedTexts(rows.map((row) => row.searchText));
-    return {
-      rows: rows.map((row, index) => ({
-        ...row,
-        vector: embeddings[index],
-      })),
-      hasVectors: true,
-    };
-  } catch (error) {
-    console.error(
-      `${context} embedding error, upserting without vectors:`,
-      error
-    );
-    return { rows, hasVectors: false };
+): Promise<{ rows: Array<T & { vector?: number[] }>; hasVectors: boolean }> {
+  const buckets = new Map<string, T[]>();
+  for (const row of rows) buckets.set(row.teamId || `project:${row.projectId ?? ""}`, [...(buckets.get(row.teamId || `project:${row.projectId ?? ""}`) ?? []), row]);
+  const written: Array<T & { vector?: number[] }> = [];
+  for (const group of buckets.values()) {
+    const { embeddingSpendMode, withSpendCharge } = await import("@/lib/ai/spend/embeddingRoute");
+    const route = await embeddingSpendMode(group.flatMap((row) => row.projectId ? [row.projectId] : []), group.find((row) => row.teamId)?.teamId);
+    if (route === "mixed-keyword" || (typeof route !== "string" && route.mode === "keyword")) {
+      written.push(...group);
+      continue;
+    }
+    try {
+      const texts = group.map((row) => row.searchText);
+      const key = typeof route !== "string" && route.mode === "customer-key" ? route.httpKey : process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
+      if (!key) throw new Error("TURBOPUFFER_EMBEDDINGS_API_KEY is not set");
+      const run = () => texts.length === 1 ? shareInFlightEmbedding(toEmbeddingInput(texts[0]), key) : embedInputs(texts.map(toEmbeddingInput), key);
+      const vectors = typeof route !== "string" && route.mode === "vector" && route.teamId ? await withSpendCharge(route, route.teamId, texts, run) : await run();
+      if (!vectors) written.push(...group);
+      else written.push(...group.map((row, index) => ({ ...row, vector: vectors[index] })));
+    } catch (error) {
+      console.error(`${context} embedding error, upserting without vectors:`, error);
+      if (typeof route !== "string" && route.mode === "current") return { rows, hasVectors: false };
+      written.push(...group);
+    }
   }
+  return { rows: written, hasVectors: written.length > 0 };
 }
 
-async function embedQueryForSearch(
-  query: string,
-  context: string
-): Promise<number[] | null> {
+async function embedQueryForSearch(query: string, context: string, projectIds: number[] = []): Promise<number[] | null> {
+  const { embeddingSpendMode, withSpendCharge } = await import("@/lib/ai/spend/embeddingRoute");
+  const route = projectIds.length ? await embeddingSpendMode(projectIds).catch(() => ({ mode: "current" as const })) : { mode: "current" as const };
+  if (route === "mixed-keyword" || route.mode === "keyword") return null;
   try {
-    return await embedText(query);
+    const key = route.mode === "customer-key" ? route.httpKey : undefined;
+    const run = () => key ? embedInputs([toEmbeddingInput(query)], key).then((rows) => rows[0] ?? null) : embedText(query);
+    if (route.mode === "vector" && route.teamId) return await withSpendCharge(route, route.teamId, [query], run);
+    return await run();
   } catch (error) {
     console.error(`${context} embedding error, using BM25 only:`, error);
     return null;
