@@ -4,7 +4,6 @@ import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
-import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import {
   AUTO_MODEL_OPTION_ID,
@@ -57,7 +56,6 @@ export function useAiModelPreference(
   const billing = billingOverride === undefined ? boardBilling : billingOverride;
   const queryClient = useQueryClient();
   const autoModelEnabled = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
-  const taskWriterAuto = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
   const { data: userPreferences } = useGetUserPreferences();
   const currentTeamId =
     teamId === undefined ? currentProject?.teamId : teamId;
@@ -145,11 +143,7 @@ export function useAiModelPreference(
 
   const setAiOption = useCallback(
     (option: TAiModal) => {
-      let saveTaskWriterAuto = false;
-      if (taskWriterAuto && surface === "taskWriter" && option.id === AUTO_MODEL_OPTION_ID) {
-        saveTaskWriterAuto = true;
-      }
-      const autoPick = saveTaskWriterAuto || (autoModelEnabled && surface === "aiChat" && option.id === AUTO_MODEL_OPTION_ID);
+      const autoPick = autoModelEnabled && surface === "aiChat" && option.id === AUTO_MODEL_OPTION_ID;
       const validOption = autoPick ? toAutoModelOption(resolveOption()) : getAiModelOptionById(option.id, haiku55Enabled);
       if (!validOption) return;
 
@@ -199,7 +193,7 @@ export function useAiModelPreference(
           console.log("useAiModelPreference update error:", error);
         });
     },
-    [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, resolveOption, surface, taskWriterAuto, userPreferences],
+    [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, resolveOption, surface, userPreferences],
   );
 
   return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption };
