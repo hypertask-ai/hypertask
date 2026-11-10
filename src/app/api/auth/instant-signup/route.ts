@@ -14,6 +14,7 @@ import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7294_DAILY_FUNNEL_PROBE_FLAG } from '@/lib/flags/definitions/htpr-7294-daily-funnel-probe'
 import { storeProbeVerificationLink } from '@/lib/funnelProbe/inbox'
 import { isProbeRecipientEmail } from '@/lib/funnelProbe/inbox'
+import { gateProbeInstantSignup } from '@/lib/funnelProbe/signupGuard'
 
 const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
 
@@ -132,6 +133,18 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.trim().toLowerCase()
     console.log('📧 Instant signup for:', normalizedEmail)
+
+    const probeGate = await gateProbeInstantSignup(
+      request.headers.get('authorization'),
+      normalizedEmail,
+      process.env.CRON_SECRET,
+    )
+    if (!probeGate.ok) {
+      return NextResponse.json(
+        { success: false, error: probeGate.error, code: probeGate.code },
+        { status: probeGate.status },
+      )
+    }
 
     const rateLimitCheck = VerificationCodeService.isRateLimited(normalizedEmail)
     if (rateLimitCheck.limited) {
