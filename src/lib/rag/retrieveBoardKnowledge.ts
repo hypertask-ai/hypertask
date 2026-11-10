@@ -9,7 +9,6 @@ import {
   type TurbopufferCommentRow,
   type TurbopufferTaskRow,
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
-import { NON_LIVE_STATUSES } from "@/utils/controllers/turbopuffer/searchStatusFilter";
 
 type SearchStatus = "Normal" | "Archive" | "Deleted";
 
@@ -190,7 +189,7 @@ export async function retrieveBoardKnowledge(
       searchQuery: input.query,
       projectIds,
       status,
-      excludeStatuses: NON_LIVE_STATUSES,
+      excludeStatuses: ["Deleted", "Archive"],
       projectId: filterProjectId,
       topK: Math.max(input.limit * 2, 20),
     }),
@@ -198,7 +197,7 @@ export async function retrieveBoardKnowledge(
       searchQuery: input.query,
       projectIds,
       status,
-      excludeStatuses: NON_LIVE_STATUSES,
+      excludeStatuses: ["Deleted", "Archive"],
       topK: Math.max(input.limit * 4, 50),
       limit: Math.max(input.limit, 10),
     }),

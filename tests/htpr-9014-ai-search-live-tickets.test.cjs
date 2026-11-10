@@ -3,7 +3,17 @@ const test = require("node:test");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
 const statusFilter = loadModule(
-  "src/utils/controllers/turbopuffer/searchStatusFilter.ts"
+  "src/utils/controllers/turbopuffer/turbopufferHelper.ts",
+  {
+    "@/lib/prisma": { default: {} },
+    "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
+    "@/lib/turbopuffer": {
+      default: { namespace: () => ({ write: async () => ({}), query: async () => ({}) }) },
+      turbopufferNamespaces: { task: { name: "task" }, comment: { name: "comment" }, page: { name: "page" }, customInstructionFile: { name: "custom-instruction-file" } },
+    },
+    "@/utils/controllers/search/rankHits": { parseTicketSearchQuery: () => null },
+    "@/app/api/ai/_lib/boardMemoryContract": { buildCustomInstructionSearchFilters: () => null },
+  }
 );
 const liveOnly = ["Deleted", "Archive"];
 
@@ -16,7 +26,7 @@ test("a search with no status never keeps trashed tickets", () => {
 });
 
 test("the AI surfaces exclude both trashed and archived tickets by default", () => {
-  assert.deepEqual(statusFilter.NON_LIVE_STATUSES, liveOnly);
+  assert.deepEqual(statusFilter.TRASHED_STATUSES, ["Deleted"]);
   assert.deepEqual(
     statusFilter.buildSearchStatusFilter("taskStatus", undefined, liveOnly),
     [

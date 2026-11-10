@@ -24,10 +24,6 @@ import { Prisma } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
-import {
-  deleteTasksFromTurbopuffer,
-  upsertTasksToTurbopuffer,
-} from "@/utils/controllers/turbopuffer/turbopufferHelper";
 
 export class TaskHardDeleteInProgressError extends Error {
   constructor() {
@@ -156,7 +152,8 @@ async function updateTaskTreeStatus(
   actingUserId: number | null,
   actingAgentId: string | null
 ) {
-  const { task, taskIds } = await prisma.$transaction(async (tx) => {
+  const trashedTaskIds: number[] = []
+  const task = await prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<TaskTreeRow[]>`
       WITH RECURSIVE task_tree AS (
         -- HTPR-7187: stay on the root's board; legacy cross-board sub-tasks
@@ -197,8 +194,9 @@ async function updateTaskTreeStatus(
     const targetAlreadyApplied = lockedRows.every(({ status: currentStatus }) =>
       status === "Normal" ? currentStatus === "Normal" : currentStatus === "Deleted"
     )
+    trashedTaskIds.push(...taskIds)
     if (targetAlreadyApplied) {
-      return { task: stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
+      return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
         where: { id: rootTaskId },
         select: {
           id: true,
@@ -206,7 +204,7 @@ async function updateTaskTreeStatus(
           subTasks: { orderBy: { status: "desc" } },
           parentTask: { include: { subTasks: true } },
         },
-      })), taskIds }
+      }))
     }
     if (isHumanOverride) {
       for (const id of taskIds) {
@@ -254,7 +252,7 @@ async function updateTaskTreeStatus(
     await tx.notification.deleteMany({
       where: { taskId: { in: taskIds } },
     })
-    return { task: stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
+    return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
       where: { id: rootTaskId },
       select: {
         id: true,
@@ -262,10 +260,10 @@ async function updateTaskTreeStatus(
         subTasks: { orderBy: { status: "desc" } },
         parentTask: { include: { subTasks: true } },
       },
-    })), taskIds }
+    }))
   }, { timeout: 30_000 })
 
-  await syncTaskTreeSearchIndex(taskIds, status)
+  await syncTaskTreeSearchIndex(trashedTaskIds, status)
   return task
 }
 
@@ -273,7 +271,11 @@ async function syncTaskTreeSearchIndex(
   taskIds: number[],
   status: "Deleted" | "Normal",
 ) {
+  if (taskIds.length === 0) return
   try {
+    const { deleteTasksFromTurbopuffer, upsertTasksToTurbopuffer } = await import(
+      "@/utils/controllers/turbopuffer/turbopufferHelper"
+    )
     if (status === "Deleted") {
       await deleteTasksFromTurbopuffer(taskIds)
       return
