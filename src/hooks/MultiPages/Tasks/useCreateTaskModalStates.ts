@@ -56,8 +56,11 @@ import { taskWriterRoute } from "@/lib/constants/APIRouteConstants";
 import { extractTitleAndDescription } from "@/utils/aiWriterUtils";
 import {
   createAiTitleEditTracker,
+  createTaskWriterFieldDiffTracker,
   recordBoardMemorySignal,
+  type TaskWriterSnapshotSource,
 } from "@/lib/ai/boardMemoryClient";
+import { HTPR_9010_TASK_WRITER_MEMORY_FLAG } from "@/lib/flags/definitions/htpr-9010-task-writer-memory";
 import { createDictationCoordinator } from "@/lib/dictationCoordinator";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import { normalizeCreateTaskFormDate } from "@/lib/createTaskFormDate";
@@ -133,6 +136,8 @@ const useCreateTaskModalGlobalStates = () => {
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const saveEpochRef = useRef(0);
   const generatedTitleTrackerRef = useRef(createAiTitleEditTracker());
+  const taskWriterFieldDiffTrackerRef = useRef(createTaskWriterFieldDiffTracker());
+  const taskWriterMemoryEnabled = useFlag(HTPR_9010_TASK_WRITER_MEMORY_FLAG);
   const autoTitleCoordinatorRef = useRef<ReturnType<
     typeof createAutoTitleGenerationCoordinator
   > | null>(null);
@@ -290,6 +295,7 @@ const useCreateTaskModalGlobalStates = () => {
   const resetFormValues = () => {
     saveEpochRef.current += 1;
     generatedTitleTrackerRef.current.reset();
+    taskWriterFieldDiffTrackerRef.current.reset();
     autoTitleCoordinator.reset(defaultFormValues.title);
     lastDescriptionTextRef.current = descriptionText(defaultFormValues.description);
     formValuesRef.current = defaultFormValues;
@@ -337,6 +343,14 @@ const useCreateTaskModalGlobalStates = () => {
       title: appendTitleDictation(current.title, transcript),
     }));
   }, []);
+
+  const recordTaskWriterDraft = useCallback(
+    (note: string, draft: TaskWriterSnapshotSource) => {
+      if (!taskWriterMemoryEnabled) return;
+      taskWriterFieldDiffTrackerRef.current.record(note, draft);
+    },
+    [taskWriterMemoryEnabled],
+  );
 
   const applyTaskWriterTitle = useCallback((title: string) => {
     autoTitleCoordinator.taskWriterTitleApplied();
@@ -481,6 +495,7 @@ const useCreateTaskModalGlobalStates = () => {
     saveEpochRef.current += 1;
     setIsGeneratingTitle(false);
     generatedTitleTrackerRef.current.reset();
+    taskWriterFieldDiffTrackerRef.current.reset();
     const clearGeneratedTitle = autoTitleCoordinator.boardChanged();
     const viewDefaults = getNewTaskViewDefaults(getActiveFiltersFromProject(project));
     const boardChanged = formValuesRef.current.currentProject?.id !== project.id;
@@ -709,6 +724,16 @@ const useCreateTaskModalGlobalStates = () => {
         titleEditSignal
       );
     }
+    const fieldDiffSignal = taskWriterFieldDiffTrackerRef.current.takeSignal({
+      ...formValuesAtSave,
+      title: savedTitle,
+    });
+    if (fieldDiffSignal && taskWriterMemoryEnabled) {
+      void recordBoardMemorySignal(
+        formValuesAtSave.currentProject?.id,
+        fieldDiffSignal
+      );
+    }
     localStorage.setItem(
       "MENTION_PROJECT_ID",
       (formValuesAtSave.currentProject?.id ?? "").toString()
@@ -769,6 +794,7 @@ const useCreateTaskModalGlobalStates = () => {
     improveWritingModel,
     improveWritingSource,
     rememberNewTicketForChat,
+    taskWriterMemoryEnabled,
   ]);
 
   const processFollowers = (
@@ -964,6 +990,7 @@ const useCreateTaskModalGlobalStates = () => {
     onCancelDiscard,
     userInput,
     handleSetUserInput,
+    recordTaskWriterDraft,
     parentTaskInfo,
     allProjects,
     handleProjectChange,

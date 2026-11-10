@@ -63,7 +63,8 @@ export interface IAITaskWriterContainerProps {
   returnTitleAndDescription: (
     title: string,
     description: string,
-    props?: ITaskWriterProperties
+    props?: ITaskWriterProperties,
+    note?: string
   ) => void;
   applyCreateTaskResult?: (
     result: ITaskWriterResult,

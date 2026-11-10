@@ -362,7 +362,7 @@ const AITaskWriterContainer: React.FC<
         case "AcceptDescTitle": {
           const result = extractTitleAndDescription(currentDisplayResponse);
           AISaveHandler(result.description, currentItem?.attachments);
-          returnTitleAndDescription?.(result.title ?? "", result.description);
+          returnTitleAndDescription?.(result.title ?? "", result.description, undefined, firstBrief ?? userPrompt);
           clearHistory();
           break;
         }
@@ -382,7 +382,7 @@ const AITaskWriterContainer: React.FC<
             assignees: result.assignees,
             dueDate: result.dueDate,
             startDate: result.startDate,
-          });
+          }, firstBrief ?? userPrompt);
           clearHistory();
           break;
         }
@@ -405,6 +405,8 @@ const AITaskWriterContainer: React.FC<
       getCurrentResponseItem,
       clearHistory,
       returnTitleAndDescription,
+      firstBrief,
+      userPrompt,
       sendAIRequest,
       projectId,
       projectLabels,

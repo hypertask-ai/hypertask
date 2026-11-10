@@ -1,5 +1,22 @@
 import { boardMemoryRoute } from "@/lib/constants/APIRouteConstants";
 import type { TAiMode } from "@/models/AI_Task_writer_model/AiTaskWriter.models";
+import type { IForm } from "@/models/CreateTaskModalModels/model";
+
+export const TASK_WRITER_NOTE_MAX_LENGTH = 2_000;
+
+export type TaskWriterFieldSnapshot = {
+  title?: string | null;
+  priority?: string | null;
+  estimate?: string | null;
+  labels?: string[];
+  status?: string | null;
+  dueDate?: string | null;
+  startDate?: string | null;
+};
+
+export type TaskWriterSnapshotSource = Partial<
+  Pick<IForm, "priority" | "estimate" | "tags" | "status" | "dueDate" | "startDate">
+> & { title?: string | null };
 
 export type BoardMemoryClientSignal =
   | {
@@ -11,6 +28,12 @@ export type BoardMemoryClientSignal =
       type: "edited_ai_title";
       originalText: string;
       correctedText: string;
+    }
+  | {
+      type: "task_writer_field_diff";
+      note: string;
+      draft: TaskWriterFieldSnapshot;
+      saved: TaskWriterFieldSnapshot;
     };
 
 const BOARD_MEMORY_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -60,6 +83,70 @@ export function createAiTitleEditTracker() {
         originalText: original,
         correctedText: saved,
       };
+    },
+  };
+}
+
+function snapshotDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
+export function snapshotTaskWriterFields(
+  source: TaskWriterSnapshotSource,
+): Required<TaskWriterFieldSnapshot> {
+  return {
+    title: source.title?.trim() || null,
+    priority: source.priority?.Priority_Value ?? null,
+    estimate: source.estimate?.estimate_full_value ?? null,
+    labels: (source.tags ?? []).map((tag) => tag.value).sort(),
+    status: source.status?.sectionTitle ?? null,
+    dueDate: snapshotDate(source.dueDate),
+    startDate: snapshotDate(source.startDate),
+  };
+}
+
+export function diffTaskWriterFields(
+  draft: Required<TaskWriterFieldSnapshot>,
+  saved: Required<TaskWriterFieldSnapshot>,
+) {
+  const draftChanges: TaskWriterFieldSnapshot = {};
+  const savedChanges: TaskWriterFieldSnapshot = {};
+  for (const key of Object.keys(draft) as (keyof typeof draft)[]) {
+    if (JSON.stringify(draft[key]) === JSON.stringify(saved[key])) continue;
+    Object.assign(draftChanges, { [key]: draft[key] });
+    Object.assign(savedChanges, { [key]: saved[key] });
+  }
+  return { draft: draftChanges, saved: savedChanges };
+}
+
+export function createTaskWriterFieldDiffTracker() {
+  let pending: {
+    note: string;
+    draft: Required<TaskWriterFieldSnapshot>;
+  } | null = null;
+
+  return {
+    record(note: string, draft: TaskWriterSnapshotSource) {
+      const trimmed = note.trim().slice(0, TASK_WRITER_NOTE_MAX_LENGTH);
+      pending = trimmed
+        ? { note: trimmed, draft: snapshotTaskWriterFields(draft) }
+        : null;
+    },
+    reset() {
+      pending = null;
+    },
+    takeSignal(saved: TaskWriterSnapshotSource): BoardMemoryClientSignal | null {
+      const current = pending;
+      pending = null;
+      if (!current) return null;
+      const diff = diffTaskWriterFields(
+        current.draft,
+        snapshotTaskWriterFields(saved),
+      );
+      if (Object.keys(diff.saved).length === 0) return null;
+      return { type: "task_writer_field_diff", note: current.note, ...diff };
     },
   };
 }

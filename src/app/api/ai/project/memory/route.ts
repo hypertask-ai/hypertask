@@ -11,6 +11,7 @@ import {
 } from "@/app/api/ai/_lib/boardMemory";
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
 import { isBoardMemoryFactSource } from "@/app/api/ai/_lib/boardMemoryContract";
+import { prepareTaskWriterFieldDiffSignal } from "@/app/api/ai/_lib/taskWriterFieldDiff";
 import {
   BoardMemoryBusyError,
   BoardMemoryRateLimitError,
@@ -29,7 +30,20 @@ const toggleSchema = z.object({
   enabled: z.boolean(),
   projectId: projectIdSchema,
 });
-const learnSchema = z.discriminatedUnion("type", [
+const fieldDiffValueSchema = z.string().trim().max(300).nullable();
+const fieldDiffFieldsSchema = z
+  .object({
+    title: fieldDiffValueSchema,
+    priority: fieldDiffValueSchema,
+    estimate: fieldDiffValueSchema,
+    labels: z.array(z.string().trim().max(100)).max(30),
+    status: fieldDiffValueSchema,
+    dueDate: fieldDiffValueSchema,
+    startDate: fieldDiffValueSchema,
+  })
+  .partial()
+  .strict();
+const learnSchema =z.discriminatedUnion("type", [
   z.object({
     projectId: projectIdSchema,
     type: z.literal("task_writer_correction"),
@@ -41,6 +55,13 @@ const learnSchema = z.discriminatedUnion("type", [
     type: z.literal("edited_ai_title"),
     originalText: z.string().trim().min(1).max(500),
     correctedText: z.string().trim().min(1).max(500),
+  }),
+  z.object({
+    projectId: projectIdSchema,
+    type: z.literal("task_writer_field_diff"),
+    note: z.string().trim().min(1).max(20_000),
+    draft: fieldDiffFieldsSchema,
+    saved: fieldDiffFieldsSchema,
   }),
 ]);
 
@@ -63,7 +84,14 @@ export async function PATCH(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withUser(async (userId) => {
     const input = learnSchema.parse(await request.json());
-    const { projectId, ...signal } = input;
+    const { projectId, ...parsedSignal } = input;
+    const signal =
+      parsedSignal.type === "task_writer_field_diff"
+        ? await prepareTaskWriterFieldDiffSignal(parsedSignal, userId)
+        : parsedSignal;
+    if (!signal) {
+      return NextResponse.json({ enabled: false, learned: [] as string[] });
+    }
     return NextResponse.json(
       await learnBoardMemoryFromSignal({ projectId, signal, userId }),
     );

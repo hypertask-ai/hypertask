@@ -30,6 +30,7 @@ import {
   isBoardMemoryFactSource,
   normalizeLearnedMemoryFacts,
 } from "@/app/api/ai/_lib/boardMemoryContract";
+import type { TaskWriterFieldDiffSignal } from "@/app/api/ai/_lib/taskWriterFieldDiff";
 import {
   BoardMemoryBusyError,
   bumpBoardMemoryRevision,
@@ -64,7 +65,8 @@ export type BoardMemorySignal =
       type: "edited_ai_title";
       originalText: string;
       correctedText: string;
-    };
+    }
+  | TaskWriterFieldDiffSignal;
 
 export type BoardMemoryEntry = {
   content: string;

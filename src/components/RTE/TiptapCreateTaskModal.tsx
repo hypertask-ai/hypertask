@@ -119,6 +119,7 @@ const TiptapCreateTaskModal = () => {
     toggleRecording,
     isRecording,
     applyTaskWriterTitle,
+    recordTaskWriterDraft,
     enableAutoTitleGeneration,
     scheduleTitleGeneration,
     generateTitleFromDescription,
@@ -1151,8 +1152,9 @@ const TiptapCreateTaskModal = () => {
                   callbackAttachments(mappedAttachments);
                   handleFocus(true);
                 }}
-                returnTitleAndDescription={(title, description, props) => {
+                returnTitleAndDescription={(title, description, props, note) => {
                   if (title) applyTaskWriterTitle(title);
+                  recordTaskWriterDraft(note ?? "", { title, ...props });
                   if (props?.priority) handleChange("priority", props.priority);
                   if (props?.estimate) handleChange("estimate", props.estimate);
                   if (props?.tags) handleChange("tags", props.tags);
