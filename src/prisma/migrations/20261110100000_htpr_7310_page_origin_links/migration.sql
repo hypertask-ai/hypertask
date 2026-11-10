@@ -10,7 +10,6 @@ WHERE p."taskId" IS NOT NULL
     SELECT 1
     FROM "PageTaskLink" l
     WHERE l."pageId" = p."id"
-      AND l."taskId" = p."taskId"
   )
 ON CONFLICT ("pageId", "taskId") DO NOTHING;
 
@@ -24,10 +23,9 @@ BEGIN
         SELECT 1
         FROM "PageTaskLink" l
         WHERE l."pageId" = p."id"
-          AND l."taskId" = p."taskId"
       )
   ) THEN
-    RAISE EXCEPTION 'HTPR-7310: page origin ticket missing PageTaskLink row';
+    RAISE EXCEPTION 'HTPR-7310: page with origin ticket has no PageTaskLink rows';
   END IF;
 END $$;
 

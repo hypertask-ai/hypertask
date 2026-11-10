@@ -103,7 +103,7 @@ test('review 2 lists/metadata: unlinked origin refused when other links remain /
     assert.equal(originRows.some((page) => page.publicId === 'page'), !enabled);
     const linkedRows = await h.service.listPages({ taskId: 11, userId: 3, standalonePagesEnabled: enabled });
     assert.deepEqual(linkedRows.map((page) => page.publicId).sort(), enabled ? ['old-writer-page', 'page'] : ['old-writer-page']);
-    assert.deepEqual(linkedRows.find((page) => page.publicId === 'old-writer-page').linkedTasks.map((task) => task.id), enabled ? [] : [11]);
+    assert.deepEqual(linkedRows.find((page) => page.publicId === 'old-writer-page').linkedTasks.map((task) => task.id), [11]);
     const page = await h.service.getPage({ publicId: 'page', userId: 3, standalonePagesEnabled: enabled });
     assert.deepEqual(page.linkedTasks.map((task) => task.id), enabled ? [11] : [10]);
     if (enabled) assert.deepEqual(linkedRows.find((page) => page.publicId === 'page').linkedTasks.map((task) => task.id), [11]);

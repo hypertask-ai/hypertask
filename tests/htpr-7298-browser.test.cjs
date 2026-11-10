@@ -208,7 +208,7 @@ for (const [name, userId, visible] of [['ticket-only viewer omits linked page', 
     const { body, status } = await h.request('list', 'GET', undefined, 'task_id=10');
     assert.equal(status, 200);
     assert.equal(body.pages.some((p) => p.publicId === 'page'), visible);
-    assert.equal(body.pages.length, visible ? 2 : 1);
+    assert.equal(body.pages.length, visible ? 1 : 0);
     if (!visible) assert.doesNotMatch(JSON.stringify(body), /Page title/);
   });
 }
@@ -261,7 +261,7 @@ test('unlink flag off is refused without mutations / flag on is allowed', async 
     const h = harness({ flag: enabled });
     const result = await h.request('[publicId]/links', 'DELETE', { task_id: 10 });
     assert.equal(result.status, enabled ? 200 : 404);
-    assert.equal(h.state.links.length, 2);
+    assert.equal(h.state.links.length, 3);
     assert.equal(h.state.links.filter((link) => link.removedAt === null).length, enabled ? 1 : 2);
   }
 });
