@@ -24,6 +24,10 @@ import { Prisma } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
+import {
+  deleteTasksFromTurbopuffer,
+  upsertTasksToTurbopuffer,
+} from "@/utils/controllers/turbopuffer/turbopufferHelper";
 
 export class TaskHardDeleteInProgressError extends Error {
   constructor() {
@@ -152,7 +156,7 @@ async function updateTaskTreeStatus(
   actingUserId: number | null,
   actingAgentId: string | null
 ) {
-  return prisma.$transaction(async (tx) => {
+  const { task, taskIds } = await prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<TaskTreeRow[]>`
       WITH RECURSIVE task_tree AS (
         -- HTPR-7187: stay on the root's board; legacy cross-board sub-tasks
@@ -194,7 +198,7 @@ async function updateTaskTreeStatus(
       status === "Normal" ? currentStatus === "Normal" : currentStatus === "Deleted"
     )
     if (targetAlreadyApplied) {
-      return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
+      return { task: stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
         where: { id: rootTaskId },
         select: {
           id: true,
@@ -202,7 +206,7 @@ async function updateTaskTreeStatus(
           subTasks: { orderBy: { status: "desc" } },
           parentTask: { include: { subTasks: true } },
         },
-      }))
+      })), taskIds }
     }
     if (isHumanOverride) {
       for (const id of taskIds) {
@@ -250,7 +254,7 @@ async function updateTaskTreeStatus(
     await tx.notification.deleteMany({
       where: { taskId: { in: taskIds } },
     })
-    return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
+    return { task: stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
       where: { id: rootTaskId },
       select: {
         id: true,
@@ -258,6 +262,24 @@ async function updateTaskTreeStatus(
         subTasks: { orderBy: { status: "desc" } },
         parentTask: { include: { subTasks: true } },
       },
-    }))
+    })), taskIds }
   }, { timeout: 30_000 })
+
+  await syncTaskTreeSearchIndex(taskIds, status)
+  return task
+}
+
+async function syncTaskTreeSearchIndex(
+  taskIds: number[],
+  status: "Deleted" | "Normal",
+) {
+  try {
+    if (status === "Deleted") {
+      await deleteTasksFromTurbopuffer(taskIds)
+      return
+    }
+    await upsertTasksToTurbopuffer(taskIds)
+  } catch (error) {
+    console.log("search index sync after trash or restore failed:", error)
+  }
 }

@@ -8,7 +8,6 @@ import {
   TaskHardDeleteInProgressError,
   updateTaskAndSubtasks,
 } from "@/pages/api/queues/tasks/taskDeleteReminder"
-import { upsertTaskToTurbopuffer } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { AgentMutationLeaseConflictError } from '@/lib/mcp/tasks/agentMutationFence'
 
@@ -46,7 +45,7 @@ const route = taskWriteRoute({
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
     if (!allowedTask) return NextResponse.json({message:"Task not found or access denied"}, { status: 404 })
-    const updatedTask = await updateTaskAndSubtasks(
+    await updateTaskAndSubtasks(
       { id: Number(taskId) },
       "Normal",
       null,
@@ -59,8 +58,6 @@ const route = taskWriteRoute({
     } catch (cancelError) {
       console.warn("recoverTask: restored; delete-job cancellation will no-op", cancelError)
     }
-    upsertTaskToTurbopuffer(updatedTask.id)
-
     return NextResponse.json({message:"Success"}, { status: 200 })
   },
 });

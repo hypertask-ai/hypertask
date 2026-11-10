@@ -52,6 +52,7 @@ import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIn
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
 import { authorizeIndexedRows } from "@/lib/rag/authorizeIndexedRows";
 import { searchTasks } from "@/utils/controllers/turbopuffer/turbopufferHelper";
+import { NON_LIVE_STATUSES } from "@/utils/controllers/turbopuffer/searchStatusFilter";
 import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 
 const byokProviderFlagSchema = z
@@ -285,6 +286,7 @@ export async function prepareTaskWriterRun(
       ? searchTasks({
           searchQuery: retrievalQuery,
           projectIds: [body.projectId],
+          excludeStatuses: NON_LIVE_STATUSES,
           topK: Math.min(
             TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
             TASK_WRITER_RELATED_CANDIDATE_LIMIT +

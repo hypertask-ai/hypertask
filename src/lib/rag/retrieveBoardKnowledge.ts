@@ -9,6 +9,7 @@ import {
   type TurbopufferCommentRow,
   type TurbopufferTaskRow,
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
+import { NON_LIVE_STATUSES } from "@/utils/controllers/turbopuffer/searchStatusFilter";
 
 type SearchStatus = "Normal" | "Archive" | "Deleted";
 
@@ -177,9 +178,10 @@ export async function retrieveBoardKnowledge(
     return { success: false, error: "Project not found or access denied" };
   }
 
-  const status = stringFilterValue(input.metadataFilters, ["status"]) as
-    | SearchStatus
-    | undefined;
+  const requestedStatus = stringFilterValue(input.metadataFilters, [
+    "status",
+  ]) as SearchStatus | undefined;
+  const status = requestedStatus === "Normal" ? requestedStatus : undefined;
   const projectIds = filterProjectId
     ? [filterProjectId]
     : accessibleProjectIds;
@@ -188,6 +190,7 @@ export async function retrieveBoardKnowledge(
       searchQuery: input.query,
       projectIds,
       status,
+      excludeStatuses: NON_LIVE_STATUSES,
       projectId: filterProjectId,
       topK: Math.max(input.limit * 2, 20),
     }),
@@ -195,6 +198,7 @@ export async function retrieveBoardKnowledge(
       searchQuery: input.query,
       projectIds,
       status,
+      excludeStatuses: NON_LIVE_STATUSES,
       topK: Math.max(input.limit * 4, 50),
       limit: Math.max(input.limit, 10),
     }),

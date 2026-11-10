@@ -10,8 +10,11 @@ import {
   type TicketSearchQuery,
 } from "@/utils/controllers/search/rankHits";
 import { buildCustomInstructionSearchFilters } from "@/app/api/ai/_lib/boardMemoryContract";
-
-type SearchStatus = "Normal" | "Archive" | "Deleted";
+import {
+  buildSearchStatusFilter,
+  TRASHED_STATUSES,
+  type SearchStatus,
+} from "./searchStatusFilter";
 
 export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const EMBEDDINGS_ENDPOINT = "https://ai-gateway.vercel.sh/v1/embeddings";
@@ -238,6 +241,7 @@ type SearchTasksParams = {
   searchQuery: string;
   projectIds: number[];
   status?: SearchStatus | null;
+  excludeStatuses?: SearchStatus[];
   projectId?: number | null;
   topK?: number;
   keywordOnly?: boolean;
@@ -247,6 +251,7 @@ type SearchCommentsParams = {
   searchQuery: string;
   projectIds: number[];
   status?: SearchStatus | null;
+  excludeStatuses?: SearchStatus[];
   topK?: number;
   limit?: number;
   keywordOnly?: boolean;
@@ -746,6 +751,20 @@ export async function deleteDocsInTurbopuffer(
   });
 }
 
+export async function deleteTasksFromTurbopuffer(taskIds: number[]) {
+  for (const taskId of taskIds) {
+    await deleteTaskInTurbopuffer(taskId);
+    await deleteManyCommentsInTurbopuffer(taskId);
+  }
+}
+
+export async function upsertTasksToTurbopuffer(taskIds: number[]) {
+  for (const taskId of taskIds) {
+    await upsertTaskToTurbopuffer(taskId);
+    await upsertAllCommentsToTurbopuffer(taskId);
+  }
+}
+
 export async function upsertCustomInstructionFileRowsToTurbopuffer(
   rows: TurbopufferCustomInstructionFileRow[],
   options: {
@@ -799,6 +818,7 @@ export async function searchTasks({
   searchQuery,
   projectIds,
   status,
+  excludeStatuses = TRASHED_STATUSES,
   projectId,
   topK = 50,
   keywordOnly = false,
@@ -809,14 +829,16 @@ export async function searchTasks({
 
   const ticketQuery = parseTicketSearchQuery(query);
   const rankQuery = ticketQuery?.normalizedQuery ?? query;
-  const filters = combineFilters([
-    projectFilter,
-    status ? ["status", "Eq", status] : null,
-  ]);
+  const statusFilter = buildSearchStatusFilter(
+    "status",
+    status,
+    excludeStatuses
+  );
+  const filters = combineFilters([projectFilter, statusFilter]);
   const exactRowsPromise = searchExactTaskRowsByTicket(
     ticketQuery,
     projectFilter,
-    status
+    statusFilter
   );
 
   const queryVector = keywordOnly
@@ -876,6 +898,7 @@ export async function searchComments({
   searchQuery,
   projectIds,
   status,
+  excludeStatuses = TRASHED_STATUSES,
   topK = 200,
   limit = 50,
   keywordOnly = false,
@@ -887,7 +910,7 @@ export async function searchComments({
 
   const filters = combineFilters([
     projectFilter,
-    status ? ["taskStatus", "Eq", status] : null,
+    buildSearchStatusFilter("taskStatus", status, excludeStatuses),
   ]);
 
   const queryVector = keywordOnly
@@ -1200,7 +1223,7 @@ async function searchTaskRowsWithBm25(
 async function searchExactTaskRowsByTicket(
   ticketQuery: TicketSearchQuery | null,
   projectFilter: unknown[],
-  status?: SearchStatus | null
+  statusFilter: unknown[] | null
 ): Promise<TurbopufferTaskRow[]> {
   if (!ticketQuery) return [];
 
@@ -1210,7 +1233,7 @@ async function searchExactTaskRowsByTicket(
       .query({
         filters: combineFilters([
           projectFilter,
-          status ? ["status", "Eq", status] : null,
+          statusFilter,
           ["uniqueIndex", "Eq", ticketQuery.uniqueIndex],
         ]),
         include_attributes: TASK_INCLUDE_ATTRIBUTES,
