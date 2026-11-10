@@ -22,10 +22,10 @@ args = sys.argv[1:]
 secret = 'fixture-only-bearer-value'
 mode = os.environ.get('FAKE_MODE', '')
 if args[:2] == ['agents', 'create']:
-    assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '4060', '--json']
+    assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '2060', '--project', '11514', '--json']
     call = ['create', args[3]]
 else:
-    assert args == ['--json', '--token', secret, 'tasks', 'get', 'YPER4-159']
+    assert args == ['--json', '--token', secret, 'context']
     call = ['read', 'verified token']
 with open(os.environ['CALLS'], 'a') as f:
     f.write(json.dumps(call) + '\\n')
@@ -41,7 +41,9 @@ if call[0] == 'create':
     else:
         print(json.dumps({'token': '' if mode == 'empty-token' else secret}))
 else:
-    print(json.dumps({'success': True, 'tasks': [{'ticketNumber': 'HTPR-1' if mode == 'wrong-ticket' else 'YPER4-159'}]}))
+    tokens = sorted((pathlib.Path.home() / '.config/hypertask-agents/credentials').glob('runner-*-agent-token'), key=lambda p: p.stat().st_mtime)
+    n = tokens[-1].name.split('-')[1] if tokens else '0'
+    print(json.dumps({'success': True, 'connected_agent': {'displayName': 'Runner 999' if mode == 'wrong-ticket' else 'Runner ' + n}}))
 ''')
     cli.chmod(0o755)
     base_env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'])
