@@ -21,11 +21,13 @@ const cleanTagIds = (value: unknown): string[] => {
   const valid = list.filter((entry): entry is string => typeof entry === "string" && TAG_ID.test(entry));
   return [...new Set(valid)].slice(0, MAX_SELECTED_TAGS);
 };
+
 export const serializeTableGrouping = (mode: TableGroupBy, tagIds: unknown = []): string => {
   if (mode !== "tag") return mode;
   const ids = cleanTagIds(tagIds);
   return ids.length > 0 ? `${TAG_PREFIX}${ids.join(",")}` : TABLE_GROUP_BY_TAG_NONE;
 };
+
 export const sanitizeTableGrouping = (value: unknown): string | null => {
   if (isTableGroupBy(value) || value === TABLE_GROUP_BY_TAG_NONE) return value as string;
   if (typeof value !== "string" || !value.startsWith(TAG_PREFIX)) return null;
