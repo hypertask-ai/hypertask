@@ -23,6 +23,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useFlag } from '@/hooks/useFlag'
 import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from '@/lib/flags/keys'
 import { HTPR_8172_NEW_TASK_AI_NAVIGATION_FLAG } from '@/lib/flags/definitions/htpr-8172-new-task-ai-navigation'
+import { HTPR_9002_CTRL_J_NEW_TASK_FLAG } from '@/lib/flags/definitions/htpr-9002-ctrl-j-new-task'
 const Tooltip = dynamic(() => import("@/components/Common/Tooltip"), { ssr: false })
 
 const attachmentButtonId = "create-task-modal-attachmentUpload"
@@ -43,9 +44,10 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     } = useContextCreateTaskModal()
     const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG)
     const keepTaskAiNavigation = useFlag(HTPR_8172_NEW_TASK_AI_NAVIGATION_FLAG)
+    const ctrlJWritesInDescription = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG) && !_mbl
     const router = useRouter()
     const sidebarHandoffPending = useRef(false)
-    useEffect(ctrlJSidebarOnNewTask ? () => {
+    useEffect(ctrlJSidebarOnNewTask && !ctrlJWritesInDescription ? () => {
         const openNewTaskSidebar = async (event: KeyboardEvent) => {
             const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey)
             if (!document.getElementById("createTaskModal") || event.key.toLowerCase() !== "j" || !cmdControl || event.shiftKey || event.altKey || event.isComposing || isRecording || showAssignModal || showConfirmationModal) return
@@ -73,7 +75,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         }
         window.addEventListener("keydown", openNewTaskSidebar, true)
         return () => window.removeEventListener("keydown", openNewTaskSidebar, true)
-    } : () => {}, [ctrlJSidebarOnNewTask, keepTaskAiNavigation, _mbl, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
+    } : () => {}, [ctrlJSidebarOnNewTask, ctrlJWritesInDescription, keepTaskAiNavigation, _mbl, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
 
     const {
         toggleMoveModal, toggleShowSizeModal, toggleDueDateModal,

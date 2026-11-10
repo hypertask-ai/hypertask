@@ -59,7 +59,16 @@ import type {
   ITaskWriterResult,
 } from "@/models/AI_Task_writer_model";
 import type { IAgent, IUser } from "@/models/model";
-import { mergeMobileCreateTaskWriterResult } from "@/utils/aiWriterUtils";
+import { extractTaskProperties, mergeMobileCreateTaskWriterResult } from "@/utils/aiWriterUtils";
+import InlineDraftAiFloat from "@/components/RTE/Components/InlineDraftAiFloat";
+import { HTPR_9002_CTRL_J_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-9002-ctrl-j-new-task";
+import {
+  isNewTaskCtrlJ,
+  requestNewTaskWrite,
+  shapeNewTaskWriteResult,
+  type NewTaskWriter,
+} from "@/lib/ai/newTaskWrite";
+import { useNewTaskWriteChips } from "@/hooks/MultiPages/Tasks/useNewTaskWriteChips";
 import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   buildTaskWriterAutoDraftPrompt,
@@ -189,6 +198,9 @@ const TiptapCreateTaskModal = () => {
   let composeShortcutCapture = true;
   if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
   const newTaskWindow = !mobileWriterSave;
+  const ctrlJInlineWrite =
+    useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG) && newTaskWindow && !isMbl;
+  const [inlineAiOpen, setInlineAiOpen] = useState(false);
   const setCommands = useSetRecoilState(showCommandsAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const [writerOpen, setShouldShowAITaskWriter] = useState(
@@ -225,6 +237,10 @@ const TiptapCreateTaskModal = () => {
       : closeHandler(true);
   const toggleAiTaskWriterVisibility = () => {
     if (newTaskWindow) {
+      if (ctrlJInlineWrite) {
+        setInlineAiOpen((open) => !open);
+        return;
+      }
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
       return;
     }
@@ -267,7 +283,7 @@ const TiptapCreateTaskModal = () => {
     formValues.currentProject ?? _currentProject ?? undefined;
   const projectId = projectForContext?.id;
   useEffect(() => {
-    if (!newTaskWindow) return;
+    if (!newTaskWindow || ctrlJInlineWrite) return;
     const openNewTask = (event: KeyboardEvent) => {
       if (event.code !== "KeyJ" || !isComposePaletteShortcut(event, isApple, pathname)) return;
       event.preventDefault();
@@ -276,7 +292,19 @@ const TiptapCreateTaskModal = () => {
     };
     window.addEventListener("keydown", openNewTask, composeShortcutCapture);
     return () => window.removeEventListener("keydown", openNewTask, composeShortcutCapture);
-  }, [newTaskWindow, composeShortcutCapture, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
+  }, [newTaskWindow, ctrlJInlineWrite, composeShortcutCapture, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
+  useEffect(() => {
+    if (!ctrlJInlineWrite) return;
+    const toggleInlineWrite = (event: KeyboardEvent) => {
+      if (!isNewTaskCtrlJ(event, isApple) || showCommands.show || showAssignModal) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.repeat) return;
+      setInlineAiOpen((open) => !open);
+    };
+    window.addEventListener("keydown", toggleInlineWrite, true);
+    return () => window.removeEventListener("keydown", toggleInlineWrite, true);
+  }, [ctrlJInlineWrite, isApple, showCommands.show, showAssignModal]);
   const { data: projectLabels } = useGetAllProjectLabels(
     projectId ?? undefined,
   );
@@ -314,6 +342,75 @@ const TiptapCreateTaskModal = () => {
       openingSectionIdRef.current = formValues.status.sectionId;
     }
   }, [formValues.currentProject?.id, formValues.status?.sectionId]);
+  const defaultDescriptionPlaceholderRef = useRef<string | null>(null);
+  useEffect(() => {
+    const placeholder = editor?.extensionManager.extensions.find(
+      (extension) => extension.name === "placeholder",
+    );
+    if (!editor || !placeholder) return;
+    if (defaultDescriptionPlaceholderRef.current === null) {
+      defaultDescriptionPlaceholderRef.current = placeholder.options.placeholder;
+    }
+    placeholder.options.placeholder = ctrlJInlineWrite
+      ? `Add a description, or press ${isApple ? "Cmd" : "Ctrl"}+J to write it with AI`
+      : defaultDescriptionPlaceholderRef.current;
+    editor.view.dispatch(editor.state.tr);
+  }, [editor, ctrlJInlineWrite, isApple]);
+  const writeChips = useNewTaskWriteChips(projectId, ctrlJInlineWrite && inlineAiOpen);
+  const newTaskWriter = React.useMemo<NewTaskWriter>(
+    () => ({
+      chips: writeChips,
+      write: async (instruction, chip) => {
+        if (!projectForContext) {
+          throw new Error("Choose a board before writing a task.");
+        }
+        const html = await requestNewTaskWrite({
+          project: projectForContext,
+          instruction,
+          chip,
+          currentTitle: getCurrentTitle(),
+        });
+        const result = shapeNewTaskWriteResult(
+          extractTaskProperties(html, projectLabels, projectSections, projectAssignees),
+          chip,
+          projectLabels,
+        );
+        if (!result.description.trim()) {
+          throw new Error("The task writer returned nothing. Please try again.");
+        }
+        return {
+          description: result.description,
+          applyProperties: () => {
+            if (result.title && !getCurrentTitle().trim()) {
+              applyTaskWriterTitle(result.title);
+            }
+            if (result.priority) handleChange("priority", result.priority);
+            if (result.estimate) handleChange("estimate", result.estimate);
+            if (result.tags) handleChange("tags", result.tags);
+            if (result.status) {
+              handleChange("status", {
+                ...result.status,
+                position: result.status.position ?? "top",
+              });
+            }
+            if (result.assignees) handleChange("assignees", result.assignees);
+            if (result.dueDate) handleChange("dueDate", result.dueDate);
+            if (result.startDate) handleChange("startDate", result.startDate);
+          },
+        };
+      },
+    }),
+    [
+      applyTaskWriterTitle,
+      getCurrentTitle,
+      handleChange,
+      projectAssignees,
+      projectForContext,
+      projectLabels,
+      projectSections,
+      writeChips,
+    ],
+  );
   const id = "create-task-tiptap-description";
   const divIds = {
     popoverContainer: "popover-wrapper-" + id,
@@ -353,7 +450,7 @@ const TiptapCreateTaskModal = () => {
     addImage(e.dataTransfer);
   };
   const handleFocus = (forceFocus?: boolean) => {
-    if (editor?.isFocused || (shouldShowAiTaskWriter && !forceFocus))
+    if (editor?.isFocused || inlineAiOpen || (shouldShowAiTaskWriter && !forceFocus))
       return false;
     editor?.commands.focus("end");
   };
@@ -667,6 +764,10 @@ const TiptapCreateTaskModal = () => {
 
   const toggleAiTaskWriter = () => {
     if (newTaskWindow) {
+      if (ctrlJInlineWrite) {
+        setInlineAiOpen((open) => !open);
+        return;
+      }
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
       return;
     }
@@ -1117,6 +1218,15 @@ const TiptapCreateTaskModal = () => {
               </div>
             ) : (
               <div className="h-[21px]"></div>
+            )}
+            {ctrlJInlineWrite && inlineAiOpen && editor && (
+              <InlineDraftAiFloat
+                editor={editor}
+                onClose={() => setInlineAiOpen(false)}
+                projectId={projectId}
+                taskWriter={newTaskWriter}
+                matchCommentRowControls
+              />
             )}
             <AttachmentsUpload
               key={attachmentComposerEpoch}
