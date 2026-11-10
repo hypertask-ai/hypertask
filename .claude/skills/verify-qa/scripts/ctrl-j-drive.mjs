@@ -99,6 +99,9 @@ try {
     status: response?.status() ?? null, key: sendsWithCtrlEnter ? 'Control+Enter' : 'Enter', uniqueIndex: task?.uniqueIndex ?? null,
   });
 
+  await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
+  await page.locator('.kanban-column-title').first().waitFor({ timeout: 30_000 });
+  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached', timeout: 30_000 }).catch(() => {});
   await blurAndPress('Control+j');
   await popup.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
   await page.keyboard.press('Escape');

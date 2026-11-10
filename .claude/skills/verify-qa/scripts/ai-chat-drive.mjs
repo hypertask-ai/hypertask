@@ -94,9 +94,10 @@ try {
   const opened = await sidebar.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
   await page.screenshot({ path: path.join(dir, '03-sidebar.png') });
   step('the chat shortcut opens the docked sidebar with its composer', opened && (await composer.isVisible()), { opened });
-  await closeSidebar();
   await page.keyboard.press('Control+q');
-  step('the chat shortcut closes the docked sidebar again', await sidebar.isHidden({ timeout: 10_000 }).catch(() => false), {});
+  const closed = await sidebar.waitFor({ state: 'hidden', timeout: 10_000 }).then(() => true, () => false);
+  await page.screenshot({ path: path.join(dir, '04-shortcut-closed.png') });
+  step('the chat shortcut closes the docked sidebar again', closed, {});
 } catch (error) {
   step('run', false, error.message.split('\n')[0]);
 }
@@ -120,7 +121,7 @@ try {
   await floatingPage.evaluate(() => document.activeElement?.blur());
   await floatingPage.keyboard.press('Control+q');
   const shown = await windowPanel.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false);
-  await floatingPage.screenshot({ path: path.join(dir, '04-floating-window.png') });
+  await floatingPage.screenshot({ path: path.join(dir, '05-floating-window.png') });
   step('the chat shortcut opens the floating window', shown && (await windowPanel.locator('[contenteditable="true"]').isVisible()), { shown });
   await floating.close();
 } catch (error) {
