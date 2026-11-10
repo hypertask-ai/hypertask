@@ -16,7 +16,6 @@ import {
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableCollapsedSections";
 import {
   defaultBoardSortingOrder,
@@ -81,7 +80,9 @@ const route = taskWriteRoute({
       req.body,
       "table_collapsed_sections",
     )
-      ? await gatedTableCollapsedSectionsForViewWrite(table_collapsed_sections, userId)
+      ? (await isFeatureEnabled("htpr-8972-table-group-fold", userId))
+        ? sanitizeTableCollapsedSectionsForWrite(table_collapsed_sections)
+        : null
       : undefined;
     const project = await prisma.project.findFirst({
       where: {
