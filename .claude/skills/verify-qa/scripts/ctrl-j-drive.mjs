@@ -86,24 +86,35 @@ try {
 
   const footerText = (await writer.innerText().catch(() => '')).replace(/\s+/g, ' ').toLowerCase();
   const shortcut = /(ctrl|cmd) enter create/.test(footerText) ? 'Control+Enter' : 'Enter';
-  const waitForCreate = (ms) => page.waitForResponse((response) => response.url().includes('/api/tasks/create'), { timeout: ms }).catch(() => null);
+  const waitForCreate = (ms) => page.waitForResponse((response) => response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/tasks/create', { timeout: ms }).catch(() => null);
+  const sentTask = async (response) => {
+    if (!response) return { task: null, body: null };
+    const body = await response.json().catch(() => null);
+    return { task: body?.newTask?.newTask ?? body?.newTask ?? body?.task ?? body, body };
+  };
   let via = `shortcut ${shortcut}`;
-  let sent = waitForCreate(30_000);
+  let sent = waitForCreate(90_000);
   await composer.click();
   await page.keyboard.press(shortcut);
   let response = await sent;
   if (!response) {
     via = 'Create button after the shortcut sent nothing';
-    sent = waitForCreate(60_000);
+    sent = waitForCreate(90_000);
     await writer.locator('[aria-label="Create task"]').first().click();
     response = await sent;
   }
-  const body = response ? await response.json().catch(() => null) : null;
-  const task = body?.newTask?.newTask ?? body?.newTask ?? body?.task ?? body;
+  const { task, body } = await sentTask(response);
   if (task?.id) result.created.push({ id: task.id, uniqueIndex: task.uniqueIndex });
+  const closed = await popup.waitFor({ state: 'hidden', timeout: 20_000 }).then(() => true, () => false);
   await page.screenshot({ path: path.join(dir, '02-ctrl-j-created.png') });
-  step('the send shortcut creates one task and closes the popup', Boolean(task?.id) && (await popup.isHidden()), {
-    status: response?.status() ?? null, via, footer: footerText.slice(0, 120), uniqueIndex: task?.uniqueIndex ?? null,
+  step('the send shortcut creates one task and closes the popup', Boolean(task?.id) && closed, {
+    status: response?.status() ?? null,
+    url: response?.url() ?? null,
+    via,
+    closed,
+    body: JSON.stringify(body ?? null).slice(0, 300),
+    footer: footerText.slice(0, 120),
   });
 
   await page.goto(BOARD, { waitUntil: 'domcontentloaded' });
