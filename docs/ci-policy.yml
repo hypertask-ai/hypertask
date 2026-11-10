@@ -412,6 +412,23 @@ feature_map_weekly:
   fixtures: offline_with_temporary_home_and_no_secrets
   app_driving: false
 
+feature_map_live_weekly:
+  ticket: https://app.hypertask.ai/detail/project-11514/205
+  context: feature-map-live-weekly
+  workflow: .github/workflows/visual-regression.yml
+  job: verify-qa
+  runs_on: ubuntu-latest
+  required: false
+  cron_utc: "5 4 * * 1"
+  triggers: [schedule, workflow_dispatch]
+  node_major: 24
+  permissions: [contents_read, packages_read]
+  commands:
+    - node --test tests/feature-map-live-weekly-file.test.cjs
+  fixtures: disposable_browser_smoke_loopback
+  app_driving: true
+  board_writes: project_11514_weekly_ticket
+
 premerge_verify_qa:
   ticket: https://app.hypertask.ai/detail/project-4060/673
   context: browser-smoke

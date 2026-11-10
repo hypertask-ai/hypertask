@@ -522,9 +522,13 @@ problems fail the job and appear in the step summary. It is not a required check
 and does not alter the ruleset. Existing stale pages are reported, not allowlisted.
 
 The separately installed user timer performs bounded source-only Codex reads and
-files at most one drift ticket per ISO week. It never drives the app. A runner
-ships documentation repairs through `/ship` and executes only the listed live
-recipes with `verify-qa`. See the
+files at most one drift ticket per ISO week on board 11514 (labels `CI` and
+`Hypertask CI`). It never drives the app. The Monday live run and board filing
+are documented in [docs/ci.md](../ci.md#feature-map-citation-check-yper4-610).
+The same job files on a manual dispatch with `head=production` and
+`journey=inbox-cycle`, which is how a week's live proof is re-run on demand.
+A runner ships documentation repairs through `/ship` and executes only the listed
+live recipes with `verify-qa` after deploy. See the
 [maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
 installation, state, load holds, limits and offline tests.
 
