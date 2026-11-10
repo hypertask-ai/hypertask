@@ -76,6 +76,9 @@ stubSourceModule(
     mobileOverlayAppSheetPanelClass: "",
   },
 );
+stubSourceModule("src/hooks/useFlag.tsx", {
+  useFlag: () => false,
+});
 stubSourceModule("src/hooks/General/useMobileVisualViewport.ts", {
   useMobileVisualViewport: () => null,
 });

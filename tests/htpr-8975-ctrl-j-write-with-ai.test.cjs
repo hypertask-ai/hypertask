@@ -128,7 +128,7 @@ test("Ctrl+J that reaches comment, comment edit and description editors opens Wr
   }
 });
 
-function panel(t, enabled) {
+function panel(t, enabled, { onClose = () => {}, onParentKeyDown } = {}) {
   const micProps = [];
   const arrow = () => React.createElement("svg", { "data-arrow": "" });
   const { default: InlineDraftAiFloat } = load("src/components/RTE/Components/InlineDraftAiFloat.tsx", {
@@ -147,7 +147,8 @@ function panel(t, enabled) {
     "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
     "@/utils/helperFunctions/sanitizeHtml": { sanitizeAiHtml: (html) => html },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
-    "react-hot-toast": { default: { dismiss: () => {}, error: () => {} } },
+    "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
+    "react-hot-toast": { default: { dismiss: () => {}, error: () => {}, promise: (request) => request } },
   });
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>");
   const globals = {
@@ -167,19 +168,33 @@ function panel(t, enabled) {
     isEmpty: true,
     isEditable: true,
     view: { dom: dom.window.document.createElement("div") },
-    commands: { setTextSelection: () => {}, unsetHighlight: () => {}, focus: () => {} },
+    contents: [],
+    commands: {
+      setTextSelection: () => {},
+      unsetHighlight: () => {},
+      focus: () => {},
+      selectAll: () => {},
+      setContent: (html) => {
+        editor.contents.push(html);
+        editor.isEmpty = false;
+      },
+    },
     on: () => {},
     off: () => {},
     setEditable: () => {},
   };
   const container = dom.window.document.getElementById("root");
   const reactRoot = createRoot(container);
-  React.act(() => reactRoot.render(React.createElement(InlineDraftAiFloat, {
-    editor,
-    onClose: () => {},
-    toggleRecording: () => {},
-    matchCommentRowControls: enabled,
-  })));
+  React.act(() => reactRoot.render(React.createElement(
+    "div",
+    { onKeyDown: onParentKeyDown },
+    React.createElement(InlineDraftAiFloat, {
+      editor,
+      onClose,
+      toggleRecording: () => {},
+      matchCommentRowControls: enabled,
+    }),
+  )));
   t.after(() => {
     React.act(() => reactRoot.unmount());
     dom.window.close();
@@ -188,7 +203,68 @@ function panel(t, enabled) {
       else delete global[name];
     }
   });
-  return { container, mic: micProps.at(-1) };
+  const press = (target, init) =>
+    React.act(() => {
+      target.dispatchEvent(new dom.window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+    });
+  const rewrite = async (instruction) => {
+    const input = container.querySelector('[aria-label="Write with AI"] input');
+    const setValue = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set;
+    React.act(() => {
+      setValue.call(input, instruction);
+      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+    await React.act(async () => {
+      input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    return input;
+  };
+  const doneShown = () => [...container.querySelectorAll("button")].some((button) => button.textContent.trim() === "Done");
+  const box = () => container.querySelector('[aria-label="Write with AI"]');
+  return { container, mic: micProps.at(-1), editor, press, rewrite, doneShown, box };
+}
+
+function editorKeyboard(editor, events) {
+  const { useTaskDetailEditorKeyboard } = loader({
+    "@/hooks/useFlag": { useFlag: (key) => ["htpr-7393-comment-inline-ai", "htpr-8173-description-inline-drafts"].includes(key) },
+    "@/lib/state": { useSetRecoilState: () => (value) => events.push(["commands", value]) },
+    "@/store": { showCommandsAtom: "commands" },
+    "@/models/enums": { CommandMode: { Command: "command" } },
+  })("src/components/RTE/useTaskDetailEditorKeyboard.tsx");
+  const context = {
+    mode: "create-comment",
+    isApple: false,
+    isInboxFlow: false,
+    inInbox: false,
+    editor,
+    shouldShowInlineDraftAiRef: { current: true },
+    sendComment: () => events.push(["send", editor.contents.at(-1)]),
+    handleCallback: () => events.push(["callback"]),
+    toggleAiTaskWriter: () => events.push(["write-with-ai"]),
+  };
+  return (event) => useTaskDetailEditorKeyboard(() => context).handleKeydown(event);
+}
+
+function answerWith(t, response) {
+  const previous = global.fetch;
+  global.fetch = response;
+  t.after(() => {
+    global.fetch = previous;
+  });
+}
+
+const formalReply = async () => ({ ok: true, json: async () => ({ corrected_html: "<p>Formal reply</p>" }) });
+
+function wiredPanel(t, enabled) {
+  const events = [];
+  let parentKeyDown = () => {};
+  const box = panel(t, enabled, {
+    onClose: () => events.push(["close"]),
+    onParentKeyDown: (event) => parentKeyDown(event),
+  });
+  parentKeyDown = editorKeyboard(box.editor, events);
+  return { ...box, events };
 }
 
 test("Write with AI box shows one white mic, a Rewrite word and the comment box colour with the flag on", (t) => {
@@ -214,4 +290,44 @@ test("flag off keeps today's purple arrow, plain mic and purple border in the Wr
   assert.ok(container.querySelector('[aria-label="Send AI instruction"] [data-arrow]'));
   assert.equal([...container.querySelectorAll("button")].some((button) => button.textContent.trim() === "Rewrite"), false);
   assert.match(container.querySelector('[aria-label="Write with AI"]').className, /border-hypertasks-ai-purple\/70 bg-comment-description/);
+});
+
+test("Ctrl+Enter in the Write with AI box after Rewrite keeps the result, closes the box and sends the rewritten comment", async (t) => {
+  answerWith(t, formalReply);
+  const box = wiredPanel(t, true);
+  await box.rewrite("make it formal");
+  assert.equal(box.doneShown(), true, "result state shows Done");
+  assert.ok(box.box().contains(document.activeElement), "focus comes back to the box");
+  box.press(document.activeElement, { key: "Enter", ctrlKey: true });
+  assert.deepEqual(box.events, [["close"], ["send", "<p>Formal reply</p>"]]);
+});
+
+test("Ctrl+Enter while the rewrite is still loading sends nothing and keeps the box open", async (t) => {
+  answerWith(t, () => new Promise(() => {}));
+  const box = wiredPanel(t, true);
+  const input = await box.rewrite("make it formal");
+  for (const target of [document.activeElement, input, box.box(), document.body]) {
+    box.press(target, { key: "Enter", ctrlKey: true });
+  }
+  assert.deepEqual(box.events, []);
+});
+
+test("Ctrl+J in the result state reaches the editor and closes Write with AI", async (t) => {
+  answerWith(t, formalReply);
+  const box = wiredPanel(t, true);
+  await box.rewrite("make it formal");
+  assert.equal(box.doneShown(), true);
+  assert.ok(box.box().contains(document.activeElement), "Ctrl+J starts inside the box, not on the page");
+  box.press(document.activeElement, { key: "j", code: "KeyJ", keyCode: 74, ctrlKey: true });
+  assert.deepEqual(box.events, [["write-with-ai"]]);
+});
+
+test("flag off keeps today's Ctrl+Enter in the Write with AI box: no send, no close, no focus change", async (t) => {
+  answerWith(t, formalReply);
+  const box = wiredPanel(t, false);
+  const input = await box.rewrite("make it formal");
+  assert.equal(box.doneShown(), true);
+  box.press(input, { key: "Enter", ctrlKey: true });
+  assert.deepEqual(box.events, []);
+  assert.equal(box.box().getAttribute("tabindex"), null);
 });
