@@ -120,10 +120,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
             <TableTagGroupPicker
               project={project}
               onClose={() => setTagPickerOpen(false)}
-              onApply={(tagIds) => {
-                setTagPickerOpen(false)
-                void setTableGroupByViewAndReturn(project, "tag", tagIds)
-              }}
+              onApply={(tagIds) => { setTagPickerOpen(false); void setTableGroupByViewAndReturn(project, "tag", tagIds) }}
             />
           )}
         </>

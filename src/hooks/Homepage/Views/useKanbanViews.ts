@@ -426,8 +426,7 @@ const useKanbanViews = (project: IProject | null) => {
     tableGroupBy: ReturnType<typeof getActiveTableGroupByFromProject>,
     tagIds: string[] = [],
   ) => {
-    if (tableGroupBy !== "column" && !legacyTableGroupEnabled && !tableGroupModesEnabled) return;
-    if (!tableGroupModesEnabled && tableGroupBy !== "column" && tableGroupBy !== "tag") return;
+    if (tableGroupBy !== "column" && !tableGroupModesEnabled && !(legacyTableGroupEnabled && tableGroupBy === "tag")) return;
     const value = tableGroupBy === "tag" && !tableGroupModesEnabled ? "tag" : serializeTableGrouping(tableGroupBy, tagIds);
     return apiHandler(
       (queuedProject) => buildUnsavedBody(queuedProject, {

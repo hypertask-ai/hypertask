@@ -51,12 +51,11 @@ export const sanitizeTableGroupBy = (value: unknown): TableGroupBy | null => {
 export const effectiveTableGroupBy = (value: unknown): TableGroupBy =>
   sanitizeTableGroupBy(value) ?? "column";
 
-const activeView = (project?: IProject | null) => {
+export const getActiveTableGroupingValueFromProject = (project?: IProject | null): string => {
   const view = project?.project_view?.user_project_views?.[0];
-  return view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
+  const activeView = view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
+  return sanitizeTableGrouping(activeView?.table_group_by) ?? "column";
 };
-export const getActiveTableGroupingValueFromProject = (project?: IProject | null): string =>
-  sanitizeTableGrouping(activeView(project)?.table_group_by) ?? "column";
 export const getActiveTableGroupingFromProject = (project?: IProject | null): TableGrouping =>
   parseTableGrouping(getActiveTableGroupingValueFromProject(project));
 export const getActiveTableGroupByFromProject = (project?: IProject | null): TableGroupBy =>
@@ -71,10 +70,9 @@ export const serializeEffectiveTableGrouping = (grouping: TableGrouping): string
   grouping.mode === "tag" && grouping.allTags ? "tag" : serializeTableGrouping(grouping.mode, grouping.tagIds);
 
 type GroupSpec = { key: string; title: string; order: number };
-type Group = { title: string; order: number; items: ITask[] };
 const byTitle = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
 const buildGroups = (sections: ISection[], specOf: (task: ITask) => GroupSpec): TableTagGroupedSection[] => {
-  const groups = new Map<string, Group>();
+  const groups = new Map<string, { title: string; order: number; items: ITask[] }>();
   for (const section of sections) {
     for (const task of section.items ?? []) {
       const spec = specOf(task);
