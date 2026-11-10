@@ -15,8 +15,7 @@ import {
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
-import { isFeatureEnabled } from "@/lib/flags";
-import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableGroupByTag";
+import { gatedTableCollapsedSectionsForViewWrite } from "./gate-table-collapsed-sections";
 import {
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
@@ -76,14 +75,11 @@ const route = taskWriteRoute({
     )
       ? await gatedTableGroupByForViewWrite(table_group_by, userId)
       : undefined;
-    const tableGroupFoldEnabled = await isFeatureEnabled("htpr-8972-table-group-fold", userId);
     const sanitizedTableCollapsedSections = Object.prototype.hasOwnProperty.call(
       req.body,
       "table_collapsed_sections",
     )
-      ? tableGroupFoldEnabled
-        ? sanitizeTableCollapsedSectionsForWrite(table_collapsed_sections)
-        : undefined
+      ? await gatedTableCollapsedSectionsForViewWrite(table_collapsed_sections, userId)
       : undefined;
     const project = await prisma.project.findFirst({
       where: {
@@ -205,9 +201,7 @@ const route = taskWriteRoute({
         table_sort_column: sanitizedTableSort.column,
         table_sort_direction: sanitizedTableSort.direction,
         table_group_by: sanitizedTableGroupBy ?? null,
-        ...(tableGroupFoldEnabled
-          ? { table_collapsed_sections: sanitizedTableCollapsedSections ?? null }
-          : {}),
+        table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
         board_layout: resolvedBoardLayout,
       };
 
@@ -275,9 +269,7 @@ const route = taskWriteRoute({
             table_sort_column: sanitizedTableSort.column,
             table_sort_direction: sanitizedTableSort.direction,
             table_group_by: sanitizedTableGroupBy ?? null,
-            ...(tableGroupFoldEnabled
-              ? { table_collapsed_sections: sanitizedTableCollapsedSections ?? null }
-              : {}),
+            table_collapsed_sections: sanitizedTableCollapsedSections ?? null,
             board_layout: resolvedBoardLayout,
             visibility: "Private",
           },
