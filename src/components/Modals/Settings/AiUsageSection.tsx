@@ -341,7 +341,7 @@ export const allowanceBarColor = (pct: number, capped: boolean) => {
   return "bg-hypertasks-header-blue";
 };
 
-export const ModelRow = ({ row }: { row: ModelUsageRow }) => (
+const ModelRow = ({ row }: { row: ModelUsageRow }) => (
   <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(72px,2fr)_84px] items-center gap-3 rounded-[5px] px-2 py-2 hover:bg-hover-active">
     <span className="truncate text-dense font-semibold text-white-black">
       {row.label}
@@ -360,7 +360,7 @@ export const ModelRow = ({ row }: { row: ModelUsageRow }) => (
   </div>
 );
 
-export const PercentageUsageRow = ({ row }: { row: PercentageRow }) => (
+const PercentageUsageRow = ({ row }: { row: PercentageRow }) => (
   <div className="flex items-center justify-between gap-4 rounded-[5px] px-2 py-2 hover:bg-hover-active">
     <span className="min-w-0 flex-1 truncate text-dense font-semibold text-white-black">
       {row.label}
@@ -371,7 +371,7 @@ export const PercentageUsageRow = ({ row }: { row: PercentageRow }) => (
   </div>
 );
 
-export const EmptyState = ({ children }: { children: React.ReactNode }) => (
+const EmptyState = ({ children }: { children: React.ReactNode }) => (
   <p className="px-2 py-2 text-dense font-medium text-text-light-gray">
     {children}
   </p>

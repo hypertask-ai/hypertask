@@ -5,18 +5,21 @@ import { useEffect, useState } from "react";
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
 import { useSettingsTeam } from "./useSettingsTeam";
-import {
-  EmptyState,
-  ModelRow,
-  PercentageUsageRow,
-  allowanceBarColor,
-  featureLabel,
-  formatResetDate,
-  type AiUsageData,
-} from "./AiUsageSection";
+import { allowanceBarColor, featureLabel, formatResetDate, type AiUsageData } from "./AiUsageSection";
 
 type TeamTarget = { projectId?: number; teamId: string; teamName: string };
 export type TeamAiUsageBreakdownProps = Record<string, never>;
+
+const Note = ({ children }: { children: React.ReactNode }) => (
+  <p className="px-2 py-2 text-dense font-medium text-text-light-gray">{children}</p>
+);
+
+const Row = ({ label, value }: { label: string; value: string }) => (
+  <div className="flex items-center justify-between gap-4 rounded-[5px] px-2 py-2 hover:bg-hover-active">
+    <span className="min-w-0 flex-1 truncate text-dense font-semibold text-white-black">{label}</span>
+    <span className="shrink-0 text-right text-dense font-medium text-text-light-gray">{value}</span>
+  </div>
+);
 
 const UsageGroup = ({ children, title }: { children: React.ReactNode; title: string }) => (
   <div className="flex flex-col gap-1">
@@ -59,9 +62,9 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
   return (
     <SettingsCard title={target.teamName}>
       {!error && data && allowance ? null : (
-        <EmptyState>
+        <Note>
           {error ?? data?.usageMessage ?? (data ? "Monthly AI allowance is currently unavailable." : "Loading AI usage")}
-        </EmptyState>
+        </Note>
       )}
 
       {!error && data && allowance ? (
@@ -93,7 +96,7 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
           {data.models.length > 0 ? (
             <UsageGroup title="By model">
               {data.models.map((row, index) => (
-                <ModelRow key={`${row.label}-${index}`} row={row} />
+                <Row key={`${row.label}-${index}`} label={row.label} value={row.onYourKey ? "on your key" : `${row.pct ?? 0}%`} />
               ))}
             </UsageGroup>
           ) : null}
@@ -102,7 +105,7 @@ const TeamAiUsageCard = ({ target }: { target: TeamTarget }) => {
             rows.length > 0 ? (
               <UsageGroup key={title} title={title}>
                 {rows.map((row, index) => (
-                  <PercentageUsageRow key={`${row.label}-${index}`} row={row} />
+                  <Row key={`${row.label}-${index}`} label={row.label} value={`${row.pct}%`} />
                 ))}
               </UsageGroup>
             ) : null,
@@ -151,7 +154,7 @@ const TeamAiUsageBreakdown = () => {
         teams.map((target) => <TeamAiUsageCard key={target.teamId} target={target} />)
       ) : (
         <SettingsCard title="Teams">
-          <EmptyState>{error ?? (teams ? "Open a team board before viewing AI usage." : "Loading AI usage")}</EmptyState>
+          <Note>{error ?? (teams ? "Open a team board before viewing AI usage." : "Loading AI usage")}</Note>
         </SettingsCard>
       )}
     </SettingsSectionShell>
