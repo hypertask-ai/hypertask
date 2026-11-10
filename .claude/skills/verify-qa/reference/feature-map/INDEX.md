@@ -47,6 +47,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
 | Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | no smoke id; agent `ht-flag get` and a refused `ht-flag set` |
 | Figma connect | [figma-connect.md](figma-connect.md) | none; verify by hand on Settings > Accounts |
+| In-app feedback | [in-app-feedback.md](in-app-feedback.md) | POST /api/feedback on board 15; brain-medium only when the flag is on |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Login | [login.md](login.md) | `login` (write journey) |
 | Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
