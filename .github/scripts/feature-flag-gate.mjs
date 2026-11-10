@@ -1874,58 +1874,90 @@ function readLabelsFromEnv() {
   }
 }
 
+const FLAG_DEFINITION_PATHS = new Set([
+  "src/lib/flags/keys.ts",
+  "src/lib/flags.ts",
+  "src/lib/flags/definitions.ts",
+  "src/lib/flags/releaseRisk.ts",
+]);
+
+export function touchesFlagDefinitions(changedFiles) {
+  return changedFiles.some((path) => FLAG_DEFINITION_PATHS.has(path) || path.startsWith("src/lib/flags/definitions/"));
+}
+
+function runtimeFilesFrom(changedFiles) {
+  return changedFiles.filter((path) =>
+    /^src\//.test(path) && /\.[jt]sx?$/.test(path) &&
+    !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
+    !/\.stories\.[jt]sx?$/.test(path));
+}
+
+function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles, runtimeFiles = runtimeFilesFrom(changedFiles) }) {
+  const mergeBase = git(["merge-base", baseSha, headSha]).trim();
+  const baseRegistry = parseFlagRegistry(mergeBase);
+  const headRegistry = parseFlagRegistry(headSha);
+  const added = new Set([...headRegistry.byValue.keys()].filter((key) => !baseRegistry.byValue.has(key)));
+  const baseDefinitions = parseDefinitions(mergeBase);
+  const headDefinitions = parseDefinitions(headSha);
+  for (const key of headDefinitions.keys) {
+    if (!baseDefinitions.keys.includes(key)) added.add(key);
+  }
+  if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
+  const baseFiles = new Set(flagDefinitionPaths(mergeBase));
+  for (const path of flagDefinitionPaths(headSha)) {
+    const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
+    if (definition.releaseRisk?.highRisk && !definition.releaseRisk.harmEvidence) {
+      const baseDefinition = !added.has(definition.key) && baseFiles.has(path)
+        ? parseFlagFile(git(["show", `${mergeBase}:${path}`]), path).definition : null;
+      if (added.has(definition.key) || JSON.stringify(definition.releaseRisk) !== JSON.stringify(baseDefinition?.releaseRisk)) {
+        throw new Error(`new or changed highRisk metadata for ${definition.key} needs releaseRisk.harmEvidence with a matching lasting harm and scenario`);
+      }
+    }
+    if (added.has(definition.key) && definition.releaseRisk?.highRisk === "money" && definition.defaultMode !== "OWNER_AND_QA") {
+      throw new Error(`new money flag ${definition.key} must set defaultMode: "OWNER_AND_QA"; Valentin approves release`);
+    }
+    if (baseFiles.has(path)) continue;
+    if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
+        definition.defaultMode !== "EVERYONE" &&
+        !(definition.defaultMode === "OWNER_ONLY" && definition.releaseRisk?.ownerRequest)) {
+      let gatesUi = false;
+      if (definition.defaultMode === "OWNER_AND_QA") {
+        const coveredUi = uiFiles.filter((uiPath) => {
+          try { git(["cat-file", "-e", `${headSha}:${uiPath}`]); return true; } catch { return false; }
+        });
+        gatesUi = coveredUi.length > 0 && runtimeFiles.some((runtimePath) => {
+          try { git(["cat-file", "-e", `${headSha}:${runtimePath}`]); } catch { return false; }
+          return referencesFlagAtRuntime(headSha, runtimePath, headRegistry, new Set([definition.key]),
+            addedLinesFor(mergeBase, headSha, runtimePath), addedLinesFor(mergeBase, headSha, runtimePath, true), mergeBase) &&
+            runtimeGateCoveredUiFiles(headSha, runtimePath, coveredUi).size > 0;
+        });
+      }
+      if (!gatesUi) throw new Error(`new flag ${definition.key} must set defaultMode: "EVERYONE" (or "OWNER_AND_QA" when this flag controls an extant changed UI entry; or releaseRisk.highRisk for money, access, data-deletion or customer-email; or defaultMode: "OWNER_ONLY" with releaseRisk.ownerRequest containing Valentin's exact quote and ticketUrl)`);
+    }
+  }
+}
+
+export function evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`]).split("\n").filter(Boolean) }) {
+  if (!touchesFlagDefinitions(changedFiles)) {
+    return { pass: true, reason: "No changed feature-flag definition files." };
+  }
+  const uiFiles = changedFiles.filter(isUiFile);
+  try {
+    validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles });
+    return { pass: true, reason: "Feature flag definitions satisfy rollout rules." };
+  } catch (error) {
+    return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
+  }
+}
+
 export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
     .split("\n").filter(Boolean);
   const uiFiles = changedFiles.filter(isUiFile);
-  const runtimeFiles = changedFiles.filter((path) =>
-    /^src\//.test(path) && /\.[jt]sx?$/.test(path) &&
-    !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
-    !/\.stories\.[jt]sx?$/.test(path));
-  if (changedFiles.some((path) => ["src/lib/flags/keys.ts", "src/lib/flags.ts", "src/lib/flags/definitions.ts", "src/lib/flags/releaseRisk.ts"].includes(path) || path.startsWith("src/lib/flags/definitions/"))) {
+  const runtimeFiles = runtimeFilesFrom(changedFiles);
+  if (touchesFlagDefinitions(changedFiles)) {
     try {
-      const mergeBase = git(["merge-base", baseSha, headSha]).trim();
-      const baseRegistry = parseFlagRegistry(mergeBase);
-      const headRegistry = parseFlagRegistry(headSha);
-      const added = new Set([...headRegistry.byValue.keys()].filter((key) => !baseRegistry.byValue.has(key)));
-      const baseDefinitions = parseDefinitions(mergeBase);
-      const headDefinitions = parseDefinitions(headSha);
-      for (const key of headDefinitions.keys) {
-        if (!baseDefinitions.keys.includes(key)) added.add(key);
-      }
-      if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
-      const baseFiles = new Set(flagDefinitionPaths(mergeBase));
-      for (const path of flagDefinitionPaths(headSha)) {
-        const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
-        if (definition.releaseRisk?.highRisk && !definition.releaseRisk.harmEvidence) {
-          const baseDefinition = !added.has(definition.key) && baseFiles.has(path)
-            ? parseFlagFile(git(["show", `${mergeBase}:${path}`]), path).definition : null;
-          if (added.has(definition.key) || JSON.stringify(definition.releaseRisk) !== JSON.stringify(baseDefinition?.releaseRisk)) {
-            throw new Error(`new or changed highRisk metadata for ${definition.key} needs releaseRisk.harmEvidence with a matching lasting harm and scenario`);
-          }
-        }
-        if (added.has(definition.key) && definition.releaseRisk?.highRisk === "money" && definition.defaultMode !== "OWNER_AND_QA") {
-          throw new Error(`new money flag ${definition.key} must set defaultMode: "OWNER_AND_QA"; Valentin approves release`);
-        }
-        if (baseFiles.has(path)) continue;
-        if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
-            definition.defaultMode !== "EVERYONE" &&
-            !(definition.defaultMode === "OWNER_ONLY" && definition.releaseRisk?.ownerRequest)) {
-          let gatesUi = false;
-          if (definition.defaultMode === "OWNER_AND_QA") {
-            const coveredUi = uiFiles.filter((uiPath) => {
-              try { git(["cat-file", "-e", `${headSha}:${uiPath}`]); return true; } catch { return false; }
-            });
-            gatesUi = coveredUi.length > 0 && runtimeFiles.some((runtimePath) => {
-              try { git(["cat-file", "-e", `${headSha}:${runtimePath}`]); } catch { return false; }
-              return referencesFlagAtRuntime(headSha, runtimePath, headRegistry, new Set([definition.key]),
-                addedLinesFor(mergeBase, headSha, runtimePath), addedLinesFor(mergeBase, headSha, runtimePath, true), mergeBase) &&
-                runtimeGateCoveredUiFiles(headSha, runtimePath, coveredUi).size > 0;
-            });
-          }
-          if (!gatesUi) throw new Error(`new flag ${definition.key} must set defaultMode: "EVERYONE" (or "OWNER_AND_QA" when this flag controls an extant changed UI entry; or releaseRisk.highRisk for money, access, data-deletion or customer-email; or defaultMode: "OWNER_ONLY" with releaseRisk.ownerRequest containing Valentin's exact quote and ticketUrl)`);
-        }
-      }
+      validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles, runtimeFiles });
     } catch (error) {
       return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
     }
