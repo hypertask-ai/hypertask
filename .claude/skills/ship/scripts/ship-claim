@@ -120,12 +120,35 @@ incident_ok() {
     and ((.section // "") | IN("Done", "Archive", "Archived") | not))' <<<"$got" >/dev/null 2>&1
 }
 
+# open_prs_read / merged_prs_read: GraphQL first (gh pr list). When GraphQL refuses the call (rate limit), read the same
+# fields over REST, which has its own budget, so a spent GraphQL budget cannot stop every claim. The callers check shape
+# and size, so a short or malformed REST answer still HOLDs. The open read pages 3 x 100; 300 or more still HOLDs.
+open_prs_read() {
+  local gh=${SHIP_CLAIM_GH:-gh} out p page all='[]'
+  out=$($gh pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft) && { printf '%s' "$out"; return 0; }
+  echo "ship-claim: GraphQL refused the open PR read; trying REST." >&2
+  for p in 1 2 3; do
+    page=$($gh api "repos/hypertask-ai/hypertask/pulls?state=open&per_page=100&page=$p" \
+      --jq '[.[] | {number, headRefName: .head.ref, title, isDraft: (.draft // false)}]') || return 1
+    all=$(jq -c -s '.[0] + .[1]' <<<"$all"$'\n'"$page") || return 1
+    [ "$(jq length <<<"$page")" = 100 ] || break
+  done
+  printf '%s' "$all"
+}
+merged_prs_read() {
+  local gh=${SHIP_CLAIM_GH:-gh} out
+  out=$($gh pr list -R hypertask-ai/hypertask --state merged --base production --search "$1 in:title" --limit 100 --json number,title) && { printf '%s' "$out"; return 0; }
+  echo "ship-claim: GraphQL refused the merged PR read for $1; trying REST." >&2
+  $gh api -X GET search/issues -f "q=repo:hypertask-ai/hypertask is:pr is:merged base:production $1 in:title" -F per_page=100 \
+    --jq 'if .incomplete_results then error("incomplete") else [.items[] | {number, title}] end'
+}
+
 hold_check() {
   local t=$1 rn open n free board page total offset count expected_total candidates ticket project number merged matches seen unfinished='' known='' mine=''
   [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
   rn=${BASH_REMATCH[1]}
   if incident_ok "$t"; then echo "ship-claim: INCIDENT lane. Holds, queue brake and infra first skipped for $t."; return 0; fi
-  open=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft) \
+  open=$(open_prs_read) \
     || { echo "ship-claim: HOLD. Cannot read open PRs, so no new claim for RUNNER $rn. Retry later." >&2; return 4; }
   jq -e 'type == "array" and length < 300 and all(.[];
     (.number | type == "number") and (.headRefName | type == "string") and (.title | type == "string")
@@ -169,7 +192,7 @@ hold_check() {
         [ -n "$ticket" ] || continue
         [[ $ticket =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ && $project =~ ^[1-9][0-9]*$ && $number =~ ^[1-9][0-9]*$ ]] \
           || { echo "ship-claim: HOLD. Invalid assigned ticket on board $board." >&2; return 4; }
-        merged=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state merged --base production --search "$ticket in:title" --limit 100 --json number,title) \
+        merged=$(merged_prs_read "$ticket") \
           || { echo "ship-claim: HOLD. Cannot read merged PRs for $ticket." >&2; return 4; }
         jq -e 'type == "array" and length < 100 and all(.[]; (.number | type == "number") and (.title | type == "string"))' <<<"$merged" >/dev/null \
           || { echo "ship-claim: HOLD. Merged PR read is malformed or incomplete for $ticket." >&2; return 4; }

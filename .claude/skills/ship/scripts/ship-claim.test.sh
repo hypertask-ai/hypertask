@@ -376,6 +376,16 @@ printf '%s\n' "$*" >> "$HOLD_READS"
 case " $* " in
   *' --state open '*) [ -z "${HOLD_OPEN_FAIL:-}" ] || exit 1; cat "$HOLD_OPEN" ;;
   *' --state merged '*) [ -z "${HOLD_MERGED_FAIL:-}" ] || exit 1; cat "$HOLD_MERGED" ;;
+  *' api repos/hypertask-ai/hypertask/pulls?'*)
+    # REST fallback: serve HOLD_REST_OPEN as page 1 and HOLD_REST_PAGE2 (or []) after it; apply the caller's --jq like gh does.
+    [ -n "${HOLD_REST_OPEN:-}" ] && [ -z "${HOLD_REST_FAIL:-}" ] || exit 1
+    expr=''; prev=''; for a in "$@"; do [ "$prev" = --jq ] && expr=$a; prev=$a; done
+    case "$2" in *page=1) src=$HOLD_REST_OPEN ;; *page=2) src=${HOLD_REST_PAGE2:-/dev/null} ;; *) src=/dev/null ;; esac
+    if [ "$src" = /dev/null ]; then printf '[]' | jq -c "$expr"; else jq -c "$expr" "$src"; fi ;;
+  *' api -X GET search/issues '*)
+    [ -n "${HOLD_REST_MERGED:-}" ] && [ -z "${HOLD_REST_FAIL:-}" ] || exit 1
+    expr=''; prev=''; for a in "$@"; do [ "$prev" = --jq ] && expr=$a; prev=$a; done
+    jq -c "$expr" "$HOLD_REST_MERGED" ;;
   *) exit 1 ;;
 esac
 EOF
@@ -497,6 +507,33 @@ for failure in HOLD_OPEN_FAIL HOLD_BOARD_FAIL HOLD_MERGED_FAIL; do
   eq "$failure refuses the claim" "$?" 4
   [ ! -s "$D/log" ] && ok "$failure refuses before board writes" || bad "$failure wrote to board"
 done
+# GraphQL refused (rate limit): the open and merged PR reads fall back to REST. Shape and size checks still apply.
+jq -n '[{number:7,head:{ref:"runner-6/other-work"},title:"HTPR-9 other work",draft:false}]' > "$D/rest-open-own.json"
+jq -n '[{number:8,head:{ref:"someone/else"},title:"HTPR-10 not mine",draft:true}]' > "$D/rest-open-other.json"
+jq -n '[range(100) | {number:(.+100),head:{ref:("someone/branch-"+(.|tostring))},title:"HTPR-11 filler",draft:false}]' > "$D/rest-open-full.json"
+: > "$D/log"; printf '[]' > "$D/merged-empty.json"
+env SHIP_SESSION_NAME='RUNNER 6' HOLD_MERGED="$D/merged-empty.json" HOLD_OPEN_FAIL=1 HOLD_REST_OPEN="$D/rest-open-other.json" ./ship-claim YPER4-999 >"$D/rest-claim.out" 2>&1
+eq "GraphQL open read fails, REST has no own PR -> claim goes through" "$?" 0
+out=$(env SHIP_SESSION_NAME='RUNNER 6' HOLD_OPEN_FAIL=1 HOLD_REST_OPEN="$D/rest-open-own.json" ./ship-claim hold YPER4-999 2>&1); rc=$?
+eq "GraphQL open read fails, REST shows own open PR -> hold" "$rc" 4
+[[ $out == *'RUNNER 6 still has open PRs: https://github.com/hypertask-ai/hypertask/pull/7'* ]] && ok "REST fallback names the open PR" || bad "REST open fallback output: $out"
+out=$(env SHIP_SESSION_NAME='RUNNER 6' HOLD_OPEN_FAIL=1 HOLD_REST_OPEN="$D/rest-open-full.json" HOLD_REST_PAGE2="$D/rest-open-own.json" ./ship-claim hold YPER4-999 2>&1); rc=$?
+eq "REST fallback reads page 2 of open PRs" "$rc" 4
+[[ $out == *'pull/7'* ]] && ok "own PR on REST page 2 is found" || bad "page 2 not read: $out"
+out=$(env SHIP_SESSION_NAME='RUNNER 6' HOLD_OPEN_FAIL=1 HOLD_REST_FAIL=1 HOLD_REST_OPEN="$D/rest-open-other.json" ./ship-claim hold YPER4-999 2>&1); rc=$?
+eq "GraphQL and REST both fail -> hold" "$rc" 4
+[[ $out == *'Cannot read open PRs'* ]] && ok "double failure names the open PR read" || bad "double failure output: $out"
+jq '.tasks[0].section="In Progress" | .tasks[0].assignees[0].agent.displayName="RUNNER 6"' "$HOLD_BOARD" > "$D/rest-board.json"
+jq -n '{incomplete_results:false,items:[{number:42,title:"HTPR-123 [BUGFIX] Existing work",state:"closed"}]}' > "$D/rest-merged-hit.json"
+jq -n '{incomplete_results:false,items:[]}' > "$D/rest-merged-none.json"
+jq -n '{incomplete_results:true,items:[]}' > "$D/rest-merged-partial.json"
+out=$(env SHIP_SESSION_NAME='RUNNER 6' HOLD_BOARD="$D/rest-board.json" HOLD_MERGED_FAIL=1 HOLD_REST_MERGED="$D/rest-merged-hit.json" ./ship-claim hold YPER4-999 2>&1); rc=$?
+eq "GraphQL merged read fails, REST finds the merged PR -> completion hold" "$rc" 4
+[[ $out == *'live QA'* && $out != *'Cannot read merged PRs'* ]] && ok "REST merged fallback reaches the completion hold" || bad "REST merged fallback output: $out"
+env SHIP_SESSION_NAME='RUNNER 6' HOLD_BOARD="$D/rest-board.json" HOLD_MERGED_FAIL=1 HOLD_REST_MERGED="$D/rest-merged-none.json" ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "GraphQL merged read fails, REST finds nothing -> no hold" "$?" 0
+out=$(env SHIP_SESSION_NAME='RUNNER 6' HOLD_BOARD="$D/rest-board.json" HOLD_MERGED_FAIL=1 HOLD_REST_MERGED="$D/rest-merged-partial.json" ./ship-claim hold YPER4-999 2>&1); rc=$?
+eq "REST merged search marked incomplete -> hold" "$rc" 4
 cp "$HOLD_BOARD" "$D/valid-board"; cp "$HOLD_OPEN" "$D/valid-open"; cp "$HOLD_MERGED" "$D/valid-merged"
 for file in "$HOLD_BOARD" "$HOLD_OPEN" "$HOLD_MERGED"; do
   printf '{}' > "$file"
