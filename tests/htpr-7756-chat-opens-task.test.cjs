@@ -137,29 +137,27 @@ test("the client rejects malformed navigation without displaying a success claim
   assert.match(result.messages.at(-1).content, /could not open/);
 });
 
-for (const enabled of [true, false]) {
-  test(`the real chat hook gates the existing task navigator: ${enabled}`, () => {
-    let context;
-    const navigateToTask = () => {};
-    const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
-      react: { useState: () => [0, () => {}], useEffect() {} },
-      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask }) },
-      "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
-      "@/lib/ai/chipEvents": { signalAiChip: () => {} },
-      "@/lib/flags/keys": { HTPR_7756_CHAT_OPENS_TASK_FLAG: flag },
-      "@/lib/state": { useRecoilState: () => [null, () => {}] },
-      "@/store": {},
-      "./useAiChatState": { useAiChatState: () => ({}) },
-      "./useAiChatSessions": { useAiChatSessions: () => ({}) },
-      "./useAiChatAttachments": { useAiChatAttachments: () => ({}) },
-      "./aiChatSend": { createAiChatSend: (value) => { context = value; return {}; } },
-      "./aiChatKeyboard": { createAiChatKeyboard: () => ({}) },
-      "./useAiChatPresentation": { useAiChatPresentation: () => ({}) },
-    });
-    useAiChat();
-    assert.equal(context.navigateToTask, enabled ? navigateToTask : undefined);
+test("the real chat hook always wires the task navigator for open_task events", () => {
+  let context;
+  const navigateToTask = () => {};
+  const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
+    react: { useState: () => [0, () => {}], useEffect() {} },
+    "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask }) },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
+    "@/lib/flags/keys": { HTPR_7756_CHAT_OPENS_TASK_FLAG: flag },
+    "@/lib/state": { useRecoilState: () => [null, () => {}] },
+    "@/store": {},
+    "./useAiChatState": { useAiChatState: () => ({}) },
+    "./useAiChatSessions": { useAiChatSessions: () => ({}) },
+    "./useAiChatAttachments": { useAiChatAttachments: () => ({}) },
+    "./aiChatSend": { createAiChatSend: (value) => { context = value; return {}; } },
+    "./aiChatKeyboard": { createAiChatKeyboard: () => ({}) },
+    "./useAiChatPresentation": { useAiChatPresentation: () => ({}) },
   });
-}
+  useAiChat();
+  assert.equal(context.navigateToTask, navigateToTask);
+});
 
 test("the bugfix flag is registered for Everyone with release metadata", () => {
   const { FEATURE_FLAG_DEFINITIONS } = load("src/lib/flags/definitions.ts", {});
