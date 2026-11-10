@@ -12,6 +12,8 @@ import { tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 
+const NO_COLLAPSED_SECTIONS: ReadonlySet<string> = new Set();
+
 type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableState>, "sortState" | "customFieldBySortColumnRef" | "sectionOrderBySid" | "timeTotals" | "timeNow" | "sections" | "expanded" | "collapsedSections" | "myTasksBulk" | "setExcludedTaskIds" | "persistedActiveItem" | "showArchivedOnBoard" | "isApple" | "myTasksSnoozeEnabled" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setExpanded">;
 
@@ -28,17 +30,18 @@ export function useTableRows(context: Context) {
 
   const isPrioritySort = sortState[0]?.column === "priority";
   const savedViewPrioritySort = myTasksSort?.field === "priority";
-  const effectiveCollapsed = tableGroupFoldEnabled ? collapsedSections : new Set<string>();
+  const effectiveCollapsed = tableGroupFoldEnabled ? collapsedSections : NO_COLLAPSED_SECTIONS;
+  const foldGroups = tableGroupFoldEnabled && Boolean(_currentProject);
 
   const rows = useMemo(() => {
     if (sortState.length > 0) {
-      const flattenSort = (
+      const flattenSort = !foldGroups && (
         shouldFlattenSortedRows(
           Boolean(_currentProject),
           true,
           isPrioritySort,
         ) || savedViewPrioritySort
-      ) && !tableGroupFoldEnabled;
+      );
       const comparators = sortState.map(({ column, direction }, index) =>
         getSortComparator(
           column,
@@ -116,6 +119,7 @@ export function useTableRows(context: Context) {
     expanded,
     effectiveCollapsed,
     tableGroupFoldEnabled,
+    foldGroups,
     sortState,
     sectionOrderBySid,
     _currentProject,

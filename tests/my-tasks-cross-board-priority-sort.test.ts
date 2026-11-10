@@ -15,9 +15,9 @@ for (const hasCurrentProject of [true, false]) {
   }
 }
 
-test("a real board keeps groups when sorting", () => {
-  assert.equal(shouldFlattenSortedRows(true, true, false), false);
-  assert.equal(shouldFlattenSortedRows(true, true, true), false);
+test("a real board flattens every active sort", () => {
+  assert.equal(shouldFlattenSortedRows(true, true, false), true);
+  assert.equal(shouldFlattenSortedRows(true, true, true), true);
 });
 
 test("My Tasks keeps non-priority sorts grouped by board", () => {

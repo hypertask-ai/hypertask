@@ -4,8 +4,7 @@ export function shouldFlattenSortedRows(
   isPrioritySort: boolean,
 ): boolean {
   if (!hasActiveSort) return false;
-  if (hasCurrentProject) return false;
-  return isPrioritySort;
+  return hasCurrentProject || isPrioritySort;
 }
 
 export function sortedTaskRowSectionKey(

@@ -11,9 +11,9 @@ import {
 } from "../src/lib/table-view/tableGroupByTag";
 import { getTableRowDragData } from "../src/components/PageComponents/Kanban/TableView/tableRowDrag";
 
-test("board table sort keeps section groups", () => {
-  assert.equal(shouldFlattenSortedRows(true, true, false), false);
-  assert.equal(shouldFlattenSortedRows(true, true, true), false);
+test("the flatten helper keeps its My Tasks rule and the fold flag decides on a board", () => {
+  assert.equal(shouldFlattenSortedRows(false, true, true), true);
+  assert.equal(shouldFlattenSortedRows(false, true, false), false);
 });
 
 test("rows sort inside each tag group without flattening the board", () => {

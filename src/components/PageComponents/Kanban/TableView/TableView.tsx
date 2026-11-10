@@ -377,7 +377,7 @@ const TableView = ({
               Boolean(_currentProject),
               sortState.length > 0,
               isPrioritySort,
-            ) || savedViewPrioritySort) && !tableGroupFoldEnabled
+            ) || savedViewPrioritySort) && !(tableGroupFoldEnabled && Boolean(_currentProject))
           ) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
@@ -422,6 +422,12 @@ const TableView = ({
                       tabIndex={tableGroupFoldEnabled ? 0 : undefined}
                       className={`flex items-center gap-1 px-[10px] pt-1 ${tableGroupFoldEnabled ? "cursor-pointer" : ""}`}
                       onClick={tableGroupFoldEnabled ? () => toggleCollapsedSection(sid) : undefined}
+                      onKeyDown={tableGroupFoldEnabled ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        toggleCollapsedSection(sid);
+                      } : undefined}
                     >
                       {tableGroupFoldEnabled && (
                         <ChevronDown
