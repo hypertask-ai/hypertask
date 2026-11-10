@@ -209,12 +209,12 @@ function draftHandoff(enabled, create, calls, dom, apple = false, options = {}) 
   visit(file);
   assert.ok(effect);
   const compiled = ts.transpileModule(`const effect = ${effect};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", "_mbl", "closeBackDismissBeforeNavigation", "PlanLimitRefusal", "keepTaskAiNavigation", `${compiled}; return effect();`)(
+  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", "_mbl", "closeBackDismissBeforeNavigation", "PlanLimitRefusal", "keepTaskAiNavigation", "newTaskCtrlJFlag", `${compiled}; return effect();`)(
     enabled, dom.window, dom.window.document, apple, false, false, false, { current: false }, false,
     options.formValues ?? { currentProject: { id: 6859 }, status: { sectionId: 7 }, title: "" },
     (value) => calls.push(["busy", value]), create, options.router ?? { push: (url) => calls.push(["navigate", url]) },
     options.closeHandler ?? ((save) => calls.push(["close", save])), { error: () => calls.push(["error"]) },
-    options.mobile ?? false, load("src/lib/mobile/backDismiss.ts").closeBackDismissBeforeNavigation, load("src/lib/planLimitsClient.ts").PlanLimitRefusal, options.keepTaskAiNavigation ?? true,
+    options.mobile ?? false, load("src/lib/mobile/backDismiss.ts").closeBackDismissBeforeNavigation, load("src/lib/planLimitsClient.ts").PlanLimitRefusal, options.keepTaskAiNavigation ?? true, options.newTaskCtrlJFlag ?? false,
   );
 }
 
