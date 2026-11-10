@@ -77,9 +77,9 @@ jobs:
       - run: node scripts/rag-eval.cjs --check-set
       - if: github.event_name != 'workflow_dispatch'
         run: node scripts/rag-eval.cjs --check-baseline
-      - if: github.event_name == 'workflow_dispatch'
+      - if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
         run: node scripts/rag-eval.cjs --write-baseline
         env:
           RAG_EVAL_EMBED_KEY: ${{ secrets.OPENAI_API_KEY }}
-      - if: github.event_name == 'workflow_dispatch'
+      - if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
         run: cat tests/fixtures/rag-search/vectors.json
