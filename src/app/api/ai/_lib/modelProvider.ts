@@ -47,7 +47,7 @@ import {
   normalizeCustomEndpointConfig,
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
-import { CHAT_TITLE_MAX_OUTPUT_TOKENS, type ReasoningEffort } from "@/app/api/ai/_lib/reasoningEffort";
+import type { ReasoningEffort } from "@/app/api/ai/_lib/reasoningEffort";
 
 export class AiGatewayKeyRequiredError extends Error {
   constructor(message: string) {
@@ -323,17 +323,6 @@ type ModelUsageContext = Partial<Pick<AiUsageRecord,
 
 const modelUsageContexts = new WeakMap<object, ModelUsageContext>();
 
-function chatTitleOutputCapped(
-  params: { maxOutputTokens?: number },
-  context: ModelUsageContext,
-): boolean {
-  return (
-    context.reasoningFeature === "chat-title" &&
-    typeof params.maxOutputTokens === "number" &&
-    params.maxOutputTokens === CHAT_TITLE_MAX_OUTPUT_TOKENS
-  );
-}
-
 function reasoningApi(): typeof import("@/app/api/ai/_lib/reasoningEffort") | null {
   try {
     const loaded = require("@/app/api/ai/_lib/reasoningEffort") as Partial<typeof import("@/app/api/ai/_lib/reasoningEffort")> | null;
@@ -530,11 +519,8 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
     transformParams: async ({ params }) => {
       const reasoning = reasoningApi();
       const optIn = reasoning ? await reasoning.aiThinkingOptInEnabled(context.userId) : false;
-      const titleCapped = chatTitleOutputCapped(params, context);
       if (!isHaiku55Model(modelId)) {
-        if (optIn && reasoning) return reasoning.applyReasoningToParams(params, context, modelId);
-        if (titleCapped && reasoning) return reasoning.applyReasoningToParams(params, context, modelId);
-        return params;
+        return optIn && reasoning ? reasoning.applyReasoningToParams(params, context, modelId) : params;
       }
       const enabled = await import("@/app/api/ai/_lib/planGate")
         .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
@@ -542,7 +528,6 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
       if (!enabled) throw new Error("This AI model is unavailable.");
       const { temperature: _temperature, topP: _topP, topK: _topK, ...supportedParams } = params;
       if (optIn && reasoning) return reasoning.applyReasoningToParams(supportedParams, context, modelId);
-      if (titleCapped && reasoning) return reasoning.applyReasoningToParams(supportedParams, context, modelId);
       const directOutput = params.responseFormat?.type === "json" ||
         (params.maxOutputTokens != null && params.maxOutputTokens <= 1200);
       return {

@@ -272,12 +272,6 @@ test("flag on sends the mapped effort and flag off keeps today's Haiku default",
   });
   assert.equal(unchanged.providerOptions.anthropic.thinking.type, "adaptive");
   assert.equal(unchanged.providerOptions.anthropic.effort, "medium");
-  const titled = await sent(off, {
-    flagContext: { userId: 7, provider: "openai", reasoningFeature: "chat-title" },
-    modelId: "gpt-6-luna",
-    params: { maxOutputTokens: reasoning.CHAT_TITLE_MAX_OUTPUT_TOKENS },
-  });
-  assert.equal(titled.providerOptions.openai.reasoningEffort, "none");
   const short = await sent(off, {
     flagContext: { userId: 7, provider: "openrouter", feature: "summary" },
     modelId: haiku,
@@ -333,6 +327,7 @@ test("chat title always caps output at 64 tokens", async () => {
     "@/lib/ai/prompts/registry": { renderPrompt: () => "Name this chat" },
     "@/app/api/ai/_lib/reasoningEffort": {
       CHAT_TITLE_MAX_OUTPUT_TOKENS: 64,
+      applyReasoningToParams: (params, input, modelId) => reasoning.applyReasoningToParams(params, input, modelId),
     },
     ai: { generateText: async (args) => { captured = args; return { text: "Weekly plan" }; } },
   };
@@ -352,4 +347,5 @@ test("chat title always caps output at 64 tokens", async () => {
   assert.equal(captured.providerOptions.gateway.tags[0], "chat");
   assert.equal(captured.providerOptions.anthropic, undefined);
   assert.equal(captured.maxOutputTokens, 64);
+  assert.equal(captured.providerOptions.openai.reasoningEffort, "none");
 });
