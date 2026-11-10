@@ -12,6 +12,8 @@ import {
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
 import { isBoardMemoryFactSource } from "@/app/api/ai/_lib/boardMemoryContract";
 import { prepareTaskWriterFieldDiffSignal } from "@/app/api/ai/_lib/taskWriterFieldDiff";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9010_TASK_WRITER_MEMORY_FLAG } from "@/lib/flags/definitions/htpr-9010-task-writer-memory";
 import {
   BoardMemoryBusyError,
   BoardMemoryRateLimitError,
@@ -85,9 +87,15 @@ export async function POST(request: NextRequest) {
   return withUser(async (userId) => {
     const input = learnSchema.parse(await request.json());
     const { projectId, ...parsedSignal } = input;
+    if (
+      parsedSignal.type === "task_writer_field_diff" &&
+      !(await isFeatureEnabled(HTPR_9010_TASK_WRITER_MEMORY_FLAG, userId))
+    ) {
+      return NextResponse.json({ enabled: false, learned: [] as string[] });
+    }
     const signal =
       parsedSignal.type === "task_writer_field_diff"
-        ? await prepareTaskWriterFieldDiffSignal(parsedSignal, userId)
+        ? prepareTaskWriterFieldDiffSignal(parsedSignal)
         : parsedSignal;
     if (!signal) {
       return NextResponse.json({ enabled: false, learned: [] as string[] });

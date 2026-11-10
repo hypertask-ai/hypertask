@@ -111,21 +111,13 @@ test("Task Writer field diff signal", async (t) => {
     assert.deepEqual(flagChecks, []);
   });
 
-  await t.test("a note that holds a secret or personal data is dropped whole", async () => {
+  await t.test("a note that holds a secret or personal data is dropped whole", () => {
     reset();
-    const signal = (note) => ({ type: "task_writer_field_diff", note, draft: {}, saved: { title: "x" } });
-    const on = async () => true;
-    assert.equal(await prepareTaskWriterFieldDiffSignal(signal("key is sk-abcdefghijklmnopqrstuvwx"), 6, on), null);
-    assert.equal(await prepareTaskWriterFieldDiffSignal(signal("mail me at a@b.com"), 6, on), null);
-    assert.equal((await prepareTaskWriterFieldDiffSignal(signal("plain note"), 6, on)).note, "plain note");
-    assert.equal(
-      await prepareTaskWriterFieldDiffSignal(
-        { type: "task_writer_field_diff", note: "plain", draft: {}, saved: { title: "password: hunter2" } },
-        6,
-        on,
-      ),
-      null,
-    );
+    const signal = (note, saved = { title: "x" }) => ({ type: "task_writer_field_diff", note, draft: {}, saved });
+    assert.equal(prepareTaskWriterFieldDiffSignal(signal("key is sk-abcdefghijklmnopqrstuvwx")), null);
+    assert.equal(prepareTaskWriterFieldDiffSignal(signal("mail me at a@b.com")), null);
+    assert.equal(prepareTaskWriterFieldDiffSignal(signal("plain note")).note, "plain note");
+    assert.equal(prepareTaskWriterFieldDiffSignal(signal("plain", { title: "password: hunter2" })), null);
   });
 
   await t.test("the client tracker caps the note and emits only changed fields", () => {
