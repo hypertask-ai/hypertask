@@ -34,7 +34,9 @@ def uses_external_auth_context(call):
         return True
     if re.search(r'\bwhere:\s*[A-Za-z_]\w*\s*[,}]', call):
         return True
-    return bool(re.search(r'\bwhere:\s*[^,}]+[?:]', call))
+    if re.search(r'\bwhere:\s*\{\s*[A-Za-z_]\w+\s*[,}]', call):
+        return True
+    return bool(re.search(r'\bwhere:\s*[^,}]+\?', call))
 
 
 def read_entries(path, kind):

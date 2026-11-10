@@ -14,6 +14,7 @@ FIXTURES = HERE / 'fixtures'
 ROUTE = 'src/app/api/mcp/chat/rooms/pending/route.ts'
 CALL = 'prisma.task.findFirst({ where: { id } })'
 COUNT_WHERE_CALL = 'prisma.task.count({ where })'
+FINDMANY_WHERE_CALL = 'prisma.task.findMany({ where, include })'
 CONDITIONAL_WHERE_CALL = (
     'prisma.task.findMany({ where: filtered.paged || rankedResults && !sortField'
     ' ? { ...where, id: { in: primaryIds } } : where, select: { id: true }, })'
@@ -49,15 +50,22 @@ def run(output):
         route.write_bytes((FIXTURES / 'real-route.ts.fixture').read_bytes() + (FIXTURES / 'planted.ts.fixture').read_bytes())
         invoke('planted-real-route', 1, f'New unscoped query: {ROUTE}')
 
-        source = (FIXTURES / 'unscoped.ts.fixture').read_bytes()
-        route.write_bytes(source)
-        exception = dict(path=ROUTE, call=normalize(CALL), occurrence=1,
-                         sha256=hashlib.sha256(source).hexdigest(),
-                         reason='Self-test preauthorized ID control, not a production exception.',
+        static_source = (FIXTURES / 'unscoped.ts.fixture').read_bytes().replace(
+            b'const id = 1;',
+            b'',
+        ).replace(
+            b'where: { id }',
+            b"where: { status: 'Normal' }",
+        )
+        static_call = "prisma.task.findFirst({ where: { status: 'Normal' } })"
+        route.write_bytes(static_source)
+        exception = dict(path=ROUTE, call=normalize(static_call), occurrence=1,
+                         sha256=hashlib.sha256(static_source).hexdigest(),
+                         reason='Self-test inline-where control, not a production exception.',
                          approvedIn='https://app.hypertask.ai/detail/project-15/7496')
         exceptions.write_text(json.dumps([exception]))
         invoke('exception-positive', 0, 'findings=1, excepted=1, debt=0, new=0')
-        route.write_bytes(source.replace(b'findFirst', b'findMany'))
+        route.write_bytes(static_source.replace(b'findFirst', b'findMany'))
         exceptions.write_text(json.dumps([exception]))
         invoke('stale-exception', 1, 'Stale exception:')
 
@@ -66,11 +74,22 @@ def run(output):
         invoke('removed-call', 1, 'Stale exception:')
 
         exceptions.write_text(json.dumps([exception]))
-        route.write_bytes(source + b'\n// unrelated edit\n')
+        route.write_bytes(static_source + b'\n// unrelated edit\n')
         invoke('unrelated-file-edit', 0, 'findings=1, excepted=1, debt=0, new=0')
 
+        id_source = (FIXTURES / 'unscoped.ts.fixture').read_bytes()
+        route.write_bytes(id_source)
+        id_exception = dict(path=ROUTE, call=normalize(CALL), occurrence=1,
+                            sha256=hashlib.sha256(id_source).hexdigest(),
+                            reason='Self-test preauthorized ID control, not a production exception.',
+                            approvedIn='https://app.hypertask.ai/detail/project-15/7496')
+        exceptions.write_text(json.dumps([id_exception]))
+        weakened_id = id_source.replace(b'const id = 1;', b'const id = 999999;')
+        route.write_bytes(weakened_id)
+        invoke('shorthand-where-id-stale', 1, 'Stale exception:')
+
         exceptions.write_text(json.dumps([exception]))
-        route.write_bytes(source + (FIXTURES / 'planted.ts.fixture').read_bytes())
+        route.write_bytes(static_source + (FIXTURES / 'planted.ts.fixture').read_bytes())
         invoke('new-call-in-excepted-file', 1, 'New unscoped query:')
 
         exceptions.write_text('[]\n')
@@ -81,7 +100,7 @@ def run(output):
         new_path = 'src/app/api/brand-new-agent-query/route.ts'
         new_route = root / new_path
         new_route.parent.mkdir(parents=True)
-        new_route.write_bytes(source)
+        new_route.write_bytes(id_source)
         invoke('brand-new-agent-route', 1, f'New unscoped query: {new_path}')
 
         count_source = (FIXTURES / 'external-where-count.ts.fixture').read_bytes()
@@ -117,5 +136,23 @@ def run(output):
         route.write_bytes(weakened)
         invoke('conditional-where-stale', 1, 'Stale exception:')
 
-    print('Self-tests passed: 10 (nine negatives, scoped positive; exception prerequisite also passed)', flush=True)
+        findmany_source = (FIXTURES / 'external-where-findmany.ts.fixture').read_bytes()
+        route.write_bytes(findmany_source)
+        findmany_exception = dict(
+            path=ROUTE,
+            call=normalize(FINDMANY_WHERE_CALL),
+            occurrence=1,
+            sha256=hashlib.sha256(findmany_source).hexdigest(),
+            reason='Self-test preauthorized findMany-where control, not a production exception.',
+            approvedIn='https://app.hypertask.ai/detail/project-15/7496',
+        )
+        exceptions.write_text(json.dumps([findmany_exception]))
+        weakened = findmany_source.replace(
+            b'projectId: { in: [1] }',
+            b'projectId: { in: [] }',
+        )
+        route.write_bytes(weakened)
+        invoke('external-where-findmany-stale', 1, 'Stale exception:')
+
+    print('Self-tests passed: 12 (eleven negatives, scoped positive; exception prerequisite also passed)', flush=True)
     return 0

@@ -1,0 +1,9 @@
+import prisma from '@/lib/prisma';
+import { validateMcpRouteAuth } from '@/lib/mcp/routeWrapper';
+
+export async function GET(request: Request) {
+  await validateMcpRouteAuth(request);
+  const where = { projectId: { in: [1] } };
+  const include = { assignees: true };
+  return prisma.task.findMany({ where, include });
+}
