@@ -5,7 +5,6 @@ import globalConstants from "@/lib/constants";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import { getTaskShortcutAction } from "@/lib/keyboard/taskShortcuts";
 import { CommandMode } from "@/models/enums";
-import { MAX_SORT_LEVELS } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { toggleTaskTimer } from "@/hooks/Task Detail/useTimeTracking";
 import toast from "react-hot-toast";
 import { useFlag } from "@/hooks/useFlag";
@@ -16,6 +15,10 @@ import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
 import type { useTableRows } from "./useTableRows";
 import { SortColumn, initialDirection, SortState, myTasksSortFromTable, isTaskRow, Row, TASK_SHORTCUT_COMMAND_MODES } from "./tableViewShared";
+import { applyTableSortClick } from "@/lib/table-view/tableViewSettings";
+import { HTPR_8973_TABLE_SORT_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-8973-table-sort-columns";
+import { useSetRecoilState } from "@/lib/state";
+import { tableSortAccountAtom } from "@/store";
 
 type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_currentProject" | "currentUser"> &
   Pick<ReturnType<typeof useTableState>, "customFieldBySortColumn" | "sortState" | "setSortState" | "setTableSortViewAndReturn" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setTasksPlayList" | "navigateToTask" | "draggedTaskRef" | "setDragOverSectionId" | "currentProjectSectionIds" | "moveTaskToSection" | "timerToggling" | "queryClient" | "removeFromListWithStatus" | "setExcludedTaskIds" | "router" | "updateTaskInCache" | "starTask" | "assignTask" | "setAssignTask" | "myTasksSnoozeEnabled" | "lastGAt" | "setShowCommands" | "isApple" | "didRestore" | "persistedActiveItem" | "selectedIndex"> &
@@ -25,6 +28,8 @@ export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes") || legacyTableGroupEnabled;
+  const tableSortColumnsEnabled = useFlag(HTPR_8973_TABLE_SORT_COLUMNS_FLAG);
+  const setSortAccount = useSetRecoilState(tableSortAccountAtom);
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
   _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
@@ -40,27 +45,13 @@ export function useTableActions(context: Context) {
   const toggleSort = useCallback(
     (column: SortColumn, shiftKey: boolean) => {
       const initial = initialDirection(column, customFieldBySortColumn);
-      const existingIndex = sortState.findIndex((level) => level.column === column);
-      let next: SortState;
-      if (shiftKey && !myTasksSort) {
-        if (existingIndex >= 0) {
-          next = sortState.map((level, index) =>
-            index === existingIndex
-              ? { ...level, direction: level.direction === "asc" ? "desc" : "asc" }
-              : level
-          );
-        } else if (sortState.length === MAX_SORT_LEVELS) {
-          next = sortState;
-        } else {
-          next = [...sortState, { column, direction: initial }];
-        }
-      } else if (sortState[0]?.column !== column) {
-        next = [{ column, direction: initial }];
-      } else if (sortState[0].direction === initial) {
-        next = [{ column, direction: initial === "asc" ? "desc" : "asc" }];
-      } else {
-        next = [];
-      }
+      const next = applyTableSortClick(
+        sortState,
+        column,
+        shiftKey,
+        initial,
+        !myTasksSort,
+      ) as SortState;
       if (myTasksSort && onMyTasksSortChange) {
         const controlledSort = myTasksSortFromTable(
           next[0] ?? { column, direction: initial },
@@ -69,7 +60,20 @@ export function useTableActions(context: Context) {
         return;
       }
       setSortState(next);
-      if (_currentProject) setTableSortViewAndReturn(_currentProject, next[0] ?? null);
+      if (tableSortColumnsEnabled) {
+        const viewId =
+          _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
+          _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
+          _currentProject?.project_view?.default_view?.id;
+        if (viewId) setSortAccount({ viewId, sort: next });
+      }
+      if (_currentProject) {
+        setTableSortViewAndReturn(
+          _currentProject,
+          next[0] ?? null,
+          tableSortColumnsEnabled ? next : undefined,
+        );
+      }
     },
     [
       sortState,
@@ -78,6 +82,8 @@ export function useTableActions(context: Context) {
       customFieldBySortColumn,
       myTasksSort,
       onMyTasksSortChange,
+      tableSortColumnsEnabled,
+      setSortAccount,
     ]
   );
 

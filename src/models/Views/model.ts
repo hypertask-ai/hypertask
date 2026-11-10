@@ -56,6 +56,8 @@ export type TCreate_view_body = {
         board_show_archived?: boolean | null,
         table_sort_column?: string | null,
         table_sort_direction?: string | null,
+        table_sort_stack?: { column: string; direction: "asc" | "desc" }[] | null,
+        table_columns?: { keys: string[]; widths: Record<string, number> } | null,
         table_group_by?: string | null,
         table_collapsed_sections?: string | null,
         board_layout?: TSavedBoardLayout | null,
@@ -79,6 +81,8 @@ export type TUpdate_view_body = {
         board_show_archived?: boolean | null,
         table_sort_column?: string | null,
         table_sort_direction?: string | null,
+        table_sort_stack?: { column: string; direction: "asc" | "desc" }[] | null,
+        table_columns?: { keys: string[]; widths: Record<string, number> } | null,
         table_group_by?: string | null,
         table_collapsed_sections?: string | null,
         board_layout?: TSavedBoardLayout | null,
@@ -109,6 +113,8 @@ export type TBodyAPIUnsaved = {
     board_show_archived?: boolean | null;
     table_sort_column?: string | null;
     table_sort_direction?: string | null;
+    table_sort_stack?: { column: string; direction: "asc" | "desc" }[] | null;
+    table_columns?: { keys: string[]; widths: Record<string, number> } | null;
     table_group_by?: string | null;
     table_collapsed_sections?: string | null;
     board_layout?: TSavedBoardLayout | null;

@@ -39,6 +39,8 @@ import {
   getActiveSortingStackFromProject,
   getActiveSubtaskSettingFromProject,
   getActiveTableSortFromProject,
+  getActiveTableSortStackFromProject,
+  getActiveTableColumnsFromProject,
   getViewFromProject,
   getProjectForViewMutation,
   enqueueBoardViewMutation,
@@ -66,6 +68,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8973_TABLE_SORT_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-8973-table-sort-columns";
+import type { TableColumnSettings, TableSortLevel } from "@/lib/table-view/tableViewSettings";
 import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 let emptySectionMutationId = 0
@@ -78,6 +82,7 @@ const useKanbanViews = (project: IProject | null) => {
     UpdateKanban();
   const queryClient = useQueryClient();
   const deletedViewLeavesTabs = useFlag(HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG);
+  const tableSortColumnsEnabled = useFlag(HTPR_8973_TABLE_SORT_COLUMNS_FLAG);
   const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG);
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled;
@@ -245,6 +250,10 @@ const useKanbanViews = (project: IProject | null) => {
     board_show_archived: getActiveShowArchivedOverrideFromProject(queuedProject),
     table_sort_column: getActiveTableSortFromProject(queuedProject)?.column ?? null,
     table_sort_direction: getActiveTableSortFromProject(queuedProject)?.direction ?? null,
+    ...(tableSortColumnsEnabled ? {
+      table_sort_stack: getActiveTableSortStackFromProject(queuedProject),
+      table_columns: getActiveTableColumnsFromProject(queuedProject),
+    } : {}),
     table_group_by: tableGroupByTagEnabled
       ? serializeEffectiveTableGrouping(effectiveTableGrouping(queuedProject, tableGroupModesEnabled, tableGroupByTagEnabled))
       : "column",
@@ -410,11 +419,23 @@ const useKanbanViews = (project: IProject | null) => {
 
   const setTableSortViewAndReturn = async (
     project: IProject,
-    tableSort: TTableSort
+    tableSort: TTableSort,
+    stack?: TableSortLevel[] | null,
   ) => apiHandler(
     (queuedProject) => buildUnsavedBody(queuedProject, {
       table_sort_column: tableSort?.column ?? null,
       table_sort_direction: tableSort?.direction ?? null,
+      ...(stack === undefined ? {} : { table_sort_stack: stack ?? [] }),
+    }),
+    project,
+  );
+
+  const setTableColumnsViewAndReturn = async (
+    project: IProject,
+    columns: TableColumnSettings | null,
+  ) => apiHandler(
+    (queuedProject) => buildUnsavedBody(queuedProject, {
+      table_columns: columns,
     }),
     project,
   );
@@ -625,6 +646,7 @@ const useKanbanViews = (project: IProject | null) => {
     hasUserSelectedView,
     setBoardSortingViewAndReturn,
     setTableSortViewAndReturn,
+    setTableColumnsViewAndReturn,
     setTableGroupByViewAndReturn,
     setTableCollapsedSectionsViewAndReturn,
     saveFilterAPI,
