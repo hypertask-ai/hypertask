@@ -5,7 +5,7 @@ export const HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG = "htpr-9010-task-writer-brain
 export default {
   key: HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG,
   kind: "feature",
-  defaultMode: "OWNER_AND_QA",
+  defaultMode: "EVERYONE",
   shippedOn: "2026-11-10",
   description: "Task Writer picks exactly one brain label on boards that have brain labels, without the user naming tags. Needs htpr-7513-writer-project-labels.",
   related: ["htpr-7513-writer-project-labels"],

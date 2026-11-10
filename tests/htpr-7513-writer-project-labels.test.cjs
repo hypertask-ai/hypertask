@@ -457,13 +457,13 @@ test("brain labels: streamed HTML gets one brain marker even when the model wrot
   assert.equal(properties.normalizeTaskWriterLabels("<p>Body</p>", ids, null).includes("ai-generated-task-tags"), false);
 });
 
-test("brain flag has the Owner + QA default and is exported with the other keys", () => {
+test("brain flag has the Everyone default the flag gate requires and is exported with the other keys", () => {
   const definition = optionalModule("src/lib/flags/definitions/htpr-9010-task-writer-brain-tag.ts").default;
   assert.ok(definition);
   assert.equal(definition.key, brainFlag);
   assert.equal(keys.HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG, brainFlag);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.defaultMode, "EVERYONE");
   assert.deepEqual([...definition.related], [flag]);
   assert.equal(definition.releaseRisk.risk, "small");
 });
