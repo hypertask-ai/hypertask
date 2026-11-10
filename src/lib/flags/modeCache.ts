@@ -7,6 +7,22 @@ export const FLAG_MODE_GENERATION_KEY = `${FLAG_MODE_CACHE_KEY}:generation`;
 export const FLAG_MODE_WRITERS_KEY = `${FLAG_MODE_CACHE_KEY}:writers`;
 export const flagModeScope = new AsyncLocalStorage<{ modes?: Promise<RawFlagMode[] | null> }>();
 
+const HUMAN_FLAG_CACHE_MS = 60_000;
+let humanProcessFlagCache: { expiresAt: number; rows: RawFlagMode[] } | undefined;
+
+export function readHumanProcessFlagCache(): RawFlagMode[] | undefined {
+  if (!humanProcessFlagCache || humanProcessFlagCache.expiresAt <= Date.now()) return undefined;
+  return humanProcessFlagCache.rows;
+}
+
+export function storeHumanProcessFlagCache(rows: RawFlagMode[]): void {
+  humanProcessFlagCache = { expiresAt: Date.now() + HUMAN_FLAG_CACHE_MS, rows };
+}
+
+export function clearHumanProcessFlagCache(): void {
+  humanProcessFlagCache = undefined;
+}
+
 export function withFeatureFlagSnapshot<T>(run: () => T): T {
   return flagModeScope.run({}, run);
 }
@@ -24,6 +40,7 @@ export async function flagCacheCommand<T>(operation: Promise<T>, timeoutMs = 100
 
 export async function withFlagModeInvalidation<T>(write: () => Promise<T>): Promise<T> {
   const result = await write();
+  clearHumanProcessFlagCache();
   const scope = flagModeScope.getStore();
   if (scope) scope.modes = undefined;
   if (process.env.REDIS_URL) {

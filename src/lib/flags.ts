@@ -277,11 +277,23 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
 }
 
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
+  const { currentRedisAudience } = await import("@/lib/redis/audience");
+  if (currentRedisAudience() === "agent") {
+    return prisma.featureFlag.findMany({ select: { key: true, mode: true } });
+  }
+  const {
+    clearHumanProcessFlagCache,
+    FLAG_MODE_CACHE_KEY,
+    FLAG_MODE_GENERATION_KEY,
+    FLAG_MODE_WRITERS_KEY,
+    flagCacheCommand,
+    readHumanProcessFlagCache,
+    storeHumanProcessFlagCache,
+  } = await import("@/lib/flags/modeCache");
+  const cachedProcess = readHumanProcessFlagCache();
+  if (cachedProcess) return cachedProcess;
   if (!process.env.REDIS_URL) return null;
   try {
-    const {
-      FLAG_MODE_CACHE_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_WRITERS_KEY, flagCacheCommand,
-    } = await import("@/lib/flags/modeCache");
     const redis = await flagCacheCommand(import("@/lib/redis").then(({ getRedis }) => getRedis()));
     const [writers, generation, cached] = await flagCacheCommand(redis.mget(
       FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
@@ -293,6 +305,8 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       if (!Array.isArray(rows) || !rows.every((row) =>
         typeof row?.key === "string" && FEATURE_FLAG_MODES.includes(row.mode),
       )) return null;
+      storeHumanProcessFlagCache(rows);
+      return rows;
     } else {
       rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
     }
@@ -303,12 +317,14 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       await flagCacheCommand(redis.eval(`
         if (redis.call('GET', KEYS[1]) or '0') == '0'
           and (redis.call('GET', KEYS[2]) or '0') == ARGV[1] then
-          return redis.call('SET', KEYS[3], ARGV[2], 'EX', 30)
+          return redis.call('SET', KEYS[3], ARGV[2], 'EX', 60)
         end
         return 0
       `, 3, FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
       generation ?? "0", JSON.stringify(rows))).catch(() => undefined);
     }
+    clearHumanProcessFlagCache();
+    storeHumanProcessFlagCache(rows);
     return rows;
   } catch {
     return null;

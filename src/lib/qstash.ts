@@ -4,6 +4,7 @@ import { Client } from "@upstash/qstash";
 import { verifySignature } from "@upstash/qstash/nextjs";
 import type { NextApiHandler } from "next";
 import { getRedis } from "@/lib/redis";
+import { withRedisAudience } from "@/lib/redis/audience";
 
 let qstashClient: Client | undefined;
 
@@ -97,7 +98,7 @@ export function withQstashSignature(handler: NextApiHandler): NextApiHandler {
         nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY!.trim(),
       });
     }
-    return signedHandler(req, res);
+    return withRedisAudience("job", () => signedHandler!(req, res));
   };
 }
 

@@ -1,3 +1,7 @@
+import { currentRedisAudience } from "@/lib/redis/audience";
+import { createMemoryRedisClient } from "@/lib/redis/memoryClient";
+import { instrumentRedisMetrics } from "@/lib/redis/metrics";
+
 type RedisClient = InstanceType<(typeof import("ioredis"))["default"]>;
 
 function getRedisUrl() {
@@ -29,9 +33,31 @@ function logReconnectingConnectionError(error: NodeJS.ErrnoException) {
 const globalForRedis = globalThis as unknown as {
   redis?: RedisClient;
   redisPromise?: Promise<RedisClient>;
+  agentRedis?: ReturnType<typeof createMemoryRedisClient>;
 };
 
+async function connectProductionRedis(): Promise<RedisClient> {
+  const { default: Redis } = await import("ioredis");
+  const client = new Redis(getRedisUrl(), { protocol: 2 });
+  client.on("error", logReconnectingConnectionError);
+  const metrics = {
+    incrby: (key: string, amount: number) => client.incrby(key, amount),
+    hincrby: (key: string, field: string, amount: number) => client.hincrby(key, field, amount),
+    expire: (key: string, seconds: number) => client.expire(key, seconds),
+    get: (key: string) => client.get(key),
+    hgetall: (key: string) => client.hgetall(key),
+  };
+  return instrumentRedisMetrics(client, metrics) as RedisClient;
+}
+
 export async function getRedis(): Promise<RedisClient> {
+  if (currentRedisAudience() === "agent") {
+    if (!globalForRedis.agentRedis) {
+      globalForRedis.agentRedis = createMemoryRedisClient();
+    }
+    return globalForRedis.agentRedis as unknown as RedisClient;
+  }
+
   if (globalForRedis.redis) return globalForRedis.redis;
 
   if (!globalForRedis.redisPromise) {
@@ -39,10 +65,7 @@ export async function getRedis(): Promise<RedisClient> {
       if (process.env.NEXT_RUNTIME === "edge") {
         throw new Error("Redis TCP client is unavailable in the Edge runtime.");
       }
-
-      const { default: Redis } = await import("ioredis");
-      const client = new Redis(getRedisUrl(), { protocol: 2 });
-      client.on("error", logReconnectingConnectionError);
+      const client = await connectProductionRedis();
       globalForRedis.redis = client;
       return client;
     })();

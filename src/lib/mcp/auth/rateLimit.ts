@@ -62,6 +62,31 @@ export async function checkMcpRateLimit(
     }
     const fastEnabled = !(await shouldUseExactCountRateLimit())
     if (!fastEnabled) localCounts.clear()
+    const { currentRedisAudience } = await import('@/lib/redis/audience')
+    if (currentRedisAudience() === 'agent') {
+      const trackCount = fastEnabled && localWindowStart === windowStartSeconds
+      const state = trackCount ? localCounts.get(key) : undefined
+      const increment = state && !state.leasing && state.count + LEASE <= MCP_RATE_LIMIT_PER_MINUTE / 2 ? LEASE : 1
+      if (state && increment === LEASE) state.leasing = true
+      const count = (state?.count ?? 0) + increment
+      if (state) {
+        state.count = count
+        state.leasing = false
+      } else if (trackCount) localCounts.set(key, { count, reserved: 0, leasing: false })
+      const countOutcome = classifyMcpRateLimitCount(count)
+      if (countOutcome === 'allow') return null
+      let limit = MCP_AGENT_RATE_LIMIT_PER_MINUTE
+      if (countOutcome === 'resolve-tier') {
+        const ctx = await (resolveAuth ? resolveAuth() : validateMcpAuth(request))
+        limit = resolveMcpRateLimit(ctx, token)
+      }
+      const decision = decideMcpRateLimit(count, limit, windowStartSeconds, nowSeconds)
+      if (!decision.limited) return null
+      return NextResponse.json(
+        { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } },
+      )
+    }
     const redis = await getRedis()
     const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined
     if (prepaid && prepaid.reserved > 0) {
