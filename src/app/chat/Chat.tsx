@@ -570,19 +570,18 @@ export default function Chat({ initialSessionId }: ChatProps) {
   ], [pinnedSessions, sessionGroups]);
 
   const displayedSessions = displayedSessionGroups.flatMap((group) => group.sessions);
-  const allRailGroupsShut = sectionsEnabled
+  const holdRailPaging = sectionsEnabled
     && searchQuery.trim().length === 0
-    && displayedSessionGroups.length > 0
-    && displayedSessionGroups.every((group) => collapsedRailSections.includes(group.title));
+    && displayedSessionGroups.some((group) => collapsedRailSections.includes(group.title));
 
   useEffect(() => {
-    if (!paged || allRailGroupsShut || !hasMoreSessions || isLoadingMoreSessions || pagingError || !historyEndRef.current) return;
+    if (!paged || holdRailPaging || !hasMoreSessions || isLoadingMoreSessions || pagingError || !historyEndRef.current) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMoreSessions();
     }, { root: historyEndRef.current.parentElement });
     observer.observe(historyEndRef.current);
     return () => observer.disconnect();
-  }, [paged, allRailGroupsShut, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
+  }, [paged, holdRailPaging, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
