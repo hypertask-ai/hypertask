@@ -56,6 +56,8 @@ function load() {
     "@/lib/flags": { ...flags, isFeatureEnabled: async () => false },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
+    "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async (rows) => rows.map((row) => ({ ...row, agentStatus: null })) },
+    "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" },
   };
   mocks["@/utils/controllers/projects/getAllIncludes"] = require("./task-route-loader.cjs").load("src/utils/controllers/projects/getAllIncludes.ts", mocks);
   const source = fs.readFileSync(path.join(root, "src/utils/controllers/taskDetail/load.ts"), "utf8");

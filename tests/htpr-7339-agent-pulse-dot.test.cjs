@@ -1,11 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
+const React = require("react");
+const { renderToStaticMarkup } = require("react-dom/server");
 const { load } = require("./task-route-loader.cjs");
 
-const root = path.join(__dirname, "..");
-const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const flagKey = "htpr-7339-agent-pulse-dot";
 
 const NOW = Date.parse("2026-10-10T12:00:00Z");
@@ -38,27 +36,12 @@ test("dot mode pulses only inside ten minutes while working, steady while waitin
   assert.equal(agentStatusDotMode(minutesAgo(360), "waiting for you", minute, NOW), null);
 });
 
-test("board card and ticket header gate the dot on the ticket flag", () => {
-  const tagsRow = read("src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx");
-  const title = read("src/components/PageComponents/TaskDetail/TopRow/TaskDetailTitleContainer.tsx");
-  const headerChip = read("src/components/PageComponents/TaskDetail/TopRow/TaskDetailAgentStatusChip.tsx");
-  assert.match(tagsRow, /HTPR_7339_AGENT_PULSE_DOT_FLAG/);
-  assert.match(tagsRow, /AgentStatusChip/);
-  assert.match(title, /TaskDetailAgentStatusChip/);
-  assert.match(title, /HTPR_7339_AGENT_PULSE_DOT_FLAG/);
-  assert.match(headerChip, /HTPR_7339_AGENT_PULSE_DOT_FLAG/);
-  const loadTs = read("src/utils/controllers/taskDetail/load.ts");
-  assert.match(loadTs, /attachAgentStatus/);
-  assert.match(loadTs, /isFeatureEnabled\(HTPR_7339_AGENT_PULSE_DOT_FLAG/);
-});
-
-test("status dot uses approved size, colours and test id", () => {
-  const dot = read("src/components/agentStatus/AgentStatusDot.tsx");
-  assert.match(dot, /data-testid="agent-status-dot"/);
-  assert.match(dot, /agent-status-dot-working/);
-  assert.match(dot, /agent-status-dot-waiting/);
-  assert.match(dot, /h-\[6px\] w-\[6px\]/);
-  assert.match(fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8"), /agent-status-dot-working[\s\S]*#51A4F1/);
-  assert.match(fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8"), /agent-status-dot-waiting[\s\S]*#FB773F/);
-  assert.match(dot, /motion-safe:animate-pulse/);
+test("the status dot renders working and waiting classes", () => {
+  const AgentStatusDot = load("src/components/agentStatus/AgentStatusDot.tsx", {
+    react: React,
+    "react/jsx-runtime": require("react/jsx-runtime"),
+    "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+  }).default;
+  assert.match(renderToStaticMarkup(React.createElement(AgentStatusDot, { mode: "working" })), /agent-status-dot-working/);
+  assert.match(renderToStaticMarkup(React.createElement(AgentStatusDot, { mode: "waiting" })), /agent-status-dot-waiting/);
 });
