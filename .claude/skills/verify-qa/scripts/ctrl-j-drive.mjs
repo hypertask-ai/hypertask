@@ -74,7 +74,7 @@ try {
   await page.screenshot({ path: path.join(dir, '01-ctrl-j-opened.png') });
   step('ctrl-j-opens the New Task popup', opened && (await composer.isVisible()), { opened });
 
-  await composer.click();
+  await composer.focus();
   const marker = `Ctrl+J drive ${Date.now()}`;
   await page.keyboard.insertText(marker);
   step('the composer takes typed text', (await composer.inputValue()) === marker, { marker });
@@ -95,7 +95,7 @@ try {
   };
   let via = `shortcut ${shortcut}`;
   let sent = waitForCreate(90_000);
-  await composer.click();
+  await composer.focus();
   await page.keyboard.press(shortcut);
   let response = await sent;
   if (!response) {
