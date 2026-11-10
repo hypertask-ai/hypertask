@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const {
-  isoWeek, weeklyLiveTitle, countSteps, findOpenWeeklyTicket, fileWeeklyLiveResult,
+  isoWeek, weeklyLiveTitle, countSteps, findOpenWeeklyTicket, fileWeeklyLiveResult, weeklyDescription,
 } = require('../.github/scripts/feature-map-live-weekly-file.mjs')
 
 test('countSteps and weekly title', () => {
@@ -15,7 +15,7 @@ test('countSteps and weekly title', () => {
 function fetchFor(routes, calls = []) {
   return async (url, init = {}) => {
     const body = init.body ? JSON.parse(init.body) : null
-    calls.push({ url, method: init.method || 'GET', body })
+    calls.push({ url, method: init.method || 'GET', body, headers: init.headers || {} })
     const pathname = new URL(url).pathname + new URL(url).search
     const hit = routes.find((route) => route.when(pathname, body))
     if (!hit) return { ok: false, status: 404, json: async () => ({}) }
@@ -67,9 +67,24 @@ test('fileWeeklyLiveResult creates a board 11514 ticket then comments', async ()
   assert.equal(create.body.title, title)
   assert.deepEqual(create.body.labels, ['CI', 'Hypertask CI', 'brain-light'])
   assert.match(create.body.description, /What's wrong or wanted:.*Who it affects:.*Recommended course and why:.*What Valentin must decide:.*How to undo:/)
+  assert.match(create.body.description, /Problem.*Fix.*Done when.*Risk.*Decision/s)
+  assert.equal(create.headers['Idempotency-Key'], `feature-map-live-weekly-${week}`)
   const comment = calls.find((call) => call.url.endsWith('/api/mcp/comments'))
   assert.equal(comment.body.ticket_number, 'HYCI-205')
   assert.match(comment.body.text, /feature-map-live-weekly 2026-W45/)
+})
+
+test('weekly description keeps every sentence within twelve words', () => {
+  for (const counts of [{ pass: 5, fail: 0, verdict: 'PASS' }, { pass: 3, fail: 2, verdict: 'FAIL' }, { pass: 4, fail: 1, verdict: 'FAIL' }]) {
+    const text = weeklyDescription({ week: '2026-W46', counts }).replace(/<\/[^>]+>/g, '\n').replace(/<[^>]+>/g, ' ')
+    const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+    for (const line of lines) {
+      for (const sentence of line.split(/(?<=[.!?:;])\s+/)) {
+        const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu) ?? []
+        assert.ok(words.length <= 12, `too long: ${sentence}`)
+      }
+    }
+  }
 })
 
 test('fileWeeklyLiveResult reuses an open weekly ticket', async () => {
