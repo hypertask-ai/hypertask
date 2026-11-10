@@ -6,30 +6,13 @@ import prisma from "@/lib/prisma";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
+  buildSearchStatusFilter,
   parseTicketSearchQuery,
+  TRASHED_STATUSES,
+  type SearchStatus,
   type TicketSearchQuery,
 } from "@/utils/controllers/search/rankHits";
 import { buildCustomInstructionSearchFilters } from "@/app/api/ai/_lib/boardMemoryContract";
-
-type SearchStatus = "Normal" | "Archive" | "Deleted";
-
-export const TRASHED_STATUSES: SearchStatus[] = ["Deleted"];
-
-export function buildSearchStatusFilter(
-  field: string,
-  status?: SearchStatus | null,
-  excludeStatuses: SearchStatus[] = TRASHED_STATUSES
-): unknown[] | null {
-  if (status) return [field, "Eq", status];
-
-  const excluded = excludeStatuses.filter(
-    (value, index) => excludeStatuses.indexOf(value) === index
-  );
-  if (excluded.length === 0) return null;
-
-  const rejections = excluded.map((value) => [field, "NotEq", value]);
-  return rejections.length === 1 ? rejections[0] : ["And", rejections];
-}
 
 export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const EMBEDDINGS_ENDPOINT = "https://ai-gateway.vercel.sh/v1/embeddings";

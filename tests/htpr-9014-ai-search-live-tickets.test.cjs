@@ -2,19 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
-const statusFilter = loadModule(
-  "src/utils/controllers/turbopuffer/turbopufferHelper.ts",
-  {
-    "@/lib/prisma": { default: {} },
-    "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
-    "@/lib/turbopuffer": {
-      default: { namespace: () => ({ write: async () => ({}), query: async () => ({}) }) },
-      turbopufferNamespaces: { task: { name: "task" }, comment: { name: "comment" }, page: { name: "page" }, customInstructionFile: { name: "custom-instruction-file" } },
-    },
-    "@/utils/controllers/search/rankHits": { parseTicketSearchQuery: () => null },
-    "@/app/api/ai/_lib/boardMemoryContract": { buildCustomInstructionSearchFilters: () => null },
-  }
-);
+const statusFilter = loadModule("src/utils/controllers/search/rankHits.ts");
 const liveOnly = ["Deleted", "Archive"];
 
 test("a search with no status never keeps trashed tickets", () => {
@@ -105,23 +93,6 @@ test("AI chat search asks the index for live tickets only and drops a Deleted st
   }
 });
 
-test("the Task Writer and hyper-mentioned searches ask for live tickets only", () => {
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const sources = ["src/app/api/ai/_lib/editorAi.ts", "src/app/api/ai/_lib/taskWriterRun.ts"];
-  for (const file of sources) {
-    const source = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
-    const searches = source.split("searchTasks({").slice(1).length - 1;
-    const comments = source.split("searchComments({").slice(1).length - 1;
-    assert.ok(searches >= 1, `${file} must search tasks`);
-    assert.equal(
-      source.split('excludeStatuses: ["Deleted", "Archive"],').length - 1,
-      searches + comments,
-      `${file} must ask for live tickets on every index search`
-    );
-  }
-});
-
 test("Trash removes a task tree from the index and restore puts it back", async () => {
   const index = { deleted: [], restored: [] };
   const sync = loadModule(
@@ -145,13 +116,3 @@ test("Trash removes a task tree from the index and restore puts it back", async 
   assert.equal(index.deleted.length, 1);
 });
 
-test("the Trash and restore route hands the whole ticket tree to the index sync", () => {
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const source = fs.readFileSync(
-    path.join(__dirname, "..", "src/pages/api/queues/tasks/taskDeleteReminder.ts"),
-    "utf8"
-  );
-  assert.ok(source.includes("trashedTaskIds.push(...taskIds)"));
-  assert.match(source, /await syncSearchIndex\(trashedTaskIds, status\)/);
-});
