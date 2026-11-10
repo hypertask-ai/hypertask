@@ -22,6 +22,7 @@ import {
   type TAiModelPreferences,
   type TAiModelPreferencesBySurface,
 } from "@/lib/aiModelPreferences";
+import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import {
   aiImageModelDefinitions,
   AUTO_MODEL_OPTION_ID,
@@ -328,15 +329,20 @@ export async function POST(request: NextRequest) {
       }
 
       const preferenceUpdates = Object.entries(body.aiModelPreferences);
-      const invalidPreference = preferenceUpdates.find(
-        ([surface, optionId]) =>
-          !isAiModelPreferenceSurface(surface) ||
-          typeof optionId !== "string" ||
-          (surface === "imageGeneration"
-            ? !aiImageModelDefinitions.some((model) => model.key === optionId)
-            : !getAiModelOptionById(optionId) &&
-              !(surface === "aiChat" && optionId === AUTO_MODEL_OPTION_ID)),
-      );
+      let taskWriterAuto = false;
+      if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id)) {
+        taskWriterAuto = true;
+      }
+      const invalidPreference = preferenceUpdates.find(([surface, optionId]) => {
+        if (!isAiModelPreferenceSurface(surface) || typeof optionId !== "string") return true;
+        if (surface === "imageGeneration") {
+          return !aiImageModelDefinitions.some((model) => model.key === optionId);
+        }
+        if (getAiModelOptionById(optionId)) return false;
+        if (surface === "aiChat" && optionId === AUTO_MODEL_OPTION_ID) return false;
+        if (surface === "taskWriter" && optionId === AUTO_MODEL_OPTION_ID && taskWriterAuto) return false;
+        return true;
+      });
 
       if (invalidPreference) {
         return NextResponse.json(

@@ -18,9 +18,11 @@ import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFall
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
 import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, isGrokGemini4ModelKey, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
+import { taskWriterPickerOption } from "@/lib/taskWriterPickerAuto";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 import { getAiFeatureModelOverride, resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
@@ -708,7 +710,15 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  const autoPick = args.aiFeature && args.userId && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
+  let pickerSelection = null;
+  if (args.aiFeature === "taskWriter" && typeof args.userId === "number") {
+    if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, args.userId)) {
+      pickerSelection = taskWriterPickerOption(args.modelOptionId, args.modelSelected, haiku55Enabled);
+    }
+  }
+  const namedPickerOption = pickerSelection && pickerSelection !== "auto" ? pickerSelection : null;
+  const requestAuto = pickerSelection === "auto";
+  const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))
     ? pickAutoModelOption({
         feature: args.aiFeature,
         settings: teamContext.settings,
@@ -719,7 +729,9 @@ export async function selectTaskWriterModel(args: {
         forcedProvider: await autoForcedProvider(keyLookup),
       })
     : null;
-  let selection = autoPick
+  let selection = namedPickerOption
+    ? selectionFromModelOption(namedPickerOption)
+    : autoPick
     ? selectionFromModelOption(autoPick)
     : taskWriterSonnet
     ? selectionFromModelOption(getAiModelOptionById("claude-sonnet-5-5-thinking")!)
