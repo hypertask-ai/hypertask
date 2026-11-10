@@ -205,9 +205,7 @@ export function useTableState(context: Context) {
   }
   if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled)) {
     const grouping = getActiveTableGroupingFromProject(_currentProject);
-    if (grouping.mode !== "column") {
-      sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
-    }
+    if (grouping.mode !== "column") sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
   }
 
   useEffect(() => {

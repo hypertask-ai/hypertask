@@ -5,7 +5,6 @@ export type TableGroupBy = "column" | "tag" | "assignee" | "priority" | "size";
 export type TableGrouping = { mode: TableGroupBy; tagIds: string[]; allTags: boolean };
 
 export type TableTagGroupedSection = TableCreateTaskSection & { items: ITask[] };
-
 export const TABLE_GROUP_BY_TAG_NONE = "tag:none" as const;
 export const NO_TAG_SECTION_TITLE = "No tag";
 export const OTHER_GROUP_TITLE = "Other";
@@ -106,7 +105,6 @@ export function buildTableSectionsGroupedByTag(
     return { key: `tag:${id}`, title: label?.value?.trim() || id, order: index };
   });
 }
-
 export function countTableTags(sections: ISection[]): { id: string; title: string; count: number }[] {
   const counts = new Map<string, { id: string; title: string; count: number }>();
   for (const section of sections) {
@@ -122,18 +120,15 @@ export function countTableTags(sections: ISection[]): { id: string; title: strin
       }
     }
   }
-  return [...counts.values()].sort(
-    (a, b) => b.count - a.count || a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
-  );
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
 }
 export const buildTableSectionsGroupedByAssignee = (sections: ISection[]) =>
   buildGroups(sections, (task) => {
     const assignee = task.assignees?.[0];
     if (!assignee) return { key: "assignee:none", title: UNASSIGNED_GROUP_TITLE, order: LAST };
-    if (typeof assignee.agentId === "string") {
-      return { key: `assignee:agent:${assignee.agentId}`, title: assignee.agent?.displayName || "Agent", order: 0 };
-    }
-    return { key: `assignee:user:${assignee.userId}`, title: assignee.user?.displayName || "Member", order: 0 };
+    return typeof assignee.agentId === "string"
+      ? { key: `assignee:agent:${assignee.agentId}`, title: assignee.agent?.displayName || "Agent", order: 0 }
+      : { key: `assignee:user:${assignee.userId}`, title: assignee.user?.displayName || "Member", order: 0 };
   });
 
 export const buildTableSectionsGroupedByPriority = (sections: ISection[]) =>

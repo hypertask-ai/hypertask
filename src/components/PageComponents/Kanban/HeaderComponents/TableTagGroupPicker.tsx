@@ -10,10 +10,7 @@ import { useFlag } from "@/hooks/useFlag";
 const ACTION = "inline-flex min-h-7 items-center rounded-[4px] border-0 px-2 py-1 text-meta font-medium text-white-black hover:bg-hover-active";
 const TableTagGroupPicker = ({ project, onClose, onApply }: { project: IProject; onClose: () => void; onApply: (tagIds: string[]) => void }) => {
   const enabled = useFlag("htpr-8974-table-group-modes");
-  const counts = useMemo(
-    () => countTableTags(project.filteredSections?.length ? project.filteredSections : project.sections ?? []),
-    [project.filteredSections, project.sections],
-  );
+  const counts = useMemo(() => countTableTags(project.filteredSections?.length ? project.filteredSections : project.sections ?? []), [project.filteredSections, project.sections]);
   const [selected, setSelected] = useState<string[]>(() => {
     const grouping = getActiveTableGroupingFromProject(project);
     const available = new Set(counts.map((tag) => tag.id));
@@ -62,5 +59,4 @@ const TableTagGroupPicker = ({ project, onClose, onApply }: { project: IProject;
       </ModalFooterComp>
     </ModalContainerCustom> : null;
 };
-
 export default TableTagGroupPicker;
