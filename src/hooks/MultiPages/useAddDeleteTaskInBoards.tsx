@@ -1,6 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import { planLimitRefusalMessage } from "@/lib/planLimitsClient";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
+import { HTPR_9006_QUICK_ADD_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-9006-quick-add-column";
 import toast from "react-hot-toast";
 
 import { aiChatNewTicketPathAtom, currentProjectAtom, activeSectionAtom, currentUserAtom } from "@/store";
@@ -37,6 +38,7 @@ interface CreateTaskGloballyParams {
 const useAddDeleteTaskInBoards = () => {
   let showPlanLimitToast = false;
   if (useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG)) showPlanLimitToast = true;
+  const quickAddShowsInColumn = useFlag(HTPR_9006_QUICK_ADD_COLUMN_FLAG);
   const queryClient = useQueryClient();
   const store = useStore();
   const _currentProject = useRecoilValue(currentProjectAtom)
@@ -115,7 +117,9 @@ const useAddDeleteTaskInBoards = () => {
     console.log("🚀 ~ createItem ~ sections:", sections)
 
 
-    const sectionIndex = _currentProject.sections.findIndex((sec) => sec.sectionId === sectionId);
+    const sectionIndex = quickAddShowsInColumn
+      ? sections.findIndex((sec: { sectionId?: number; id?: number }) => (sec.sectionId ?? sec.id) === sectionId)
+      : _currentProject.sections.findIndex((sec: { sectionId?: number }) => sec.sectionId === sectionId);
     console.log("🚀 ~ createItem ~ sectionIndex:", sectionIndex)
 
     const ranking = generateRanking(
@@ -182,20 +186,27 @@ const useAddDeleteTaskInBoards = () => {
 
         task = res.data;
       }
-      store.set(aiChatNewTicketPathAtom, `/detail/project-${projectId}/${task.uniqueIndex}`);
+      const rememberedTask = quickAddShowsInColumn
+        ? { ...task, sectionId: typeof task.sectionId === "number" ? task.sectionId : sectionId, section: task.section || section }
+        : task;
+      store.set(aiChatNewTicketPathAtom, `/detail/project-${projectId}/${rememberedTask.uniqueIndex}`);
       try {
       const targetSection = sections[sectionIndex];
 
-      const updatedItems = position === "top" ? [task, ...(targetSection?.items || [])] : [...(targetSection?.items || []), task];
+      const updatedItems = position === "top" ? [rememberedTask, ...(targetSection?.items || [])] : [...(targetSection?.items || []), rememberedTask];
 
       const updatedSections = sections.map((sec, index) =>
         index === sectionIndex ? { ...targetSection, items: updatedItems } : sec
       );
       console.log("🚀 ~ createItem ~ updatedSections:", updatedSections);
 
-      mutationHandler(projectToUpdateIndex, updatedSections, allData);
+      const boardTasks = allData.updatedProjects[projectToUpdateIndex].tasks;
+      const nextTasks = quickAddShowsInColumn && Array.isArray(boardTasks)
+        ? [...boardTasks.filter((row: ITask) => row?.id !== rememberedTask.id), rememberedTask]
+        : undefined;
+      mutationHandler(projectToUpdateIndex, updatedSections, allData, nextTasks);
 
-      if (!createAnother) updateActiveItemAndItemInView(task.id, _currentProject.id, getActiveSection());
+      if (!createAnother) updateActiveItemAndItemInView(rememberedTask.id, _currentProject.id, getActiveSection());
       else updateActiveItemAndItemInView(null, _currentProject.id, getActiveSection());
       } catch (error) {
         console.log("🚀 ~ createItem ~ local update error:", error);
