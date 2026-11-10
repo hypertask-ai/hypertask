@@ -58,7 +58,7 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
       if (!row || row.ticketNumber !== ticket) return false;
       if (row.pullRequests?.some((link) => link.url === url)) return true;
       const description = row.description ?? '';
-      return description.includes(url) || description.includes(`/pull/${pr.number}`);
+      return description.includes(url);
     };
     const response = await fetchImpl('https://app.hypertask.ai/api/mcp/tasks/update', {
       method: 'POST',
