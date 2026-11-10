@@ -126,6 +126,8 @@ async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSa
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "next/dynamic": { default: () => Assign },
     "@/lib/assignees": assignees,
+    "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+    "@/lib/taskDetail/rightColumnFields": { ADD_FIELD_EVENT: "task-add-field" },
   });
   const common = { "react-hot-toast": { default: noop }, "@/lib/configs/taskDetail.config": { default: {} }, "@/lib/constants": constants };
   const useActions = load("src/app/detail/[...slug]/useTaskDetailCommentActions.tsx", {
