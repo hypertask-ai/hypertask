@@ -42,6 +42,6 @@ test("the status dot renders working and waiting classes", () => {
     "react/jsx-runtime": require("react/jsx-runtime"),
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
   }).default;
-  assert.match(renderToStaticMarkup(React.createElement(AgentStatusDot, { mode: "working" })), /agent-status-dot-working/);
-  assert.match(renderToStaticMarkup(React.createElement(AgentStatusDot, { mode: "waiting" })), /agent-status-dot-waiting/);
+  assert.match(renderToStaticMarkup(React.createElement(AgentStatusDot, { mode: "working" })), /--agent-status-dot-working/);
+  assert.match(renderToStaticMarkup(React.createElement(AgentStatusDot, { mode: "waiting" })), /--agent-status-dot-waiting/);
 });

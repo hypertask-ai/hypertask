@@ -566,14 +566,6 @@ span[data-label^="project"] {
   --agent-status-dot-working: #51a4f1;
   --agent-status-dot-waiting: #fb773f;
 }
-
-.agent-status-dot-working {
-  background-color: var(--agent-status-dot-working);
-}
-
-.agent-status-dot-waiting {
-  background-color: var(--agent-status-dot-waiting);
-}
 #sectionsContainer {
   // An intrinsic grid row can overflow the board and let focus scroll its headers away.
   grid-template-rows: minmax(0, 1fr);
