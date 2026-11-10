@@ -4,7 +4,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7324_PLAN_AI_CAPS_FLAG } from "@/lib/flags/definitions/htpr-7324-plan-ai-caps";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
-import { isTeamComped } from "@/lib/teamComp";
+import { isTeamComped, teamCompPlan } from "@/lib/teamComp";
 import { pickEntitlingSubscriptionRow, subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
 import {
   aiAllowancePeriod,
@@ -44,6 +44,14 @@ async function planMode(teamId: string): Promise<"legacy" | "plan" | "strict"> {
   } catch {
     return "strict";
   }
+}
+
+async function compedProTeam(teamId: string) {
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { compedUntil: true, compedPlan: true },
+  });
+  return teamCompPlan(team) === "Pro";
 }
 
 export async function teamPlanAllowanceEnabled(teamId: string): Promise<boolean> {
@@ -154,9 +162,12 @@ export async function resolveTeamAllowancePolicy(
     }
     demoGlobal = owner.uid.startsWith("guest_");
     ownerIdentityConfirmed = true;
-    const byok = fundingSource === "shared" && !demoGlobal &&
-      await storePlanIdForProject(null, teamId) === "BYOK";
-    if ((fundingSource === "managed" || byok) && !demoGlobal) {
+    const savedPlan = fundingSource === "shared" && !demoGlobal
+      ? await storePlanIdForProject(null, teamId)
+      : null;
+    const byok = savedPlan === "BYOK";
+    const compedPro = savedPlan === "Pro" && await compedProTeam(teamId);
+    if ((fundingSource === "managed" || byok || compedPro) && !demoGlobal) {
       const month = aiAllowancePeriod();
       const seats = await cachedPaidSeats(teamId, month.key, byok);
       const highWaterKey = `ai-allowance:${month.key}:${teamId}:${byok ? "members-high" : "seats-high"}`;

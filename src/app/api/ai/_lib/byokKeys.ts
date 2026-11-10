@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai/forcedTeamKey";
 import { fallbackRunsOnOurOwnGatewayKey } from "@/lib/ai/modelFundingGuard";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
+import { teamCompPlan } from "@/lib/teamComp";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   gatewayFundingSourceForApiKey,
@@ -199,6 +200,15 @@ async function resolveLookupPlan(lookup?: ByokLookupContext) {
   const teamId = await resolveLookupTeamId(lookup);
   if (!teamId) return undefined;
   return storePlanIdForProject(null, teamId);
+}
+
+async function compedProTeam(teamId: string | null | undefined) {
+  if (!teamId) return false;
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { compedUntil: true, compedPlan: true },
+  });
+  return teamCompPlan(team) === "Pro";
 }
 
 function getSharedIncludedAllowanceGatewayKey(plan: string | undefined) {
@@ -571,6 +581,12 @@ export async function getTeamGatewayFunding(
   await loadManaged();
   if (managedEnabled && managedKey) {
     return withProvenance(managedFunding(managedKey), managedProvenance, options?.includeProvenance);
+  }
+  if (managedKey) return undefined;
+
+  const platformGatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  if (isVercelAiGatewayKey(platformGatewayKey) && await compedProTeam(await resolveLookupTeamId(lookup))) {
+    return { apiKey: platformGatewayKey, source: "shared" };
   }
 
   return undefined;
