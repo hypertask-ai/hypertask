@@ -11,10 +11,25 @@ function lookup({ enabled = true, tasks = [task], sendResult = true, sendError =
   const access = { members: { some: { userId: user.id } } };
   const { createGetTasksTool } = load("src/lib/ai/tools/getTasks.ts", {
     ai: { tool: (definition) => definition },
-    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { flags.push([key, userId]); return enabled; } },
+    "@/lib/flags": {
+      isFeatureEnabled: async (key, userId) => {
+        if (key === "htpr-8987-chat-blocker-read") return false;
+        flags.push([key, userId]);
+        return enabled;
+      },
+    },
+    "@/lib/flags/definitions/htpr-8987-chat-blocker-read": {
+      HTPR_8987_CHAT_BLOCKER_READ_FLAG: "htpr-8987-chat-blocker-read",
+    },
     "@/lib/flags/keys": { HTPR_7756_CHAT_OPENS_TASK_FLAG: flag },
     "@/lib/prisma": { default: { task: { findMany: async (query) => { queries.push(query); return tasks; } } } },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (userId) => { assert.equal(userId, user.id); return access; } },
+    "@/utils/controllers/projects/getAllIncludes": {
+      getProjectWhere: (userId) => { assert.equal(userId, user.id); return access; },
+      blockedByRelationsInclude: () => ({}),
+    },
+    "@/utils/controllers/tasks/attachOpenBlockingTasks": {
+      attachOpenBlockingTasks: async (tasks) => tasks.map((task) => ({ ...task, blockingTasks: [] })),
+    },
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}) },
     "@/lib/ai/tools/helpers": { sanitizeForJson: (value) => value, mapTaskToMcpGetResponse: (value) => value },
   });
