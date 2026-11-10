@@ -28,3 +28,12 @@ test("chat prompt adds action-first shaping on top", () => {
   assert.match(AGENT_SYSTEM_PROMPT, /End with one next action/);
   assert.match(AGENT_SYSTEM_PROMPT, /Cap lists at 5 items/);
 });
+
+test("a task summary leads with what the task is", () => {
+  const summary = AGENT_SYSTEM_PROMPT.split("### 3.1. SUMMARY STYLE")[1].split("### 4.")[0];
+  assert.match(summary, /what the task is/);
+  assert.match(summary, /where it stands/);
+  assert.match(summary, /at most three bullets/);
+  assert.match(summary, /Never write a heading or line that says "Next action"/);
+  assert.match(summary, /outranks "End with one next action"/);
+});

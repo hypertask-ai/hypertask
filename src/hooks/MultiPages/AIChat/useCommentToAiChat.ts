@@ -11,6 +11,7 @@ import {
   isAiChatSidebarModeAtom,
 } from "@/store";
 import { useOptionalAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/chatContext";
+import { TASK_SUMMARY_PROMPT } from "@/lib/ai/taskSummaryPrompt";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 
 export function useCommentToAiChat() {
@@ -121,9 +122,7 @@ export function useCommentToAiChat() {
       openChat();
       if (!(await waitForSession())) return;
       if (isTypingRef.current) return;
-      await handleSendMessageRef.current?.(
-        "Summarize this ticket, its description and the key points from the comments, concisely."
-      );
+      await handleSendMessageRef.current?.(TASK_SUMMARY_PROMPT);
     } finally {
       sendingRef.current = false;
     }
