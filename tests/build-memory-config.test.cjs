@@ -87,15 +87,16 @@ test("production build heap cap leaves half the build machine for native memory"
       "or the parent Next process, native webpack memory and the page worker run the container out of memory " +
       "(YPER4-957)",
   );
-  const MEASURED_HEAP_MB = 4000;
+  const MEASURED_HEAP_MB = 3840;
   assert.equal(
     Number(cap[1]),
     MEASURED_HEAP_MB,
     `heap cap ${cap[1]} MB must be ${MEASURED_HEAP_MB}: ` +
-      "3584 MB still aborted inside V8 on 2026-11-07 with a 3080 MB live set (HYCI-184, dpl_9tg62h9sytSJHF5iEJKQeftXk7o2). " +
-      "4096 MB at parallelism 1 still SIGKILL'd on 2026-11-08 (HYCI-180, dpl_HrSLPn4mek9iMnGazP8HZLuiuaNq). " +
-      "3840 MB failed production deployment 7668278693 (dpl_5G6Dae88e25UY24812esxUu2euVb, merge 0d635b84165) on the same tree that built at 4096. " +
-      "4000 MB keeps headroom for native memory and stays under the 8192 MiB machine.",
+      "4000 MB with webpack cache generations still in RAM OOM-killed six production builds in 24h (HYCI-224). " +
+      "HYCI-220 sets maxMemoryGenerations=0 so the worker no longer holds every cache generation in memory. " +
+      "3840 MB leaves 4352 MiB for native memory on the 8192 MiB machine and stays above the 3080 MB V8 peak " +
+      "measured at HYCI-184 once the disk-cache fix is live. " +
+      "If production logs \"Reached heap limit\", the paid Enhanced Build Machine is Valentin's decision.",
   );
 });
 
