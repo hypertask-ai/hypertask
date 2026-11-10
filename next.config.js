@@ -49,7 +49,7 @@ const nextConfig = {
   // The sanitizer's jsdom is pinned in npm overrides to avoid requiring ESM in
   // serverless runtimes where Node's optional require(esm) support is disabled.
   // Keep legacy URL parsers in node_modules, where Node 24 exempts them from DEP0169.
-  serverExternalPackages: ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk"],
+  serverExternalPackages: ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk", "evlog"],
   // The public onboarding page reads this markdown relative to process.cwd().
   outputFileTracingIncludes: {
     "/wiki/agents": ["./src/app/wiki/agents/agents.md"],
