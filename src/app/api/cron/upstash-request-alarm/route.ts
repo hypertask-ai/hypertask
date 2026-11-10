@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
+import { FEATURE_FLAG_OWNER_USER_ID, HTPR_8978_UPSTASH_TRAFFIC_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { checkUpstashDailyRequests } from "@/lib/ops/upstashRequestAlarm";
 
 export const runtime = "nodejs";
@@ -8,6 +9,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   if (!hasValidCronAuthorization(request.headers.get("authorization"), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!(await isFeatureEnabled(HTPR_8978_UPSTASH_TRAFFIC_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
+    return NextResponse.json({ skipped: "flag-off" });
   }
   try {
     return NextResponse.json(await checkUpstashDailyRequests());

@@ -25,14 +25,6 @@ export function projectDailyRequests(delta: number, elapsedMs: number): number {
   return Math.round((delta / elapsedMs) * 86_400_000);
 }
 
-export type UpstashRequestAlarmResult = {
-  total: number | null;
-  projectedDailyRequests: number | null;
-  alarm: boolean;
-  filedTaskId: number | null;
-  reason: string;
-};
-
 async function findTicket(marker: string) {
   const existing = await prisma.task.findFirst({
     where: { projectId: BOARD_PROJECT_ID, description_: { is: { content: { contains: marker } } } },
@@ -46,11 +38,7 @@ async function createTicket(day: string, projected: number) {
     where: { id: BOARD_PROJECT_ID, status: "Normal" },
     select: {
       uniqueIdentifier: true,
-      section: {
-        where: { deleted: false, visibility: true, section_title: BOARD_SECTION_TITLE },
-        select: { id: true, section_title: true },
-        take: 1,
-      },
+      section: { where: { deleted: false, visibility: true, section_title: BOARD_SECTION_TITLE }, select: { id: true, section_title: true }, take: 1 },
       labels: { where: { value: BOARD_LABEL_VALUE }, select: { id: true }, take: 1 },
     },
   });
@@ -60,11 +48,7 @@ async function createTicket(day: string, projected: number) {
   }
   const { task } = await createProvisionedTaskCore({
     title: `Upstash requests projected above ${UPSTASH_DAILY_REQUEST_ALARM.toLocaleString("en-GB")} a day on ${day}`,
-    description: [
-      `<p data-ht-marker="${MARKER}">Upstash command volume is projected at ${projected.toLocaleString("en-GB")} requests for ${day}, above the ${UPSTASH_DAILY_REQUEST_ALARM.toLocaleString("en-GB")} a day alarm.</p>`,
-      `<p>Projection from <code>INFO total_commands_processed</code> between two cron runs. Lower the traffic, or raise the alarm with a comment on HTPR-8978.</p>`,
-      `<p data-ht-marker="${MARKER}:${day}"></p>`,
-    ].join(""),
+    description: `<p data-ht-marker="${MARKER}">Upstash projects ${projected.toLocaleString("en-GB")} requests for ${day}, above the ${UPSTASH_DAILY_REQUEST_ALARM.toLocaleString("en-GB")} a day alarm, from <code>INFO total_commands_processed</code> between cron runs.</p><p data-ht-marker="${MARKER}:${day}"></p>`,
     userId: OPS_USER_ID,
     creationChannel: "api",
     projectId: BOARD_PROJECT_ID,
@@ -80,7 +64,7 @@ async function createTicket(day: string, projected: number) {
   return taskId;
 }
 
-export async function checkUpstashDailyRequests(): Promise<UpstashRequestAlarmResult> {
+export async function checkUpstashDailyRequests() {
   const redis = await getRedis();
   const total = parseTotalCommands(String(await redis.info("stats")));
   if (total === null) {
@@ -122,6 +106,11 @@ export async function checkUpstashDailyRequests(): Promise<UpstashRequestAlarmRe
   const existing = await findTicket(marker);
   if (existing) {
     return { total, projectedDailyRequests: projected, alarm: true, filedTaskId: existing, reason: "already-filed" };
+  }
+  const claimed = await redis.set(`${MARKER}:claim:${day}`, "1", "EX", 25 * 60 * 60, "NX");
+  if (claimed !== "OK") {
+    const raced = await findTicket(marker);
+    return { total, projectedDailyRequests: projected, alarm: true, filedTaskId: raced, reason: raced ? "already-filed" : "filing-in-flight" };
   }
   const filedTaskId = await createTicket(day, projected);
   return { total, projectedDailyRequests: projected, alarm: true, filedTaskId, reason: "filed" };

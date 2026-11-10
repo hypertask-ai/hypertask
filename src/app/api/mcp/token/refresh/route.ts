@@ -1,6 +1,8 @@
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
+import { FEATURE_FLAG_OWNER_USER_ID, HTPR_8978_UPSTASH_TRAFFIC_FLAG, isFeatureEnabled } from '@/lib/flags';
+import { consumeLocalWindow } from '@/lib/rateLimit/localWindow';
 import { checkMcpRateLimit } from '@/lib/mcp/auth';
 import { handleMcpTokenRefresh } from '@/lib/mcp/token/refresh';
 
@@ -23,8 +25,11 @@ function getClientIp(request: NextRequest): string {
 }
 
 async function isTokenRefreshRateLimited(clientIp: string): Promise<boolean> {
-  const redis = await getRedis();
   const key = `${RATE_KEY_PREFIX}${clientIp}`;
+  if (await isFeatureEnabled(HTPR_8978_UPSTASH_TRAFFIC_FLAG, FEATURE_FLAG_OWNER_USER_ID)) {
+    return consumeLocalWindow(key, RATE_WINDOW_SEC) > RATE_MAX_PER_WINDOW;
+  }
+  const redis = await getRedis();
   const n = await redis.incr(key);
   if (n === 1) {
     await redis.expire(key, RATE_WINDOW_SEC);

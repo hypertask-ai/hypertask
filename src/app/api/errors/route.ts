@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { reportError } from "@/lib/errors/reportError";
+import { FEATURE_FLAG_OWNER_USER_ID, HTPR_8978_UPSTASH_TRAFFIC_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getRedis } from "@/lib/redis";
 
 export const runtime = "nodejs";
@@ -45,16 +46,22 @@ local ip = redis.call('INCR', KEYS[1])
 if ip == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
 local global = redis.call('INCR', KEYS[2])
 if global == 1 then redis.call('EXPIRE', KEYS[2], ARGV[1]) end
-return {ip, global}
-`;
+return {ip, global}`;
 
 async function claimIntakeWindow(ipKey: string, globalKey: string) {
   const redis = await getRedis();
-  const counts = await redis.eval(INTAKE_CLAIM, 2, ipKey, globalKey, RATE_WINDOW_SECONDS);
-  if (!Array.isArray(counts) || counts.length !== 2) {
-    throw new Error("Invalid error intake counters");
+  if (await isFeatureEnabled(HTPR_8978_UPSTASH_TRAFFIC_FLAG, FEATURE_FLAG_OWNER_USER_ID)) {
+    const counts = await redis.eval(INTAKE_CLAIM, 2, ipKey, globalKey, RATE_WINDOW_SECONDS);
+    if (!Array.isArray(counts) || counts.length !== 2) {
+      throw new Error("Invalid error intake counters");
+    }
+    return counts.map(Number) as [number, number];
   }
-  return counts.map(Number) as [number, number];
+  const count = (key: string) => redis.incr(key).then(async (value) => {
+    if (value === 1) await redis.expire(key, RATE_WINDOW_SECONDS);
+    return value;
+  });
+  return [await count(ipKey), await count(globalKey)] as [number, number];
 }
 
 async function isRateLimited(request: NextRequest) {

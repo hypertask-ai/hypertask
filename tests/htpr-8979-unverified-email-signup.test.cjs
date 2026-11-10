@@ -119,6 +119,9 @@ function memoryRedis() {
     async get(key) {
       return values.get(key) ?? null
     },
+    async mget(...keys) {
+      return keys.map((key) => values.get(key) ?? null)
+    },
   }
 }
 
@@ -171,6 +174,9 @@ test('ending the earlier sessions reports failure when the store refuses', async
           throw new Error('redis unavailable')
         },
         async get() {
+          throw new Error('redis unavailable')
+        },
+        async mget() {
           throw new Error('redis unavailable')
         },
       }),

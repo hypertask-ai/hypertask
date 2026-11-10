@@ -116,6 +116,7 @@ test("a second CLI login with a new credential is not a second connection", asyn
     eval: async () => JSON.stringify({ userId: 123, email: "member@example.test" }),
   }) };
   h.mocks["@/lib/mcp/auth"] = { createMcpToken: () => `cli-credential-${++count}` };
+  h.mocks["@/lib/rateLimit/localWindow"] = { consumeLocalWindow: () => 1 };
   const post = h.load("src/app/api/cli/token-exchange/route.ts").POST;
   const exchange = () => new Request("http://localhost/api/cli/token-exchange", {
     method: "POST", body: JSON.stringify({ code: `login-${count}` }), headers: { "user-agent": "hypertask-cli/0.2.0" },

@@ -92,6 +92,7 @@ test("CLI code exchange is consumed atomically and emits once, not on credential
   let consumed = false;
   h.mocks["@/lib/redis"] = { getRedis: async () => ({ incr: async () => 1, expire: async () => 1, eval: async () => { if (consumed) return false; consumed = true; return JSON.stringify({ userId: 123, email: "member@example.test" }); } }) };
   h.mocks["@/lib/mcp/auth"] = { createMcpToken: () => "mock-cli-credential" };
+  h.mocks["@/lib/rateLimit/localWindow"] = { consumeLocalWindow: () => 1 };
   const { POST } = h.load("src/app/api/cli/token-exchange/route.ts");
   const request = () => new Request("http://localhost/api/cli/token-exchange", { method: "POST", body: JSON.stringify({ code: "mock-code" }), headers: { "user-agent": "hypertask-cli/0.2.0" } });
   assert.equal((await POST(request())).status, 200);
@@ -120,6 +121,7 @@ for (const [scenario, userId, enabled] of [["other-flags-off", 123, false], ["QA
       h.mocks["@/lib/redis"] = { getRedis: async () => ({ incr: async () => 1, expire: async () => 1, eval: async () => JSON.stringify({ userId, email: "member@example.test" }) }) };
       let issued = 0;
       h.mocks["@/lib/mcp/auth"] = { createMcpToken: () => `mock-cli-credential-${++issued}` };
+      h.mocks["@/lib/rateLimit/localWindow"] = { consumeLocalWindow: () => 1 };
       const { POST } = h.load(file, production ? productionSource(file) : undefined);
       for (let exchange = 0; exchange < 2; exchange++) {
         const response = await POST(new Request("http://localhost/api/cli/token-exchange", { method: "POST", body: JSON.stringify({ code: `code-${exchange}` }) }));
