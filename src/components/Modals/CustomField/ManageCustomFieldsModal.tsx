@@ -21,8 +21,6 @@ import {
 import { ModalBody, ModalFooter } from "reactstrap";
 import ConfirmModal from "../Common Modals/ConfirmActionModal";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_9027_AMOLED_TOGGLE_FLAG } from "@/lib/flags/definitions/htpr-9027-amoled-toggle";
 
 const CUSTOM_FIELDS_PER_PROJECT_MAX = 50;
 
@@ -41,8 +39,6 @@ type Props = {
 };
 
 const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
-  const amoledToggle = useFlag(HTPR_9027_AMOLED_TOGGLE_FLAG);
-  const toggleOnClass = amoledToggle ? "[.amoled_&]:bg-shadcn-primary" : undefined;
   const currentProject = useRecoilValue(currentProjectAtom);
   const boardName = currentProject?.title ?? currentProject?.name;
   const queryClient = useQueryClient();
@@ -225,13 +221,11 @@ const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
                           <InlineToggle
                             checked={field.showInRail !== false}
                             label="Rail"
-                            onClass={toggleOnClass}
                             onToggle={() => toggleVisibility(field, "showInRail")}
                           />
                           <InlineToggle
                             checked={field.showInTable !== false}
                             label="Table"
-                            onClass={toggleOnClass}
                             onToggle={() => toggleVisibility(field, "showInTable")}
                           />
 
@@ -284,13 +278,11 @@ function InlineToggle({
   label,
   onToggle,
   disabled,
-  onClass,
 }: {
   checked: boolean;
   label: string;
   onToggle: () => void;
   disabled?: boolean;
-  onClass?: string;
 }) {
   return (
     <button
@@ -308,8 +300,7 @@ function InlineToggle({
       <span
         className={cn(
           "relative h-[14px] w-[26px] shrink-0 rounded-full transition-colors",
-          checked ? "bg-hypertasks-green" : "bg-hover-active",
-          checked && onClass
+          checked ? "bg-hypertasks-green" : "bg-hover-active"
         )}
       >
         <span
