@@ -7,6 +7,7 @@ import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
 import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { userCommentCountsByTaskId } from "@/utils/controllers/tasks/userCommentCounts";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
 import { markQuietAgentMentions } from "@/utils/controllers/notifications/quietOwnerInbox";
 import { inboxConfig } from "@/lib/configs/inbox.config";
@@ -235,7 +236,7 @@ const notificationGetAll = async (
       actorActivityRows,
       directReplyRows,
       hyperAiInvites,
-      blockedTasks,
+      waitingTasks,
       userSetting,
     ] = await Promise.all([
       getInboxNotifications(parsedUserId, prisma, options, agentId, teamScope),
@@ -267,6 +268,7 @@ const notificationGetAll = async (
         orderBy: { waitingOnSetAt: "asc" },
         select: {
           ...inboxTaskSelect(parsedUserId),
+          _count: undefined,
           notifications: {
             where: { userId: parsedUserId, agentId: null, status: "Archive", archivedAt: { not: null } },
             orderBy: { archivedAt: "desc" },
@@ -297,6 +299,11 @@ const notificationGetAll = async (
         select: { notificationMatrix: true },
       }),
     ]);
+    const waitingTaskCommentCounts = await userCommentCountsByTaskId(waitingTasks.map((task) => task.id));
+    const blockedTasks = waitingTasks.map((task) => ({
+      ...task,
+      _count: { comments: waitingTaskCommentCounts.get(task.id) ?? 0 },
+    }));
     const humanFacingCommentRows = actorActivityRows.some((row) => row.type === "Comment" && row.fromAgentId) &&
       await isFeatureEnabled(HTPR_8090_ASSIGNEE_INBOX_FLAG, parsedUserId)
       ? await prisma.notification.findMany({

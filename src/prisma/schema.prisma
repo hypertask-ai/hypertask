@@ -1343,6 +1343,7 @@ model Task {
   // Backs the ticketNumber lookup in linkifyTicketRefs.ts (AI responses linkify
   // ticket refs on most turns); applied to prod Neon via CREATE INDEX CONCURRENTLY.
   @@index([ticketNumber])
+  @@index([ticketNumber(ops: raw("gin_trgm_ops"))], map: "Task_ticketNumber_trgm_idx", type: Gin)
   @@unique([projectId, uniqueIndex])
 }
 
@@ -2220,6 +2221,8 @@ model Logs {
   LoggedById Int?
   LoggedBy   User?    @relation(fields: [LoggedById], references: [id])
   status     Status
+
+  @@index([LoggedById, createdAt])
 }
 
 model Announcments {

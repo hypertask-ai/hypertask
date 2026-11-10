@@ -138,7 +138,7 @@ test("board refusal signal crosses useSections without clearing quick entry or a
       getNewTaskViewDefaults: () => ({ tags: viewDefaults ? [{}] : [], assignees: [] }),
       createNewTaskGloballyAPIHandler: async () => ({ error: true, ErrorMessage: error }),
       axios: { post: async () => { throw error; } },
-      showPlanLimitToast: enabled, planLimitRefusalMessage, toast: { error: text => toasts.push(text) },
+      showPlanLimitToast: enabled, planLimitRefusalMessage, quickAddShowsInColumn: false, toast: { error: text => toasts.push(text) },
     });
     const invokeCreateItem = evaluate(initializer("src/hooks/Homepage/useSections.ts", "invokeCreateItem"), {
       createItem, position: "top", sectionId: 7, projectId: 15, title: "Bugs",

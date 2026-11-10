@@ -756,6 +756,30 @@ test("My Tasks quick-add flag is retired and default-board patches stay enabled 
   listedRows = [];
 });
 
+test("the retired My Tasks snooze flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6461-my-tasks-snooze";
+  assert.equal(flags.MY_TASKS_SNOOZE_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_6461_my_tasks_snooze_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [{ key, mode, updatedAt: new Date() }];
+    row = { mode, updatedAt: new Date() };
+    assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+    for (const userId of [6, 985, 42]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(42))[key], true);
+});
+
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
   assert.equal(flags.HTPR_6899_STABLE_LAYOUT_FLAG, "htpr-6899-stable-layout");
   const listed = await flags.listFeatureFlagModes();
@@ -1176,11 +1200,11 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fixture = path.join(dir, "flags.ts");
-  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6461-my-tasks-snooze" ? { ...definition, kind: "bugfix" } : definition))};`);
+  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6177-auto-task-descriptions" ? { ...definition, kind: "bugfix" } : definition))};`);
   fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
     .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
   const bugfixFlags = jiti(fixture);
-  const key = "htpr-6461-my-tasks-snooze";
+  const key = "htpr-6177-auto-task-descriptions";
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
   const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
@@ -1206,7 +1230,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "explicit-bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
-  const key = "htpr-6461-my-tasks-snooze";
+  const key = "htpr-6177-auto-task-descriptions";
   for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
     const fixture = path.join(dir, `flags-${mode}.ts`);
     fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === key ? { ...definition, kind: "bugfix", defaultMode: mode } : definition))};`);

@@ -10,8 +10,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const { DECISIONS_GUIDANCE } = load('src/lib/mcp/decisionsGuidance.ts', {})
 const discoveryKey = 'htpr-7322-agent-feature-discovery'
 const decisionsKey = 'htpr-7092-decisions'
-const mappedKey = 'htpr-6461-my-tasks-snooze'
-const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', mappedKey]
+const mappedKey = decisionsKey
+const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns']
 const definitions = definitionKeys.map((key) => ({
   key,
   kind: key === 'htpr-7064-inbox-remind-returns' ? 'bugfix' : 'feature',
@@ -64,13 +64,13 @@ function endpoint(ctx, mod, limited = null, discoveryEnabled = true) {
 const request = () => new NextRequest('https://app.hypertask.ai/api/mcp/features')
 
 test('catalog includes every enabled feature kind without requiring a destination and excludes off and non-feature kinds', async () => {
-  const mod = catalog({ [decisionsKey]: false, [mappedKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
+  const mod = catalog({ [mappedKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
   const rows = await mod.getFeatureCatalog(reader.user.id)
   assert.deepEqual(rows.filter(({ key }) => !key.startsWith('core-')), [
-    { key: mappedKey, description: definitions.find(({ key }) => key === mappedKey).description, shippedOn: definitions.find(({ key }) => key === mappedKey).shippedOn, available: true, name: 'My Tasks snooze', url: 'https://app.hypertask.ai/my-tasks' },
+    { key: mappedKey, description: definitions.find(({ key }) => key === mappedKey).description, shippedOn: definitions.find(({ key }) => key === mappedKey).shippedOn, available: true, name: 'Decisions', url: 'https://app.hypertask.ai/inbox?split=Decisions' },
     { key: 'htpr-998-unmapped-product', name: 'unmapped product', description: 'No verified destination', shippedOn: '2026-10-11', available: true },
   ])
-  for (const key of [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-999-improvement', 'core-decisions']) {
+  for (const key of ['htpr-7064-inbox-remind-returns', 'htpr-999-improvement', 'core-decisions']) {
     assert.equal(rows.some((row) => row.key === key), false)
   }
   assert.ok(rows.every(({ name }) => typeof name === 'string' && name.trim().length > 0))

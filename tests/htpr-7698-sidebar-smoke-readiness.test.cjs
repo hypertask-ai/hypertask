@@ -88,6 +88,7 @@ function pageFor({ selected = agent, failure } = {}) {
     getByRole: (_role, { name }) => name === "Switch conversation" ? title : { visible: true },
     getByText: text => { assert.equal(text, failure); return transcript; },
     locator: () => ({ visible: true }),
+    route: async () => {},
   };
   return { page, selectors, list, title, commit() {
     title.text = selected.name ?? selected.title ?? "AI chat";

@@ -21,7 +21,7 @@ import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
-import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import {
   buildTableSectionsGroupedByTag,
   getActiveTableGroupByFromProject,
@@ -45,8 +45,7 @@ export function useTableState(context: Context) {
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
-  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
+  const myTasksSnoozeEnabled = Boolean(myTasksSnoozeActive);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();

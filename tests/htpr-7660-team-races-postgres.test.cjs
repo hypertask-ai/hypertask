@@ -5,6 +5,7 @@ const net = require('node:net');
 const path = require('node:path');
 const { load } = require('./task-route-loader.cjs');
 const { NextRequest } = require('next/server');
+const { withSchemaExtensions } = require('./helpers/schema-extensions.cjs');
 
 const root = path.resolve(__dirname, '..');
 const image = process.env.HTPR_PG_IMAGE || 'ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea';
@@ -31,7 +32,7 @@ before(async () => {
   assert.equal(ready.status, 0, ready.stderr);
   const schema = run(process.execPath, [path.join(root, 'node_modules/prisma/build/index.js'), 'migrate', 'diff', '--from-empty', '--to-schema', path.join(root, 'src/prisma/schema.prisma'), '--script'], { env: { ...process.env, DATABASE_URL: url } });
   assert.equal(schema.status, 0, schema.stderr);
-  const apply = run('docker', ['exec', '-i', container, 'psql', '-U', 'ht', '-d', 'ht_test', '-v', 'ON_ERROR_STOP=1'], { input: schema.stdout });
+  const apply = run('docker', ['exec', '-i', container, 'psql', '-U', 'ht', '-d', 'ht_test', '-v', 'ON_ERROR_STOP=1'], { input: withSchemaExtensions(schema.stdout) });
   assert.equal(apply.status, 0, apply.stderr);
   const { PrismaClient } = require('@prisma/client');
   const { PrismaPg } = require('@prisma/adapter-pg');

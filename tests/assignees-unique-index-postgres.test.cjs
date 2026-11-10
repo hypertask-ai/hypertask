@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
+const { withSchemaExtensions } = require("./helpers/schema-extensions.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -177,7 +178,7 @@ async function provision() {
         cleanup,
       };
     }
-    const apply = psql(container, fs.readFileSync(schemaSql, "utf8"));
+    const apply = psql(container, withSchemaExtensions(fs.readFileSync(schemaSql, "utf8")));
     fs.rmSync(schemaSql, { force: true });
     if (apply.status !== 0) {
       return {
