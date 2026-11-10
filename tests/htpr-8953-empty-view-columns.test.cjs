@@ -118,16 +118,16 @@ test("the board keeps its columns when the view lists them out of order", () => 
 });
 
 test("view tab counts use the same fallback as the board", () => {
-  const hook = fs.readFileSync(
-    path.join(__dirname, "..", "src/hooks/Homepage/Views/useRenderedViews.ts"),
+  const counter = fs.readFileSync(
+    path.join(__dirname, "..", "src/lib/savedViews/savedViewTaskCounts.ts"),
     "utf8"
   );
   assert.ok(
-    hook.includes("savedColumns.length > 0"),
+    counter.includes("visibleColumns.length > 0"),
     "a view with an empty column list must count its tickets against the board's columns"
   );
   assert.ok(
-    !hook.includes("board_columns_view as ISection[] | undefined) ?? project?.section ?? []"),
+    !counter.includes("board_columns_view as ISection[] | undefined) ?? project?.section ?? []"),
     "the raw nullish fallback leaves an empty list counting zero tickets"
   );
 });

@@ -2,10 +2,9 @@ import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htp
 import { useMemo } from 'react'
 import { useRecoilValue } from '@/lib/state'
 import { IProject, ISection, IView } from '@/models/model'
-import { IFilterSettings } from '@/models/Filters/model'
 import { activeBuiltinViewsAtom, currentUserAtom, hiddenViewTabIdsAtom, showEmptyViewTabsAtom } from '@/store'
-import { applyFilters, defaultFilterSettings } from '@/utils/helperFunctions/Views/FilterHelperFunctions'
-import { applySubTaskSetting } from '@/utils/helperFunctions/Views/SubtaskHelperFunction'
+import { getActiveColumnsViewFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFunctions'
+import { countTasksInSavedView } from '@/lib/savedViews/savedViewTaskCounts'
 import {
   BoardView,
   BUILTIN_VIEWS,
@@ -21,7 +20,6 @@ import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking'
 import { useFlag } from '@/hooks/useFlag'
 import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/definitions/htpr-7804-blocked-by-me'
-import { DEFAULT_SUBTASK_SETTING } from '@/models/Views/model'
 
 const useRenderedViews = (project: IProject | null) => {
   const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG)
@@ -51,36 +49,18 @@ const useRenderedViews = (project: IProject | null) => {
   ), [activeViewId, defaultViewId, hiddenViewTabIds, orderedViews, project?.id])
 
   const savedViewTaskCounts = useMemo(() => {
-    const tasks = project?.tasks ?? []
+    if (!project) return [] as (readonly [string, number])[]
+    const activeColumns = getActiveColumnsViewFromProject(project)
     return (orderedViews.filter((view) => !isBuiltinView(view)) as IView[]).map((view) => {
-      const savedColumns = view.board_columns_view as ISection[] | undefined
-      const columns = savedColumns && savedColumns.length > 0
-        ? savedColumns
-        : project?.section ?? []
-      const sections = columns
-        .filter((column) => column.visibility !== false)
-        .map((column) => {
-          const sectionId = column.id ?? column.sectionId
-          return {
-            ...column,
-            sectionId,
-            items: tasks.filter((task) => task.sectionId === sectionId),
-          }
-        })
-      const filters = (view.board_filters as IFilterSettings | undefined) ?? defaultFilterSettings
-      const filteredSections = applySubTaskSetting(
-        applyFilters(
-          sections,
-          filters.addedFilters ?? [],
-          filters.matchFilters,
-          project ?? undefined,
-          filterRuntimeContext,
-        ),
-        view.board_subtask_setting ?? DEFAULT_SUBTASK_SETTING
-      )
-      return [view.id, filteredSections.reduce((count, section) => count + (section.items?.length ?? 0), 0)] as const
+      const visibleColumns = view.id === activeViewId
+        ? activeColumns
+        : view.board_columns_view as ISection[] | undefined
+      return [
+        view.id,
+        countTasksInSavedView(view, project, visibleColumns, filterRuntimeContext),
+      ] as const
     })
-  }, [filterRuntimeContext, orderedViews, project])
+  }, [activeViewId, filterRuntimeContext, orderedViews, project])
 
   const viewTaskCounts = useMemo(() => {
     const tasks = project?.tasks ?? []

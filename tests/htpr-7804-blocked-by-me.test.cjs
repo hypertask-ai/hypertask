@@ -110,6 +110,8 @@ test("empty Blocked by me remains discoverable without changing other empty tabs
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-7804-blocked-by-me": flag,
     "@/models/Views/model": { DEFAULT_SUBTASK_SETTING: "None" },
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveColumnsViewFromProject: () => [] },
+    "@/lib/savedViews/savedViewTaskCounts": { countTasksInSavedView: () => 0 },
   });
   assert.deepEqual(hook(project(15)).renderedViews.map((view) => view.id), ["home", id]);
 });
