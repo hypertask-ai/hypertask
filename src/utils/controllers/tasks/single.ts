@@ -3,6 +3,8 @@ import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { assertTaskCountTransition, isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
+import { openObservationGateMessage, openObservationGates } from "@/lib/tickets/openObservationGate";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
@@ -98,6 +100,7 @@ class TaskDescriptionChangedError extends Error {}
 class TaskTitleChangedError extends Error {}
 class TaskTargetChangedError extends Error {}
 class FlagColumnMismatchError extends Error {}
+class OpenObservationGateError extends Error {}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -374,6 +377,7 @@ export async function updateTaskSingle(
         }
         const requestedSectionId = requestedMutation.sectionId;
         const requestedSectionName = requestedMutation.section;
+        let destinationSection: { section_title: string; isDone: boolean | null } | null = null;
         sectionIdChanged =
           requestedSectionId !== undefined &&
           requestedSectionId !== currentState.sectionId;
@@ -400,7 +404,7 @@ export async function updateTaskSingle(
                 projectId:
                   requestedMutation.projectId ?? currentState.projectId,
               },
-              select: { section_title: true },
+              select: { section_title: true, isDone: true },
             });
             if (!targetSection) throw new Error("Section not found");
             if (
@@ -410,6 +414,7 @@ export async function updateTaskSingle(
               throw new Error("Section does not match sectionId");
             }
             updateData.section = targetSection.section_title;
+            destinationSection = targetSection;
           }
         }
         if (
@@ -446,6 +451,38 @@ export async function updateTaskSingle(
           }, await listFeatureFlagModes());
           if (blocked.length) {
             throw new FlagColumnMismatchError(`Cannot move to Flag: Everyone. Not released: ${blocked.map(({ key, mode }) => `${key} (${mode})`).join(", ")}.`);
+          }
+        }
+        if (
+          sectionNameChanged &&
+          !destinationSection &&
+          typeof requestedSectionName === "string" &&
+          requestedSectionName !== ""
+        ) {
+          const namedSections = await tx.section.findMany({
+            where: {
+              section_title: requestedSectionName,
+              projectId: requestedMutation.projectId ?? currentState.projectId,
+            },
+            select: { section_title: true, isDone: true },
+          });
+          if (namedSections.length === 1) destinationSection = namedSections[0];
+        }
+        if (
+          sectionChanged &&
+          destinationSection &&
+          columnRoleFor(destinationSection) === "done"
+        ) {
+          const openGates = openObservationGates(
+            typeof requestedMutation.description === "string"
+              ? requestedMutation.description
+              : currentState.description_?.content ?? currentState.description,
+            typeof requestedMutation.acceptanceCriteria === "string"
+              ? requestedMutation.acceptanceCriteria
+              : currentState.acceptanceCriteria,
+          );
+          if (openGates.length) {
+            throw new OpenObservationGateError(openObservationGateMessage(openGates));
           }
         }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
@@ -823,6 +860,9 @@ export async function updateTaskSingle(
     }
     if (error instanceof FlagColumnMismatchError) {
       return { status: 409, json: { message: error.message, code: "FLAG_COLUMN_MISMATCH" } };
+    }
+    if (error instanceof OpenObservationGateError) {
+      return { status: 409, json: { message: error.message, code: "OPEN_OBSERVATION_GATE" } };
     }
     if (error instanceof PlainLanguageTicketError) {
       return { status: 400, json: { message: error.message, code: "PLAIN_LANGUAGE_TICKET_REQUIRED" } };

@@ -1,4 +1,5 @@
 import axios from "axios";
+import toast from "react-hot-toast";
 
 let pendingMoves = 0;
 export const pendingBoardMoves = () => pendingMoves;
@@ -21,6 +22,9 @@ export default async function moveTaskHandler(
     });
 
     return response.status >= 200 && response.status < 300;
+  } catch (error: any) {
+    toast.error(error?.response?.data?.message ?? "Unable to move task");
+    return false;
   } finally {
     pendingMoves -= 1;
   }
