@@ -36,4 +36,6 @@ test("a task summary leads with what the task is", () => {
   assert.match(summary, /at most three bullets/);
   assert.match(summary, /Never write a heading or line that says "Next action"/);
   assert.match(summary, /outranks "End with one next action"/);
+  assert.match(summary, /summarize a comment or a discussion/);
+  assert.match(summary, /keep the concrete names/);
 });
