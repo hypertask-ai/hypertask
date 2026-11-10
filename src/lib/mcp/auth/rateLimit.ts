@@ -72,10 +72,14 @@ export async function checkMcpRateLimit(
     }
     if (agentLocalOnly) {
       let entry = localCounts.get(key)
-      if (!entry && localCounts.size < MAX_LOCAL_COUNTS) {
-        entry = { count: 0, reserved: 0, leasing: false }
-        localCounts.set(key, entry)
+      if (!entry) {
+        if (localCounts.size >= MAX_LOCAL_COUNTS) agentLocalOnly = false
+        else {
+          entry = { count: 0, reserved: 0, leasing: false }
+          localCounts.set(key, entry)
+        }
       }
+      if (agentLocalOnly) {
       const count = entry ? ++entry.count : 1
       const countOutcome = classifyMcpRateLimitCount(count)
       if (countOutcome === 'allow') return null
@@ -90,6 +94,7 @@ export async function checkMcpRateLimit(
         { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
         { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } },
       )
+      }
     }
     const redis = await getRedis()
     const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined

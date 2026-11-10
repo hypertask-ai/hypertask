@@ -12,6 +12,7 @@ import type { FeatureFlagDefinition, FeatureFlagKind } from "@/lib/flags/definit
 import {
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
 } from "@/lib/flags/keys";
+import { HTPR_8978_UPSTASH_AUDIENCE_FLAG } from "@/lib/flags/definitions/htpr-8978-upstash-audience";
 
 export * from "@/lib/flags/keys";
 export type { FeatureFlagKind } from "@/lib/flags/definitions";
