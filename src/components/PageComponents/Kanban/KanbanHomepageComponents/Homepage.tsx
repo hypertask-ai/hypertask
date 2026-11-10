@@ -1,4 +1,5 @@
 import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
+import { HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG } from "@/lib/flags/definitions/htpr-8928-bulk-archive-instant-hide";
 import { HTPR_8427_KANBAN_ARCHIVE_SHORTCUT_FLAG } from "@/lib/flags/definitions/htpr-8427-kanban-archive-shortcut";
 import { useFlag } from "@/hooks/useFlag";
 import { BoardCardDataProvider } from "../KanbanTaskComponents/BoardCardData";
@@ -24,6 +25,8 @@ import { useUndoContext } from "@/hooks/General/useUndo";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import globalAPIHandlers from "@/utils/api/global";
+import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
+import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import useGlobalFocusHandler from "@/hooks/Inbox/useGlobalFocusHandler";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import {
@@ -110,6 +113,7 @@ const HomePage = ({
   const { secondaryStartupEnabled } = useBoardStartup();
   const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG);
   const archiveShortcutAlwaysRuns = useFlag(HTPR_8427_KANBAN_ARCHIVE_SHORTCUT_FLAG);
+  const bulkArchiveInstantHide = useFlag(HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG);
   const store = useStore();
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
   const getFocusedTaskId = useCallback(
@@ -144,6 +148,9 @@ const HomePage = ({
     }
     return members;
   }, [membersAndOwner]);
+  const [pendingBulkArchiveIds, setPendingBulkArchiveIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const displaySections = useMemo(() => {
     const kw = searchProjectId === _currentProject.id ? searchKeyword.trim() : "";
     const searchedSections = kw
@@ -158,9 +165,16 @@ const HomePage = ({
       return searchedSections;
     }
 
-    return searchedSections.map((section) => ({
+    const runningFiltered = searchedSections.map((section) => ({
       ...section,
       items: (section.items ?? []).filter((task) => runningTimers.has(task.id)),
+    }));
+    if (pendingBulkArchiveIds.size === 0) return runningFiltered;
+    return runningFiltered.map((section) => ({
+      ...section,
+      items: (section.items ?? []).filter(
+        (task) => !pendingBulkArchiveIds.has(task.id),
+      ),
     }));
   }, [
     _currentProject.id,
@@ -171,6 +185,7 @@ const HomePage = ({
     sectionsToDisplay,
     searchKeyword,
     searchProjectId,
+    pendingBulkArchiveIds,
   ]);
   const hiddenSectionIndexes = useMemo(() => {
     const kw = searchProjectId === _currentProject.id ? searchKeyword.trim() : "";
@@ -681,6 +696,87 @@ const HomePage = ({
     ],
   );
 
+  const archiveSelectedBatchForBulk = useCallback(
+    async (tasks: ITask[]) => {
+      const pendingIds = new Set(tasks.map((task) => task.id));
+      setPendingBulkArchiveIds(pendingIds);
+      const tasksBySection = new Map<number, number[]>();
+      for (const task of tasks) {
+        const sourceSectionId = getBulkSourceSectionId(task);
+        if (sourceSectionId == null) throw new Error("Task column is unavailable");
+        const taskIds = tasksBySection.get(sourceSectionId) ?? [];
+        taskIds.push(task.id);
+        tasksBySection.set(sourceSectionId, taskIds);
+      }
+
+      for (const [sectionId, taskIds] of tasksBySection) {
+        await removeFromListWithStatus(
+          sectionId,
+          _currentProject.id,
+          taskIds[0],
+          "Archive",
+          taskIds,
+          { suppressUndo: true, optimisticOnly: true },
+        );
+      }
+
+      const failures: ITask[] = [];
+      const successes: ITask[] = [];
+      for (const task of tasks) {
+        try {
+          await globalAPIHandlers.archiveTask(task.id, "Archive");
+          successes.push(task);
+        } catch (error) {
+          console.error("Kanban bulk archive failed", task.id, error);
+          failures.push(task);
+        }
+      }
+
+      if (currentUser?.id) {
+        for (const task of successes) {
+          refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, task.id, {
+            status: "Archive",
+          });
+        }
+      }
+
+      if (successes.length > 0) {
+        registerArchiveUndo(
+          `Undo archive of ${successes.length} tasks`,
+          {
+            taskIds: successes.map((task) => task.id),
+            projectId: _currentProject.id,
+          },
+        );
+      }
+
+      try {
+        if (failures.length > 0 && currentUser?.id) {
+          await reconcileActiveBoardTasks(
+            queryClient,
+            _currentProject.id,
+            currentUser.id,
+          );
+        }
+        return failures;
+      } finally {
+        setPendingBulkArchiveIds((current) => {
+          const next = new Set(current);
+          for (const id of pendingIds) next.delete(id);
+          return next;
+        });
+      }
+    },
+    [
+      _currentProject.id,
+      currentUser.id,
+      getBulkSourceSectionId,
+      queryClient,
+      registerArchiveUndo,
+      removeFromListWithStatus,
+    ],
+  );
+
   const moveTaskForBulk = useCallback(
     async (task: ITask, destination: ISection) => {
       const sourceSectionId = getBulkSourceSectionId(task);
@@ -883,6 +979,9 @@ const HomePage = ({
     <KanbanBulkSelectionProvider
       items={bulkSelectionItems}
       onArchiveTask={archiveTaskForBulk}
+      onArchiveSelectedBatch={
+        bulkArchiveInstantHide ? archiveSelectedBatchForBulk : undefined
+      }
       onArchiveUndo={(tasks) => registerArchiveUndo(
         `Undo archive of ${tasks.length} tasks`,
         { taskIds: tasks.map((task) => task.id), projectId: _currentProject.id },
