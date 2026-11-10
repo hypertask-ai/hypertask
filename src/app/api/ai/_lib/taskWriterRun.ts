@@ -379,7 +379,7 @@ export async function prepareTaskWriterRun(
   }
   if (boardLabels) {
     suffix += "\n\nChoose the existing label for the project the ticket is about, not a dependency or a project mentioned only as a comparison. Use only the board's provided label IDs; never invent a label, use a name as an ID, or fall back to the first label. If the project is unclear or ambiguous, suggest no project label. Preserve applicable existing generic labels. For HTML put comma-separated IDs in <span id=\"ai-generated-task-tags\" style=\"display:none\">. For structured tasks put each ticket's own IDs in its labelIds array; use an empty array when none apply.";
-    if (brainLabels && brainTools) suffix += `\n\n${brainTools.TASK_WRITER_BRAIN_RULE}`;
+    if (brainLabels && brainTools) suffix += `\n\n${brainTools.taskWriterBrainRule(brainLabels)}`;
   }
   if (customFieldDefinitions?.length) {
     suffix += `\n\n${renderPrompt("task-writer-custom-fields-output")}`;
