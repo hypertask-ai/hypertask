@@ -290,7 +290,7 @@ const InlineDraftAiFloat = ({
   const wasEditableRef = useRef(true);
   const rootRef = useRef<HTMLDivElement>(null);
   const promptInputRef = useRef<HTMLInputElement>(null);
-  const ctrlEnterSendsRef = useRef(false);
+  const boxShortcutsRef = useRef(false);
   const closeRef = useRef<() => void>(() => {});
   const recordingRef = useRef(false);
   const audioProcessingRef = useRef(false);
@@ -329,7 +329,7 @@ const InlineDraftAiFloat = ({
   const isRefineFullscreen = presentation === "refine-fullscreen";
   const isEditInline = presentation === "edit-inline";
   const isMobileAiSheet = isRefineFullscreen || isComposer;
-  ctrlEnterSendsRef.current = ticketEditorCtrlJ && !isMobileAiSheet;
+  boxShortcutsRef.current = ticketEditorCtrlJ && !isMobileAiSheet;
   const sheetViewport = useMobileVisualViewport(isMobileAiSheet);
   const sheetContainerStyle = getMobileOverlaySheetContainerStyle(sheetViewport);
 
@@ -471,15 +471,22 @@ const InlineDraftAiFloat = ({
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (
-        ctrlEnterSendsRef.current &&
-        event.key === "Enter" &&
-        (isApple ? event.metaKey : event.ctrlKey) &&
-        (loadingRef.current || recordingRef.current || audioProcessingRef.current)
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
+      const modKey = isApple ? event.metaKey : event.ctrlKey;
+      const dictating = recordingRef.current || audioProcessingRef.current;
+      if (boxShortcutsRef.current && modKey) {
+        if (event.key === "Enter" && (loadingRef.current || dictating)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        const insideBox = rootRef.current?.contains(event.target as Node);
+        if (event.code === "KeyJ" && !event.shiftKey && !event.altKey && !dictating && insideBox) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeRef.current();
+          editor.commands.focus();
+          return;
+        }
       }
 
       if (event.key === "Escape") {
@@ -1036,15 +1043,10 @@ const InlineDraftAiFloat = ({
     writeMode && newTaskWriter ? (
       <div className="scrollbar-none flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto">
         {newTaskWriter.chips.map((chip) => (
-          <button
-            key={chip.key}
-            type="button"
-            aria-pressed={selectedWriteChipKey === chip.key}
-            disabled={isLoading}
+          <button key={chip.key} type="button" disabled={isLoading} aria-pressed={selectedWriteChipKey === chip.key}
             className={cn(matchCommentRowControls ? APP_CHIP_LINK_CLASS : CHIP_LINK_CLASS, selectedWriteChipKey === chip.key && "bg-hover-active text-white-black")}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => setSelectedWriteChipKey((current) => (current === chip.key ? null : chip.key))}
-          >
+            onClick={() => setSelectedWriteChipKey((current) => (current === chip.key ? null : chip.key))}>
             {chip.label}
           </button>
         ))}

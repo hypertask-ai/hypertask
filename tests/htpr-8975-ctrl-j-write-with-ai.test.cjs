@@ -169,10 +169,13 @@ function panel(t, enabled, { onClose = () => {}, onParentKeyDown } = {}) {
     isEditable: true,
     view: { dom: dom.window.document.createElement("div") },
     contents: [],
+    focusCalls: 0,
     commands: {
       setTextSelection: () => {},
       unsetHighlight: () => {},
-      focus: () => {},
+      focus: () => {
+        editor.focusCalls += 1;
+      },
       selectAll: () => {
         editor.state.selection = { from: 0, to: editor.state.doc.content.size };
       },
@@ -314,14 +317,22 @@ test("Ctrl+Enter while the rewrite is still loading sends nothing and keeps the 
   assert.deepEqual(box.events, []);
 });
 
-test("Ctrl+J in the result state reaches the editor and closes Write with AI", async (t) => {
+test("Ctrl+J in the result state closes Write with AI, returns focus to the editor and opens nothing else", async (t) => {
   answerWith(t, formalReply);
   const box = wiredPanel(t, true);
   await box.rewrite("make it formal");
   assert.equal(box.doneShown(), true);
   assert.ok(box.box().contains(document.activeElement), "Ctrl+J starts inside the box, not on the page");
+  const pageListener = [];
+  const onPage = (event) => pageListener.push(event.code);
+  const page = document;
+  page.addEventListener("keydown", onPage, true);
+  t.after(() => page.removeEventListener("keydown", onPage, true));
+  const focusBefore = box.editor.focusCalls;
   box.press(document.activeElement, { key: "j", code: "KeyJ", keyCode: 74, ctrlKey: true });
-  assert.deepEqual(box.events, [["write-with-ai"]]);
+  assert.deepEqual(box.events, [["close"]]);
+  assert.deepEqual(pageListener, [], "page shortcuts such as New task never see this Ctrl+J");
+  assert.equal(box.editor.focusCalls, focusBefore + 1);
 });
 
 test("flag off keeps today's Ctrl+Enter in the Write with AI box: no send, no close, no focus change", async (t) => {
