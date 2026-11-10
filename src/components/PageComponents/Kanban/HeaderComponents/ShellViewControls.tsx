@@ -20,19 +20,11 @@ import SearchFilter from "./SearchFilter"
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
 import {
-  getActiveTableGroupingFromProject,
+  getActiveTableGroupByFromProject,
   type TableGroupBy,
 } from "@/lib/table-view/tableGroupByTag"
 import Tooltip from "@/components/Common/Tooltip"
 import TableTagGroupPicker from "./TableTagGroupPicker"
-
-const GROUP_BY_LABEL: Record<TableGroupBy, string> = {
-  column: "Column",
-  tag: "Tags",
-  assignee: "Assignee",
-  priority: "Priority",
-  size: "Size",
-}
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
   const isMbl = useContext(MobileViewContext)
@@ -46,7 +38,14 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const [groupOpen, setGroupOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const { timers: runningTimers } = useBoardRunningTimers(project.id)
-  const tableGroupBy = getActiveTableGroupingFromProject(project).mode
+  const tableGroupBy = getActiveTableGroupByFromProject(project)
+  const groupByLabel: Record<TableGroupBy, string> = {
+    column: "Column",
+    tag: "Tags",
+    assignee: "Assignee",
+    priority: "Priority",
+    size: "Size",
+  }
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
   const hasActiveSort = getActiveSortingModeFromProject(project) !== "Manual"
@@ -86,12 +85,11 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
           </span>
         )}
       </ViewControlButton>
-      {tableGroupByTagEnabled ? (
-        boardLayout === "table" ? (
+      {tableGroupByTagEnabled && boardLayout === "table" && (
         <>
           <ViewControlButton
             label="Group table"
-            tooltipText={`Group: ${GROUP_BY_LABEL[tableGroupBy]}`}
+            tooltipText={`Group: ${groupByLabel[tableGroupBy]}`}
             tooltipLeft={-88}
             active={tableGroupBy !== "column"}
             onClick={() => setGroupOpen(true)}
@@ -131,8 +129,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
             />
           )}
         </>
-        ) : null
-      ) : null}
+      )}
       {project.timeTrackingEnabled && (
         <ViewControlButton
           label="Show only tasks with a running timer"

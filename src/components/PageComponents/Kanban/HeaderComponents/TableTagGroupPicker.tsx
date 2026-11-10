@@ -38,9 +38,7 @@ const TableTagGroupPicker = ({ project, onClose, onApply }: { project: IProject;
       return next;
     });
   };
-  if (!enabled) return null;
-  return (
-    <ModalContainerCustom id="table-tag-group-picker" isOpen toggle={onClose} shouldCloseOnClickOutside className="xs:max-h-full sm:min-w-[480px] sm:top-[24%] sm:max-h-[520px]">
+  return enabled ? <ModalContainerCustom id="table-tag-group-picker" isOpen toggle={onClose} shouldCloseOnClickOutside className="xs:max-h-full sm:min-w-[480px] sm:top-[24%] sm:max-h-[520px]">
       <ModalHeaderComp header="Group by tags" />
       <ModalBody className="p-0 rounded-b-[4px]">
         <ModalInput id="table-tag-group-search" value={keyword} placeholder="Search tags…" onChange={(event) => setKeyword(event.target.value)} />
@@ -62,8 +60,7 @@ const TableTagGroupPicker = ({ project, onClose, onApply }: { project: IProject;
         <button type="button" className={ACTION} onClick={onClose}>Cancel</button>
         <button type="button" className={ACTION} onClick={() => onApply(selected)}>Apply</button>
       </ModalFooterComp>
-    </ModalContainerCustom>
-  );
+    </ModalContainerCustom> : null;
 };
 
 export default TableTagGroupPicker;
