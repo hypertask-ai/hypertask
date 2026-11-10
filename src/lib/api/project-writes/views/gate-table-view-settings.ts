@@ -1,6 +1,5 @@
 import { Prisma } from "@prisma/client";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8973_TABLE_SORT_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-8973-table-sort-columns";
 import {
   sanitizeTableColumns,
   sanitizeTableSortStack,
@@ -54,9 +53,10 @@ export async function tableViewSettingsForWrite(
   const primary = sanitizeTableSort(body.table_sort_column, body.table_sort_direction);
   const hasStack = Object.prototype.hasOwnProperty.call(body, "table_sort_stack");
   const hasColumns = Object.prototype.hasOwnProperty.call(body, "table_columns");
-  const enabled = hasStack || hasColumns
-    ? await isFeatureEnabled(HTPR_8973_TABLE_SORT_COLUMNS_FLAG, userId)
-    : false;
+  let enabled = false;
+  if (hasStack || hasColumns) {
+    enabled = await isFeatureEnabled("htpr-8973-table-sort-columns", userId);
+  }
   if (!enabled) {
     return {
       table_sort_column: primary.column,
