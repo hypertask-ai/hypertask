@@ -325,8 +325,9 @@ test("Ctrl+J in the result state closes Write with AI, returns focus to the edit
   assert.ok(box.box().contains(document.activeElement), "Ctrl+J starts inside the box, not on the page");
   const pageListener = [];
   const onPage = (event) => pageListener.push(event.code);
-  document.addEventListener("keydown", onPage, true);
-  t.after(() => document.removeEventListener("keydown", onPage, true));
+  const page = document;
+  page.addEventListener("keydown", onPage, true);
+  t.after(() => page.removeEventListener("keydown", onPage, true));
   const focusBefore = box.editor.focusCalls;
   box.press(document.activeElement, { key: "j", code: "KeyJ", keyCode: 74, ctrlKey: true });
   assert.deepEqual(box.events, [["close"]]);
