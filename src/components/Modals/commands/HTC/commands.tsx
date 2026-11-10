@@ -795,7 +795,10 @@ const Commands = (props: Props) => {
       const target = event.target as HTMLElement;
       if (!(tabPaletteCycle && !isMobile) && isCompose && target.matches("[data-compose-task-writer] textarea") &&
           document.querySelector("[data-compose-board-chip]")) return;
-      if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
+      const paletteTabOwnsTab = tabPaletteCycle && !isMobile && isCompose &&
+        Boolean(target.closest("[data-compose-task-writer]")) &&
+        !target.closest("details[open], [data-compose-board-picker-open]");
+      if (!paletteTabOwnsTab && !target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       setShowCommands((previous) => ({ ...previous, paletteTab: isCompose ? "search" : "compose" }));
