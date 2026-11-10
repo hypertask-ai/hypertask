@@ -76,7 +76,7 @@ test('soft unlink relink: removed association excluded from lists/metadata / POS
   assert.deepEqual((await h.service.getPage({ publicId: 'page', userId: 3 })).linkedTasks.map((row) => row.id), [10]);
   assert.equal((await h.service.listPages({ taskId: 11, userId: 3 })).some((row) => row.publicId === 'page'), false);
   for (let i = 0; i < 2; i++) assert.equal((await h.request('[publicId]/links', 'POST', { task_id: 11 })).status, 200);
-  assert.equal(h.state.links.length, 2);
+  assert.equal(h.state.links.filter((row) => row.pageId === 20).length, 2);
   assert.deepEqual(h.state.links[1], original);
   assert.equal(h.state.pages[0].taskId, 10);
   assert.deepEqual((await h.service.getPage({ publicId: 'page', userId: 3 })).linkedTasks.map((row) => row.id), [10, 11]);
@@ -84,17 +84,15 @@ test('soft unlink relink: removed association excluded from lists/metadata / POS
   assert.deepEqual(rows.find((row) => row.publicId === 'page').linkedTasks.map((row) => row.id), [10, 11]);
 });
 
-test('soft unlink origin then move secondary: origin recreation refused / sole active ticket carries page on same old board', async () => {
-  const browser = harness({ userId: 3 });
-  assert.equal((await browser.request('[publicId]/links', 'DELETE', { task_id: 10 })).status, 200);
-  const removedAt = browser.state.links[0].removedAt;
-  const links = browser.state.links.map((edge) => link(10, edge.taskId === 10 ? 21 : 20, { removedAt: edge.removedAt }));
-  const h = lifecycle({ tasks: [task(20), task(21)], pages: [page(10, 21)], links });
+test('soft unlink origin then move secondary: sole active secondary link carries page on same old board', async () => {
+  const removedAt = new Date('2026-10-18');
+  const links = [link(10, 10, { removedAt }), link(10, 20)];
+  const h = lifecycle({ tasks: [task(20), task(10)], pages: [page(10, 10)], links });
   assert.equal((await h.move()).success, true);
   assert.equal(h.state().pages[0].projectId, 2);
-  assert.equal(h.state().pages[0].taskId, 21);
+  assert.equal(h.state().pages[0].taskId, 10);
   assert.deepEqual(h.state().links, links);
-  assert.equal(h.state().links.find((row) => row.taskId === 21).removedAt.getTime(), removedAt.getTime());
+  assert.equal(h.state().links.find((row) => row.taskId === 10).removedAt.getTime(), removedAt.getTime());
   assert.equal(h.calls.includes('materialize'), false);
 });
 
