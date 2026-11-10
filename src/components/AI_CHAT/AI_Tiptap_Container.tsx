@@ -302,7 +302,7 @@ export function AI_Tiptap_Container({
   );
 
   return (
-    <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root data-sidebar-agent={agentSessionsEnabled ? sidebarAgent : undefined} inert={disabled || !active || undefined}
+    <div className="p-2 relative" ref={focusRootRef} data-ai-chat-composer-root data-sidebar-agent={agentSessionsEnabled ? sidebarAgent : undefined} inert={disabled || !active || undefined}
       onKeyDownCapture={controlledComposer ? (event) => {
         if (isMbl || !active || disabled || !(event.metaKey || event.ctrlKey) || !event.shiftKey || event.keyCode !== 68) return;
         const recorder = focusRootRef.current?.querySelector<HTMLElement>(`[id="${audioButtonId}"]`);
