@@ -59,6 +59,19 @@ for (const smoke of [false, true]) {
       assert.equal(config.productionBrowserSourceMaps, true);
       assert.equal(config.outputFileTracingExcludes, undefined);
       assert.deepEqual(config.serverExternalPackages, ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk"]);
+      const productionCache = {
+        cache: { type: "filesystem", maxMemoryGenerations: Infinity },
+        resolve: { alias: {} },
+      };
+      config.webpack(productionCache, { dev: false });
+      assert.equal(productionCache.cache.type, "filesystem");
+      assert.equal(productionCache.cache.maxMemoryGenerations, 0);
+      const developmentCache = {
+        cache: { type: "filesystem", maxMemoryGenerations: Infinity },
+        resolve: { alias: {} },
+      };
+      config.webpack(developmentCache, { dev: true });
+      assert.equal(developmentCache.cache.maxMemoryGenerations, Infinity);
     });
   }
 }
