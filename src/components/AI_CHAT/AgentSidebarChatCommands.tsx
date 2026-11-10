@@ -119,7 +119,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
       }
       host.style.maxHeight = `${Math.max(0, maxHeight)}px`;
       const right = agentsOnly ? Math.min(window.innerWidth, host.closest('[data-testid="ai-sidebar"]')?.getBoundingClientRect().right ?? window.innerWidth) : window.innerWidth;
-      host.style.maxWidth = `${Math.max(0, right - (agentsOnly ? host.getBoundingClientRect().left : box.left) - 8)}px`;
+      host.style.maxWidth = `${Math.max(0, right - host.getBoundingClientRect().left - 8)}px`;
     };
     place();
     host.focus({ preventScroll: true });
