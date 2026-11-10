@@ -145,26 +145,31 @@ export function isOwnKeyAuthFailure(provider: string | null | undefined, error: 
   return providerAuthStatus(error) !== null && ownKeyRejectedMessage(provider) !== null;
 }
 
-export function userFacingErrorMessage(error: unknown, stage: string, provider?: string | null) {
+export function userFacingErrorMessage(
+  error: unknown,
+  stage: string,
+  provider?: string | null,
+  quiet = false,
+) {
   if (error instanceof Error && error.name === "ForcedTeamKeyError" && error.message.trim()) {
-    console.warn(`[ai/chat/stream] ${stage} refused: forced team key`);
+    if (!quiet) console.warn(`[ai/chat/stream] ${stage} refused: forced team key`);
     return error.message;
   }
   const allowanceError = includedAllowanceError(error);
   if (allowanceError) {
-    console.info(`[ai/chat/stream] ${stage} refused: included AI allowance used up`);
+    if (!quiet) console.info(`[ai/chat/stream] ${stage} refused: included AI allowance used up`);
     return allowanceError.message;
   }
   const ownKeyMessage = isOwnKeyAuthFailure(provider, error) ? ownKeyRejectedMessage(provider) : null;
   if (ownKeyMessage) {
-    console.warn(`[ai/chat/stream] ${stage} refused: own provider key rejected`);
+    if (!quiet) console.warn(`[ai/chat/stream] ${stage} refused: own provider key rejected`);
     return ownKeyMessage;
   }
   if (error instanceof Error && error.name === "AiProviderAuthenticationError") {
-    console.warn(`[ai/chat/stream] ${stage} refused: DeepSeek AI key rejected`);
+    if (!quiet) console.warn(`[ai/chat/stream] ${stage} refused: DeepSeek AI key rejected`);
     return error.message;
   }
-  console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
+  if (!quiet) console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
   return "Sorry, something went wrong while generating a response. Please try again.";
 }
 
