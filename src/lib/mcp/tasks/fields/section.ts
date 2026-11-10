@@ -1,6 +1,7 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7990_TASK_MOVE_REFUSAL_FLAG } from '@/lib/flags/definitions/htpr-7990-task-move-refusal';
+import { boardColumnsLine, visibleBoardColumns } from '@/lib/mcp/boards/sectionLookup';
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskSection(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
@@ -44,12 +45,12 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
         await moveResponse.json().catch(() => null)
     } else if (requestBody.sectionId && sectionInfo && sectionInfo.projectId !== task.projectId) {
         throw Object.assign(
-            new Error('sectionId must be a column on the task\'s own board. Use hypertask_move_task_between_boards to move a task to another board.'),
+            new Error(`sectionId must be a column on the task's own board. Use hypertask_move_task_between_boards to move a task to another board.${boardColumnsLine(await visibleBoardColumns(task.projectId))}`),
             { status: 400, code: 'invalid_value', field: 'sectionId' }
         )
     } else if (requestBody.sectionId && !sectionInfo) {
         throw Object.assign(
-            new Error('sectionId does not match a column. Pass a column id from the task\'s own board.'),
+            new Error(`sectionId does not match a column. Pass a column id from the task's own board.${boardColumnsLine(await visibleBoardColumns(task.projectId))}`),
             { status: 400, code: 'not_found', field: 'sectionId' }
         )
     }

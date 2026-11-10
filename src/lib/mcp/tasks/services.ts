@@ -11,6 +11,7 @@ import type { Prisma } from '@prisma/client';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { taskDetailInclude } from './mappers';
 import { unresolvedLabelMessage } from '@/lib/mcp/labelMessages';
+import { missingSectionMessage } from '@/lib/mcp/boards/sectionLookup';
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import createLabelActivity from '@/utils/controllers/activities/createLabelActivity';
 import {
@@ -139,7 +140,7 @@ export async function getSectionForTask(
         if (!section) {
             return {
                 section: null,
-                error: { status: 404, message: `Section with ID ${sectionId} not found in project ${projectId}` }
+                error: { status: 404, message: await missingSectionMessage(projectId, sectionId) }
             };
         }
     } else {
