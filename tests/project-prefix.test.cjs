@@ -11,6 +11,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
 
 const root = path.resolve(__dirname, "..");
+const blockingListStubs = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
   stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
@@ -25,7 +26,15 @@ function load(file, stubs = {}) {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
-    if (request in stubs) return stubs[request];
+    const listImport = blockingListStubs.resolveListImport(request);
+    if (listImport !== undefined) return listImport;
+    if (request in stubs) {
+      const value = stubs[request];
+      if (request === "@/utils/controllers/projects/getAllIncludes") {
+        return blockingListStubs.mergeGetAllIncludesStub(value);
+      }
+      return value;
+    }
     if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, isPlanLimitsEnabled: async () => false };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
