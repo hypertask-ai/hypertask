@@ -34,7 +34,7 @@ async function withChat(options, check) {
       if (options.historyLoad) await options.historyLoad;
       if (options.historyError) throw new Error("History unavailable");
       calls.push(["page", scope]);
-      const visible = rows.filter(item => item.userId === values.get(atoms.currentUserAtom).id && (scope.taskId === undefined || item.taskId === scope.taskId) && (!scope.projectId || (item.projectId === scope.projectId && item.taskId === null)));
+      const visible = rows.filter(item => item.userId === values.get(atoms.currentUserAtom).id && (scope.taskId === undefined || item.taskId === scope.taskId) && (!scope.projectId || (item.projectId === scope.projectId && item.taskId === null))).sort((a, b) => b.updatedAt - a.updatedAt);
       const offset = Number(scope.cursor ?? 0), limit = scope.limit ?? 30;
       return response({ success: true, sessions: visible.slice(offset, offset + limit).map(({ messages, ...item }) => ({ ...item, hasMessages: messages.length > 0 })), nextCursor: offset + limit < visible.length ? String(offset + limit) : null });
     },
