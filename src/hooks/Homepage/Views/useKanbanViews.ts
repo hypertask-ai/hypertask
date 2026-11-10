@@ -56,7 +56,7 @@ import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByT
 import {
   getActiveTableCollapsedSectionsFromProject,
   serializeTableCollapsedSections,
-} from "@/lib/table-view/tableCollapsedSections";
+} from "@/lib/table-view/tableGroupByTag";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import toast from "react-hot-toast";

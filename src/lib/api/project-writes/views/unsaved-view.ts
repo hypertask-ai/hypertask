@@ -16,7 +16,7 @@ import {
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import { isFeatureEnabled } from "@/lib/flags";
-import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableCollapsedSections";
+import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableGroupByTag";
 import {
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,

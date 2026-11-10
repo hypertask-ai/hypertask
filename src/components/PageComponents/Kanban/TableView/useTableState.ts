@@ -26,7 +26,7 @@ import {
   buildTableSectionsGroupedByTag,
   getActiveTableGroupByFromProject,
 } from "@/lib/table-view/tableGroupByTag";
-import { getActiveTableCollapsedSectionsFromProject } from "@/lib/table-view/tableCollapsedSections";
+import { getActiveTableCollapsedSectionsFromProject } from "@/lib/table-view/tableGroupByTag";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
@@ -265,7 +265,7 @@ export function useTableState(context: Context) {
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
   expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
-  setTableSortViewAndReturn, setTableCollapsedSectionsViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
+  setTableSortViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
   };

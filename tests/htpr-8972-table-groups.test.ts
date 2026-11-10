@@ -8,7 +8,7 @@ import {
   parseTableCollapsedSections,
   serializeTableCollapsedSections,
   tableTaskRowKey,
-} from "../src/lib/table-view/tableCollapsedSections";
+} from "../src/lib/table-view/tableGroupByTag";
 import { getTableRowDragData } from "../src/components/PageComponents/Kanban/TableView/tableRowDrag";
 
 test("board table sort keeps section groups", () => {

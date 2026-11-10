@@ -15,7 +15,7 @@ import { ChevronDown } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 import { getActiveTableGroupByFromProject } from "@/lib/table-view/tableGroupByTag";
-import { tableTaskRowKey } from "@/lib/table-view/tableCollapsedSections";
+import { tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 
@@ -423,12 +423,6 @@ const TableView = ({
                       className="flex cursor-pointer items-center gap-1 px-[10px] pt-1"
                       onClick={() => {
                         if (tableGroupFoldEnabled) toggleCollapsedSection(sid);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          toggleCollapsedSection(sid);
-                        }
                       }}
                     >
                       <ChevronDown

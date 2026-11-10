@@ -8,7 +8,7 @@ import { visibleTasksFromRows } from "@/lib/myTasksBulkSelection";
 import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
 import { getSortComparator, Row, SECTION_CAP, isTaskRow } from "./tableViewShared";
-import { tableTaskRowKey } from "@/lib/table-view/tableCollapsedSections";
+import { tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 
