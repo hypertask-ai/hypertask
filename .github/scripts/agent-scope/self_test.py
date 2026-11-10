@@ -52,12 +52,20 @@ def run(output):
                          approvedIn='https://app.hypertask.ai/detail/project-15/7496')
         exceptions.write_text(json.dumps([exception]))
         invoke('exception-positive', 0, 'findings=1, excepted=1, debt=0, new=0')
-        exceptions.write_text(json.dumps([{**exception, 'sha256': '0' * 64}]))
+        route.write_bytes(source.replace(b'findFirst', b'findMany'))
+        exceptions.write_text(json.dumps([exception]))
         invoke('stale-exception', 1, 'Stale exception:')
 
         exceptions.write_text(json.dumps([exception]))
+        route.write_bytes((FIXTURES / 'scoped.ts.fixture').read_bytes())
+        invoke('removed-call', 1, 'Stale exception:')
+
+        exceptions.write_text(json.dumps([exception]))
+        route.write_bytes(source + b'\n// unrelated edit\n')
+        invoke('unrelated-file-edit', 0, 'findings=1, excepted=1, debt=0, new=0')
+
+        exceptions.write_text(json.dumps([exception]))
         route.write_bytes(source + (FIXTURES / 'planted.ts.fixture').read_bytes())
-        exceptions.write_text(json.dumps([{**exception, 'sha256': hashlib.sha256(route.read_bytes()).hexdigest()}]))
         invoke('new-call-in-excepted-file', 1, 'New unscoped query:')
 
         exceptions.write_text('[]\n')
@@ -71,5 +79,5 @@ def run(output):
         new_route.write_bytes(source)
         invoke('brand-new-agent-route', 1, f'New unscoped query: {new_path}')
 
-    print('Self-tests passed: 6 (five negatives, scoped positive; exception prerequisite also passed)', flush=True)
+    print('Self-tests passed: 8 (seven negatives, scoped positive; exception prerequisite also passed)', flush=True)
     return 0

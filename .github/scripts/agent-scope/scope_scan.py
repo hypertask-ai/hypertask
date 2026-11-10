@@ -29,6 +29,12 @@ def key(entry):
     return (entry['path'], entry['call'], entry['occurrence'])
 
 
+def uses_external_auth_context(call):
+    if re.search(r'\{\s*where\s*,', call):
+        return True
+    return bool(re.search(r'\bwhere:\s*[A-Za-z_]\w*\s*[,}]', call))
+
+
 def read_entries(path, kind):
     entries = json.loads(path.read_text())
     if not isinstance(entries, list):
@@ -68,10 +74,14 @@ def check_findings(findings, exceptions, baseline):
     debt = set()
     for entry in exceptions:
         identity = key(entry)
-        if identity not in actual or actual[identity]['sha256'] != entry['sha256']:
-            errors.append(f'Stale exception: {entry["path"]} occurrence={entry["occurrence"]}')
-        else:
-            excepted.add(identity)
+        if identity in actual:
+            finding = actual[identity]
+            if uses_external_auth_context(entry['call']) and finding['sha256'] != entry['sha256']:
+                errors.append(f'Stale exception: {entry["path"]} occurrence={entry["occurrence"]}')
+            else:
+                excepted.add(identity)
+            continue
+        errors.append(f'Stale exception: {entry["path"]} occurrence={entry["occurrence"]}')
     for entry in baseline:
         identity = key(entry)
         if identity in excepted:
