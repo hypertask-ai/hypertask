@@ -14,6 +14,7 @@ import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from "@/lib/flags/keys";
 
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { groupInboxItemsByDate } from "@/lib/inbox/inboxDateGroups";
+import { NEEDS_YOU_SPLIT } from "@/lib/inbox/needsYou";
 import { HTPR_7801_INBOX_VISIBLE_ORDER_FLAG } from "@/lib/flags/definitions/htpr-7801-inbox-visible-order";
 import type { INotification, TRemoveFromInboxMode } from "@/models/model";
 import { useRouter } from "next/navigation";
@@ -281,9 +282,10 @@ const InboxSplit = ({
     ];
 
     return groupInboxItemsByDate(
-      timelineItems,
+      selectedSplit === NEEDS_YOU_SPLIT ? timelineItems.filter((item) => item.kind === "notification") : timelineItems,
       selectedSplit === "Blocked by you",
       snapshot,
+      selectedSplit === NEEDS_YOU_SPLIT,
     );
   }, [_notifications, activeDrafts, selectedSplit, snapshot, boardAccessDecisions]);
   const groupedInboxEntries = Object.entries(groupedInboxItems);
@@ -912,7 +914,7 @@ const InboxSplit = ({
     buildInboxTasksPlaylist(
       notifications,
       decisionCommentLinks,
-      inboxVisibleOrder ? { oldestFirst: selectedSplit === "Blocked by you", snapshot } : undefined,
+      inboxVisibleOrder && selectedSplit !== NEEDS_YOU_SPLIT ? { oldestFirst: selectedSplit === "Blocked by you", snapshot } : undefined,
     );
 
   const buildQueryParams = (mode: string): string => {

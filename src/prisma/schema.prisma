@@ -2180,6 +2180,11 @@ model Notification {
   // its display text from a related entity (comment/task/reaction); a
   // proactive agent message has none of those, so it needs its own text.
   message String? @db.Text
+  needsYouScore Int?
+  needsYouReason String?
+  needsYouSource String?
+  needsYouCostUsd Float?
+  needsYouScoredAt DateTime?
 
   @@index([taskId, userId, status, createdAt])
   @@index([userId, status, agentId, createdAt])
