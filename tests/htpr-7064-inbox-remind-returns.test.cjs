@@ -113,12 +113,11 @@ function fixture({ enabled = true, fallbackEnabled = true, existing = true, mute
   stub("src/lib/flags.ts", {
     HTPR_7064_INBOX_REMIND_RETURNS_FLAG: flagKey,
     HTPR_7061_REMIND_WITHOUT_INBOX_FLAG: fallbackFlagKey,
-    MY_TASKS_SNOOZE_FLAG: "htpr-6461-my-tasks-snooze",
     isFeatureEnabled: async (key, userId) => {
       calls.flags.push({ key, userId });
       if (key === flagKey) return enabled;
       if (key === fallbackFlagKey) return fallbackEnabled;
-      return key === "htpr-6461-my-tasks-snooze";
+      return false;
     },
   });
   stub("src/utils/controllers/tasks/assertTaskAccess.ts", { userCanAccessTask: async () => access });

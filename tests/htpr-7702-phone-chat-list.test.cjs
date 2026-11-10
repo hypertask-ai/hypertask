@@ -21,7 +21,7 @@ const compiled = ts.transpileModule(`const effect = ${placement.arguments[0].get
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-function view({ mobile = true, enabled = true, agentsOnly = false, composerTop = 558, listTop = 330, viewportHeight = 664, noComposer = false, noSidebar = false } = {}) {
+function view({ mobile = true, enabled = true, agentsOnly = false, composerTop = 558, listTop = 330, viewportHeight = 664, noComposer = false, noSidebar = false, anchorLeft = 58 } = {}) {
   const dom = new JSDOM(`<div data-ai-chat-composer-root id="other-sidebar"></div><div data-testid="ai-sidebar"><button id="anchor"></button><ul id="list" tabindex="-1"></ul><div data-ai-chat-composer-root inert id="inactive"></div><div hidden><div data-ai-chat-composer-root id="hidden"></div></div>${noComposer ? "" : '<div data-ai-chat-composer-root id="composer"><input id="editor"></div>'}</div>`);
   const { window } = dom;
   const { document } = window;
@@ -33,7 +33,7 @@ function view({ mobile = true, enabled = true, agentsOnly = false, composerTop =
   const geometry = { composerTop, listTop };
   document.querySelector('[data-testid="ai-sidebar"]').getBoundingClientRect = () => ({ ...rect(0), right: 390 });
   host.getBoundingClientRect = () => rect(geometry.listTop, 288, 326);
-  anchor.getBoundingClientRect = () => rect(geometry.listTop - 48, 180, 44);
+  anchor.getBoundingClientRect = () => ({ ...rect(geometry.listTop - 48, 180, 44), left: anchorLeft });
   document.getElementById("inactive").getBoundingClientRect = () => rect(100);
   document.getElementById("hidden").getBoundingClientRect = () => rect(0, 0, 0);
   document.getElementById("other-sidebar").getBoundingClientRect = () => rect(50);
@@ -54,6 +54,13 @@ test("phone max height uses active same-sidebar composer top minus actual list t
   try {
     assert.equal(chat.host.style.maxHeight, "216px");
     assert.equal(chat.geometry.listTop + parseFloat(chat.host.style.maxHeight), chat.geometry.composerTop - 12);
+    assert.equal(chat.host.style.maxWidth, "958px");
+  } finally { chat.dispose(); }
+});
+
+test("conversation list width follows its own left edge, not a far-right anchor button", () => {
+  const chat = view({ mobile: false, anchorLeft: 1000 });
+  try {
     assert.equal(chat.host.style.maxWidth, "958px");
   } finally { chat.dispose(); }
 });

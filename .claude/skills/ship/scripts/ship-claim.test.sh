@@ -603,7 +603,7 @@ eq "human-assigned Backlog infra ticket never blocks an app claim" "$(holdrc 'RU
 prs 5; free_infra YPER4-4 free
 eq "picked by the launcher, free infra waits -> app claim allowed" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 0
 eq "picked by the launcher, board 11514 unreadable -> app claim still held" "$(SHIP_CLAIM_PICKED=1 SHIP_CLAIM_HYPERTASK=$D/ht11514fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 4
-prs 21; eq "picked by the launcher, queue full -> app claim still held" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 4
+prs 21; eq "picked by the launcher, queue over 20 -> fleet/pick WIP cap decides, app claim allowed" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 0
 # Incident lane (YPER4-1375): SHIP_CLAIM_INCIDENT=1 skips every hold, but only for a real open incident ticket.
 inc_task() { jq -n --arg l "$1" --arg s "${2:-Bugs}" --argjson done "${3:-false}" \
   '{success:true,tasks:[{ticketNumber:"HTPR-5000",projectId:15,section:$s,status:"Normal",sectionIsDone:$done,labels:[{name:$l}],assignees:[]}]}' > "$D/inc.json"; }
@@ -680,6 +680,17 @@ for ticket in HTPR-8264 HYFA-1 YPER4-999 HYCI-30; do
   eq "$ticket extra-hard refuses runner even in QA" "$rc" 4
   [[ $out == *'brain-extra-hard'* ]] && ok 'refusal explains brain restriction' || bad "unclear brain refusal: $out"
   [ ! -s "$D/log" ] && [ ! -s "$HOLD_READS" ] && ok 'brain refusal precedes writes and hold reads' || bad 'extra-hard claim reached hold or writes'
+  mkdir -p "$D/rstate"; echo claude > "$D/rstate/engine-6"
+  : > "$D/log"
+  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1)
+  [[ $out != *'is brain-extra-hard'* ]] && ok "$ticket extra-hard passes the brain gate on a claude runner" || bad "claude runner refused extra-hard: $out"
+  echo codex > "$D/rstate/engine-6"
+  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1)
+  [[ $out != *'is brain-extra-hard'* ]] && ok "$ticket extra-hard passes the brain gate on a codex runner" || bad "codex runner refused extra-hard: $out"
+  echo opencode > "$D/rstate/engine-6"
+  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1); rc=$?
+  eq "$ticket extra-hard still refuses an opencode runner" "$rc" 4
+  rm -rf "$D/rstate"
 done
 for identity in 'RUNNER 6' 'HT Design Builder' 'Infra Runner 2'; do
   for label in design-pass brain-extra-hard; do

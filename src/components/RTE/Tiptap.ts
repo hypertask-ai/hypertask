@@ -6,7 +6,7 @@ import TaskList from "@tiptap/extension-task-list";
 import { TableKit } from "@tiptap/extension-table";
 import { Extension, nodePasteRule, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { MutableRefObject, useEffect, useMemo, useRef, useState } from "react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { RedirectMode } from "@/models/model";
@@ -83,6 +83,7 @@ interface IProps {
   trackFocus?: boolean;
   mentionProjectId?: number | null;
   placeholder?: string;
+  placeholderOverrideRef?: MutableRefObject<string | null>;
 }
 const useTiptap = ({
   mode,
@@ -92,6 +93,7 @@ const useTiptap = ({
   trackFocus = true,
   mentionProjectId,
   placeholder,
+  placeholderOverrideRef,
 }: IProps) => {
   const skillProjectIdRef = useRef(mentionProjectId);
   skillProjectIdRef.current = mentionProjectId;
@@ -132,6 +134,15 @@ const useTiptap = ({
     };
 
   }, []);
+  const [defaultPlaceholder] = useState(
+    () =>
+      placeholder ??
+      (allowedCommentModes.includes(mode)
+        ? getRandomElement(globalConstants.CommentTips(isApple, createNewComment))
+        : isMobileView || newTaskWindow
+          ? "Add a description…"
+          : getRandomElement(globalConstants.DescriptionTips(isApple)))
+  );
   const extensions = useMemo(
     () => [
       Gapcursor,
@@ -161,15 +172,9 @@ const useTiptap = ({
       }),
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({
-        placeholder:
-          placeholder ??
-          (allowedCommentModes.includes(mode)
-            ? getRandomElement(
-                globalConstants.CommentTips(isApple, createNewComment)
-              )
-            : isMobileView || newTaskWindow
-              ? "Add a description…"
-              : getRandomElement(globalConstants.DescriptionTips(isApple))),
+        placeholder: placeholderOverrideRef
+          ? () => placeholderOverrideRef.current ?? defaultPlaceholder
+          : defaultPlaceholder,
         emptyEditorClass: `${styles.is_editor_empty}`,
         emptyNodeClass: "New Comment",
       }),

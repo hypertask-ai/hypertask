@@ -58,6 +58,8 @@ import {
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG } from "@/lib/flags/definitions/htpr-8975-ctrl-j-write-with-ai";
+import { HTPR_9002_CTRL_J_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-9002-ctrl-j-new-task";
+import type { NewTaskWriteChip, NewTaskWriter } from "@/lib/ai/newTaskWrite";
 
 const CHIP_LINK_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 text-text-light-gray hover:bg-hover-active hover:text-white-black focus-visible:outline-none focus-visible:bg-hypertasks-ai-purple focus-visible:font-semibold focus-visible:text-white disabled:opacity-50";
@@ -99,6 +101,7 @@ interface LastAction {
   sourceContent?: string;
   sourceKind?: "source" | "proposal";
   sourceRevision?: number;
+  taskWrite?: { chip: NewTaskWriteChip | null };
 }
 
 interface MobileOpeningSource {
@@ -246,6 +249,7 @@ const InlineDraftAiFloat = ({
   presentation = "inline",
   suppressEditorSelectionHighlight = false,
   matchCommentRowControls = false,
+  taskWriter,
 }: {
   editor: Editor;
   onClose: () => void;
@@ -257,9 +261,14 @@ const InlineDraftAiFloat = ({
   presentation?: "inline" | "composer" | "refine-fullscreen" | "edit-inline";
   suppressEditorSelectionHighlight?: boolean;
   matchCommentRowControls?: boolean;
+  taskWriter?: NewTaskWriter;
 }) => {
   const isApple = useDeviceContext();
-  const ticketEditorCtrlJ = useFlag(HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG);
+  const ticketEditorCtrlJFlag = useFlag(HTPR_8975_CTRL_J_WRITE_WITH_AI_FLAG);
+  const newTaskCtrlJ = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
+  const newTaskWriter = newTaskCtrlJ ? taskWriter : undefined;
+  const ticketEditorCtrlJ = ticketEditorCtrlJFlag || Boolean(newTaskWriter);
+  const [selectedWriteChipKey, setSelectedWriteChipKey] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<InlineDraftAiRange | null>(null);
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
@@ -281,7 +290,7 @@ const InlineDraftAiFloat = ({
   const wasEditableRef = useRef(true);
   const rootRef = useRef<HTMLDivElement>(null);
   const promptInputRef = useRef<HTMLInputElement>(null);
-  const ctrlEnterSendsRef = useRef(false);
+  const boxShortcutsRef = useRef(false);
   const closeRef = useRef<() => void>(() => {});
   const recordingRef = useRef(false);
   const audioProcessingRef = useRef(false);
@@ -320,7 +329,7 @@ const InlineDraftAiFloat = ({
   const isRefineFullscreen = presentation === "refine-fullscreen";
   const isEditInline = presentation === "edit-inline";
   const isMobileAiSheet = isRefineFullscreen || isComposer;
-  ctrlEnterSendsRef.current = ticketEditorCtrlJ && !isMobileAiSheet;
+  boxShortcutsRef.current = ticketEditorCtrlJ && !isMobileAiSheet;
   const sheetViewport = useMobileVisualViewport(isMobileAiSheet);
   const sheetContainerStyle = getMobileOverlaySheetContainerStyle(sheetViewport);
 
@@ -462,15 +471,22 @@ const InlineDraftAiFloat = ({
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (
-        ctrlEnterSendsRef.current &&
-        event.key === "Enter" &&
-        (isApple ? event.metaKey : event.ctrlKey) &&
-        (loadingRef.current || recordingRef.current || audioProcessingRef.current)
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
+      const modKey = isApple ? event.metaKey : event.ctrlKey;
+      const dictating = recordingRef.current || audioProcessingRef.current;
+      if (boxShortcutsRef.current && modKey) {
+        if (event.key === "Enter" && (loadingRef.current || dictating)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        const insideBox = rootRef.current?.contains(event.target as Node);
+        if (event.code === "KeyJ" && !event.shiftKey && !event.altKey && !dictating && insideBox) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeRef.current();
+          editor.commands.focus();
+          return;
+        }
       }
 
       if (event.key === "Escape") {
@@ -618,6 +634,9 @@ const InlineDraftAiFloat = ({
   };
 
   const hasSelection = scope.to > scope.from;
+  const writeMode =
+    Boolean(newTaskWriter) && !isMobileAiSheet && editor.isEmpty && !hasSelection;
+  const sendLabel = writeMode ? "Write" : "Rewrite";
   const showEditChips =
     (isMobileAiSheet && Boolean(mobileSourceDraft)) ||
     shouldShowInlineDraftAiChips(hasSelection, prompt);
@@ -729,6 +748,7 @@ const InlineDraftAiFloat = ({
       !isMobileAiSheet &&
       !selectionPresent &&
       !editor.isEmpty &&
+      !action.taskWrite &&
       action.command === "WriteContent"
     ) {
       return;
@@ -763,7 +783,17 @@ const InlineDraftAiFloat = ({
     editor.setEditable(false);
 
     const requestPrompt = prompt;
+    const taskWrite = action.taskWrite;
+    const writeOutcome: { applyProperties?: () => void } = {};
     const request = (async () => {
+      if (taskWrite && newTaskWriter) {
+        const outcome = await newTaskWriter.write(
+          action.instruction ?? "",
+          taskWrite.chip,
+        );
+        writeOutcome.applyProperties = outcome.applyProperties;
+        return outcome.description;
+      }
       const response = await fetch(tiptapForwardSlashRoute, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -795,8 +825,9 @@ const InlineDraftAiFloat = ({
     })();
 
     try {
-      const loadingMessage =
-        action.command === "WriteContent" ? "Writing draft" : "Rewriting draft";
+      let loadingMessage = "Rewriting draft";
+      if (taskWrite) loadingMessage = "Writing task";
+      else if (action.command === "WriteContent") loadingMessage = "Writing draft";
       if (isMobileAiSheet) toast.loading(loadingMessage, { id: toastId });
       const html = isMobileAiSheet
         ? await request
@@ -804,7 +835,7 @@ const InlineDraftAiFloat = ({
             request,
             {
               loading: loadingMessage,
-              success: "Draft updated",
+              success: taskWrite ? "Task written" : "Draft updated",
               error: (error) =>
                 error instanceof Error ? error.message : "AI edit failed",
             },
@@ -853,7 +884,12 @@ const InlineDraftAiFloat = ({
         toast.success("Draft updated", { id: toastId });
         return;
       }
-      replaceScope(html, range);
+      replaceScope(
+        html,
+        taskWrite ? { from: 0, to: editor.state.doc.content.size } : range,
+      );
+      writeOutcome.applyProperties?.();
+      setSelectedWriteChipKey(null);
       setHasResult(true);
     } catch (error) {
       if (isMobileAiSheet) {
@@ -889,6 +925,17 @@ const InlineDraftAiFloat = ({
       });
       return;
     }
+    if (writeMode) {
+      const chip =
+        newTaskWriter?.chips.find((item) => item.key === selectedWriteChipKey) ??
+        null;
+      void runAction({
+        command: "WriteContent",
+        instruction,
+        taskWrite: { chip },
+      });
+      return;
+    }
     void runAction({
       command: inlineDraftAiCommandForInstruction(hasSelection),
       instruction,
@@ -912,6 +959,10 @@ const InlineDraftAiFloat = ({
       return;
     }
     if (!lastAction) return;
+    if (lastAction.taskWrite) {
+      void runAction(lastAction);
+      return;
+    }
     void runAction(
       lastAction.instruction
         ? {
@@ -944,11 +995,7 @@ const InlineDraftAiFloat = ({
           value={prompt}
           disabled={isLoading || audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
-          placeholder={inlineDraftAiWritePlaceholder(
-            hasSelection,
-            allowSuggestReply,
-            editor.isEmpty,
-          )}
+          placeholder={writeMode ? "Describe the task…" : inlineDraftAiWritePlaceholder(hasSelection, allowSuggestReply, editor.isEmpty)}
           className="w-full border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
         />
       </div>
@@ -966,9 +1013,9 @@ const InlineDraftAiFloat = ({
       {matchCommentRowControls ? (
         <span className={dictationActive ? "hidden" : "flex shrink-0 items-center"}>
           <SendMessageButton
-            label="Rewrite"
+            label={sendLabel}
             textButton
-            shortcut={{ text: "Rewrite", keyCombination: ["ENTER"] }}
+            shortcut={{ text: sendLabel, keyCombination: ["ENTER"] }}
             mobile={false}
             disabled={!prompt.trim() || isLoading || audioProcessing}
             onClick={submitPrompt}
@@ -992,7 +1039,21 @@ const InlineDraftAiFloat = ({
     </div>
   );
 
-  const inlineEditChips = showEditChips ? (
+  const writeChips =
+    writeMode && newTaskWriter ? (
+      <div className="scrollbar-none flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto">
+        {newTaskWriter.chips.map((chip) => (
+          <button key={chip.key} type="button" disabled={isLoading} aria-pressed={selectedWriteChipKey === chip.key}
+            className={cn(matchCommentRowControls ? APP_CHIP_LINK_CLASS : CHIP_LINK_CLASS, selectedWriteChipKey === chip.key && "bg-hover-active text-white-black")}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setSelectedWriteChipKey((current) => (current === chip.key ? null : chip.key))}>
+            {chip.label}
+          </button>
+        ))}
+      </div>
+    ) : null;
+
+  const rewriteChips = showEditChips ? (
     <div className="scrollbar-none flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto">
       {hasResult && (
         <>
@@ -1023,6 +1084,7 @@ const InlineDraftAiFloat = ({
       ))}
     </div>
   ) : null;
+  const inlineEditChips = writeMode ? writeChips : rewriteChips;
 
   const useMobileProposal = () => {
     if (!mobileOpeningSource) return;

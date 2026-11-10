@@ -43,6 +43,8 @@ const common = {
   "@/hooks/useFlag": { useFlag: () => cachedLayout },
   "@/lib/taskDetail/initialTicketPosition": require("jiti").createJiti(__filename)(path.join(root, "src/lib/taskDetail/initialTicketPosition.ts")),
   "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: "unread-ticket-opens-top" },
+  "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" },
+  "@/lib/agentStatus/TaskDetailAgentStatusChip": { default: () => null },
   "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
   "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
 };
@@ -58,6 +60,7 @@ const title = load("src/components/PageComponents/TaskDetail/TopRow/TaskDetailTi
   "@/hooks/useFlag": { useFlag: key => key !== "htpr-8991-right-column" && cachedLayout },
   "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
   "@/lib/flags/definitions/htpr-8992-sticky-title": { HTPR_8992_STICKY_TITLE_FLAG: "htpr-8992-sticky-title" },
+  "@/lib/flags/definitions/htpr-8997-id-row": { HTPR_8997_ID_ROW_FLAG: "htpr-8997-id-row" },
   "@/hooks/General/useCopyURL": { default: () => ({ copyTicketNumber: noop }) },
   "@/components/Common/Tooltip": { default: () => null },
   "@/lib/contexts/deviceContext": { useDeviceContext: () => false },

@@ -4,7 +4,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7324_PLAN_AI_CAPS_FLAG } from "@/lib/flags/definitions/htpr-7324-plan-ai-caps";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
-import { isTeamComped } from "@/lib/teamComp";
+import { isTeamComped, teamCompPlan } from "@/lib/teamComp";
 import { pickEntitlingSubscriptionRow, subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
 import {
   aiAllowancePeriod,
@@ -19,20 +19,20 @@ import {
 type FundingSource = "shared" | "managed" | "customer";
 const FLAT_TEAM_PRICE_IDS = new Set(["price_1U7MmqIhmcH60VccoCD7iFea"]);
 const POLICY_CACHE_TTL_MS = 5 * 60 * 1000;
-const owners = new Map<string, { userId: number; uid?: string; expiresAt: number }>();
+const owners = new Map<string, { userId: number; uid?: string; compedPro: boolean; expiresAt: number }>();
 const seatSnapshots = new Map<string, { seats: number; month: string; expiresAt: number }>();
 const seatHighWaters = new Map<string, { month: string; observedSeats: number; highWater: number; expiresAt: number }>();
 
-async function teamOwner(teamId: string): Promise<{ userId: number; uid?: string; expiresAt: number }> {
+async function teamOwner(teamId: string): Promise<{ userId: number; uid?: string; compedPro: boolean; expiresAt: number }> {
   const cached = owners.get(teamId);
   if (cached && cached.expiresAt > Date.now()) return cached;
   const team = await prisma.team.findUnique({
     where: { id: teamId },
-    select: { googleAccount: { select: { userId: true } } },
+    select: { googleAccount: { select: { userId: true } }, compedUntil: true, compedPlan: true },
   });
   if (!team?.googleAccount?.userId) throw new Error("AI allowance team owner is unavailable");
   const userId = team.googleAccount.userId;
-  const owner = { userId, expiresAt: Date.now() + POLICY_CACHE_TTL_MS };
+  const owner = { userId, compedPro: teamCompPlan(team) === "Pro", expiresAt: Date.now() + POLICY_CACHE_TTL_MS };
   owners.set(teamId, owner);
   return owner;
 }
@@ -154,9 +154,12 @@ export async function resolveTeamAllowancePolicy(
     }
     demoGlobal = owner.uid.startsWith("guest_");
     ownerIdentityConfirmed = true;
-    const byok = fundingSource === "shared" && !demoGlobal &&
-      await storePlanIdForProject(null, teamId) === "BYOK";
-    if ((fundingSource === "managed" || byok) && !demoGlobal) {
+    const savedPlan = fundingSource === "shared" && !demoGlobal
+      ? await storePlanIdForProject(null, teamId)
+      : null;
+    const byok = savedPlan === "BYOK";
+    const compedPro = savedPlan === "Pro" && owner.compedPro;
+    if ((fundingSource === "managed" || byok || compedPro) && !demoGlobal) {
       const month = aiAllowancePeriod();
       const seats = await cachedPaidSeats(teamId, month.key, byok);
       const highWaterKey = `ai-allowance:${month.key}:${teamId}:${byok ? "members-high" : "seats-high"}`;

@@ -29,7 +29,7 @@ const healthyTeams = {
 };
 const healthyUsage = {
   [FREE]: { fundingSource: 'shared', maskedKey: 'vck_canary****', allowance: { budgetUsd: 1, remainingUsd: 0.924265, capped: false } },
-  [PRO]: { fundingSource: 'managed', allowance: null, apiKey: 'sk-canary-private' },
+  [PRO]: { fundingSource: 'shared', allowance: { budgetUsd: 5, remainingUsd: 4.5, capped: false } },
   [BYOK]: { fundingSource: 'customer', allowance: null },
 };
 const STATE_FILES = { free: 'state-free.json', pro: 'state-pro.json', byok: 'state-byok.json' };
@@ -80,7 +80,7 @@ async function run(t, { args = [], teams = healthyTeams, usage = healthyUsage, u
 
 const healthyOutput = [
   'free | Free | not comped | $0.92 of $1.00 left | shared | OK',
-  `pro | Pro | comped until ${futureDay} | n/a | managed | OK`,
+  `pro | Pro | comped until ${futureDay} | $4.50 of $5.00 left | shared | OK`,
   `byok | BYOK | comped until ${futureDay} | n/a | own key | OK`,
   '',
 ].join('\n');
@@ -194,10 +194,10 @@ test('a missing state file is unavailable', async t => {
   assert.match(stdout, /^byok \| - \| - \| - \| UNAVAILABLE: cannot read login state$/m);
 });
 
-test('a pro team with no managed key source is a mismatch', async t => {
+test('a pro team with no key source is a mismatch', async t => {
   const { code, stdout } = await run(t, { usage: { ...healthyUsage, [PRO]: { fundingSource: null, allowance: null } } });
   assert.equal(code, 1);
-  assert.match(stdout, /^pro \| Pro \| comped until .* \| n\/a \| none \| MISMATCH: expected managed key source$/m);
+  assert.match(stdout, /^pro \| Pro \| comped until .* \| n\/a \| none \| MISMATCH: expected shared key source$/m);
 });
 
 test('a login that belongs to another user is a mismatch and never asks about teams', async t => {

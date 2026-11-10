@@ -168,5 +168,15 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-9004 saves the Thinking and Effort choice with one small same-origin POST to Hypertask's own preferences route. The browser call pays nothing and no model is called. Thinking cost is set by the chat request, behind the htpr-9004-thinking-effort flag, and stays off until the user switches it on.",
     "source": "https://app.hypertask.ai/detail/project-15/9004"
+  },
+  "src/hooks/MultiPages/Tasks/useNewTaskWriteChips.ts:c57e9a3305e777924bf5238428f700e24cc2a7da440aac5bcf886f8c67b81d59": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-9002 reads the board's task templates from Hypertask's own same-origin /api/task-templates route. The browser call pays nothing and the route only reads the database.",
+    "source": "https://app.hypertask.ai/detail/project-15/9002"
+  },
+  "src/lib/ai/newTaskWrite.ts:7f4656f0415bae7bfe8fdf137825726c3a9a95dc4efcc572fb779b698d6aa5bd": {
+    "maxUsdPerDay": 1,
+    "reason": "HTPR-9002 sends one request per Write press on the new task screen to the existing task writer route on the board's already chosen model. It replaces the same task writer call that the compose palette makes today, behind a flag at Owner and QA, so a dollar a day is a generous ceiling.",
+    "source": "https://app.hypertask.ai/detail/project-15/9002"
   }
 }

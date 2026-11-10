@@ -29,7 +29,7 @@ test("rows sort inside each tag group without flattening the board", () => {
   } as ITask;
   const sections = buildTableSectionsGroupedByTag([
     { section_title: "Backlog", items: [taskA, taskB] },
-  ]);
+  ], ["l1"]);
   const comparator = getSortComparator("updated", "desc", new Map());
   const sorted = [...(sections[0]?.items ?? [])].sort(comparator);
   assert.deepEqual(sorted.map((task) => task.id), [2, 1]);

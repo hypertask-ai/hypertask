@@ -123,15 +123,18 @@ async function walkFunnel(browser, email, teammateEmail, runId) {
       },
     });
     const boardId = board.json?.board?.id;
+    const sectionId = board.json?.sections?.[0]?.id;
     record("own board created", Boolean(boardId), boardId ? `board ${boardId}` : `HTTP ${board.status} ${board.json?.message || board.json?.error || ""}`);
     if (!boardId) return { token, verified: true };
 
     const created = [];
+    let taskError = "";
     for (const title of TASK_TITLES) {
-      const task = await api("/api/mcp/tasks", { method: "POST", token, body: { project_id: boardId, title } });
+      const task = await api("/api/mcp/tasks", { method: "POST", token, body: { project_id: boardId, section_id: sectionId, title } });
       if (task.json?.task?.id) created.push(task.json.task.id);
+      else taskError = taskError || `HTTP ${task.status} ${task.json?.message || task.json?.error || ""}`;
     }
-    record("three tasks created", created.length === TASK_TITLES.length, `${created.length} of ${TASK_TITLES.length} saved`);
+    record("three tasks created", created.length === TASK_TITLES.length, `${created.length} of ${TASK_TITLES.length} saved ${taskError}`.trim());
 
     const invite = await api(`/api/mcp/projects/${boardId}/members`, {
       method: "POST",

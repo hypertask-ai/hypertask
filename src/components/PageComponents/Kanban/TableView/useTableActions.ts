@@ -1,5 +1,4 @@
-import { useCallback, useEffect } from "react";
-import type { DragEvent as ReactDragEvent } from "react";
+import { useCallback, useEffect, type DragEvent as ReactDragEvent } from "react";
 import { IAssignees, ITask } from "@/models/model";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import globalConstants from "@/lib/constants";
@@ -24,7 +23,8 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
 
 export function useTableActions(context: Context) {
   const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
-  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const tableGroupByTagEnabled = useFlag("htpr-8974-table-group-modes") || legacyTableGroupEnabled;
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
   _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,

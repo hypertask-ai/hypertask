@@ -59,7 +59,16 @@ import type {
   ITaskWriterResult,
 } from "@/models/AI_Task_writer_model";
 import type { IAgent, IUser } from "@/models/model";
-import { mergeMobileCreateTaskWriterResult } from "@/utils/aiWriterUtils";
+import { extractTaskProperties, mergeMobileCreateTaskWriterResult } from "@/utils/aiWriterUtils";
+import InlineDraftAiFloat from "@/components/RTE/Components/InlineDraftAiFloat";
+import { HTPR_9002_CTRL_J_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-9002-ctrl-j-new-task";
+import {
+  isNewTaskCtrlJ,
+  requestNewTaskWrite,
+  shapeNewTaskWriteResult,
+  type NewTaskWriter,
+} from "@/lib/ai/newTaskWrite";
+import { useNewTaskWriteChips } from "@/hooks/MultiPages/Tasks/useNewTaskWriteChips";
 import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   buildTaskWriterAutoDraftPrompt,
@@ -122,9 +131,11 @@ const TiptapCreateTaskModal = () => {
   const { togglePriorityModal, toggleProjectsModal } =
     useContextCreateTaskInfoColumn();
 
+  const descriptionPlaceholderRef = useRef<string | null>(null);
   const { editor } = useTiptap({
     mode: "read-edit-description",
     defaultContent: formValues.description,
+    placeholderOverrideRef: descriptionPlaceholderRef,
   });
   const asyncPush = useAsyncRoutePush();
   const [filesDropped, setFilesDropped] = useState<File[]>([]);
@@ -186,9 +197,12 @@ const TiptapCreateTaskModal = () => {
   const mobileWriterSaveFlag = useFlag(HTPR_8028_MOBILE_WRITER_SAVE_FLAG);
   const mobileWriterSave = Boolean(isMbl && mobileWriterSaveFlag);
   const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
+  const newTaskCtrlJFlag = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
   let composeShortcutCapture = true;
   if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
+  if (newTaskCtrlJFlag && !isMbl) composeShortcutCapture = false;
   const newTaskWindow = !mobileWriterSave;
+  const [inlineAiOpen, setInlineAiOpen] = useState(false);
   const setCommands = useSetRecoilState(showCommandsAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const [writerOpen, setShouldShowAITaskWriter] = useState(
@@ -266,6 +280,8 @@ const TiptapCreateTaskModal = () => {
   const projectForContext =
     formValues.currentProject ?? _currentProject ?? undefined;
   const projectId = projectForContext?.id;
+  const latestProjectIdRef = useRef(projectId);
+  latestProjectIdRef.current = projectId;
   useEffect(() => {
     if (!newTaskWindow) return;
     const openNewTask = (event: KeyboardEvent) => {
@@ -277,6 +293,19 @@ const TiptapCreateTaskModal = () => {
     window.addEventListener("keydown", openNewTask, composeShortcutCapture);
     return () => window.removeEventListener("keydown", openNewTask, composeShortcutCapture);
   }, [newTaskWindow, composeShortcutCapture, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
+  useEffect(() => {
+    if (!newTaskCtrlJFlag || !newTaskWindow || isMbl) return;
+    const toggleInlineWrite = (event: KeyboardEvent) => {
+      if (!isNewTaskCtrlJ(event, isApple) || showCommands.show || showAssignModal) return;
+      if (document.activeElement?.closest("#htc, .chatwindow, [data-ai-chat-panel]") || document.querySelector("#htc")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.repeat) return;
+      setInlineAiOpen((open) => !open);
+    };
+    window.addEventListener("keydown", toggleInlineWrite, true);
+    return () => window.removeEventListener("keydown", toggleInlineWrite, true);
+  }, [newTaskCtrlJFlag, newTaskWindow, isMbl, isApple, showCommands.show, showAssignModal]);
   const { data: projectLabels } = useGetAllProjectLabels(
     projectId ?? undefined,
   );
@@ -314,6 +343,71 @@ const TiptapCreateTaskModal = () => {
       openingSectionIdRef.current = formValues.status.sectionId;
     }
   }, [formValues.currentProject?.id, formValues.status?.sectionId]);
+  useEffect(() => {
+    if (!editor) return;
+    descriptionPlaceholderRef.current = newTaskCtrlJFlag && newTaskWindow && !isMbl
+      ? `Add a description, or press ${isApple ? "Cmd" : "Ctrl"}+J to write it with AI`
+      : null;
+    editor.view.dispatch(editor.state.tr);
+  }, [editor, newTaskCtrlJFlag, newTaskWindow, isMbl, isApple]);
+  const writeChips = useNewTaskWriteChips(projectId, inlineAiOpen);
+  const newTaskWriter = React.useMemo<NewTaskWriter>(
+    () => ({
+      chips: writeChips,
+      write: async (instruction, chip) => {
+        if (!projectForContext) {
+          throw new Error("Choose a board before writing a task.");
+        }
+        const html = await requestNewTaskWrite({
+          project: projectForContext,
+          instruction,
+          chip,
+          currentTitle: getCurrentTitle(),
+        });
+        if (latestProjectIdRef.current !== projectForContext.id) {
+          throw new Error("The board changed while writing. Please write again.");
+        }
+        const result = shapeNewTaskWriteResult(
+          extractTaskProperties(html, projectLabels, projectSections, projectAssignees),
+          chip,
+          projectLabels,
+        );
+        if (!result.description.trim()) {
+          throw new Error("The task writer returned nothing. Please try again.");
+        }
+        return {
+          description: result.description,
+          applyProperties: () => {
+            if (result.title && !getCurrentTitle().trim()) {
+              applyTaskWriterTitle(result.title);
+            }
+            if (result.priority) handleChange("priority", result.priority);
+            if (result.estimate) handleChange("estimate", result.estimate);
+            if (result.tags) handleChange("tags", result.tags);
+            if (result.status) {
+              handleChange("status", {
+                ...result.status,
+                position: result.status.position ?? "top",
+              });
+            }
+            if (result.assignees) handleChange("assignees", result.assignees);
+            if (result.dueDate) handleChange("dueDate", result.dueDate);
+            if (result.startDate) handleChange("startDate", result.startDate);
+          },
+        };
+      },
+    }),
+    [
+      applyTaskWriterTitle,
+      getCurrentTitle,
+      handleChange,
+      projectAssignees,
+      projectForContext,
+      projectLabels,
+      projectSections,
+      writeChips,
+    ],
+  );
   const id = "create-task-tiptap-description";
   const divIds = {
     popoverContainer: "popover-wrapper-" + id,
@@ -353,7 +447,7 @@ const TiptapCreateTaskModal = () => {
     addImage(e.dataTransfer);
   };
   const handleFocus = (forceFocus?: boolean) => {
-    if (editor?.isFocused || (shouldShowAiTaskWriter && !forceFocus))
+    if (editor?.isFocused || inlineAiOpen || (shouldShowAiTaskWriter && !forceFocus))
       return false;
     editor?.commands.focus("end");
   };
@@ -679,6 +773,14 @@ const TiptapCreateTaskModal = () => {
     toggleAiTaskWriterVisibility();
     if (editMode === "Description" && !shouldShowAiTaskWriter)
       setEditMode("Description-ai");
+  };
+
+  const inlineWriteOr = (fallback: () => void) => () => {
+    if (newTaskCtrlJFlag && newTaskWindow && !isMbl) {
+      setInlineAiOpen((open) => !open);
+      return;
+    }
+    fallback();
   };
 
   const showClassicForm = useCallback(() => {
@@ -1118,6 +1220,15 @@ const TiptapCreateTaskModal = () => {
             ) : (
               <div className="h-[21px]"></div>
             )}
+            {newTaskCtrlJFlag && newTaskWindow && !isMbl && inlineAiOpen && editor && (
+              <InlineDraftAiFloat
+                editor={editor}
+                onClose={() => setInlineAiOpen(false)}
+                projectId={projectId}
+                taskWriter={newTaskWriter}
+                matchCommentRowControls
+              />
+            )}
             <AttachmentsUpload
               key={attachmentComposerEpoch}
               hasTitle={formValues.title.trim().length > 0}
@@ -1137,7 +1248,7 @@ const TiptapCreateTaskModal = () => {
               toggleRecording={toggleRecording}
               isRecording={isRecording}
               dictationCoordinator={dictationCoordinator}
-              toggleAiTaskWriter={toggleAiTaskWriter}
+              toggleAiTaskWriter={inlineWriteOr(toggleAiTaskWriter)}
               isAiTaskWriterOpen={shouldShowAiTaskWriter}
               backgroundTaskUploads
             />
@@ -1146,12 +1257,12 @@ const TiptapCreateTaskModal = () => {
       }
       <button
         className="hidden"
-        onClick={toggleAiTaskWriterVisibility}
+        onClick={inlineWriteOr(toggleAiTaskWriterVisibility)}
         id={divIds.popoverTriggerButtonId}
       />
       <button
         className="hidden"
-        onClick={toggleAiTaskWriter}
+        onClick={inlineWriteOr(toggleAiTaskWriter)}
         id={aiTaskWriterConfig.elementIds.createTaskModalTrigger}
       />
     </>
