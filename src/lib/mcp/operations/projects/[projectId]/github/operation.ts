@@ -25,10 +25,10 @@ function parseProjectId(raw: string): number | null {
 }
 
 async function flagRefusal(userId: number) {
-  const page = await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, userId)
-  const agentDoor = await isFeatureEnabled(HTPR_8951_BOARD_GITHUB_REPOS_FLAG, userId)
-  if (page && agentDoor) return null
-  return NextResponse.json({ success: false, error: 'not_found' }, { status: 404 })
+  const off = NextResponse.json({ success: false, error: 'not_found' }, { status: 404 })
+  if (!await isFeatureEnabled(HTPR_8951_BOARD_GITHUB_REPOS_FLAG, userId)) return off
+  if (!await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, userId)) return off
+  return null
 }
 
 function settingsRefusal(error: BoardGithubSettingsError) {
