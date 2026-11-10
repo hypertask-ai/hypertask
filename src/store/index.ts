@@ -407,6 +407,12 @@ export const aiChatPinnedSessionIdsAtom = atom<string[]>({
     effects_UNSTABLE: [persistAtom],
 });
 
+export const aiChatCollapsedRailSectionsAtom = atom<string[]>({
+    key: "aiChatCollapsedRailSections",
+    default: [],
+    effects_UNSTABLE: [persistAtom],
+});
+
 export const aiChatBoardSessionMapAtom = atom<Record<number, string>>({
     key: "aiChatBoardSessionMap",
     default: {},
