@@ -65,6 +65,7 @@ interface GithubPullRequestPayload {
 interface GithubCheckSuitePayload {
   action: string;
   repository: {
+    id: number;
     full_name: string;
     private: boolean;
     fork: boolean;
