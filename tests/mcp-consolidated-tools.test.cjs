@@ -151,9 +151,10 @@ test('scope filtering advertises only callable actions for management, agent and
 })
 
 const agentOnlyTools = new Set(['hypertask_request_board_access', 'hypertask_get_board_access_request'])
+const flagAppendedChatTools = new Set(['hypertask_chat_inbox', 'hypertask_chat_reply'])
 test('legacy dispatch keeps every existing name callable and forwards credentials and invocation identity', async () => {
   const { calls, tools } = spyTools()
-  for (const tool of legacy.filter((candidate) => !agentOnlyTools.has(candidate.name))) {
+  for (const tool of legacy.filter((candidate) => !agentOnlyTools.has(candidate.name) && !flagAppendedChatTools.has(candidate.name))) {
     const args = sample(z.toJSONSchema(tool.parameters, { unrepresentable: 'any' }))
     if (tool.name === 'hypertask_time') args.action = 'running'
     const result = await rpc(tools, 'tools/call', { name: tool.name, arguments: args })

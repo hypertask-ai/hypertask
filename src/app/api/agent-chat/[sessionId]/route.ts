@@ -19,6 +19,7 @@ import {
 } from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
 import { agentChatDeliveryMode } from "@/lib/agents/chatAvailability";
+import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from "@/lib/flags/definitions/htpr-7742-agent-chat-all";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
 
 export const runtime = "nodejs";
@@ -167,7 +168,7 @@ export async function GET(
     const deliveryMode = agentChatDeliveryMode({
       heartbeatAt: session.agent?.heartbeatAt ?? null,
       subscription,
-    });
+    }, new Date(), await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, userId));
 
     return NextResponse.json({
       success: true,

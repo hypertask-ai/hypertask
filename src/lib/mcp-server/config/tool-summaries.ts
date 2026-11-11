@@ -5,6 +5,8 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   HELLO: 'Returns a welcome map.',
   LIST_FEATURES: 'Returns available product features and destinations.',
   AGENT_PRESENCE: 'Returns live agent status.',
+  CHAT_INBOX: 'Returns unanswered sidebar chats.',
+  CHAT_REPLY: 'Returns the chat reply.',
   REQUEST_BOARD_ACCESS: 'Returns a durable request for human owner consent; never grants access.',
   GET_BOARD_ACCESS_REQUEST: 'Returns your own board-access request outcome and current membership state.',
   LIST_AGENTS: 'Returns owned agents.',
