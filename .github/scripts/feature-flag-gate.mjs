@@ -1967,17 +1967,24 @@ function currentProductionSha(baseSha) {
   return tip;
 }
 
-function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles, runtimeFiles = runtimeFilesFrom(changedFiles) }) {
-  const mergeBase = git(["merge-base", baseSha, headSha]).trim();
-  const baseRegistry = parseFlagRegistry(mergeBase);
+function diffBaseSha(baseSha, headSha) {
+  try {
+    return git(["merge-base", currentProductionSha(baseSha), headSha]).trim();
+  } catch {
+    return git(["merge-base", baseSha, headSha]).trim();
+  }
+}
+
+function validateFlagDefinitionChanges({ baseSha, headSha, diffBase = git(["merge-base", baseSha, headSha]).trim(), changedFiles, uiFiles, runtimeFiles = runtimeFilesFrom(changedFiles) }) {
+  const baseRegistry = parseFlagRegistry(diffBase);
   const headRegistry = parseFlagRegistry(headSha);
   const added = new Set([...headRegistry.byValue.keys()].filter((key) => !baseRegistry.byValue.has(key)));
-  const baseDefinitions = parseDefinitions(mergeBase);
+  const baseDefinitions = parseDefinitions(diffBase);
   const headDefinitions = parseDefinitions(headSha);
   for (const key of headDefinitions.keys) {
     if (!baseDefinitions.keys.includes(key)) added.add(key);
   }
-  const baseFiles = new Set(flagDefinitionPaths(mergeBase));
+  const baseFiles = new Set(flagDefinitionPaths(diffBase));
   const productionSha = currentProductionSha(baseSha);
   const productionFiles = new Set(flagDefinitionPaths(productionSha));
   const copiedFiles = new Set();
@@ -1994,7 +2001,7 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
     const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
     if (definition.releaseRisk?.highRisk && !definition.releaseRisk.harmEvidence) {
       const baseDefinition = !added.has(definition.key) && baseFiles.has(path)
-        ? parseFlagFile(git(["show", `${mergeBase}:${path}`]), path).definition : null;
+        ? parseFlagFile(git(["show", `${diffBase}:${path}`]), path).definition : null;
       if (added.has(definition.key) || JSON.stringify(definition.releaseRisk) !== JSON.stringify(baseDefinition?.releaseRisk)) {
         throw new Error(`new or changed highRisk metadata for ${definition.key} needs releaseRisk.harmEvidence with a matching lasting harm and scenario`);
       }
@@ -2014,7 +2021,7 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
         gatesUi = coveredUi.length > 0 && runtimeFiles.some((runtimePath) => {
           try { git(["cat-file", "-e", `${headSha}:${runtimePath}`]); } catch { return false; }
           return referencesFlagAtRuntime(headSha, runtimePath, headRegistry, new Set([definition.key]),
-            addedLinesFor(mergeBase, headSha, runtimePath), addedLinesFor(mergeBase, headSha, runtimePath, true), mergeBase) &&
+            addedLinesFor(diffBase, headSha, runtimePath), addedLinesFor(diffBase, headSha, runtimePath, true), diffBase) &&
             runtimeGateCoveredUiFiles(headSha, runtimePath, coveredUi).size > 0;
         });
       }
@@ -2023,13 +2030,15 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
   }
 }
 
-export function evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`]).split("\n").filter(Boolean) }) {
-  if (!touchesFlagDefinitions(changedFiles)) {
+export function evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles }) {
+  const diffBase = diffBaseSha(baseSha, headSha);
+  const files = changedFiles ?? git(["diff", "--name-only", `${diffBase}...${headSha}`]).split("\n").filter(Boolean);
+  if (!touchesFlagDefinitions(files)) {
     return { pass: true, reason: "No changed feature-flag definition files." };
   }
-  const uiFiles = changedFiles.filter(isUiFile);
+  const uiFiles = files.filter(isUiFile);
   try {
-    validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles });
+    validateFlagDefinitionChanges({ baseSha, headSha, diffBase, changedFiles: files, uiFiles });
     return { pass: true, reason: "Feature flag definitions satisfy rollout rules." };
   } catch (error) {
     return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
@@ -2037,13 +2046,14 @@ export function evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles =
 }
 
 export function evaluate({ title, baseSha, headSha, labels = [] }) {
-  const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
+  const diffBase = diffBaseSha(baseSha, headSha);
+  const changedFiles = git(["diff", "--name-only", `${diffBase}...${headSha}`])
     .split("\n").filter(Boolean);
   const uiFiles = changedFiles.filter(isUiFile);
   const runtimeFiles = runtimeFilesFrom(changedFiles);
   if (touchesFlagDefinitions(changedFiles)) {
     try {
-      validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles, runtimeFiles });
+      validateFlagDefinitionChanges({ baseSha, headSha, diffBase, changedFiles, uiFiles, runtimeFiles });
     } catch (error) {
       return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
     }
@@ -2071,7 +2081,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const autoRevert = isVerifiedAutoRevert(title, baseSha, headSha);
   const tag = titleMatch?.[2] ?? null;
   if (tag === "REFACTOR") {
-    const { uiAdded, moved, newLines, riskyNew } = refactorUiLineCounts(baseSha, headSha);
+    const { uiAdded, moved, newLines, riskyNew } = refactorUiLineCounts(diffBase, headSha);
     if (riskyNew > CROSS_CHECK_LINE_BUDGET) {
       return failure(
         `This [REFACTOR] pull request adds ${riskyNew} new UI lines that are not moved code ` +
@@ -2089,7 +2099,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const exempt = autoRevert || titleExempt || aiChatLabel;
   let widened = null;
   if (exempt) {
-    const uiAdded = git(["diff", "--numstat", "--no-renames", `${baseSha}...${headSha}`])
+    const uiAdded = git(["diff", "--numstat", "--no-renames", `${diffBase}...${headSha}`])
       .split("\n").filter(Boolean)
       .map((line) => {
         const [added, , ...pathParts] = line.split("\t");
@@ -2110,7 +2120,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     }
     if (titleExempt && ["BUGFIX", "INFRA"].includes(normalizePolicyToken(tag)) && !autoRevert && !aiChatLabel) {
       try {
-        widened = widenedUiExposure(git(["merge-base", baseSha, headSha]).trim(), headSha, uiFiles);
+        widened = widenedUiExposure(diffBase, headSha, uiFiles);
       } catch (error) {
         return failure(`UI exposure could not be parsed safely: ${error.message}`);
       }
@@ -2127,10 +2137,9 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   }
 
   try {
-    const mergeBase = git(["merge-base", baseSha, headSha]).trim();
-    parseFlagRegistry(mergeBase);
+    parseFlagRegistry(diffBase);
     const headRegistry = parseFlagRegistry(headSha);
-    const baseDefinitions = parseDefinitions(mergeBase);
+    const baseDefinitions = parseDefinitions(diffBase);
     const headDefinitions = parseDefinitions(headSha);
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
@@ -2166,9 +2175,9 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         path,
         headRegistry,
         ticketKeys,
-        addedLinesFor(mergeBase, headSha, path),
-        addedLinesFor(mergeBase, headSha, path, true),
-        mergeBase,
+        addedLinesFor(diffBase, headSha, path),
+        addedLinesFor(diffBase, headSha, path, true),
+        diffBase,
       );
       console.error('DEBUG path', path, 'key', key);
       if (key) {
