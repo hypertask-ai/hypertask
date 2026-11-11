@@ -67,3 +67,26 @@ confidence-gated design would look strong. It also nearly doubles the hit rate o
 `brain-light` (26% against 15%), the class the default gets wrong most.
 
 Full report, confusion tables and every row: HTPR-9044.
+
+## Jev Router against Grok (HYCI-246)
+
+`scripts/brain-tag-grok-eval.cjs` runs the same four level definitions through
+two OpenRouter chat models on a 40 ticket stratified sample of the frozen corpus:
+`typesafe/jev-router` and `x-ai/grok-4.7`. Both get the identical system prompt,
+the identical ticket text and a one word answer, so the only difference is the
+model. It scores exact match, macro exact, within one level, latency p50 and p90,
+real cost per tag from the reported usage, and a paired bootstrap against the
+always-medium default. `--budget-usd` stops the run before it can overspend, and
+the default is 2 dollars.
+
+```sh
+OPENROUTER_EVAL_KEY=<capped key> node scripts/brain-tag-grok-eval.cjs --cases=40 --out=.evidence/brain-tag-grok
+```
+
+Two runs on 2026-11-11, 40 tickets each, $0.31 of credit for every run including
+the smoke tests. Grok was right on 63% of tickets, Jev Router on 55%, the
+always-medium default on 53%. Jev answered every ticket in 2.2 s p50 against
+Grok's 6.0 s, and cost $0.0001 per tag against Grok's $0.0043, about 43 times
+cheaper. The gap of -7.5 points with a 95% interval of -17.5 to 0 does not clear
+the 5 point bar, so the brain tag stays on Grok. At the volume we tag, the saving
+is a few cents a month.
