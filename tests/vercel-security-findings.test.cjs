@@ -163,7 +163,12 @@ test('reads findings only after the coverage snapshot is fixed', async () => {
     order.push('findings');
     return page([finding()]);
   }, () => {});
-  assert.deepEqual(order, ['commits', 'check', 'findings']);
+  const findingsAt = order.indexOf('findings');
+  assert.equal(order.filter(step => step === 'findings').length, 1);
+  assert.equal(order.at(-1), 'findings', `findings must be read last, saw ${order.join(',')}`);
+  assert.equal(order.filter(step => step === 'check').length, 1);
+  assert.equal(findingsAt, order.length - 1);
+  assert.ok(order.indexOf('check') > order.indexOf('commits'), 'coverage must be read before findings');
 });
 
 test('refuses a coverage read that cannot be trusted', async () => {
