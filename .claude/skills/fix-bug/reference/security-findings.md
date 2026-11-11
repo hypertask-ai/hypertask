@@ -5,6 +5,35 @@ description: How to handle a Strix scanner finding, and how the weekly scan runs
 
 # Security findings
 
+## Read production Vercel Security Review states
+
+The server's saved `vercel-ht` token is invalid. Do not copy another login,
+print credentials, or request broader access. Use the existing Actions secret
+from a GitHub-hosted runner instead:
+
+```bash
+gh workflow run vercel-security-findings.yml --repo hypertask-ai/hypertask \
+  --ref production -f ticket=287 -f project=11514
+```
+
+Set `ticket` to the receiving ticket's unique index and `project` to its board
+ID. The workflow is production-branch-only and reads the production Vercel
+project. It follows the same read-only endpoint used by Vercel CLI 65.12.1
+`security vulnerabilities list --status all --environment production`:
+`https://vercel.com/api/omniagent/v1/security-findings`.
+
+Read the receiving ticket's agent activity with `vcc activity list HYCI-287`.
+All pages and statuses are included: open, closed and dismissed. Match a fixed
+warning using its project finding number or finding ID; `resolved-in` records
+its closing commit when Vercel supplies one. Titles, source, descriptions,
+fixes and secret values are deliberately excluded. This is finding-state proof,
+not a request to trigger a new scan or dismiss a warning.
+
+Actions logs contain counts only. No raw findings are uploaded as artifacts.
+An authentication failure, unexpected response or incomplete page sequence
+fails the job rather than reporting zero findings. Check the run once, record
+a recheck time on the ticket, and let the launcher resume; do not watch/poll.
+
 ## Strix findings are candidates, not confirmed bugs
 
 A Strix ticket names a suspected vulnerability with a severity and CVSS

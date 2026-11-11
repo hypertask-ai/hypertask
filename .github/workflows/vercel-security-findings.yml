@@ -1,0 +1,35 @@
+name: Vercel security findings
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticket:
+        description: Ticket unique index receiving finding states
+        required: true
+      project:
+        description: Hypertask board ID receiving finding states
+        required: false
+        default: "11514"
+
+permissions:
+  contents: read
+
+jobs:
+  findings:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Read production finding states into the ticket
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          TICKET: ${{ inputs.ticket }}
+          BOARD: ${{ inputs.project }}
+        run: node .github/scripts/vercel-security-findings.cjs
