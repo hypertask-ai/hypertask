@@ -18,9 +18,11 @@ gh workflow run vercel-security-findings.yml --repo hypertask-ai/hypertask \
 ```
 
 The workflow is production-branch-only and reads the production Vercel
-project. It follows the same read-only endpoint used by Vercel CLI 65.12.1
+project. It follows the read-only endpoint used by Vercel CLI 65.12.1
 `security vulnerabilities list --status all --environment production`:
-`https://vercel.com/api/omniagent/v1/security-findings`.
+`https://vercel.com/api/omniagent/v1/security-findings`. Every request sends
+`status=open,closed,dismissed` explicitly, so Vercel's `open` default can
+never hide a closed or dismissed finding.
 
 Find the dispatched run, then read its log once it succeeds:
 

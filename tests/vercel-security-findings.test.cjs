@@ -47,7 +47,7 @@ test('reads every status and every page with production scope and GET only', asy
     assert.equal(url.searchParams.get('teamId'), 'team_yureFlJZ6ibwebaOOkKc5whs');
     assert.equal(url.searchParams.get('projectId'), 'prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf');
     assert.equal(url.searchParams.get('environment'), 'production');
-    assert.equal(url.searchParams.has('status'), false);
+    assert.equal(url.searchParams.get('status'), 'open,closed,dismissed');
     assert.equal(options.method, undefined);
     assert.equal(options.redirect, 'error');
     assert.equal(options.headers.Authorization, 'Bearer fixture-token');

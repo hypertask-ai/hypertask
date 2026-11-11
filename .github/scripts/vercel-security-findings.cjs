@@ -1,6 +1,7 @@
 const TEAM_ID = 'team_yureFlJZ6ibwebaOOkKc5whs';
 const PROJECT_ID = 'prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf';
 const ENDPOINT = 'https://vercel.com/api/omniagent/v1/security-findings';
+const ALL_STATUSES = 'open,closed,dismissed';
 
 async function readFindings(token, request = fetch) {
   if (!token) throw new Error('VERCEL_TOKEN is missing');
@@ -9,7 +10,7 @@ async function readFindings(token, request = fetch) {
   let cursor;
   do {
     const url = new URL(ENDPOINT);
-    for (const [key, value] of Object.entries({ teamId: TEAM_ID, projectId: PROJECT_ID, environment: 'production', limit: '100', cursor })) {
+    for (const [key, value] of Object.entries({ teamId: TEAM_ID, projectId: PROJECT_ID, environment: 'production', status: ALL_STATUSES, limit: '100', cursor })) {
       if (value) url.searchParams.set(key, value);
     }
     const response = await request(url, {
