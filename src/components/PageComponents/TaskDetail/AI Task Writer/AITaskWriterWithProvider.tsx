@@ -18,6 +18,7 @@ interface AITaskWriterWithProviderProps extends Omit<IAITaskWriterContainerProps
   projectAssignees?: (import("@/models/model").IUser | import("@/models/model").IAgent)[];
   project?: IProject;
   requestKind?: "manual" | "auto-description";
+  guaranteeScreenshots?: boolean;
 }
 
 const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
@@ -31,6 +32,7 @@ const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
   projectAssignees,
   project,
   requestKind,
+  guaranteeScreenshots,
   ...containerProps
 }) => {
   return (
@@ -45,6 +47,7 @@ const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
       projectAssignees={projectAssignees}
       project={project}
       requestKind={requestKind}
+      guaranteeScreenshots={guaranteeScreenshots}
     >
       <AITaskWriterContainer
         {...containerProps}
