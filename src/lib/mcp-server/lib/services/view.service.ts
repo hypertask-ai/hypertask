@@ -275,10 +275,7 @@ export class ViewService {
 
       return response;
     } catch (error) {
-      logger.error("Failed to update view", {
-        correlationId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.failure("Failed to update view", error, { correlationId });
       throw error;
     }
   }

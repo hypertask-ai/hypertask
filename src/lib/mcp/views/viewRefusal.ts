@@ -39,7 +39,6 @@ const MESSAGE_REFUSALS: Array<{
   { test: /^assignee .+ is neither a project member/, field: 'assignee_ids', code: 'invalid_value' },
   { test: /^View does not exist$/, field: 'view_id', code: 'not_found' },
   { test: /^Use either filters or board_filters/, field: 'filters', code: 'invalid_value' },
-  { test: /^Use either label_names\/assignee_ids\/match or board_filters/, field: 'label_names', code: 'invalid_value' },
   { test: /^subtask_setting must be/, field: 'subtask_setting', code: 'invalid_value' },
   { test: /^board_empty_sections must be/, field: 'board_empty_sections', code: 'invalid_value', allowed_values: ['Show', 'Hidden'] },
   { test: /^match must be 'ALL' or 'ANY'$/, field: 'match', code: 'invalid_value', allowed_values: ['ALL', 'ANY'] },
