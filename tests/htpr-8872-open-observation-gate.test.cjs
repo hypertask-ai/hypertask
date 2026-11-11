@@ -9,7 +9,7 @@ const checkedChecklist = openChecklist.replace('data-checked="false"', 'data-che
 const ordinary = '<h2>Done when</h2><ul><li><p>Search finds reminders.</p></li></ul>';
 const openProse = '<p>Full-day observation gate: still unfinished.</p>';
 
-function harness({ description = "", acceptanceCriteria = "", section = "Flag: Everyone", isDone = true, projectId = 15 } = {}) {
+function harness({ description = "", rowDescription = "", acceptanceCriteria = "", section = "Flag: Everyone", isDone = true, projectId = 15 } = {}) {
   const before = {
     id: 1,
     projectId,
@@ -20,7 +20,7 @@ function harness({ description = "", acceptanceCriteria = "", section = "Flag: E
     section: "In Progress",
     status: "Normal",
     title: "Fixture",
-    description: "",
+    description: rowDescription,
     acceptanceCriteria,
     description_: { content: description },
   };
@@ -121,6 +121,13 @@ for (const [name, description, acceptanceCriteria] of [
     assert.equal(h.saved().sectionId, 11);
   });
 }
+
+test("a gate in the legacy description column of a created ticket is read", async () => {
+  const h = harness({ description: "", rowDescription: openChecklist });
+  const result = await h.update({});
+  assert.equal(result.status, 409);
+  assert.match(result.json.message, /Full-day observation: watch production for 24 hours/);
+});
 
 test("an open gate never blocks a move to a working column", async () => {
   const h = harness({ description: openChecklist, section: "QA", isDone: false });
