@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
         where: { agentId: agentId },
         select: { active: true, events: true },
       });
-      if (!unanswered && subscription?.active && (!chatAllEnabled || subscription.events.includes("chat.message"))) {
+      if (!unanswered && subscription?.active && (!chatAllEnabled || subscription.events?.includes("chat.message"))) {
         return { found: true, messages: [], readableContextIds: new Set<string>() };
       }
 

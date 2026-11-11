@@ -23,7 +23,7 @@ export function agentChatDeliveryMode(
   pollingFallbackEnabled = false,
 ): AgentChatDeliveryMode {
   if (availability.subscription?.active) {
-    if (availability.subscription.events.includes("chat.message")) return "webhook";
+    if (availability.subscription.events?.includes("chat.message")) return "webhook";
     if (!pollingFallbackEnabled) return null;
   }
   return hasFreshAgentChatHeartbeat(availability.heartbeatAt, now)
