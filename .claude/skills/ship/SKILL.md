@@ -75,6 +75,7 @@ Record branch ownership with `ship-check branch` immediately after creating each
 | Real ticket and accepted PR title | `ship-check title/pr`; title format is ticket, bracketed type, description |
 | Own PR bound to ticket; latest head passes tests | `ship-check bind`, `ci-tests`, and merge guard |
 | Current-head premerge evidence | `ship-check pr` and guard publish it; trusted poster refreshes it |
+| Branch carries production at merge time | `ship-check fresh`; the guard refuses a behind-branch merge until the branch is updated |
 | Successful production deployment before completion | `ship-check deployed` and Done guard |
 | Live proof matches merge and evidence contract | `ship-check proof`; app tickets require screenshots |
 | Correct board completion and session cleanup | `ship-check done/cleaned` |
