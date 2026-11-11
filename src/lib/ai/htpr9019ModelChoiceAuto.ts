@@ -1,11 +1,43 @@
 import { cache } from "react";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
-import { isFeatureEnabled } from "@/lib/flags";
+import { featureFlagCandidateUserIds, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 
 export type Htpr9019ModelChoiceAutoResult = "done" | "switched" | "failed";
+
+export async function sweepHtpr9019ModelChoices() {
+  const audiences = await Promise.all([
+    featureFlagCandidateUserIds(HTPR_9019_SAVED_MODEL_AUTO_FLAG),
+    featureFlagCandidateUserIds(HTPR_7915_AUTO_MODEL_FLAG),
+  ]);
+  if (audiences.some((audience) => audience !== null)) {
+    return { skipped: "waiting for Everyone" };
+  }
+
+  const users = await prisma.$queryRaw<{ userId: number }[]>`
+    SELECT settings."userId" FROM "UserSetting" settings
+    WHERE NOT EXISTS (
+      SELECT 1 FROM htpr_9019_model_choice_auto_done done WHERE done.user_id = settings."userId"
+    )
+    ORDER BY settings."userId" LIMIT 100
+  `;
+  let switched = 0;
+  const failed: number[] = [];
+  for (const { userId } of users) {
+    const result = await ensureHtpr9019ModelChoiceAuto(userId);
+    if (result === "switched") switched++;
+    if (result === "failed") failed.push(userId);
+  }
+  const [coverage] = await prisma.$queryRaw<{ remaining: bigint }[]>`
+    SELECT count(*) AS remaining FROM "UserSetting" settings
+    WHERE NOT EXISTS (
+      SELECT 1 FROM htpr_9019_model_choice_auto_done done WHERE done.user_id = settings."userId"
+    )
+  `;
+  return { scanned: users.length, switched, failed, remaining: Number(coverage.remaining) };
+}
 
 export const ensureHtpr9019ModelChoiceAuto = cache(async (userId: number): Promise<Htpr9019ModelChoiceAutoResult> => {
   try {

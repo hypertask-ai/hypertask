@@ -2,6 +2,10 @@
   "ignoreCommand": "node scripts/vercel-ignore-build.cjs",
   "crons": [
     {
+      "path": "/api/cron/saved-model-auto",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/needs-you",
       "schedule": "* * * * *"
     },

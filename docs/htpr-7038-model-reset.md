@@ -2,6 +2,14 @@
 
 Decision: https://app.hypertask.ai/detail/project-15/7038. Reset saved personal LLM picker choices to `claude-haiku-5-5` once; users can choose another model afterwards. This is saved-data repair, not a persistent override or a change to plan defaults.
 
+## Successor: HTPR-9019 saved Auto rollout
+
+HTPR-9019 supersedes the Haiku reset with a once-only switch to `auto`, using separate backups and completion markers. The same five global and team-scoped text surfaces remain in scope; image, thinking, team defaults and own-key configuration remain unchanged. Preference reads and writes still complete the reset before accepting a later manual choice.
+
+The authenticated `/api/cron/saved-model-auto` sweep runs every 15 minutes, but does no work until both `htpr-9019-saved-model-auto` and `htpr-7915-auto-model` are at Everyone. Independent QA therefore precedes broad rollout. Each invocation selects at most 100 settings rows without a completion marker, including inactive accounts, and uses the same per-user transactional backup/reset. Failures retain no marker and retry on the next invocation; completed users and their later manual choices are never selected again. The response reports scanned, switched, failed user IDs and remaining settings rows; only `remaining: 0` proves coverage, not deployment or an active-account screenshot.
+
+The new rollback script is `scripts/htpr-9019-undo-model-choice-auto.sql`. It preserves later choices, including an explicit later Auto, by restoring only settings rows with the reset transaction's row version. Keep both backups and completion markers.
+
 ## Storage audit
 
 | Storage | Classification and action | Source |

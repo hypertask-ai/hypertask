@@ -44,8 +44,10 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
     await db.query(fs.readFileSync("src/prisma/migrations/20261110140000_htpr_9019_saved_model_choice_auto/migration.sql", "utf8"));
     const original = { aiChat: "old-chat", taskWriter: "old-writer", writeWithAi: "old-write", improveWriting: "old-improve", askAi: "old-ask", imageGeneration: "keep-image", thinking: { mode: "high" }, teams: { 'odd.team,{"': { aiChat: "team-pick", imageGeneration: "team-image" }, broken: null } };
     await db.query(`INSERT INTO "UserSetting" VALUES (1, '${JSON.stringify(original)}'::jsonb), (2, '${JSON.stringify(original)}'::jsonb), (3, '{}'::jsonb)`);
-    let enabled = false, baseEnabled = true, failCache = false;
+    let enabled = false, baseEnabled = true, failCache = false, everyone = false;
     const prisma = {
+      $queryRaw: async (parts, ...values) => (await db.query(sql(parts, values))).split("\n").filter(Boolean).map((value) =>
+        parts.join("").includes("count(*)") ? { remaining: BigInt(value) } : { userId: Number(value) }),
       htpr7038ModelChoiceResetDone: { findUnique: async ({ where }) => (await db.query(`SELECT user_id FROM htpr_7038_model_choice_reset_done WHERE user_id=${where.userId}`)) ? { userId: where.userId } : null },
       htpr9019ModelChoiceAutoDone: { findUnique: async ({ where }) => (await db.query(`SELECT user_id FROM htpr_9019_model_choice_auto_done WHERE user_id=${where.userId}`)) ? { userId: where.userId } : null },
       $transaction: async (callback) => {
@@ -61,9 +63,12 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
         } catch (error) { await db.query("ROLLBACK"); throw error; }
       },
     };
-    const { ensureHtpr9019ModelChoiceAuto: switchChoices } = loadModule("src/lib/ai/htpr9019ModelChoiceAuto.ts", {
+    const { ensureHtpr9019ModelChoiceAuto: switchChoices, sweepHtpr9019ModelChoices: sweep } = loadModule("src/lib/ai/htpr9019ModelChoiceAuto.ts", {
       react: { cache: (fn) => fn }, "@/lib/prisma": { default: prisma },
-      "@/lib/flags": { isFeatureEnabled: async (key) => key === "htpr-7915-auto-model" ? baseEnabled : enabled },
+      "@/lib/flags": {
+        isFeatureEnabled: async (key) => key === "htpr-7915-auto-model" ? baseEnabled : enabled,
+        featureFlagCandidateUserIds: async (key) => key === "htpr-7915-auto-model" ? (baseEnabled ? null : []) : (everyone ? null : [1]),
+      },
       "@/lib/redis": { getRedis: async () => ({ setex: async () => { if (failCache) throw new Error("cache unavailable"); } }) },
     });
     const preferences = async () => JSON.parse(await db.query('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=1'));
@@ -96,6 +101,28 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
     assert.equal(await switchChoices(2), "switched");
     assert.equal(await switchChoices(3), "done");
     assert.equal(await db.query("SELECT count(*) FROM htpr_7038_model_choice_reset_done"), "3");
+    await db.query(`INSERT INTO "UserSetting" VALUES (4, '${JSON.stringify(original)}'::jsonb), (5, '${JSON.stringify(original)}'::jsonb)`);
+    assert.deepEqual(await sweep(), { skipped: "waiting for Everyone" });
+    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_auto_done"), "3");
+    everyone = true;
+    baseEnabled = false;
+    assert.deepEqual(await sweep(), { skipped: "waiting for Everyone" });
+    baseEnabled = true;
+    failCache = true;
+    assert.deepEqual(await sweep(), { scanned: 2, switched: 0, failed: [4, 5], remaining: 2 });
+    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_backup"), "12");
+    failCache = false;
+    assert.deepEqual(await sweep(), { scanned: 2, switched: 2, failed: [], remaining: 0 });
+    assert.deepEqual(JSON.parse(await db.query('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=4')), expected);
+    assert.equal(await db.query("SELECT previous_value FROM htpr_9019_model_choice_backup WHERE user_id=4 AND location='[\"aiChat\"]'"), "old-chat");
+    await db.query(`UPDATE "UserSetting" SET "aiModelPreferences" = jsonb_set("aiModelPreferences", '{aiChat}', '"dormant-later-choice"') WHERE "userId"=4`);
+    assert.deepEqual(await sweep(), { scanned: 0, switched: 0, failed: [], remaining: 0 });
+    assert.equal(await db.query('SELECT "aiModelPreferences"->>\'aiChat\' FROM "UserSetting" WHERE "userId"=4'), "dormant-later-choice");
+    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_backup WHERE user_id=4"), "6");
+    await db.query(`INSERT INTO "UserSetting" SELECT id, '{}'::jsonb FROM generate_series(6, 106) id`);
+    assert.deepEqual(await sweep(), { scanned: 100, switched: 0, failed: [], remaining: 1 });
+    assert.deepEqual(await sweep(), { scanned: 1, switched: 0, failed: [], remaining: 0 });
+    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_auto_done"), "106");
     await db.query(fs.readFileSync("scripts/htpr-9019-undo-model-choice-auto.sql", "utf8"));
     assert.deepEqual(await preferences(), expected, "later explicit Auto is not migration-owned");
     assert.deepEqual(JSON.parse(await db.query('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=2')), original, "untouched migration-owned choices are restored");
