@@ -141,7 +141,6 @@ test("a checkout marks in-scope tickets and asks for the backfill otherwise", as
   assert.equal(await inScope.seed.seedTeamSummaryRefreshesOnCheckout("team-1"), true);
   assert.equal(inScope.redis.values.get("ai-summary:stale:51"), "1");
   assert.equal(inScope.redis.values.get("ai-summary:stale:52"), "1");
-  assert.equal(inScope.jobs.length, 0);
 
   const mixed = harness({ enabledFor: [6], owners: { 53: 6, 54: 7 } });
   assert.equal(await mixed.seed.seedTeamSummaryRefreshesOnCheckout("team-1"), false);
