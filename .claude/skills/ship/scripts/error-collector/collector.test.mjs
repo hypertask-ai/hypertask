@@ -64,6 +64,9 @@ if (name === 'ht') {
   if (plain[0] === 'task' && plain[1] === 'create') {
     if (args[0] !== '--json') throw new Error('must request JSON');
     if (cfg.createFail) { console.error('Project not found or access denied'); process.exit(1); }
+    if (cfg.firstCreateRefusal && readFileSync(calls, 'utf8').trim().split('\\n').map(line => JSON.parse(line)).filter(call => call.name === 'vcc' && call.args.includes('create')).length === 1) {
+      console.error(cfg.firstCreateRefusal); process.exit(5);
+    }
     const board = Number(args[args.indexOf('--project') + 1]);
     const task = { ticketNumber: (board === 15 ? 'HTPR-' : 'YPER4-') + (100 + remote.length), projectId: board, description: row.description, status: 'Normal' };
     remote.push(task);
@@ -515,6 +518,22 @@ check('tickets', 'HYCI-271 a refused create leaves the slot free and still tries
   assert.deepEqual(h.state().created, []);
   assert.equal(Object.keys(h.state().pending).length, 2);
 }));
+
+check('tickets', 'HYCI-271 local wrapper refusals allow the next group to file', async () => {
+  for (const refusal of [
+    'vcc: task create refused: filing-gate missing',
+    'vcc: Ticket description refused by the house ticket rules (skills/tickets).',
+    'vcc: not filed. The same problem is already open on Fleet CI & Infra: HYCI-100',
+  ]) await withHarness(async h => {
+    h.events([event(), event({ message: 'Payment failed for user 456' })]);
+    h.config({ firstCreateRefusal: refusal });
+    await h.run();
+    assert.equal(creates(h).length, 2);
+    assert.equal(h.state().created.length, 1);
+    assert.equal(Object.keys(h.state().pending).length, 1);
+    assert.equal(details(h).length, 1);
+  });
+});
 
 check('tickets', 'HYCI-271 an ambiguous detail note is not posted twice', () => withHarness(async h => {
   h.events([event()]);
