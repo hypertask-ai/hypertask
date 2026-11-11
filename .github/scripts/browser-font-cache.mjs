@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
+import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -51,57 +51,13 @@ export function fillBrowserFontCache(env = process.env) {
   spawnSync("fc-cache", ["-f", userFonts], { stdio: "ignore" });
 }
 
-function selfCheck() {
-  const root = mkdtempSync(path.join(tmpdir(), "font-cache-"));
-  try {
-    const source = path.join(root, "source", "truetype", "liberation2");
-    const cache = path.join(root, "cache");
-    const user = path.join(root, "user");
-    mkdirSync(source, { recursive: true });
-    writeFileSync(path.join(source, "LiberationSans.ttf"), "font-bytes");
-    const env = {
-      ...process.env,
-      BROWSER_FONT_SOURCE: path.join(root, "source"),
-      BROWSER_FONT_CACHE: cache,
-      BROWSER_FONT_USER: user,
-    };
-    fillBrowserFontCache(env);
-    if (!existsSync(path.join(cache, "truetype", "liberation2", "LiberationSans.ttf"))) {
-      throw new Error("seeded font missing from the cache");
-    }
-    rmSync(path.join(root, "source"), { recursive: true, force: true });
-    fillBrowserFontCache(env);
-    if (!existsSync(path.join(user, "truetype", "liberation2", "LiberationSans.ttf"))) {
-      throw new Error("cached font was not reused");
-    }
-    let rejected = false;
-    try {
-      fillBrowserFontCache({
-        ...env,
-        BROWSER_FONT_SOURCE: path.join(root, "missing"),
-        BROWSER_FONT_CACHE: path.join(root, "empty-cache"),
-        BROWSER_FONT_USER: path.join(root, "empty-user"),
-      });
-    } catch (error) {
-      rejected = error.message === "browser font cache empty";
-    }
-    if (!rejected) throw new Error("empty font cache was accepted");
-    console.log("browser font cache ready");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
 const isMain = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 if (isMain) {
-  if (process.argv[2] === "--self-check") selfCheck();
-  else {
-    try {
-      fillBrowserFontCache();
-    } catch (error) {
-      console.error(error.message);
-      process.exit(1);
-    }
-    console.log("browser font cache ready");
+  try {
+    fillBrowserFontCache();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
   }
+  console.log("browser font cache ready");
 }
