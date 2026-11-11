@@ -411,9 +411,14 @@ esac
             target = self.repo / '.claude/skills/verify-qa/reference/ops-map' / f'{name}.md'
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text((recipes / f'{name}.md').read_text())
-        script = 'drive.py'
+        script = 'drive.mjs'
+        (self.repo / '.gitignore').write_text('node_modules/\n')
+        dependency = self.repo / 'node_modules/proof-fixture'
+        dependency.mkdir(parents=True)
+        (dependency / 'package.json').write_text('{"type":"module","exports":"./index.mjs"}')
+        (dependency / 'index.mjs').write_text('export const version = "prepared dependency";\n')
         (self.repo / 'drive-version.txt').write_text('merged')
-        (self.repo / script).write_text('import os, sys\nfrom pathlib import Path\nassert Path("drive-version.txt").read_text() == "merged"\nassert Path(os.environ["SHIP_CHECKOUT"]) == Path.cwd()\nprint("drive reached", sys.argv[1])\nsys.exit(int(os.environ.get("DRIVE_EXIT", "0")))\n')
+        (self.repo / script).write_text('import assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nimport { version } from "proof-fixture";\nassert.equal(version, "prepared dependency");\nassert.equal(readFileSync("drive-version.txt", "utf8"), "merged");\nassert.equal(process.env.SHIP_CHECKOUT, process.cwd());\nconsole.log("drive reached", process.argv[2]);\nprocess.exit(Number(process.env.DRIVE_EXIT || 0));\n')
         self.run_git('add', '.')
         self.run_git('commit', '-qm', 'proof fixture')
         sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
@@ -556,7 +561,7 @@ print('recorded')
                     self.assertIn('proof ok', self.check('proof', ticket, DESCRIPTION=localized))
         proof.write_text(complete)
         (self.repo / 'drive-version.txt').write_text('later production')
-        (self.repo / script).write_text('raise SystemExit("must not execute the later drive")\n')
+        (self.repo / script).write_text('throw new Error("must not execute the later drive");\n')
         self.run_git('add', '.')
         self.run_git('commit', '-qm', 'unrelated newer production')
         rerun(70, ACTOR='third-agent-id', ACTOR_NAME='Runner 3')

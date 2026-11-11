@@ -177,6 +177,9 @@ def main():
             checkout = Path(temporary) / 'checkout'
             call('git', '-C', str(root), 'worktree', 'add', '--detach', str(checkout), sha)
             try:
+                dependencies = root / 'node_modules'
+                if dependencies.is_dir():
+                    (checkout / 'node_modules').symlink_to(dependencies.resolve(), target_is_directory=True)
                 installed = checkout / script
                 require(installed.resolve().is_relative_to(checkout) and digest(installed) == drive_hash, 'drive script differs from merged source')
                 command = [{'.mjs': 'node', '.py': 'python3', '.sh': 'bash'}[installed.suffix], str(installed), str(output)]
