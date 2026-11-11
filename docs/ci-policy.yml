@@ -468,6 +468,7 @@ driven_proof:
     feature_map: ".claude/skills/verify-qa/reference/feature-map/<page>.md"
     source: [seeded]
     head: pull_request_head_sha
+    coverage: every non-exempt file maps to the recorded feature; mixed-feature and unmapped changes fail
     cases: nonempty steps with every pass true
     screenshot: every listed screenshot exists with a PNG signature
   reuses:

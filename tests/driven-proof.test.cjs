@@ -44,6 +44,15 @@ test('a screen change needs current-head seeded proof for its own feature', asyn
   }
 })
 
+test('a majority-feature drive cannot cover another feature or an unmapped app file', async (t) => {
+  const recordDir = seededRun(t)
+  const inboxFiles = [...files, 'src/app/inbox/Inbox.tsx']
+  assert.equal((await check(recordDir, { files: [...inboxFiles, 'docs/ci.md'] })).verdict, 'PASS')
+  for (const extra of ['src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx', 'src/app/unmapped/page.tsx']) {
+    assert.equal((await check(recordDir, { files: [...inboxFiles, extra] })).detail, 'proof does not cover the changed feature')
+  }
+})
+
 test('replaying the eight merged pull requests without proof is red, including 3066', async () => {
   assert.deepEqual(Object.keys(replay).sort(), ['3042', '3044', '3050', '3058', '3062', '3066', '3067', '3076'])
   for (const [number, pull] of Object.entries(replay)) {

@@ -651,16 +651,6 @@ GitHub-only verification for [YPER4-562](https://app.hypertask.ai/detail/project
 - The /admin/flags page is not in the matrix: only user 6 may open it and the smoke session must never be user 6.
 - First-load jump (CLS under 0.05) is HTPR-7074, not this check.
 
-## Premerge verify-qa (YPER4-673)
-
-`browser-smoke-flags` reuses its existing disposable PR build at `http://127.0.0.1:3100` for this report-only journey, after its live-like inbox cycle (HYCI-57 moved the journey to the shard that seeds the inbox). After the live-like inbox cycle, `.github/scripts/verify-qa-premerge.mjs` selects the feature-map page with the most changed files (longest prefix per file). Inbox changes run the seeded inbox cycle; supported login, board, task, comment, creation, AI-chat and billing changes run that page's tagged IDs from `e2e/smoke/journeys.spec.ts`, with `HT_QA_JOURNEYS=1`, one worker and no retries. The initial `--qa-journeys` seed provides a private QA runner board, so setup does not need to create another board after the Free account reaches its board limit. Writes stay on the disposable database, never a production preview. Ties, unsupported pages and unmatched diffs record `UNREACHABLE: no driver`; they never substitute inbox. Skipped or missing selected tests cannot count as PASS.
-
-Changes to the dispatcher or its tests also run an explicitly synthetic login matched-control against the same PR build, saved under `verify-qa-premerge/matched-control/`. The top-level result always reports the real diff, including an unmatched infra-only diff. This control proves dispatch and opt-in without adding an unrelated app change.
-
-Screenshots, `result.json` and `summary.md` upload as `verify-qa-premerge` for 7 days. The job summary names the journey, the feature-map page and the artifact URL. The step is report-only: `VERIFY_QA_REPORT_ONLY=1` and a non-zero exit become a warning, not a failed `browser-smoke-flags`. It is not a ruleset context and does not block merges. A later unit can make it required after a clean week.
-
-Sharing that `.next` build with app-smoke is deferred. `app-smoke.yml` is loaded from `production`, and its build runs inside a locked-down container with `CORE_APP_SMOKE`, a mocked Google font file and a docker-network callback URL. browser-smoke bakes different `NEXT_PUBLIC_*` values, including `NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100`. The two workflows also run in parallel, so waiting on a large `.next` upload would slow a required check. The container build at `scripts/run-app-smoke-isolated.sh` stays.
-
 ## Driven proof (HTPR-8938)
 
 `driven-proof` is a pull-request check. It goes red when the diff is not docs-only, test-only, or CI-only and the head has no proof record from the seeded browser-smoke app. It is report-only: it is not in `required_checks`, and a red result does not block merge. Making it required is a later ruleset edit, after false alarms are rare.
@@ -673,9 +663,19 @@ Exempt classes, and a pull request is exempt only when every changed file is in 
 
 An empty or unreadable diff fails. Any other file, including `src/**`, `e2e/**`, and `package.json`, needs a record.
 
-`browser-smoke-flags` already drives the disposable app at `http://127.0.0.1:3100` with `scripts/seed-browser-smoke.mjs` and `.github/scripts/verify-qa-premerge.mjs`. Its existing `result.json` records the PR head. The checker reuses that artifact, feature-map journey selection and loopback guard; it accepts only a passing run for the changed feature, with passing cases and PNG screenshots. It requires the same feature-map, passing-case and screenshot facts as `ship-check proof`, without converting evidence into a second format. The Doctor line stays on the post-merge check, because it names the merge SHA. The drive never targets production. A preview URL can satisfy the checker later; this landing only produces the seeded record.
+`browser-smoke-flags` already drives the disposable app at `http://127.0.0.1:3100` with `scripts/seed-browser-smoke.mjs` and `.github/scripts/verify-qa-premerge.mjs`. Its existing `result.json` records the PR head. The checker reuses that artifact, feature-map journey selection and loopback guard; it accepts only a passing run for the changed feature, with passing cases and PNG screenshots. Every non-exempt file must map to that feature; mixed-feature or unmapped changes stay red. It requires the same feature-map, passing-case and screenshot facts as `ship-check proof`, without converting or duplicating its post-merge record. Changes to the checker also run the real seeded inbox cycle as a positive control. Preview and production records are not accepted in this landing.
 
 The check replays pull requests 3076, 3067, 3066, 3062, 3058, 3050, 3044, and 3042 as file lists. Each touches the app and has no record, so each is red. Pull request 3066 is the kanban cleanup.
+
+## Premerge verify-qa (YPER4-673)
+
+`browser-smoke-flags` reuses its existing disposable PR build at `http://127.0.0.1:3100` for this report-only journey, after its live-like inbox cycle (HYCI-57 moved the journey to the shard that seeds the inbox). After the live-like inbox cycle, `.github/scripts/verify-qa-premerge.mjs` selects the feature-map page with the most changed files (longest prefix per file). Inbox changes run the seeded inbox cycle; supported login, board, task, comment, creation, AI-chat and billing changes run that page's tagged IDs from `e2e/smoke/journeys.spec.ts`, with `HT_QA_JOURNEYS=1`, one worker and no retries. The initial `--qa-journeys` seed provides a private QA runner board, so setup does not need to create another board after the Free account reaches its board limit. Writes stay on the disposable database, never a production preview. Ties, unsupported pages and unmatched diffs record `UNREACHABLE: no driver`; they never substitute inbox. Skipped or missing selected tests cannot count as PASS.
+
+Changes to the dispatcher or its tests also run an explicitly synthetic login matched-control against the same PR build, saved under `verify-qa-premerge/matched-control/`. The top-level result always reports the real diff, including an unmatched infra-only diff. This control proves dispatch and opt-in without adding an unrelated app change.
+
+Screenshots, `result.json` and `summary.md` upload as `verify-qa-premerge` for 7 days. The job summary names the journey, the feature-map page and the artifact URL. The step is report-only: `VERIFY_QA_REPORT_ONLY=1` and a non-zero exit become a warning, not a failed `browser-smoke-flags`. It is not a ruleset context and does not block merges. A later unit can make it required after a clean week.
+
+Sharing that `.next` build with app-smoke is deferred. `app-smoke.yml` is loaded from `production`, and its build runs inside a locked-down container with `CORE_APP_SMOKE`, a mocked Google font file and a docker-network callback URL. browser-smoke bakes different `NEXT_PUBLIC_*` values, including `NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100`. The two workflows also run in parallel, so waiting on a large `.next` upload would slow a required check. The container build at `scripts/run-app-smoke-isolated.sh` stays.
 
 ## On-demand pre-PR verification (YPER4-697)
 
