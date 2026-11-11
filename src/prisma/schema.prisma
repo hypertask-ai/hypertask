@@ -2969,6 +2969,31 @@ model AiUsage {
   @@index([userId, createdAt])
 }
 
+model AutoModelShadow {
+  id            BigInt   @id @default(autoincrement())
+  createdAt     DateTime @default(now())
+  userId        Int
+  teamId        String?
+  projectId     Int?
+  chatSessionId String?
+  feature       String
+  autoTier      Int
+  autoStepUp    Int      @default(0)
+  autoModelKey  String?
+  jevLevel      String?
+  jevTier       Int?
+  jevConfidence Float?
+  jevLatencyMs  Int
+  longThread    Boolean  @default(false)
+  resent        Boolean  @default(false)
+  codeFence     Boolean  @default(false)
+  comparison    String?
+  error         String?
+
+  @@index([createdAt])
+  @@index([chatSessionId, createdAt])
+}
+
 // Typed proof-of-work attached to a ticket (HTPR-4443): a test run, screenshot,
 // deploy link, or diff — so evidence isn't buried in comment threads.
 model TaskEvidence {

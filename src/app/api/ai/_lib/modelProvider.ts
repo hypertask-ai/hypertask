@@ -82,6 +82,7 @@ export type AiGatewayFeature =
   | "smart-label"
   | "jev-duplicate"
   | "jev-inbox"
+  | "jev-auto-model"
   | "onboarding-board"
   | "status-update"
   | "suggest-reply";
