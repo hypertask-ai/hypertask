@@ -13,7 +13,53 @@ const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_
 const MAX_LOCAL_COUNTS = 1_000
 const LEASE = 10
 const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
+const agentLocalCounts = new Map<string, number>()
 let localWindowStart: number | undefined
+let agentLocalWindowStart: number | undefined
+
+export function agentShapedMcpToken(token: string): boolean {
+  if (token.startsWith('htk_')) return true
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as { agentId?: unknown }
+    return typeof payload.agentId === 'string' && payload.agentId.length > 0
+  } catch {
+    return false
+  }
+}
+
+function localAgentRateLimit(token: string): NextResponse | null {
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const windowStartSeconds = Math.floor(nowSeconds / MCP_RATE_LIMIT_WINDOW_SECONDS) * MCP_RATE_LIMIT_WINDOW_SECONDS
+  if (agentLocalWindowStart !== windowStartSeconds) {
+    agentLocalCounts.clear()
+    agentLocalWindowStart = windowStartSeconds
+  }
+  const tokenHash = createHash('sha256').update(token).digest('hex')
+  const key = `${tokenHash}:${windowStartSeconds}`
+  const count = (agentLocalCounts.get(key) ?? 0) + 1
+  if (!agentLocalCounts.has(key) && agentLocalCounts.size >= MAX_LOCAL_COUNTS) {
+    const decision = decideMcpRateLimit(
+      MCP_AGENT_RATE_LIMIT_PER_MINUTE + 1,
+      MCP_AGENT_RATE_LIMIT_PER_MINUTE,
+      windowStartSeconds,
+      nowSeconds,
+    )
+    return NextResponse.json(
+      { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } },
+    )
+  }
+  agentLocalCounts.set(key, count)
+  const decision = decideMcpRateLimit(count, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
+  if (!decision.limited) return null
+  return NextResponse.json(
+    { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } },
+  )
+}
+
 let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 let exactCountFlagLookup: Promise<boolean> | undefined
 
@@ -48,6 +94,7 @@ export async function checkMcpRateLimit(
   if (getMcpOperationContext(request)?.rateLimitChecked) return null
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return null
+  if (agentShapedMcpToken(token)) return localAgentRateLimit(token)
 
   let key: string | undefined
   try {
