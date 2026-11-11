@@ -47,8 +47,8 @@ if (name === 'ht') {
   const url = new URL(args[1], 'https://fake.invalid');
   if (url.pathname.startsWith('/mcp/tasks/') && url.pathname.endsWith('/agent-activity')) {
     console.log(JSON.stringify({ success: true, activities: read('activities.json', []).filter(item => item.ticket === url.pathname.split('/')[3]) }));
-  } else if (url.pathname === '/mcp/projects/2060/sections') {
-    console.log(JSON.stringify({ success: true, sections: cfg.sections ?? [{ id: 4351, section_title: 'Todo', projectId: 2060, deleted: false }] }));
+  } else if (url.pathname === '/mcp/projects/11514/sections') {
+    console.log(JSON.stringify({ success: true, sections: cfg.sections ?? [{ id: 4351, section_title: 'Todo', projectId: 11514, deleted: false }] }));
   } else {
     if (url.pathname !== '/mcp/tasks') throw new Error('unexpected read');
     const status = url.searchParams.get('status');
@@ -127,11 +127,11 @@ check('sources', 'normalization strips every dynamic value and hash matches inde
 
 check('sources', 'retired board events retarget to the live infra board', () => withHarness(async h => {
   h.events([event({ board: 4060, service: 'vps-journal' })]);
-  h.config({ sections: [{ id: 4351, section_title: 'Todo', projectId: 2060, deleted: false }] });
+  h.config({ sections: [{ id: 4351, section_title: 'Todo', projectId: 11514, deleted: false }] });
   await h.run();
   const args = creates(h)[0].args;
-  assert.equal(args[args.indexOf('--project') + 1], '2060');
-  assert.equal(Object.values(h.state().fingerprints)[0].board, 2060);
+  assert.equal(args[args.indexOf('--project') + 1], '11514');
+  assert.equal(Object.values(h.state().fingerprints)[0].board, 11514);
 }));
 
 check('sources', 'PowerShell genuine pipe failures count as one new kind across transient scopes', () => withHarness(async h => {
@@ -144,7 +144,7 @@ check('sources', 'PowerShell genuine pipe failures count as one new kind across 
   assert.equal(new Set(messages.map(message => fingerprint('vps-journal', message))).size, 1);
   assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vps-journal', messages[0].replace('Access denied.', 'Connection refused.')));
   assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vercel', messages[0]));
-  h.events(messages.map(message => event({ service: 'vps-journal', board: 2060, message })));
+  h.events(messages.map(message => event({ service: 'vps-journal', board: 11514, message })));
   assert.equal(await h.run(), 0);
   assert.equal(creates(h).length, 1);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].newGroups, 1);
@@ -361,36 +361,37 @@ check('tickets', 'adopts Normal, Archive and Deleted, searches all statuses and 
   });
 });
 
-check('tickets', 'routes 2060 to live Backlog, falls back to Todo and refuses absent intake', async () => {
+check('tickets', 'routes 11514 to live Backlog, falls back to Todo and refuses absent intake', async () => {
   for (const title of ['Backlog', 'To Do', 'Todo']) await withHarness(async h => {
-    h.events([event({ board: 2060 })]);
-    h.config({ sections: [{ id: 1, section_title: 'Backlog', projectId: 2060, deleted: true }, { id: 2, section_title: title, projectId: 2060, deleted: false }] });
+    h.events([event({ board: 11514 })]);
+    h.config({ sections: [{ id: 1, section_title: 'Backlog', projectId: 11514, deleted: true }, { id: 2, section_title: title, projectId: 11514, deleted: false }] });
     await h.run();
     const args = creates(h)[0].args;
-    assert.equal(args[args.indexOf('--project') + 1], '2060');
+    assert.equal(args[args.indexOf('--project') + 1], '11514');
     assert.equal(args[args.indexOf('--section') + 1], '2');
-    assert.ok(h.calls().some(c => c.name === 'ht' && c.args[1] === '/mcp/projects/2060/sections'));
+    assert.ok(h.calls().some(c => c.name === 'ht' && c.args[1] === '/mcp/projects/11514/sections'));
   });
-  await withHarness(async h => { h.events([event({ board: 2060 })]); h.config({ sections: [] }); await h.run(); assert.equal(creates(h).length, 0); assert.equal(Object.keys(h.state().pending).length, 1); });
+  await withHarness(async h => { h.events([event({ board: 11514 })]); h.config({ sections: [] }); await h.run(); assert.equal(creates(h).length, 0); assert.equal(Object.keys(h.state().pending).length, 1); });
 });
 
 check('tickets', 'retired board state moves to the live infra board and drops its archived tickets', () => withHarness(async h => {
   const seen = new Date(NOW - 1000).toISOString();
-  const pending = { board: 4060, service: 'vps-journal', normalized: 'Boom failed', message: 'Boom failed', stack: '', routes: ['/mcp'], count: 3, firstSeen: seen, lastSeen: seen };
-  h.seed({ version: 1, sources: {}, fingerprints: { deadbeefdeadbeef: { ticket: 'YPER4-100', deleted: false, board: 4060, firstSeen: seen, lastSeen: seen, total: 1, routes: [] } }, pending: { cafebabecafebabe: pending }, days: {}, summaries: {}, activities: { 'YPER4-100': { count: 1, since: seen, at: null } }, noiseWindows: { cafebabecafebabe: [{ board: 4060, service: 'vps-journal', ts: seen, count: 1, message: 'Boom failed', route: '/mcp', stack: '' }] }, occurrences: { deadbeefdeadbeefcafe: { ticket: 'YPER4-100', queuedAt: seen, text: 'Retained occurrence' } }, created: [] });
-  h.config({ sections: [{ id: 4351, section_title: 'Todo', projectId: 2060, deleted: false }] });
+  const pending = { board: 2060, service: 'vps-journal', normalized: 'Boom failed', message: 'Boom failed', stack: '', routes: ['/mcp'], count: 3, firstSeen: seen, lastSeen: seen };
+  h.seed({ version: 1, sources: {}, fingerprints: { deadbeefdeadbeef: { ticket: 'YPER4-100', deleted: false, board: 4060, firstSeen: seen, lastSeen: seen, total: 1, routes: [] }, deadbeefdeadbeff: { ticket: 'YPER4-101', deleted: false, board: 2060, firstSeen: seen, lastSeen: seen, total: 1, routes: [] } }, pending: { cafebabecafebabe: pending }, days: {}, summaries: {}, activities: { 'YPER4-100': { count: 1, since: seen, at: null }, 'YPER4-101': { count: 1, since: seen, at: null } }, noiseWindows: { cafebabecafebabe: [{ board: 4060, service: 'vps-journal', ts: seen, count: 1, message: 'Boom failed', route: '/mcp', stack: '' }] }, occurrences: { deadbeefdeadbeefcafe: { ticket: 'YPER4-100', queuedAt: seen, text: 'Retained occurrence' }, deadbeefdeadbeffcafe: { ticket: 'YPER4-101', queuedAt: seen, text: 'Retained occurrence' } }, created: [] });
+  h.config({ sections: [{ id: 4351, section_title: 'Todo', projectId: 11514, deleted: false }] });
   h.events([]);
   await h.run();
   const args = creates(h)[0].args;
-  assert.equal(args[args.indexOf('--project') + 1], '2060');
+  assert.equal(args[args.indexOf('--project') + 1], '11514');
   assert.equal(args[args.indexOf('--section') + 1], '4351');
   const reads = h.calls().filter(c => c.name === 'ht').map(c => c.args[1]);
-  assert.ok(reads.includes('/mcp/projects/2060/sections'));
+  assert.ok(reads.includes('/mcp/projects/11514/sections'));
   assert.ok(!reads.some(url => url.includes('4060')));
+  assert.ok(!reads.some(url => url.includes('2060')));
   assert.deepEqual(Object.keys(h.state().pending), []);
-  assert.equal(Object.values(h.state().fingerprints).every(record => record.board === 2060), true);
+  assert.equal(Object.values(h.state().fingerprints).every(record => record.board === 11514), true);
   assert.deepEqual(Object.keys(h.state().activities), []);
-  assert.ok(Object.values(h.state().noiseWindows).flat().every(event => event.board === 2060));
+  assert.ok(Object.values(h.state().noiseWindows).flat().every(event => event.board === 11514));
   assert.deepEqual(Object.keys(h.state().occurrences), []);
 }));
 
@@ -471,6 +472,19 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
     assert.equal(Object.keys(h.state().pending).length, 0);
   });
 });
+
+check('tickets', 'hourly cap files a product Vercel error before an infra group', () => withHarness(async h => {
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
+  h.events([
+    event({ board: 2060, service: 'vps-journal', message: 'infra unit failed', route: 'init.scope' }),
+    event({ board: 15, service: 'vercel', message: 'Failed to update view', route: '/mcp' }),
+  ]);
+  await h.run();
+  const made = creates(h);
+  assert.equal(made.length, 1);
+  assert.equal(made[0].args[made[0].args.indexOf('--project') + 1], '15');
+  assert.equal(Object.values(h.state().pending).every(group => group.board !== 15), true);
+}));
 
 check('reporting', 'default rolling cap, pending counts/routes survive and exactly one hold notice per run', () => withHarness(async h => {
   const items = Array.from({ length: 7 }, (_, i) => event({ message: `failure kind ${String.fromCharCode(65 + i)}` }));
@@ -710,7 +724,7 @@ check('reporting', 'errors marked [ht-forced-test] are skipped for every source,
   h.events([
     event({ message: 'Error: [ht-forced-test] YPER4-384 forced server test 1' }),
     event({ service: 'browser', message: 'Error: [ht-forced-test] YPER4-384 forced browser test 2' }),
-    event({ service: 'github-actions', board: 2060, route: '', message: 'Smoke failed [ht-forced-test]' }),
+    event({ service: 'github-actions', board: 11514, route: '', message: 'Smoke failed [ht-forced-test]' }),
     event({ message: 'Error: YPER4-377 forced browser test 3' }),
   ]);
   await h.run();
@@ -736,7 +750,7 @@ check('reporting', 'CLI reports named HtForcedTest are skipped, a real CLI error
 }));
 
 check('reporting', 'outside PR guard dry runs are noise, other workflow failures are errors (YPER4-364)', () => withHarness(async h => {
-  const ci = { service: 'github-actions', board: 2060, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/1' };
+  const ci = { service: 'github-actions', board: 11514, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/1' };
   h.events([event({ ...ci, message: 'Outside PR guard failed: outside-pr-guard' }), event({ ...ci, message: 'CI Tests failed: browser-smoke' })]);
   await h.run();
   assert.equal(creates(h).length, 1);
@@ -745,7 +759,7 @@ check('reporting', 'outside PR guard dry runs are noise, other workflow failures
 }));
 
 check('reporting', 'an optional AI smoke pilot dispatch is noise, other AI smoke failures are errors (YPER4-967)', () => withHarness(async h => {
-  const ci = { service: 'github-actions', board: 2060, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/2' };
+  const ci = { service: 'github-actions', board: 11514, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/2' };
   h.events([event({ ...ci, message: 'AI smoke pilot failed: pilot' }), event({ ...ci, message: 'AI smoke failed: pilot' })]);
   await h.run();
   assert.equal(creates(h).length, 1);
@@ -754,7 +768,7 @@ check('reporting', 'an optional AI smoke pilot dispatch is noise, other AI smoke
 }));
 
 check('reporting', 'an SSH client hanging up is noise, other sshd failures are errors (YPER4-406)', () => withHarness(async h => {
-  const vps = { service: 'vps-journal', board: 2060, route: 'ssh.service', stack: '' };
+  const vps = { service: 'vps-journal', board: 11514, route: 'ssh.service', stack: '' };
   h.events([event({ ...vps, message: 'ssh.service: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe' }), event({ ...vps, message: 'ssh.service: error: bind [127.0.0.1]:7979: Address already in use' })]);
   await h.run();
   assert.equal(creates(h).length, 1);
@@ -763,7 +777,7 @@ check('reporting', 'an SSH client hanging up is noise, other sshd failures are e
 }));
 
 check('reporting', 'SSH client resets under session scopes are noise, real failures still file (YPER4-450)', () => withHarness(async h => {
-  const vps = { service: 'vps-journal', board: 2060, stack: '' };
+  const vps = { service: 'vps-journal', board: 11514, stack: '' };
   h.events([
     event({ ...vps, route: 'session-924033.scope', message: 'session-924033.scope: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
     event({ ...vps, route: 'ssh.service', message: 'ssh.service: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
@@ -780,7 +794,7 @@ check('reporting', 'SSH client resets under session scopes are noise, real failu
 }));
 
 check('reporting', 'a one-shot gate observer exiting 1 on purpose is noise, other failed units still file (YPER4-833)', () => withHarness(async h => {
-  const vps = { service: 'vps-journal', board: 2060, route: 'init.scope', stack: '' };
+  const vps = { service: 'vps-journal', board: 11514, route: 'init.scope', stack: '' };
   const failed = unit => `init.scope: Failed to start ${unit} - /usr/bin/bash /home/valentin/projects/ceo/runs/IGSH-976/observe-once.sh.`;
   h.events([
     event({ ...vps, message: failed('igsh976-observe-180200.service') }),
@@ -818,7 +832,7 @@ check('reporting', 'SSH daemon identifier fallback ignores client resets but ret
 
 check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures still file', () => withHarness(async h => {
   const message = 'run-u2003644.scope: (7.6.7:C:80) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: 1990196 in AppDomain: None.  Error Message: Operation canceled.';
-  const vps = { service: 'vps-journal', board: 2060, route: 'run-u2003644.scope', stack: '' };
+  const vps = { service: 'vps-journal', board: 11514, route: 'run-u2003644.scope', stack: '' };
   h.events([
     event({ ...vps, message }),
     event({ ...vps, message: message.replace('run-u2003644.scope', 'run-r1b66062f07d0426abf597f7579b30ec8.scope') }),
@@ -938,11 +952,11 @@ check('reporting', 'R5: quiet successful sources have zero-error daily coverage'
 }));
 
 check('review', 'one error on a product route and an infra route keeps its first board and the source keeps reading', () => withHarness(async h => {
-  h.events([event({ route: '/mcp' }), event({ route: '/sse', board: 2060 })]);
+  h.events([event({ route: '/mcp' }), event({ route: '/sse', board: 11514 })]);
   assert.equal(await h.run(), 0);
   assert.equal(creates(h).length, 1);
   assert.equal(creates(h)[0].args[4], '15');
-  h.events([event({ route: '/sse', board: 2060, ts: new Date(NOW + 1000).toISOString() })]);
+  h.events([event({ route: '/sse', board: 11514, ts: new Date(NOW + 1000).toISOString() })]);
   assert.equal(await h.run({ now: NOW + 2000 }), 0);
   assert.equal(creates(h).length, 1);
   assert.equal(Object.values(h.state().fingerprints)[0].total, 3);
@@ -1017,7 +1031,7 @@ check('reporting', 'R11: dry-run fixture remains deterministic in the last UTC m
 check('install', 'units mirror precedent, installer copies modules/noise and fake systemctl enables user timer', () => withHarness(async h => {
   h.env.USER_UNIT_CHECK = '/usr/bin/true';
   assert.ok(readdirSync(join(HERE, 'sources')).includes('fixture.mjs'));
-  assert.match(readFileSync(join(HERE, 'README.md'), 'utf8'), /Todo, section 4351/);
+  assert.match(readFileSync(join(HERE, 'README.md'), 'utf8'), /Backlog, section 32923/);
   const service = readFileSync(join(HERE, '../error-collector.service'), 'utf8');
   const timer = readFileSync(join(HERE, '../error-collector.timer'), 'utf8');
   assert.ok(service.match(/Environment="PATH=([^"]+)"/)[1].split(':').includes('%h/.local/lib/hypertask/runner-pickup'));
@@ -1038,7 +1052,7 @@ check('install', 'units mirror precedent, installer copies modules/noise and fak
 }));
 
 check('reporting', 'summary-only events are counted but never searched, ticketed or fingerprinted', () => withHarness(async h => {
-  h.events([event({ service: 'posthog', ticket: false, count: 7 }), event({ service: 'posthog', ticket: false, board: 2060, count: 2 })]);
+  h.events([event({ service: 'posthog', ticket: false, count: 7 }), event({ service: 'posthog', ticket: false, board: 11514, count: 2 })]);
   await h.run({ summary: true });
   assert.equal(creates(h).length, 0);
   assert.equal(h.calls().filter(call => call.name === 'ht').length, 0);
@@ -1141,7 +1155,7 @@ check('followups', 'journal classifies raw status codes before normalized groupi
   assert.equal(counts.noise, 4);
   assert.equal(counts.errors, 4);
   assert.equal(creates(h).length, 2);
-  assert.equal(Object.values(h.state().fingerprints).find(item => item.total === 2)?.board, 2060);
+  assert.equal(Object.values(h.state().fingerprints).find(item => item.total === 2)?.board, 11514);
 }));
 
 check('followups', 'deadline default is twelve minutes and below the service limit', () => withHarness(async h => {
@@ -1328,7 +1342,7 @@ check('sources', 'Neon collector advances snapshots atomically, failures leave b
     assert.equal(creates(h).length, 3);
     assert.ok(!readFileSync(h.statePath, 'utf8').includes(connection));
     assert.ok(!readFileSync(h.statePath, 'utf8').includes('fixture-password'));
-    assert.equal(Object.values(h.state().fingerprints).find(record => record.total === 2).board, 2060);
+    assert.equal(Object.values(h.state().fingerprints).find(record => record.total === 2).board, 11514);
   } finally { globalThis.fetch = original; }
 }));
 
@@ -1439,7 +1453,7 @@ for (const kind of ['deleted', 'other-board', 'other-route', 'empty-route']) che
   const state = h.state();
   const record = Object.values(state.fingerprints)[0];
   if (kind === 'deleted') record.deleted = true;
-  if (kind === 'other-board') record.board = 2060;
+  if (kind === 'other-board') record.board = 11514;
   if (kind === 'other-route') record.routes = ['/unrelated'];
   delete state.sources.fixture;
   h.seed(state);
@@ -1514,7 +1528,7 @@ check('tickets', 'stale unresolved aliases survive revival into pending and adop
   await h.run();
   assert.deepEqual(h.state().stale[fp].aliases, [alias]);
   h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
-  h.events([event({ message, board: 2060, ts: new Date(NOW + 1000).toISOString() })]);
+  h.events([event({ message, board: 15, ts: new Date(NOW + 1000).toISOString() })]);
   await h.run({ now: NOW + 1000 });
   assert.deepEqual(h.state().pending[fp].aliases, [alias]);
   assert.equal(h.state().pending[fp].board, 15);
