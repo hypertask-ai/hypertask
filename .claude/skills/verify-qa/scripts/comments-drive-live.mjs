@@ -22,10 +22,7 @@ await driveMain("comments", process.argv.slice(2), { post: "comment appears" }, 
   ).catch(() => null);
   await page.keyboard.press("Control+Enter");
   const response = await saved;
-  const outside = async () => {
-    await page.waitForFunction(marker => [...document.querySelectorAll("body *")].some(el => !el.children.length && !el.closest("#comment-input") && el.textContent?.includes(marker)), marker, { timeout: 10_000 }).catch(() => {});
-    return page.locator(`text=${marker}`).evaluateAll((els) => els.filter((el) => !el.closest("#comment-input")).length);
-  };
+  const outside = () => page.getByTestId("ticket-comment").filter({ hasText: marker }).waitFor({ state: "visible", timeout: 30_000 }).then(() => 1, () => 0);
   const posted = Boolean(response?.ok()) && (await outside()) > 0;
   await page.screenshot({ path: path.join(dir, "01-comment.png") });
   step("comment appears", posted, { status: response?.status() ?? 0 });

@@ -25,11 +25,14 @@ await driveMain("task", process.argv.slice(2), { title: "title visible" }, async
     await page.keyboard.press("Control+b");
     await page.keyboard.type("bold-part");
     await page.keyboard.press("Control+b");
+    const saving = page.waitForResponse((response) => response.url().includes("/api/tasks/single") && response.request().method() === "PUT" && (response.request().postData() || "").includes(marker), { timeout: 20_000 }).catch(() => null);
     await page.keyboard.press("Escape");
-    await page.reload({ waitUntil: "domcontentloaded" });
-    const saved = page.locator("#description-input .ProseMirror[contenteditable='false']");
-    descriptionPersisted = await saved.getByText(marker).waitFor({ state: "visible", timeout: 10_000 }).then(() => true, () => false);
-    boldPersisted = descriptionPersisted && await saved.locator("strong", { hasText: "bold-part" }).waitFor({ state: "visible", timeout: 5_000 }).then(() => true, () => false);
+    if ((await saving)?.ok()) {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      const saved = page.locator("#description-input .ProseMirror[contenteditable='false']");
+      descriptionPersisted = await saved.getByText(marker).waitFor({ state: "visible", timeout: 15_000 }).then(() => true, () => false);
+      boldPersisted = descriptionPersisted && await saved.locator("strong", { hasText: "bold-part" }).waitFor({ state: "visible", timeout: 5_000 }).then(() => true, () => false);
+    }
   }
   await page.screenshot({ path: path.join(dir, "02-description.png") });
   step("description survives reload", descriptionPersisted, { marker });
