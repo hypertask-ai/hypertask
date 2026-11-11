@@ -321,9 +321,10 @@ check('tickets', 'creation options, redacted escaped HTML, atomic private state 
   h.events([event({ message: `Checkout failed ${unsafe}`, stack: Array.from({ length: 50 }, (_, i) => `${i}: ${unsafe}`).join('\n') })]);
   await h.run();
   const call = creates(h)[0];
-  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log', '--priority', 'high', '--title']);
-  assert.match(call.description, /^<p><strong>/);
-  assert.match(call.description, /error-fingerprint:[a-f0-9]{16}<\/p>$/);
+  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title']);
+  assert.match(call.description, /<h2>Problem<\/h2>/);
+  assert.match(call.description, /<p><strong>/);
+  assert.match(call.description, /error-fingerprint:[a-f0-9]{16}<\/p><\/blockquote>$/);
   assert.ok(!call.description.includes('<script>'));
   const stack = call.description.match(/<pre>([\s\S]*?)<\/pre>/)[1];
   assert.equal(stack.split('\n').length, 40);
@@ -466,11 +467,36 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
   for (const flag of ['searchFail', 'badSearch', 'createFail']) await withHarness(async h => {
     h.events([event()]); h.config({ [flag]: true }); assert.equal(await h.run(), 0);
     assert.equal(Object.keys(h.state().pending).length, 1);
+    if (flag === 'createFail') assert.equal(h.state().created.length, 1);
     if (flag !== 'createFail') assert.equal(creates(h).length, 0);
     h.config({}); await h.run({ now: NOW + 1000 });
     assert.equal(Object.keys(h.state().pending).length, 0);
   });
 });
+
+check('tickets', 'uncertain creates retain their hourly slot across groups and retries', async () => {
+  for (const flag of ['ambiguousCreate', 'badReceipt', 'createFail']) await withHarness(async h => {
+    h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
+    h.events([event(), event({ message: 'Upload failure', route: '/uploads' })]);
+    h.config({ [flag]: true });
+    await h.run();
+    assert.equal(creates(h).length, 1);
+    assert.equal(h.state().created.length, 1);
+    h.config({});
+    await h.run({ now: NOW + 1000 });
+    assert.equal(creates(h).length, 1);
+    await h.run({ now: NOW + HOUR });
+    assert.equal(creates(h).length, 2);
+  });
+});
+
+check('tickets', 'create title drops code names the server rejects', () => withHarness(async h => {
+  h.events([event({ service: 'vercel', message: 'Failed to update view | Use either label_names/assignee_ids/match or board_filters, not both', route: '/mcp' })]);
+  await h.run();
+  const title = creates(h)[0].args[creates(h)[0].args.indexOf('--title') + 1];
+  assert.equal(title.includes('label_names') || title.includes('board_filters'), false);
+  assert.match(title, /^vercel: /);
+}));
 
 check('tickets', 'hourly cap files a product Vercel error before an infra group', () => withHarness(async h => {
   h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
