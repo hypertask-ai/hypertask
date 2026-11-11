@@ -38,3 +38,9 @@ Never run a live admission as a read-only check: it reserves ownership.
 
 Speed-runner starts remain outside numeric admission. Preview and fixture results
 do not prove fleet-wide exclusivity or eliminate pre-existing manual overlaps.
+
+## What usually breaks
+
+- Preview changes inbox or ownership state.
+- Incomplete reads release an active domain lease.
+- A conflicting relabel displaces an active holder.

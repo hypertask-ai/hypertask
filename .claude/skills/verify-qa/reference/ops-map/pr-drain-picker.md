@@ -28,6 +28,12 @@ expire after three hours and the same runner renews its own claim. Keep active
 board claims authoritative when adopting a PR. Resolve or close obsolete work
 with evidence; never mark a PR ready just to lower the draft count.
 
+## What usually breaks
+
+- Dry-run creates or renews a PR claim.
+- A failed read returns NONE and admits new work.
+- An active owner's PR is offered to another runner.
+
 ## Fleet outcome
 
 Record the live draft count separately. Shipping this picker does not prove

@@ -401,6 +401,21 @@ esac
         page = '.claude/skills/verify-qa/reference/feature-map/' + 'fixture.md'
         (self.repo / page).parent.mkdir(parents=True)
         (self.repo / page).write_text('## Gotchas\n\n- Cursor lost after reload.\n  Check the box.\n\n### Proof\n- Not a gotcha.\n')
+        ops = {
+            'pr-drain-picker': [
+                'Dry-run creates or renews a PR claim.',
+                'A failed read returns NONE and admits new work.',
+                "An active owner's PR is offered to another runner."],
+            'runner-pickup': [
+                'Preview changes inbox or ownership state.',
+                'Incomplete reads release an active domain lease.',
+                'A conflicting relabel displaces an active holder.'],
+        }
+        recipes = SCRIPT.parents[2] / 'verify-qa/reference/ops-map'
+        for name in ops:
+            target = self.repo / '.claude/skills/verify-qa/reference/ops-map' / f'{name}.md'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text((recipes / f'{name}.md').read_text())
         script = 'drive.py'
         (self.repo / script).write_text('import os, sys\nprint("drive reached", sys.argv[1])\nsys.exit(int(os.environ.get("DRIVE_EXIT", "0")))\n')
         self.run_git('add', '.')
@@ -414,8 +429,8 @@ case "$1:$2" in
 esac
 ''')
         self.write('hypertask', '''#!/usr/bin/env python3
-import json, sys
-print(json.dumps({'success':True,'tasks':[{'ticketNumber':'HTPR-7766','boardId':15,'description':'<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>'}]}))
+import json, os, sys
+print(json.dumps({'success':True,'tasks':[{'ticketNumber':'HTPR-7766','boardId':15,'description':os.environ.get('DESCRIPTION', '<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>')}]}))
 ''')
         activity = self.root / 'activity.json'
         builder = dict(id='builder-note', agentId='builder-id', agentName='Runner 1', runId='builder-run', createdAt='2026-11-09T00:00:00Z', text='Proof builder: PR 42')
@@ -430,7 +445,7 @@ import json, os, sys
 from pathlib import Path
 p = Path(os.environ['FIXTURE_ROOT'])/'activity.json'
 rows = json.loads(p.read_text())
-rows.append(dict(id=str(len(rows)),agentId=os.environ.get('ACTOR','reviewer-id'),agentName='Runner 2',runId='reviewer-run',createdAt=f'2026-11-09T01:00:{len(rows):02d}Z',text=sys.argv[-1]))
+rows.append(dict(id=str(len(rows)),agentId=os.environ.get('ACTOR','reviewer-id'),agentName=os.environ.get('ACTOR_NAME','Runner 2'),runId='reviewer-run',createdAt=f'2026-11-09T01:00:{len(rows):02d}Z',text=sys.argv[-1]))
 p.write_text(json.dumps(rows))
 print('recorded')
 ''')
@@ -452,24 +467,23 @@ print('recorded')
         self.assertIn('missing Acceptance item: Every action works', self.check('proof', ticket, success=False))
         self.assertIn('missing Acceptance item: Every action works', self.check('move', ticket, 'Done', success=False))
         self.assertIn('proof ok', self.check('proof', ticket, SHIP_PROOF_STRICT='0'))
-        complete = f'''Feature map: {page}
-Doctor: sha {sha} deployment success
-Run: {run}
-Drive script: {script}
-
-## Cases
-- PASS: doctor -> doctor.png
-## Acceptance
-- PASS: Every action works from the keyboard in all three places. -> result.json
-- PASS: Board keys still work. -> result.json
-## What usually breaks
-- TRIED: Cursor lost after reload. Check the box. -> result.json
-'''
+        complete = (recipes / 'proof-coverage.md').read_text().split('```text\n')[1].split('```')[0]
+        for before, after in [
+            ('.claude/skills/verify-qa/reference/feature-map/<page>.md', page),
+            ('<merge-sha>', sha), ('<id>', '985'), ('<YYYY-MM-DD>-qa-run-<n>', run),
+            ('<repository-relative .mjs, .py or .sh committed in the merge>', script),
+            ('- PASS: <case> -> <nonempty-file>', '- PASS: doctor -> doctor.png'),
+            ('<exact acceptance bullet>', 'Every action works from the keyboard in all three places.'),
+            ('<exact breakage bullet>', 'Cursor lost after reload. Check the box.'),
+            ('- NOT-APPLICABLE: <another exact breakage bullet> -> <reason of 10 characters or more>\n', ''),
+            ('<nonempty-file>', 'result.json'),
+            ('## What usually breaks', '- PASS: Board keys still work. -> result.json\n\n## What usually breaks')]:
+            complete = complete.replace(before, after)
         proof.write_text(complete)
         activity.write_text('[]')
         self.assertIn('builder must bind', self.check('proof', ticket, success=False))
         activity.write_text(json.dumps([builder]))
-        self.check('bind', ticket, '42')
+        self.check('bind', ticket, '42', ACTOR='builder-id', ACTOR_NAME='Runner 1')
         (output / 'result.json').write_text('')
         self.check('proof', ticket, success=False)
         (output / 'result.json').write_text('{"ok":true}')
@@ -497,6 +511,28 @@ Drive script: {script}
         self.assertIn('evidence changed', self.check('proof', ticket, success=False))
         proof.write_text(complete.replace('TRIED: Cursor lost after reload. Check the box. -> result.json', 'NOT-APPLICABLE: Cursor lost after reload. Check the box. -> Read-only change; no cursor behavior affected.'))
         rerun(18)
+        self.assertIn('proof ok', self.check('proof', ticket))
+        nested = '<h2>Done when</h2><ul><li><p>Every action works from the keyboard in all three places.</p><ul><li><p>Board keys still work.</p><ul><li>Nested keys work.</li></ul></li></ul></li></ul>'
+        self.assertIn('missing Acceptance item: Nested keys work.', self.check('proof', ticket, success=False, DESCRIPTION=nested))
+        proof.write_text(proof.read_text().replace('## What usually breaks', '- PASS: Nested keys work. -> result.json\n\n## What usually breaks'))
+        self.env['DESCRIPTION'] = nested
+        rerun(19)
+        self.assertIn('proof ok', self.check('proof', ticket))
+        del self.env['DESCRIPTION']
+        for number, (name, breakage) in enumerate(ops.items(), 20):
+            with self.subTest(recipe=name):
+                ops_page = '.claude/skills/verify-qa/reference/ops-map/' + name + '.md'
+                proof.write_text(complete.replace(page, ops_page).split('## What usually breaks')[0]
+                                 + '## What usually breaks\n'
+                                 + ''.join(f'- TRIED: {item} -> result.json\n' for item in breakage))
+                rerun(number)
+                self.assertIn('proof ok', self.check('proof', ticket))
+        self.check('bind', ticket, '42')
+        self.assertIn('no independent drive rerun', self.check('proof', ticket, success=False))
+        self.assertIn('builder cannot', rerun(22, success=False))
+        rerun(22, ACTOR_NAME='Runner 3')
+        self.assertIn('different authenticated agent', self.check('proof', ticket, success=False))
+        rerun(23, ACTOR='third-agent-id', ACTOR_NAME='Runner 3')
         self.assertIn('proof ok', self.check('proof', ticket))
 
 

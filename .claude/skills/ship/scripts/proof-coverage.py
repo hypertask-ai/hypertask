@@ -29,17 +29,17 @@ def normalize(text):
 class TicketItems(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.lines, self.text, self.depth, self.heading = [], '', 0, False
+        self.lines, self.text, self.bullets, self.heading = [], '', [], False
 
-    def flush(self, heading=False, bullet=False):
+    def flush(self, heading=False):
         if self.text.strip():
             text = normalize(self.text)
-            label = re.match(r'^([A-Za-z][A-Za-z ]{0,40}):', text) if not bullet else None
-            heading = heading or (not bullet and text.lower() in {'done when', 'acceptance', 'acceptance criteria'})
+            label = re.match(r'^([A-Za-z][A-Za-z ]{0,40}):', text)
+            heading = heading or text.lower() in {'done when', 'acceptance', 'acceptance criteria'}
             if heading or label:
                 self.lines.append('## ' + (label[1] if label else text))
             else:
-                self.lines.append(('- ' if bullet else '') + text)
+                self.lines.append(text)
         self.text = ''
 
     def handle_starttag(self, tag, attrs):
@@ -47,25 +47,34 @@ class TicketItems(HTMLParser):
             self.flush()
             self.heading = True
         elif tag == 'li':
-            if not self.depth:
+            if not self.bullets:
                 self.flush()
-            self.depth += 1
-        elif tag in ('p', 'div', 'br') and not self.depth:
-            self.flush()
+            self.bullets.append([len(self.lines), ''])
+            self.lines.append('')
+        elif tag in ('p', 'div', 'br'):
+            if self.bullets:
+                self.bullets[-1][1] += ' '
+            else:
+                self.flush()
 
     def handle_endtag(self, tag):
         if re.fullmatch(r'h[1-6]', tag):
             self.flush(True)
             self.heading = False
-        elif tag == 'li':
-            self.depth -= 1
-            if not self.depth:
-                self.flush(bullet=True)
-        elif tag in ('p', 'div') and not self.depth and not self.heading:
-            self.flush()
+        elif tag == 'li' and self.bullets:
+            index, text = self.bullets.pop()
+            self.lines[index] = '- ' + normalize(text) if text.strip() else ''
+        elif tag in ('p', 'div'):
+            if self.bullets:
+                self.bullets[-1][1] += ' '
+            elif not self.heading:
+                self.flush()
 
     def handle_data(self, data):
-        self.text += data
+        if self.bullets:
+            self.bullets[-1][1] += data
+        else:
+            self.text += data
 
 
 def items(text, headings):
@@ -141,8 +150,8 @@ def main():
     drive_hash = hashlib.sha256(source).hexdigest()
     log = activities(ticket)
     builders = [r for r in log if r.get('text') == f'Proof builder: PR {pr}']
-    require(builders and builders[0].get('agentId'), f'builder must bind PR {pr} through ship-check bind before independent QA')
-    builder = builders[0]
+    require(builders and builders[-1].get('agentId'), f'builder must bind PR {pr} through ship-check bind before independent QA')
+    builder = builders[-1]
     binding = dict(pr=int(pr), sha=sha, proof_sha256=digest(proof), drive_sha256=drive_hash)
     if mode == 'rerun':
         require(len(args) == 2 and args[0] == script, f'inspect the drive script, then explicitly pass {script} and a fresh QA run name')
@@ -171,7 +180,7 @@ def main():
         return
     reruns = []
     for row in log:
-        if row.get('text', '').startswith('Proof rerun: '):
+        if row['createdAt'] > builder['createdAt'] and row.get('text', '').startswith('Proof rerun: '):
             entry = json.loads(row['text'][len('Proof rerun: '):])
             require(isinstance(entry, dict), 'malformed independent rerun record')
             if all(entry.get(k) == v for k, v in binding.items()):

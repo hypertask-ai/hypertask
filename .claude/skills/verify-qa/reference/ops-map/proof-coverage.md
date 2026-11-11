@@ -22,10 +22,16 @@ Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md
 Doctor: sha <merge-sha> deployment success; /my-tasks signed in as user <id>
 Run: <YYYY-MM-DD>-qa-run-<n>
 Drive script: <repository-relative .mjs, .py or .sh committed in the merge>
-Acceptance: PASS: <exact acceptance bullet> -> <nonempty-file>
-Breakage: TRIED: <exact breakage bullet> -> <nonempty-file>
-Breakage: NOT-APPLICABLE: <exact breakage bullet> -> <reason of 10 characters or more>
-Cases: PASS: <case> -> <nonempty-file>
+
+## Cases
+- PASS: <case> -> <nonempty-file>
+
+## Acceptance
+- PASS: <exact acceptance bullet> -> <nonempty-file>
+
+## What usually breaks
+- TRIED: <exact breakage bullet> -> <nonempty-file>
+- NOT-APPLICABLE: <another exact breakage bullet> -> <reason of 10 characters or more>
 ```
 
 ## What usually breaks
