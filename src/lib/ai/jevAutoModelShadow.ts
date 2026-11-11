@@ -104,7 +104,7 @@ export async function shadowAutoModelTurn(turn: AutoModelShadowTurn): Promise<vo
         feature: turn.feature ?? "chat", autoTier, autoStepUp: signals.stepUp, autoModelKey: turn.autoModelKey,
         jevLevel: guess?.level ?? null, jevTier, jevConfidence: guess?.confidence ?? null, jevLatencyMs: Date.now() - started,
         longThread: signals.longThread, resent: signals.resent, codeFence: signals.codeFence,
-        comparison: jevTier === null ? null : compareAutoModelTiers(jevTier, autoTier), error: guess ? null : String(text ?? "no answer").slice(0, 200),
+        comparison: jevTier === null ? null : compareAutoModelTiers(jevTier, autoTier), error: guess ? null : text === null ? "no-answer" : text.trim() ? "no-level" : "empty-answer",
       },
     });
   } catch (error) {

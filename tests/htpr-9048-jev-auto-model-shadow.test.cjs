@@ -51,8 +51,9 @@ test("a managed turn logs one row next to Auto's level, and the skips make no ca
   const untied = runtime({ funding: null });
   await untied.mod.shadowAutoModelTurn(turn({ teamId: null, projectId: null }));
   const silent = runtime({ answer: "no idea" });
+  const failed = runtime({ answer: null }); await failed.mod.shadowAutoModelTurn(turn());
   await silent.mod.shadowAutoModelTurn(turn({ message: "fix ```js\nx\n```" }));
-  assert.deepEqual([customer.calls.length, customer.writes.length, untied.calls.length, untied.writes.length, silent.writes[0].jevLevel, silent.writes[0].error, silent.writes[0].autoTier], [0, 0, 0, 0, null, "no idea", 2]);
+  assert.deepEqual([customer.calls.length, customer.writes.length, untied.calls.length, untied.writes.length, silent.writes[0].jevLevel, silent.writes[0].error, silent.writes[0].error.includes("no idea"), failed.writes[0].error, failed.writes[0].jevLevel, silent.writes[0].autoTier], [0, 0, 0, 0, null, "no-level", false, "no-answer", null, 2]);
 });
 
 test("the shadow flag gate reads the ticket flag and refuses a turn with no user", async () => {
