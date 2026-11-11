@@ -223,3 +223,15 @@ test('a ticket without Risk is refused on create', async () => {
   assert.equal(h.calls.writes, 0)
   assert.equal((await h.create({ description: withRisk, dry_run: true })).status, 200)
 })
+
+test('the agent task boundary refuses oversized text before writes and still accepts normal tickets', async () => {
+  const h = taskRoutes()
+  const response = await h.create({ description: '<blockquote '.repeat(90_000), dry_run: true })
+  assert.equal(response.status, 400)
+  const body = await response.json()
+  assert.equal(body.field, 'description')
+  assert.match(body.error, /100000 characters/)
+  assert.equal(h.calls.writes, 0)
+  assert.equal((await h.create({ description: withRisk, dry_run: true })).status, 200)
+  assert.equal(h.calls.writes, 0)
+})

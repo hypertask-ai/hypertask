@@ -215,9 +215,10 @@ export function activationHarness() {
         return mocked;
       }
       if (key.startsWith("@/")) {
-        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/flags/approvalWords", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/funnelProbe/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride", "@/lib/logging/"];
+        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/flags/approvalWords", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/funnelProbe/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride", "@/lib/logging/", "@/lib/text/safeHtmlText.mjs"];
         if (!allowed.some((prefix) => key.startsWith(prefix))) throw Error(`Unmocked dependency ${key}`);
-        return load(`src/${key.slice(2)}.ts`);
+        const relative = key.slice(2);
+        return load(/\.(?:mjs|cjs|json)$/.test(relative) ? `src/${relative}` : `src/${relative}.ts`);
       }
       return nativeRequire(name);
     };
