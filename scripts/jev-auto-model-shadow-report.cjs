@@ -16,10 +16,9 @@ const LEVEL_TIER = { light: 1, standard: 2, high: 3 };
 const pct = (value) => (typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "n/a");
 const share = (part, whole) => (whole ? part / whole : null);
 const stamp = (value) => (value instanceof Date ? value.toISOString() : String(value ?? ""));
-const tierOf = (row) => row.jevTier ?? LEVEL_TIER[row.jevLevel] ?? null;
 
 function comparisonOf(row) {
-  const tier = tierOf(row);
+  const tier = row.jevTier ?? LEVEL_TIER[row.jevLevel] ?? null;
   if (tier === null || typeof row.autoTier !== "number") return null;
   return tier > row.autoTier ? "jev-higher" : tier < row.autoTier ? "jev-lower" : "agree";
 }
@@ -35,26 +34,18 @@ function markRetries(rows) {
   });
 }
 
-function countBy(rows, name) {
-  return rows.filter((row) => comparisonOf(row) === name).length;
-}
-
 function analyze(inputRows) {
   const rows = markRetries(inputRows);
   const answered = rows.filter((row) => comparisonOf(row) !== null);
-  const counts = Object.fromEntries(COMPARISONS.map((name) => [name, countBy(answered, name)]));
+  const tally = (subset) => Object.fromEntries(COMPARISONS.map((name) => [name, subset.filter((row) => comparisonOf(row) === name).length]));
+  const counts = tally(answered);
   const confident = answered.filter((row) => typeof row.jevConfidence === "number" && row.jevConfidence >= CONFIDENT);
   const retried = answered.filter((row) => row.retried);
-  const retriedCounts = Object.fromEntries(COMPARISONS.map((name) => [name, countBy(retried, name)]));
+  const retriedCounts = tally(retried);
   const latencies = answered.map((row) => row.jevLatencyMs).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
-  const retriedHigher = share(retriedCounts["jev-higher"], retried.length);
   const bars = [
     { name: "1000 Auto turns logged", pass: rows.length >= MIN_ROWS, detail: `${rows.length} of ${MIN_ROWS} turns` },
-    {
-      name: "Jev answers almost every turn",
-      pass: (share(answered.length, rows.length) ?? 0) >= MIN_PARSED,
-      detail: `${pct(share(answered.length, rows.length))} parsed (${answered.length} of ${rows.length})`,
-    },
+    { name: "Jev answers almost every turn", pass: (share(answered.length, rows.length) ?? 0) >= MIN_PARSED, detail: `${pct(share(answered.length, rows.length))} parsed` },
     {
       name: "Jev would change Auto's level often enough to matter",
       pass: (share(answered.length - counts.agree, answered.length) ?? 0) >= MIN_DISAGREEMENT,
@@ -62,7 +53,7 @@ function analyze(inputRows) {
     },
     {
       name: "On retried turns Jev mostly wanted more",
-      pass: retried.length >= 20 && retriedHigher !== null && retriedHigher >= RETRY_SHARE && retriedCounts["jev-higher"] > retriedCounts["jev-lower"],
+      pass: retried.length >= 20 && (share(retriedCounts["jev-higher"], retried.length) ?? 0) >= RETRY_SHARE && retriedCounts["jev-higher"] > retriedCounts["jev-lower"],
       detail: `${retried.length} retried turns, ${retriedCounts["jev-higher"]} higher, ${retriedCounts["jev-lower"]} lower, ${retriedCounts.agree} agree`,
     },
   ];
@@ -70,11 +61,10 @@ function analyze(inputRows) {
     rows: rows.length,
     answered: answered.length,
     parsed: share(answered.length, rows.length),
-    agreement: share(counts.agree, answered.length),
     counts,
-    confident: { threshold: CONFIDENT, count: confident.length, coverage: share(confident.length, answered.length), agreement: share(countBy(confident, "agree"), confident.length) },
+    confident: `${pct(share(confident.filter((row) => comparisonOf(row) === "agree").length, confident.length))} over ${confident.length} turns`,
     retried: { count: retried.length, counts: retriedCounts },
-    latencyMs: { p50: latencies[Math.ceil(latencies.length * 0.5) - 1] ?? null, p90: latencies[Math.ceil(latencies.length * 0.9) - 1] ?? null },
+    latencyMs: { p50: latencies[Math.ceil(latencies.length / 2) - 1] ?? null, p90: latencies[Math.ceil(latencies.length * 0.9) - 1] ?? null },
     errors: rows.filter((row) => row.error).length,
     bars,
     verdict: bars.every((bar) => bar.pass) ? "KEEP" : "DROP",
@@ -85,24 +75,18 @@ function renderReport(result) {
   return [
     "# Auto model pilot: Jev's shadow level (HTPR-9048)",
     "",
-    `${result.rows} Auto chat turns logged, ${result.answered} with a Jev level. Jev guessed the effort level only; Auto's own pick answered every turn.`,
+    `${result.rows} Auto chat turns logged, ${result.answered} with a Jev level. Jev guessed the level only; Auto's own pick answered every turn.`,
     "",
-    `- turns logged: ${result.rows}`,
-    `- Jev answered: ${result.answered} (${pct(result.parsed)})`,
-    `- Jev agrees with Auto: ${pct(result.agreement)}`,
-    `- Jev wanted a higher level: ${result.counts["jev-higher"]} (${pct(share(result.counts["jev-higher"], result.answered))})`,
-    `- Jev wanted a lower level: ${result.counts["jev-lower"]} (${pct(share(result.counts["jev-lower"], result.answered))})`,
-    `- agreement when sure (>= ${CONFIDENT}): ${pct(result.confident.agreement)} over ${result.confident.count} turns`,
-    `- retried turns: ${result.retried.count} (${result.retried.counts["jev-higher"]} Jev wanted higher, ${result.retried.counts["jev-lower"]} lower, ${result.retried.counts.agree} agree)`,
-    `- Jev latency p50 / p90: ${result.latencyMs.p50 ?? "n/a"} / ${result.latencyMs.p90 ?? "n/a"} ms`,
-    `- turns with no Jev answer: ${result.errors}`,
+    `- Jev agrees with Auto: ${pct(share(result.counts.agree, result.answered))}`,
+    `- Jev wanted higher: ${result.counts["jev-higher"]}, lower: ${result.counts["jev-lower"]}`,
+    `- agreement when sure (>= ${CONFIDENT}): ${result.confident}`,
+    `- retried turns: ${result.retried.count} (${result.retried.counts["jev-higher"]} higher, ${result.retried.counts["jev-lower"]} lower, ${result.retried.counts.agree} agree)`,
+    `- Jev latency p50 / p90: ${result.latencyMs.p50 ?? "n/a"} / ${result.latencyMs.p90 ?? "n/a"} ms, no answer on ${result.errors} turns`,
     "",
     "## Verdict",
     ...result.bars.map((bar) => `- ${bar.pass ? "PASS" : "FAIL"} ${bar.name}: ${bar.detail}`),
     "",
-    result.verdict === "KEEP"
-      ? "Keep Jev: it changes Auto's level often enough and the retries point the same way. Next step is our own team only."
-      : "Drop Jev for Auto: it does not clear every bar above, so it is not a better chooser than today's rule.",
+    result.verdict === "KEEP" ? "Keep Jev: it changes Auto's level often enough and the retries point the same way." : "Drop Jev for Auto: it does not clear every bar above, so it is not a better chooser than today's rule.",
     "",
   ].join("\n");
 }
@@ -114,7 +98,7 @@ async function rowsFromDatabase(since, limit) {
   const pool = new Pool({ connectionString, max: 1 });
   try {
     const { rows } = await pool.query(
-      `SELECT "createdAt", "chatSessionId", "feature", "autoTier", "autoModelKey", "jevLevel", "jevTier", "jevConfidence", "jevLatencyMs", "resent", "error" FROM "AutoModelShadow" ${since ? `WHERE "createdAt" >= $1` : ""} ORDER BY "createdAt" ASC LIMIT ${Number(limit) || MIN_ROWS}`,
+      `SELECT "createdAt", "chatSessionId", "autoTier", "jevLevel", "jevTier", "jevConfidence", "jevLatencyMs", "resent", "error" FROM "AutoModelShadow" ${since ? `WHERE "createdAt" >= $1` : ""} ORDER BY "createdAt" ASC LIMIT ${Number(limit) || MIN_ROWS}`,
       since ? [since] : [],
     );
     return rows.map((row) => ({ ...row, createdAt: stamp(row.createdAt) }));
@@ -145,4 +129,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { MIN_ROWS, CONFIDENT, RETRY_SHARE, analyze, renderReport, markRetries, comparisonOf };
+module.exports = { MIN_ROWS, CONFIDENT, analyze, renderReport, markRetries, comparisonOf };
