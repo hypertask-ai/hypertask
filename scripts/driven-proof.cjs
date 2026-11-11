@@ -54,6 +54,10 @@ async function decide({ files, recordDir, head, root = process.cwd() }) {
   return accepted.ok ? { verdict: 'PASS', detail: `seeded ${accepted.featureMap}` } : { verdict: 'FAIL', detail: accepted.reason }
 }
 
+function controlNeeded(files) {
+  return Array.isArray(files) && files.some((file) => file === 'scripts/driven-proof.cjs')
+}
+
 function pullRequestFiles(base, head) {
   const tmp = mkdtempSync(path.join(tmpdir(), 'driven-proof-scope-'))
   try {
@@ -74,7 +78,7 @@ async function main() {
   const head = process.env.HEAD_SHA || ''
   const files = process.argv.includes('--control') ? ['src/pages/api/notifications/getAll.ts'] : pullRequestFiles(process.env.BASE_SHA, head)
   if (process.env.GITHUB_OUTPUT && !process.argv.includes('--control')) {
-    const control = files.some((file) => ['scripts/driven-proof.cjs', 'tests/driven-proof.test.cjs'].includes(file))
+    const control = controlNeeded(files)
     appendFileSync(process.env.GITHUB_OUTPUT, `control_needed=${control}\n`)
   }
   const result = await decide({ files, recordDir: process.env.DRIVEN_PROOF_RECORD, head })
@@ -86,4 +90,4 @@ async function main() {
 
 if (require.main === module) main().catch((error) => { console.error(error); process.exitCode = 1 })
 
-module.exports = { classify, decide, acceptRecord }
+module.exports = { classify, decide, acceptRecord, controlNeeded }

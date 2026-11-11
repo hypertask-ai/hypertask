@@ -2127,7 +2127,7 @@ jobs:
                 echo "::warning::verify-qa matched control exited ${control_status}; evidence is report-only"
               fi
             fi
-            if grep -Eq '^(scripts/driven-proof\.cjs|tests/driven-proof\.test\.cjs)$' "$VERIFY_QA_CHANGED_FILES"; then
+            if grep -Eq '^scripts/driven-proof\.cjs$' "$VERIFY_QA_CHANGED_FILES"; then
               VERIFY_QA_NAMED_JOURNEY=inbox-cycle VERIFY_QA_OUT=verify-qa-premerge/driven-control \
                 timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
             fi

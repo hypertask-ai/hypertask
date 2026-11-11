@@ -3,7 +3,7 @@ const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
 const test = require('node:test')
-const { decide, classify } = require('../scripts/driven-proof.cjs')
+const { decide, classify, controlNeeded } = require('../scripts/driven-proof.cjs')
 
 const root = path.join(__dirname, '..')
 const head = 'a'.repeat(40)
@@ -90,4 +90,14 @@ test('report-only check reuses real seeded evidence, checks failed producers, an
   assert.equal(policy.driven_proof.report_only, true)
   assert.equal(policy.required_checks.contexts.includes('driven-proof'), false)
   assert.match(readFileSync(path.join(root, 'docs/ci.md'), 'utf8'), /Docs: `docs\/\*\*` and any Markdown file outside `src\/`/)
+  const smoke = workflow.jobs['browser-smoke-flags'].steps.find((step) => step.id === 'smoke')
+  assert.match(smoke.run, /grep -Eq '\^scripts\/driven-proof\\\.cjs\$'/)
+  assert.doesNotMatch(smoke.run, /tests\/driven-proof\.test\.cjs/)
+})
+
+test('a test-only edit does not ask for a seeded control the heavy lane will not produce', () => {
+  assert.equal(controlNeeded(['tests/driven-proof.test.cjs']), false)
+  assert.equal(controlNeeded(['tests/driven-proof.test.cjs', 'docs/ci.md']), false)
+  assert.equal(controlNeeded(['scripts/driven-proof.cjs']), true)
+  assert.equal(controlNeeded(['scripts/driven-proof.cjs', 'tests/driven-proof.test.cjs']), true)
 })
