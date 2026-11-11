@@ -137,7 +137,13 @@ for (const height of ["287", "286.6666666666667"]) {
 
 test("ticket description HTML uses the same node view and retains saved dimensions", async (context) => {
   await withMedia(context, imageHtml("430", "286.6666666666667"), async ({ editor, updates, loadImage }) => {
+    const image = document.querySelector("img");
+    assert.ok(image.classList.contains("rounded-[4px]"), "inline screenshot corners must use the shared 4px design token while loading");
+    assert.equal(image.getAttribute("src"), source);
     await loadImage();
+    assert.ok(image.classList.contains("rounded-[4px]"), "inline screenshot corners must remain 4px after loading");
+    assert.equal(image.style.width, "430px");
+    assert.equal(image.style.height, "286.6666666666667px");
     assert.equal(String(editor.state.doc.nodeAt(imagePosition).attrs.width), "430");
     assert.equal(String(editor.state.doc.nodeAt(imagePosition).attrs.height), "286.6666666666667");
     assert.equal(updates.length, 0, "opening saved media should not dirty the document");

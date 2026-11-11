@@ -384,7 +384,7 @@ export const ResizableMediaNodeView = ({
             src={normalizeImageSource(node.attrs.src)}
             onError={() => setImageFailed(true)}
             ref={resizableImgRef as any}
-            className={`rounded-lg ${isLoading ? "opacity-50" : ""}`}
+            className={`rounded-[4px] ${isLoading ? "opacity-50" : ""}`}
             alt={node.attrs.alt || node.attrs.src}
             style={{
               width: `${currentWidth}px`,
