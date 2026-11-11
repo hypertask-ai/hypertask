@@ -1,104 +1,83 @@
 # AI search test set (HTPR-9012)
 
-`scripts/rag-eval.cjs` scores Hypertask AI search against this set and prints
-recall@10, MRR@10, nDCG@10, how often a deleted ticket comes back, and how often
-the deleted canary leaks. It measures only. Nothing here changes the product.
+This is a report-only, offline replay of production retrieval code. It is not a
+live Turbopuffer benchmark or a measurement of production embedding quality.
 
-## What is in the set
+## Dataset
 
-- `corpus.json` — every ticket on board 15 (Hypertask Product), captured from
-  `hypertask task list --project 15`: ticket number, title, status and the
-  description as plain text, with links and email addresses removed and capped
-  at 1,200 characters because this repository is public. Board 15 only, so no
-  client text.
-- `queries.json` — 153 query and answer pairs.
-  - 2 duplicate pairs, taken from the board's own duplicate tickets: HTPR-8996
-    against HTPR-8945, and HTPR-7844 against HTPR-8027.
-  - 148 paraphrase pairs written from a ticket's title and body. The query is
-    how a person would describe the problem, the answer is that ticket.
-  - 3 deleted canary probes (below).
-- `canaries` inside `corpus.json` — three synthetic rows marked `Deleted`
-  (`CANARY-1` to `CANARY-3`). Real soft-deleted rows cannot be exported, so
-  these probe whether a deleted row is ever returned. They contain no board or
-  client content.
-- `vectors.json` — int8 vectors of every document and every query, recorded so
-  scoring runs offline with no key.
-- `baseline.json` — the numbers recorded on the ticket. Scoring fails when a
-  number falls below its floor.
+The original board-15 snapshot is unchanged: 173 tickets, 150 answer queries
+(2 duplicate links and 148 paraphrases), plus 3 synthetic deleted-ticket probes.
+Titles and capped descriptions came from board 15 only; links and email addresses
+were removed. No client boards are exported. The board had insufficient duplicate,
+comment-reference and chat-citation examples, so paraphrases supplement them.
+The canaries contain invented text, not exported deleted tickets.
 
-Board 15 has no ticket whose comments cite a chat answer, and only two live
-duplicate pairs, so those two sources are smaller than the ticket assumed. The
-paraphrase pairs carry the set.
+`vectors.json` contains saved, quantized `Xenova/all-MiniLM-L6-v2` vectors, not
+production OpenAI embeddings. Its fixture hash must match corpus and queries;
+missing or stale vectors are errors. The harness never calls a paid model.
 
-## How each mode mirrors production
+## Production code, fixture-backed boundaries
 
-The three modes are the three ways the app can retrieve past tickets:
+`scripts/rag-eval/production.cjs` transpiles and executes the current repository's
+complete production modules, without extracting or rewriting their functions:
 
-- `keyword` — BM25 with the same field weights production uses in
-  `buildTaskBm25RankBy` (`src/utils/controllers/turbopuffer/turbopufferHelper.ts`):
-  title x4, ticket number x2, search text x1, k1 1.2, b 0.75, prefix match on
-  the last query token. Tokenising, ticket-number parsing and the exact-ticket
-  pin come from production code (`src/utils/controllers/search/rankHits.ts`),
-  so a change there moves these numbers.
-- `semantic` — cosine over vectors of the same search text production embeds,
-  truncated at 4,000 characters.
+- `rag`: `retrieveBoardKnowledge`, including metadata filtering, result assembly,
+  limits, and its calls to `searchTasks` and `searchComments`.
+- `search`: `searchTasks` with Normal status, the underlying ticket search
+  retrieval primitive. This is not the full MCP HTTP handler.
+- Both execute production ticket parsing, status exclusion, exact-ticket lookup,
+  exact-hit pinning, normalization and Turbopuffer query construction.
 
-Production embeds with `openai/text-embedding-3-small`. That model is not
-reachable from a runner or from CI today: the Vercel gateway answers 403 to this
-host, and the repository `OPENAI_API_KEY` resolves empty on branch runs. The
-committed vectors are therefore `Xenova/all-MiniLM-L6-v2`. Same ranking shape,
-same metrics, different model. To re-record with the production model, delete
-`vectors.json` and run `--write-baseline` with `RAG_EVAL_EMBED_KEY` set to a
-funded key. The floors in `baseline.json` move when that happens, which is
-expected.
-- `hybrid` — reciprocal rank fusion (k 60, top 50 each) of the two lists above,
-  the same shape as `rerank_by: ["RRF"]` in production.
+Only external boundaries are substituted: the board lookup returns board 15,
+usage logging does nothing, the embedding HTTP boundary returns saved vectors,
+and Turbopuffer executes plans against the snapshot. Unknown dependencies, filter
+operators and ranking operators throw rather than connect to a real service.
+The replay has no production credentials or database connection.
 
-`search` filters to status Normal, which is what `hypertask_search_tasks` does.
-`rag` passes no status filter, which is what `rag_retrieval` does today, so the
-deleted leak numbers show the real gap until HTPR-9014 lands.
+The fixture backend interprets production Sum/Product/BM25 weights and filters.
+It approximates Turbopuffer BM25 (k1 1.2, b 0.75), cosine ANN and RRF (k 60).
+These backend algorithms are approximations; production field weights, status
+policy, candidate limits and exact-match behavior are not duplicated.
 
-## Run it
+Modes:
+
+- `keyword`: production's keyword spending route, without embeddings.
+- `hybrid`: production's ANN + BM25 plan and fusion.
+- `semantic`: diagnostic ablation of that same plan, executing only its ANN
+  branch. Production exact-ticket lookup/pinning still applies.
+
+Saved 384-dimensional query vectors are zero-padded at the embedding boundary
+so production's 1536-dimensional response validation runs unchanged. Zero padding
+does not change cosine similarity. This does not make them OpenAI embeddings.
+
+Mutation controls change the actual production source in memory: removing RAG
+status exclusions must expose a deleted canary; zeroing production task-search
+weights must lose a known keyword answer. A detached copy of retrieval policy
+would fail these controls.
+
+## Reports and limitations
 
 ```bash
-node scripts/rag-eval.cjs                 # table from the committed vectors
-node scripts/rag-eval.cjs --check-baseline # fails below a recorded floor
-node scripts/rag-eval.cjs --check-set      # fixtures only
+node --test tests/rag-search-eval.test.cjs
+node scripts/rag-eval.cjs --check-set
+node scripts/rag-eval.cjs --output rag-search-report.json
 ```
 
-CI runs the harness tests, `--check-set` and `--check-baseline` on every change
-that touches search, the RAG code, or this folder. Scoring needs no network and
-no key because the vectors are committed. A `workflow_dispatch` run of the
-`AI evals` workflow re-records the baseline and prints the vectors.
+Run these only in GitHub-hosted CI, not on the VPS. AI evals runs on every PR and
+every production push. Each run publishes a step-summary table and the
+`rag-search-report` artifact containing all six surface/mode measurements.
+Recall@10, reciprocal rank, nDCG and deleted-hit rates are informational; no score
+floor blocks changes. Invalid fixtures or broken harness behavior still fail.
 
-## The recorded baseline (2026-11-10)
+The former committed score-floor baseline measured copied retrieval rules and
+is removed. Use the corrected GitHub artifact and ticket's baseline instead.
 
-| surface | mode | recall@10 | MRR@10 | nDCG@10 | deleted in top 10 | deleted canary leak |
-|---|---|---|---|---|---|---|
-| rag | keyword | 0.993 | 0.943 | 0.956 | 0.02 | 1 |
-| rag | semantic | 0.987 | 0.895 | 0.918 | 0.027 | 1 |
-| rag | hybrid | 0.987 | 0.938 | 0.95 | 0.027 | 1 |
-| search | keyword | 0.993 | 0.943 | 0.956 | 0 | 0 |
-| search | semantic | 0.987 | 0.895 | 0.918 | 0 | 0 |
-| search | hybrid | 0.987 | 0.938 | 0.95 | 0 | 0 |
+There are no comment documents in this snapshot. Comment search runs against an
+empty namespace, so comment relevance, comment/task competition, access control,
+live index freshness, provider ranking parity and embedding-model improvements
+are not measured. Those need separate fixtures or live evaluation, not a claim
+that these offline numbers prove production quality.
 
-`rag` is `rag_retrieval`, which passes no status filter, so a deleted ticket
-comes back every time a probe matches. `search` is `hypertask_search_tasks`,
-which filters status Normal and never returns one. That gap is HTPR-9014.
-
-## Refresh the corpus
-
-The corpus is a captured snapshot, not a live read. To refresh it, pull board 15
-again with `hypertask task list --project 15` (100 per page), keep the same shape
-(`ticketNumber`, `title`, `status`, plain text in `text`), drop links and email
-addresses, cap the text at 1,200 characters, and keep the three canaries.
-
-`vectors.json` carries a `fixtures` fingerprint, so a changed corpus or query set
-is refused instead of scored with stale vectors; re-run with
-`RAG_EVAL_EMBED_KEY` set, then `--write-baseline`.
-
-## What this does not cover
-
-The BM25 constants and the RRF step are Turbopuffer's, so they are reimplemented
-here rather than imported. A change to production's ranking weights or fusion
-therefore needs the constants above updated by hand in the same PR.
+To refresh, export board 15 through `hypertask`, retain this privacy filtering,
+and regenerate vectors using an approved source. A changed dataset must receive
+a new fixture hash and an explicitly identified embedding model.
