@@ -12,6 +12,7 @@ import {
   describeTaskWriterStreamFailure,
 } from "@/utils/helperFunctions/describeTaskWriterFailure";
 import { buildTaskWriterRequestScope } from "./taskWriterBoardContext";
+import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
 
 const MAX_TEMPLATE_CHIPS = 8;
 const MAX_TEMPLATE_TEXT_LENGTH = 2_000;
@@ -171,11 +172,13 @@ export async function requestNewTaskWrite({
   instruction,
   chip,
   currentTitle,
+  guaranteeScreenshots,
 }: {
   project: IProject;
   instruction: string;
   chip: NewTaskWriteChip | null;
   currentTitle: string;
+  guaranteeScreenshots: boolean;
 }): Promise<string> {
   const boardAi = project.ai_custom_instructions?.[0];
   const response = await fetch(taskWriterRoute, {
@@ -198,5 +201,11 @@ export async function requestNewTaskWrite({
   const html = await response.text();
   const failure = describeTaskWriterStreamFailure(html);
   if (failure) throw new Error(failure);
+  if (guaranteeScreenshots && html.trim()) {
+    return guaranteeCreationScreenshots(html, {
+      instructions: instruction,
+      attachments: creationScreenshotCandidates([], instruction),
+    });
+  }
   return html;
 }

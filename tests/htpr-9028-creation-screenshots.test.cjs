@@ -131,6 +131,38 @@ test("without the guarantee, a writer that omits a prose URL leaves no img", asy
   }
 });
 
+test("the new task inline writer restores pasted screenshots without relying on model output", async () => {
+  const previousFetch = global.fetch;
+  const { requestNewTaskWrite } = load("src/lib/ai/newTaskWrite.ts", {
+    "@/lib/constants/constants": { EstimateConstants: [], PriorityConstants: [] },
+    "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
+  });
+  try {
+    const omitted = "<h1 id=\"ai-generated-task-title\">Fix</h1><p>Fix the layout.</p>";
+    const write = async (html, instruction, guaranteeScreenshots) => {
+      global.fetch = async () => new Response(html);
+      return requestNewTaskWrite({
+        project: { id: 15 }, instruction, chip: null, currentTitle: "Fix", guaranteeScreenshots,
+      });
+    };
+    const instruction = `Fix this screenshot ${shot}`;
+    const restored = await write(omitted, instruction, true);
+    assert.equal(count(restored), 1);
+    assert.ok(restored.includes(shot));
+    assert.equal(count(await write(restored, instruction, true)), 1);
+    assert.equal(await write(omitted, instruction, false), omitted);
+    assert.equal(await write(omitted, `${instruction}. Link only.`, true), omitted);
+    assert.equal(await write("", instruction, true), "");
+    assert.equal(await write(omitted, "Fix https://example.com/spec.pdf", true), omitted);
+    global.fetch = async () => new Response("Unavailable", { status: 503 });
+    await assert.rejects(requestNewTaskWrite({
+      project: { id: 15 }, instruction, chip: null, currentTitle: "Fix", guaranteeScreenshots: true,
+    }));
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 const base64Png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==";
 
 function createTool(writes, guarantee, message = "Create a task from this screenshot.", images = [png]) {
