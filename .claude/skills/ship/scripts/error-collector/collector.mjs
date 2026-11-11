@@ -14,7 +14,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
-const CONTROL = 'YPER4-354';
+const CONTROL = 'HYCI-291';
 export const PRODUCT_BOARD = 15;
 export const INFRA_BOARD = 11514;
 const LIVE_BOARDS = [PRODUCT_BOARD, INFRA_BOARD];
