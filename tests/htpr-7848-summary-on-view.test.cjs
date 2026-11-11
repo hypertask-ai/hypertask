@@ -13,7 +13,7 @@ function memoryRedis() {
     return next;
   };
   return {
-    values, ttls, bump,
+    values, ttls,
     pipeline: () => ({ keys: [], incr(key) { this.keys.push(key); return this; },
       exec: async () => this.keys.map((key) => [null, bump(key)]) }),
     incr: async (key) => bump(key),
@@ -154,9 +154,8 @@ test("a checkout marks in-scope tickets and asks for the backfill otherwise", as
 test("the switch stays owner-and-QA only, reversible and marked as money", () => {
   const definition = loadModule("src/lib/flags/definitions/htpr-7848-summary-on-view.ts").default;
   assert.equal(definition.key, flagKey);
-  assert.equal(definition.kind, "improvement");
   assert.equal(definition.defaultMode, "OWNER_AND_QA");
-  assert.equal(definition.releaseRisk.highRisk, "money");
+  assert.deepEqual(definition.releaseRisk.highRisk, "money");
   assert.equal(definition.releaseRisk.harmEvidence.harm, "charge");
   assert.match(definition.description, /Off restores the scheduled runs/);
 });

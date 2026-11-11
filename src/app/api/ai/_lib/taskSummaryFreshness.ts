@@ -42,7 +42,7 @@ export async function markTaskSummariesStale(taskIds: number[]): Promise<number>
     const pipeline = redis.pipeline();
     for (const taskId of taskIds) pipeline.incr(staleMarkerKey(taskId));
     const results = await pipeline.exec();
-    return results?.length ?? 0;
+    return results?.filter(([error, value]) => !error && value).length ?? 0;
   } catch (error) {
     console.error("[taskSummaries] Could not mark summaries out of date for tasks", taskIds.length, error);
     return 0;
