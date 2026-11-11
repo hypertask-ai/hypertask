@@ -5,6 +5,7 @@ import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr
 import { HTPR_8960_BORDER_ONLY_SELECT_FLAG } from "@/lib/flags/definitions/htpr-8960-border-only-select";
 import { HTPR_8970_CALM_CARDS_FLAG } from "@/lib/flags/definitions/htpr-8970-calm-cards";
 import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
+import { HTPR_9026_CARD_PEOPLE_FLAG } from "@/lib/flags/definitions/htpr-9026-card-people";
 import { ALL_CARD_PARTS, cardPartsView } from "@/lib/kanban/cardParts";
 import { useCardParts } from "@/hooks/General/useCardParts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -121,7 +122,9 @@ const KanbanTaskCard = ({
   const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
   const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG);
   const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
+  const cardPeople = useFlag(HTPR_9026_CARD_PEOPLE_FLAG);
   const savedParts = useCardParts();
+  const showPeople = !cardSettings || !cardPeople || savedParts.people;
   const card = cardPartsView(task, blockingUser, cardSettings ? savedParts : ALL_CARD_PARTS);
   const subTasks = <CardSubTasks subTasks={card.subTasks} currentSetting={currentSetting} onClick={onSubtaskClick} />;
   return (
@@ -130,7 +133,7 @@ const KanbanTaskCard = ({
     tabIndex={0}
     id={`task-${task.id}`}
     className={cn(
-      "outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1",
+      "outline-none rounded-[4px] xs:border-[1px] md:border-none xs:border-light-black-border-1",
       cardOverflowClamp && "min-w-0 max-w-full w-full",
       calm && "rounded-[4px]",
     )}
@@ -197,8 +200,8 @@ const KanbanTaskCard = ({
         _count={card.commentCount}
         notifications={card.notifications}
         ticketNumber={card.ticketNumber}
-        assignees={assignedUsers}
-        agentAssignees={agentAssignees}
+        assignees={showPeople ? assignedUsers : []}
+        agentAssignees={showPeople ? agentAssignees : []}
         countNotifications={card.notificationCount}
         countSubtasks={card.subTaskCount}
         subTaskSetting={currentSetting}
@@ -232,7 +235,7 @@ const KanbanTaskCard = ({
         taskLabels={card.taskLabels}
         hasDraft={hasDraft}
         blockingUser={card.blockingUser}
-        agents={agentAssignees}
+        agents={showPeople ? agentAssignees : []}
         cardOverflowClamp={cardOverflowClamp}
       />
       {calm ? <div className="contents [&>div]:gap-1 [&>div>div]:gap-1 [&_span]:!text-micro [&_span]:leading-4">{subTasks}</div> : subTasks}

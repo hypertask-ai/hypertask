@@ -16,22 +16,22 @@ const cn = loader({
   "../api/global": {},
 })("src/utils/undoActions/helperFuncs.ts").cn;
 const empty = () => null;
-const partKeys = ["ticketNumber", "inboxIcon", "comments", "subTasks", "priority", "size", "dueDate", "tags", "staleness", "blockedEdge"];
+const partKeys = ["people", "ticketNumber", "inboxIcon", "comments", "subTasks", "priority", "size", "dueDate", "tags", "staleness", "blockedEdge"];
 
 test("the flag ships at Owner + QA as a feature with small risk", () => {
   const { key, kind, defaultMode, releaseRisk } = flag.default;
   assert.deepEqual([key, kind, defaultMode, releaseRisk.risk], [flagKey, "feature", "OWNER_AND_QA", "small"]);
 });
 
-const defaultOn = ["ticketNumber", "inboxIcon", "tags"];
+const defaultOn = ["people", "ticketNumber", "inboxIcon", "tags"];
 
-test("no saved setting, or junk, means the default card: number, inbox icon and tags on, the rest off", () => {
+test("no saved setting, or junk, keeps People, number, inbox icon and tags on", () => {
   assert.deepEqual(parts.CARD_PARTS.map(({ key }) => key), partKeys);
   for (const raw of [undefined, null, "all", [], 3]) {
     const shown = parts.parseCardParts(raw);
     assert.deepEqual(partKeys.filter((key) => shown[key]).sort(), [...defaultOn].sort(), `raw ${JSON.stringify(raw)}`);
   }
-  assert.ok(Object.values(parts.parseCardParts({})).every((shown) => shown === false), "a saved object is kept as saved");
+  assert.ok(Object.entries(parts.parseCardParts({})).every(([key, shown]) => shown === (key === "people")), "legacy saved objects keep People visible");
   const allOff = parts.parseCardParts({ ...parts.EMPTY_CARD_PARTS, comments: true });
   assert.deepEqual(partKeys.filter((key) => allOff[key]), ["comments"], "saved choices beat the defaults");
   const saved = parts.parseCardParts({ priority: true, size: "yes", name: true });
@@ -40,14 +40,14 @@ test("no saved setting, or junk, means the default card: number, inbox icon and 
   assert.equal(saved.size, false);
 });
 
-function renderCard({ enabled, saved }) {
+function renderCard({ enabled, saved, peopleEnabled = false }) {
   const seen = {};
   const capture = (name) => (props) => {
     seen[name] = props;
     return React.createElement("section", { "data-part": name }, props.staleClock ?? props.children);
   };
   const Card = loader({
-    "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
+    "@/hooks/useFlag": { useFlag: (key) => (key === flagKey && enabled) || (key === "htpr-9026-card-people" && peopleEnabled) },
     "@/hooks/General/useCardParts": { useCardParts: () => parts.parseCardParts(saved) },
     "@/utils/undoActions/helperFuncs": { cn },
     "@/lib/flags/keys": {},
@@ -67,7 +67,7 @@ function renderCard({ enabled, saved }) {
   };
   const blocker = { id: 9, displayName: "Valentin" };
   const html = renderToStaticMarkup(React.createElement(Card, {
-    task, project: {}, currentSetting: "Card", assignedUsers: [{ id: 7 }], agentAssignees: [], blockingUser: blocker,
+    task, project: {}, currentSetting: "Card", assignedUsers: [{ id: 7 }], agentAssignees: [{ id: "agent-1" }], blockingUser: blocker,
     active: false, hover: false, hasDraft: false,
   }));
   return { html, seen, task, blocker };
@@ -283,4 +283,36 @@ test("toggling a switch updates the board at once and posts the whole card setti
   assert.equal(client.getQueryData(["user-preferences"]).cardParts.dueDate, true, "optimistic before the save returns");
   await pending;
   assert.deepEqual(posts, [["/api/users/preferences", { cardParts: { ...parts.DEFAULT_CARD_PARTS, dueDate: true } }]]);
+});
+
+test("People off hides both assignee kinds in both rows, without hiding the name or tags", () => {
+  const { html, seen, task } = renderCard({ enabled: true, peopleEnabled: true, saved: { people: false, tags: true } });
+  assert.ok(html.includes("Name stays"));
+  assert.deepEqual(seen.top.assignees, []);
+  assert.deepEqual(seen.top.agentAssignees, []);
+  assert.deepEqual(seen.tags.agents, []);
+  assert.equal(seen.tags.taskLabels, task.taskLabels);
+});
+
+test("People stays visible for legacy preferences, enabled choices and either flag off", () => {
+  for (const options of [
+    { enabled: true, peopleEnabled: true, saved: { tags: true } },
+    { enabled: true, peopleEnabled: true, saved: { people: true } },
+    { enabled: true, peopleEnabled: false, saved: { people: false } },
+    { enabled: false, peopleEnabled: true, saved: { people: false } },
+  ]) {
+    const { seen } = renderCard(options);
+    assert.deepEqual(seen.top.assignees, [{ id: 7 }]);
+    assert.deepEqual(seen.top.agentAssignees, [{ id: "agent-1" }]);
+    assert.deepEqual(seen.tags.agents, [{ id: "agent-1" }]);
+  }
+});
+
+test("People false survives saving and a fresh preference read, then can be restored", async () => {
+  const api = preferencesApi();
+  for (const people of [false, true]) {
+    const next = { ...parts.DEFAULT_CARD_PARTS, people };
+    assert.equal((await api.post({ cardParts: next })).status, 200);
+    assert.equal(parts.parseCardParts((await api.get()).body.settings.cardParts).people, people);
+  }
 });
