@@ -17,6 +17,10 @@ function intakeSection(sections) {
     || sections?.find((item) => sectionTitle(item) !== "Done");
 }
 
+function taskSearch(projectId, status, search) {
+  return `/tasks?project_id=${projectId}&status=${status}&search=${encodeURIComponent(search)}&limit=100`;
+}
+
 // Independent of the PostHog receiver, credentials, queries and incident parser.
 async function api(fetchImpl, token, path, body, key) {
   const response = await fetchImpl(`${APP}/api/mcp${path}`, {
@@ -36,7 +40,7 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env[BOA
   }
   let existing;
   for (const status of ["Normal", "Archive", "Deleted"]) {
-    const page = await api(fetchImpl, token, `/tasks?project_id=${FACTORY_BOARD}&status=${status}&search=${encodeURIComponent(FAILURE_TITLE)}&limit=100`);
+    const page = await api(fetchImpl, token, taskSearch(FACTORY_BOARD, status, FAILURE_TITLE));
     if (!Array.isArray(page.tasks)) throw new Error("Failure ticket lookup returned no tasks");
     existing = page.tasks.find((task) => task.title === FAILURE_TITLE);
     if (existing) break;
@@ -108,7 +112,7 @@ export async function runCanary({ fetchImpl = fetch, token = process.env[BOARD_T
   if (triggered.status !== 500) throw new Error(`Production error-test returned HTTP ${triggered.status}, expected 500`);
   let fallbackIssueId;
   while (now() < deadline) {
-    const page = await api(fetchImpl, token, `/tasks?project_id=15&status=Normal&search=${marker}&limit=100`);
+    const page = await api(fetchImpl, token, taskSearch(15, "Normal", marker));
     if (!Array.isArray(page.tasks)) throw new Error("Nightly canary lookup returned no tasks");
     // A legacy error reporter's ticket is not proof of PostHog issue ingestion.
     let ticket = page.tasks.find((task) => task.description?.includes(marker) && task.description.includes("PostHog issue ID: <code>") && /posthog-alert:issue_(?:created|reopened):/.test(task.description));
@@ -119,7 +123,7 @@ export async function runCanary({ fetchImpl = fetch, token = process.env[BOARD_T
         fallbackIssueId = await findCanaryIssue({ fetchImpl, apiKey, marker, deadline, now });
       }
       if (fallbackIssueId) {
-        const fallback = await api(fetchImpl, token, `/tasks?project_id=${FACTORY_BOARD}&status=Normal&search=${fallbackIssueId}&limit=100`);
+        const fallback = await api(fetchImpl, token, taskSearch(FACTORY_BOARD, "Normal", fallbackIssueId));
         if (!Array.isArray(fallback.tasks)) throw new Error("Canary fallback lookup returned no tasks");
         const receipt = new RegExp(`<p>posthog-dispatch-fallback:issue:${fallbackIssueId}:[0-9a-f-]{36}<\\/p>`);
         ticket = fallback.tasks.find((task) => receipt.test(task.description ?? ""));
