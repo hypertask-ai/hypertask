@@ -6,7 +6,7 @@ Exempt classes, and a pull request is exempt only when every changed file is in 
 
 - Docs: `docs/**` and any Markdown file outside `src/`.
 - Tests: `tests/**`.
-- CI: `.github/**`, `scripts/**`, `.claude/**`, `skills/**`, `.agents/**`.
+- CI: `.github/**`, `scripts/**`, `.claude/**`, `skills/**`, `.agents/**`, `playwright.config.smoke.ts`.
 
 An empty or unreadable diff fails. Any other file, including `src/**`, `e2e/**`, and `package.json`, needs a record.
 

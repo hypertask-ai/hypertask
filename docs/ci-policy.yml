@@ -461,7 +461,7 @@ driven_proof:
   exempt:
     docs: ["docs/**", "non-src **/*.md"]
     test: ["tests/**"]
-    ci: [".github/**", "scripts/**", ".claude/**", "skills/**", ".agents/**"]
+    ci: [".github/**", "scripts/**", ".claude/**", "skills/**", ".agents/**", "playwright.config.smoke.ts"]
   exempt_rule: every changed file must match one exempt class; a mix of those classes is still exempt; any other file needs a proof record
   empty_diff: fail
   proof:

@@ -379,6 +379,7 @@ export async function runTaggedJourneys({ base, journey, outDir }, execute = spa
       HT_QA_JOURNEYS: '1',
       HT_QA_TIER: '',
       HT_QA_EXPECTED_PLAN: 'Free',
+      VERIFY_QA_SCREENSHOTS: '1',
       PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,
     },
     encoding: 'utf8',

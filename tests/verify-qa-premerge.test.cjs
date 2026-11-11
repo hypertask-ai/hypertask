@@ -108,18 +108,41 @@ test('tagged runner passes selected IDs, PR base and opt-in to Playwright and ev
       assert.equal(options.env.HT_QA_JOURNEYS, '1')
       assert.equal(options.env.HT_QA_TIER, '')
       assert.equal(options.env.HT_QA_EXPECTED_PLAN, 'Free')
+      assert.equal(options.env.VERIFY_QA_SCREENSHOTS, '1')
       assert.equal(options.cwd, process.cwd())
       fs.writeFileSync(options.env.PLAYWRIGHT_JSON_OUTPUT_NAME, JSON.stringify({ suites: [{ specs: statuses.map((status, i) => ({
         tags: [`id:${['open-task', 'edit-description'][i]}`],
-        tests: [{ results: [{ status }] }],
+        tests: [{ results: [{ status, attachments: [{ contentType: 'image/png', path: path.join(outDir, 'test-results', `${i}.png`) }] }] }],
       })) }] }))
       return { status: exit }
     })
     assert.equal(result.verdict, verdict)
+    assert.deepEqual(result.screenshots, statuses.map((_, i) => path.join('test-results', `${i}.png`)))
     assert.deepEqual(result.steps.map((step) => step.name), ['open-task', 'edit-description'])
     assert.deepEqual(result.steps.map((step) => step.pass), ['open-task', 'edit-description'].map((_, i) => statuses[i] === 'passed'))
   }
   await assert.rejects(runTaggedJourneys({ base: 'http://127.0.0.1:3100', journey: ['login'], outDir }, () => ({ error: new Error('timed out') })), /journey runner: timed out/)
+})
+
+test('premerge journeys capture successful screenshots without changing other smoke projects', () => {
+  for (const enabled of ['', '1']) {
+    const child = spawnSync(process.execPath, ['-e', `
+      const { loadModule } = require('./tests/helpers/loadModule.cjs')
+      const config = loadModule(${JSON.stringify(path.resolve('playwright.config.smoke.ts'))}).default
+      console.log(JSON.stringify(config.projects.map(project => ({
+        name: project.name, screenshot: project.use?.screenshot ?? config.use.screenshot,
+      }))))
+    `], { encoding: 'utf8', env: {
+      ...process.env, BASE_URL: 'http://127.0.0.1:3100', BROWSER_SMOKE_PR: '', SMOKE_POSTDEPLOY: '',
+      VERIFY_QA_SCREENSHOTS: enabled,
+    } })
+    assert.equal(child.status, 0, child.stderr)
+    const projects = JSON.parse(child.stdout)
+    assert.ok(projects.some((project) => project.name === 'journeys'))
+    for (const project of projects) {
+      assert.equal(project.screenshot, enabled === '1' && project.name === 'journeys' ? 'on' : 'only-on-failure', project.name)
+    }
+  }
 })
 
 test('unmatched, unsupported and tied diffs write UNREACHABLE without loading a browser or fixture', (t) => {

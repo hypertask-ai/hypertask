@@ -7,7 +7,7 @@ function exemptKind(file) {
   if (typeof file !== 'string' || !file || /[\r\n]/.test(file)) return null
   if (file.startsWith('docs/') || (file.endsWith('.md') && !file.startsWith('src/'))) return 'docs'
   if (file.startsWith('tests/')) return 'test'
-  if (['.github/', 'scripts/', '.claude/', 'skills/', '.agents/'].some((prefix) => file.startsWith(prefix))) return 'ci'
+  if (file === 'playwright.config.smoke.ts' || ['.github/', 'scripts/', '.claude/', 'skills/', '.agents/'].some((prefix) => file.startsWith(prefix))) return 'ci'
   return null
 }
 

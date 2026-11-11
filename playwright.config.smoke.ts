@@ -53,7 +53,7 @@ export default defineConfig({
       testMatch: /journeys\.spec\.ts/,
       dependencies: ['journeys-setup'],
       timeout: 45_000,
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], screenshot: process.env.VERIFY_QA_SCREENSHOTS === '1' ? 'on' : 'only-on-failure' },
     },
     // Only the tests tagged @mobile (open board, open task, create task) ,
     // see e2e/smoke/journeys.spec.ts. Same Chromium pin as "Mobile" above.

@@ -29,6 +29,8 @@ async function check(recordDir, options = {}) {
 
 test('docs, tests, and CI pass without a drive; runtime and unknown diffs do not', async () => {
   assert.equal((await check(null, { files: ['docs/ci.md', 'tests/driven-proof.test.cjs', '.github/workflows/ci-tests.yml', 'scripts/driven-proof.cjs'] })).detail, 'exempt: ci, docs, test')
+  assert.equal((await check(null, { files: ['playwright.config.smoke.ts'] })).detail, 'exempt: ci')
+  assert.equal((await check(null, { files: [...files, 'playwright.config.smoke.ts'] })).verdict, 'FAIL')
   assert.equal(classify(['src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx']).exempt, false)
   assert.equal(classify(['README.md']).kinds.join(','), 'docs')
   assert.equal(classify(['src/app/wiki/agents/agents.md']).exempt, false)
