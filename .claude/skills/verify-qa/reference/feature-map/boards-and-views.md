@@ -65,14 +65,10 @@ Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
 
 ### Bulk archive selected cards
 
-With `htpr-9066-bulk-archive` enabled, create 50 owned fixtures in one test-board
-column. Shift-click to select them, then press Ctrl+E. Record the screen and
-request timing: one `/api/tasks/bulk-archive` request, all 50 hidden within five
-seconds, and no return during a stale/background board refresh or after reload.
-Repeat with Running-only disabled and enabled. Check failed cards are selected
-and named; Undo restores only confirmed archives. CI covers a failed save,
-foreign/deleted IDs, duplicate requests, flag-off and refused agent requests.
-Single-card archive and flag-off users keep their existing archive path.
+With `htpr-9066-bulk-archive` on, select 50 owned fixtures in one test-board column and press Ctrl+E.
+Record the screen: one `/api/tasks/bulk-archive` request, all 50 hidden within five seconds, none back
+after a stale refresh or reload, with Running-only off and on. Failed cards stay selected and named.
+Flag-off users keep the existing per-card path.
 
 ### Bulk move between boards
 
