@@ -273,10 +273,13 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     },
     projectPrefixAlias: { findMany: async ({ where }) => { aliasQueries++; return aliases.filter(row => matches(row, where)); } },
     taskNumberAlias: { findMany: async ({ where }) => moveAliases.filter(row => matches(row, where)) },
-    $queryRaw: async (_strings, ticketNumber) => { rawQueries.push(String(ticketNumber)); return tasks
-      .filter(row => (row.ticketNumber ?? "").toLowerCase() === String(ticketNumber).toLowerCase())
-      .sort((left, right) => left.projectId - right.projectId || left.id - right.id)
-      .map(row => ({ id: row.id })); },
+    $queryRaw: async (strings, ticketNumber) => {
+      rawQueries.push({ text: Array.isArray(strings) ? strings.join("?") : String(strings), value: String(ticketNumber) });
+      return tasks
+        .filter(row => (row.ticketNumber ?? "").toLowerCase() === String(ticketNumber).toLowerCase())
+        .sort((left, right) => left.projectId - right.projectId || left.id - right.id)
+        .map(row => ({ id: row.id }));
+    },
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -969,7 +972,9 @@ test("round 3: MCP prefix history needs the flag, keeps legacy prefixes, and ID-
 test("round 4: an indexed miss does not scan Task again", async () => {
   const f = lookups();
   assert.equal(await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "UNKNOWN-123" }), null);
-  assert.deepEqual(f.rawQueries, ["UNKNOWN-123"]);
+  assert.equal(f.rawQueries.length, 1);
+  assert.match(f.rawQueries[0].text, /lower\("ticketNumber"\) = lower\(\?\)/);
+  assert.equal(f.rawQueries[0].value, "UNKNOWN-123");
   assert.deepEqual(f.taskQueries.filter(where => where.ticketNumber !== undefined), [], "an unknown number must not repeat the case-insensitive Task scan");
 });
 
@@ -977,13 +982,14 @@ test("round 4: a wildcard identifier keeps the old case-insensitive match", asyn
   const indexed = lookups({ prefixAliases: [] });
   const legacy = lookups({ enabled: false, prefixAliases: [] });
   for (const number of ["NEW_123", "TEAM%A-1", "OLD\\-123"]) {
+    const resolved = await indexed.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number });
+    assert.match(indexed.rawQueries.at(-1).text, /lower\("ticketNumber"\) LIKE lower\(\?\)/, `${number} must keep the wildcard predicate`);
     assert.deepEqual(
-      await indexed.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number }),
+      resolved,
       await legacy.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number }),
       `${number} must resolve the way it did before the index`,
     );
   }
-  assert.deepEqual(indexed.rawQueries, [], "LIKE wildcards must not be treated as an exact indexed match");
 });
 
 test("round 4: a candidate rechecks the ticket number before it is returned", async () => {

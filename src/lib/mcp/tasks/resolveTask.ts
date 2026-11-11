@@ -14,14 +14,20 @@ const LIKE_WILDCARD = /[\\%_]/;
 export const needsIlikeSemantics = (ticketNumber: string) => LIKE_WILDCARD.test(ticketNumber);
 
 export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string): Promise<number[] | null> => {
-  if (needsIlikeSemantics(ticketNumber)) return null;
   try {
-    const rows = await prisma.$queryRaw<{ id: number }[]>`
-      SELECT id FROM "Task"
-      WHERE lower("ticketNumber") = lower(${ticketNumber})
-      ORDER BY "projectId" ASC, id ASC
-      LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
-    `;
+    const rows = needsIlikeSemantics(ticketNumber)
+      ? await prisma.$queryRaw<{ id: number }[]>`
+          SELECT id FROM "Task"
+          WHERE lower("ticketNumber") LIKE lower(${ticketNumber})
+          ORDER BY "projectId" ASC, id ASC
+          LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
+        `
+      : await prisma.$queryRaw<{ id: number }[]>`
+          SELECT id FROM "Task"
+          WHERE lower("ticketNumber") = lower(${ticketNumber})
+          ORDER BY "projectId" ASC, id ASC
+          LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
+        `;
     return rows.map((row) => row.id);
   } catch {
     return null;
