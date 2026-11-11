@@ -370,6 +370,7 @@ const TiptapCreateTaskModal = () => {
           instruction,
           chip,
           currentTitle: getCurrentTitle(),
+          guaranteeScreenshots,
         });
         if (latestProjectIdRef.current !== projectForContext.id) {
           throw new Error("The board changed while writing. Please write again.");
@@ -407,6 +408,7 @@ const TiptapCreateTaskModal = () => {
     [
       applyTaskWriterTitle,
       getCurrentTitle,
+      guaranteeScreenshots,
       handleChange,
       projectAssignees,
       projectForContext,
