@@ -227,7 +227,8 @@ export async function POST(request: NextRequest) {
 
     const sectionResult = await getSectionForTask(
       target_project_id,
-      target_section_id
+      target_section_id,
+      user.id
     );
     if (sectionResult.error) {
       return NextResponse.json(
