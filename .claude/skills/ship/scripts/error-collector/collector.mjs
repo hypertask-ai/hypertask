@@ -457,7 +457,8 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   await checkpoint();
   let held = 0;
   const sections = new Map();
-  for (const [fp, group] of Object.entries(state.pending)) {
+  const filing = Object.entries(state.pending).sort(([, left], [, right]) => Number(right.board === PRODUCT_BOARD) - Number(left.board === PRODUCT_BOARD));
+  for (const [fp, group] of filing) {
     if (signal.aborted) break;
     try {
       let found = search(fp, group.board, env);
