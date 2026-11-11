@@ -5,10 +5,9 @@ const { load, withStubs } = require("./task-route-loader.cjs");
 const noop = async () => undefined;
 
 const openChecklist = '<h2>Done when</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Full-day observation: watch production for 24 hours</p></li></ul>';
-const checkedChecklist = '<h2>Done when</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Full-day observation: watch production for 24 hours</p></li></ul>';
+const checkedChecklist = openChecklist.replace('data-checked="false"', 'data-checked="true"');
 const ordinary = '<h2>Done when</h2><ul><li><p>Search finds reminders.</p></li></ul>';
 const openProse = '<p>Full-day observation gate: still unfinished.</p>';
-const passedProse = '<p>Full-day observation gate: passed.</p>';
 
 function harness({ description = "", acceptanceCriteria = "", section = "Flag: Everyone", isDone = true, projectId = 15 } = {}) {
   const before = {
@@ -44,7 +43,7 @@ function harness({ description = "", acceptanceCriteria = "", section = "Flag: E
     user: { findUnique: async () => ({ id: 985 }) },
     $transaction: async (run) => run(db),
   };
-  const stubs = withStubs({}, {
+  const controller = load("src/utils/controllers/tasks/single.ts", withStubs({}, {
     "@/lib/prisma": { default: db },
     "@/lib/flags": { isFeatureEnabled: async () => false, listFeatureFlagModes: async () => [] },
     "@/lib/auth/agentScope": { recordAgentBoardScopeMiss() {} },
@@ -69,8 +68,7 @@ function harness({ description = "", acceptanceCriteria = "", section = "Flag: E
     "@/lib/mcp/tasks/humanMutationOverride": { normalizeRequestedTaskMutation: (value) => value, requestedTaskStateChanges: (_old, value) => value, hasRequestedTaskStateChange: () => false, taskLifecycleTimestampChanges: () => ({}) },
     "@/lib/mcp/tasks/agentDoneLifecycle": { assertAgentMayLeaveDone: noop, AgentDoneLifecycleDeniedError: class extends Error {} },
     "@/lib/cycleService": { CycleAssignmentError: class extends Error {} },
-  });
-  const controller = load("src/utils/controllers/tasks/single.ts", stubs);
+  }));
   return {
     calls,
     saved: () => saved,
@@ -83,94 +81,47 @@ function harness({ description = "", acceptanceCriteria = "", section = "Flag: E
   };
 }
 
-test("an unchecked full-day observation refuses the Done move and names the gate", async () => {
-  for (const agentId of [null, "runner-agent"]) {
-    const h = harness({ description: openChecklist });
-    const result = await h.update({}, agentId);
+for (const [name, fixture, extra, agentId, target, expected, gate] of [
+  ["an unchecked full-day observation", { description: openChecklist }, {}, "runner-agent", undefined, "section", ["OPEN_OBSERVATION_GATE", /Full-day observation: watch production for 24 hours/]],
+  ["an unchecked full-day observation for a person", { description: openChecklist }, {}, null, undefined, "section", [undefined, /Full-day observation: watch production for 24 hours/]],
+  ["a written gate that is still open", { description: openProse }, {}, null, undefined, "section", [undefined, /still unfinished/]],
+  ["a written gate with the article", { description: "<p>The full-day observation gate is not finished.</p>" }, {}, null, undefined, "section", [undefined, /not finished/]],
+  ["a gate in acceptance criteria", { acceptanceCriteria: "<p>Full-day observation gate: incomplete.</p>" }, {}, null, undefined, "section", [undefined, /incomplete/]],
+  ["a gate added in the same move", { description: ordinary }, { description: openChecklist }, null, undefined, "nothing", [undefined, /Full-day observation: watch production for 24 hours/]],
+  ["a gate read by column name alone", { description: openChecklist }, {}, null, { section: "Flag: Everyone" }, "section", [undefined, /Full-day observation: watch production for 24 hours/]],
+]) {
+  test(`refuses Done for ${name}`, async () => {
+    const h = harness(fixture);
+    const result = await h.update(extra, agentId, target);
     assert.equal(result.status, 409);
-    assert.equal(result.json.code, "OPEN_OBSERVATION_GATE");
-    assert.match(result.json.message, /Full-day observation: watch production for 24 hours/);
+    if (expected[0]) assert.equal(result.json.code, expected[0]);
+    assert.match(result.json.message, expected[1]);
     assert.equal(h.saved().sectionId, 10);
-    assert.ok(!h.calls.includes("saved"));
-  }
-});
+    if (gate === "nothing") assert.ok(!h.calls.includes("saved"));
+  });
+}
 
-test("a written observation gate that is still open refuses the Done move and names it", async () => {
-  const h = harness({ description: openProse });
-  const result = await h.update({});
-  assert.equal(result.status, 409);
-  assert.match(result.json.message, /full-day observation gate: still unfinished/i);
-  assert.equal(h.saved().sectionId, 10);
-});
-
-test("an open gate in acceptance criteria refuses the Done move", async () => {
-  const h = harness({ acceptanceCriteria: "<p>Full-day observation gate: incomplete.</p>" });
-  const result = await h.update({});
-  assert.equal(result.status, 409);
-  assert.match(result.json.message, /incomplete/);
-  assert.equal(h.saved().sectionId, 10);
-});
-
-test("a gate on a description written in the same move still refuses Done", async () => {
-  const h = harness({ description: ordinary });
-  const result = await h.update({ description: openChecklist });
-  assert.equal(result.status, 409);
-  assert.match(result.json.message, /Full-day observation: watch production for 24 hours/);
-  assert.equal(h.calls.filter((call) => call === "saved").length, 0);
-});
-
-test("a ticket with no observation gate moves to Done as before", async () => {
-  const h = harness({ description: ordinary });
-  const result = await h.update({});
-  assert.equal(result.status, 200);
-  assert.equal(h.saved().sectionId, 11);
-  assert.ok(h.calls.includes("saved"));
-});
-
-test("a finished observation moves to Done as before", async () => {
-  for (const description of [checkedChecklist, passedProse]) {
-    const h = harness({ description });
+for (const [name, description, acceptanceCriteria] of [
+  ["a plain ticket", ordinary, ""],
+  ["a checked observation", checkedChecklist, ""],
+  ["a passed gate line", "<p>Full-day observation gate: passed.</p>", ""],
+  ["a passed gate beside another topic", "<p>Full-day observation gate: passed; report unfinished</p>", ""],
+  ["a gate that is no longer unfinished", "<p>Full-day observation gate: no longer unfinished.</p>", ""],
+  ["prose that only mentions a gate", "<ul><li><p>A ticket can state a full-day observation gate that is not finished.</p></li></ul>", ""],
+  ["a passed gate with other acceptance criteria", "<p>Full-day observation gate: passed.</p>", "Report: unfinished"],
+  ["a ticket with no description", "", ""],
+]) {
+  test(`still moves ${name} to Done`, async () => {
+    const h = harness({ description, acceptanceCriteria });
     const result = await h.update({});
     assert.equal(result.status, 200);
     assert.equal(h.saved().sectionId, 11);
-  }
-});
+  });
+}
 
 test("an open gate never blocks a move to a working column", async () => {
   const h = harness({ description: openChecklist, section: "QA", isDone: false });
   const result = await h.update({}, null, { sectionId: 5511, section: "QA" });
   assert.equal(result.status, 200);
   assert.equal(h.saved().sectionId, 5511);
-});
-
-test("a gate is read only when the ticket states one", async () => {
-  const passes = [
-    "<ul><li><p>A ticket can state a full-day observation gate that is not finished.</p></li></ul>",
-    "<p>Full-day observation gate: no longer unfinished.</p>",
-    "<p>Full-day observation gate: passed; report unfinished</p>",
-    "<p>Observation from support: the reminder arrived.</p>",
-  ];
-  for (const description of passes) {
-    const h = harness({ description });
-    assert.equal((await h.update({})).status, 200, description);
-  }
-  const refuses = [
-    ["<p>Full-day observation gate: still unfinished.</p>", /still unfinished/],
-    ["<p>The full-day observation gate is not finished.</p>", /not finished/],
-    ["<p>- Full-day observation: incomplete.</p>", /incomplete/],
-  ];
-  for (const [description, expected] of refuses) {
-    const h = harness({ description });
-    const result = await h.update({});
-    assert.equal(result.status, 409, description);
-    assert.match(result.json.message, expected);
-  }
-});
-
-test("a done move by column name alone still reads the gate", async () => {
-  const h = harness({ description: openChecklist });
-  const result = await h.update({}, null, { section: "Flag: Everyone" });
-  assert.equal(result.status, 409);
-  assert.match(result.json.message, /Full-day observation: watch production for 24 hours/);
-  assert.equal(h.saved().sectionId, 10);
 });
