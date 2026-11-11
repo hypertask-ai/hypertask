@@ -5,10 +5,7 @@ set +x
 set -euo pipefail
 for dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
   [ -d "$dir" ] || continue
-  case ":${PATH-}:" in
-    *":$dir:"*) ;;
-    *) PATH="$dir${PATH:+:$PATH}" ;;
-  esac
+  case ":${PATH-}:" in *":$dir:"*) ;; *) PATH="$dir${PATH:+:$PATH}" ;; esac
 done
 export PATH
 umask 077

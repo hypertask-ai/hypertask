@@ -6,10 +6,7 @@ description: Set up one Hypertask agent login on this machine with one command. 
 # Set up one agent
 
 One command on a clean machine, from the repo root:
-
-```sh
-.claude/skills/setup-agents/scripts/setup-agents --name "HT Growth Lead"
-```
+`.claude/skills/setup-agents/scripts/setup-agents --name "HT Growth Lead"`.
 
 `/setup-runner <n>` is the runner shortcut: it picks a free runner number and calls
 the same script with `--name "Runner <n>" --identity "RUNNER <n>"`. There is no
