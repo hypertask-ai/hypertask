@@ -44,4 +44,7 @@ regexes = [
   # generic rule reads each digest as a key. They are cost-note pins, not credentials.
   '''d81492e3ad427ad3c756a6a9df025a18ce34c8bf15e826af7843ac301b086548''',
   '''f3674c8615f24685280d686182c0eb898a780fd28735c7d75799b7fbd532482c''',
+  # HYCI-254: sha256 call digest in paid-api-cost-notes.json. The path
+  # githubLinkAuth.ts contains Auth, so the generic rule reads the digest as a key.
+  '''6733e7778b3d8693e30cd26563956cc65d74fd041a697094e8288278fc97945f''',
 ]
