@@ -1,0 +1,98 @@
+{
+  "description": "<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>",
+  "nested": "<h2>Done when</h2><ul><li><p>Every action works from the keyboard in all three places.</p><ul><li><p>Board keys still work.</p><ul><li>Nested keys work.</li></ul></li></ul></li></ul>",
+  "substitutions": [
+    [
+      "<id>",
+      "985"
+    ],
+    [
+      "- PASS: <case> -> <nonempty-file>",
+      "- PASS: doctor -> doctor.png"
+    ],
+    [
+      "<exact acceptance bullet>",
+      "Every action works from the keyboard in all three places."
+    ],
+    [
+      "<exact breakage bullet>",
+      "Cursor lost after reload. Check the box."
+    ],
+    [
+      "- NOT-APPLICABLE: <another exact breakage bullet> -> <reason of 10 characters or more>\n",
+      ""
+    ],
+    [
+      "<nonempty-file>",
+      "result.json"
+    ],
+    [
+      "## What usually breaks",
+      "- PASS: Board keys still work. -> result.json\n\n## What usually breaks"
+    ]
+  ],
+  "invalid": [
+    [
+      "- PASS: Board keys still work. -> result.json",
+      "",
+      "missing Acceptance item: Board keys still work."
+    ],
+    [
+      "Board keys still work. -> result.json",
+      "Board keys still work. -> absent.json",
+      "evidence"
+    ],
+    [
+      "- TRIED: Cursor lost after reload. Check the box. -> result.json",
+      "",
+      "missing What usually breaks item: Cursor lost"
+    ],
+    [
+      "TRIED: Cursor lost after reload. Check the box. -> result.json",
+      "NOT-APPLICABLE: Cursor lost after reload. Check the box. -> no",
+      "needs a reason"
+    ]
+  ],
+  "structured": [
+    [
+      "Structured keys work.",
+      "Structured keys work."
+    ],
+    [
+      "- Structured keys work.",
+      "Structured keys work."
+    ],
+    [
+      "1. Structured keys work.",
+      "Structured keys work."
+    ],
+    [
+      "<ul><li>Structured keys work.</li></ul>",
+      "Structured keys work."
+    ],
+    [
+      "<p>Structured keys work.</p>",
+      "Structured keys work."
+    ],
+    [
+      "<p>Keys: Structured keys work.</p>",
+      "Keys: Structured keys work."
+    ],
+    [
+      "<p>Structured keys work.</p><ul><li>Board keys still work.</li></ul>",
+      "Structured keys work."
+    ]
+  ],
+  "localized": [
+    "<p><strong>Akzeptanzkriterien:</strong></p><ul><li>Board keys still work.</li></ul>",
+    "## Akzeptanzkriterien\n- Board keys still work.\n",
+    "<p><strong>Critères d’acceptation:</strong></p><ul><li>Board keys still work.</li></ul>",
+    "## Critères d’acceptation\n- Board keys still work.\n",
+    "<p><strong>Critères d'acceptation:</strong></p><ul><li>Board keys still work.</li></ul>",
+    "## Critères d'acceptation\n- Board keys still work.\n",
+    "<p><strong>Criterios de aceptación:</strong></p><ul><li>Board keys still work.</li></ul>",
+    "## Criterios de aceptación\n- Board keys still work.\n",
+    "<p><strong>Acceptatiecriteria:</strong></p><ul><li>Board keys still work.</li></ul>",
+    "## Acceptatiecriteria\n- Board keys still work.\n"
+  ]
+}

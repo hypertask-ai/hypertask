@@ -1,0 +1,11 @@
+#!/bin/sh
+case "$1:$2" in
+  pr:view)
+    if [ "$7" = title ]; then
+      echo 'HTPR-7766 [BUGFIX] Fixture'
+    else
+      printf '{"number":42,"title":"HTPR-7766 [BUGFIX] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"production"}\n' "$FIXTURE_MERGE_SHA"
+    fi ;;
+  api:*/status) echo 'Ignored Build Step' ;;
+  *) exit 1 ;;
+esac

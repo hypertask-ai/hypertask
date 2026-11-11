@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+path = Path(os.environ['FIXTURE_ROOT']) / 'activity.json'
+rows = json.loads(path.read_text())
+rows.append(dict(id=str(len(rows)), agentId=os.environ.get('ACTOR', 'reviewer-id'),
+                 agentName=os.environ.get('ACTOR_NAME', 'Runner 2'), runId='reviewer-run',
+                 createdAt=f'2026-11-09T01:00:{len(rows):02d}Z', text=sys.argv[-1]))
+path.write_text(json.dumps(rows))
+print('recorded')

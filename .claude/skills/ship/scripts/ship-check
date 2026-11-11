@@ -22,7 +22,7 @@
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
-#   ship-check proof <T>         evidence, complete acceptance coverage and authenticated independent drive rerun
+#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
 #   ship-check rerun <T> <script> <run>  explicitly execute the inspected merged drive script and record its result
 #   ship-check done <T>          ticket is in the done column its own board names
 #   ship-check cleaned <T>       only this session's recorded branches and worktrees are gone

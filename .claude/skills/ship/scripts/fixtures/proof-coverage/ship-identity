@@ -1,0 +1,2 @@
+#!/bin/sh
+printf '%s\tfixture\n' "${ACTOR_NAME:-Runner 2}"

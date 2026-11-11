@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import time
@@ -402,9 +403,11 @@ esac
         (folder / 'pr').write_text('42')
         (output / 'result.json').write_text('{"ok":true}')
         (output / 'doctor.png').write_bytes(b'screenshot fixture')
-        page = '.claude/skills/verify-qa/reference/feature-map/' + 'fixture.md'
-        (self.repo / page).parent.mkdir(parents=True)
-        (self.repo / page).write_text('## Gotchas\n\n- Cursor lost after reload.\n  Check the box.\n\n### Proof\n- Not a gotcha.\n')
+        fixtures = SCRIPT.parent / 'fixtures/proof-coverage'
+        cases = json.loads((fixtures / 'cases.json').read_text())
+        shutil.copytree(fixtures / 'checkout', self.repo, dirs_exist_ok=True)
+        shutil.copytree(fixtures / 'dependency', self.repo / 'node_modules/proof-fixture')
+        page = '.claude/skills/verify-qa/reference/feature-map/fixture.md'
         ops = ('pr-drain-picker', 'runner-pickup')
         recipes = SCRIPT.parents[2] / 'verify-qa/reference/ops-map'
         for name in ops:
@@ -412,43 +415,20 @@ esac
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text((recipes / f'{name}.md').read_text())
         script = 'drive.mjs'
-        (self.repo / '.gitignore').write_text('node_modules/\n')
-        dependency = self.repo / 'node_modules/proof-fixture'
-        dependency.mkdir(parents=True)
-        (dependency / 'package.json').write_text('{"type":"module","exports":"./index.mjs"}')
-        (dependency / 'index.mjs').write_text('export const version = "prepared dependency";\n')
-        (self.repo / 'drive-version.txt').write_text('merged')
-        (self.repo / script).write_text('import assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nimport { version } from "proof-fixture";\nassert.equal(version, "prepared dependency");\nassert.equal(readFileSync("drive-version.txt", "utf8"), "merged");\nassert.equal(process.env.SHIP_CHECKOUT, process.cwd());\nconsole.log("drive reached", process.argv[2]);\nprocess.exit(Number(process.env.DRIVE_EXIT || 0));\n')
         self.run_git('add', '.')
         self.run_git('commit', '-qm', 'proof fixture')
         sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
-        self.write('gh', f'''#!/bin/sh
-case "$1:$2" in
-  pr:view) if [ "$7" = title ]; then echo 'HTPR-7766 [BUGFIX] Fixture'; else echo '{{"number":42,"title":"HTPR-7766 [BUGFIX] Fixture","state":"MERGED","mergeCommit":{{"oid":"{sha}"}},"baseRefName":"production"}}'; fi ;;
-  api:*/status) echo 'Ignored Build Step' ;;
-  *) exit 1 ;;
-esac
-''')
-        self.env['DESCRIPTION'] = '<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>'
+        self.env['FIXTURE_MERGE_SHA'] = sha
+        for command in ('gh', 'vcc'):
+            self.write(command, (fixtures / command).read_text())
+        self.env['DESCRIPTION'] = cases['description']
         activity = self.root / 'activity.json'
         builder = dict(id='builder-note', agentId='builder-id', agentName='Runner 1', runId='builder-run', createdAt='2026-11-09T00:00:00Z', text='Proof builder: PR 42')
-        activity.write_text(json.dumps([builder]))
         self.write('ht', '#!/bin/sh\nexit 10\n')
-        self.write('vcc', '''#!/usr/bin/env python3
-import json, os, sys
-from pathlib import Path
-p = Path(os.environ['FIXTURE_ROOT'])/'activity.json'
-rows = json.loads(p.read_text())
-rows.append(dict(id=str(len(rows)),agentId=os.environ.get('ACTOR','reviewer-id'),agentName=os.environ.get('ACTOR_NAME','Runner 2'),runId='reviewer-run',createdAt=f'2026-11-09T01:00:{len(rows):02d}Z',text=sys.argv[-1]))
-p.write_text(json.dumps(rows))
-print('recorded')
-''')
-        home = self.root / 'home'
-        identity = home / '.agents/skills/ship/scripts/ship-identity'
+        self.env['HOME'] = str(self.root / 'home')
+        identity = Path(self.env['HOME']) / '.agents/skills/ship/scripts/ship-identity'
         identity.parent.mkdir(parents=True)
-        identity.write_text('#!/bin/sh\nprintf "%s\\tfixture\\n" "${ACTOR_NAME:-Runner 2}"\n')
-        identity.chmod(0o755)
-        self.env['HOME'] = str(home)
+        self.write(identity, (fixtures / 'ship-identity').read_text())
         historical = (SCRIPT.parent / 'fixtures/htpr-7766-proof.md').read_text()
         historical = historical.replace('c164a28dfcf6f06f5ef05b6fb9f414f880b3b49d', sha)
         for line in historical.splitlines():
@@ -464,14 +444,9 @@ print('recorded')
         complete = (recipes / 'proof-coverage.md').read_text().split('```text\n')[1].split('```')[0]
         for before, after in [
             ('.claude/skills/verify-qa/reference/feature-map/<page>.md', page),
-            ('<merge-sha>', sha), ('<id>', '985'), ('<YYYY-MM-DD>-qa-run-<n>', run),
+            ('<merge-sha>', sha), ('<YYYY-MM-DD>-qa-run-<n>', run),
             ('<repository-relative .mjs, .py or .sh committed in the merge>', script),
-            ('- PASS: <case> -> <nonempty-file>', '- PASS: doctor -> doctor.png'),
-            ('<exact acceptance bullet>', 'Every action works from the keyboard in all three places.'),
-            ('<exact breakage bullet>', 'Cursor lost after reload. Check the box.'),
-            ('- NOT-APPLICABLE: <another exact breakage bullet> -> <reason of 10 characters or more>\n', ''),
-            ('<nonempty-file>', 'result.json'),
-            ('## What usually breaks', '- PASS: Board keys still work. -> result.json\n\n## What usually breaks')]:
+            *cases['substitutions']]:
             complete = complete.replace(before, after)
         proof.write_text(complete)
         activity.write_text('[]')
@@ -482,11 +457,7 @@ print('recorded')
         self.check('proof', ticket, success=False)
         (output / 'result.json').write_text('{"ok":true}')
         self.assertIn('no independent drive rerun', self.check('proof', ticket, success=False))
-        for before, after, message in [
-            ('- PASS: Board keys still work. -> result.json', '', 'missing Acceptance item: Board keys still work.'),
-            ('Board keys still work. -> result.json', 'Board keys still work. -> absent.json', 'evidence'),
-            ('- TRIED: Cursor lost after reload. Check the box. -> result.json', '', 'missing What usually breaks item: Cursor lost'),
-            ('TRIED: Cursor lost after reload. Check the box. -> result.json', 'NOT-APPLICABLE: Cursor lost after reload. Check the box. -> no', 'needs a reason')]:
+        for before, after, message in cases['invalid']:
             proof.write_text(complete.replace(before, after))
             self.assertIn(message, self.check('proof', ticket, success=False))
         proof.write_text(complete)
@@ -508,7 +479,7 @@ print('recorded')
         (folder / '2026-11-09-qa-run-17/drive-result.log').write_text('altered')
         self.assertIn('evidence changed', self.check('proof', ticket, success=False))
         validate(complete.replace('TRIED: Cursor lost after reload. Check the box. -> result.json', 'NOT-APPLICABLE: Cursor lost after reload. Check the box. -> Read-only change; no cursor behavior affected.'), 18)
-        nested = '<h2>Done when</h2><ul><li><p>Every action works from the keyboard in all three places.</p><ul><li><p>Board keys still work.</p><ul><li>Nested keys work.</li></ul></li></ul></li></ul>'
+        nested = cases['nested']
         self.assertIn('missing Acceptance item: Nested keys work.', self.check('proof', ticket, success=False, DESCRIPTION=nested))
         validate(complete.replace('## What usually breaks', '- PASS: Nested keys work. -> result.json\n\n## What usually breaks'), 19, DESCRIPTION=nested)
         for number, name in enumerate(ops, 20):
@@ -526,17 +497,8 @@ print('recorded')
         self.assertIn('different authenticated agent', self.check('proof', ticket, success=False))
         reviewer = dict(ACTOR='third-agent-id', ACTOR_NAME='Runner 3')
         validate(proof.read_text(), 23, **reviewer)
-        criteria = ['Structured keys work.', '- Structured keys work.', '1. Structured keys work.',
-                    '<ul><li>Structured keys work.</li></ul>', '<p>Structured keys work.</p>',
-                    '<p>Keys: Structured keys work.</p>',
-                    '<p>Structured keys work.</p><ul><li>Board keys still work.</li></ul>']
-        variants = [(dict(ACCEPTANCE=value), 'Keys: Structured keys work.' if 'Keys:' in value else 'Structured keys work.')
-                    for value in criteria]
-        for heading in ['Akzeptanzkriterien', "Critères d’acceptation", "Critères d'acceptation",
-                        'Criterios de aceptación', 'Acceptatiecriteria']:
-            variants.extend((dict(DESCRIPTION=value), 'Board keys still work.') for value in [
-                f'<p><strong>{heading}:</strong></p><ul><li>Board keys still work.</li></ul>',
-                f'## {heading}\n- Board keys still work.\n'])
+        variants = [(dict(ACCEPTANCE=value), expected) for value, expected in cases['structured']]
+        variants.extend((dict(DESCRIPTION=value), 'Board keys still work.') for value in cases['localized'])
         for number, (env, expected) in enumerate(variants, 24):
             with self.subTest(**env):
                 proof.write_text(complete.replace(f'- PASS: {expected} -> result.json', ''))
