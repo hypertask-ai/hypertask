@@ -7,6 +7,7 @@ process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
 function harness() {
   const h = activationHarness();
+  h.mocks["@/utils/controllers/projects/getAllIncludes"] = { projectContentAccessWhere: () => ({}) };
   h.prisma.team.findFirst = async ({ where }: any) => where.stripe_customer_id === "cus_stored"
     ? { id: "team", googleAccount: { userId: 123 } } : null;
   h.prisma.subscriptionPlan = { findFirst: async () => null };
