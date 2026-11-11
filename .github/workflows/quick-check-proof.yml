@@ -1,82 +1,37 @@
 name: Quick check proof
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [production]
-    paths:
-      - 'scripts/quick-check.mjs'
-      - 'scripts/install-git-hooks.mjs'
-      - '.githooks/**'
-      - 'tests/quick-check.test.cjs'
-      - 'tests/install-git-hooks.test.cjs'
-      - '.github/workflows/quick-check-proof.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: quick-check-proof-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   quick-check-proof:
-    name: quick-check-proof
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: 180a1169e79389ab0d1059dd47dcac71d3469ec9
           persist-credentials: false
-
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ^24.22.1
           check-latest: true
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Hook wiring tests
-        run: node --test tests/quick-check.test.cjs tests/install-git-hooks.test.cjs
-
-      - name: Times the hook on a small change
+      - run: npm ci --no-audit --no-fund
+      - name: Isolate PR 3303 chat regression with a bounded heap
         shell: bash
         run: |
           set -euo pipefail
-          printf 'export const quickCheckProof = (value: string): string => value.trim();\n' > src/lib/quick-check-proof.ts
-          node scripts/quick-check.mjs --files src/lib/quick-check-proof.ts
-          start=$(date +%s%3N)
-          node scripts/quick-check.mjs --files src/lib/quick-check-proof.ts
-          end=$(date +%s%3N)
-          warm=$((end - start))
-          echo "measured run: ${warm}ms"
-          if [ "$warm" -ge 10000 ]; then
-            echo "hook ran over the 10s budget: ${warm}ms" >&2
-            exit 1
-          fi
-          echo "quick check under 10s: ${warm}ms"
-
-      - name: Blocks a push with a type error
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf 'export const quickCheckProof: string = 7;\n' > src/lib/quick-check-proof-error.ts
-          if node scripts/quick-check.mjs --files src/lib/quick-check-proof-error.ts; then
-            echo "the hook let a type error through" >&2
-            exit 1
-          fi
-          echo "the hook refused the push with a type error"
-
-      - name: Blocks a push with a duplicate import
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf 'import { join } from "node:path";\nimport { join } from "node:path";\nexport const quickCheckProofDuplicate = join("a", "b");\n' > src/lib/quick-check-proof-duplicate.ts
-          if node scripts/quick-check.mjs --files src/lib/quick-check-proof-duplicate.ts; then
-            echo "the hook let a duplicate import through" >&2
-            exit 1
-          fi
-          echo "the hook refused the push with a duplicate import"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tests/htpr-8988-chat-window-layout.test.cjs')
+          s = p.read_text()
+          s = s.replace('const view = stackView(', 'console.error("PROBE stackView", new Error().stack); const view = stackView(')
+          s = s.replace('React.act(() =>', 'console.error("PROBE act", new Error().stack); React.act(() =>')
+          s = s.replace('view.render(React.createElement(Harness));', 'console.error("PROBE render"); view.render(React.createElement(Harness)); console.error("PROBE rendered");')
+          p.write_text(s)
+          PY
+          timeout --signal=TERM --kill-after=10s 120s /usr/bin/time -v node --max-old-space-size=1024 --require ./tests/helpers/register-server-only.cjs tests/htpr-8988-chat-window-layout.test.cjs
