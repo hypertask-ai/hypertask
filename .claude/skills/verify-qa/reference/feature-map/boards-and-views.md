@@ -63,6 +63,13 @@ Prints PASS/FAIL per step and `board ok`. Loopback only.
 `--break columns` must print `negative control ok`.
 Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
 
+### Bulk archive selected cards
+
+With `htpr-9066-bulk-archive` on, select 50 owned fixtures in one test-board column and press Ctrl+E.
+Record the screen: one `/api/tasks/bulk-archive` request, all 50 hidden within five seconds, none back
+after a stale refresh or reload, with Running-only off and on. Failed cards stay selected and named.
+Flag-off users keep the existing per-card path.
+
 ### Bulk move between boards
 
 With HTPR-8737 enabled for Owner + QA, use two writable boards. On the
