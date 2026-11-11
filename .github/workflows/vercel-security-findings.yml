@@ -2,14 +2,6 @@ name: Vercel security findings
 
 on:
   workflow_dispatch:
-    inputs:
-      ticket:
-        description: Ticket unique index receiving finding states
-        required: true
-      project:
-        description: Hypertask board ID receiving finding states
-        required: false
-        default: "11514"
 
 permissions:
   contents: read
@@ -27,10 +19,7 @@ jobs:
         with:
           node-version: "^24.22.1"
           check-latest: true
-      - name: Read production finding states into the ticket
+      - name: Read production finding states
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
-          TICKET: ${{ inputs.ticket }}
-          BOARD: ${{ inputs.project }}
         run: node .github/scripts/vercel-security-findings.cjs

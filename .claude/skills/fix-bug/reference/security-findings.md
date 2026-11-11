@@ -13,26 +13,38 @@ from a GitHub-hosted runner instead:
 
 ```bash
 gh workflow run vercel-security-findings.yml --repo hypertask-ai/hypertask \
-  --ref production -f ticket=287 -f project=11514
+  --ref production
 ```
 
-Set `ticket` to the receiving ticket's unique index and `project` to its board
-ID. The workflow is production-branch-only and reads the production Vercel
+The workflow is production-branch-only and reads the production Vercel
 project. It follows the same read-only endpoint used by Vercel CLI 65.12.1
 `security vulnerabilities list --status all --environment production`:
 `https://vercel.com/api/omniagent/v1/security-findings`.
 
-Read the receiving ticket's agent activity with `vcc activity list HYCI-287`.
-All pages and statuses are included: open, closed and dismissed. Match a fixed
-warning using its project finding number or finding ID; `resolved-in` records
-its closing commit when Vercel supplies one. Titles, source, descriptions,
-fixes and secret values are deliberately excluded. This is finding-state proof,
-not a request to trigger a new scan or dismiss a warning.
+Find the dispatched run, then read its log once it succeeds:
 
-Actions logs contain counts only. No raw findings are uploaded as artifacts.
+```bash
+gh run list --repo hypertask-ai/hypertask --workflow vercel-security-findings.yml --limit 1
+gh run view <RUN_ID> --repo hypertask-ai/hypertask --log
+```
+
+Only trust a successful run with both `BEGIN COMPLETE PRODUCTION SECURITY
+FINDINGS` and `END COMPLETE PRODUCTION SECURITY FINDINGS` markers. All pages
+and statuses are included: open, closed and dismissed. Match a fixed warning
+using its project finding number or finding ID; `resolved-in` records its
+closing commit when Vercel supplies one. Record the relevant states and full
+Actions run URL on the ticket using your own `vcc activity add` identity.
+
+Actions logs include only validated finding numbers, IDs, status, severity,
+closing commit and a read timestamp. Titles, source, descriptions, fixes and
+secret values are excluded. No raw findings are uploaded as artifacts and
+no MCP credential or ticket writes are needed in Actions. This is finding-state
+proof, not a request to trigger a new scan or dismiss a warning.
+
 An authentication failure, unexpected response or incomplete page sequence
-fails the job rather than reporting zero findings. Check the run once, record
-a recheck time on the ticket, and let the launcher resume; do not watch/poll.
+fails the job without publishing a report rather than reporting zero findings.
+Check the run once, record a recheck time on the ticket, and let the launcher
+resume; do not watch/poll.
 
 ## Strix findings are candidates, not confirmed bugs
 

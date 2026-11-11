@@ -17,7 +17,8 @@ test('secret-bearing reader runs only on the production branch and hosted runner
   const step = job.steps.at(-1);
   assert.equal(step.run, 'node .github/scripts/vercel-security-findings.cjs');
   assert.equal(step.env.VERCEL_TOKEN, '${{ secrets.VERCEL_TOKEN }}');
-  assert.doesNotMatch(source, /upload-artifact|pull_request_target/);
+  assert.deepEqual(Object.keys(step.env), ['VERCEL_TOKEN']);
+  assert.doesNotMatch(source, /upload-artifact|pull_request_target|MCP_TOKEN/);
 });
 
 const finding = (overrides = {}) => ({
@@ -60,39 +61,43 @@ test('refuses denied, challenged, malformed and incomplete responses', async () 
 });
 
 test('reports empty results distinctly and allows only state metadata', () => {
-  assert.match(formatFindings([])[0], /No production findings returned/);
-  const output = formatFindings([finding(), finding({ status: 'open' })]).join('');
+  assert.match(formatFindings([]), /No production findings returned/);
+  const output = formatFindings([finding(), finding({ status: 'open' })]);
   assert.match(output, /#12 01ARZ3NDEKTSV4RRFFQ69G5FAV closed medium resolved-in=a{40}/);
   assert.match(output, /open medium/);
   assert.doesNotMatch(output, /secret-title|secret-description|secret-code/);
   for (const override of [{ findingId: '<script>' }, { status: 'unknown' }, { severity: 'unknown' }, { environment: 'preview' }, { target: { id: 'other-project' } }, { resolvedIn: { commitSha: 'secret' } }]) {
     assert.throws(() => formatFindings([finding(override)]));
   }
-  const chunks = formatFindings(Array.from({ length: 150 }, (_, i) => finding({ number: i + 1 })));
-  assert.ok(chunks.length > 1);
-  assert.ok(chunks.every(chunk => chunk.length <= 5000));
-  assert.equal(chunks.join('').match(/resolved-in=/g).length, 150);
+  const report = formatFindings(Array.from({ length: 150 }, (_, i) => finding({ number: i + 1 })));
+  assert.match(report, /^BEGIN COMPLETE PRODUCTION SECURITY FINDINGS\n/);
+  assert.match(report, /All statuses, 150 findings/);
+  assert.match(report, /\nEND COMPLETE PRODUCTION SECURITY FINDINGS$/);
+  assert.equal(report.match(/resolved-in=/g).length, 150);
 });
 
-test('delivers only validated states to ticket activities and accepts queued writes', async () => {
-  const env = { VERCEL_TOKEN: 'vercel-secret', MCP_TOKEN: 'mcp-secret', TICKET: '287', BOARD: '11514' };
-  for (const status of [200, 201, 202]) {
-    let posts = 0;
-    await main(env, async (url, options) => {
-      if (url instanceof URL) return page([finding()]);
-      assert.equal(url, 'https://app.hypertask.ai/api/mcp/comments');
-      assert.equal(options.method, 'POST');
-      const body = JSON.parse(options.body);
-      assert.equal(body.unique_index, 287);
-      assert.equal(body.project_id, 11514);
-      assert.equal(body.kind, undefined);
-      assert.doesNotMatch(options.body, /secret-title|secret-description|secret-code|vercel-secret|mcp-secret/);
-      posts++;
-      return { status };
-    });
-    assert.equal(posts, 1);
+test('publishes one complete redacted report only after every read validates', async () => {
+  const env = { VERCEL_TOKEN: 'vercel-secret' };
+  const reports = [];
+  let calls = 0;
+  await main(env, async (url, options) => {
+    assert.ok(url instanceof URL);
+    assert.equal(url.origin, 'https://vercel.com');
+    assert.equal(options.method, undefined);
+    assert.equal(reports.length, 0);
+    return calls++ === 0 ? page([finding()], 'next') : page([finding({ number: 8 })]);
+  }, report => reports.push(report));
+  assert.equal(reports.length, 1);
+  assert.match(reports[0], /All statuses, 2 findings/);
+  assert.match(reports[0], /#8 /);
+  assert.doesNotMatch(reports[0], /secret-title|secret-description|secret-code|vercel-secret/);
+  for (const [request, error] of [
+    [async () => page([finding({ status: 'bad' })]), /unexpected finding metadata/],
+    [async url => url.searchParams.has('cursor') ? page([finding({ status: 'bad' })]) : page([finding()], 'next'), /unexpected finding metadata/],
+    [async url => url.searchParams.has('cursor') ? { ok: false, status: 500 } : page([finding()], 'next'), /HTTP 500/],
+    [async () => page([], 'same'), /incomplete pagination/],
+  ]) {
+    await assert.rejects(main(env, request, () => assert.fail('Incomplete results must not be published')), error);
   }
-  await assert.rejects(main({ ...env, TICKET: '287; echo bad' }, async () => assert.fail()), /numeric/);
-  await assert.rejects(main(env, async url => url instanceof URL ? page([finding({ status: 'bad' })]) : assert.fail()), /metadata/);
-  await assert.rejects(main(env, async url => url instanceof URL ? page([]) : { status: 500 }), /delivery: HTTP 500/);
+  await assert.rejects(main({}, async () => assert.fail(), () => assert.fail()), /missing/);
 });
