@@ -34,7 +34,8 @@ function normalizePageRow(row: TurbopufferPageRow): TurbopufferPageRow {
 }
 
 export async function smartPageSearchEnabled(userId: number): Promise<boolean> {
-  return isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, userId);
+  if (await isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, userId)) return true;
+  return false;
 }
 
 export async function searchPagesInTurbopuffer({
