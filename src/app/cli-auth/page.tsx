@@ -10,13 +10,20 @@ import useCurrentUser from '@/hooks/General/useCurrentUserCheckFromCookies';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/utils/undoActions/helperFuncs';
-import logo from '@/assets/hypertaskLogoWhite.png';
+import darkMark from '@/assets/HTC_without_text.png';
+import useDarkMode from '@/hooks/MultiPages/HTC/useDarkMode';
 import {
   POST_CLI_NEXT_REDIRECT_KEY,
   parseSafePostCliRedirect,
   CLI_CALLBACK_WINDOW_NAME,
 } from '@/lib/auth/safeReturnTo';
 import { Copy } from 'lucide-react';
+
+function Mark({ className }: { className?: string }) {
+  const { effectiveTheme } = useDarkMode();
+  const src = effectiveTheme === 'dark' ? '/loginLogoMain.png' : darkMark;
+  return <Image src={src} alt="Hypertask logo" width={47} height={59} className={cn('object-contain', className)} />;
+}
 
 type CliStep = 'consent' | 'loading' | 'error' | 'declined' | 'connected';
 
@@ -45,7 +52,7 @@ function CliAuthCard({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={cn(
-        'w-full max-w-md rounded px-8 py-8 sm:py-10',
+        'w-full max-w-md rounded-[4px] px-8 py-8 sm:py-10',
         'border border-border-light-gray-thin bg-pageBackground shadow-lg'
       )}
     >
@@ -93,7 +100,7 @@ function CopyableField({
           value={value}
           aria-describedby={description ? `${id}-description` : undefined}
           className={cn(
-            'flex-1 min-w-0 rounded border border-border-light-gray-thin',
+            'flex-1 min-w-0 rounded-[4px] border border-border-light-gray-thin',
             'bg-comment-description px-3 py-2.5 text-meta sm:text-content text-white-black font-mono',
             'focus:outline-none focus:border-border-light-gray-thin',
             'select-all'
@@ -102,7 +109,7 @@ function CopyableField({
         <button
           type="button"
           onClick={onCopy}
-          className="shrink-0 rounded border border-border-light-gray-thin px-3 py-2.5 text-content text-white-black hover:bg-hover-active transition-colors"
+          className="shrink-0 rounded-[4px] border border-border-light-gray-thin px-3 py-2.5 text-content text-white-black hover:bg-hover-active transition-colors"
         >
           <Copy className="text-white-black" size={16} strokeWidth={1.75} />
         </button>
@@ -213,13 +220,7 @@ function CliAuthContent() {
       <CliAuthShell>
         <CliAuthCard>
           <div className="flex flex-col items-center text-center space-y-6">
-            <Image
-              src={logo}
-              alt="Hypertask"
-              className="object-contain"
-              width={200}
-              height={28}
-            />
+            <Mark />
             <h1 className="text-heading font-bold text-white-black">
               Authenticating HyperTask CLI
             </h1>
@@ -238,13 +239,7 @@ function CliAuthContent() {
     <CliAuthShell>
       <CliAuthCard>
         <div className="flex flex-col items-stretch text-center space-y-6">
-          <Image
-            src={logo}
-            alt="Hypertask"
-            className="object-contain self-center"
-            width={200}
-            height={28}
-          />
+          <Mark className="self-center" />
           <h1 className="text-heading font-bold text-white-black">
             Authenticating HyperTask CLI
           </h1>
@@ -258,7 +253,7 @@ function CliAuthContent() {
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-full px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
+                className="w-full px-4 py-2.5 rounded-[4px] border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
               >
                 Close
               </button>
@@ -266,12 +261,12 @@ function CliAuthContent() {
           )}
 
           {step === 'error' && error && (
-            <div className="rounded-lg border border-red-500/40 bg-red-950/30 p-4 text-left">
+            <div className="rounded-[4px] border border-red-500/40 bg-red-950/30 p-4 text-left">
               <p className="text-red-200 text-content">{error}</p>
               <button
                 type="button"
                 onClick={handleTryAgain}
-                className="mt-4 w-full px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
+                className="mt-4 w-full px-4 py-2.5 rounded-[4px] bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
               >
                 Try again
               </button>
@@ -292,14 +287,14 @@ function CliAuthContent() {
                 <button
                   type="button"
                   onClick={handleAllow}
-                  className="px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
+                  className="px-4 py-2.5 rounded-[4px] bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
                 >
                   Allow and continue
                 </button>
                 <button
                   type="button"
                   onClick={handleDecline}
-                  className="px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
+                  className="px-4 py-2.5 rounded-[4px] border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
                 >
                   Cancel
                 </button>
@@ -355,14 +350,14 @@ function CliAuthContent() {
                 <button
                   type="button"
                   onClick={handleConnectedContinue}
-                  className="w-full px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
+                  className="w-full px-4 py-2.5 rounded-[4px] bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
                 >
                   Continue to Hypertask
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenCallbackInThisTab}
-                  className="w-full px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
+                  className="w-full px-4 py-2.5 rounded-[4px] border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
                 >
                   I&apos;m on the same device
                 </button>
@@ -404,8 +399,8 @@ const resultSchema = z.object({
 });
 const startSchema = z.object({ id: z.string().uuid(), code: z.string(), expiresAt: z.string().datetime() });
 type Flow = z.infer<typeof resultSchema>;
-const PRIMARY = "w-full py-3 px-6 mb-3 bg-shadcn-primary text-primary-foreground font-medium rounded transition-colors";
-const SECONDARY = "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded transition-colors";
+const PRIMARY = "w-full py-3 px-6 mb-3 bg-shadcn-primary text-primary-foreground font-medium rounded-[4px] transition-colors";
+const SECONDARY = "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded-[4px] transition-colors";
 
 async function request(action: string, body: object): Promise<unknown> {
   const response = await fetch(`/api/cli/device/${action}`, {
@@ -479,7 +474,7 @@ function AgentSignIn() {
     <CliAuthShell>
       <CliAuthCard>
         <div className="flex flex-col items-center text-center">
-          <Image src={logo} alt="Hypertask logo" width={48} height={48} className="object-contain mb-3" />
+          <Mark className="mb-3" />
           <h1 className="text-heading font-semibold mb-2">Sign in an agent</h1>
           <p className="text-content text-text-light-gray mb-6">Create a free board for your agent.</p>
           {error && <p role="alert" className="text-content text-text-light-gray mb-4">{error}</p>}
