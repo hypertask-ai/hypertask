@@ -343,7 +343,7 @@ export async function POST(request: NextRequest) {
         if (getAiModelOptionById(optionId)) return false;
         if (optionId !== AUTO_MODEL_OPTION_ID) return true;
         if (surface === "aiChat" || (surface === "taskWriter" && taskWriterAuto)) return false;
-        return !(savedModelAutoEnabled && surface !== "imageGeneration");
+        return !savedModelAutoEnabled;
       });
 
       if (invalidPreference) {

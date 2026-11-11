@@ -721,7 +721,7 @@ export async function selectTaskWriterModel(args: {
   }
   const namedPickerOption = pickerSelection && pickerSelection !== "auto" ? pickerSelection : null;
   const savedAutoChoiceEnabled = savedModelAutoEnabled && (personalModelOptionId === "auto");
-  const requestAuto = pickerSelection === "auto" || (args.modelOptionId === "auto" && savedModelAutoEnabled);
+  const requestAuto = pickerSelection === "auto" || (args.modelOptionId === "auto" && savedModelAutoEnabled && args.aiFeature && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled));
   const explicitOption = savedModelAutoEnabled && args.aiFeature && !namedPickerOption && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
     ? getAiModelOptionById(args.modelOptionId, haiku55Enabled)
     : undefined;
