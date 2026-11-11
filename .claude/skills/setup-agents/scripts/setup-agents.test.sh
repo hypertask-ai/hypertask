@@ -40,8 +40,7 @@ else:
     def calls(home):
         path = home / 'calls'
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
-    def creds(home):
-        return home / '.config/hypertask-agents/credentials'
+    def creds(home): return home / '.config/hypertask-agents/credentials'
     def must_fail(env, needle, *args, mode=''):
         result = run(dict(env, FAKE_MODE=mode) if mode else env, *args)
         assert result.returncode != 0 and needle in result.stderr, (args, result.returncode, result.stderr)
