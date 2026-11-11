@@ -28,7 +28,7 @@ export type AutoModelShadowTurn = {
   autoModelKey: string | null;
 };
 
-const askJev = async (prompt: string, apiKey: string, tags: AiGatewayTags) => {
+const askJev = (prompt: string, apiKey: string, tags: AiGatewayTags) => {
   const model = resolveGatewayModel(JEV_AUTO_MODEL_SLUG, apiKey);
   const reply = generateText({
     model,
@@ -49,17 +49,9 @@ const askJev = async (prompt: string, apiKey: string, tags: AiGatewayTags) => {
 export async function shadowAutoModelTurn(turn: AutoModelShadowTurn): Promise<void> {
   if (!turn.teamId && turn.projectId === null) return;
   try {
-    const funding = await getTeamGatewayFunding({
-      trustedTeamId: turn.teamId,
-      projectId: turn.projectId,
-      userId: turn.userId,
-    });
+    const funding = await getTeamGatewayFunding({ trustedTeamId: turn.teamId, projectId: turn.projectId, userId: turn.userId });
     if (!funding?.apiKey || funding.source === "customer") return;
-    const signals = autoModelTurnSignals({
-      message: turn.message,
-      history: turn.history,
-      longThreadMessages: AUTO_LONG_THREAD_MESSAGES,
-    });
+    const signals = autoModelTurnSignals({ message: turn.message, history: turn.history, longThreadMessages: AUTO_LONG_THREAD_MESSAGES });
     const autoTier = Math.min(3, tierForFeature(turn.feature) + signals.stepUp);
     const started = Date.now();
     const text = await askJev(buildJevAutoModelPrompt(turn.message), funding.apiKey, {
