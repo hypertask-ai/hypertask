@@ -6,6 +6,7 @@ import { escapeHtml } from "@/utils/htmlEscape";
 import {
   buildDigestEntries,
   DIGEST_VERSION,
+  MAX_CATCHUP_TOPIC_ENTRIES,
   type DigestEntry,
   type ShippedTicket,
 } from "./entries";
@@ -27,6 +28,8 @@ const ALARM_MARKER = "latest-updates-alarm";
 const ALARM_USER_ID = 332;
 const ALARM_CLAIM_SECONDS = 6 * 60 * 60;
 const RUN_CLAIM_SECONDS = 10 * 60;
+const LAST_RUN_KEY = "rocket-digest:last-run";
+const LAST_RUN_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 export type DigestRun = {
   skipped: boolean;
@@ -75,22 +78,32 @@ function digestVersion(body: unknown): number | null {
   return typeof version === "number" ? version : 0;
 }
 
-async function dropOutdatedDigestEntries(): Promise<number> {
+async function outdatedDigestEntryIds(): Promise<number[]> {
   const rows = await prisma.announcments.findMany({ select: { id: true, body: true } });
-  const outdated = rows
+  return rows
     .filter((row) => {
       const version = digestVersion(row.body);
       return version !== null && version < DIGEST_VERSION;
     })
     .map((row) => row.id);
+}
 
-  if (outdated.length) {
-    await prisma.$transaction([
-      prisma.userAnnouncement.deleteMany({ where: { announcementId: { in: outdated } } }),
-      prisma.announcments.deleteMany({ where: { id: { in: outdated } } }),
-    ]);
-  }
+async function dropDigestEntries(outdated: readonly number[]): Promise<number> {
+  if (!outdated.length) return 0;
+  await prisma.$transaction([
+    prisma.userAnnouncement.deleteMany({ where: { announcementId: { in: [...outdated] } } }),
+    prisma.announcments.deleteMany({ where: { id: { in: [...outdated] } } }),
+  ]);
   return outdated.length;
+}
+
+async function recordRun(now: Date): Promise<void> {
+  try {
+    const redis = await getRedis();
+    await redis.set(LAST_RUN_KEY, now.toISOString(), "EX", LAST_RUN_TTL_SECONDS);
+  } catch {
+    return;
+  }
 }
 
 export async function lastDigestRunAt(): Promise<Date | null> {
@@ -103,6 +116,16 @@ export async function lastDigestRunAt(): Promise<Date | null> {
     .filter((value): value is string => typeof value === "string")
     .map((value) => new Date(value))
     .filter((date) => !Number.isNaN(date.getTime()));
+  try {
+    const redis = await getRedis();
+    const recorded = await redis.get(LAST_RUN_KEY);
+    if (recorded) {
+      const date = new Date(recorded);
+      if (!Number.isNaN(date.getTime())) runAt.push(date);
+    }
+  } catch {
+    return newestOf(runAt);
+  }
   return newestOf(runAt);
 }
 
@@ -127,13 +150,17 @@ export async function runRocketDigest({
   now?: Date;
 }): Promise<DigestRun> {
   const since = new Date(now.getTime() - BACKFILL_DAYS * DAY_MS);
-  const cleared = dryRun ? 0 : await dropOutdatedDigestEntries();
-  const announced = await announcedTicketIds();
+  const outdated = await outdatedDigestEntryIds();
+  const announced = await announcedTicketIds(outdated);
   const tickets = await selectShippedTickets(DIGEST_PROJECT_ID, since, now, announced);
-  const entries = buildDigestEntries(tickets);
+  const entries = buildDigestEntries(
+    tickets,
+    outdated.length ? { maxTopics: MAX_CATCHUP_TOPIC_ENTRIES } : {},
+  );
+  let cleared = 0;
   let posted = 0;
 
-  if (!dryRun && entries.length) {
+  if (!dryRun && (entries.length || outdated.length)) {
     if (!(await claim("rocket-digest:run", now, RUN_CLAIM_SECONDS))) {
       return {
         skipped: true,
@@ -141,7 +168,7 @@ export async function runRocketDigest({
         until: now.toISOString(),
         shipped: 0,
         entries: [],
-        cleared,
+        cleared: 0,
         posted: 0,
       };
     }
@@ -149,7 +176,9 @@ export async function runRocketDigest({
       await createAnnouncement({ body: announcementBody(entry, now), createdAt: entry.releasedAt });
       posted += 1;
     }
+    cleared = await dropDigestEntries(outdated);
   }
+  if (!dryRun) await recordRun(now);
 
   return {
     skipped: entries.length === 0,
