@@ -209,44 +209,122 @@ people_content() {
   fi
 }
 BRAIN_RULES=${VCC_BRAIN_RULES:-$HOME/projects/poteto-2-advisor/brain-rules.md}
+BRAIN_LEVELS=(brain-light brain-medium brain-hard brain-extra-hard)
+brain_board_labels() {
+  local out
+  out=$(hypertask labels list --project "$1" --json 2>/dev/null) || return 1
+  jq -r '(.labels // [])[] | (.name? // "") | ascii_downcase | select(test("^brain-(light|medium|hard|extra-hard)$"))' <<< "$out" 2>/dev/null || return 1
+}
+brain_level_nearest() {
+  local wanted=$1 i level want_at=-1
+  shift
+  [ "$#" -gt 0 ] && [ "$wanted" != '' ] || return 1
+  for i in "${!BRAIN_LEVELS[@]}"; do [ "${BRAIN_LEVELS[$i]}" = "$wanted" ] && want_at=$i; done
+  [ "$want_at" -ge 0 ] || return 1
+  for ((i = want_at; i < ${#BRAIN_LEVELS[@]}; i++)); do
+    for level in "$@"; do [ "$level" = "${BRAIN_LEVELS[$i]}" ] && { printf '%s' "$level"; return 0; }; done
+  done
+  for ((i = want_at - 1; i >= 0; i--)); do
+    for level in "$@"; do [ "$level" = "${BRAIN_LEVELS[$i]}" ] && { printf '%s' "$level"; return 0; }; done
+  done
+  return 1
+}
+brain_label_swap() {
+  local from=$1 to=$2 list=$3 item out=''
+  while IFS= read -r item; do
+    item=${item#"${item%%[![:space:]]*}"}
+    item=${item%"${item##*[![:space:]]}"}
+    [ -n "$item" ] || continue
+    if [ "$from" = '*' ]; then
+      case "${item,,}" in brain-*) continue ;; esac
+    elif [ "${item,,}" = "$from" ]; then
+      [ -n "$to" ] || continue
+      item=$to
+    fi
+    out+="${out:+,}$item"
+  done < <(printf '%s\n' "$list" | tr ',' '\n')
+  printf '%s' "$out"
+}
+brain_args_swap() {
+  local from=$1 to=$2 value arg
+  local -a args=("${VCC_ARGS[@]}") final=()
+  local i=0 n=${#args[@]}
+  while [ "$i" -lt "$n" ]; do
+    arg=${args[$i]}
+    case "$arg" in
+      --labels)
+        if [ $((i + 1)) -ge "$n" ]; then final+=(--labels); i=$((i + 1)); continue; fi
+        value=$(brain_label_swap "$from" "$to" "${args[$((i + 1))]}")
+        [ -z "$value" ] || final+=(--labels "$value")
+        i=$((i + 2)) ;;
+      --labels=*)
+        value=$(brain_label_swap "$from" "$to" "${arg#*=}")
+        [ -z "$value" ] || final+=("--labels=$value")
+        i=$((i + 1)) ;;
+      *) final+=("$arg"); i=$((i + 1)) ;;
+    esac
+  done
+  VCC_ARGS=("${final[@]}")
+}
 brain_label_check() {
-  local -a args=("$@")
-  while [ "${#args[@]}" -gt 0 ]; do
-    case "${args[0]}" in
-      --project|--team) args=("${args[@]:2}") ;;
-      --project=*|--team=*|--json|--human) args=("${args[@]:1}") ;;
+  VCC_ARGS=("$@")
+  local -a lead=("$@") brain=()
+  local project='' arg labels='' other_brain=0 item listed='' level present=false to='' can_read=false
+  local -a board=()
+  while [ "${#lead[@]}" -gt 0 ]; do
+    case "${lead[0]}" in
+      --project) project=${lead[1]:-}; lead=("${lead[@]:2}") ;;
+      --project=*) project=${lead[0]#--project=}; lead=("${lead[@]:1}") ;;
+      --team) lead=("${lead[@]:2}") ;;
+      --team=*|--json|--human) lead=("${lead[@]:1}") ;;
       *) break ;;
     esac
   done
-  case "${args[0]:-} ${args[1]:-}" in 'task create'|'tasks create') ;; *) return 0 ;; esac
-  local arg label labels='' other_brain=0
-  local -a brain=()
-  set -- "${args[@]:2}"
+  case "${lead[0]:-} ${lead[1]:-}" in 'task create'|'tasks create') ;; *) return 0 ;; esac
+  set -- "${lead[@]:2}"
   while [ "$#" -gt 0 ]; do
     arg=$1
     case "$arg" in
       --help|-h) return 0 ;;
+      --project) project=${2:-}; [ "$#" -ge 2 ] && shift ;;
+      --project=*) project=${arg#--project=} ;;
       --labels) labels+=",${2:-}"; [ "$#" -ge 2 ] && shift ;;
       --labels=*) labels+=",${arg#*=}" ;;
     esac
     shift
   done
-  local IFS=,
-  for label in $labels; do
-    label=${label#"${label%%[![:space:]]*}"}
-    label=${label%"${label##*[![:space:]]}"}
-    case "${label,,}" in
-      brain-light|brain-medium|brain-hard|brain-extra-hard) brain+=("$label") ;;
+  while IFS= read -r item; do
+    item=${item#"${item%%[![:space:]]*}"}
+    item=${item%"${item##*[![:space:]]}"}
+    [ -n "$item" ] || continue
+    case "${item,,}" in
+      brain-light|brain-medium|brain-hard|brain-extra-hard) brain+=("${item,,}") ;;
       brain-*) other_brain=1 ;;
     esac
-  done
-  [ "${#brain[@]}" -eq 1 ] && [ "$other_brain" = 0 ] && return 0
-  printf 'vcc: task create refused: set exactly one of brain-light, brain-medium, brain-hard or brain-extra-hard in --labels (by name), the cheapest level that can do the work well; unsure between medium and hard, pick medium. How to choose: %s\n' "$BRAIN_RULES" >&2
-  exit 5
+  done < <(printf '%s\n' "$labels" | tr ',' '\n')
+  if [ -n "$project" ] && listed=$(brain_board_labels "$project"); then
+    can_read=true
+    [ -n "$listed" ] && mapfile -t board <<< "$listed"
+  fi
+  if [ "$can_read" = true ] && [ "${#board[@]}" -eq 0 ]; then
+    printf 'vcc: board %s has no brain labels; filing without one\n' "$project" >&2
+    brain_args_swap '*' ''
+    return 0
+  fi
+  if [ "${#brain[@]}" -ne 1 ] || [ "$other_brain" != 0 ]; then
+    printf 'vcc: task create refused: set exactly one of brain-light, brain-medium, brain-hard or brain-extra-hard in --labels (by name), the cheapest level that can do the work well; unsure between medium and hard, pick medium. How to choose: %s\n' "$BRAIN_RULES" >&2
+    exit 5
+  fi
+  [ "$can_read" = true ] || return 0
+  for level in "${board[@]}"; do [ "$level" = "${brain[0]}" ] && present=true; done
+  [ "$present" = false ] || return 0
+  to=$(brain_level_nearest "${brain[0]}" "${board[@]}") || return 0
+  [ -n "$to" ] || return 0
+  printf 'vcc: board %s offers no %s; using %s\n' "$project" "${brain[0]}" "$to" >&2
+  brain_args_swap "${brain[0]}" "$to"
 }
 people_content "$@"
 question_comment "$@"
-brain_label_check "$@"
 
 completion_move() {
   local section='' project='' destination='' target_section='' out arg checker="$HOME/.agents/skills/ship/scripts/ship-check"
@@ -299,6 +377,7 @@ esac
 HT_TOKEN="$(cat "$TOKEN_FILE")"
 [ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
 export HT_TOKEN
+brain_label_check "$@"
 completion_move "$@"
 FILING_GATE=${VCC_FILING_GATE:-$HOME/.local/share/house-rules/skills/hypertask-triage/scripts/filing-gate}
 create_project() {
@@ -464,7 +543,7 @@ review_move() {
 if [ "${1:-}" != activity ]; then
   blocker_entry "$@"
   review_move "$@"
-  exec /usr/bin/env -S hypertask "$@"
+  exec /usr/bin/env -S hypertask "${VCC_ARGS[@]}"
 fi
 
 fail() { echo "vcc activity: $*" >&2; exit 1; }
