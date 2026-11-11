@@ -7,8 +7,17 @@ const test = require("node:test");
 const source = readFileSync(path.join(__dirname, "..", "next.config.js"), "utf8");
 
 for (const smoke of [false, true]) {
-  for (const posthog of [false, true]) {
-    test(`build memory limits survive smoke=${smoke} and PostHog=${posthog}`, async () => {
+  for (const [posthog, webpack] of [[false, false], [false, true], [true, false], [true, true]]) {
+    test(`build memory limits survive smoke=${smoke}, PostHog=${posthog} and webpack=${webpack}`, async (t) => {
+      const previous = { WEBPACK: process.env.WEBPACK, TURBOPACK: process.env.TURBOPACK };
+      t.after(() => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      });
+      process.env.WEBPACK = webpack ? "1" : "0";
+      process.env.TURBOPACK = webpack ? "0" : "1";
       const configModule = { exports: {} };
       let wrapped = false;
       const env = {
@@ -60,7 +69,7 @@ for (const smoke of [false, true]) {
       assert.equal(config.experimental.parallelServerBuildTraces, smoke);
       assert.equal(config.experimental.parallelServerCompiles, undefined);
       assert.equal(config.productionBrowserSourceMaps, true);
-      assert.deepEqual(config.outputFileTracingExcludes, posthog ? { "*": [".next/server/**/*.map"] } : undefined);
+      assert.deepEqual(config.outputFileTracingExcludes, posthog && webpack ? { "*": [".next/server/**/*.map"] } : undefined);
       assert.deepEqual(config.serverExternalPackages, [
         "isomorphic-dompurify", "jsdom", "pusher", "aws-sdk",
         "stripe", "posthog-node", "@modelcontextprotocol/sdk", "mcp-handler",
