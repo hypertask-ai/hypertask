@@ -1,9 +1,11 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { loader } = require('./htpr-6927-fixtures.cjs')
+const { load } = require('./helpers/flag-files.cjs')
+const { stubFlags } = load('tests/helpers/flags.ts')
 
 const CACHE_FLAG = 'htpr-7042-neon-work-avoidance'
-const TEST_FLAG = 'scope-fixture'
+const TEST_FLAG = 'htpr-7203-mcp-flat-schema'
 
 function harness() {
   let load
@@ -13,24 +15,29 @@ function harness() {
   const authScopes = []
   const overrides = {
     react: { cache: fn => fn },
-    '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [
-      { key: CACHE_FLAG, defaultMode: 'EVERYONE' },
-      { key: TEST_FLAG, defaultMode: 'EVERYONE' },
-    ] },
+    '@/lib/flags/definitions': stubFlags({
+      [CACHE_FLAG]: { defaultMode: 'EVERYONE' },
+      [TEST_FLAG]: { defaultMode: 'EVERYONE' },
+    }),
     '@/lib/prisma': { __esModule: true, default: {
       featureFlag: {
         findMany: async () => { snapshots++; return [{ key: CACHE_FLAG, mode: 'EVERYONE' }, { key: TEST_FLAG, mode }] },
         findUnique: async ({ where }) => ({ mode: where.key === TEST_FLAG ? mode : 'EVERYONE' }),
       },
       user: { findUnique: async () => ({ email: 'member@example.com' }) },
+      agent: { findUnique: async () => ({ permissions: { role: 'write' } }) },
     } },
-    '@/lib/redis': { getRedis: async () => ({
-      mget: async () => { redisCalls.push('mget'); return [null, null, null] },
-      eval: async () => { redisCalls.push('eval'); return 'OK' },
-    }) },
+    '@/lib/redis': { getRedis: async () => {
+      redisCalls.push('connect')
+      return {
+        mget: async () => { redisCalls.push('mget'); return [null, null, null] },
+        eval: async () => { redisCalls.push('eval'); return 'OK' },
+      }
+    } },
     './tools': { MCP_TOOLS: [] },
     './board-access-catalog': { boardAccessCatalog: async tools => tools },
     './tools/agent-presence.tool': { getAgentPresenceTool: async () => ({ name: 'presence' }) },
+    './tools/chat-inbox.tool': { appendAgentChatTools: async tools => tools },
     './utils/actAsAgentCatalog': { actAsAgentAvailable: async () => false },
     './listQueryContract': { resolvePortableTools: tools => tools },
     './consolidated-tools': { selectMcpTools: tools => tools },
@@ -92,7 +99,7 @@ for (const endpoint of ['/mcp', '/sse', '/message']) {
 test('human flag reads still use the shared cache; the zero-command agent check has a positive control', async () => {
   const h = harness()
   assert.equal(await h.humanFlag(), true)
-  assert.deepEqual(h.redisCalls, ['mget', 'eval'])
+  assert.deepEqual(h.redisCalls, ['connect', 'mget', 'eval'])
   h.redisCalls.length = 0
   h.setMode('EVERYONE')
   assert.deepEqual(await (await h.call()).json(), { enabled: true })
