@@ -64,6 +64,7 @@ function loadRoute(tasks = []) {
     "@/lib/agents/visibility": {
       accessibleAgentWhere: () => ({}),
     },
+    "@/lib/tasks/redactWaitingActivities": { scrubStoredTaskSummary: async (content) => content },
     "@/lib/mcp/tasks/mappers": {
       mapMcpTaskLabel: () => ({}),
       mapTaskAssignee: () => undefined,
