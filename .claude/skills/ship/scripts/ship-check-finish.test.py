@@ -407,7 +407,7 @@ esac
         cases = json.loads((fixtures / 'cases.json').read_text())
         shutil.copytree(fixtures / 'checkout', self.repo, dirs_exist_ok=True)
         shutil.copytree(fixtures / 'dependency', self.repo / 'node_modules/proof-fixture')
-        page = '.claude/skills/verify-qa/reference/feature-map/fixture.md'
+        page = next((fixtures / 'checkout').rglob('fixture.md')).relative_to(fixtures / 'checkout').as_posix()
         ops = ('pr-drain-picker', 'runner-pickup')
         recipes = SCRIPT.parents[2] / 'verify-qa/reference/ops-map'
         for name in ops:
