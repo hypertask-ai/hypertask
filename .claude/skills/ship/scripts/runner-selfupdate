@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # runner-selfupdate: refresh installed runner code from production, or install its five-minute timer.
 set -euo pipefail
-LIVE=${RUNNER_SELFUPDATE_LIVE:-$HOME/projects/ht-skills-live}
+STATE=${RUNNER_SELFUPDATE_STATE:-$HOME/.local/state/runner-selfupdate}
+SOURCE=${RUNNER_SELFUPDATE_SOURCE:-$HOME/projects/ht-skills-live}
+LIVE=${RUNNER_SELFUPDATE_LIVE:-$STATE/production}
 LIB=${RUNNER_SELFUPDATE_LIB:-$HOME/.local/lib/hypertask/runner-pickup}
 DISPATCH=${RUNNER_SELFUPDATE_DISPATCH:-$HOME/.claude/skills/runners/scripts/runner-dispatch}
 UNITS=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
-STATE=${RUNNER_SELFUPDATE_STATE:-$HOME/.local/state/runner-selfupdate}
 SYSTEMCTL=${RUNNER_SELFUPDATE_SYSTEMCTL:-systemctl}
 GIT=${RUNNER_SELFUPDATE_GIT:-git}
 SYNC_RETRY_DELAY=${RUNNER_SELFUPDATE_RETRY_DELAY:-5}
@@ -31,6 +32,15 @@ alert() {
 }
 
 sync_live() {
+  local remote
+  if [ ! -e "$LIVE" ]; then
+    remote=$("$GIT" -C "$SOURCE" remote get-url origin) || {
+      sync_failure='checkout|Could not identify the runner source remote'; return 1;
+    }
+    if ! "$GIT" clone -q --depth 1 --no-checkout --single-branch --branch production "$remote" "$LIVE"; then
+      sync_failure='checkout|Could not create the isolated runner checkout'; return 1
+    fi
+  fi
   if ! "$GIT" -C "$LIVE" fetch -q origin production; then
     sync_failure='fetch|Could not fetch the merged runner update'; return 1
   fi
