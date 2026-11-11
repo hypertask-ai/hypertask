@@ -209,7 +209,7 @@ test("a stored agent reply appears in the room transcript", async () => {
   });
 
   const stored = await waitForStoredReply(
-    (entry) => entry.authorAgentId === "product",
+    (entry) => entry.author?.id === "product",
   );
 
   assert.equal(stored.content, "Dev 2, please finish HTPR-6557.");
