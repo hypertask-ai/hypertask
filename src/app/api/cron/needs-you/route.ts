@@ -9,7 +9,10 @@ export async function GET(request: NextRequest) {
   if (!hasValidCronAuthorization(request.headers.get("authorization"), process.env.CRON_SECRET)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userIds = await featureFlagCandidateUserIds(HTPR_9055_NEEDS_YOU_FLAG);
   const users = await prisma.notification.findMany({
-    where: { needsYouScoredAt: null, agentId: null, taskId: { not: null }, status: "Normal", archivedAt: null, ...(userIds === null ? {} : { userId: { in: userIds } }) },
+    where: {
+      agentId: null, taskId: { not: null }, status: "Normal", archivedAt: null, ...(userIds === null ? {} : { userId: { in: userIds } }),
+      OR: [{ needsYouScoredAt: null }, { needsYouSource: "skipped", NOT: { needsYouReason: "Own AI" } }],
+    },
     select: { userId: true }, distinct: ["userId"], orderBy: { id: "asc" }, take: 4,
   });
   let scored = 0;

@@ -70,7 +70,7 @@ function worker({ enabled = true, source = "managed", plan = "Pro", settings = {
 test("arrival retries and concurrent delivery score once; own-AI teams and revoked access send nothing", async () => {
   for (const [options, source, paid, score] of [
     [{}, "jev", 1, 95], [{ source: "customer" }, "skipped", 0, 0], [{ plan: "BYOK" }, "skipped", 0, 0],
-    [{ settings: { ownKeyOnly: true } }, "skipped", 0, 0], [{ providers: ["custom"] }, "skipped", 0, 0],
+    [{ settings: { ownKeyOnly: true } }, "skipped", 0, 0], [{ providers: ["custom"] }, "rules", 0, 0],
     [{ ownKey: "customer-key" }, "skipped", 0, 0], [{ access: false }, "skipped", 0, 0],
     [{ settings: {} }, "rules", 0, 0], [{ settings: { providers: { openrouter: false } } }, "rules", 0, 0],
     [{ enabled: false }, undefined, 0, null],
