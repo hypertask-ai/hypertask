@@ -161,9 +161,8 @@ export default async function getProject(shareId: string) {
             projectAsIProject.firstTask = firstTask;
 
             const flags: Record<string, boolean> = inviteObj.userId ? await featureFlagsForUser(inviteObj.userId) : {};
-            projectAsIProject.filteredSections = getFilteredSections(_sections, projectAsIProject, undefined, {}, {
-                tagHideFilterEnabled: flags[HTPR_8171_HIDE_TAGS_FLAG] === true,
-            });
+            const runtimeContext = { tagHideFilterEnabled: flags[HTPR_8171_HIDE_TAGS_FLAG] === true };
+            projectAsIProject.filteredSections = getFilteredSections(_sections, projectAsIProject, undefined, {}, runtimeContext);
             projectAsIProject.filteredSections = getAppliedSubtaskSections(projectAsIProject.filteredSections, projectAsIProject);
             projectAsIProject.filteredSections = getFilteredEmptySections(projectAsIProject.filteredSections, projectAsIProject);
         }
