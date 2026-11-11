@@ -15,6 +15,7 @@ import {
   type PullRequestCheckState,
   type PullRequestLifecycle,
 } from "./githubPullRequests";
+import { pullRequestGithubAuthorization } from "./githubLinkAuth";
 
 export class PullRequestLinkError extends Error {
   constructor(
@@ -104,17 +105,26 @@ export function toPublicTaskPullRequest(
   };
 }
 
-function githubHeaders(): Record<string, string> {
-  const token = process.env.GITHUB_TOKEN;
+async function githubHeaders(): Promise<Record<string, string>> {
+  const authorization = await pullRequestGithubAuthorization();
   return {
     Accept: "application/vnd.github+json",
     "User-Agent": "Hypertask-Pull-Request-Linker",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(authorization ? { Authorization: authorization } : {}),
   };
 }
 
+function retryWithoutAuthorization(
+  status: number,
+  headers: Record<string, string>,
+): boolean {
+  if (!headers.Authorization) return false;
+  if (status === 401 || status === 403) return true;
+  return status === 404 && !process.env.GITHUB_TOKEN;
+}
+
 async function fetchGithub(url: string): Promise<Response> {
-  const headers = githubHeaders();
+  const headers = await githubHeaders();
   const send = (requestHeaders: Record<string, string>) =>
     fetch(url, {
       headers: requestHeaders,
@@ -122,8 +132,7 @@ async function fetchGithub(url: string): Promise<Response> {
       signal: AbortSignal.timeout(3_000),
     });
   const response = await send(headers);
-  if (response.status !== 401 && response.status !== 403) return response;
-  if (!headers.Authorization) return response;
+  if (!retryWithoutAuthorization(response.status, headers)) return response;
   await response.body?.cancel().catch(() => undefined);
   const publicHeaders = { ...headers };
   delete publicHeaders.Authorization;
