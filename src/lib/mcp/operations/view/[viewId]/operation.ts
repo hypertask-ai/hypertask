@@ -17,7 +17,7 @@ import { ListViewItem } from "@/lib/mcp/operations/view/operation";
 import { TBoardSortingLevel } from "@/models/Views/model";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { getViewUrl } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
-import { isViewCallerError, plainViewError, viewMutationRefusal } from "@/lib/mcp/views/viewRefusal";
+import { isViewCallerError, plainViewError, viewInputRefusal, viewMutationRefusal } from "@/lib/mcp/views/viewRefusal";
 import { isSubtaskSetting } from "@/models/Views/model";
 
 export interface AppliedViewItem extends ListViewItem {
@@ -217,9 +217,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
       body.match !== undefined ||
       body.label_match !== undefined
     if (filtersProvided && body.board_filters !== undefined) {
-      return NextResponse.json(
-        { success: false, error: 'Use either label_names/assignee_ids/match or board_filters, not both' },
-        { status: 400 }
+      return viewInputRefusal(
+        'Use either label_names/assignee_ids/match or board_filters, not both',
+        'label_names',
       )
     }
     if (
