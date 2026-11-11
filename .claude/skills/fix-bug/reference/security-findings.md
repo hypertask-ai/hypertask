@@ -5,6 +5,50 @@ description: How to handle a Strix scanner finding, and how the weekly scan runs
 
 # Security findings
 
+## Read production Vercel Security Review states
+
+Read the states on a GitHub-hosted runner with the existing Actions secret, so
+no server login is involved and it keeps working when the saved `vercel-ht`
+login is rejected or challenged. Never copy another login, print credentials,
+or request broader access:
+
+```bash
+gh workflow run vercel-security-findings.yml --repo hypertask-ai/hypertask \
+  --ref production
+```
+
+The workflow is production-branch-only and reads the production Vercel
+project. It follows the read-only endpoint used by Vercel CLI 65.12.1
+`security vulnerabilities list --status all --environment production`:
+`https://vercel.com/api/omniagent/v1/security-findings`. Every request sends
+`status=open,closed,dismissed` explicitly, so Vercel's `open` default can
+never hide a closed or dismissed finding.
+
+Find the dispatched run, then read its log once it succeeds:
+
+```bash
+gh run list --repo hypertask-ai/hypertask --workflow vercel-security-findings.yml --limit 1
+gh run view <RUN_ID> --repo hypertask-ai/hypertask --log
+```
+
+Only trust a successful run with both `BEGIN COMPLETE PRODUCTION SECURITY
+FINDINGS` and `END COMPLETE PRODUCTION SECURITY FINDINGS` markers. All pages
+and statuses are included: open, closed and dismissed. Match a fixed warning
+using its project finding number or finding ID; `resolved-in` records its
+closing commit when Vercel supplies one. Record the relevant states and full
+Actions run URL on the ticket using your own `vcc activity add` identity.
+
+Actions logs include only validated finding numbers, IDs, status, severity,
+closing commit and a read timestamp. Titles, source, descriptions, fixes and
+secret values are excluded. No raw findings are uploaded as artifacts and
+no MCP credential or ticket writes are needed in Actions. This is finding-state
+proof, not a request to trigger a new scan or dismiss a warning.
+
+An authentication failure, unexpected response or incomplete page sequence
+fails the job without publishing a report rather than reporting zero findings.
+Check the run once, record a recheck time on the ticket, and let the launcher
+resume; do not watch/poll.
+
 ## Strix findings are candidates, not confirmed bugs
 
 A Strix ticket names a suspected vulnerability with a severity and CVSS
