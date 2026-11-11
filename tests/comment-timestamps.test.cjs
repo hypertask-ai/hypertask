@@ -29,6 +29,7 @@ function load(relativePath, modules = {}) {
     if (name === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() }
     if (name === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html }
     if (name === "@/lib/mcp/comments/contentPresence") return require('jiti')(__filename, { interopDefault: true })(path.join(root, 'src/lib/mcp/comments/contentPresence.ts'))
+    if (name === '@/utils/controllers/projects/getAllIncludes') return { getProjectWhere: () => ({}) }
     throw new Error(`Unexpected import: ${name}`)
   }, FixedDate)
   return loadedModule.exports
