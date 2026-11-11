@@ -5,7 +5,6 @@ import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { gatewayProviderOptionsForModel, resolveGatewayModel, type AiGatewayTags } from "@/app/api/ai/_lib/modelProvider";
 import { AUTO_LONG_THREAD_MESSAGES } from "@/app/api/ai/_lib/autoModel";
 import { tierForFeature } from "@/app/api/ai/_lib/reasoningEffort";
-import { HTPR_9048_JEV_AUTO_MODEL_SHADOW_FLAG } from "@/lib/flags/definitions/htpr-9048-jev-auto-model-shadow";
 import prisma from "@/lib/prisma";
 
 export const JEV_AUTO_MODEL_SLUG = "openrouter/typesafe/jev-1.14";
@@ -114,13 +113,7 @@ export async function shadowAutoModelTurn(turn: AutoModelShadowTurn): Promise<vo
   }
 }
 
-export async function shadowAutoModelTurnInBackground(turn: AutoModelShadowTurn): Promise<void> {
-  try {
-    const { isFeatureEnabled } = await import("@/lib/flags");
-    if (!(await isFeatureEnabled(HTPR_9048_JEV_AUTO_MODEL_SHADOW_FLAG, turn.userId))) return;
-  } catch {
-    return;
-  }
+export function shadowAutoModelTurnInBackground(turn: AutoModelShadowTurn): void {
   const task = shadowAutoModelTurn(turn);
   try {
     waitUntil(task);

@@ -17,7 +17,7 @@ import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan }
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
-import { autoForcedProvider, autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { autoForcedProvider, autoModelEnabled, autoModelShadowEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 
 import { createSseErrorResponse, reportHandledChatError, errorMessage } from "@/lib/ai/chatStream/errors";
 import { ChatRequest } from "@/lib/ai/chatStream/request";
@@ -213,7 +213,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       });
       if (autoPick) {
         selection = selectionFromModelOption(autoPick);
-        startAutoModelShadow({
+        if (await autoModelShadowEnabled(dbUser.id)) startAutoModelShadow({
           userId: dbUser.id,
           teamId: gatewayTags.teamId ?? null,
           projectId: usageProjectId,

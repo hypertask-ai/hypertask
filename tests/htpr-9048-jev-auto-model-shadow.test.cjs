@@ -10,7 +10,6 @@ function runtime({ funding = { apiKey: "vck_fixture", source: "managed" }, answe
     ai: { generateText: (input) => (calls.push(input), Promise.resolve({ text: answer })) },
     "@vercel/functions": { waitUntil: (task) => tasks.push(task) },
     "@/lib/flags": { isFeatureEnabled: async () => enabled },
-    "@/lib/flags/definitions/htpr-9048-jev-auto-model-shadow": { HTPR_9048_JEV_AUTO_MODEL_SHADOW_FLAG: "htpr-9048-jev-auto-model-shadow" },
     "@/lib/prisma": { default: { autoModelShadow: { create: async (input) => (writes.push(input.data), input.data) } } },
     "@/app/api/ai/_lib/byokKeys": { getTeamGatewayFunding: async () => funding ?? undefined },
     "@/app/api/ai/_lib/modelProvider": { resolveGatewayModel: () => ({ provider: "gateway" }), gatewayProviderOptionsForModel: () => undefined },
@@ -42,8 +41,9 @@ test("the flag, the prompt, Jev's answer and Auto's step-up signals", () => {
 });
 
 test("a managed turn logs one row next to Auto's level, and the skips make no call", async () => {
-  const { mod, calls, writes } = runtime();
-  await mod.shadowAutoModelTurn(turn());
+  const { mod, calls, writes, tasks } = runtime();
+  mod.shadowAutoModelTurnInBackground(turn());
+  await Promise.all(tasks);
   assert.deepEqual([calls[0].maxOutputTokens, writes[0].autoTier, writes[0].jevLevel, writes[0].jevTier, writes[0].comparison, writes[0].error], [24, 1, "standard", 2, "jev-higher", null]);
   const customer = runtime({ funding: { apiKey: "vck_customer", source: "customer" } });
   await customer.mod.shadowAutoModelTurn(turn());
@@ -52,12 +52,12 @@ test("a managed turn logs one row next to Auto's level, and the skips make no ca
   const silent = runtime({ answer: "no idea" });
   await silent.mod.shadowAutoModelTurn(turn({ message: "fix ```js\nx\n```" }));
   assert.deepEqual([customer.calls.length, customer.writes.length, untied.calls.length, untied.writes.length, silent.writes[0].jevLevel, silent.writes[0].error, silent.writes[0].autoTier], [0, 0, 0, 0, null, "no idea", 2]);
-  const off = runtime({ enabled: false });
-  await off.mod.shadowAutoModelTurnInBackground(turn());
-  const on = runtime({ enabled: true });
-  await on.mod.shadowAutoModelTurnInBackground(turn());
-  await Promise.all(on.tasks);
-  assert.deepEqual([off.writes.length, on.writes.length], [0, 1]);
+});
+
+test("the shadow flag gate reads the ticket flag and refuses a turn with no user", async () => {
+  const on = loadModule("src/app/api/ai/_lib/autoModel.ts", { "@/lib/flags": { isFeatureEnabled: async () => true } });
+  const off = loadModule("src/app/api/ai/_lib/autoModel.ts", { "@/lib/flags": { isFeatureEnabled: async () => false } });
+  assert.deepEqual([await on.autoModelShadowEnabled(985), await on.autoModelShadowEnabled(null), await off.autoModelShadowEnabled(985)], [true, false, false]);
 });
 
 test("a resend marks the earlier turn retried and the four bars decide keep or drop", () => {

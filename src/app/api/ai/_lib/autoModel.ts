@@ -3,6 +3,7 @@ import { isByokProviderKey, resolveTeamProviderEnabled, type TByokProviderKey } 
 import { modelOptionMatchesForcedKey } from "@/lib/ai/forcedTeamKey";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { HTPR_9048_JEV_AUTO_MODEL_SHADOW_FLAG } from "@/lib/flags/definitions/htpr-9048-jev-auto-model-shadow";
 import { tierForFeature, type AutoTier } from "@/app/api/ai/_lib/reasoningEffort";
 
 export const AUTO_LONG_THREAD_MESSAGES = 20;
@@ -31,6 +32,16 @@ export async function autoModelEnabled(userId: number | null | undefined): Promi
   try {
     const { isFeatureEnabled } = await import("@/lib/flags");
     return await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, userId);
+  } catch {
+    return false;
+  }
+}
+
+export async function autoModelShadowEnabled(userId: number | null | undefined): Promise<boolean> {
+  if (typeof userId !== "number" || !Number.isInteger(userId) || userId <= 0) return false;
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_9048_JEV_AUTO_MODEL_SHADOW_FLAG, userId);
   } catch {
     return false;
   }
