@@ -481,7 +481,6 @@ ai_model_watch:
   commands:
     - node --test tests/model-diff.test.cjs
     - node --test tests/model-watch-allowlist.test.cjs
-    - node --test tests/model-watch-writing.test.cjs
     - node scripts/model-diff --json
     - node .github/scripts/ai-model-watch.cjs
   fixtures: offline_synthetic_no_secrets

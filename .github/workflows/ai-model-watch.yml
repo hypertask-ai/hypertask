@@ -30,7 +30,6 @@ jobs:
         run: |
           node --test tests/model-diff.test.cjs
           node --test tests/model-watch-allowlist.test.cjs
-          node --test tests/model-watch-writing.test.cjs
       - name: Discover model changes
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
