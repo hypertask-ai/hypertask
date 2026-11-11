@@ -571,7 +571,7 @@ jobs:
         if: steps.setup-checkout.outcome == 'success' && steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success'
         continue-on-error: true
         timeout-minutes: 8
-        run: ./node_modules/.bin/playwright install --with-deps chromium
+        run: bash .github/scripts/install-chromium.sh
 
       # A failed npm ci / playwright install is an UNRUNNABLE check, not a
       # broken app: record it as a failed preflight so the decision step below
