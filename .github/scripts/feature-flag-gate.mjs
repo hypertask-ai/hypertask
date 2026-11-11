@@ -1103,10 +1103,10 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
   return null;
 }
 
-function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), parameterBoolean = () => undefined, checker = null, live = null } = {}) {
+function controlsReturnedValue(node, { earlyOnly = false, allowAsync = false, after = null, independentParameters = new Set(), parameterBoolean = () => undefined, checker = null, live = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
-  if (fn?.asteriskToken || (!earlyOnly && (fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
+  if (fn?.asteriskToken || (!earlyOnly && ((!allowAsync && fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword)) ||
       fn?.parameters.some((parameter) => parameter.initializer && staticBoolean(parameter.initializer, true) === null)))) return false;
   for (let child = node, parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
     if (typescript.isTryStatement(parent) ||
@@ -1414,6 +1414,10 @@ function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = contro
   const callback = enclosingFunctionLike(call);
   const snapshot = snapshotCallForCallback(callback, checker);
   if (snapshot) {
+    const returnsResult = (value) => controlsReturnedValue(value, { allowAsync: true });
+    if (!gatesRuntimeBehavior(snapshot, checker, sourceFile,
+      (reference) => returnsResult(reference) || referenceGates(reference), live,
+      (value) => returnsResult(value) || directGates(value))) return false;
     let result = callback.body;
     if (typescript.isBlock(result)) {
       result = result.statements.length === 1 && typescript.isReturnStatement(result.statements[0])
@@ -1421,7 +1425,7 @@ function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = contro
     }
     result = unwrapArgumentExpression(result);
     if (result && typescript.isAwaitExpression(result)) result = unwrapArgumentExpression(result.expression);
-    if (result === call) return gatesRuntimeBehavior(snapshot, checker, sourceFile, referenceGates, live, directGates);
+    if (result === call) return true;
   }
   if (directGates(call)) return true;
   const assigned = assignedGateSymbol(call, checker);
