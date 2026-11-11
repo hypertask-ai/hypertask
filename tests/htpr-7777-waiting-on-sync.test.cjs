@@ -269,12 +269,12 @@ test("other blockers, explicit waits outside review columns and unrelated boards
     task({ id: 1, waitingOnUserId: 8 }),
     task({ id: 2, section: "In Progress" }),
     task({ id: 3, projectId: 99, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null }),
-    task({ id: 4, projectId: 4060, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null }),
+    task({ id: 4, projectId: 2060, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null }),
   ];
   const f = fixture(rows);
   assert.equal(await f.sweep(), 1);
   assert.deepEqual(rows.map((row) => row.waitingOnUserId), [8, 6, null, 6]);
-  assert.deepEqual(f.boards, [4060]);
+  assert.deepEqual(f.boards, [2060]);
 });
 
 test("a failed transaction emits no realtime changes", async () => {

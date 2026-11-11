@@ -359,14 +359,18 @@ export default function FeatureFlagsAdmin({
                     <p className="mt-1 text-content text-text-light-gray">
                       Shipped: {flag.shippedOn ? <time dateTime={flag.shippedOn}>{flag.shippedOn}</time> : "Not recorded"}
                     </p>
-                    {ticket && (
+                    {ticket?.[1] === "htpr" ? (
                       <a
-                        href={`https://app.hypertask.ai/detail/project-${ticket[1] === "htpr" ? 15 : 4060}/${ticket[2]}`}
+                        href={`https://app.hypertask.ai/detail/project-15/${ticket[2]}`}
                         className="mt-1 inline-block text-content text-text-light-gray underline-offset-2 hover:underline focus-visible:underline"
                       >
-                        {ticket[1].toUpperCase()}-{ticket[2]}
+                        HTPR-{ticket[2]}
                       </a>
-                    )}
+                    ) : ticket ? (
+                      <p className="mt-1 text-content text-text-light-gray">
+                        {ticket[1].toUpperCase()}-{ticket[2]}
+                      </p>
+                    ) : null}
                   </>
                 ) : flag.ticketTitle ? (
                   <>

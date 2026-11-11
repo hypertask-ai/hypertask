@@ -84,7 +84,7 @@ export async function sweepAbandonedWork(options: { dryRun?: boolean } = {}) {
   if (!enabled) return { enabled: false, liveRunners: 0, boards: [] };
   const nowMs = Date.now();
   const [sectionRows, runnerRows] = await Promise.all([
-    prisma.$queryRaw<Array<{ id: number; projectId: number; title: string }>>`SELECT id, "projectId", "section_title" AS title FROM "Section" WHERE "projectId" IN (15, 4060) AND deleted = false`,
+    prisma.$queryRaw<Array<{ id: number; projectId: number; title: string }>>`SELECT id, "projectId", "section_title" AS title FROM "Section" WHERE "projectId" IN (15, 2060) AND deleted = false`,
     prisma.$queryRaw<Array<{ n: number }>>`SELECT COUNT(*)::int AS n FROM (
       SELECT a.id FROM "Agent" a WHERE a."revokedAt" IS NULL AND a."archivedAt" IS NULL AND a."heartbeatAt" >= now() - interval '45 minutes'
       UNION SELECT r."agentId" FROM "AgentRun" r WHERE r."agentId" IS NOT NULL AND r."lastActivityAt" >= now() - interval '45 minutes'

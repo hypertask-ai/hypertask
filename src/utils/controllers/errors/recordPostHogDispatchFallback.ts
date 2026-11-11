@@ -10,7 +10,7 @@ export async function recordPostHogDispatchFallback(
   alert: PostHogDispatchFallbackAlert,
   githubStatus: 403 | 429,
 ) {
-  const projectId = 4060;
+  const projectId = 2060;
   const issueUrl = `https://eu.posthog.com/project/236160/error_tracking/${alert.issue_id}`;
   const marker = `posthog-dispatch-fallback:issue:${alert.issue_id}:${alert.event_id}`;
   const existing = await prisma.task.findFirst({
@@ -22,8 +22,8 @@ export async function recordPostHogDispatchFallback(
     where: { id: projectId, status: "Normal" },
     select: {
       uniqueIdentifier: true,
-      section: { where: { deleted: false, visibility: true, section_title: "Backlog" }, select: { id: true, section_title: true }, take: 1 },
-      labels: { where: { value: "Infra" }, select: { id: true }, take: 1 },
+      section: { where: { deleted: false, visibility: true, section_title: "Todo" }, select: { id: true, section_title: true }, take: 1 },
+      labels: { where: { value: { equals: "Infra", mode: "insensitive" } }, select: { id: true }, take: 1 },
     },
   });
   const section = project?.section[0];

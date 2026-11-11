@@ -127,7 +127,7 @@ export function plainLanguageIncidentTitle(alert) {
   return `${problem}${where}`.slice(0, 99);
 }
 
-export const INTERNAL_AGENT_TICKET_BOARDS = new Set([15, 4060]);
+export const INTERNAL_AGENT_TICKET_BOARDS = new Set([15]);
 
 export function isInternalAgentTicketBoard(projectId) {
   return INTERNAL_AGENT_TICKET_BOARDS.has(projectId);
