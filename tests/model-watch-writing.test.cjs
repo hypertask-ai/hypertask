@@ -127,11 +127,11 @@ test("watcher rollup names the premium gate instead of authorising every class",
   assert.match(allGated.description.split("<hr>")[0], /What Valentin must decide:<\/strong> May these model classes ship once the earlier steps are done\?<\/p>/);
   assert.match(allGated.description.split("<hr>")[1], /2 of these wait for the price check or HTPR-7746\. Valentin must then say yes before they ship\./);
   const open = rollupTicket([cheap], new Date("2026-10-25T12:00:00Z"));
-  assert.match(open.description.split("<hr>")[1], /Valentin must say yes before these classes can ship\./);
-  assert.match(open.description.split("<hr>")[0], /What Valentin must decide:<\/strong> May these model classes ship once the earlier steps are done\?<\/p>/);
+  assert.match(open.description.split("<hr>")[1], /Valentin must say yes before this class can ship\./);
+  assert.match(open.description.split("<hr>")[0], /What Valentin must decide:<\/strong> May this model class ship\?<\/p>/);
   const openai = rollupTicket([{ ...cheap, provider: "openai", model: "openai/gpt-6" }], new Date("2026-10-25T12:00:00Z"));
-  assert.match(openai.description.split("<hr>")[0], /What Valentin must decide:<\/strong> May these model classes ship once the earlier steps are done\?<\/p>/);
-  assert.match(openai.description.split("<hr>")[1], /Valentin must say yes before these classes can ship\./);
+  assert.match(openai.description.split("<hr>")[0], /What Valentin must decide:<\/strong> May this model class ship\?<\/p>/);
+  assert.match(openai.description.split("<hr>")[1], /Valentin must say yes before this class can ship\./);
   const gatedOnly = rollupTicket([{ ...cheap, kind: "new-version", provider: "openai", inputPerMillion: 9 }], new Date("2026-10-25T12:00:00Z"));
   assert.match(gatedOnly.description.split("<hr>")[0], /What Valentin must decide:<\/strong> nothing<\/p>/);
   assert.match(gatedOnly.description.split("<hr>")[1], /1 of these wait for the price check or HTPR-7746\. Nothing else; a runner ships the rest\./);
