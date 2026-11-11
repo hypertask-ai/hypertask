@@ -152,7 +152,7 @@ function contextPointsBeforeQuestion(html: string): number {
 }
 
 function questionHit(html: string): Hit | null {
-  const allBlocks = dropBlockquotes(html).split(/<br\s*\/?>|<\/(?:p|li|h[1-6]|div)>/i)
+  const allBlocks = dropBlockquotes(html).split(/(?=<br\s*\/?>|<\/(?:p|li|h[1-6]|div)>)/i)
   const blockTexts = allBlocks.map((block) => parse(stripTags(block)).text)
   const questionAt = blockTexts.findIndex((text) => labelPattern('Question').test(text))
   if (questionAt === -1) return null
@@ -161,7 +161,7 @@ function questionHit(html: string): Hit | null {
     if (labelPattern('What this is').test(blockTexts[index])) start = index
   }
   const blocks = allBlocks.slice(start)
-  const part = blocks.join('</p>')
+  const part = blocks.join('')
   const textLines = lines(part)
   const owners = new Map<string, number>()
   blockTexts.slice(start).forEach((text, index) => {
