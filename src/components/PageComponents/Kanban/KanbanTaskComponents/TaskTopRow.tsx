@@ -16,12 +16,26 @@ import { IAgent, IProject, ITask, IUser } from "@/models/model";
 import { useFlag } from "@/hooks/useFlag";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { HTPR_8970_CALM_CARDS_FLAG } from "@/lib/flags/definitions/htpr-8970-calm-cards";
-import { stackFaces, useCardAgentStatus } from "@/lib/agentStatus/cardStatus";
+import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
+import { stackFaces, useCardAgentStatus, type CardAgentStatus } from "@/lib/agentStatus/cardStatus";
+import AgentStatusDot from "@/lib/agentStatus/AgentStatusDot";
+import { agentStatusDotMode, type AgentStatusDotMode } from "@/lib/agentStatus/dot";
+import { useMinuteClock } from "@/lib/agentStatus/minuteClock";
 import type { AgentStep } from "@/lib/agentStatus/chip";
 
 const AGENT_STEP_DOT: Partial<Record<AgentStep, string>> = {
   working: "bg-[var(--color-pull-request-green)]",
   "in review": "bg-[var(--color-card-age-warn)]",
+};
+
+const AgentDot = ({ pulse, mode, step }: { pulse: boolean; mode: AgentStatusDotMode | null; step: AgentStep }) => {
+  if (pulse) {
+    return mode ? <AgentStatusDot mode={mode} className="absolute -bottom-px -right-px" /> : null;
+  }
+  const tone = AGENT_STEP_DOT[step];
+  return tone ? (
+    <span data-testid="agent-dot" data-step={step} className={cn("absolute -bottom-px -right-px h-2 w-2 rounded-full", tone)} />
+  ) : null;
 };
 
 interface ITaskTopRow {
@@ -80,25 +94,37 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
 
   const htcButtonCallback = () => updateTaskFocus(task);
   const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG);
+  const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG);
   const agentStatus = useCardAgentStatus(task, project);
+  const agentMinute = useMinuteClock(Boolean(task.agentStatus));
+  const agentDotMode = agentPulseDot && agentStatus && task.agentStatus
+    ? agentStatusDotMode(task.agentStatus.at, agentStatus.step, agentMinute)
+    : null;
   const faces = stackFaces(assignees, agentAssignees, agentStatus?.agentName);
   const unread = notifications?.length > 0 && notifications[0]?.seen === false;
   const stackAvatars: React.ReactNode[] = [];
+  const stackFace = (key: string, status: CardAgentStatus | null, avatar: React.ReactNode) => (
+    <span key={key} className={cn("relative flex shrink-0", stackAvatars.length > 0 && "ml-[-8px]")}>
+      {avatar}
+      {status ? <AgentDot pulse={agentPulseDot} mode={agentDotMode} step={status.step} /> : null}
+    </span>
+  );
   for (const assignee of faces.users) {
-    stackAvatars.push(
-      <UserAvatar key={`user-${assignee.id}`} alt={assignee.displayName} className={cn(stackAvatars.length > 0 && "ml-[-8px]")}
-        name={assignee.displayName} photoURL={assignee.photoURL} size={20} title={assignee.displayName} />
+    stackAvatars.push(stackFace(`user-${assignee.id}`, null,
+      <UserAvatar alt={assignee.displayName} name={assignee.displayName} photoURL={assignee.photoURL} size={20} title={assignee.displayName} />)
     );
   }
   for (const agent of faces.agents) {
     const status = agent.displayName === agentStatus?.agentName ? agentStatus : null;
-    const dot = status ? AGENT_STEP_DOT[status.step] : undefined;
-    stackAvatars.push(
-      <span key={`agent-${agent.id}`} className={cn("relative flex shrink-0", stackAvatars.length > 0 && "ml-[-8px]")}>
-        <UserAvatar agentId={agent.id} alt={status ? status.text : `Assigned agent: ${agent.displayName}`}
-          name={agent.displayName} photoURL={agent.photoURL} size={20} title={status ? status.text : agent.displayName} />
-        {dot && <span data-testid="agent-dot" data-step={status?.step} className={cn("absolute -bottom-px -right-px h-2 w-2 rounded-full", dot)} />}
-      </span>
+    stackAvatars.push(stackFace(`agent-${agent.id}`, status,
+      <UserAvatar agentId={agent.id} alt={status ? status.text : `Assigned agent: ${agent.displayName}`}
+        name={agent.displayName} photoURL={agent.photoURL} size={20} title={status ? status.text : agent.displayName} />)
+    );
+  }
+  const statusAgentAssigned = faces.agents.some((agent) => agent.displayName === agentStatus?.agentName);
+  if (agentPulseDot && agentStatus && agentDotMode && !statusAgentAssigned) {
+    stackAvatars.push(stackFace("agent-status", agentStatus,
+      <UserAvatar alt={agentStatus.text} name={agentStatus.agentName} size={20} title={agentStatus.text} />)
     );
   }
 
