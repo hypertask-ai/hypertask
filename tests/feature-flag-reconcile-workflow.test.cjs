@@ -70,7 +70,7 @@ test("reconciliation fails closed when mktemp cannot create private scratch", (t
   assert.match(result.stdout, /::error::Cannot create private feature-flag reconciliation scratch space\./);
 });
 
-const singlePullRequest = workflow.split("  reconcile-open-pull-requests:")[0];
+const singlePullRequest = workflow.split("  reconciliation-pull-requests:")[0];
 const waitingDescription = "feature-flag-gate is waiting for the run on the newer production commit";
 
 function featureFlagStatus(pull, overrides = {}) {
@@ -114,6 +114,7 @@ function runWorkflow(t, {
     REPO: "fixture/repository",
     RUN_URL: "https://example.invalid/actions/runs/1",
     PR_NUMBER: "42",
+    RECONCILE_PR_NUMBER: "42",
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
     FIXTURE_PR: path.join(fixture, "pull.json"),
     FIXTURE_STATUSES: path.join(fixture, "statuses.json"),
@@ -283,8 +284,8 @@ exit 1
 }
 
 for (const state of ["success", "failure"]) {
-  test(`reconcile: unchanged ${state} fingerprint now skips with one batched status read and no POST`, (t) => {
-    const { result, output, posts, calls } = runWorkflow(t, {
+  test(`reconcile: unchanged ${state} fingerprint skips with one selected-head status read and no POST`, (t) => {
+    const { result, output, posts, calls, pull } = runWorkflow(t, {
       statuses: (pull) => ({ [pull.head.sha]: [
         { context: "another-gate", state: "pending" },
         featureFlagStatus(pull, { state }),
@@ -297,7 +298,7 @@ for (const state of ["success", "failure"]) {
     assert.deepEqual(posts, []);
     assert.deepEqual(calls.map((call) => call.endpoint), [
       "repos/fixture/repository/pulls?state=open&base=production&per_page=100",
-      "graphql",
+      `repos/fixture/repository/commits/${pull.head.sha}/statuses?per_page=100`,
     ]);
   });
 }
@@ -341,9 +342,9 @@ for (const change of ["base", "title", "head", "error", "pending", "missing fing
     assert.equal(posts[0].state, "success");
     assert.equal(posts[0].description, "ok");
     assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
-    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 0);
-    assert.equal(calls.filter((call) => call.endpoint === "graphql").length, 1);
-    assert.equal(calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).length, 0);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 1);
+    assert.equal(calls.filter((call) => call.endpoint === "graphql").length, 0);
+    assert.equal(calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).length, 1);
     assert.equal(calls.filter((call) => call.endpoint.includes("/pulls?")).length, 2);
   });
 }
@@ -366,11 +367,11 @@ for (const state of ["success", "failure"]) {
       statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state })] }),
     });
     assert.equal(result.status, 0, output);
-    assert.match(output, /evaluated 2, skipped 0/);
-    assert.equal(posts.length, 2);
+    assert.match(output, /evaluated 1, skipped 0/);
+    assert.equal(posts.length, 1);
     assert.ok(posts.every((post) => post.state === "failure" && /shared by multiple/.test(post.description)));
-    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 0);
-    assert.equal(calls.filter((call) => call.endpoint === "graphql").length, 1);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 1);
+    assert.equal(calls.filter((call) => call.endpoint === "graphql").length, 0);
   });
 }
 
@@ -393,7 +394,9 @@ test("reconcile: evaluated PR still rechecks current metadata before publishing"
   });
   assert.equal(result.status, 0, output);
   assert.match(output, /changed during reconciliation/);
-  assert.deepEqual(posts, [], "a stale sweep must not overwrite the concurrent PR verdict");
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].state, "error");
+  assert.match(posts[0].description, /waiting for the updated pull request/);
 });
 
 for (const [field, change] of [
@@ -403,19 +406,26 @@ for (const [field, change] of [
   ["base", (pull) => ({ ...pull, base: { ...pull.base, sha: "e".repeat(40) } })],
   ["state", (pull) => ({ ...pull, state: "closed" })],
 ]) {
-  test(`reconcile: publication refresh skips changed ${field} after the fleet snapshot`, (t) => {
+  test(`reconcile: publication refresh blocks changed ${field} after the fleet snapshot`, (t) => {
     const { result, output, posts } = runWorkflow(t, { publicationPull: change });
     assert.equal(result.status, 0, output);
     assert.match(output, /changed during reconciliation/);
-    assert.deepEqual(posts, [], "do not overwrite a concurrent PR event with a stale result");
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].state, "error");
+    assert.match(posts[0].description, /waiting for the updated pull request/);
   });
 }
 
-test("reconcile: publication refresh failure leaves existing status untouched and fails closed", (t) => {
-  const { result, output, posts } = runWorkflow(t, { apiFailure: { endpoint: "/pulls/42", status: 404 } });
+test("reconcile: publication refresh failure replaces an old success with an error and fails closed", (t) => {
+  const { result, output, posts } = runWorkflow(t, {
+    apiFailure: { endpoint: "/pulls/42", status: 500 },
+    statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { target_url: null })] }),
+  });
   assert.equal(result.status, 2, output);
   assert.match(output, /Cannot refresh pull request #42/);
-  assert.deepEqual(posts, []);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].state, "error");
+  assert.match(posts[0].description, /could not refresh this pull request/);
 });
 
 test("reconcile: evaluated PR still rechecks fresh shared heads before publishing", (t) => {
@@ -436,10 +446,14 @@ test("per-PR: final verdict posts the current base/title fingerprint and unchang
     "https://example.invalid/actions/runs/1" + new URL(featureFlagStatus(pull).target_url).hash);
 });
 
-test("reconcile drift: production moved mid-run leaves the concurrent PR verdict untouched", (t) => {
-  const { result, output, posts } = runWorkflow(t, { drift: true });
+test("reconcile drift: production moved mid-run replaces an old success with pending", (t) => {
+  const { result, output, posts } = runWorkflow(t, {
+    drift: true, statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { target_url: null })] }),
+  });
   assert.equal(result.status, 0, output);
-  assert.deepEqual(posts, []);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].state, "pending");
+  assert.equal(posts[0].description, waitingDescription);
   assert.doesNotMatch(output, /infrastructure failure/);
   assert.doesNotMatch(output, /::error::/);
   assert.match(output, /Trusted production checkout drifted; a later event will re-evaluate with current policy\./);
@@ -539,7 +553,7 @@ for (const job of [reconciliation, singlePullRequest]) {
   }
 }
 
-for (const endpoint of ['graphql', '/pulls?', '/statuses/']) {
+for (const endpoint of ['/commits/', '/pulls?', '/statuses/']) {
   test(`reconcile: rate limit at ${endpoint} exits the parent shell without publishing an error`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
       apiFailure: { endpoint, after: endpoint === '/pulls?' ? 1 : 0, status: 403, rate: true, reset: 3600 },
@@ -551,22 +565,58 @@ for (const endpoint of ['graphql', '/pulls?', '/statuses/']) {
   });
 }
 
-test("PR queues isolate different PRs and reconciliation without cancelling metadata events", () => {
-  const { concurrency } = yaml.load(workflow);
-  assert.deepEqual(concurrency, {
-    group: "feature-flag-gate-${{ github.event.pull_request.number || 'reconcile' }}",
-    queue: "max",
-    "cancel-in-progress": false,
-  });
-  const group = (number) => concurrency.group.replace(/\$\{\{ (.*?) \}\}/g, (_, expression) => {
-    const github = { event: { pull_request: number ? { number } : undefined } };
-    return new Function("github", `return (${expression.replace("pull_request.number", "pull_request?.number")})`)(github);
-  });
-  assert.equal(group(42), group(42), "edits to one PR stay serialized");
-  assert.notEqual(group(42), group(43), "a stuck PR cannot hold another PR");
-  assert.notEqual(group(42), group(), "a stuck sweep cannot hold a PR");
-  assert.equal(group(), "feature-flag-gate-reconcile");
+test("events and reconciliation serialize per PR, never per workflow run", () => {
+  const config = yaml.load(workflow);
+  assert.equal(config.concurrency, undefined, "a completed-job zombie cannot hold a workflow-wide lock");
+  const event = config.jobs["feature-flag-gate"].concurrency;
+  const sweep = config.jobs["reconcile-open-pull-requests"].concurrency;
+  const group = (config, number) => config.group.replace(/\$\{\{ .*? \}\}/, number);
+  for (const concurrency of [event, sweep]) {
+    assert.equal(concurrency.queue, "max");
+    assert.equal(concurrency["cancel-in-progress"], false);
+  }
+  assert.equal(event.group, "feature-flag-gate-${{ github.event.pull_request.number }}");
+  assert.equal(sweep.group, "feature-flag-gate-${{ matrix.number }}");
+  assert.equal(group(event, 42), group(sweep, 42), "sweep POST cannot overlap a newer event verdict");
+  assert.notEqual(group(event, 42), group(sweep, 43), "unrelated PRs cannot hold each other");
+  assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["fail-fast"], false);
+  assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["max-parallel"], 4);
 });
+
+for (const [name, pages, expected] of [
+  ["empty", [[]], []],
+  ["paginated", [[{ number: 42 }], [{ number: 43 }, { number: 42 }]], [42, 43]],
+  ["matrix limit", [Array.from({ length: 257 }, (_, number) => ({ number: number + 1 }))], null],
+]) {
+  test(`discovery: ${name} produces a bounded, deduplicated matrix or fails closed`, (t) => {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-discovery-"));
+    t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
+    const config = yaml.load(workflow);
+    const discovery = config.jobs["reconciliation-pull-requests"];
+    assert.equal(discovery.permissions.statuses, undefined, "discovery cannot publish statuses");
+    const script = discovery.steps.find((step) => step.id === "pulls").run;
+    fs.writeFileSync(path.join(fixture, "pages.json"), JSON.stringify(pages));
+    fs.writeFileSync(path.join(fixture, "gh"), '#!/bin/sh\nprintf "%s\\n" "$*" >"$FIXTURE_CALL"\ncat "$FIXTURE_PAGES"\n', { mode: 0o755 });
+    const output = path.join(fixture, "output");
+    const call = path.join(fixture, "call");
+    fs.writeFileSync(output, "");
+    const result = spawnSync("bash", ["-e", "-c", script], {
+      cwd: path.join(__dirname, ".."), encoding: "utf8", timeout: 5000,
+      env: { ...process.env, PATH: `${fixture}:${process.env.PATH}`, REPO: "fixture/repository",
+        GITHUB_OUTPUT: output, FIXTURE_CALL: call, FIXTURE_PAGES: path.join(fixture, "pages.json") },
+    });
+    assert.ifError(result.error);
+    const contents = fs.readFileSync(output, "utf8");
+    assert.match(fs.readFileSync(call, "utf8"), /--paginate --slurp/);
+    if (expected === null) {
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.equal(contents, "", "never silently omit pull requests beyond the matrix limit");
+    } else {
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(contents, `numbers=${JSON.stringify(expected)}\n`);
+    }
+  });
+}
 
 function openPullFleet(pull) {
   const pulls = [];
@@ -596,7 +646,7 @@ function openPullFleet(pull) {
   return { pulls, statuses };
 }
 
-test("reconcile: 32 skipped and 33 evaluated pull requests refresh only evaluated PRs before publishing", (t) => {
+test("reconcile: a matrix job reads and publishes only its selected PR among 65 open PRs", (t) => {
   const { result, output, calls } = runWorkflow(t, {
     extraPulls: (pull) => openPullFleet(pull).pulls,
     statuses: (pull) => openPullFleet(pull).statuses,
@@ -609,13 +659,13 @@ test("reconcile: 32 skipped and 33 evaluated pull requests refresh only evaluate
     graphql: calls.filter((call) => call.endpoint === "graphql").length,
     posts: calls.filter((call) => call.args.includes("POST")).length,
   };
-  assert.equal(result.status, 2, output);
-  assert.match(output, /evaluated 33, skipped 32/);
-  assert.equal(counts.statuses, 0, JSON.stringify(counts));
-  assert.equal(counts.graphql, 1, JSON.stringify(counts));
+  assert.equal(result.status, 0, output);
+  assert.match(output, /evaluated 1, skipped 0/);
+  assert.equal(counts.statuses, 1, JSON.stringify(counts));
+  assert.equal(counts.graphql, 0, JSON.stringify(counts));
   assert.equal(counts.list, 2, JSON.stringify(counts));
-  assert.equal(counts.perPull, 33, JSON.stringify(counts));
-  assert.equal(counts.posts, 33, JSON.stringify(counts));
+  assert.equal(counts.perPull, 1, JSON.stringify(counts));
+  assert.equal(counts.posts, 1, JSON.stringify(counts));
 });
 
 test('a genuine evaluation error is not hidden by rate limiting its error-status post', (t) => {
@@ -633,7 +683,7 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   const selected = (event_name, action = "synchronize", number = 42) => {
     const github = { event_name, event: { action, pull_request: { number, base: { ref: "production" } } } };
     return Object.entries(config.jobs)
-      .filter(([, job]) => new Function("github", `return (${job.if})`)(github))
+      .filter(([, job]) => new Function("github", "needs", `return (${job.if})`)(github, { "reconciliation-pull-requests": { outputs: { numbers: "[42]" } } }))
       .map(([name]) => name);
   };
   for (const action of config.on.pull_request_target.types.filter((action) => action !== "closed")) {
@@ -641,11 +691,10 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   }
   assert.deepEqual(selected("pull_request_target", "closed"), []);
   assert.deepEqual(selected("push"), []);
-  assert.deepEqual(selected("schedule"), ["reconcile-open-pull-requests"]);
+  assert.deepEqual(selected("schedule"), ["reconciliation-pull-requests", "reconcile-open-pull-requests"]);
   assert.deepEqual(Object.keys(config.on).sort(), ["pull_request_target", "schedule"]);
   assert.deepEqual(config.on.schedule, [{ cron: "*/15 * * * *" }]);
-  assert.equal(config.concurrency.group, "feature-flag-gate-${{ github.event.pull_request.number || 'reconcile' }}");
-  assert.equal(config.concurrency["cancel-in-progress"], false);
+  assert.equal(config.jobs["reconcile-open-pull-requests"].needs, "reconciliation-pull-requests");
 
   const { result, output, posts, calls, pull } = runWorkflow(t, {
     job: singlePullRequest,

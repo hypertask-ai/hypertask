@@ -12,15 +12,14 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: feature-flag-gate-${{ github.event.pull_request.number || 'reconcile' }}
-  queue: max
-  cancel-in-progress: false
-
 jobs:
   feature-flag-gate:
     if: github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
     name: feature-flag-gate
+    concurrency:
+      group: feature-flag-gate-${{ github.event.pull_request.number }}
+      queue: max
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -255,8 +254,48 @@ jobs:
           fi
           exit "$result"
 
-  reconcile-open-pull-requests:
+  reconciliation-pull-requests:
     if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: feature-flag-gate-discovery
+      queue: max
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      numbers: ${{ steps.pulls.outputs.numbers }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+      - name: List reconciliation pull requests
+        id: pulls
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/github-api-retry.sh
+          pages=$(gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100")
+          numbers=$(jq -ce '[flatten[].number] | unique | if length <= 256 then . else error("Too many pull requests for reconciliation matrix") end' <<<"$pages")
+          echo "numbers=$numbers" >>"$GITHUB_OUTPUT"
+
+  reconcile-open-pull-requests:
+    needs: reconciliation-pull-requests
+    if: github.event_name == 'schedule' && needs['reconciliation-pull-requests'].outputs.numbers != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        number: ${{ fromJSON(needs.reconciliation-pull-requests.outputs.numbers) }}
+    concurrency:
+      group: feature-flag-gate-${{ matrix.number }}
+      queue: max
+      cancel-in-progress: false
     name: reconcile-feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -288,8 +327,9 @@ jobs:
           permission-contents: read
           permission-pull-requests: read
           permission-statuses: read
-      - name: Reconcile every open production pull request
+      - name: Reconcile the selected production pull request
         env:
+          RECONCILE_PR_NUMBER: ${{ matrix.number }}
           GH_TOKEN: ${{ github.token }}
           GH_READ_TOKEN: ${{ steps.ci-token.outputs.token }}
           REPO: ${{ github.repository }}
@@ -357,7 +397,7 @@ jobs:
             echo "::error::Cannot list open production pull requests."
             exit 2
           fi
-          if ! jq -c 'flatten[]' "$pages" >"$rows"; then
+          if ! jq -c --argjson number "$RECONCILE_PR_NUMBER" 'flatten[] | select(.number == $number)' "$pages" >"$rows"; then
             echo "::error::Cannot parse the open production pull-request list."
             exit 2
           fi
@@ -384,17 +424,6 @@ jobs:
             exit 2
           fi
           export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
-
-          status_batch="$gate_tmp/status-by-sha.json"
-          batch_status=0
-          node .github/scripts/feature-flag-status-batch.mjs "$REPO" >"$status_batch" || batch_status=$?
-          if [ "$batch_status" -eq 78 ]; then
-            exit 0
-          fi
-          if [ "$batch_status" -ne 0 ]; then
-            echo "::warning::Batched feature-flag status read failed; reading each commit."
-            rm -f "$status_batch"
-          fi
 
           while IFS= read -r pull; do
             fingerprint=""
@@ -427,9 +456,7 @@ jobs:
             result=2
             fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
             statuses_file="$gate_tmp/latest-statuses-$number.json"
-            if [ -f "$status_batch" ] && jq -e --arg sha "$head_sha" 'has($sha)' "$status_batch" >/dev/null; then
-              jq -c --arg sha "$head_sha" '.[$sha]' "$status_batch" >"$statuses_file"
-            elif ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
+            if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
               echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; evaluating without deduplication."
               printf '[]\n' >"$statuses_file"
             fi
@@ -508,10 +535,6 @@ jobs:
               statuses_file=$(jq -r '.statuses_file' <<<"$decision")
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")
               result=$(jq -r '.result' <<<"$decision")
-              if [ "$result" -eq 3 ]; then
-                echo "Skip #$number: production moved during reconciliation."
-                continue
-              fi
               if ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
                 echo "::error::Cannot re-check whether pull request #$number shares its head commit."
                 publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file" ||
@@ -525,6 +548,8 @@ jobs:
               fi
               if ! GH_API_NO_WAIT=1 gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json"; then
                 echo "::error::Cannot refresh pull request #$number before reconciliation publication."
+                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh this pull request" "$statuses_file" ||
+                  echo "::error::Cannot publish the feature-flag-gate error for #$number."
                 failures=$((failures + 1))
                 continue
               fi
@@ -536,6 +561,8 @@ jobs:
                  [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
                  ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
                 echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
+                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file" ||
+                  echo "::error::Cannot publish the feature-flag-gate error for #$number."
                 continue
               fi
 
