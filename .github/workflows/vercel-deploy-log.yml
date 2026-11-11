@@ -13,13 +13,9 @@ on:
         required: false
         default: ""
       ticket:
-        description: Hypertask ticket number (unique index on the board) that receives the log
+        description: Hypertask ticket number (unique index on board 15) that receives the log
         required: true
         default: "6163"
-      project:
-        description: Hypertask board id that receives the log
-        required: true
-        default: "15"
 
 permissions:
   contents: read
@@ -39,13 +35,11 @@ jobs:
           MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           DEPLOYMENT: ${{ inputs.deployment }}
           TICKET: ${{ inputs.ticket }}
-          BOARD: ${{ inputs.project }}
         run: |
           set -euo pipefail
           api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
           # Manual inputs are untrusted: pin both to their expected shapes before use.
-          [[ "$TICKET" =~ ^[0-9]{1,7}$ ]] || { echo "ticket must be a unique index"; exit 1; }
-          [[ "$BOARD" =~ ^[0-9]{1,7}$ ]] || { echo "project must be a board id"; exit 1; }
+          [[ "$TICKET" =~ ^[0-9]{1,7}$ ]] || { echo "ticket must be a board-15 unique index"; exit 1; }
           [[ -z "$DEPLOYMENT" || "$DEPLOYMENT" =~ ^dpl_[A-Za-z0-9]{1,64}$ ]] || { echo "deployment must look like dpl_..."; exit 1; }
 
           if [ -z "$DEPLOYMENT" ]; then
@@ -56,10 +50,7 @@ jobs:
 
           META=$(api "/v13/deployments/$DEPLOYMENT?teamId=$TEAM_ID" \
             | jq -c '{state: (.readyState // .state), errorCode, errorMessage, createdAt, sha: .meta.githubCommitSha}')
-          echo "deployment $DEPLOYMENT state: $(echo "$META" | jq -r '.state') errorCode: $(echo "$META" | jq -r '.errorCode // empty')"
-          ERR=$(echo "$META" | jq -r '.errorMessage // empty')
-          printf '%s' "$ERR" | head -c 400 | sed -E -e 's#[a-z]+://[^[:space:]]*@[^[:space:]]+#<url-with-credentials>#g' -e 's#(token|secret|password|api[_-]?key|authorization)([=: ]+)[^[:space:]]+#\1\2<redacted>#Ig'
-          echo
+          echo "deployment $DEPLOYMENT state: $(echo "$META" | jq -r '.state')"
 
           # Build events; keep only log-like entries, tail them, redact DB URLs.
           EVENTS=$(api "/v3/deployments/$DEPLOYMENT/events?teamId=$TEAM_ID&builds=1&limit=-1" \
@@ -85,14 +76,14 @@ jobs:
                    then {kept: ([$line] + .kept), used: (.used + ($line | length) + 1), full: false}
                    else {kept: .kept, used: .used, full: true}
                  end)
-            | {unique_index: ($t | tonumber), project_id: ($b | tonumber), content_type: "html",
+            | {unique_index: ($t | tonumber), project_id: 15, content_type: "html",
                text: ($head + "<pre>" + (.kept | join("\n")) + "</pre>"
                       + (if (.kept | length) < ($lines | length)
                          then "<p>Earlier lines were dropped to fit the 5000-character comment limit.</p>"
                          else "" end))}
           JQ
           )
-          BODY=$(jq -n --arg meta "$META" --arg ev "$EVENTS" --arg d "$DEPLOYMENT" --arg t "$TICKET" --arg b "$BOARD" "$BODY_JQ")
+          BODY=$(jq -n --arg meta "$META" --arg ev "$EVENTS" --arg d "$DEPLOYMENT" --arg t "$TICKET" "$BODY_JQ")
           code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/comments" \
             -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" -d "$BODY")
           echo "comment post: HTTP $code"
