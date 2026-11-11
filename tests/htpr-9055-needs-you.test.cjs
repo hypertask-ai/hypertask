@@ -20,6 +20,7 @@ test("rules cap boosts; highest distinct ticket wins, never date order", () => {
   assert.deepEqual(tabs.data[tabs.tabs.findIndex(({ project }) => project === "Needs you")], [1, 2]);
   assert.equal(getInboxTabs(rows.map((row) => ({ ...row, needsYouEnabled: false }))).tabs.some(({ project }) => project === "Needs you"), false);
   assert.deepEqual(rules.needsYouIndices([notice({ needsYouSource: "skipped" }), notice({ taskId: null })]), []);
+  assert.equal(getInboxTabs([notice({ needsYouSource: "skipped" })]).tabs.some(({ project }) => project === "Needs you"), false);
   assert.deepEqual(rules.needsYouIndices([undefined, ...rows]), [2, 3]);
   assert.doesNotThrow(() => getInboxTabs([undefined, ...rows]));
   const ranked = [rows[1], rows[2]].map((notification) => ({ notification, date: new Date(notification.createdAt) }));
@@ -82,17 +83,16 @@ test("arrival retries and concurrent delivery score once; own-AI teams and revok
   }
 });
 
-test("catch-up route rejects unsigned calls and reports stored daily cost", async () => {
+test("catch-up route rejects unsigned calls and scores without a daily scan", async () => {
   const { GET } = loadModule("src/app/api/cron/needs-you/route.ts", {
-    "@/lib/prisma": { default: { notification: { findMany: async () => [{ userId: 985 }], aggregate: async () => ({ _sum: { needsYouCostUsd: 0.00003 }, _count: { _all: 1, needsYouCostUsd: 1 } }) } } },
+    "@/lib/prisma": { default: { notification: { findMany: async () => [{ userId: 985 }] } } },
     "@/lib/flags": { featureFlagCandidateUserIds: async () => [985] },
     "@/utils/controllers/notifications/scoreNeedsYou": { scoreNeedsYouInbox: async () => 1 },
   });
   assert.equal((await GET({ headers: new Headers() })).status, 401);
   const response = await GET({ headers: new Headers({ authorization: "Bearer fixture-secret" }) });
-  const result = await response.json();
   assert.equal(response.status, 200);
-  assert.deepEqual({ scored: result.scored, costUsd: result.costUsd }, { scored: 1, costUsd: 0.00003 });
+  assert.deepEqual(await response.json(), { scored: 1 });
 });
 
 test("inbox entry point keeps older scores through task collapse and never asks Jev on reads", async () => {

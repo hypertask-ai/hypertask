@@ -428,9 +428,8 @@ export const getInboxTabs = (
     );
   }
 
-  if (notifications.some((notice) => notice?.needsYouEnabled)) {
-    autoSplitsWithBlocked.unshift({ splitName: NEEDS_YOU_SPLIT, notificationIndices: needsYouIndices(notifications), projectId: null });
-  }
+  const rankedNeedsYou = needsYouIndices(notifications);
+  if (rankedNeedsYou.length > 0) autoSplitsWithBlocked.unshift({ splitName: NEEDS_YOU_SPLIT, notificationIndices: rankedNeedsYou, projectId: null });
 
   const splits: NotificationSplit[] = [
     ...autoSplitsWithBlocked,

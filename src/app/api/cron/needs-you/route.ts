@@ -14,8 +14,5 @@ export async function GET(request: NextRequest) {
   });
   let scored = 0;
   for (const { userId } of users) scored += await scoreNeedsYouInbox(userId);
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const daily = await prisma.notification.aggregate({ where: { needsYouScoredAt: { gte: today } }, _sum: { needsYouCostUsd: true }, _count: { _all: true, needsYouCostUsd: true } });
-  return NextResponse.json({ scored, day: today.toISOString().slice(0, 10), costUsd: daily._sum.needsYouCostUsd ?? 0, unknownCosts: daily._count._all - daily._count.needsYouCostUsd });
+  return NextResponse.json({ scored });
 }
