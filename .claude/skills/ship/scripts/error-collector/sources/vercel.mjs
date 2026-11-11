@@ -1,4 +1,5 @@
 import { key, query } from '../io.mjs';
+import { fetchHosted } from '../vercel-hosted.mjs';
 
 export const name = 'vercel';
 const realtimeFailure = row => /^\[[\w/-]+\] (?:[\w-]+ )*broadcast failed(?:\s|$)/.test(messageParts(row.message).message);
@@ -51,9 +52,10 @@ export function parseEvents(rows, service = name) {
 }
 
 export async function fetchVercel({ since, until, env }, service = name) {
-  const token = key('vercel', 'VERCEL_TOKEN', env);
-  const team = key('vercel', 'VERCEL_TEAM_ID', env);
-  const project = key('vercel', 'VERCEL_PROJECT_ID', env);
+  if (env.ERROR_COLLECTOR_VERCEL_HOSTED === '1') return fetchHosted({ since, until, env }, service);
+  const token = env.VERCEL_TOKEN || key('vercel', 'VERCEL_TOKEN', env);
+  const team = env.VERCEL_TEAM_ID || key('vercel', 'VERCEL_TEAM_ID', env);
+  const project = env.VERCEL_PROJECT_ID || key('vercel', 'VERCEL_PROJECT_ID', env);
   const proxy = service === 'vercel-5xx';
   const base = {
     event: proxy ? 'vercel.proxy_response' : 'vercel.log',

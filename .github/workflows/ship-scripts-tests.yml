@@ -156,6 +156,7 @@ jobs:
           node --test .claude/skills/ship/scripts/error-collector/collector.test.mjs
           node --test .claude/skills/ship/scripts/error-collector/sources.test.mjs
           node --test .claude/skills/ship/scripts/error-collector/vercel-logs.test.mjs
+          node --test .claude/skills/ship/scripts/error-collector/vercel-hosted.test.mjs
           bash .claude/skills/ship/scripts/mcp-contract-watch.test.sh
           bash .claude/skills/ship/scripts/ship-gates.test.sh
           python3 scripts/daily-stats.test.py
