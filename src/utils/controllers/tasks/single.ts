@@ -3,8 +3,6 @@ import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { assertTaskCountTransition, isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
-import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
-import { openObservationGateMessage, openObservationGates } from "@/lib/tickets/openObservationGate";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
@@ -101,6 +99,75 @@ class TaskTitleChangedError extends Error {}
 class TaskTargetChangedError extends Error {}
 class FlagColumnMismatchError extends Error {}
 class OpenObservationGateError extends Error {}
+
+const DONE_COLUMN_NAME =
+  /^(?:done|complete|completed|shipped|closed|finished|live|released)$/i;
+const OBSERVATION_OPEN_WORD =
+  /\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b/gi;
+const OBSERVATION_NEGATED_OPEN = /(?:\bno longer|\bnot|\bnever)\s+$/i;
+const OBSERVATION_GATE_LABEL =
+  /^(?:[-*•]\s*)?(?:the\s+|this\s+|our\s+)?(?:full[- ]day\s+)?observation(?:\s+gate)?\b/i;
+const CHECKLIST_ITEM = /<li\b([^>]*)>([\s\S]*?)(?=<\/li>|<li\b|<\/ul>|$)/gi;
+
+function plainText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function uncheckedObservationItem(html: string): string | null {
+  for (const item of html.matchAll(CHECKLIST_ITEM)) {
+    const checked = /data-checked\s*=\s*["']?([a-z]+)/i.exec(item[1]);
+    if (!checked || checked[1].toLowerCase() === "true") continue;
+    const label = plainText(item[2]);
+    if (/\bobservation\b/i.test(label)) return label;
+  }
+  return null;
+}
+
+function openObservationLine(html: string): string | null {
+  for (const line of html.replace(/<[^>]+>/g, "\n").split("\n")) {
+    const text = line
+      .replace(/&nbsp;|&#160;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const label = OBSERVATION_GATE_LABEL.exec(text);
+    if (!label) continue;
+    const statusClause = text.slice(label[0].length).split(/[.;,]/)[0];
+    for (const word of statusClause.matchAll(new RegExp(OBSERVATION_OPEN_WORD.source, "gi"))) {
+      if (!OBSERVATION_NEGATED_OPEN.test(text.slice(0, label[0].length + (word.index ?? 0)))) {
+        return text;
+      }
+    }
+  }
+  return null;
+}
+
+function openObservationGates(...sources: Array<string | null | undefined>): string[] {
+  const gates: string[] = [];
+  for (const source of sources) {
+    if (!source) continue;
+    for (const gate of [uncheckedObservationItem(source), openObservationLine(source)]) {
+      if (gate && !gates.includes(gate)) gates.push(gate);
+    }
+  }
+  return gates;
+}
+
+function openObservationGateMessage(gates: string[]): string {
+  return `Cannot mark this ticket done. The full-day observation gate is still unfinished: ${gates
+    .map((gate) => `"${gate}"`)
+    .join("; ")}.`;
+}
+
+function destinationIsDoneColumn(section: {
+  section_title: string;
+  isDone: boolean | null;
+}): boolean {
+  return section.isDone ?? DONE_COLUMN_NAME.test(section.section_title.trim());
+}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -471,7 +538,7 @@ export async function updateTaskSingle(
         if (
           sectionChanged &&
           destinationSection &&
-          columnRoleFor(destinationSection) === "done"
+          destinationIsDoneColumn(destinationSection)
         ) {
           const openGates = openObservationGates(
             typeof requestedMutation.description === "string"
