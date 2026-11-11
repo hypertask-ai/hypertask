@@ -23,16 +23,13 @@ second implementation.
   reuses it. The token is published 0600 through a hard link so a racing writer is
   not overwritten, linked into the `sessions/` folder `ship-identity` reads, and
   never printed.
-- Refuses a name that is empty, over 64 characters, or holds a control character, a
-  pipe, a template marker or a credential-looking prefix.
 - Asks the server to verify the login and to confirm the board lists the credential
-  under this display name, so a slug shared by two names cannot write as the wrong
-  agent. Prints `<name>: login ok, identity ok`, or the exact `/rename` line when
-  this session does not carry the name yet.
+  under this name, so a slug shared by two names cannot write as the wrong agent.
+  Prints `<name>: login ok, identity ok`, or the exact `/rename` line when this
+  session does not carry the name yet.
 
 A clean machine also needs agent-create rights (`hypertask login`) or a management
-key; without one the command names that fix and saves nothing. An empty or unreadable
-credential, a session link that is not a symlink, a refused board call or a mismatched
-identity all stop it with a plain reason. Fix the cause and rerun; already-minted
-credentials are kept. Never replace a credential by hand or borrow another agent's
-login.
+key; without one the command names that fix and saves nothing. A bad name, an empty
+or unreadable credential, a session link that is not a symlink, a refused board call
+or a mismatched identity all stop it with a plain reason; fix the cause and rerun,
+already-minted credentials are kept.
