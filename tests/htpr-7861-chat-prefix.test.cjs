@@ -11,7 +11,10 @@ const { LEAN_AGENT_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, CHAT_REQUEST_WRITING_STYL
 
 test("lean routing uses registered names and retains write safeguards", async () => {
   const { chatToolSchemas } = await import("../scripts/chat-prefix-budget.mjs");
-  const names = new Set(Object.keys(chatToolSchemas()));
+  const schemas = chatToolSchemas();
+  const names = new Set(Object.keys(schemas));
+  assert.equal(schemas.web_search.description, "Unavailable: TAVILY_API_KEY is not configured on the server.");
+  assert.deepEqual(asSchema(schemas.web_search.inputSchema).jsonSchema.required, ["query"]);
   for (const name of LEAN_AGENT_SYSTEM_PROMPT.match(/\b(?:hypertask_\w+|rag_retrieval|search_help_docs)\b/g)) {
     assert.ok(names.has(name), `Unregistered tool ${name}`);
   }

@@ -21,7 +21,7 @@ function resolveModule(filename, specifier) {
 function schemaModule(filename) {
   if (modules.has(filename)) return modules.get(filename);
   const source = ts.createSourceFile(filename, fs.readFileSync(filename, "utf8"), ts.ScriptTarget.Latest, true);
-  const scope = { context, ...context };
+  const scope = { context, ...context, process: { env: {} } };
   const imports = new Map();
   const evaluate = (node) => {
     const expression = node.getText(source).replace(/^export\s+(?:default\s+)?/, "");
