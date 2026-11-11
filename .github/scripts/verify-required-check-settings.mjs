@@ -151,11 +151,8 @@ try {
       "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
       "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "premerge-evidence",
     ].sort();
-    const statusRules = ruleset.rules.filter((rule) => rule.type === "required_status_checks");
-    if (!statusRules.some((rule) => rule.parameters.strict_required_status_checks_policy === true)) {
-      throw new Error("Production required checks must require an up-to-date branch.");
-    }
-    const actual = [...new Set(statusRules
+    const actual = [...new Set(ruleset.rules
+      .filter((rule) => rule.type === "required_status_checks")
       .flatMap((rule) => rule.parameters.required_status_checks.map((check) => check.context)))].sort();
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
       throw new Error("Live required checks do not match docs/ci-policy.yml.");

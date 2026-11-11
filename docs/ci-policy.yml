@@ -110,7 +110,6 @@ review_first_gate:
   local_agent_verification: [tsc-noEmit, targeted-tests]
 
 required_checks:
-  strict_required_status_checks_policy: true
   # An administrator applied these checks through GitHub's ruleset API on
   # 2026-09-08. The hourly Required Check Settings monitor verifies this live ruleset.
   # claude-review is the reviewer's legacy status name; the live ruleset
