@@ -55,6 +55,19 @@ test('trusted publication combines outside and title guards without exposing can
   assert.deepEqual(workflow('secret-guard').on.push.branches, ['production', 'main']);
 });
 
+test('runner policy installs its parser even after an earlier guard fails', () => {
+  const steps = workflow('pr-guards-trusted').jobs['pr-guards-trusted'].steps;
+  const installIndex = steps.findIndex(step => step.name === 'Install the trusted workflow parser');
+  const runnerIndex = steps.findIndex(step => step.id === 'runner-policy');
+  assert.ok(installIndex >= 0 && installIndex < runnerIndex);
+  const install = steps[installIndex];
+  const runner = steps[runnerIndex];
+  assert.equal(install.if, "${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}");
+  assert.equal(install.if, runner.if);
+  assert.equal(install.run, 'npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund');
+  assert.equal(runner.env.NODE_PATH, '${{ github.workspace }}/.github/scripts/node-version-guard/node_modules');
+});
+
 test('CI policy preserves every required context and describes native guard publication', () => {
   const policy = yaml.load(read('docs/ci-policy.yml'));
   assert.deepEqual(policy.pr_job_budget.pull_request_guards.native_checks, ['secret-scan', 'next-public-secrets']);
