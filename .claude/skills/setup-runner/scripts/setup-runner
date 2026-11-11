@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Runner shortcut: reserve a free runner number, then use the one setup-agents path.
 set +x
 set -euo pipefail
 for runner_command_dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Temp HOME and a fake CLI only. Never provisions a real agent.
-# usage: setup-agents.test.sh [--case missing-deps|clean-home|safety|check-mode]
 set -euo pipefail
 { [ "$#" -eq 0 ] || { [ "$#" -eq 2 ] && [ "$1" = --case ]; }; } || { echo "usage: setup-agents.test.sh [--case <name>]" >&2; exit 1; }
 python3 - "$(dirname "$0")/setup-agents" "${2:-}" <<'PY'

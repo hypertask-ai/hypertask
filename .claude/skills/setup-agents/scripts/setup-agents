@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# One agent onboarding path: check the machine, then set up or reuse one agent login.
-# Prints no token and never replaces an existing credential.
 set +x
 set -euo pipefail
 for dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
