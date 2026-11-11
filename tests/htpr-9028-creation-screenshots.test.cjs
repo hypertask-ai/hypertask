@@ -314,13 +314,7 @@ test("a data URL attachment is uploaded once and reused", async () => {
     "@/lib/createTaskAttachmentUploads": { startCreateTaskUpload: () => { uploads.push(1); return { id: "one", promise: Promise.resolve({ url: shot }) }; } },
   });
   const pending = { name: "pasted.png", type: "image/png", source: base64Png };
-  const saved = await withFetch(async () => ({ blob: async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }) }), () => hostedScreenshotFiles([pending, { ...pending }]));
+  const saved = await hostedScreenshotFiles([pending, { ...pending }]);
   assert.deepEqual(saved.map((file) => file.url), [shot, shot]);
   assert.equal(uploads.length, 1);
 });
-
-async function withFetch(fakeFetch, run) {
-  const previous = global.fetch;
-  global.fetch = fakeFetch;
-  try { return await run(); } finally { global.fetch = previous; }
-}

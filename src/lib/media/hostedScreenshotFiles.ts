@@ -22,7 +22,7 @@ export async function hostedScreenshotFiles(files: ScreenshotInput[]): Promise<S
       hosted.push({ url: source ?? undefined, fileName, mimeType });
       continue;
     }
-    const uploadable = (typeof File !== "undefined" && file instanceof File) ? file : await fileFromSource(source, fileName ?? "screenshot");
+    const uploadable = (typeof File !== "undefined" && file instanceof File) ? file : fileFromSource(source, fileName ?? "screenshot");
     if (!uploadable) {
       hosted.push({ url: source ?? undefined, fileName, mimeType });
       continue;
@@ -43,11 +43,15 @@ export async function hostedScreenshotFiles(files: ScreenshotInput[]): Promise<S
   return hosted;
 }
 
-async function fileFromSource(source: string | undefined, name: string): Promise<File | null> {
-  if (!source || typeof File === "undefined" || !/^(data|blob):/i.test(source)) return null;
+function fileFromSource(source: string | undefined, name: string): File | null {
+  if (!source || typeof File === "undefined") return null;
+  const match = /^data:([^;,]*)(;base64)?,(.*)$/is.exec(source);
+  if (!match) return null;
   try {
-    const blob = await (await fetch(source)).blob();
-    return new File([blob], name, { type: blob.type || "image/png" });
+    const bytes = match[2]
+      ? Uint8Array.from(atob(match[3]), (char) => char.charCodeAt(0))
+      : new TextEncoder().encode(decodeURIComponent(match[3]));
+    return new File([bytes], name, { type: match[1] || "image/png" });
   } catch {
     return null;
   }
