@@ -60,16 +60,33 @@ export const POST = taskWriteRoute({
             fromUserId: user.id, fromUserDisplayName: user.displayName, fromUser: user, fromAgent: null, newStatus: "Archive",
           } },
         })) });
-        return { tasks, changed };
+        const deliveries = await Promise.all(changed.map(async (task) => {
+          const changes: WebhookTaskChanges = {
+            status: { from: task.status, to: "Archive" },
+            ...(task.dueDate ? { dueDate: { from: task.dueDate.toISOString(), to: null } } : {}),
+          };
+          const actor = { userId: user.id, agentId: null, displayName: user.displayName };
+          const [board, agent] = await Promise.all([
+            persistBoardWebhookEvent(tx, projectId, { event: "task.updated", data: {
+              task: { id: task.id, ticketNumber: task.ticketNumber, projectId, title: task.title }, changes, actor,
+            } }),
+            persistAgentTaskUpdatedWebhook(tx, { taskId: task.id, actor, changes }),
+          ]);
+          return { board, agent };
+        }));
+        return { tasks, changed, deliveries };
       }, { timeout: 30_000 });
       const archivedIds = result.tasks.map((task) => task.id);
       const archived = new Set(archivedIds);
       waitUntil((async () => {
-        await broadcastBoardChange(projectId, { originUserId: user.id }).catch((error) => console.error("Bulk archive broadcast failed", error));
+        const published = await Promise.allSettled([
+          broadcastBoardChange(projectId, { originUserId: user.id }),
+          publishBoardWebhookDeliveries(result.deliveries.flatMap((delivery) => delivery.board)),
+          publishAgentWebhookDeliveries(result.deliveries.flatMap((delivery) => delivery.agent)),
+        ]);
+        for (const outcome of published) if (outcome.status === "rejected") console.error("Bulk archive delivery failed", outcome.reason);
         for (let offset = 0; offset < result.changed.length; offset += 5) {
           await Promise.all(result.changed.slice(offset, offset + 5).map(async (task) => {
-            const changes: WebhookTaskChanges = { status: { from: task.status, to: "Archive" } };
-            const actor = { userId: user.id, agentId: null, displayName: user.displayName };
             const work = [
               cancelDueDateJob(task.id, projectId),
               broadcastInboxForTask(task.id),
@@ -78,11 +95,6 @@ export const POST = taskWriteRoute({
               upsertTaskToTurbopuffer(task.id, { strict: true }),
               upsertAllCommentsToTurbopuffer(task.id, { strict: true }),
               scheduleTaskSummaryGeneration({ taskId: task.id, ownerUserId: task.userId, activityOnlyOwnerId: task.userId }),
-              persistBoardWebhookEvent(prisma, projectId, { event: "task.updated", data: {
-                task: { id: task.id, ticketNumber: task.ticketNumber, projectId, title: task.title },
-                changes: { ...changes, ...(task.dueDate ? { dueDate: { from: task.dueDate.toISOString(), to: null } } : {}) }, actor,
-              } }).then(publishBoardWebhookDeliveries),
-              persistAgentTaskUpdatedWebhook(prisma, { taskId: task.id, actor, changes }).then(publishAgentWebhookDeliveries),
               ...(task.recurrence ? [spawnNextRecurrence(task.id, task.dueDate, user.id, null)] : []),
             ];
             const outcomes = await Promise.allSettled(work);

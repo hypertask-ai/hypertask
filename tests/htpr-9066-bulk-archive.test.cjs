@@ -11,7 +11,7 @@ function fixture({ enabled = true, allowed = true, fail = false, paused = false 
   const effect = async id => { effects.push(id); if (paused) await pause; };
   const tx = {
     task: {
-      findMany: async ({ where }) => tasks.filter(t => allowed && where.id.in.includes(t.id) && t.projectId === where.projectId && (!where.status || where.status.in.includes(t.status))),
+      findMany: async ({ where }) => structuredClone(tasks.filter(t => allowed && where.id.in.includes(t.id) && t.projectId === where.projectId && (!where.status || where.status.in.includes(t.status)))),
       updateMany: async ({ where, data }) => {
         if (data.status) writes.push([...where.id.in]);
         for (const task of tasks.filter(t => where.id.in.includes(t.id))) {
@@ -45,8 +45,8 @@ function fixture({ enabled = true, allowed = true, fail = false, paused = false 
     '@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove': { default: effect },
     '@/utils/controllers/notifications/broadcastInboxForTask': { broadcastInboxForTask: effect },
     '@/lib/realtime/server': { broadcastBoardChange: async () => {}, broadcastTaskChange: effect },
-    '@/lib/mcp/webhooks/outbox': { persistBoardWebhookEvent: async () => [], publishBoardWebhookDeliveries: async () => {} },
-    '@/lib/agentWebhooks/outbox': { persistAgentTaskUpdatedWebhook: async () => [], publishAgentWebhookDeliveries: async () => {} },
+    '@/lib/mcp/webhooks/outbox': { persistBoardWebhookEvent: async (client, _project, event) => { assert.equal(client, tx); assert.deepEqual(event.data.changes.status, { from: 'Normal', to: 'Archive' }); return []; }, publishBoardWebhookDeliveries: async () => {} },
+    '@/lib/agentWebhooks/outbox': { persistAgentTaskUpdatedWebhook: async client => { assert.equal(client, tx); return []; }, publishAgentWebhookDeliveries: async () => {} },
   }).POST;
   const body = { ids: Array.from({ length: 50 }, (_, i) => i + 1), projectId: 15 };
   const call = (data = body, session = { userId: 985, teamScope: null, source: 'better-auth' }) => route({ headers: new Headers(), json: async () => data }, session);
