@@ -121,6 +121,18 @@ test("entrySummary drops the internal flag link and the ticket template fields",
     entrySummary("<p>Flag: Everyone</p><p>Problem: creating a task from AI chat takes too long.</p>"),
     "Creating a task from AI chat takes too long.",
   );
+  assert.equal(
+    entrySummary(
+      "<p>Flag: (Everyone)</p><p>What&#x27;s wrong or wanted: The ticket ID left the properties column.</p>",
+    ),
+    "The ticket ID left the properties column.",
+  );
+  assert.equal(
+    entrySummary(
+      "<p>Flag: (Owner + QA) when released.</p><p>Problem: page search only matches exact words.</p>",
+    ),
+    "Page search only matches exact words.",
+  );
   assert.equal(entrySummary("<p>Why.</p>"), "");
 });
 
@@ -253,6 +265,18 @@ test("entrySummary drops chat mentions, decision notes and flag prose", () => {
   assert.equal(
     entrySummary("<p>@Tom Fix the sidebar so it stops covering cards.</p>"),
     "Fix the sidebar so it stops covering cards.",
+  );
+  assert.equal(
+    entrySummary("<p>@Tom Update AI model picker defaults.</p>"),
+    "Update AI model picker defaults.",
+  );
+  assert.equal(
+    entrySummary("<p>@Tom Investigate the slow board load on large boards.</p>"),
+    "Investigate the slow board load on large boards.",
+  );
+  assert.equal(
+    entrySummary("<p>@Valentin Yeo Restore the archived column on old boards.</p>"),
+    "Restore the archived column on old boards.",
   );
 });
 

@@ -27,9 +27,9 @@ const MIN_SUMMARY_WORDS = 4;
 
 const HTML_BREAKS = /<(?:br|\/p|\/li|\/h[1-6]|\/div)\s*\/?>/gi;
 const HTML_TAG = /<[^>]*>/g;
-const FLAG_MODE = "(?:everyone|internal|off|qa|owner|only me \\+ qa)";
+const FLAG_MODE = "(?:everyone|internal|off|qa|owner \\+ qa|only me \\+ qa|owner)";
 const FLAG_NOTE = new RegExp(
-  `(?:^|(?<=[.!?]\\s))\\s*flag:\\s*(?:https?:\\/\\/\\S+|${FLAG_MODE})\\s*(?:\\([^)]{0,40}\\))?\\s*`,
+  `(?:^|(?<=[.!?]\\s))\\s*flag:\\s*\\(?\\s*(?:https?:\\/\\/\\S+|${FLAG_MODE})\\s*\\)?\\s*(?:\\([^)]{0,40}\\))?\\s*(?:\\bwhen\\s+released\\b\\.?)?\\s*`,
   "gi",
 );
 const LEADING_FIELD =
@@ -51,38 +51,78 @@ const MENTION_STOP = new Set([
   "and",
   "apply",
   "at",
+  "avoid",
   "build",
   "cap",
+  "change",
+  "check",
   "create",
+  "cut",
+  "deploy",
+  "document",
+  "drop",
+  "ensure",
+  "expose",
+  "finish",
   "fix",
   "for",
   "from",
+  "gate",
+  "get",
   "give",
+  "handle",
+  "hide",
+  "improve",
   "in",
+  "investigate",
   "keep",
   "let",
   "make",
+  "merge",
   "move",
   "on",
   "open",
+  "polish",
   "prevent",
+  "prove",
   "put",
+  "raise",
+  "reduce",
+  "refresh",
   "remove",
+  "rename",
+  "replace",
+  "restore",
+  "review",
+  "revert",
+  "rework",
+  "rotate",
   "run",
   "send",
+  "set",
+  "ship",
   "show",
   "sort",
   "stop",
+  "surface",
   "switch",
+  "take",
+  "test",
   "the",
   "to",
   "track",
+  "trim",
+  "tune",
   "turn",
+  "update",
   "use",
   "when",
+  "wire",
   "with",
   "write",
 ]);
+const MAX_MENTION_NAME_WORDS = 3;
+
 const TICKET_PARENTHETICAL = /\s*\([^()]*\b[A-Z]{2,}[A-Z0-9]*-\d+\b[^()]*\)/g;
 const FIRST_FIELD_LABEL =
   /\b(?:what'?s wrong or wanted|what is wrong or wanted|what'?s needed|what we want)\s*:/i;
@@ -132,16 +172,31 @@ function stripLeadingFields(text: string): string {
   return stripped;
 }
 
+function mentionNameWords(text: string): { words: string[]; tails: string[] } {
+  const words: string[] = [];
+  const tails: string[] = [text];
+  let tail = text;
+  while (words.length < MAX_MENTION_NAME_WORDS) {
+    const word = tail.match(MENTION_WORD);
+    if (!word) break;
+    words.push(word[1]);
+    tail = tail.slice(word[0].length);
+    tails.push(tail);
+  }
+  return { words, tails };
+}
+
 function stripMention(text: string): string {
   const mention = text.match(MENTION);
   if (!mention) return text;
-  let rest = text.slice(mention[0].length);
-  for (let extra = 0; extra < 3; extra += 1) {
-    const word = rest.match(MENTION_WORD);
-    if (!word || MENTION_STOP.has(word[1].toLowerCase())) break;
-    rest = rest.slice(word[0].length);
+  const { words, tails } = mentionNameWords(text.slice(mention[0].length));
+  let consumed = 0;
+  for (let index = 0; index < words.length; index += 1) {
+    if (MENTION_STOP.has(words[index].toLowerCase())) break;
+    if (index === words.length - 1) break;
+    consumed = index + 1;
   }
-  return rest.trimStart();
+  return tails[consumed].trimStart();
 }
 
 function cleanSentence(piece: string): string {
