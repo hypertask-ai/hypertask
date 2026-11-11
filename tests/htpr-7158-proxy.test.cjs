@@ -36,6 +36,7 @@ function harness() {
   const redis = {
     set: async (key, value) => { store.set(key, value); return 'OK' },
     get: async (key) => { calls.push(key); return store.get(key) ?? null },
+    mget: async (...keys) => { for (const key of keys) calls.push(key); return keys.map((key) => store.get(key) ?? null) },
   }
   const imports = { '@/lib/auth/session': session, '@/lib/redis': { getRedis: async () => redis } }
   const revocation = load('src/lib/auth/sessionRevocation.ts', imports)
@@ -132,7 +133,7 @@ test('a valid cookie still passes API and page handling without a negative cache
 
 test('a Redis outage fails open for otherwise-valid API and page cookies', async () => {
   const h = harness()
-  h.redis.get = async () => { throw new Error('fake outage') }
+  h.redis.mget = async () => { throw new Error('fake outage') }
   for (const route of ['/api/projects', '/inbox']) {
     const response = await h.proxy(request(route, session.signSession({ id: 7 })))
     assert.equal(response.headers.get('x-middleware-next'), '1')
@@ -141,7 +142,7 @@ test('a Redis outage fails open for otherwise-valid API and page cookies', async
 
 test('a hanging Redis read is bounded and fails open at the proxy', async () => {
   const h = harness()
-  h.redis.get = () => new Promise(() => {})
+  h.redis.mget = () => new Promise(() => {})
   const start = performance.now()
   const response = await h.proxy(request('/api/projects', session.signSession({ id: 7 })))
   assert.equal(response.headers.get('x-middleware-next'), '1')
