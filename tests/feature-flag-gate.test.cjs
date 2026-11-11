@@ -206,6 +206,47 @@ test("server gates reject client hooks, dead calls, unrelated flags and unchange
   assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
 });
 
+test("agent snapshots preserve real flag dataflow and reject unused or fake readers", async (t) => {
+  const imports = 'import {isFeatureEnabled as read} from "@/lib/flags";\nimport {withFeatureFlagSnapshot as snapshot} from "@/lib/flags/modeCache";\nimport {OTHER_FLAG as key} from "@/lib/flags/keys";\n';
+  const dynamic = 'const {isFeatureEnabled: read} = await import("@/lib/flags"); const {withFeatureFlagSnapshot: snapshot} = await import("@/lib/flags/modeCache"); const {OTHER_FLAG: key} = await import("@/lib/flags/definitions/htpr-1-other");';
+  const cases = [
+    ['static snapshot', imports, 'const enabled = await snapshot(() => read(key, 0), "agent"); if (enabled) return "new"; return "old";', true],
+    ['dynamic snapshot from PR 3382', '', dynamic + 'const enabled = await snapshot(() => read(key, 0), "agent"); if (enabled) return "new"; return "old";', true],
+    ['dynamic direct read', '', dynamic + 'if (await read(key, 0)) return "new"; return "old";', true],
+    ['async callback return', imports, 'const enabled = await snapshot(async () => { return await read(key, 0); }, "agent"); return enabled ? "new" : "old";', true],
+    ['callback internal branch', imports, 'return snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent");', true],
+    ['nested snapshots', imports, 'const enabled = await snapshot(() => snapshot(() => read(key, 0), "agent"), "agent"); return enabled ? "new" : "old";', true],
+    ['discarded snapshot', imports, 'await snapshot(() => read(key, 0), "agent"); return "new";', false],
+    ['unused snapshot binding', imports, 'const enabled = await snapshot(() => read(key, 0), "agent"); return "new";', false],
+    ['discarded callback result', imports, 'const enabled = await snapshot(() => { read(key, 0); return true; }, "agent"); return enabled ? "new" : "old";', false],
+    ['constant callback result', imports, 'const enabled = await snapshot(() => { read(key, 0); return true; }, "agent"); if (enabled) return "new"; return "old";', false],
+    ['masked snapshot result', imports, 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled && false ? "new" : "old";', false],
+    ['unknown key', imports, 'const enabled = await snapshot(() => read("htpr-1-fake", 0), "agent"); return enabled ? "new" : "old";', false],
+    ['unrelated key', imports, 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false, 2],
+    ['fake static wrapper', imports.replace('@/lib/flags/modeCache', '@/lib/fake'), 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['fake dynamic wrapper', '', dynamic.replace('@/lib/flags/modeCache', '@/lib/fake') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['fake dynamic reader', '', dynamic.replace('import("@/lib/flags")', 'import("@/lib/fake")') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['fake key module', '', dynamic.replace('@/lib/flags/definitions/htpr-1-other', '@/lib/fake') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['shadowed reader', imports, 'const read = () => true; const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['shadowed wrapper', imports, 'const snapshot = () => true; const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['dead snapshot', imports, 'if (false) { const enabled = await snapshot(() => read(key, 0), "agent"); if (enabled) return "new"; } return "old";', false],
+    ['generator callback', imports, 'const enabled = snapshot(function* () { return read(key, 0); }, "agent"); return enabled ? "new" : "old";', false],
+    ['mutable dynamic reader', '', dynamic.replace('const {isFeatureEnabled:', 'let {isFeatureEnabled:') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['unawaited dynamic reader', '', dynamic.replace('await import("@/lib/flags")', 'import("@/lib/flags")') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['defaulted dynamic reader', '', dynamic.replace('isFeatureEnabled: read}', 'isFeatureEnabled: read = () => true}') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['reassigned wrapper', imports, 'snapshot = () => true; const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['unused helper', imports + 'async function dead() { return snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent"); }\n', 'return "ungated";', false],
+  ];
+  for (const [name, prelude, body, expected, ticket = 1] of cases) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/mcp/auth/rateLimit.ts", `${prelude}export async function execute() { ${body} }\n`);
+    const result = await evaluate(`HTPR-${ticket} [COST] snapshot behavior`, base, commit(git, name), dir);
+    assert.equal(result.pass, expected, `${name}: ${result.reason}`);
+  }
+});
+
 test("server coverage cannot excuse unrelated UI or use a client gate", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");

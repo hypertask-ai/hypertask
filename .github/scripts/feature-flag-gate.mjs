@@ -760,6 +760,37 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   return null;
 }
 
+function importedBinding(symbol) {
+  const declaration = symbol?.declarations?.[0];
+  if (declaration && typescript.isImportSpecifier(declaration)) {
+    const statement = declaration.parent.parent.parent;
+    if (declaration.isTypeOnly || statement.importClause?.isTypeOnly) return null;
+    return { imported: (declaration.propertyName ?? declaration.name).text, module: statement.moduleSpecifier.text };
+  }
+  if (!declaration || !typescript.isBindingElement(declaration) || declaration.initializer ||
+      declaration.dotDotDotToken || !typescript.isObjectBindingPattern(declaration.parent)) return null;
+  const variable = declaration.parent.parent;
+  if (!typescript.isVariableDeclaration(variable) || !variable.initializer ||
+      !(variable.parent.flags & typescript.NodeFlags.Const)) return null;
+  let initializer = unwrapArgumentExpression(variable.initializer);
+  if (!typescript.isAwaitExpression(initializer)) return null;
+  initializer = unwrapArgumentExpression(initializer.expression);
+  if (!typescript.isCallExpression(initializer) || initializer.expression.kind !== typescript.SyntaxKind.ImportKeyword ||
+      initializer.arguments.length !== 1 || !typescript.isStringLiteral(initializer.arguments[0])) return null;
+  const name = declaration.propertyName ?? declaration.name;
+  if (!typescript.isIdentifier(name) && !typescript.isStringLiteral(name)) return null;
+  return { imported: name.text, module: initializer.arguments[0].text };
+}
+
+function snapshotCallForCallback(fn, checker) {
+  if (!fn || fn.asteriskToken || (!typescript.isArrowFunction(fn) && !typescript.isFunctionExpression(fn))) return null;
+  const call = fn.parent;
+  if (!typescript.isCallExpression(call) || call.arguments[0] !== fn ||
+      call.arguments.length > 2 || !typescript.isIdentifier(call.expression)) return null;
+  const binding = importedBinding(checker.getSymbolAtLocation(call.expression));
+  return binding?.module === "@/lib/flags/modeCache" && binding.imported === "withFeatureFlagSnapshot" ? call : null;
+}
+
 function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = false) {
   const functions = [];
   function collect(node) {
@@ -836,6 +867,14 @@ function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = 
       if (renderOnly || live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live, !entries)) continue;
       live.add(fn);
       changed = true;
+    }
+    for (const fn of renderOnly ? [] : functions) {
+      const call = snapshotCallForCallback(fn, checker);
+      if (call && !live.has(fn) && isLiveCallSite(call, live, !entries) &&
+          !writtenSymbols.has(checker.getSymbolAtLocation(call.expression))) {
+        live.add(fn);
+        changed = true;
+      }
     }
     for (const fn of functions) {
       if (live.has(fn) || fn.asteriskToken || !typescript.isCallExpression(fn.parent) ||
@@ -1372,6 +1411,18 @@ function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = contro
     directGates = controlsRuntimeBranch) {
   const live = liveFunctions ?? collectLiveFunctions(sourceFile, checker);
   if (!callEnclosingFunctionIsLive(call, sourceFile, checker, live)) return false;
+  const callback = enclosingFunctionLike(call);
+  const snapshot = snapshotCallForCallback(callback, checker);
+  if (snapshot) {
+    let result = callback.body;
+    if (typescript.isBlock(result)) {
+      result = result.statements.length === 1 && typescript.isReturnStatement(result.statements[0])
+        ? result.statements[0].expression : null;
+    }
+    result = unwrapArgumentExpression(result);
+    if (result && typescript.isAwaitExpression(result)) result = unwrapArgumentExpression(result.expression);
+    if (result === call) return gatesRuntimeBehavior(snapshot, checker, sourceFile, referenceGates, live, directGates);
+  }
   if (directGates(call)) return true;
   const assigned = assignedGateSymbol(call, checker);
   if (!assigned?.symbol) return false;
@@ -1584,31 +1635,35 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
   const liveFunctions = collectLiveFunctions(sourceFile, checker);
   const renderFunctions = collectLiveFunctions(sourceFile, checker, null, true);
 
-  for (const statement of sourceFile.statements) {
-    if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
-    const moduleName = statement.moduleSpecifier.text;
-    const bindings = statement.importClause?.namedBindings;
-    if (!bindings || !typescript.isNamedImports(bindings)) continue;
-    for (const specifier of bindings.elements) {
-      const imported = specifier.propertyName?.text ?? specifier.name.text;
-      const symbol = checker.getSymbolAtLocation(specifier.name);
-      if (!symbol) continue;
-      importedFunctions.set(symbol, { imported, module: moduleName });
-      if ((moduleName === "@/hooks/useFlag" && imported === "useFlag" && !isServerFile(path)) ||
-          (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
-      const key = registry.byIdentifier.get(imported);
-      if (!key) continue;
-      if (!FLAG_KEY_MODULES.has(moduleName)) {
-        const definitionPath = moduleName.startsWith("@/lib/flags/definitions/")
-          ? `src/${moduleName.slice(2)}${moduleName.endsWith(".ts") ? "" : ".ts"}`
-          : resolveLocalModule(ref, path, moduleName);
-        if (!definitionPath || !flagDefinitionPaths(ref).includes(definitionPath)) continue;
-        const { identifier, definition } = parseFlagFile(git(["show", `${ref}:${definitionPath}`]), definitionPath);
-        if (identifier !== imported || definition.key !== key) continue;
+  const writtenSymbols = writtenBindingSymbols(sourceFile, checker);
+  function registerImport(node) {
+    if ((typescript.isImportSpecifier(node) || typescript.isBindingElement(node)) && typescript.isIdentifier(node.name)) {
+      const symbol = checker.getSymbolAtLocation(node.name);
+      const binding = importedBinding(symbol);
+      if (binding && !writtenSymbols.has(symbol)) {
+        const { imported, module: moduleName } = binding;
+        importedFunctions.set(symbol, binding);
+        if ((moduleName === "@/hooks/useFlag" && imported === "useFlag" && !isServerFile(path)) ||
+            (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
+        const key = registry.byIdentifier.get(imported);
+        if (key) {
+          let valid = FLAG_KEY_MODULES.has(moduleName);
+          if (!valid) {
+            const definitionPath = moduleName.startsWith("@/lib/flags/definitions/")
+              ? `src/${moduleName.slice(2)}${moduleName.endsWith(".ts") ? "" : ".ts"}`
+              : resolveLocalModule(ref, path, moduleName);
+            if (definitionPath && flagDefinitionPaths(ref).includes(definitionPath)) {
+              const { identifier, definition } = parseFlagFile(git(["show", `${ref}:${definitionPath}`]), definitionPath);
+              valid = identifier === imported && definition.key === key;
+            }
+          }
+          if (valid) flagSymbols.set(symbol, key);
+        }
       }
-      flagSymbols.set(symbol, key);
     }
+    typescript.forEachChild(node, registerImport);
   }
+  registerImport(sourceFile);
 
   if (isUiFile(path) && hasUngatedExportedJsxEntry(
     sourceFile,
