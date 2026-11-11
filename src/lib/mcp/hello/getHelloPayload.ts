@@ -81,12 +81,17 @@ async function helloGuidedStart(
 }
 
 async function helloCapabilities(userId: number) {
-  const [{ isFeatureEnabled }, { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG }] = await Promise.all([
+  const [{ isFeatureEnabled }, { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG }, { HTPR_7742_AGENT_CHAT_ALL_FLAG }] = await Promise.all([
     import('@/lib/flags'),
     import('@/lib/flags/definitions/htpr-7322-agent-feature-discovery'),
+    import('@/lib/flags/definitions/htpr-7742-agent-chat-all'),
   ])
   return {
     ...HELLO_CAPABILITIES,
+    ...(await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, userId) ? {
+      agent_chat:
+        'Read unanswered sidebar chats with hypertask_chat_inbox or hypertask chat listen. Reply with hypertask_chat_reply or hypertask chat reply <sessionId> --text "...". Call the inbox at startup and on your next run. POST /api/mcp/chat/heartbeat with {} while listening so the sidebar says Online. No extra chat setup is required.',
+    } : {}),
     ...(await isFeatureEnabled(HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG, userId) ? {
       features:
         'List every enabled feature-kind flag and core product destinations for the authenticated user, with registry descriptions, shipped dates and verified URLs where known, through hypertask_list_features (hypertask_user_context action features) or GET /api/mcp/features. Non-feature kinds and unavailable features are omitted.',

@@ -28,8 +28,11 @@ function stubModule(relativePath, exports) {
 function loadMessageRoute({
   brief,
   briefError = null,
+  chatAllEnabled = false,
+  subscription = { active: true, events: ["chat.message"] },
 }) {
   const deliveries = [];
+  const messageUpdates = [];
   let briefCalls = 0;
   const participantUpdates = [];
   const prisma = {
@@ -51,9 +54,10 @@ function loadMessageRoute({
       operation({
         $queryRaw: async () => [{ heartbeatAt: null }],
         agentWebhookSubscription: {
-          findUnique: async () => ({ active: true }),
+          findUnique: async () => subscription,
         },
         chatMessage: {
+          update: async (input) => { messageUpdates.push(input); return {}; },
           create: async ({ data }) => ({
             id: "message-1",
             ...data,
@@ -88,7 +92,7 @@ function loadMessageRoute({
   });
   stubModule("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
   stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async () => false,
+    isFeatureEnabled: async (key) => key === "htpr-7742-agent-chat-all" && chatAllEnabled,
   });
   stubModule("src/lib/agents/chatBrief.ts", {
     buildAgentChatBrief: async (input) => {
@@ -114,6 +118,7 @@ function loadMessageRoute({
   return {
     ...routeJiti(routePath),
     deliveries,
+    messageUpdates,
     briefCalls: () => briefCalls,
     participantUpdates,
   };
@@ -434,6 +439,21 @@ test("message send keeps released reply guidance when enrichment fails", async (
     userName: "Valentin",
     replyGuidance: "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.",
   });
+});
+
+test("offline send retains a message for the next poll without taking over a chat webhook", async () => {
+  for (const subscription of [null, { active: true, events: ["task.assigned"] }, { active: true, events: ["chat.message"] }]) {
+    for (const chatAllEnabled of [false, true]) {
+      const route = loadMessageRoute({ brief: null, subscription, chatAllEnabled });
+      const response = await sendMessage(route);
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).delivered, false);
+      const retained = chatAllEnabled && !subscription?.events.includes("chat.message");
+      assert.deepEqual(route.messageUpdates, retained
+        ? [{ where: { id: "message-1" }, data: { isDelivered: false } }]
+        : []);
+    }
+  }
 });
 
 test("message send always adds ADHD reply guidance after layout flag retirement", async () => {

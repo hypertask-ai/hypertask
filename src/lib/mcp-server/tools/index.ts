@@ -5,6 +5,8 @@ import { reportFeedbackTool } from './report-feedback.tool';
 import { helloTool } from './hello.tool';
 import { listFeaturesTool } from './list-features.tool';
 import { agentPresenceTool } from './agent-presence.tool';
+import { chatInboxTool } from './chat-inbox.tool';
+import { chatReplyTool } from './chat-reply.tool';
 import { listAgentsTool } from './list-agents.tool';
 import { agentWebhookTool } from './agent-webhook.tool';
 import { createAgentTool } from './create-agent.tool';
@@ -93,6 +95,8 @@ export const MCP_TOOLS = [
   helloTool,
   listFeaturesTool,
   agentPresenceTool,
+  chatInboxTool,
+  chatReplyTool,
   listAgentsTool,
   agentWebhookTool,
   createAgentTool,

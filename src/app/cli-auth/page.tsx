@@ -424,8 +424,22 @@ async function request(action: string, body: object): Promise<unknown> {
   return response.json();
 }
 
+function usePaintedDark() {
+  const [paintedDark, setPaintedDark] = useState(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    const read = () => setPaintedDark(root.classList.contains("dark"));
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  return paintedDark;
+}
+
 function AgentSignIn() {
   const { effectiveTheme } = useDarkMode();
+  const paintedDark = usePaintedDark();
   const [flow, setFlow] = useState<Flow | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -485,11 +499,13 @@ function AgentSignIn() {
   }
 
   const expired = flow !== null && ["PENDING", "CLAIMED", "APPROVED", "EXPIRED"].includes(flow.state) && remaining === 0;
+  const chosenMark = paintedDark || effectiveTheme === 'dark' ? '/loginLogoMain.png' : darkMark;
+  const markSrc = typeof chosenMark === 'string' ? chosenMark : chosenMark.src;
   return (
     <CliAuthShell>
       <CliAuthCard agentSignIn>
         <div className="flex flex-col items-center text-center">
-          <Image src={effectiveTheme === 'dark' ? '/loginLogoMain.png' : darkMark} alt="Hypertask logo" width={47} height={59} className="object-contain mb-3" />
+          <img key={markSrc} src={markSrc} alt="Hypertask logo" width={47} height={59} className="object-contain mb-3" />
           <h1 className="text-heading font-semibold mb-2">Sign in an agent</h1>
           <p className="text-content text-text-light-gray mb-6">Create a free board for your agent.</p>
           {error && <p role="alert" className="text-content text-text-light-gray mb-4">{error}</p>}

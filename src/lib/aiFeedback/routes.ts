@@ -20,6 +20,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/ai/usage',
   '/api/mcp/assignees/assign',
   '/api/mcp/chat/activity',
+  '/api/mcp/chat/heartbeat',
   '/api/mcp/chat/pending',
   '/api/mcp/chat/rooms/pending',
   '/api/mcp/cli-error',

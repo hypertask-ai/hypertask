@@ -275,6 +275,7 @@ function roster(enabled) {
     "@/utils/controllers/agents/boardMembers": { getAgentTeamIds: async () => new Map() },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return key === "htpr-8048-agent-sessions" ? false : enabled; } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag, "@/lib/agentStatus/chip": chip,
+    "@/lib/flags/definitions/htpr-7742-agent-chat-all": { HTPR_7742_AGENT_CHAT_ALL_FLAG: "htpr-7742-agent-chat-all" },
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/lib/api/rateLimit": { checkRestRateLimit: noop }, "@/lib/agentRuns/service": { browserMutationIsSameOrigin: noop },
     "@/lib/agents/runtimeState": {
@@ -295,7 +296,7 @@ test("roster batches authorized agent IDs once and marks only fresh ACTIVE runs 
   assert.deepEqual(body.agents.map(agent => [agent.id, agent.status, agent.deliveryMode]), [
     ["working", "working", "webhook"], ["quiet", null, "polling"], ["stale", null, null], ["done", null, null],
   ]);
-  assert.deepEqual(view.flagReads, [["htpr-8048-agent-sessions", 6], [flag.HTPR_7688_PAST_CHATS_FIRST_FLAG, 6]]);
+  assert.deepEqual(view.flagReads, [["htpr-8048-agent-sessions", 6], [flag.HTPR_7688_PAST_CHATS_FIRST_FLAG, 6], ["htpr-7742-agent-chat-all", 6]]);
   assert.equal(view.queries.length, 1);
   const query = view.queries[0];
   assert.deepEqual(query.where.agentId.in, ["working", "quiet", "stale", "done"]);

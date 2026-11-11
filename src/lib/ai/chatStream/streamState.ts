@@ -43,5 +43,6 @@ export type StreamState = StreamOptions & {
   turnUsage: { inputTokens?: number; outputTokens?: number } | undefined;
   generationFinishedWithError: boolean;
   turnOutcomeRecorded: boolean;
+  requestLogEnabled: boolean;
   recordTurnOutcome: (outcome: AiChatTurnOutcome, error?: unknown) => void;
 };

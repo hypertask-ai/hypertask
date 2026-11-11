@@ -10,6 +10,7 @@ import crypto from 'node:crypto'
 import Redis from 'ioredis'
 import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from './stateless-http'
 import { selectMcpTools } from './consolidated-tools'
+import { appendAgentChatTools } from './tools/chat-inbox.tool'
 import { getAgentPresenceTool } from './tools/agent-presence.tool'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { HTPR_7203_MCP_FLAT_SCHEMA_FLAG, isFeatureEnabled } from '@/lib/flags'
@@ -192,13 +193,13 @@ export async function handleLegacySseRequest(
               const actAsAgent = Boolean(ctx && await actAsAgentAvailable(ctx))
               const available = await boardAccessCatalog(tools
                 .map((tool) => tool.name === presenceTool.name ? presenceTool : tool), ctx)
-              const catalog = observeFeedbackTools(selectMcpTools(available, true, {
+              const catalog = observeFeedbackTools(await appendAgentChatTools(selectMcpTools(available, true, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
                 ...(ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
                 ...(actAsAgent ? { actAsAgent } : {}),
-              }, await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, userId), await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, userId), await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, userId), await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, userId), false, await isFeatureEnabled(HTPR_7934_NEAREST_FIELD_HINT_FLAG, userId)), userId)
+              }, await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, userId), await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, userId), await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, userId), await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, userId), false, await isFeatureEnabled(HTPR_7934_NEAREST_FIELD_HINT_FLAG, userId)), ctx), userId)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

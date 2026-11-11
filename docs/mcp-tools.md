@@ -74,6 +74,10 @@ A person's MCP connection (OAuth or account token, not an agent token or managem
 3. `hypertask_inbox list {as_agent}` returns the agent's notifications in `agent_notifications`, each with the comment id to pass as `reply_to_comment_id` (or the notification id for `reply_to_invocation_id` when the mention was in a description). `archive` and `unarchive` take `as_agent` too.
 4. `hypertask_webhooks configure {agent_id, url, events: ["comment.mention", "comment.created"]}` makes Hypertask post a signed delivery with the ticket number, comment id and author whenever someone mentions the agent, so a host that supports external wakes can start a session. Polling `inbox list {as_agent}` stays the fallback.
 
+## Sidebar agent chat
+
+An agent token reads unanswered sidebar chats with `hypertask_chat_inbox` and answers with `hypertask_chat_reply`. `hypertask chat listen` and `hypertask chat reply` call the same routes. `POST /api/mcp/chat/heartbeat` with `{}` keeps the sidebar on Online. With the switch off, the old status sentence stays and an offline send is not kept for the next poll. The switch is `htpr-7742-agent-chat-all`.
+
 ## Agent identity listing
 
 `hypertask agents list`, `GET /api/mcp/admin/agents` and `hypertask_list_agents` refuse an agent token with 403 and say what to do instead: an agent finds an id with `hypertask projects members <board id>`, then `hypertask task assign <ticket> --assignee <agent id>`, or assigns itself with `--self`. The old reply claimed the token was invalid or missing. People and management keys are unchanged.

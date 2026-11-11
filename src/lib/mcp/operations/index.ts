@@ -11,6 +11,8 @@ type OperationDefinition = {
 }
 
 const operations: OperationDefinition[] = [
+  { pattern: /^\/mcp\/chat\/pending$/, params: [], methods: ["GET"], load: () => import('@/app/api/mcp/chat/pending/route') },
+  { pattern: /^\/mcp\/chat\/sessions\/([^\/]+)\/messages$/, params: ["sessionId"], methods: ["GET","POST"], load: () => import('@/app/api/mcp/chat/sessions/[sessionId]/messages/route') },
   { pattern: /^\/mcp\/agents\/board-access-requests$/, params: [], methods: ["POST"], load: () => import('./agents/board-access-requests/operation') },
   { pattern: /^\/mcp\/agents\/board-access-requests\/([^\/]+)$/, params: ["requestId"], methods: ["GET"], load: () => import('./agents/board-access-requests/[requestId]/operation') },
   { pattern: /^\/mcp\/features$/, params: [], methods: ["GET"], load: () => import('./features/operation') },

@@ -18,7 +18,8 @@ import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_ADHD_REPLY_GUIDANCE } from "@/lib/flags/keys";
-import { hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
+import { agentChatDeliveryMode, retainUndeliveredAgentChat } from "@/lib/agents/chatAvailability";
+import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from "@/lib/flags/definitions/htpr-7742-agent-chat-all";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
 import { defaultContextSchema } from "@/lib/ai/chatStream/request";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -139,6 +140,7 @@ export async function POST(
       console.error("Failed to enrich Agent Chat with work context", error);
     }
 
+    const pollingFallbackEnabled = await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, userId);
     const { message, deliveryIds, pollingChatEnabled } =
       await prisma.$transaction(async (tx) => {
       const [agent] = await tx.$queryRaw<Array<{ heartbeatAt: Date | null }>>`
@@ -151,11 +153,14 @@ export async function POST(
       if (!agent) throw new Error("Agent not found");
       const subscription = await tx.agentWebhookSubscription.findUnique({
         where: { agentId },
-        select: { active: true },
+        select: { active: true, events: true },
       });
-      const pollingChatEnabled =
-        !subscription?.active &&
-        hasFreshAgentChatHeartbeat(agent.heartbeatAt);
+      const mode = agentChatDeliveryMode(
+        { heartbeatAt: agent.heartbeatAt, subscription },
+        new Date(),
+        pollingFallbackEnabled,
+      );
+      const pollingChatEnabled = mode === "polling";
 
       await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
       const message = await tx.chatMessage.create({
@@ -194,7 +199,13 @@ export async function POST(
         ...(agentBrief ? { agentBrief } : {}),
       });
 
-      if (deliveryIds.length === 0 && pollingChatEnabled) {
+      if (retainUndeliveredAgentChat({
+        webhookDeliveryCount: deliveryIds.length,
+        mode,
+        pollingFallbackEnabled,
+        subscriptionActive: Boolean(subscription?.active),
+        subscriptionHasChat: Boolean(subscription?.events?.includes("chat.message")),
+      })) {
         await tx.chatMessage.update({
           where: { id: message.id },
           data: { isDelivered: false },
