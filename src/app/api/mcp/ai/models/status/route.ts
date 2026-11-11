@@ -36,21 +36,17 @@ const JEV = {
   model: DUPLICATE_DECISION_MODEL_SLUG,
 };
 
-async function reportSettingsFailure(error: unknown, stage: string) {
-  await reportError({
-    message: error instanceof Error ? error.message : "AI settings read failed",
-    stack: error instanceof Error ? error.stack : undefined,
-    url: "/api/mcp/ai/models/status",
-    source: "handled",
-    extra: { stage },
-  });
-}
-
 async function readJev(userId: number) {
   try {
     return { ...JEV, enabled: await isFeatureEnabled(JEV.flag, userId) };
   } catch (error) {
-    await reportSettingsFailure(error, "jev");
+    await reportError({
+      message: error instanceof Error ? error.message : "AI settings read failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/models/status",
+      source: "handled",
+      extra: { stage: "jev" },
+    });
     return { ...JEV, enabled: null };
   }
 }
@@ -92,7 +88,13 @@ async function readSettings(ctx: AuthContext, request: NextRequest) {
       jev,
     };
   } catch (error) {
-    await reportSettingsFailure(error, "team");
+    await reportError({
+      message: error instanceof Error ? error.message : "AI settings read failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/models/status",
+      source: "handled",
+      extra: { stage: "team" },
+    });
     return { teamId: null, gateway: null, providers: [], jev, unreadable: true };
   }
 }
