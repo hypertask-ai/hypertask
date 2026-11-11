@@ -25,7 +25,7 @@ right that the other missed, with a bootstrap interval and an exact test).
 
 The corpus is 200 board 15 tickets that already carry a brain label, set before
 2026-11-10 so no label could have come from the Task Writer itself. It is
-stratified: 65 light, 81 medium, 50 hard, 4 extra-hard. Client names are
+stratified: 57 light, 105 medium, 36 hard, 2 extra-hard. Client names are
 redacted and each note is cut to 1000 characters.
 
 ## How to run it
