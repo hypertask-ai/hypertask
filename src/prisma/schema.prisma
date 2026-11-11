@@ -2991,7 +2991,6 @@ model AutoModelShadow {
   error         String?
 
   @@index([createdAt])
-  @@index([chatSessionId, createdAt])
 }
 
 // Typed proof-of-work attached to a ticket (HTPR-4443): a test run, screenshot,

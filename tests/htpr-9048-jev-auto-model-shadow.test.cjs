@@ -2,7 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { loadModule } = require("./helpers/loadModule.cjs");
-
 const report = require(path.resolve(__dirname, "../scripts/jev-auto-model-shadow-report.cjs"));
 
 function runtime({ funding = { apiKey: "vck_fixture", source: "managed" }, answer = "standard 0.82", enabled = true } = {}) {
@@ -21,50 +20,44 @@ function runtime({ funding = { apiKey: "vck_fixture", source: "managed" }, answe
   return { mod, calls, writes, tasks };
 }
 
+const shadow = runtime().mod;
 const turn = (extra = {}) => ({ userId: 985, teamId: "team-1", projectId: 15, chatSessionId: "s1", feature: "aiChat", message: "Where is the export button?", history: [], autoModelKey: "claude-haiku-5-5", ...extra });
 const row = (index, overrides = {}) => ({ createdAt: new Date(Date.UTC(2026, 10, 11, 0, index)).toISOString(), chatSessionId: `u-${index}`, autoTier: 1, jevLevel: "standard", jevTier: 2, jevConfidence: 0.85, jevLatencyMs: 90, resent: false, error: null, ...overrides });
 
-test("the flag, the prompt, Jev's answer and Auto's signals", () => {
+test("the flag, the prompt, Jev's answer and Auto's step-up signals", () => {
   const definition = loadModule("src/lib/flags/definitions/htpr-9048-jev-auto-model-shadow.ts").default;
   assert.deepEqual([definition.key, definition.kind, definition.defaultMode], ["htpr-9048-jev-auto-model-shadow", "feature", "EVERYONE"]);
-  const { buildJevAutoModelPrompt, parseJevAutoModelGuess, tierForJevLevel, compareAutoModelTiers, autoModelTurnSignals } = runtime({ enabled: false }).mod;
-  const prompt = buildJevAutoModelPrompt("  Fix   the\n export button  ");
+  const prompt = shadow.buildJevAutoModelPrompt("  Fix   the\n export button  ");
   assert.match(prompt, /level <light\|standard\|high>/);
   assert.match(prompt, /REQUEST: Fix the export button$/);
-  assert.equal(buildJevAutoModelPrompt("x".repeat(5000)).includes(`REQUEST: ${"x".repeat(1201)}`), false);
-  assert.deepEqual(parseJevAutoModelGuess("standard 0.82"), { level: "standard", confidence: 0.82 });
-  assert.deepEqual(parseJevAutoModelGuess("Level: high, confidence 0.61"), { level: "high", confidence: 0.61 });
-  assert.deepEqual(parseJevAutoModelGuess("hard 90%"), { level: "high", confidence: 0.9 });
-  assert.equal(parseJevAutoModelGuess("I cannot answer"), null);
-  assert.deepEqual(["light", "standard", "high"].map(tierForJevLevel), [1, 2, 3]);
-  assert.deepEqual([compareAutoModelTiers(3, 1), compareAutoModelTiers(1, 3), compareAutoModelTiers(2, 2)], ["jev-higher", "jev-lower", "agree"]);
+  assert.equal(shadow.buildJevAutoModelPrompt("x".repeat(5000)).includes(`REQUEST: ${"x".repeat(1201)}`), false);
+  assert.deepEqual(shadow.parseJevAutoModelGuess("standard 0.82"), { level: "standard", confidence: 0.82 });
+  assert.deepEqual(shadow.parseJevAutoModelGuess("Level: high, confidence 0.61"), { level: "high", confidence: 0.61 });
+  assert.deepEqual(shadow.parseJevAutoModelGuess("hard 90%"), { level: "high", confidence: 0.9 });
+  assert.equal(shadow.parseJevAutoModelGuess("I cannot answer"), null);
+  assert.deepEqual(["light", "standard", "high"].map(shadow.tierForJevLevel), [1, 2, 3]);
+  assert.deepEqual([shadow.compareAutoModelTiers(3, 1), shadow.compareAutoModelTiers(1, 3), shadow.compareAutoModelTiers(2, 2)], ["jev-higher", "jev-lower", "agree"]);
   const long = Array.from({ length: 20 }, () => ({ role: "human", content: "hi" }));
-  assert.equal(autoModelTurnSignals({ message: "hello", history: long, longThreadMessages: 20 }).stepUp, 1);
-  assert.equal(autoModelTurnSignals({ message: "again", history: [{ role: "human", content: "again" }], longThreadMessages: 20 }).resent, true);
-  assert.equal(autoModelTurnSignals({ message: "fix ```js\nx\n```", history: null, longThreadMessages: 20 }).stepUp, 1);
+  assert.deepEqual([shadow.autoModelTurnSignals({ message: "hi", history: long, longThreadMessages: 20 }).stepUp, shadow.autoModelTurnSignals({ message: "again", history: [{ role: "human", content: "again" }], longThreadMessages: 20 }).resent, shadow.autoModelTurnSignals({ message: "```js", history: null, longThreadMessages: 20 }).stepUp], [1, true, 1]);
 });
 
 test("a managed turn logs one row next to Auto's level, and the skips make no call", async () => {
   const { mod, calls, writes } = runtime();
   await mod.shadowAutoModelTurn(turn());
-  assert.equal(calls[0].maxOutputTokens, 24);
-  assert.deepEqual([writes[0].autoTier, writes[0].jevLevel, writes[0].jevTier, writes[0].comparison, writes[0].error], [1, "standard", 2, "jev-higher", null]);
+  assert.deepEqual([calls[0].maxOutputTokens, writes[0].autoTier, writes[0].jevLevel, writes[0].jevTier, writes[0].comparison, writes[0].error], [24, 1, "standard", 2, "jev-higher", null]);
   const customer = runtime({ funding: { apiKey: "vck_customer", source: "customer" } });
   await customer.mod.shadowAutoModelTurn(turn());
-  assert.deepEqual([customer.calls.length, customer.writes.length], [0, 0]);
   const untied = runtime({ funding: null });
   await untied.mod.shadowAutoModelTurn(turn({ teamId: null, projectId: null }));
-  assert.deepEqual([untied.calls.length, untied.writes.length], [0, 0]);
   const silent = runtime({ answer: "no idea" });
   await silent.mod.shadowAutoModelTurn(turn({ message: "fix ```js\nx\n```" }));
-  assert.deepEqual([silent.writes[0].jevLevel, silent.writes[0].error, silent.writes[0].autoTier], [null, "no idea", 2]);
+  assert.deepEqual([customer.calls.length, customer.writes.length, untied.calls.length, untied.writes.length, silent.writes[0].jevLevel, silent.writes[0].error, silent.writes[0].autoTier], [0, 0, 0, 0, null, "no idea", 2]);
   const off = runtime({ enabled: false });
   await off.mod.shadowAutoModelTurnInBackground(turn());
-  assert.deepEqual([off.calls.length, off.writes.length], [0, 0]);
   const on = runtime({ enabled: true });
   await on.mod.shadowAutoModelTurnInBackground(turn());
   await Promise.all(on.tasks);
-  assert.equal(on.writes.length, 1);
+  assert.deepEqual([off.writes.length, on.writes.length], [0, 1]);
 });
 
 test("a resend marks the earlier turn retried and the four bars decide keep or drop", () => {
@@ -80,11 +73,8 @@ test("a resend marks the earlier turn retried and the four bars decide keep or d
     ...Array.from({ length: 400 }, (_, index) => row(600 + index)),
   ];
   const result = report.analyze(rows);
-  assert.deepEqual([result.rows, result.counts.agree, result.counts["jev-higher"]], [1000, 500, 500]);
-  assert.deepEqual(result.bars.map((bar) => bar.pass), [true, true, true, true]);
-  assert.equal(result.verdict, "KEEP");
+  assert.deepEqual([result.rows, result.counts.agree, result.counts["jev-higher"], result.bars.map((bar) => bar.pass), result.verdict], [1000, 500, 500, [true, true, true, true], "KEEP"]);
   assert.match(report.renderReport(result), /Keep Jev/);
   const short = report.analyze(Array.from({ length: 250 }, (_, index) => row(index)));
-  assert.equal(short.verdict, "DROP");
-  assert.match(report.renderReport(short), /FAIL 1000 Auto turns logged: 250 of 1000 turns/);
+  assert.deepEqual([short.verdict, /FAIL 1000 Auto turns logged: 250 of 1000 turns/.test(report.renderReport(short))], ["DROP", true]);
 });

@@ -23,4 +23,3 @@ CREATE TABLE "AutoModelShadow" (
 );
 
 CREATE INDEX "AutoModelShadow_createdAt_idx" ON "AutoModelShadow"("createdAt");
-CREATE INDEX "AutoModelShadow_chatSessionId_createdAt_idx" ON "AutoModelShadow"("chatSessionId", "createdAt");
