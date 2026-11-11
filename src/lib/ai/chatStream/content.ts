@@ -173,7 +173,7 @@ export function createUserPrompt(
     return `
                 IMPORTANT: Analyze the history and provide a complete, context-aware HTML body response.
                 IMPORTANT: Follow the tool selection hierarchy strictly.
-                IMPORTANT: User context is provided already. If you want to know more about the user's boards, then use the list_boards tool.
+                IMPORTANT: User context is provided already. If you want to know more about the user's boards, then use the hypertask_list_projects tool.
                 IMPORTANT: Take into account the documents and images provided by the user.
                 ${body.default_context?.scope === "ticket"
       ? "SCOPE: Current ticket only. Use only the current ticket title, description and comments as ticket context. Do not search or load other tickets or board-wide context. This explicit scope overrides the default task_id navigation guidance."
@@ -221,7 +221,7 @@ export function createUserPrompt(
 
                 IMPORTANT: Analyze the history and provide a complete, context-aware HTML body response.
                 IMPORTANT: Follow the tool selection hierarchy strictly.
-                IMPORTANT: User context is provided already. If you want to know more about the user's boards, then use the list_boards tool.
+                IMPORTANT: User context is provided already. If you want to know more about the user's boards, then use the hypertask_list_projects tool.
                 IMPORTANT: Take into account the documents and images provided by the user.
             `;
 }
