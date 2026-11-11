@@ -638,12 +638,13 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
   );
 });
 
-function runChromiumInstaller({ answering, failures }) {
+function runChromiumInstaller({ answering, failures, hang, budget = "110" }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-279-"));
   const mirrorFile = path.join(dir, "apt-mirrors.txt");
   fs.writeFileSync(
     path.join(dir, "curl"),
     `#!/bin/bash
+if [ "${hang}" = "probe" ]; then sleep 300; fi
 url="\${@: -1}"
 for hit in ${answering.join(" ")}; do
   case "$url" in *"$hit"*) exit 0;; esac
@@ -655,6 +656,9 @@ exit 6
   fs.writeFileSync(
     path.join(dir, "npx"),
     `#!/bin/bash
+cat "${dir}/99-ci-timeouts" > "${dir}/apt-conf-at-install"
+printf '%s\n' "$*" >> "${dir}/npx-args"
+if [ "${hang}" = "download" ] || { [ "${hang}" = "deps" ] && [[ "$*" == *--with-deps* ]]; }; then sleep 300; fi
 n=$(( $(cat "${dir}/npx-calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/npx-calls"
 if [ "$n" -le ${failures} ]; then printf '%s\n' "E: Failed to fetch packages  Temporary failure resolving" >&2; exit 1; fi
 echo "chromium installed"
@@ -663,15 +667,29 @@ echo "chromium installed"
   );
   fs.writeFileSync(path.join(dir, "apt-get"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
   fs.writeFileSync(path.join(dir, "sudo"), '#!/bin/bash\nexec "$@"\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, "strace"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
+  const started = performance.now();
   const child = spawnSync("bash", [path.resolve(".github/scripts/install-chromium.sh")], {
-    env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, APT_MIRROR_FILE: mirrorFile, RETRY_SLEEP: "0" },
+    timeout: 125_000,
+    env: {
+      ...process.env,
+      PATH: `${dir}:${process.env.PATH}`,
+      APT_MIRROR_FILE: mirrorFile,
+      APT_CONF_FILE: path.join(dir, "99-ci-timeouts"),
+      CHROMIUM_INSTALL_TIMEOUT: budget,
+      RETRY_SLEEP: "0",
+    },
     encoding: "utf8",
   });
   return {
     status: child.status,
     output: child.stdout + child.stderr,
     mirror: fs.existsSync(mirrorFile) ? fs.readFileSync(mirrorFile, "utf8").trim() : null,
-    npxCalls: Number(fs.readFileSync(path.join(dir, "npx-calls"), "utf8")),
+    npxCalls: fs.existsSync(path.join(dir, "npx-calls")) ? Number(fs.readFileSync(path.join(dir, "npx-calls"), "utf8")) : 0,
+    args: fs.existsSync(path.join(dir, "npx-args")) ? fs.readFileSync(path.join(dir, "npx-args"), "utf8") : "",
+    aptConf: fs.existsSync(path.join(dir, "apt-conf-at-install")) ? fs.readFileSync(path.join(dir, "apt-conf-at-install"), "utf8") : "",
+    elapsed: performance.now() - started,
+    signal: child.signal,
   };
 }
 
@@ -703,12 +721,12 @@ test("HYCI-279: a dead mirror name is skipped, kept working, and retried once", 
   assert.equal(skipped.status, 0, skipped.output);
   assert.equal(skipped.mirror, "https://azure.archive.ubuntu.com/ubuntu/");
   assert.match(skipped.output, /Ubuntu mirror did not answer: https:\/\/archive\.ubuntu\.com\/ubuntu\//);
-  assert.equal(skipped.npxCalls, 2, "one retry after the failed install");
+  assert.equal(skipped.npxCalls, 3, "one retry then browser and system dependencies");
 
   const noMirror = runChromiumInstaller({ answering: [], failures: 0 });
   assert.equal(noMirror.status, 0, noMirror.output);
   assert.equal(noMirror.mirror, null, "the runner's own sources stay when no probe answers");
-  assert.equal(noMirror.npxCalls, 1);
+  assert.equal(noMirror.npxCalls, 2);
 
   const never = runChromiumInstaller({ answering: ["azure.archive.ubuntu.com"], failures: 5 });
   assert.equal(never.status, 1);
@@ -719,4 +737,35 @@ test("HYCI-279: a dead mirror name is skipped, kept working, and retried once", 
   assert.equal(deadNetwork.status, 1);
   assert.equal(deadNetwork.npxCalls, 1, "a dead network is not retried for another nine minutes");
   assert.match(deadNetwork.output, /not retrying into a dead network/);
+});
+
+
+test("HYCI-285: browser cache lookup precedes apt without skipping system dependencies", () => {
+  const run = runChromiumInstaller({ answering: ["archive.ubuntu.com"], failures: 0 });
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(run.args.trim().split("\n"), ["playwright install chromium", "playwright install --with-deps chromium"]);
+  for (const protocol of ["http", "https", "ftp"]) {
+    assert.match(run.aptConf, new RegExp(`Acquire::${protocol}::Timeout "5"`));
+  }
+  assert.match(run.aptConf, /Acquire::Retries "0"/);
+});
+
+for (const hang of ["probe", "download", "deps"]) {
+  test(`HYCI-285: a stuck ${hang} is bounded by the whole-install deadline`, () => {
+    const run = runChromiumInstaller({ answering: ["archive.ubuntu.com"], failures: 0, hang, budget: "1" });
+    assert.equal(run.status, 1, run.output);
+    assert.equal(run.signal, null, "the installer must exit itself, not hit the test safety timeout");
+    assert.ok(run.elapsed < 10_000, `installer took ${run.elapsed}ms`);
+    assert.equal((run.output.match(/::error::/g) ?? []).length, 1, run.output);
+    assert.match(run.output, /Chromium installation timed out.*outside network/);
+  });
+}
+
+test("HYCI-285: the default deadline stops a disconnected download within two minutes", () => {
+  const run = runChromiumInstaller({ answering: [], failures: 0, hang: "download" });
+  assert.equal(run.status, 1, run.output);
+  assert.equal(run.signal, null, "the installer must exit before the test safety timeout");
+  assert.ok(run.elapsed < 120_000, `installer took ${run.elapsed}ms`);
+  console.log(`HYCI-285 disconnected install: ${(run.elapsed / 1000).toFixed(1)}s`);
+  assert.match(run.output, /Chromium installation timed out.*outside network/);
 });

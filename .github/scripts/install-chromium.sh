@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+if [[ "${1:-}" != "--run" ]]; then
+  started=$SECONDS
+  timeout -k 5 "${CHROMIUM_INSTALL_TIMEOUT:-110}" bash "${BASH_SOURCE[0]}" --run
+  status=$?
+  if ((status == 124 || status == 137)); then
+    echo "::error::Chromium installation timed out after $((SECONDS - started))s; check this runner's outside network"
+    exit 1
+  fi
+  exit "$status"
+fi
+
 SUITE="${UBUNTU_SUITE:-noble}"
 MIRROR_FILE="${APT_MIRROR_FILE:-/etc/apt/apt-mirrors.txt}"
+APT_CONF_FILE="${APT_CONF_FILE:-/etc/apt/apt.conf.d/99-ci-timeouts}"
 RETRY_SLEEP="${RETRY_SLEEP:-20}"
 ATTEMPTS=2
 MIRROR_ANSWERED=0
@@ -13,8 +25,15 @@ MIRRORS=(
   "https://mirrors.edge.kernel.org/ubuntu/"
 )
 
+APT_TIMEOUT_OPTS=(
+  -o Acquire::http::Timeout=5
+  -o Acquire::https::Timeout=5
+  -o Acquire::ftp::Timeout=5
+  -o Acquire::Retries=0
+)
+
 probe() {
-  curl -fsS --max-time 10 --connect-timeout 5 -o /dev/null "$1/dists/$SUITE/InRelease"
+  curl -fsS --max-time 6 --connect-timeout 3 -o /dev/null "$1/dists/$SUITE/InRelease"
 }
 
 choose_mirror() {
@@ -37,14 +56,24 @@ choose_mirror() {
 }
 
 install_deps() {
+  npx playwright install chromium || return 1
   npx playwright install --with-deps chromium || return 1
-  sudo apt-get update -o Acquire::Retries=3 || return 1
-  sudo apt-get install -y -o Acquire::Retries=3 strace || return 1
+  if ! command -v strace > /dev/null; then
+    sudo apt-get update "${APT_TIMEOUT_OPTS[@]}" || return 1
+    sudo apt-get install -y "${APT_TIMEOUT_OPTS[@]}" strace || return 1
+  fi
 }
+
+if ! printf 'Acquire::http::Timeout "5";\nAcquire::https::Timeout "5";\nAcquire::ftp::Timeout "5";\nAcquire::Retries "0";\n' |
+  sudo tee "$APT_CONF_FILE" > /dev/null; then
+  echo "::error::Could not configure short apt timeouts"
+  exit 1
+fi
 
 for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
   choose_mirror
   if install_deps; then
+    echo "::notice::Chromium and its system packages are ready"
     exit 0
   fi
   echo "::warning::Chromium install attempt $attempt of $ATTEMPTS failed"
