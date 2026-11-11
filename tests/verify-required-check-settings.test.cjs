@@ -21,7 +21,7 @@ const endpoints = [
 function runSettings({
   event = "pull_request", file = ".github/workflows/ci-tests.yml",
   diffStatus = 0, fetchStatus = 0, httpStatus = 200, resetSeconds = 0,
-  liveContexts = contexts, proof = null,
+  liveContexts = contexts, strict = true, proof = null,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "required-check-settings-"));
   const log = join(directory, "calls");
@@ -106,6 +106,7 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
           target: "branch",
           conditions: { ref_name: { include: ["refs/heads/production"], exclude: [] } },
           rules: [{ type: "required_status_checks", parameters: {
+            ...(strict === null ? {} : { strict_required_status_checks_policy: strict }),
             required_status_checks: liveContexts.map((context) => ({ context })),
           } }],
         }),
@@ -243,6 +244,16 @@ for (const httpStatus of [404, 403]) {
     assertRejected(result);
     assert.match(result.output, new RegExp(`HTTP ${httpStatus}.*not a rate limit`));
     assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 1);
+  });
+}
+
+for (const strict of [false, null]) {
+  test(`stale passing checks cannot be accepted when strict freshness is ${strict}`, () => {
+    const result = runSettings({ strict });
+    assertRejected(result);
+    assert.match(result.output, /Production required checks must require an up-to-date branch/);
+    assert.equal(result.stored, null);
+    assert.equal(result.stepOutput, "");
   });
 }
 
