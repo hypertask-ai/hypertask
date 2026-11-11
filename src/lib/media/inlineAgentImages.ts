@@ -86,6 +86,18 @@ export function creationScreenshotCandidates(
   return candidates;
 }
 
+export function creationScreenshotAttachments(
+  files: { url?: string | null; source?: string | null; fileName?: string | null; name?: string | null; mimeType?: string | null; type?: string | null }[] | undefined,
+): AgentImageAttachment[] {
+  return creationScreenshotCandidates(
+    (files ?? []).map((file) => ({
+      url: file.source ?? file.url,
+      fileName: file.name ?? file.fileName,
+      mimeType: file.type ?? file.mimeType,
+    })),
+  ).filter((file) => isBrowserRenderableImage(file.mimeType, file.fileName ?? file.url));
+}
+
 export function guaranteeCreationScreenshots(
   html: string,
   options: { instructions?: string; attachments?: AgentImageAttachment[] },
