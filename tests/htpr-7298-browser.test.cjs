@@ -160,6 +160,8 @@ function harness(options = {}) {
   prisma.page.create = async () => assert.fail('page creation must use the transaction client');
   const service = load('src/utils/controllers/pages/pageService.ts', {
     '@/lib/prisma': { default: prisma },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key !== 'htpr-9017-smart-page-search' && options.flag !== false },
+    '@/lib/turbopuffer': { default: { namespace: () => ({ query: async () => ({ rows: [] }) }) }, turbopufferNamespaces: { page: { name: 'pages' } } },
     '@/utils/controllers/projects/getAllIncludes': access,
     '@/utils/controllers/turbopuffer/turbopufferHelper': { convertToPlain: (value) => value, upsertPageToTurbopuffer: async () => {}, deletePageFromTurbopuffer: async () => {} },
     '@/utils/helperFunctions/markdownToHtml': { markdownToHtml: (value) => value },

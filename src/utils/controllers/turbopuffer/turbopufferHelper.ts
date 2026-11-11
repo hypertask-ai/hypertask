@@ -1186,7 +1186,7 @@ async function embedRowsForWrite<T extends { searchText: string; projectId?: num
   return { rows: written, hasVectors: written.length > 0 };
 }
 
-async function embedQueryForSearch(query: string, context: string, projectIds: number[] = []): Promise<number[] | null> {
+export async function embedQueryForSearch(query: string, context: string, projectIds: number[] = []): Promise<number[] | null> {
   const { embeddingSpendMode, withSpendCharge } = await import("@/lib/ai/spend/embeddingRoute");
   const route = projectIds.length ? await embeddingSpendMode(projectIds).catch(() => ({ mode: "current" as const })) : { mode: "current" as const };
   if (route === "mixed-keyword" || route.mode === "keyword") return null;
@@ -1304,7 +1304,7 @@ async function searchCommentRowsWithBm25(
   return groupByTask ? normalizeAndGroupCommentRows(rows, limit) : rows.map(normalizeCommentRow);
 }
 
-function getMultiQueryRows<T>(response: unknown): T[] {
+export function getMultiQueryRows<T>(response: unknown): T[] {
   const result = response as {
     results?: Array<{
       rows?: T[];
@@ -1335,7 +1335,7 @@ function normalizeAndGroupCommentRows(
   return groupedRows;
 }
 
-function buildProjectFilter(projectIds: number[], projectId?: number | null) {
+export function buildProjectFilter(projectIds: number[], projectId?: number | null) {
   const allowedProjectIds = uniqueNumbers(projectIds);
   if (allowedProjectIds.length === 0) return null;
 
