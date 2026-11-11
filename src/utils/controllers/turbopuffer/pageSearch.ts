@@ -33,13 +33,18 @@ function normalizePageRow(row: TurbopufferPageRow): TurbopufferPageRow {
   };
 }
 
+export async function smartPageSearchEnabled(userId: number): Promise<boolean> {
+  if (await isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, userId)) return true;
+  return false;
+}
+
 export async function searchPagesInTurbopuffer({
   searchQuery,
   projectIds,
   userId,
   topK = PAGE_SEARCH_RESULT_LIMIT,
 }: SearchPagesParams): Promise<TurbopufferPageRow[]> {
-  if (!await isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, userId)) return [];
+  if (!await smartPageSearchEnabled(userId)) return [];
 
   const query = searchQuery.trim();
   const projectFilter = buildProjectFilter(projectIds);
