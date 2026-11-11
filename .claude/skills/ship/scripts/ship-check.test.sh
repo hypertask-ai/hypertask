@@ -45,6 +45,30 @@ MOCK
   T 1 '[BUG] MARK-173 Type first, which only the duplicate path takes'
 }
 title_tests
+
+# A green check that predates a base move must not carry a merge (HYCI-262).
+fresh_tests() {
+  local PATH=$PATH BEHIND_FIXTURE
+  mkdir -p "$E/fresh-bin"; PATH="$E/fresh-bin:$PATH"
+  cat > "$E/fresh-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+if [[ $1 == api && $2 == repos/hypertask-ai/hypertask/pulls/4242 ]]; then echo 0123456789abcdef0123456789abcdef01234567; exit 0; fi
+if [[ $1 == api && $2 == repos/hypertask-ai/hypertask/compare/production...0123456789abcdef0123456789abcdef01234567 ]]; then echo "$BEHIND_FIXTURE"; exit 0; fi
+exit 1
+MOCK
+  chmod +x "$E/fresh-bin/gh"
+  F() {
+    local want=$1; shift; out=$(BEHIND_FIXTURE="$1" ./ship-check fresh 4242 2>&1); got=$?
+    [ "$got" = "$want" ] && ok "fresh: behind_by $1" || bad "fresh: want $want got $got <- behind_by $1 ($out)"
+  }
+  F 0 0
+  F 1 3
+  F 1 ''
+  out=$(BEHIND_FIXTURE=3 ./ship-check fresh 4242 2>&1)
+  [[ $out == *'update the branch'* && $out == *'3 commit(s) behind production'* ]] \
+    && ok 'fresh: refusal names the update and the distance' || bad "fresh: refusal message <- $out"
+}
+fresh_tests
 if [ "${1:-}" = --title-only ]; then
   [ "$fails" = 0 ] && echo 'title ok' || exit 1
   exit 0

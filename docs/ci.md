@@ -403,6 +403,14 @@ revert titles retain their existing handling. Ticketed runner bots also bind.
 The production-only manual `pr_number` input executes the same trusted title
 entry for live QA and recovery. Delayed runs can link merged PRs.
 
+## Merge guard: the branch must carry the base (HYCI-262)
+
+The ruleset's `strict_required_status_checks_policy` is still false: `GITHUB_TOKEN` has no `administration` permission key, and neither the hypertask-runners app nor the CI app installation was granted administration write, so no agent or workflow credential can change it. Proven on run 42984063820 (`The permissions requested are not granted to this installation`).
+
+So the merge boundary enforces it instead. `ship-check guard`, which the `gh` wrapper runs before every `gh pr merge`, now refuses a pull request whose head is behind the base branch: the message names the distance and the `update-branch` call, and the runner updates, waits for fresh checks, then merges. A green check that predates a base move therefore cannot carry a merge. `ship-check fresh <pr>` is the same check on its own.
+
+The repo-side switch stays a one-line owner action if Valentin wants it: enable "Require branches to be up to date before merging" on ruleset 21854377, or grant administration write to the CI app installation. Nothing in this change depends on it.
+
 ## Premerge evidence
 
 `premerge-evidence` passes every open `production` PR with the exact description `test click removed (Valentin 2026-10-21)`. No screen-path, flag-removal, live-mode, browser-click, `premerge.md` or recording evaluation remains. Valentin removed the test click on 2026-10-21 because it was not helping.

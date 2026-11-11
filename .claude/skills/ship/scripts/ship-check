@@ -16,6 +16,7 @@
 #   ship-check premerge-status <pr> publish the required current-head GitHub status
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
 #   ship-check ci-tests <pr>     latest ci-tests on the PR head passes; failures name tests and production status
+#   ship-check fresh <pr>        the head carries every commit of the base branch, so no green check predates a base move
 #   ship-check ticket <T>        ticket exists on the board
 #   ship-check deeper <T>        newest "Deeper:" agent activity names field, raw source, method, outside proof, breaks if and a
 #                                proof gate <T>.deeper-<name> with CHECK: and EXPECT: in this session's .unlazy/s-<id>/gates/*.md
@@ -184,6 +185,18 @@ check_ci_tests() {
     esac
   fi
   fail "$reason"$'\n'"run ci-why $1 for the failed step"
+}
+
+# A green check on an old base may not cover what landed on the base since (HYCI-262).
+check_fresh() {
+  local head behind
+  head=$(gh api "repos/$REPO/pulls/$1" --jq .head.sha 2>/dev/null) || fail "cannot read the head of PR $1; retry"
+  [[ $head =~ ^[0-9a-f]{40}$ ]] || fail "cannot read the head of PR $1; retry"
+  behind=$(gh api "repos/$REPO/compare/$BASE...$head" --jq .behind_by 2>/dev/null) || fail "cannot compare PR $1 with $BASE; retry"
+  [[ $behind =~ ^[0-9]+$ ]] || fail "cannot compare PR $1 with $BASE; retry"
+  [ "$behind" -eq 0 ] \
+    || fail "head ${head:0:7} is $behind commit(s) behind $BASE, so its green checks predate that work; update the branch (gh api -X PUT repos/$REPO/pulls/$1/update-branch), wait for fresh checks, then merge"
+  echo "branch up to date"
 }
 
 # Newest PR for the ticket into BASE, as "number state mergeSha". Exits 1 if GitHub cannot be read.
@@ -1114,6 +1127,7 @@ PY
       out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist).$unresolved" >&2; exit 2; }
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
+      out=$(check_fresh "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
     fi
     # Move to the board's done column, by task move or task update --section: needs merge, deploy and
     # docs (FEATURE/IMPROVE); app tickets also need proof.md.
@@ -1167,6 +1181,7 @@ case "${1:-}" in
   premerge-status) check_premerge_status "$2" ;;
   title) check_title "$2" ;;
   ci-tests) check_ci_tests "$2" ;;
+  fresh) check_fresh "$2" ;;
   ticket) check_ticket "$2" ;;
   deeper) check_deeper "${2:-}" ;;
   pr) check_pr "$2" ;;
