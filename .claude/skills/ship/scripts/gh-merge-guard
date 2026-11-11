@@ -7,22 +7,31 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 
 HOME = Path.home()
 DEST = HOME / '.local/lib/hypertask/merge-guard'
 WRAPPER = HOME / '.local/bin/gh'
 LINE = 'exec $REAL "$@"'
+CALL = 'exec "$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$REAL" "$@"'
+RETIRED = '"$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$@" || exit $?\n'
+LOCK_DIR = HOME / '.local/state/hypertask-merge'
+LOCK_TIMEOUT = 600
 FILES = ('gh-merge-guard', 'ship-check', 'ci-test-failures.py')
 BUILTINS = set('agent-task alias api attestation auth browse cache codespace completion config copilot extension gist gpg-key issue label licenses org preview pr project release repo ruleset run search secret ssh-key status variable version workflow help'.split())
-INSERT = '"$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$@" || exit $?\n'
 
 
 def install():
     source = Path(__file__).resolve().parent
-    text = WRAPPER.read_text()
-    if text.count(LINE) != 1 or text.count(INSERT) > 1 or (INSERT in text and INSERT + LINE not in text):
+    text = WRAPPER.read_text().replace(RETIRED, '')
+    if not text.startswith('#!/bin/bash\n'):
         raise ValueError('unrecognized gh wrapper shape')
-    if not text.startswith('#!/bin/bash\n') or text.count('\n' + LINE + '\n') != 1:
+    if text.count(CALL) + text.count('\n' + LINE + '\n') != 1:
         raise ValueError('unrecognized gh wrapper execution boundary')
     for name in FILES:
         if not (source / name).is_file():
@@ -37,10 +46,10 @@ def install():
             os.replace(temporary, DEST / name)
         finally:
             temporary.unlink(missing_ok=True)
-    if INSERT not in text:
+    if CALL not in text:
         with tempfile.NamedTemporaryFile(mode='w', dir=WRAPPER.parent, delete=False) as tmp:
             temporary = Path(tmp.name)
-            tmp.write(text.replace(LINE, INSERT + LINE))
+            tmp.write(text.replace(LINE, CALL))
         try:
             temporary.chmod(WRAPPER.stat().st_mode & 0o777)
             os.replace(temporary, WRAPPER)
@@ -48,13 +57,33 @@ def install():
             temporary.unlink(missing_ok=True)
 
 
-def guard(args):
+def hold_lock(repo):
+    if fcntl is None:
+        raise ValueError('this platform has no file locking, so a guarded merge cannot be serialized; merge from a POSIX host')
+    LOCK_DIR.mkdir(parents=True, exist_ok=True)
+    fd = os.open(LOCK_DIR / (re.sub(r'[^a-z0-9_.-]+', '-', repo) + '.lock'), os.O_CREAT | os.O_RDWR, 0o644)
+    timeout = float(os.environ.get('SHIP_MERGE_LOCK_TIMEOUT', LOCK_TIMEOUT))
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except OSError:
+            if time.monotonic() >= deadline:
+                os.close(fd)
+                raise ValueError('another guarded merge held the ' + repo
+                                 + ' merge lock for ' + str(int(timeout)) + ' seconds; retry when it finishes')
+            time.sleep(0.2)
+
+
+def guard(real, original):
+    args = list(original)
     prefix = []
     i = 0
     while i < len(args) and args[i].startswith('-'):
         arg = args[i]
         if arg in ('-h', '--help', '--version') and len(args) == 1:
-            return 0
+            os.execv(real, [real, *args])
         if arg in ('-R', '--repo'):
             if i + 1 >= len(args):
                 raise ValueError('missing repository argument')
@@ -66,12 +95,12 @@ def guard(args):
         else:
             raise ValueError('unsupported global arguments')
     if i == len(args):
-        return 0
+        os.execv(real, [real, *args])
     command = args[i]
     if command not in BUILTINS:
         raise ValueError('unsupported command; gh aliases are not supported')
     if command != 'pr':
-        return 0
+        os.execv(real, [real, *args])
     i += 1
     while i < len(args) and args[i].startswith('-'):
         arg = args[i]
@@ -84,16 +113,17 @@ def guard(args):
             prefix.append(arg)
             i += 1
         elif arg in ('-h', '--help') and i == len(args) - 1:
-            return 0
+            os.execv(real, [real, *args])
         else:
             raise ValueError('unsupported pr parent arguments')
     if i == len(args) or args[i] != 'merge':
-        return 0
+        os.execv(real, [real, *args])
     args = ['pr', 'merge', *prefix, *args[i + 1:]]
     if os.environ.get('GH_HOST', 'github.com').lower() != 'github.com':
         raise ValueError('unsupported GitHub host')
     repo = None
     target = None
+    pinned = None
     options = {'--merge', '--squash', '--rebase', '--auto', '--disable-auto', '--delete-branch', '-d', '--admin', '--match-head-commit', '--subject', '-t', '--body', '-b', '--body-file', '-F'}
     values = {'--match-head-commit', '--subject', '-t', '--body', '-b', '--body-file', '-F'}
     i = 2
@@ -108,13 +138,18 @@ def guard(args):
             if repo is not None:
                 raise ValueError('multiple repositories')
             repo = arg.split('=', 1)[1] if arg.startswith('--repo=') else arg[2:].removeprefix('=')
+        elif arg == '--auto':
+            raise ValueError('--auto is refused: a delayed merge can land after production moves, so its checks go stale; merge now, when the guard has just read the branch')
         elif arg in options:
             if arg in values:
                 i += 1
                 if i >= len(args):
                     raise ValueError('missing option value')
+                if arg == '--match-head-commit':
+                    pinned = args[i]
         elif any(arg.startswith(option + '=') for option in values if option.startswith('--')):
-            pass
+            if arg.startswith('--match-head-commit='):
+                pinned = arg.split('=', 1)[1]
         elif not arg.startswith('-') and target is None:
             target = arg
         else:
@@ -141,17 +176,44 @@ def guard(args):
         env['SHIP_REPO'] = repo
     if repo == 'hypertask-ai/hypertask':
         env['SHIP_BASE'] = 'production'
-    result = subprocess.run([str(checker), 'guard'], input=json.dumps({'tool_input': {'command': command}, 'cwd': os.getcwd()}), text=True, env=env)
-    return result.returncode if result.returncode > 0 else (1 if result.returncode < 0 else 0)
+    lock = hold_lock(repo)
+    try:
+        with tempfile.NamedTemporaryFile(dir=LOCK_DIR, prefix='pin-', delete=False) as tmp:
+            pin = Path(tmp.name)
+        try:
+            env['SHIP_MERGE_PIN'] = str(pin)
+            result = subprocess.run([str(checker), 'guard'], input=json.dumps({'tool_input': {'command': command}, 'cwd': os.getcwd()}), text=True, env=env)
+            if result.returncode < 0:
+                return 1
+            if result.returncode > 0:
+                return result.returncode
+            checked = pin.read_text().strip()
+            if checked and not re.fullmatch(r'[0-9a-f]{40}', checked):
+                raise ValueError('the guard recorded an unreadable head; merge again')
+            if not checked:
+                if repo == 'hypertask-ai/hypertask':
+                    raise ValueError('the guard recorded no head to merge, so this merge cannot be pinned to the branch it read; reinstall the guard with gh-merge-guard --install and merge again')
+                return subprocess.run([real, *original]).returncode
+            if pinned is not None and pinned.lower() != checked:
+                raise ValueError('--match-head-commit ' + pinned + ' is not the head the guard read (' + checked + '); merge again without --match-head-commit')
+            merge = original if pinned is not None else [*original, '--match-head-commit', checked]
+            return subprocess.run([real, *merge]).returncode
+        finally:
+            pin.unlink(missing_ok=True)
+    finally:
+        os.close(lock)
 
 
 try:
     if sys.argv[1:] == ['--install']:
         install()
-    elif sys.argv[1:2] == ['--']:
-        sys.exit(guard(sys.argv[2:]))
+    elif sys.argv[1:2] == ['--'] and len(sys.argv) > 2:
+        real = sys.argv[2]
+        if not os.path.isfile(real) or not os.access(real, os.X_OK):
+            raise ValueError('cannot run ' + real + '; reinstall the gh wrapper with gh-merge-guard --install')
+        sys.exit(guard(real, sys.argv[3:]))
     else:
-        raise ValueError('expected --install or -- followed by gh arguments')
+        raise ValueError('expected --install or -- followed by the real gh path and gh arguments')
 except (OSError, ValueError) as error:
     print('gh merge guard: ' + str(error), file=sys.stderr)
     sys.exit(2)
