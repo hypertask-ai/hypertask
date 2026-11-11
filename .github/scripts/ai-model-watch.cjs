@@ -85,21 +85,32 @@ function ticketFor(finding) {
   };
 }
 
+function rollupGate(findings) {
+  const gated = findings.filter((finding) => finding.inputPerMillion == null || finding.inputPerMillion > 5);
+  const ready = findings.filter((finding) => finding.inputPerMillion != null && finding.inputPerMillion <= 5);
+  const needsYes = ready.some((finding) => !["openai", "anthropic"].includes(finding.provider));
+  const waitLine = `${gated.length} of these wait for the price check or HTPR-7746.`;
+  const yes = { decide: "yes or no to these model classes.", decision: "Valentin says yes or no to these classes." };
+  if (!gated.length) return needsYes ? yes : { decide: "nothing", decision: "Nothing; a runner ships these classes." };
+  if (!ready.length) return { decide: "nothing", decision: `Nothing yet; ${waitLine}` };
+  return {
+    decide: needsYes ? yes.decide : "nothing",
+    decision: `${needsYes ? "Valentin says yes or no to the ready classes" : "Nothing needed for the ready classes"}; ${waitLine}`,
+  };
+}
+
 function rollupTicket(findings, now = new Date()) {
   const models = findings.map((finding) => `${finding.provider}/${identity(finding.model).name}`).sort();
   const families = [...new Set(models.map((model) => identity(model).family))].sort();
   const fingerprint = createHash("sha256").update(models.join("\n")).digest().readBigUInt64BE(0).toString().slice(0, 9);
   const marker = `modelwatchrollup-${families.slice(0, 3).join("-")}-${models.length}-${fingerprint}`;
   const items = findings.map((finding) => `<li>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}. ${priceLine(finding)} ${escapeHtml(finding.action)}.</li>`).join("");
-  const gated = findings.filter((finding) => finding.inputPerMillion == null || finding.inputPerMillion > 5);
-  const decision = gated.length
-    ? `Nothing yet; ${gated.length} of these wait for the price check or HTPR-7746.`
-    : "Valentin says yes or no to these classes.";
+  const gate = rollupGate(findings);
   const plain = plainBlock({
     wanted: "New model classes are on the gateway and not in our catalog.",
     affects: "people who pick a model in chat.",
     course: "add the classes below to the catalog. Why: people cannot pick a model we do not list.",
-    decide: gated.length ? "nothing" : "yes or no to these model classes.",
+    decide: gate.decide,
     undo: "revert the catalog change and the saved pick migration.",
   });
   const parts = plainParts({
@@ -107,7 +118,7 @@ function rollupTicket(findings, now = new Date()) {
     fix: `<ul>${items}</ul>`,
     done: `<p>Every model below shows in each picker. A live chat answer uses one.</p>`,
     risk: `<p>A wrong saved pick is the worst case. Undo by reverting the change.</p>`,
-    decision: `<p>${decision}</p>`,
+    decision: `<p>${gate.decision}</p>`,
   });
   return {
     marker,

@@ -107,12 +107,18 @@ test("watcher rollup names the premium gate instead of authorising every class",
   const base = { kind: "new-class", provider: "meta", modelClass: "llama" };
   const cheap = { ...base, model: "meta/llama-5", inputPerMillion: 1, action: "ask Valentin before shipping" };
   const premium = { ...base, model: "meta/llama-5-pro", inputPerMillion: 9, action: "waits for HTPR-7746" };
-  const gated = rollupTicket([cheap, premium], new Date("2026-10-25T12:00:00Z"));
-  assert.match(gated.description.split("<hr>")[1], /Nothing yet; 1 of these wait for the price check or HTPR-7746\./);
-  assert.match(gated.description.split("<hr>")[0], /What Valentin must decide:<\/strong> nothing<\/p>/);
+  const mixed = rollupTicket([cheap, premium], new Date("2026-10-25T12:00:00Z"));
+  const [mixedPlain, mixedParts] = mixed.description.split("<hr>");
+  assert.match(mixedPlain, /What Valentin must decide:<\/strong> yes or no to these model classes\.<\/p>/);
+  assert.match(mixedParts, /Valentin says yes or no to the ready classes; 1 of these wait for the price check or HTPR-7746\./);
+  const allGated = rollupTicket([{ ...premium, model: "meta/llama-5-pro" }, { ...cheap, model: "meta/llama-6", inputPerMillion: null }], new Date("2026-10-25T12:00:00Z"));
+  assert.match(allGated.description.split("<hr>")[0], /What Valentin must decide:<\/strong> nothing<\/p>/);
+  assert.match(allGated.description.split("<hr>")[1], /Nothing yet; 2 of these wait for the price check or HTPR-7746\./);
   const open = rollupTicket([cheap], new Date("2026-10-25T12:00:00Z"));
   assert.match(open.description.split("<hr>")[1], /Valentin says yes or no to these classes\./);
   assert.match(open.description.split("<hr>")[0], /What Valentin must decide:<\/strong> yes or no to these model classes\.<\/p>/);
+  const automatic = rollupTicket([{ ...cheap, provider: "openai", model: "openai/gpt-6" }], new Date("2026-10-25T12:00:00Z"));
+  assert.match(automatic.description.split("<hr>")[1], /Nothing; a runner ships these classes\./);
 });
 
 test("watcher reports the board refusal text instead of a bare status code", async () => {
