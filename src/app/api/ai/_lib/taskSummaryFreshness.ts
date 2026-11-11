@@ -24,7 +24,8 @@ export async function taskSummaryOnViewEnabled(
 ): Promise<boolean> {
   if (!userId) return false;
   try {
-    return await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, userId);
+    if (await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, userId)) return true;
+    return false;
   } catch (error) {
     console.error(
       "[taskSummaries] Summary-on-view switch lookup failed; keeping scheduled runs",
