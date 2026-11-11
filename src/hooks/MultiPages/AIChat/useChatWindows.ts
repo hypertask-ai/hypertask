@@ -138,6 +138,7 @@ export function useChatWindows(verifiedUserId?: number | null) {
 
   return {
     enabled: floating,
+    accountId: userId,
     windows,
     atCapacity: windows.length >= CHAT_WINDOW_MAX,
     viewport,

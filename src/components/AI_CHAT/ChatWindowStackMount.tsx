@@ -22,7 +22,8 @@ export default function ChatWindowStackMount({ userId }: { userId: number | null
     if (!multiChatWindowsEnabled || !sidebarMode || userId === null) return;
     setStored((previous) => closeChatWindowsForUser(previous, userId));
   }, [multiChatWindowsEnabled, setStored, sidebarMode, userId]);
-  const stackReady = multiChatWindowsEnabled && userId !== null && controller.enabled;
+  const accountReady = controller.accountId > 0;
+  const stackReady = multiChatWindowsEnabled && accountReady && controller.enabled;
   return stackReady && (controller.windows.length > 0 || (sideBySide && chat?.showAiChatInterface)) ? (
     <Suspense fallback={null}>
       <ChatWindowStack userId={userId} />

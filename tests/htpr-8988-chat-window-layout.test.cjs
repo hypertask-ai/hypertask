@@ -7,6 +7,10 @@ const flag = "htpr-8988-chat-window-layout";
 const user = 985;
 const geometry = loadModule("src/lib/aiChat/chatWindows.ts");
 
+function dialogPresence(container) {
+  return container.querySelector('[role="dialog"]') ? "present" : "absent";
+}
+
 function assertSeparate(rects, viewport) {
   assert.ok(rects.length >= 3);
   for (const [i, a] of rects.entries()) {
@@ -167,7 +171,7 @@ for (const options of [{ sidebar: true }, { verifiedUserId: user + 1 }]) {
     try {
       React.act(() => { assert.equal(view.controller.open("chat-a"), false); });
       assert.deepEqual(view.values.windows, []);
-      assert.equal(view.container.querySelector('[role="dialog"]'), null);
+      assert.equal(dialogPresence(view.container), "absent");
     } finally { view.close(); }
   });
 }
@@ -175,7 +179,7 @@ for (const options of [{ sidebar: true }, { verifiedUserId: user + 1 }]) {
 test("layout flag off keeps the primary in the existing panel and retains legacy secondary placement", () => {
   const view = stackView({ enabled: false });
   try {
-    assert.equal(view.container.querySelector('[role="dialog"]'), null);
+    assert.equal(dialogPresence(view.container), "absent");
     React.act(() => { assert.equal(view.controller.open("chat-a"), true); });
     assert.equal(view.container.querySelectorAll('[role="dialog"]').length, 1);
     assert.deepEqual([view.values.windows[0].x, view.values.windows[0].y], [1352, 302]);

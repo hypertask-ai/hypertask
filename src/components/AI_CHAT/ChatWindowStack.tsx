@@ -85,7 +85,7 @@ export default function ChatWindowStack({ userId }: { userId: number | null }) {
   const movePrimary = useCallback((rect: ChatWindowRect) => {
     setPrimaryRect(clampChatWindowRect(rect, viewport, tileChatWindowRect(0, count, viewport)));
   }, [count, viewport]);
-  const primaryVisible = sideBySide && chat?.showAiChatInterface && userId !== null;
+  const primaryVisible = sideBySide && chat?.showAiChatInterface && controller.accountId > 0;
   const windowStackReady = controller.enabled && viewport.width > 0 && (windows.length > 0 || primaryVisible);
   if (!windowStackReady) return null;
 
