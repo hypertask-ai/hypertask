@@ -322,8 +322,9 @@ check('tickets', 'creation options, redacted escaped HTML, atomic private state 
   await h.run();
   const call = creates(h)[0];
   assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log', '--priority', 'high', '--title']);
-  assert.match(call.description, /^<p><strong>/);
-  assert.match(call.description, /error-fingerprint:[a-f0-9]{16}<\/p>$/);
+  assert.match(call.description, /<h2>Problem<\/h2>/);
+  assert.match(call.description, /<p><strong>/);
+  assert.match(call.description, /error-fingerprint:[a-f0-9]{16}<\/p><\/blockquote>$/);
   assert.ok(!call.description.includes('<script>'));
   const stack = call.description.match(/<pre>([\s\S]*?)<\/pre>/)[1];
   assert.equal(stack.split('\n').length, 40);
@@ -466,6 +467,7 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
   for (const flag of ['searchFail', 'badSearch', 'createFail']) await withHarness(async h => {
     h.events([event()]); h.config({ [flag]: true }); assert.equal(await h.run(), 0);
     assert.equal(Object.keys(h.state().pending).length, 1);
+    if (flag === 'createFail') assert.deepEqual(h.state().created, []);
     if (flag !== 'createFail') assert.equal(creates(h).length, 0);
     h.config({}); await h.run({ now: NOW + 1000 });
     assert.equal(Object.keys(h.state().pending).length, 0);

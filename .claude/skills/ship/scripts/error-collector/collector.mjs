@@ -177,12 +177,11 @@ function description(group, fp) {
         whatValentinMustDecide: "nothing; a runner will investigate",
         howToUndo: "revert the breaking deploy or patch the handler",
       });
-  if (group.noiseRule) {
-    const fields = [ ['Service', group.service], ['Warning', group.normalized], ['Occurrences in one hour', group.hourlyCount], ['Hour ending', group.hourLastSeen], ['Routes', group.routes.join(', ')], ['Redacted sample', group.message] ];
-    return block + `<ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
-  }
-  const fields = [ ['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message] ];
-  return block + `<ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
+  const detail = group.noiseRule
+    ? `<ul>${[['Service', group.service], ['Warning', group.normalized], ['Occurrences in one hour', group.hourlyCount], ['Hour ending', group.hourLastSeen], ['Routes', group.routes.join(', ')], ['Redacted sample', group.message]].map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`
+    : `<ul>${[['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message]].map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
+  const summary = [['Problem', 'Production reported this failure again.'], ['Fix', 'A runner traces it and patches the cause.'], ['Done when', 'This failure stops repeating in production.'], ['Risk', 'The same failure can keep reaching people.'], ['Decision', 'None.']];
+  return `${summary.map(([heading, sentence]) => `<h2>${heading}</h2><p>${sentence}</p>`).join('')}<blockquote>${block}${detail}</blockquote>`;
 }
 
 function search(fp, board, env, incident) {
@@ -496,9 +495,15 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
           state.created.push(iso(now));
           await checkpoint();
-          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
-          if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
-          else found = { ticket: ticketRef(payload(output).task), deleted: false };
+          try {
+            const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
+            if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
+            else found = { ticket: ticketRef(payload(output).task), deleted: false };
+          } catch (error) {
+            state.created.pop();
+            await checkpoint();
+            throw error;
+          }
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };
         } finally { if (temp) await fs.rm(temp, { force: true }); }
       } else {
