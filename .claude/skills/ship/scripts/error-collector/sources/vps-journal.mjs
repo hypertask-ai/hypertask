@@ -15,7 +15,7 @@ export function parseJournal(text, { since, until } = {}) {
     const id = `${ts.slice(0, 10)}|${unit}|${normalize(message)}|${isNoise({ service: name, message, route: unit })}`;
     const group = groups.get(id);
     if (group) { group.count++; if (ts > group.ts) group.ts = ts; }
-    else groups.set(id, { service: name, board: 2060, message, route: unit, stack: '', ts, count: 1 });
+    else groups.set(id, { service: name, board: 11514, message, route: unit, stack: '', ts, count: 1 });
   }
   return [...groups.values()];
 }
