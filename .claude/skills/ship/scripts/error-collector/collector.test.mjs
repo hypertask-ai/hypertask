@@ -474,6 +474,14 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
   });
 });
 
+check('tickets', 'create title drops code names the server rejects', () => withHarness(async h => {
+  h.events([event({ service: 'vercel', message: 'Failed to update view | Use either label_names/assignee_ids/match or board_filters, not both', route: '/mcp' })]);
+  await h.run();
+  const title = creates(h)[0].args[creates(h)[0].args.indexOf('--title') + 1];
+  assert.equal(title.includes('label_names') || title.includes('board_filters'), false);
+  assert.match(title, /^vercel: /);
+}));
+
 check('tickets', 'hourly cap files a product Vercel error before an infra group', () => withHarness(async h => {
   h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
   h.events([

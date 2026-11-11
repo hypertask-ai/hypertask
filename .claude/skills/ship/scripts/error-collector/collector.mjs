@@ -161,6 +161,18 @@ function merge(group, event) {
   group.routes = [...new Set([...group.routes, redact(event.route)])];
 }
 
+function plainTitle(group) {
+  const raw = group.noiseRule
+    ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour`
+    : `${group.service}: ${group.normalized}`;
+  const cleaned = raw
+    .replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, 'a field')
+    .replace(/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}\b/g, 'a marker')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return (cleaned || `${group.service}: production failure`).slice(0, 150);
+}
+
 function description(group, fp) {
   const block = group.noiseRule
     ? renderPlainLanguageTicketDescription({
@@ -180,8 +192,15 @@ function description(group, fp) {
   const detail = group.noiseRule
     ? `<ul>${[['Service', group.service], ['Warning', group.normalized], ['Occurrences in one hour', group.hourlyCount], ['Hour ending', group.hourLastSeen], ['Routes', group.routes.join(', ')], ['Redacted sample', group.message]].map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`
     : `<ul>${[['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message]].map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
+  const opening = renderPlainLanguageTicketDescription({
+    whatWrongOrWanted: "Production reported this failure again.",
+    whoItAffects: "People using the app.",
+    recommendedCourseAndWhy: "A runner traces it and patches the cause.",
+    whatValentinMustDecide: "nothing",
+    howToUndo: "Revert the patch once it ships.",
+  });
   const summary = [['Problem', 'Production reported this failure again.'], ['Fix', 'A runner traces it and patches the cause.'], ['Done when', 'This failure stops repeating in production.'], ['Risk', 'The same failure can keep reaching people.'], ['Decision', 'None.']];
-  return `${summary.map(([heading, sentence]) => `<h2>${heading}</h2><p>${sentence}</p>`).join('')}<blockquote>${block}${detail}</blockquote>`;
+  return `${opening}${summary.map(([heading, sentence]) => `<h2>${heading}</h2><p>${sentence}</p>`).join('')}<blockquote>${block}${detail}</blockquote>`;
 }
 
 function search(fp, board, env, incident) {
@@ -496,7 +515,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           state.created.push(iso(now));
           await checkpoint();
           try {
-            const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
+            const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title', plainTitle(group), '--description-file', path]);
             if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
             else found = { ticket: ticketRef(payload(output).task), deleted: false };
           } catch (error) {
