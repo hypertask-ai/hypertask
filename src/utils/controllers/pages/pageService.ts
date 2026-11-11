@@ -395,6 +395,16 @@ export async function listPages({
   })
 }
 
+const PAGE_SEARCH_RESULT_LIMIT = 50
+
+async function indexedPageIds(query: string, projectIds: number[], userId: number) {
+  const { searchPagesInTurbopuffer } = await import('@/utils/controllers/turbopuffer/pageSearch')
+  const rows = await searchPagesInTurbopuffer({ searchQuery: query, projectIds, userId })
+  return [...new Set(rows
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isSafeInteger(id) && id > 0))]
+}
+
 export async function searchPages({
   query,
   projectIds,
@@ -413,38 +423,57 @@ export async function searchPages({
   const normalizedQuery = query.trim()
   if (!normalizedQuery || projectIds.length === 0) return []
 
-  const pages = await prisma.page.findMany({
-    where: {
-      archived: false,
-      ...(standalonePagesEnabled ? {} : { taskId: { not: null } }),
-      projectId: { in: projectIds },
-      project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)) },
-      OR: [
-        { title: { contains: normalizedQuery, mode: 'insensitive' } },
-        { contentText: { contains: normalizedQuery, mode: 'insensitive' } },
-      ],
-    },
-    select: {
-      id: true,
-      publicId: true,
-      title: true,
-      contentText: true,
-      projectId: true,
-      task: {
-        where: {
-          status: { not: 'Deleted' },
-          project: { status: 'Normal', ...(userId === undefined
-            ? { id: { in: projectIds } }
-            : getProjectWhere(userId, agentId, teamScope)) },
-        },
-        select: { id: true },
+  const accessiblePage = {
+    archived: false,
+    ...(standalonePagesEnabled ? {} : { taskId: { not: null } }),
+    projectId: { in: projectIds },
+    project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)) },
+  } satisfies Prisma.PageWhereInput
+  const literalWhere: Prisma.PageWhereInput = {
+    ...accessiblePage,
+    OR: [
+      { title: { contains: normalizedQuery, mode: 'insensitive' } },
+      { contentText: { contains: normalizedQuery, mode: 'insensitive' } },
+    ],
+  }
+  const select = {
+    id: true,
+    publicId: true,
+    title: true,
+    contentText: true,
+    projectId: true,
+    task: {
+      where: {
+        status: { not: 'Deleted' as const },
+        project: { status: 'Normal' as const, ...(userId === undefined
+          ? { id: { in: projectIds } }
+          : getProjectWhere(userId, agentId, teamScope)) },
       },
-      parentPageId: true,
-      updatedAt: true,
+      select: { id: true },
     },
-    orderBy: { updatedAt: 'desc' },
-  })
-  return pages.map(({ task, ...page }) => ({ ...page, taskId: task?.id ?? null }))
+    parentPageId: true,
+    updatedAt: true,
+  } satisfies Prisma.PageSelect
+  const toResult = ({ task, ...page }: Prisma.PageGetPayload<{ select: typeof select }>) => ({ ...page, taskId: task?.id ?? null })
+  const literalMatches = await prisma.page.findMany({ where: literalWhere, select, orderBy: { updatedAt: 'desc' } })
+  const rankedIds = userId === undefined ? [] : await indexedPageIds(normalizedQuery, projectIds, userId)
+  if (rankedIds.length === 0) return literalMatches.map(toResult)
+
+  const rankedPages = await prisma.page.findMany({ where: { ...accessiblePage, id: { in: rankedIds } }, select })
+  const rankById = new Map(rankedIds.map((id, rank) => [id, rank]))
+  const ordered = [
+    ...literalMatches,
+    ...rankedPages.sort((left, right) => (rankById.get(left.id) ?? rankedIds.length) - (rankById.get(right.id) ?? rankedIds.length)),
+  ]
+  const seen = new Set<number>()
+  return ordered
+    .filter((page) => {
+      if (seen.has(page.id)) return false
+      seen.add(page.id)
+      return true
+    })
+    .slice(0, PAGE_SEARCH_RESULT_LIMIT)
+    .map(toResult)
 }
 
 export async function listPageVersions({ pageId, userId, agentId, teamScope }: {
