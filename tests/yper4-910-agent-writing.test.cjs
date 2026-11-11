@@ -251,6 +251,7 @@ test('legacy comment creation refuses invalid agent kinds without publishing', a
     let writes = 0
     const route = load('src/pages/api/comments/create.ts', {
       '@/lib/auth/agentScope': { withAgentScopeRequest: (_request, run) => run(), prepareAgentScope: async () => {} },
+      '@/lib/flags': { isFeatureEnabled: async () => false },
       '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
       '@/lib/prisma': { default: { user: { findUnique: async () => ({ id: 6 }) } } },
       '@/lib/media/inlineAgentImages.server': { inlineAgentImagesForUser: async (text) => text },

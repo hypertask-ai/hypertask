@@ -109,6 +109,7 @@ function updateRouteStubs(fixture, agentId = null) {
       validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId }),
     },
     '@/utils/controllers/tasks/assertTaskAccess': require('./task-route-loader.cjs').load('src/utils/controllers/tasks/assertTaskAccess.ts', { '@/lib/prisma': { default: fixture.prisma }, '@/utils/controllers/projects/getAllIncludes': access }),
+    '@/utils/controllers/projects/getAllIncludes': access,
     '@/lib/mcp/agents': { mapVisibleMcpAgent: () => undefined, mcpVisibleAgentSelect: () => ({}) },
     '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async (ids, userId, projectId) => {
       assert.deepEqual(ids, agentId ? [agentId] : [])
@@ -338,7 +339,7 @@ function commentsRouteFixture(editorId, refetch = true) {
     '@/lib/mcp/agents': agents,
   })
   const route = load('src/lib/mcp/operations/comments/operation.ts', {
-    '@/utils/controllers/projects/getAllIncludes': {},
+    '@/utils/controllers/projects/getAllIncludes': require('./helpers/agent-board-scope.cjs').access,
     'next/server': { NextResponse: { json } },
     '@prisma/client': { Prisma: { DbNull: null } },
     '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId: null }), readMcpRouteJsonBody: async (request) => ({ ok: true, body: await request.json() }) },
