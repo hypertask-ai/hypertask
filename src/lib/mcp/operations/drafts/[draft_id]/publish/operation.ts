@@ -7,6 +7,7 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import {
   persistUrlsForComment,
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
 
     if (draft.type === 'Comment') {
       const taskWithOwner = await prisma.task.findUnique({
-        where: { id: taskId },
+        where: { id: taskId, project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) },
         select: { userId: true }
       })
 

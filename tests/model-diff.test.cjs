@@ -227,16 +227,21 @@ test("rollup marker and title come from the sorted model set, and the check date
   const older = { ...families[0], model: "spacexai/grok-4.19" };
   assert.notEqual(rollupTicket([older, ...families.slice(1)]).marker, named.marker);
   assert.notEqual(rollupTicket([families[0], ...families.slice(1, 2), { ...families[2], model: "zai/glm-5.5" }]).marker, named.marker);
-  assert.ok(ticket.description.startsWith(`<p><strong>3 new model classes are not in our catalog.</strong></p><p>Gateway check 2026-10-25.`));
+  assert.ok(ticket.description.startsWith(`<p><strong>What's wrong or wanted:</strong> New model classes are on the gateway and not in our catalog.</p>`));
   assert.equal((ticket.description.match(/<li>/g) || []).length, 3);
-  assert.match(ticket.description, /<code>new&lt;provider&gt;\/model-1<\/code>\. Gateway input price per million tokens: \$0\. ask &lt;Valentin&gt; &amp; verify\.<\/li>/);
-  assert.equal((ticket.description.match(/unknown; verify pricing before shipping/g) || []).length, 2);
-  assert.match(ticket.description, /<code>other\/model-2<\/code>.*waits for HTPR-7746\.<\/li>/);
-  assert.match(ticket.description, /<code>unknown\/model-3<\/code>.*ask Valentin before shipping\.<\/li>/);
+  assert.match(ticket.description, /<li>new&lt;provider&gt;\/model-1\. Price per million input tokens: \$0\. ask &lt;Valentin&gt; &amp; verify\.<\/li>/);
+  assert.equal((ticket.description.match(/unknown; check before shipping/g) || []).length, 2);
+  assert.match(ticket.description, /<li>other\/model-2\. Price per million input tokens: unknown; check before shipping\. waits for HTPR-7746\.<\/li>/);
+  assert.match(ticket.description, /<li>unknown\/model-3\. Price per million input tokens: unknown; check before shipping\. ask Valentin before shipping\.<\/li>/);
   assert.ok(!ticket.description.includes("<provider>"));
   assert.ok(!ticket.description.includes("<Valentin>"));
-  const guidance = ticketFor(report().findings[0]).description.split("<p>Follow ")[1];
-  assert.ok(ticket.description.endsWith(`<p>Follow ${guidance}`));
+  for (const part of ["Problem", "Fix", "Done when", "Risk", "Decision"]) {
+    assert.ok(ticket.description.includes(`<p>${part}</p>`), part);
+  }
+  const versioned = report().findings.find((finding) => finding.kind === "new-version");
+  const versionedTicket = ticketFor(versioned);
+  assert.ok(versionedTicket.description.includes("<p>Follow the update-ai-models skill."));
+  assert.ok(versionedTicket.description.includes(`<p>${versioned.action.split(";")[0].trim()}.`), versioned.action);
 });
 
 test("watcher creates one rollup for three new classes and one separate new-version ticket", async () => {
@@ -271,7 +276,7 @@ test("watcher creates one rollup for three new classes and one separate new-vers
   assert.equal((rollupDescription.match(/<li>/g) || []).length, 3);
   for (const finding of newClasses) {
     assert.ok(rollupDescription.includes(`${finding.provider}/${identity(finding.model).name}`));
-    assert.ok(rollupDescription.includes(`Gateway input price per million tokens: $${finding.inputPerMillion}`));
+    assert.ok(rollupDescription.includes(`Price per million input tokens: $${finding.inputPerMillion}`));
     assert.ok(rollupDescription.includes(finding.action));
   }
   assert.deepEqual(results, [

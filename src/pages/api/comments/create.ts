@@ -1,4 +1,6 @@
-import { parseCommentKind } from '@/lib/mcp/operations/comments/agentChatterRouting'
+import { MISSING_COMMENT_AUDIENCE, parseCommentKind } from '@/lib/mcp/operations/comments/agentChatterRouting'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_9063_COMMENT_AUDIENCE_FLAG } from '@/lib/flags/keys'
 import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
@@ -37,12 +39,15 @@ const handler: NextApiHandler = async (
       if (!text || !creatorId || !taskId || !ownerId)
         return res.status(400).json({ message: "Bad request" });
 
-      let kind: ReturnType<typeof parseCommentKind>;
+      let kind: ReturnType<typeof parseCommentKind> | undefined = undefined;
       if (agentId) {
         try {
           kind = parseCommentKind(req.body.kind);
         } catch (error) {
           return res.status(400).json({ message: error instanceof Error ? error.message : "Invalid comment kind", code: "invalid_field", field: "kind" });
+        }
+        if (!kind && await isFeatureEnabled(HTPR_9063_COMMENT_AUDIENCE_FLAG, currentUser.id)) {
+          return res.status(400).json({ message: MISSING_COMMENT_AUDIENCE, code: "missing_field", field: "kind" });
         }
       }
 
