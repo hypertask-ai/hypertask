@@ -14,14 +14,29 @@ const actionSentences = (finding) => String(finding.action ?? "")
   .map((part) => `${part}.`)
   .join(" ");
 
+const opensWithoutAsking = (finding) => finding.kind === "new-version" && ["openai", "anthropic"].includes(finding.provider);
+const needsValentin = (finding) => finding.kind !== "stale" && !opensWithoutAsking(finding);
+
+const gateSentences = (finding) => {
+  if (finding.kind === "stale") return [];
+  if (finding.inputPerMillion == null) return ["the gateway price is checked"];
+  if (finding.inputPerMillion > 5) return ["HTPR-7746 ships the premium gate"];
+  return [];
+};
+
+const decideFor = (needsYes, gated, subject) => {
+  if (!needsYes) return "nothing";
+  return gated ? `May ${subject} ship once the earlier steps are done?` : `May ${subject} ship?`;
+};
+
 const decisionFor = (finding) => {
-  const needsYes = finding.kind === "new-class" || !["openai", "anthropic"].includes(finding.provider);
-  const approval = needsYes ? " Then Valentin says yes or no." : "";
   if (finding.kind === "stale") return "Nothing; a runner removes the stale entry.";
-  if (finding.inputPerMillion != null && finding.inputPerMillion > 5) return `Nothing yet; HTPR-7746 must ship first.${approval}`;
-  if (finding.inputPerMillion == null) return `Nothing until the gateway price is checked.${approval}`;
-  if (!needsYes) return "Nothing; a runner ships it.";
-  return "Valentin says yes or no before this ships.";
+  const steps = gateSentences(finding);
+  const approval = needsValentin(finding);
+  if (!steps.length && !approval) return "Nothing; a runner ships it.";
+  const lines = steps.map((step) => `${step[0].toUpperCase()}${step.slice(1)} first.`);
+  if (approval) lines.push(steps.length ? "Valentin must then say yes before this model ships." : "Valentin must say yes before this model ships.");
+  return lines.join(" ");
 };
 
 async function refusalDetail(response) {
@@ -65,7 +80,7 @@ function ticketFor(finding) {
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
   const entry = escapeHtml((finding.current ?? []).join(", ") || "none");
   const decision = decisionFor(finding);
-  const decide = decision.startsWith("Valentin") ? "Should this model ship?" : "nothing";
+  const decide = decideFor(needsValentin(finding), gateSentences(finding).length > 0, "this model");
   const plain = plainBlock({
     wanted: "A watched model differs from our catalog or the gateway list.",
     affects: "people who pick a model in chat; the count is unknown.",
@@ -89,16 +104,14 @@ function ticketFor(finding) {
 
 function rollupGate(findings) {
   const gated = findings.filter((finding) => finding.inputPerMillion == null || finding.inputPerMillion > 5);
-  const ready = findings.filter((finding) => finding.inputPerMillion != null && finding.inputPerMillion <= 5);
-  const needsYes = ready.some((finding) => finding.kind === "new-class" || !["openai", "anthropic"].includes(finding.provider));
-  const waitLine = `${gated.length} of these wait for the price check or HTPR-7746; then Valentin says yes or no.`;
-  const yes = { decide: "Should these model classes ship?", decision: "Valentin says yes or no to these classes." };
-  if (!gated.length) return needsYes ? yes : { decide: "nothing", decision: "Nothing; a runner ships these classes." };
-  if (!ready.length) return { decide: "nothing", decision: `Nothing yet; ${waitLine}` };
-  return {
-    decide: needsYes ? "Should the ready classes ship?" : "nothing",
-    decision: `${needsYes ? "Valentin says yes or no to the ready classes" : "Nothing needed for the ready classes"}; ${waitLine}`,
-  };
+  const needsYes = findings.some(needsValentin);
+  const noun = findings.length > 1 ? "these model classes" : "this model class";
+  const classes = findings.length > 1 ? "these classes" : "this class";
+  const wait = `${gated.length} of these wait for the price check or HTPR-7746.`;
+  const lines = needsYes
+    ? [gated.length && wait, gated.length ? "Valentin must then say yes before they ship." : `Valentin must say yes before ${classes} can ship.`].filter(Boolean)
+    : [gated.length && wait, gated.length ? "Nothing else; a runner ships the rest." : "Nothing; a runner ships these classes."].filter(Boolean);
+  return { decide: decideFor(needsYes, gated.length > 0, noun), decision: lines.join(" ") };
 }
 
 function rollupTicket(findings, now = new Date()) {

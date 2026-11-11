@@ -83,14 +83,15 @@ test("watcher keeps each finding's action in the per-model ticket body", () => {
 test("watcher names the prerequisite before shipping each kind of finding", () => {
   const base = { kind: "new-version", provider: "openai", model: "openai/gpt-5.5", modelClass: "gpt-5", current: [] };
   const decision = (finding) => ticketFor(finding).description.split("<p>Decision</p>")[1];
-  assert.match(decision({ ...base, inputPerMillion: 9, action: "waits for HTPR-7746" }), /Nothing yet; HTPR-7746 must ship first\./);
-  assert.match(decision({ ...base, inputPerMillion: null, action: "ship automatically when the gateway price is at most $5 per million" }), /Nothing until the gateway price is checked\./);
+  assert.match(decision({ ...base, inputPerMillion: 9, action: "waits for HTPR-7746" }), /HTPR-7746 ships the premium gate first\./);
+  assert.match(decision({ ...base, inputPerMillion: null, action: "ship automatically when the gateway price is at most $5 per million" }), /The gateway price is checked first\./);
   assert.match(decision({ ...base, inputPerMillion: 2, action: "ship automatically" }), /Nothing; a runner ships it\./);
   assert.match(decision({ ...base, kind: "stale", inputPerMillion: null, action: "remove stale entry; migrate saved picks to the current model of its class" }), /Nothing; a runner removes the stale entry\./);
-  assert.match(decision({ ...base, provider: "meta", inputPerMillion: 1, action: "ask Valentin before shipping" }), /Valentin says yes or no before this ships\./);
-  assert.match(decision({ ...base, provider: "meta", inputPerMillion: 9 }), /Nothing yet; HTPR-7746 must ship first\. Then Valentin says yes or no\./);
-  assert.match(decision({ ...base, provider: "meta", inputPerMillion: null }), /Nothing until the gateway price is checked\. Then Valentin says yes or no\./);
-  assert.doesNotMatch(decision({ ...base, inputPerMillion: 9 }), /Then Valentin says yes or no/);
+  assert.match(decision({ ...base, provider: "meta", inputPerMillion: 1, action: "ask Valentin before shipping" }), /Valentin must say yes before this model ships\./);
+  assert.match(decision({ ...base, provider: "meta", inputPerMillion: 9 }), /HTPR-7746 ships the premium gate first\. Valentin must then say yes before this model ships\./);
+  assert.match(decision({ ...base, provider: "meta", inputPerMillion: null }), /The gateway price is checked first\. Valentin must then say yes before this model ships\./);
+  assert.doesNotMatch(decision({ ...base, inputPerMillion: 9 }), /Valentin must/);
+  assert.match(decision({ ...base, kind: "new-class", provider: "openai", inputPerMillion: 1 }), /Valentin must say yes before this model ships\./);
 });
 
 test("watcher keeps every current catalog entry and says when the audience count is unknown", () => {
@@ -120,17 +121,20 @@ test("watcher rollup names the premium gate instead of authorising every class",
   const premium = { ...base, model: "meta/llama-5-pro", inputPerMillion: 9, action: "waits for HTPR-7746" };
   const mixed = rollupTicket([cheap, premium], new Date("2026-10-25T12:00:00Z"));
   const [mixedPlain, mixedParts] = mixed.description.split("<hr>");
-  assert.match(mixedPlain, /What Valentin must decide:<\/strong> Should the ready classes ship\?<\/p>/);
-  assert.match(mixedParts, /Valentin says yes or no to the ready classes; 1 of these wait for the price check or HTPR-7746; then Valentin says yes or no\./);
+  assert.match(mixedPlain, /What Valentin must decide:<\/strong> May these model classes ship once the earlier steps are done\?<\/p>/);
+  assert.match(mixedParts, /1 of these wait for the price check or HTPR-7746\. Valentin must then say yes before they ship\./);
   const allGated = rollupTicket([{ ...premium, model: "meta/llama-5-pro" }, { ...cheap, model: "meta/llama-6", inputPerMillion: null }], new Date("2026-10-25T12:00:00Z"));
-  assert.match(allGated.description.split("<hr>")[0], /What Valentin must decide:<\/strong> nothing<\/p>/);
-  assert.match(allGated.description.split("<hr>")[1], /Nothing yet; 2 of these wait for the price check or HTPR-7746; then Valentin says yes or no\./);
+  assert.match(allGated.description.split("<hr>")[0], /What Valentin must decide:<\/strong> May these model classes ship once the earlier steps are done\?<\/p>/);
+  assert.match(allGated.description.split("<hr>")[1], /2 of these wait for the price check or HTPR-7746\. Valentin must then say yes before they ship\./);
   const open = rollupTicket([cheap], new Date("2026-10-25T12:00:00Z"));
-  assert.match(open.description.split("<hr>")[1], /Valentin says yes or no to these classes\./);
-  assert.match(open.description.split("<hr>")[0], /What Valentin must decide:<\/strong> Should these model classes ship\?<\/p>/);
+  assert.match(open.description.split("<hr>")[1], /Valentin must say yes before these classes can ship\./);
+  assert.match(open.description.split("<hr>")[0], /What Valentin must decide:<\/strong> May these model classes ship once the earlier steps are done\?<\/p>/);
   const openai = rollupTicket([{ ...cheap, provider: "openai", model: "openai/gpt-6" }], new Date("2026-10-25T12:00:00Z"));
-  assert.match(openai.description.split("<hr>")[0], /What Valentin must decide:<\/strong> Should these model classes ship\?<\/p>/);
-  assert.match(openai.description.split("<hr>")[1], /Valentin says yes or no to these classes\./);
+  assert.match(openai.description.split("<hr>")[0], /What Valentin must decide:<\/strong> May these model classes ship once the earlier steps are done\?<\/p>/);
+  assert.match(openai.description.split("<hr>")[1], /Valentin must say yes before these classes can ship\./);
+  const gatedOnly = rollupTicket([{ ...cheap, kind: "new-version", provider: "openai", inputPerMillion: 9 }], new Date("2026-10-25T12:00:00Z"));
+  assert.match(gatedOnly.description.split("<hr>")[0], /What Valentin must decide:<\/strong> nothing<\/p>/);
+  assert.match(gatedOnly.description.split("<hr>")[1], /1 of these wait for the price check or HTPR-7746\. Nothing else; a runner ships the rest\./);
 });
 
 test("watcher reports the board refusal text instead of a bare status code", async () => {
