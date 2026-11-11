@@ -1,0 +1,114 @@
+{
+  "3076": {
+    "title": "HTPR-7766 [BUGFIX] Ctrl+Shift+E enters and exits full-screen chat correctly",
+    "files": [
+      "src/app/chat/Chat.tsx",
+      "src/hooks/MultiPages/AIChat/useChatShortcuts.tsx",
+      "tests/ai-chat-shortcuts.test.cjs",
+      "tests/htpr-8013-sidebar-width.test.cjs"
+    ]
+  },
+  "3067": {
+    "title": "HTPR-8829 [BUGFIX] Ctrl+J: New Task tab not purple, white mic",
+    "files": [
+      ".claude/skills/reuse-existing-ui/reference/style-guide.md",
+      "src/components/Modals/commands/HTC/commands.tsx",
+      "src/components/RTE/Components/AudioButton.tsx",
+      "tests/htpr-8829-ctrlj-mic-fill.test.cjs",
+      "tests/htpr-8829-ctrlj-plus-composer.test.cjs"
+    ]
+  },
+  "3066": {
+    "title": "HTPR-8255 [BUGFIX] Kanban cleanup matches design QA",
+    "files": [
+      "src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx",
+      "src/styles/globals.scss",
+      "tests/htpr-8255-view-tab-icons.test.cjs"
+    ]
+  },
+  "3062": {
+    "title": "HTPR-7294 [FEATURE] Daily isolated funnel probe signup (phase 1)",
+    "files": [
+      ".github/scripts/funnel-probe-daily.mjs",
+      ".github/workflows/funnel-probe-daily.yml",
+      "config/test-duration-weights.json",
+      "e2e/smoke/flag-modes/htpr-7294-daily-funnel-probe.json",
+      "e2e/smoke/production-flag-modes.json",
+      "src/app/api/auth/instant-signup/route.ts",
+      "src/app/api/cron/funnel-probe-signup/route.ts",
+      "src/app/api/ops/funnel-probe-inbox/route.ts",
+      "src/lib/flags/definitions/htpr-7294-daily-funnel-probe.ts",
+      "src/lib/funnelProbe/inbox.ts",
+      "tests/email-link-single-use.test.cjs",
+      "tests/email-signup-demo-board.test.cjs",
+      "tests/helpers/activation-harness.ts",
+      "tests/htpr-7294-funnel-probe-daily.test.ts",
+      "vercel.json"
+    ]
+  },
+  "3058": {
+    "title": "HTPR-8755 [BUGFIX] Let MCP assign hand off to board-visible agents",
+    "files": [
+      "src/lib/mcp/agents/lifecycle.ts",
+      "src/lib/mcp/operations/assignees/assign/operation.ts",
+      "tests/agent-lifecycle.test.ts",
+      "tests/app/api/mcp/agents/agentId/archive/archive.test.ts",
+      "tests/app/api/mcp/agents/agentId/rename.test.ts",
+      "tests/helpers/agent-visibility-source.ts"
+    ]
+  },
+  "3050": {
+    "title": "HTPR-7927 [BUGFIX] Sell Pro on included AI, not board limits",
+    "files": [
+      "src/components/Modals/Settings/PlansSection.tsx",
+      "src/components/Modals/TrialPlan/TrialPlanComponents.tsx",
+      "src/lib/flags/definitions/htpr-7686-free-plan-copy.ts",
+      "src/lib/freePlanLimits.ts",
+      "src/lib/subscriptionPlans.ts",
+      "tests/free-plan-limit-copy.test.cjs",
+      "tests/htpr-7511-start-plan.test.cjs",
+      "tests/htpr-7686-free-plan-copy-flag.test.cjs",
+      "tests/htpr-7927-plan-positioning.test.cjs"
+    ]
+  },
+  "3044": {
+    "title": "HTPR-7552 [FEATURE] Sign in an agent with a five-minute code",
+    "files": [
+      ".github/paid-api-cost-notes.json",
+      "docs/ci.md",
+      "eslint.config.mjs",
+      "src/app/api/cli/device/[action]/route.ts",
+      "src/app/api/cron/oauth-token-sweep/route.ts",
+      "src/app/cli-auth/page.tsx",
+      "src/app/login/agent/page.ts",
+      "src/app/oauth/authorize/route.ts",
+      "src/app/oauth/consent/page.tsx",
+      "src/app/oauth/token/route.ts",
+      "src/lib/auth/devicePairing.ts",
+      "src/lib/auth/devicePairingCleanup.ts",
+      "src/lib/auth/devicePairingCookie.ts",
+      "src/lib/auth/devicePairingOAuth.ts",
+      "src/lib/auth/safeReturnTo.ts",
+      "src/lib/flags/definitions/htpr-7552-agent-code-signin.ts",
+      "src/lib/mcp/auth/verifyJwt.ts",
+      "src/lib/oauth/consent.ts",
+      "src/prisma/migrations/20261107183000_device_pairing/migration.sql",
+      "src/prisma/schema.prisma",
+      "src/proxy.ts",
+      "src/utils/controllers/projects/create.ts",
+      "tests/helpers/device-pairing.cjs",
+      "tests/htpr-7552-device-oauth.test.cjs",
+      "tests/htpr-7552-device-pairing.test.cjs",
+      "tests/htpr-7645-cli-callback.test.cjs"
+    ]
+  },
+  "3042": {
+    "title": "HTPR-8138 [BUGFIX] Record comment dictation through one microphone graph",
+    "files": [
+      "src/components/RTE/Components/AudioButton.tsx",
+      "src/lib/dictationCapture.ts",
+      "src/lib/flags/definitions/htpr-8138-comment-dictation.ts",
+      "tests/htpr-8138-comment-dictation.test.cjs"
+    ]
+  }
+}

@@ -87,17 +87,18 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **24 jobs** per synchronize and opening event
+Static normal non-draft app PR budget: **25 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes;
 HYCI-45 adds a second serial lane; HYCI-32 adds the second browser half and its
-required summary job; HYCI-57 takes the page tests to four shards). The browser
+required summary job; HYCI-57 takes the page tests to four shards; HTPR-8938 adds
+`driven-proof`, which starts only after `browser-smoke-flags` finishes). The browser
 jobs are over the 20-job pool but never wait beside each other:
 `browser-smoke` becomes ready only after all four shards finish, so it asks for a
 runner slot that has just been freed, and the four page shards simply use the
 pool's spare capacity.
 Path-specific evals, the
 path-specific `visual-compare` check, preview deployments and external review are
-extra. Docs-only PRs start 17 jobs; Dependabot/fork PRs no longer add a trusted
+extra. Docs-only PRs start 18 jobs; Dependabot/fork PRs no longer add a trusted
 scan-publication job. Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
@@ -659,6 +660,22 @@ Changes to the dispatcher or its tests also run an explicitly synthetic login ma
 Screenshots, `result.json` and `summary.md` upload as `verify-qa-premerge` for 7 days. The job summary names the journey, the feature-map page and the artifact URL. The step is report-only: `VERIFY_QA_REPORT_ONLY=1` and a non-zero exit become a warning, not a failed `browser-smoke-flags`. It is not a ruleset context and does not block merges. A later unit can make it required after a clean week.
 
 Sharing that `.next` build with app-smoke is deferred. `app-smoke.yml` is loaded from `production`, and its build runs inside a locked-down container with `CORE_APP_SMOKE`, a mocked Google font file and a docker-network callback URL. browser-smoke bakes different `NEXT_PUBLIC_*` values, including `NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100`. The two workflows also run in parallel, so waiting on a large `.next` upload would slow a required check. The container build at `scripts/run-app-smoke-isolated.sh` stays.
+
+## Driven proof (HTPR-8938)
+
+`driven-proof` is a pull-request check. It goes red when the diff is not docs-only, test-only, or CI-only and the head has no proof record from the seeded browser-smoke app. It is report-only: it is not in `required_checks`, and a red result does not block merge. Making it required is a later ruleset edit, after false alarms are rare.
+
+Exempt classes, and a pull request is exempt only when every changed file is in one of them:
+
+- Docs: `docs/**` and any Markdown file outside `src/`.
+- Tests: `tests/**`.
+- CI: `.github/**`, `scripts/**`, `.claude/**`, `skills/**`, `.agents/**`.
+
+An empty or unreadable diff fails. Any other file, including `src/**`, `e2e/**`, and `package.json`, needs a record.
+
+`browser-smoke-flags` already drives the disposable app at `http://127.0.0.1:3100` with `scripts/seed-browser-smoke.mjs` and `.github/scripts/verify-qa-premerge.mjs`. `scripts/driven-proof-record.cjs` keeps a record only when that drive passes, names a real feature-map page, and saves a screenshot. The record uses the same feature-map line, Cases section, PASS evidence file, and screenshot rule as `ship-check proof`. The Doctor line stays on the post-merge check, because it names the merge SHA. The drive never targets production. A preview URL can satisfy the checker later; this landing only produces the seeded record.
+
+The check replays pull requests 3076, 3067, 3066, 3062, 3058, 3050, 3044, and 3042 as file lists. Each touches the app and has no record, so each is red. Pull request 3066 is the kanban cleanup.
 
 ## On-demand pre-PR verification (YPER4-697)
 

@@ -22,17 +22,18 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **24 jobs** per synchronize and opening event
+Static normal non-draft app PR budget: **25 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes;
 HYCI-45 adds a second serial lane; HYCI-32 adds the second browser half and its
-required summary job; HYCI-57 takes the page tests to four shards). The browser
+required summary job; HYCI-57 takes the page tests to four shards; HTPR-8938 adds
+`driven-proof`, which starts only after `browser-smoke-flags` finishes). The browser
 jobs are over the 20-job pool but never wait beside each other:
 `browser-smoke` becomes ready only after all four shards finish, so it asks for a
 runner slot that has just been freed, and the four page shards simply use the
 pool's spare capacity.
 Path-specific evals, the
 path-specific `visual-compare` check, preview deployments and external review are
-extra. Docs-only PRs start 17 jobs; Dependabot/fork PRs no longer add a trusted
+extra. Docs-only PRs start 18 jobs; Dependabot/fork PRs no longer add a trusted
 scan-publication job. Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check

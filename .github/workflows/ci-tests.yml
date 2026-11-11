@@ -2147,6 +2147,21 @@ jobs:
         if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
         run: |
           printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Write the driven-proof record
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          VERIFY_QA_OUT: verify-qa-premerge
+          DRIVEN_PROOF_OUT: driven-proof-record
+        run: node scripts/driven-proof-record.cjs || echo "driven-proof record was not written"
+      - name: Upload the driven-proof record
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: driven-proof-record
+          path: driven-proof-record/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload failing smoke screenshots
         if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -2574,3 +2589,33 @@ jobs:
             --check \
             --cli-capabilities "$PARITY_TMP/capabilities.json" \
             --typescript "$PARITY_TMP/node_modules/typescript/lib/typescript.js"
+
+  driven-proof:
+    name: driven-proof
+    # HTPR-8938: red when a non-exempt change has no seeded drive record.
+    # Report-only. Not a need of browser-smoke, and not a required context.
+    needs: [browser-smoke-flags]
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.browser-smoke-flags.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Download the seeded drive record
+        id: record
+        continue-on-error: true
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: driven-proof-record
+          path: ${{ runner.temp }}/driven-proof-record
+      - name: Require a drive record unless the diff is docs, tests, or CI
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DRIVEN_PROOF_RECORD: ${{ runner.temp }}/driven-proof-record
+        run: node scripts/driven-proof.cjs
