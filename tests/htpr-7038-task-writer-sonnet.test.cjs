@@ -38,12 +38,13 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
-function harness({ plan = "Free", saved = null, teamByok = false, agentByok = false, agentId = null, unavailable = false, settings = {}, haiku = false, background = false, failFirst = false } = {}) {
+function harness({ savedAuto = false, plan = "Free", saved = null, teamByok = false, agentByok = false, agentId = null, unavailable = false, settings = {}, haiku = false, background = false, failFirst = false } = {}) {
   const checks = [], calls = [], reservations = [], agentLookups = [], usage = [], observations = [];
   let preferenceReads = 0;
   const flags = { isFeatureEnabled: async (key, id) => {
     checks.push([key, id]);
     assert.notEqual(key, "htpr-7038-task-writer-sonnet");
+    if (["htpr-9019-saved-model-auto", "htpr-7915-auto-model"].includes(key)) return savedAuto;
     if (key === keys.HTPR_7075_BACKGROUND_CLAUDE_FLAG) return background;
     return false;
   } };
@@ -145,6 +146,7 @@ function harness({ plan = "Free", saved = null, teamByok = false, agentByok = fa
   });
   const editor = moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {
     ...providerStubs,
+    "@/app/api/ai/_lib/autoModel": { autoForcedProvider: async () => null, pickAutoModelOption: () => savedAuto ? catalog.getAiModelOptionById("gpt-6-luna") : null },
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
     "@/lib/prisma": prisma, "@/lib/flags": flags, "@/lib/flags/keys": keys,
     "@/lib/aiModelOptions": catalog, "@/lib/aiProviders": providers, "@/lib/systemModelLadder": ladder,
@@ -230,6 +232,18 @@ function harness({ plan = "Free", saved = null, teamByok = false, agentByok = fa
 }
 
 async function main() {
+  for (const feature of ["taskWriter", "writeWithAi", "improveWriting"]) {
+    for (const [saved, modelOptionId, expected] of [
+      ["auto", undefined, /gpt-6-luna$/],
+      ["claude-opus-5-5-thinking", "auto", /gpt-6-luna$/],
+      ["auto", "claude-opus-5-5-thinking", /claude-opus-5[.-]5$/],
+      ["claude-opus-5-5-thinking", undefined, /claude-opus-5[.-]5$/],
+    ]) {
+      const h = harness({ plan: "Pro", savedAuto: true, saved });
+      const result = await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, modelOptionId });
+      assert.match(result.modelId, expected);
+    }
+  }
   assert.equal(catalog.isPremiumAiModelDefinition(catalog.getAiModelDefinition("claude-sonnet-5-5")), true);
   for (const kind of ["app", "mcp"]) {
     for (const plan of ["Free", "BYOK", "Pro", "AI"]) {
