@@ -12,11 +12,13 @@ const notice = (extra = {}) => ({ id: 1, taskId: 1, userId: 985, type: "TaskMove
 test("rules cap boosts; highest distinct ticket wins, never date order", () => {
   assert.deepEqual(rules.needsYouRules(notice()), { score: 0, reason: "Update" });
   assert.equal(rules.needsYouRules(notice({ type: "Mentioned", comment: { kind: "question", text: "Pay?" }, task: { waitingOnUserId: 985, priority: { priority_index: 1 } } })).score, 20);
-  const rows = [notice({ needsYouScore: 5 }), notice({ id: 2, needsYouScore: 95, createdAt: "2026-10-01T00:00:00Z" }), notice({ id: 3, taskId: 2, needsYouScore: 70 })];
+  const rows = [notice({ needsYouScore: 5 }), notice({ id: 2, needsYouScore: 95, createdAt: "2026-10-01T00:00:00Z" }), notice({ id: 3, taskId: 2, task: { uniqueIndex: 2 }, needsYouScore: 70 })];
   const tabs = getInboxTabs(rows);
   assert.deepEqual(tabs.data[tabs.tabs.findIndex(({ project }) => project === "Needs you")], [1, 2]);
   assert.equal(getInboxTabs(rows.map((row) => ({ ...row, needsYouEnabled: false }))).tabs.some(({ project }) => project === "Needs you"), false);
   assert.deepEqual(rules.needsYouIndices([notice({ needsYouSource: "skipped" }), notice({ taskId: null })]), []);
+  assert.deepEqual(rules.needsYouIndices([undefined, ...rows]), [2, 3]);
+  assert.doesNotThrow(() => getInboxTabs([undefined, ...rows]));
   const ranked = [rows[1], rows[2]].map((notification) => ({ notification, date: new Date(notification.createdAt) }));
   assert.deepEqual(groupInboxItemsByDate(ranked, false, null, true).ranked.items.map(({ notification }) => notification.id), [2, 3]);
   assert.deepEqual(buildInboxTasksPlaylist([rows[1], rows[2]], false).map(({ notification }) => notification.id), [2, 3]);
@@ -46,7 +48,7 @@ test("Jev converts a five-point score to 0-100 and stores cost; all failures ret
   try { assert.equal((await needsYouScore(notice())).needsYouSource, "rules"); } finally { clearTimeout(keepAlive); }
 });
 
-function worker({ enabled = true, source = "managed", plan = "Pro", settings = {}, providers = [], access = true, ownKey } = {}) {
+function worker({ enabled = true, source = "managed", plan = "Pro", settings = { providers: { openrouter: true } }, providers = [], access = true, ownKey } = {}) {
   const row = notice({ needsYouScoredAt: null, project: { teamId: "team", team: { aiProviderSettings: settings, byokApiKeys: providers.map((provider) => ({ provider })) } } });
   let paid = 0;
   const database = { notification: {
@@ -75,6 +77,12 @@ test("arrival retries and concurrent delivery score once; own-AI teams and revok
     assert.equal(await skipped.run(985), 1);
     assert.equal(skipped.row.needsYouSource, "skipped");
     assert.equal(skipped.paid(), 0);
+  }
+  for (const settings of [{}, { providers: { openrouter: false } }]) {
+    const disabled = worker({ settings });
+    assert.equal(await disabled.run(985), 1);
+    assert.equal(disabled.paid(), 0);
+    assert.equal(disabled.row.needsYouSource, "rules");
   }
   const off = worker({ enabled: false });
   assert.equal(await off.run(985), 0);

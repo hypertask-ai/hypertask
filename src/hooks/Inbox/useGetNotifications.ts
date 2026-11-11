@@ -487,13 +487,13 @@ export const useGetNotifications = (userId: number) => {
   }, [hydrated, document, userId, queryClient, queryKey, getStartedAt, requireProjectAccess]);
   const query = useQuery({
     queryKey,
-    select: selectInbox,
     ...(hydrated || document
       ? {}
       : {
           queryKey: [...queryKey, "hydrating"] as const,
           enabled: false,
         }),
+    select: selectInbox,
     queryFn: () =>
       fetchInboxPayload(
         userId,

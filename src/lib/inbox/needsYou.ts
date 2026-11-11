@@ -1,21 +1,13 @@
+import type { Comment, Notification, Priority, Task } from "@prisma/client";
+
 export const NEEDS_YOU_SPLIT = "Needs you";
 
-export type NeedsYouNotice = {
-  type: string;
-  userId: number;
-  taskId?: number | null;
-  fromAgentId?: string | null;
-  message?: string | null;
-  comment?: { text?: string | null; kind?: string | null } | null;
-  task?: {
-    title?: string | null;
-    waitingOnUserId?: number | null;
-    priority?: { priority_index?: number | null } | null;
-  } | null;
-  needsYouScore?: number | null;
-  needsYouEnabled?: boolean;
-  needsYouSource?: string | null;
-};
+export type NeedsYouNotice = Pick<Notification, "type" | "userId"> &
+  Partial<Pick<Notification, "taskId" | "fromAgentId" | "message" | "needsYouScore" | "needsYouSource">> & {
+    comment?: Partial<Pick<Comment, "text" | "kind">> | null;
+    task?: Partial<Pick<Task, "title" | "waitingOnUserId">> & { priority?: Partial<Pick<Priority, "priority_index">> | null } | null;
+    needsYouEnabled?: boolean;
+  };
 
 export function needsYouRules(notice: NeedsYouNotice) {
   const text = `${notice.task?.title ?? ""} ${notice.comment?.text ?? ""} ${notice.message ?? ""}`;
@@ -33,7 +25,7 @@ export function needsYouIndices(notices: NeedsYouNotice[]) {
   const byTask = new Map<number, number>();
   const score = (index: number) => notices[index].needsYouScore ?? needsYouRules(notices[index]).score;
   notices.forEach((notice, index) => {
-    if (!notice.needsYouEnabled || notice.needsYouSource === "skipped" || !notice.taskId) return;
+    if (!notice?.needsYouEnabled || notice.needsYouSource === "skipped" || !notice.taskId) return;
     const previous = byTask.get(notice.taskId);
     if (previous === undefined || score(index) > score(previous)) byTask.set(notice.taskId, index);
   });

@@ -428,7 +428,7 @@ export const getInboxTabs = (
     );
   }
 
-  if (notifications.some((notice) => notice.needsYouEnabled)) {
+  if (notifications.some((notice) => notice?.needsYouEnabled)) {
     autoSplitsWithBlocked.unshift({ splitName: NEEDS_YOU_SPLIT, notificationIndices: needsYouIndices(notifications), projectId: null });
   }
 

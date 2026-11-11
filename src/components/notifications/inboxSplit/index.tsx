@@ -211,6 +211,7 @@ const InboxSplit = ({
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
   const inboxVisibleOrder = useFlag(HTPR_7801_INBOX_VISIBLE_ORDER_FLAG);
   const needsYouEnabled = useFlag(HTPR_9055_NEEDS_YOU_FLAG);
+  const rankedSplit = needsYouEnabled ? selectedSplit === NEEDS_YOU_SPLIT : false;
   let decisionCommentLinks = false;
   if (decisionCommentLinkEnabled) {
     decisionCommentLinks = selectedSplit === decisionsSplitName;
@@ -284,12 +285,12 @@ const InboxSplit = ({
     ];
 
     return groupInboxItemsByDate(
-      selectedSplit === NEEDS_YOU_SPLIT ? timelineItems.filter((item) => item.kind === "notification") : timelineItems,
+      rankedSplit ? timelineItems.filter((item) => item.kind === "notification") : timelineItems,
       selectedSplit === "Blocked by you",
       snapshot,
-      selectedSplit === NEEDS_YOU_SPLIT,
+      rankedSplit,
     );
-  }, [_notifications, activeDrafts, selectedSplit, snapshot, boardAccessDecisions]);
+  }, [_notifications, activeDrafts, selectedSplit, snapshot, boardAccessDecisions, rankedSplit]);
   const groupedInboxEntries = Object.entries(groupedInboxItems);
   const keyboardRows = useMemo<InboxKeyboardTimelineRow[]>(
     () =>
@@ -916,7 +917,7 @@ const InboxSplit = ({
     buildInboxTasksPlaylist(
       notifications,
       decisionCommentLinks,
-      inboxVisibleOrder && selectedSplit !== NEEDS_YOU_SPLIT ? { oldestFirst: selectedSplit === "Blocked by you", snapshot } : undefined,
+      inboxVisibleOrder && !rankedSplit ? { oldestFirst: selectedSplit === "Blocked by you", snapshot } : undefined,
     );
 
   const buildQueryParams = (mode: string): string => {

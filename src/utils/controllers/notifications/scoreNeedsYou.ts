@@ -4,6 +4,7 @@ import { HTPR_9055_NEEDS_YOU_FLAG } from "@/lib/flags/definitions/htpr-9055-need
 import { getTeamGatewayFunding, isOurGatewayKey, resolveTeamByokApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { isOwnKeyOnlySettings } from "@/lib/ai/forcedTeamKey";
+import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { needsYouRules } from "@/lib/inbox/needsYou";
 import { needsYouScore } from "@/lib/ai/needsYouScore";
 import { canReadTaskNow } from "@/lib/access/canReadTaskNow";
@@ -50,7 +51,7 @@ export async function scoreNeedsYouInbox(userId: number) {
         data: { needsYouScoredAt: new Date(), needsYouScore: rules.score, needsYouReason: rules.reason, needsYouSource: allowed ? "rules" : "skipped", needsYouCostUsd: 0 },
       });
       if (!claim.count) continue;
-      if (allowed) await prisma.notification.update({ where: { id: notice.id }, data: await needsYouScore(notice) });
+      if (allowed && resolveTeamProviderEnabled(team?.aiProviderSettings, "openrouter")) await prisma.notification.update({ where: { id: notice.id }, data: await needsYouScore(notice) });
       scored++;
     }
   }));
