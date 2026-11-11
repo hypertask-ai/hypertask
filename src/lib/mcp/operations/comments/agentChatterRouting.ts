@@ -1,5 +1,8 @@
 export const COMMENT_KINDS = ['question', 'qa', 'done'] as const
 
+export const MISSING_COMMENT_AUDIENCE =
+  'No audience, so nothing was saved. Resend with kind question, qa or done for people, or use hypertask activity add for the agent log.'
+
 export type CommentKind = (typeof COMMENT_KINDS)[number]
 
 export function parseCommentKind(value: unknown): CommentKind | undefined {

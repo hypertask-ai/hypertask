@@ -6,7 +6,7 @@ import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
-import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG, HTPR_8811_AGENT_NOTE_IMAGE_LINKS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG, HTPR_8811_AGENT_NOTE_IMAGE_LINKS_FLAG, HTPR_9063_COMMENT_AUDIENCE_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -59,7 +59,7 @@ import {
 import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents'
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
-import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
+import { COMMENT_KINDS, MISSING_COMMENT_AUDIENCE, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
 import {
   assertKnownProjectionFields,
   ListQueryParseError,
@@ -1039,6 +1039,15 @@ export async function POST(request: NextRequest) {
         (mentions ?? []).some((mention) => typeof mention.user_id === 'number'),
       hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) || hasImageAttachments ||
         (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
+    }
+    if (ctx.agentId && kind === undefined && await isFeatureEnabled(HTPR_9063_COMMENT_AUDIENCE_FLAG, user.id)) {
+      return NextResponse.json(
+        {
+          ...buildFieldError('missing_field', 'kind', MISSING_COMMENT_AUDIENCE),
+          ...(dryRun && { valid: false })
+        },
+        { status: 400 }
+      )
     }
     const agentLogEntry = routeComment({
       agentId: ctx.agentId,
