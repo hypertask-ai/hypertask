@@ -151,8 +151,10 @@ function createTool(writes, guarantee, message = "Create a task from this screen
   const { createCreateTaskTool } = load("src/lib/ai/tools/createTask.ts", {
     "@/lib/errors/reportError": { reportError: async () => {} },
     ai: { tool: (definition) => definition },
-    "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
-    "@/lib/media/hostInlineScreenshots.server": { hostInlineScreenshots: async (files) => files.map((file) => (file.url.startsWith("data:") ? { ...file, url: shot, fileName: "screenshot.png", mimeType: "image/png" } : file)) },
+    "@/lib/media/inlineAgentImages.server": {
+      inlineAgentImagesForUser: async (html) => html,
+      hostInlineScreenshots: async (files) => files.map((file) => (file.url.startsWith("data:") ? { ...file, url: shot, fileName: "screenshot.png", mimeType: "image/png" } : file)),
+    },
     "@/lib/prisma": { default: {
       task: { findUnique: async () => task },
       user: { findUnique: async () => ({ id: 985 }) },
@@ -290,3 +292,35 @@ test("base64 screenshots are hosted before embedding", async () => {
   assert.equal(uploads[0].contentType, "image/png");
   assert.ok(uploads[0].bytes > 0);
 });
+
+test("a base64 writer preview is hosted before the modal description is guaranteed", async () => {
+  const uploads = [];
+  const { hostedScreenshotFiles } = load("src/lib/media/hostedScreenshotFiles.ts", {
+    "@/lib/createTaskAttachmentUploads": { startCreateTaskUpload: (file) => { uploads.push(file.name); return { id: "one", promise: Promise.resolve({ url: shot }) }; } },
+  });
+  const attachable = new File([new Uint8Array([137, 80, 78, 71])], "attached.png", { type: "image/png" });
+  const result = await hostedScreenshotFiles([
+    attachable,
+    { name: "ready.png", type: "image/png", source: shot },
+    { name: "notes.pdf", type: "application/pdf", source: "https://files.hypertask.app/tasks/attachments/notes.pdf" },
+  ]);
+  assert.deepEqual(result.map((file) => file.url), [shot, shot, "https://files.hypertask.app/tasks/attachments/notes.pdf"]);
+  assert.deepEqual(uploads, ["attached.png"]);
+});
+
+test("a data URL attachment is uploaded once and reused", async () => {
+  const uploads = [];
+  const { hostedScreenshotFiles } = load("src/lib/media/hostedScreenshotFiles.ts", {
+    "@/lib/createTaskAttachmentUploads": { startCreateTaskUpload: () => { uploads.push(1); return { id: "one", promise: Promise.resolve({ url: shot }) }; } },
+  });
+  const pending = { name: "pasted.png", type: "image/png", source: base64Png };
+  const saved = await withFetch(async () => ({ blob: async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }) }), () => hostedScreenshotFiles([pending, { ...pending }]));
+  assert.deepEqual(saved.map((file) => file.url), [shot, shot]);
+  assert.equal(uploads.length, 1);
+});
+
+async function withFetch(fakeFetch, run) {
+  const previous = global.fetch;
+  global.fetch = fakeFetch;
+  try { return await run(); } finally { global.fetch = previous; }
+}

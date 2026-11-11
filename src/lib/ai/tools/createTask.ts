@@ -1,6 +1,5 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
-import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
-import { hostInlineScreenshots } from "@/lib/media/hostInlineScreenshots.server";
+import { hostInlineScreenshots, inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
 import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
