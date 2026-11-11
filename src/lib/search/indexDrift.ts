@@ -49,39 +49,50 @@ export function driftPassRecorded(results: DriftPass[], date: string): boolean {
   return results.some((pass) => pass.date === date);
 }
 
+export type DriftFailure = { id: number; stage: "task" | "comments"; message: string };
+
 export async function advanceIndexDrift(args: {
   tasks: DriftTask[]; indexedTasks: Map<number, IndexedTaskTime | null>;
   indexedComments: Map<number, IndexedCommentCopy | null>; batchFull: boolean; maxReindex: number;
   state: DriftState; reindexTask: (taskId: number) => Promise<unknown>;
-  reindexComments: (taskId: number) => Promise<unknown>;
-}): Promise<{ state: DriftState; reindexed: number; passComplete: boolean; stopped: boolean; passFound: number | null }> {
+  reindexComments: (taskId: number) => Promise<unknown>; maxFailures?: number;
+}): Promise<{ state: DriftState; reindexed: number; passComplete: boolean; stopped: boolean; passFound: number | null; failed: DriftFailure[] }> {
   const state = { afterId: args.state.afterId, found: args.state.found, results: args.state.results };
+  const maxFailures = args.maxFailures ?? 20;
+  const failed: DriftFailure[] = [];
   let reindexed = 0;
   if (args.tasks.length === 0) {
-    return { state, reindexed, passComplete: true, stopped: false, passFound: state.found };
+    return { state, reindexed, passComplete: true, stopped: false, passFound: state.found, failed };
   }
   for (const task of args.tasks) {
     const taskDrift = taskRowDrifted(task, args.indexedTasks.get(task.id) ?? null);
     const commentDrift = commentCopyDrifted(task, args.indexedComments.get(task.id) ?? null);
     const drifted = taskDrift || commentDrift;
     if (drifted && reindexed >= args.maxReindex) {
-      return { state, reindexed, passComplete: false, stopped: true, passFound: null };
+      return { state, reindexed, passComplete: false, stopped: true, passFound: null, failed };
     }
-    try {
-      if (taskDrift) {
+    if (taskDrift) {
+      try {
         await args.reindexTask(task.id);
         reindexed += 1;
+      } catch (error) {
+        failed.push({ id: task.id, stage: "task", message: String((error as Error)?.message ?? error).slice(0, 200) });
       }
-      if (commentDrift) {
+    }
+    if (commentDrift) {
+      try {
         await args.reindexComments(task.id);
         reindexed += 1;
+      } catch (error) {
+        failed.push({ id: task.id, stage: "comments", message: String((error as Error)?.message ?? error).slice(0, 200) });
       }
-    } catch {
-      return { state, reindexed, passComplete: false, stopped: true, passFound: null };
     }
     if (drifted) state.found += 1;
     state.afterId = task.id;
+    if (failed.length >= maxFailures) {
+      return { state, reindexed, passComplete: false, stopped: true, passFound: null, failed };
+    }
   }
   const passComplete = !args.batchFull;
-  return { state, reindexed, passComplete, stopped: false, passFound: passComplete ? state.found : null };
+  return { state, reindexed, passComplete, stopped: false, passFound: passComplete ? state.found : null, failed };
 }

@@ -6,6 +6,7 @@ import {
   advanceIndexDrift,
   emptyDriftState,
   recordDriftPass,
+  type DriftFailure,
   type DriftState,
   type DriftTask,
   type IndexedCommentCopy,
@@ -117,6 +118,7 @@ export async function runIndexDriftRepair(
   let current = { afterId: state.afterId, found: state.found, results: state.results ?? [] };
   let scanned = 0;
   let reindexed = 0;
+  const failed: DriftFailure[] = [];
   for (let batch = 0; batch < DRIFT_PAGE_CAP && clock() < deadline && reindexed < DRIFT_MAX_REINDEX; batch += 1) {
     const page = await deps.loadPage(current.afterId, DRIFT_SCAN_BATCH);
     scanned += page.tasks.length;
@@ -132,6 +134,7 @@ export async function runIndexDriftRepair(
     });
     current = outcome.state;
     reindexed += outcome.reindexed;
+    failed.push(...outcome.failed);
     if (outcome.passComplete && outcome.passFound != null) {
       return {
         state: {
@@ -143,9 +146,10 @@ export async function runIndexDriftRepair(
         reindexed,
         passComplete: true,
         passFound: outcome.passFound,
+        failed,
       };
     }
     if (outcome.stopped || page.tasks.length === 0) break;
   }
-  return { state: current, scanned, reindexed, passComplete: false, passFound: null };
+  return { state: current, scanned, reindexed, passComplete: false, passFound: null, failed };
 }

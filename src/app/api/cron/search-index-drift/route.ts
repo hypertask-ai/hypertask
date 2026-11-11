@@ -37,12 +37,16 @@ export async function GET(request: NextRequest) {
   }
   const result = await runIndexDriftRepair(state);
   await redis.set(DRIFT_STATE_KEY, JSON.stringify(result.state));
-  const progress = `scanned ${result.scanned} reindexed ${result.reindexed} cursor ${result.state.afterId} found ${result.state.found}`;
+  const progress = `scanned ${result.scanned} reindexed ${result.reindexed} cursor ${result.state.afterId} found ${result.state.found} failed ${result.failed.length}`;
   console.log(result.passComplete
     ? `[search-index-drift] pass complete drift ${result.passFound} ${progress}`
     : `[search-index-drift] pass open ${progress}`);
+  for (const failure of result.failed.slice(0, 5)) {
+    console.log(`[search-index-drift] write failed task ${failure.id} ${failure.stage} ${failure.message}`);
+  }
   return NextResponse.json({
     scanned: result.scanned, reindexed: result.reindexed, passComplete: result.passComplete,
     passFound: result.passFound, afterId: result.state.afterId, found: result.state.found, results: result.state.results,
+    failed: result.failed,
   });
 }
