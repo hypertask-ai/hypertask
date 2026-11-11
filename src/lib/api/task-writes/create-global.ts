@@ -34,6 +34,32 @@ import { taskWriteRoute, type TaskWriteRoute } from "./route";
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 class TaskSectionValidationError extends Error {}
 
+export async function refuseSharedTicketWriting(
+  userId: number,
+  agentId: string | null,
+  fields: { title: unknown; description: unknown },
+  headers: Headers,
+) {
+  if (!agentId) return null;
+  let sharedWriting = true;
+  try {
+    const sharedWritingOn = await isFeatureEnabled(HTPR_8905_SHARED_TICKET_WRITING_FLAG, userId);
+    if (!sharedWritingOn) sharedWriting = false;
+  } catch {
+    sharedWriting = true;
+  }
+  if (!sharedWriting) return null;
+  try {
+    await enforceAgentWriting(userId, agentId, fields, {}, { create: true });
+  } catch (error) {
+    if (error instanceof AgentWritingError) {
+      return NextResponse.json({ message: error.message, code: error.code, field: error.field }, { status: 400, headers });
+    }
+    throw error;
+  }
+  return null;
+}
+
 const route = (requestStartedAt: number) => taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
   validationMessage: "Invalid request",
@@ -209,25 +235,8 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       await Promise.all([broadcastBoardChange(projectId, { originUserId: userId }), broadcastTaskChange(taskId)]);
       return NextResponse.json({ newTask: result.json }, { status: 200, headers: responseHeaders });
     }
-    let sharedWriting = false;
-    if (agentId) {
-      try {
-        const sharedWritingOn = await isFeatureEnabled(HTPR_8905_SHARED_TICKET_WRITING_FLAG, userId);
-        if (sharedWritingOn) sharedWriting = true;
-      } catch {
-        sharedWriting = true;
-      }
-    }
-    if (sharedWriting) {
-      try {
-        await enforceAgentWriting(userId, agentId, { title, description: storedDescription }, {}, { create: true });
-      } catch (error) {
-        if (error instanceof AgentWritingError) {
-          return NextResponse.json({ message: error.message, code: error.code, field: error.field }, { status: 400, headers: responseHeaders });
-        }
-        throw error;
-      }
-    }
+    const writingRefusal = await refuseSharedTicketWriting(userId, agentId, { title, description: storedDescription }, responseHeaders);
+    if (writingRefusal) return writingRefusal;
     let tagIds: string[] = [];
     if (tags != null && !Array.isArray(tags)) {
       return NextResponse.json({ message: "Invalid labels" }, { status: 400, headers: responseHeaders });
