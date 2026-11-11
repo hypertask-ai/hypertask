@@ -23,8 +23,8 @@ function fake(data = second()) {
     writes, collect: async () => data,
     task: ticket => { assert.ok(tasks[ticket], ticket); return structuredClone(tasks[ticket]); },
     identity: () => ({ name: 'INFRA MANAGER', credentialPath: 'session-credential-path-only' }),
-    write: args => { writes.push(args); return JSON.stringify({ success: true, task: { ticketNumber: 'YPER4-9999' } }); },
-    recover: () => 'YPER4-9999'
+    write: args => { writes.push(args); return JSON.stringify({ success: true, task: { ticketNumber: 'HYCI-9999' } }); },
+    recover: () => 'HYCI-9999'
   };
 }
 
@@ -66,7 +66,7 @@ test('same red streak twice, even at a later red commit, creates and assigns onc
   const assigns = api.writes.filter(a => a[1] === 'assign');
   assert.equal(assigns.length, 1); assert.equal(assigns[0][4], tasks['HTPR-7574'].assignees[0].agent.id);
   assert.ok(!assigns[0].includes('6'));
-  const create = api.writes[0]; assert.ok(create.includes('4060')); assert.ok(create.includes('In Progress'));
+  const create = api.writes[0]; assert.ok(create.includes('11514')); assert.ok(create.includes('In Progress'));
   const saved = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
   assert.equal(Object.keys(saved.alerts).length, 1);
 });
@@ -76,7 +76,7 @@ test('green posts nothing; recovery adds exactly one activity and marks streak c
   const red = fake(); await tick({ dir, api: red });
   const green = fake({ status: 'success', run: { id: second().run.id + 1, html_url: 'https://example/green' } });
   await tick({ dir, api: green }); await tick({ dir, api: green });
-  assert.equal(green.writes.length, 1); assert.deepEqual(green.writes[0].slice(0, 3), ['activity', 'add', 'YPER4-9999']);
+  assert.equal(green.writes.length, 1); assert.deepEqual(green.writes[0].slice(0, 3), ['activity', 'add', 'HYCI-9999']);
   assert.match(green.writes[0][3], /Production green again/);
   assert.ok(Object.values(JSON.parse(fs.readFileSync(path.join(dir, 'state.json'))).alerts)[0].closed);
 });
@@ -355,7 +355,7 @@ test('unchanged red tick makes one API call and no second alert; new failures ap
   assert.equal(next.github(), 4);
   assert.equal(next.calls.filter(([bin, args]) => bin === 'gh' && args[3].includes('/pulls/')).length, 0);
   assert.equal(next.writes.length, 1);
-  assert.deepEqual(next.writes[0].slice(0, 3), ['activity', 'add', 'YPER4-9999']);
+  assert.deepEqual(next.writes[0].slice(0, 3), ['activity', 'add', 'HYCI-9999']);
   assert.match(next.writes[0][3], /tests\/new-red.test.cjs: Error: newFailureToken/);
   assert.match(next.writes[0][3], /tests\/another-red.test.cjs: Error: anotherFailureToken/);
   assert.equal(next.writes[0][3].split('\n').length, 1);
@@ -650,9 +650,62 @@ test('the red after that rerun files one urgent fixer ticket naming the smoke te
   await tick({ dir, api, now: Date.parse('2026-10-22T12:03:00Z') / 1000 });
   const create = api.writes.find(a => a[1] === 'create');
   assert.ok(create.includes('urgent'));
-  assert.ok(create.includes('Incident,brain-medium'));
+  assert.ok(create.includes('Incident,CI,Hypertask CI,brain-medium'));
   assert.match(create[create.indexOf('--title') + 1], /layout baseline: ticket from board card/);
   assert.match(create[create.indexOf('--description') + 1],
     /layout baseline: ticket from board card \[Desktop\]: Test timeout of 50000ms exceeded/);
   assert.equal(api.writes.filter(a => a[1] === 'create').length, 1);
+});
+
+test('green recovery reconciles saved intent on the active fleet board before closing it', async t => {
+  const dir = tmp(t), title = 'Production red: saved test', marker = 'production-red-alert:saved';
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({
+    alerts: { old: { title, marker, runId: 1 } }, fails: 10, until: 0
+  }));
+  const reads = [], writes = [];
+  const api = live((bin, args) => {
+    assert.equal(bin, 'hypertask'); reads.push(args);
+    if (args[1] === 'list') {
+      assert.equal(args[args.indexOf('--project') + 1], '11514');
+      return JSON.stringify({ tasks: [{ title, ticketNumber: 'HYCI-9999' }] });
+    }
+    assert.deepEqual(args.slice(0, 3), ['tasks', 'get', 'HYCI-9999']);
+    return JSON.stringify({ tasks: [{ description: marker }] });
+  });
+  api.collect = async () => ({ status: 'success', run: { id: 2, html_url: 'https://example/green' } });
+  api.identity = () => ({});
+  api.write = args => { writes.push(args); return '{"success":true}'; };
+  await tick({ dir, api });
+  const state = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
+  assert.equal(reads.length, 2);
+  assert.equal(state.alerts.old.ticket, 'HYCI-9999');
+  assert.equal(state.alerts.old.closed, true);
+  assert.equal(state.fails, 0);
+  assert.equal(state.until, 0);
+  assert.deepEqual(writes[0].slice(0, 3), ['activity', 'add', 'HYCI-9999']);
+  assert.equal(writes.length, 1);
+});
+
+test('recovery refuses absent or ambiguous marker matches without a new alert', () => {
+  for (const matches of [[], ['HYCI-1'], ['HYCI-1', 'HYCI-2']]) {
+    const api = live((bin, args) => {
+      assert.equal(bin, 'hypertask');
+      if (args[1] === 'list') return JSON.stringify({ tasks: matches.map(ticketNumber => ({ title: 'saved', ticketNumber })) });
+      return JSON.stringify({ tasks: [{ description: matches.length === 1 ? 'wrong marker' : 'marker' }] });
+    });
+    assert.throws(() => api.recover('saved', 'marker'), /outcome unknown/);
+  }
+});
+
+test('alerts without a single fixer enter the active fleet backlog unassigned', async t => {
+  const api = fake(); api.task = () => ({ assignees: [] });
+  const p = await plan(second(), api);
+  assert.equal(p.project, 11514);
+  assert.equal(p.section, 'Backlog');
+  await tick({ dir: tmp(t), api });
+  const create = api.writes.find(args => args[1] === 'create');
+  assert.equal(create[create.indexOf('--project') + 1], '11514');
+  assert.equal(create[create.indexOf('--section') + 1], 'Backlog');
+  assert.ok(create.includes('Incident,CI,Hypertask CI,brain-medium'));
+  assert.equal(api.writes.filter(args => args[1] === 'assign').length, 0);
 });
