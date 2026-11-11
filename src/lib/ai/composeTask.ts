@@ -1,6 +1,6 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { readTaskWriterSkills, TASK_WRITER_SKILLS_HEADER, MAX_SKILL_INPUT_LENGTH, type TaskWriterSkills } from "./taskWriterSkills";
-import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut } from "@/lib/media/inlineAgentImages";
+import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut, creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IProject, ITask } from "@/models/model";
@@ -64,12 +64,13 @@ export type ComposeTaskStage = "Reading past tickets" | "Understanding the conte
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, inlineAgentImages = false,
-  applyWriterProperties = false, invokeSkills = false, writerModel,
+  applyWriterProperties = false, invokeSkills = false, writerModel, guaranteeScreenshots = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   writerModel?: { id: string; source: string };
   invokeSkills?: boolean;
   inlineAgentImages?: boolean;
+  guaranteeScreenshots?: boolean;
   applyWriterProperties?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
@@ -201,8 +202,8 @@ export async function createComposedTask({
         ...(Array.isArray(fieldDraft?.customFields) && fieldDraft.customFields.length ? { customFields: fieldDraft.customFields } : {}), ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
         ...(applyWriterProperties ? writerProperties(extractTaskProperties(html)) : {}) }];
     }
-    drafts = drafts.map((draft) => {
-      let body = restoreTaskWriterMedia(draft.description, media.media);
+    drafts = drafts.map((draft, index) => {
+      let body = restoreTaskWriterMedia(draft.description, media.media, drafts.length === 1 || Boolean(existingTaskId && index === 0));
       if (optedOut) body = body.replace(/<img\b[^>]*>/gi, "");
       if (inlineAgentImages && /<img\b/i.test(body)) {
         const doc = new DOMParser().parseFromString(body, "text/html");
@@ -231,6 +232,16 @@ export async function createComposedTask({
     drafts = [];
   }
   if (!drafts.length) drafts = [{ title, description }];
+  if (guaranteeScreenshots && drafts.length === 1) {
+    drafts = [{
+      ...drafts[0],
+      description: guaranteeCreationScreenshots(drafts[0].description, {
+        instructions: text,
+        attachments: creationScreenshotCandidates(uploads, text),
+      }),
+    }];
+    description = drafts[0].description;
+  }
   if (existingTaskId && drafts.length > 1) {
     defaults = await axios.get("/api/tasks/createGlobally", { params: { projectId: project.id, position: "top" } });
     if (!defaults?.data?.sectionId) throw new Error("This board has no column to create a task in.");

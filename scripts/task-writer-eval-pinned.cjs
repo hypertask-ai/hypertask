@@ -402,7 +402,7 @@ async function sdkGenerate(apiKey, fetch = globalThis.fetch) {
           ? { enabled: false, effort: 'none' }
           : { enabled: true, effort: options.effort },
       }),
-      instructions,
+      system: instructions,
       messages: [{ role: 'user', content: input }],
       maxOutputTokens,
       maxRetries: 2,

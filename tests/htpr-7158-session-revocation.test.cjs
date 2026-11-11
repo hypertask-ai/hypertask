@@ -35,14 +35,10 @@ function revocations(redis, getRedis = async () => redis) {
 
 function fakeRedis() {
   const store = new Map()
-  const calls = { get: [], mget: [], set: [] }
+  const calls = { get: [], set: [] }
   return {
     store, calls,
     get: async (key) => { calls.get.push(key); return store.get(key) ?? null },
-    mget: async (...keys) => {
-      for (const key of keys) calls.mget.push(key)
-      return keys.map((key) => store.get(key) ?? null)
-    },
     set: async (...args) => { calls.set.push(args); store.set(args[0], args[1]); return 'OK' },
   }
 }
@@ -106,7 +102,7 @@ test('invalid and expired cookies never generate a fingerprint or a Redis operat
     await helper.revokeSessionToken(token)
     assert.equal(await helper.isSessionTokenRevoked(token, { failClosed: true }), false)
   }
-  assert.deepEqual(redis.calls, { get: [], mget: [], set: [] })
+  assert.deepEqual(redis.calls, { get: [], set: [] })
 })
 
 test('revoke stores only the payload fingerprint with TTL equal to verified exp minus now', async (t) => {
@@ -129,7 +125,7 @@ test('another module instance immediately sees revocation after a prior negative
   assert.equal(await a.isSessionTokenRevoked(token, { failClosed: false }), false)
   await b.revokeSessionToken(token)
   assert.equal(await a.isSessionTokenRevoked(token, { failClosed: false }), true)
-  assert.equal(redis.calls.mget.length, 6)
+  assert.equal(redis.calls.get.length, 6)
 })
 
 test('only confirmed revocations survive an outage, and expired tokens are ignored', async (t) => {
@@ -139,7 +135,7 @@ test('only confirmed revocations survive an outage, and expired tokens are ignor
   const token = session.signSession({ id: 7 }, 2)
   await revocations(redis).revokeSessionToken(token)
   assert.equal(await helper.isSessionTokenRevoked(token, { failClosed: false }), true)
-  redis.mget = async () => { throw new Error('fake outage') }
+  redis.get = async () => { throw new Error('fake outage') }
   assert.equal(await helper.isSessionTokenRevoked(token, { failClosed: false }), true)
   t.mock.timers.tick(2000)
   assert.equal(await helper.isSessionTokenRevoked(token, { failClosed: true }), false)
@@ -149,16 +145,16 @@ test('Redis errors honor the caller failClosed policy and recovery is not negati
   const redis = fakeRedis()
   const helper = revocations(redis)
   const token = session.signSession({ id: 7 })
-  redis.mget = async () => { throw new Error('fake outage') }
+  redis.get = async () => { throw new Error('fake outage') }
   assert.equal(await helper.isSessionTokenRevoked(token, { failClosed: false }), false)
   assert.equal(await helper.isSessionTokenRevoked(token, { failClosed: true }), true)
-  redis.mget = async () => ['1', null]
+  redis.get = async () => '1'
   assert.equal(await helper.isSessionTokenRevoked(token, { failClosed: false }), true)
 })
 
 test('Redis GET hangs are deadline bounded in both policies, including client acquisition', async () => {
   for (const failClosed of [false, true]) {
-    const helper = revocations({ mget: () => new Promise(() => {}) })
+    const helper = revocations({ get: () => new Promise(() => {}) })
     const start = performance.now()
     assert.equal(await helper.isSessionTokenRevoked(session.signSession({ id: 7 }), { failClosed }), failClosed)
     assert.ok(performance.now() - start < 1000)
@@ -190,7 +186,7 @@ test('failed writes never throw, log after one retry, and do not falsely cache r
   t.mock.method(console, 'error', (...args) => errors.push(args))
   const helper = revocations({
     set: async () => { attempts++; throw new Error('fake outage') },
-    mget: async () => [null, null],
+    get: async () => null,
   })
   const token = session.signSession({ id: 7 })
   await assert.doesNotReject(helper.revokeSessionToken(token))

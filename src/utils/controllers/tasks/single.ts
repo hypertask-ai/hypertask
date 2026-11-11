@@ -548,10 +548,14 @@ export async function updateTaskSingle(
           destinationSection &&
           destinationIsDoneColumn(destinationSection)
         ) {
-          const openGates = openObservationGates(
+          const gateDescription =
             typeof requestedMutation.description === "string"
               ? requestedMutation.description
-              : currentState.description_?.content ?? currentState.description,
+              : currentState.description_?.content ||
+                currentState.description ||
+                "";
+          const openGates = openObservationGates(
+            gateDescription,
             typeof requestedMutation.acceptanceCriteria === "string"
               ? requestedMutation.acceptanceCriteria
               : currentState.acceptanceCriteria,

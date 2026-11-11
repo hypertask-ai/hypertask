@@ -410,6 +410,7 @@ function editorPanels(cachedStaticFirst = false) {
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     HTPR_7393_COMMENT_INLINE_AI_FLAG: "comment-inline-ai",
     HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts",
+    HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG: "htpr-9028-inline-creation-screenshots",
     useSetRecoilState: () => noop,
     useRecoilValue: () => false,
     showAIChatInterfaceAtom: "chat-open",
