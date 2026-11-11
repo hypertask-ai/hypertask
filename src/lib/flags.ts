@@ -278,53 +278,74 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
     : DEFAULT_FEATURE_FLAG_MODE);
 }
 
+const flagModeLookups = new Map<"agent" | "human", { generation: number; promise: Promise<RawFlagMode[] | null> }>();
+
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
   const {
     FLAG_MODE_CACHE_KEY,
     FLAG_MODE_GENERATION_KEY,
     FLAG_MODE_WRITERS_KEY,
+    FLAG_SNAPSHOT_MAX_AGE_MS,
     flagCacheCommand,
+    flagCacheGeneration,
+    flagModeScope,
     readProcessFlagCache,
     storeProcessFlagCache,
   } = await import("@/lib/flags/modeCache");
   const cachedProcess = readProcessFlagCache();
   if (cachedProcess) return cachedProcess;
   if (!process.env.REDIS_URL) return null;
-  try {
-    const redis = await flagCacheCommand(import("@/lib/redis").then(({ getRedis }) => getRedis()));
-    const [writers, generation, cached] = await flagCacheCommand(redis.mget(
-      FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
-    ));
-    if (writers && writers !== "0") return null;
-    let rows: RawFlagMode[];
-    if (cached) {
-      rows = JSON.parse(cached);
-      if (!Array.isArray(rows) || !rows.every((row) =>
-        typeof row?.key === "string" && FEATURE_FLAG_MODES.includes(row.mode),
-      )) return null;
-      storeProcessFlagCache(rows);
-      return rows;
-    } else {
+  const audience = flagModeScope.getStore()?.audience ?? "human";
+  const processGeneration = flagCacheGeneration();
+  const pending = flagModeLookups.get(audience);
+  if (pending?.generation === processGeneration) return pending.promise;
+  const startedAt = Date.now();
+  const read = async (): Promise<RawFlagMode[] | null> => {
+    try {
+      if (audience === "agent") {
+        const rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
+        const mode = rows.find(({ key }) => key === HTPR_7042_NEON_WORK_AVOIDANCE_FLAG)?.mode
+          ?? defaultFeatureFlagMode(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG);
+        if (mode !== "EVERYONE") return null;
+        return storeProcessFlagCache(rows, startedAt, processGeneration) ? rows : null;
+      }
+      const redis = await flagCacheCommand(import("@/lib/redis").then(({ getRedis }) => getRedis()));
+      const [writers, generation, cached] = await flagCacheCommand(redis.mget(
+        FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
+      ));
+      if (writers && writers !== "0") return null;
+      let rows: RawFlagMode[];
+      if (cached) {
+        const snapshot: unknown = JSON.parse(cached);
+        if (!Array.isArray(snapshot) || typeof snapshot[0] !== "number"
+          || snapshot[0] > startedAt || snapshot[0] + FLAG_SNAPSHOT_MAX_AGE_MS <= Date.now()) return null;
+        rows = snapshot.slice(1);
+        if (!rows.every((row) => typeof row?.key === "string" && FEATURE_FLAG_MODES.includes(row.mode))) return null;
+        return storeProcessFlagCache(rows, snapshot[0], processGeneration) ? rows : null;
+      }
       rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
-    }
-    const mode = rows.find(({ key }) => key === HTPR_7042_NEON_WORK_AVOIDANCE_FLAG)?.mode
-      ?? defaultFeatureFlagMode(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG);
-    if (mode !== "EVERYONE") return null;
-    if (!cached) {
-      await flagCacheCommand(redis.eval(`
+      const mode = rows.find(({ key }) => key === HTPR_7042_NEON_WORK_AVOIDANCE_FLAG)?.mode
+        ?? defaultFeatureFlagMode(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG);
+      if (mode !== "EVERYONE") return null;
+      const filled = await flagCacheCommand(redis.eval(`
         if (redis.call('GET', KEYS[1]) or '0') == '0'
           and (redis.call('GET', KEYS[2]) or '0') == ARGV[1] then
           return redis.call('SET', KEYS[3], ARGV[2], 'EX', 30)
         end
         return 0
       `, 3, FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
-      generation ?? "0", JSON.stringify(rows))).catch(() => undefined);
+      generation ?? "0", JSON.stringify([startedAt, ...rows]))).catch(() => undefined);
+      if (filled === 0) return null;
+      return storeProcessFlagCache(rows, startedAt, processGeneration) ? rows : null;
+    } catch {
+      return null;
     }
-    storeProcessFlagCache(rows);
-    return rows;
-  } catch {
-    return null;
-  }
+  };
+  const promise = read().finally(() => {
+    if (flagModeLookups.get(audience)?.generation === processGeneration) flagModeLookups.delete(audience);
+  });
+  flagModeLookups.set(audience, { generation: processGeneration, promise });
+  return promise;
 }
 
 const requestFlagModes = cache(loadRawFlagModes);
