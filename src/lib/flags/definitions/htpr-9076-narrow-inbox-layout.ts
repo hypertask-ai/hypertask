@@ -1,9 +1,9 @@
 import type { FeatureFlagDefinition } from "../definitions";
 
-export const HTPR_9076_NARROW_INBOX_TABS_FLAG = "htpr-9076-narrow-inbox-tabs";
+export const HTPR_9076_NARROW_INBOX_LAYOUT_FLAG = "htpr-9076-narrow-inbox-layout";
 
 export default {
-  key: HTPR_9076_NARROW_INBOX_TABS_FLAG,
+  key: HTPR_9076_NARROW_INBOX_LAYOUT_FLAG,
   kind: "bugfix",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-11",

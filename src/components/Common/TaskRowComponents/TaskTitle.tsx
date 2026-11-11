@@ -13,7 +13,7 @@ import { formatWaitingOnAge } from '@/lib/waitingOn';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-row-fill';
 import { HTPR_8264_INBOX_NAME_COLUMN_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-name-column';
-import { HTPR_9076_NARROW_INBOX_TABS_FLAG } from '@/lib/flags/definitions/htpr-9076-narrow-inbox-tabs';
+import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from '@/lib/flags/definitions/htpr-9076-narrow-inbox-layout';
 
 interface ITitleContainer {
     notification?: INotification;
@@ -30,7 +30,7 @@ interface IRenderMessageTag {
 
 export const TaskMetaChips: React.FC<{ task: ITask; showDueDate?: boolean }> = ({ task, showDueDate }) => {
     const { isIbxSlctd } = useNotificationContext();
-    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_TABS_FLAG);
+    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG);
     const snapshot = useFirstScreenSurface();
     const [now] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
     const MAX_LABELS = 3;

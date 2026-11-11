@@ -8,7 +8,7 @@ import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264
 import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
 import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
-import { HTPR_9076_NARROW_INBOX_TABS_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-tabs";
+import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-layout";
 
 import {
   FC,
@@ -132,7 +132,7 @@ const Inbox = ({
   const inboxKeepsScroll = useFlag(HTPR_7841_INBOX_KEEPS_SCROLL_FLAG);
   const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
   const inboxFirstRow = useFlag(HTPR_8868_INBOX_FIRST_ROW_FLAG);
-  const narrowInboxTabs = useFlag(HTPR_9076_NARROW_INBOX_TABS_FLAG);
+  const narrowInboxTabs = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG);
   const snapshot = useFirstScreenSurface(currentUser.id);
   const queryClient = useQueryClient();
   const [inboxDocument] = useState(() => {

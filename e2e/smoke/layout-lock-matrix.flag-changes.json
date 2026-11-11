@@ -38,7 +38,7 @@
     "approvedIn": "https://app.hypertask.ai/detail/project-15/8991"
   },
   {
-    "flag": "htpr-9076-narrow-inbox-tabs",
+    "flag": "htpr-9076-narrow-inbox-layout",
     "page": "inbox",
     "anchors": [
       "list"
