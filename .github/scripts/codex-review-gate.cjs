@@ -18,6 +18,10 @@ function priorityOf(body) {
 
 const blocks = body => (priorityOf(body) ?? 0) <= 1;
 
+const UNREAD = 'Further comments were not read.';
+const commentBody = comment => (typeof comment === 'string' ? comment : String(comment?.body ?? ''));
+const commentCommit = (comment, review) => (typeof comment === 'string' ? review.commit : comment?.commit ?? review.commit);
+
 const WIDEN_DEFAULT_MODE_PATTERNS = [
   /\bdefaultMode\s+(?:should|must|needs to)\s+(?:be\s+)?["']?EVERYONE\b/i,
   /\bdefault\s+mode\s+(?:should|must|needs to)\s+(?:be\s+)?EVERYONE\b/i,
@@ -66,11 +70,17 @@ function codeReviewStateFor(comments, headOid) {
 
 function evaluate(pr) {
   const short = pr.headOid.slice(0, 7);
-  const reviews = pr.reviews.filter(review => isCodex(review.author) && review.commit === pr.headOid);
+  const codexReviews = pr.reviews.filter(review => isCodex(review.author));
+  const headReviews = codexReviews.filter(review => review.commit === pr.headOid);
+  const staleReviews = codexReviews.filter(review => review.commit !== pr.headOid);
+  const headComments = staleReviews.flatMap(review => review.comments.filter(
+    comment => commentCommit(comment, review) === pr.headOid));
+  const unreadStale = staleReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
 
-  const rawBlocking = reviews.flatMap(review => review.comments.length
-    ? review.comments.filter(blocks)
-    : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : []);
+  const rawBlocking = headReviews.flatMap(review => review.comments.length
+    ? review.comments.map(commentBody).filter(blocks)
+    : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : [])
+    .concat(headComments.map(commentBody), unreadStale ? [UNREAD] : []);
   const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   if (blocking.length) {
     const levels = blocking.map(priorityOf);
@@ -78,21 +88,21 @@ function evaluate(pr) {
     return {
       state: 'failure',
       description: `Codex review of ${short} raised ${blocking.length} finding(s), worst ${worst}`,
-      evidence: reviews.find(review => review.url)?.url ?? '',
+      evidence: codexReviews.find(review => review.url)?.url ?? '',
     };
   }
   if (rawBlocking.length) {
     return {
       state: 'success',
       description: `Codex reviewed ${short}; feature-flag gate allowed Owner + QA release`,
-      evidence: reviews.findLast(review => review.url)?.url ?? '',
+      evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
-  if (reviews.length) {
+  if (headReviews.length || headComments.length) {
     return {
       state: 'success',
       description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
-      evidence: reviews.findLast(review => review.url)?.url ?? '',
+      evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
 
@@ -124,7 +134,7 @@ query($owner: String!, $name: String!, $after: String) {
       nodes {
         number isDraft isCrossRepository headRefOid
         commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } } } } }
+        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
         comments(last: 100) { nodes { author { login } url body } }
       }
     }
@@ -150,7 +160,7 @@ async function run({ github, context, core }) {
       statusContexts: head?.status?.contexts ?? [],
       reviews: node.reviews.nodes.map(review => ({
         author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid,
-        comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => comment.body ?? '').concat(review.comments.pageInfo.hasNextPage ? ['Further comments were not read.'] : []),
+        comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => ({ body: comment.body ?? '', commit: comment.commit?.oid })).concat(review.comments.pageInfo.hasNextPage ? [UNREAD] : []),
       })),
       comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
     });
