@@ -156,8 +156,12 @@ check before `ship-claim` writes. The sanitized historical replay lives in
 
 ## GitHub-hosted Vercel feed (HYCI-260)
 
-`error-collector-vercel.yml` runs every fifteen minutes on GitHub-hosted Ubuntu,
-using the existing Vercel secret. Each source independently reads the preceding
+`error-collector-vercel.yml` runs on GitHub-hosted Ubuntu using the existing
+Vercel secret. An independent chain job dispatches the next production run on
+a fifteen-minute boundary, even after collection fails or times out. Collection
+and hand-off have separate locks, so a waiting link cannot block collection.
+The cron is a backstop, not the cadence source; the shared schedule-chain helper
+stands down while another link is active. Each source independently reads the preceding
 24 hours through the existing bounded adapter. This overlapping snapshot lets
 the VPS recover missed timer runs without another state writer or ticket writer.
 A failed source is absent, never an empty successful batch. An all-failed run

@@ -8,13 +8,12 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: vercel-error-feed
-  cancel-in-progress: false
-
 jobs:
   collect:
     if: github.ref == 'refs/heads/production'
+    concurrency:
+      group: vercel-error-feed
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
@@ -37,3 +36,29 @@ jobs:
           path: vercel-feed/feed.enc
           if-no-files-found: error
           retention-days: 2
+
+  chain:
+    needs: [collect]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/production' }}
+    permissions:
+      contents: read
+      actions: write
+    concurrency:
+      group: vercel-error-feed-chain
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: production
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Start the next fifteen-minute link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/schedule-chain.cjs hand-off --workflow error-collector-vercel.yml --gap-minutes 15

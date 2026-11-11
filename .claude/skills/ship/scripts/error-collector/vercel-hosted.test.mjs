@@ -91,3 +91,29 @@ else process.exit(1);
     assert.equal(readFileSync(join(root, 'calls'), 'utf8'), 'list\ndownload\n');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('production feed hands off after failed collection without holding the collection lock', async () => {
+  const yaml = readFileSync(new URL('../../../../../.github/workflows/error-collector-vercel.yml', import.meta.url), 'utf8');
+  assert.doesNotMatch(yaml, /^concurrency:/m);
+  const chain = yaml.slice(yaml.indexOf('\n  chain:'));
+  assert.match(chain, /needs: \[collect\]/);
+  assert.match(chain, /if: \$\{\{ !cancelled\(\) && github.ref == 'refs\/heads\/production' \}\}/);
+  assert.match(chain, /group: vercel-error-feed-chain/);
+  assert.match(chain, /actions: write/);
+  assert.match(chain, /schedule-chain\.cjs hand-off --workflow error-collector-vercel\.yml --gap-minutes 15/);
+  const { default: scheduler } = await import('../../../../../.github/scripts/schedule-chain.cjs');
+  let clock = 1000;
+  const calls = [];
+  const result = await scheduler.handOff('hypertask-ai/hypertask', {
+    workflowFile: 'error-collector-vercel.yml', ownRunId: '123', startMs: clock, gapMs: 15 * 60 * 1000,
+    now: () => clock,
+    sleep: async ms => { clock += ms; },
+    api: async (path, method, fields) => {
+      calls.push({ path, method, fields });
+      return { workflow_runs: [{ id: 123, status: 'in_progress' }] };
+    },
+  });
+  assert.equal(clock, 901000);
+  assert.equal(result.dispatched, true);
+  assert.deepEqual(calls[1], { path: '/repos/hypertask-ai/hypertask/actions/workflows/error-collector-vercel.yml/dispatches', method: 'POST', fields: { ref: 'production' } });
+});
