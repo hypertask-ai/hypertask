@@ -1,16 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { loadModule } = require("./helpers/loadModule.cjs");
-
-const root = path.resolve(__dirname, "..");
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 class FakeRedis {
   constructor() { this.values = new Map(); this.calls = []; this.infoText = ""; }
   async mget(...keys) { this.calls.push("mget"); return keys.map((key) => this.values.get(key) ?? null); }
-  async set(key, value) { this.calls.push("set"); this.values.set(key, String(value)); return "OK"; }
+  async set(key, value, ...options) { this.calls.push("set"); if (options.includes("NX") && this.values.has(key)) return null; this.values.set(key, String(value)); return "OK"; }
+  async del(key) { this.calls.push("del"); return Number(this.values.delete(key)); }
   async get(key) { this.calls.push("get"); return this.values.get(key) ?? null; }
   async info() { this.calls.push("info"); return this.infoText; }
 }
@@ -29,10 +25,23 @@ test("a revocation check costs one command, down from two", async () => {
   assert.deepEqual(redis.calls, ["mget"]);
 });
 
-test("the error intake claims both counters in one command behind the ticket flag", () => {
-  const route = read("src/app/api/errors/route.ts");
-  assert.match(route, /HTPR_8978_UPSTASH_TRAFFIC_FLAG/);
-  assert.match(route, /redis\.eval\(INTAKE_CLAIM, 2, ipKey, globalKey, RATE_WINDOW_SECONDS\)/);
+test("error intake uses one command and still accepts allowed reports and rejects excess", async () => {
+  const calls = [];
+  const reports = [];
+  let counts = [1, 1];
+  const { POST } = loadModule("src/app/api/errors/route.ts", {
+    "@/lib/redis": { getRedis: async () => ({ eval: async (...args) => { calls.push(args); return counts; } }) },
+    "@/lib/flags": { isFeatureEnabled: async () => true, HTPR_8978_UPSTASH_TRAFFIC_FLAG: "htpr-8978-upstash-traffic", FEATURE_FLAG_OWNER_USER_ID: 6 },
+    "@/lib/errors/reportError": { reportError: async (report) => reports.push(report) },
+  });
+  const request = () => new Request("http://localhost/api/errors", { method: "POST", body: JSON.stringify({ message: "test error", source: "client" }) });
+  assert.equal((await POST(request())).status, 204);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1], 2);
+  assert.equal(reports[0].message, "test error");
+  counts = [31, 1];
+  assert.equal((await POST(request())).status, 204);
+  assert.equal(reports.length, 1);
 });
 
 function alarmModule(redis, tasks) {
@@ -40,12 +49,12 @@ function alarmModule(redis, tasks) {
     "@/lib/prisma": {
       default: {
         task: { findFirst: async () => (tasks.ticketId ? { id: tasks.ticketId } : null) },
-        project: { findFirst: async () => ({ uniqueIdentifier: "HTPR", section: [{ id: 1, section_title: "Bugs" }], labels: [{ id: 2 }] }) },
+        project: { findFirst: async () => ({ uniqueIdentifier: "HTPR", section: [{ id: 1, section_title: "Bugs" }], labels: [{ id: "infra", value: "Infra" }, { id: "brain", value: "brain-medium" }] }) },
       },
     },
     "@/lib/redis": { getRedis: async () => redis },
     "@/utils/controllers/tasks/createTaskCore": {
-      createProvisionedTaskCore: async () => { tasks.created += 1; return { task: { id: 4242 } }; },
+      createProvisionedTaskCore: async (input) => { tasks.input = input; if (tasks.failCreate) throw new Error("Ticket write failed"); tasks.created += 1; return { task: { id: 4242 } }; },
     },
   });
 }
@@ -76,10 +85,30 @@ test("the alarm files one ticket over 300k a day and one only", async () => {
   redis.infoText = "total_commands_processed:501000";
   assert.equal((await checkUpstashDailyRequests()).filedTaskId, 4242);
   assert.equal(tasks.created, 1);
+  assert.equal(tasks.input.priorityIndex, 1);
+  assert.deepEqual(tasks.input.labelIds, ["infra", "brain"]);
+  backdateSample(redis, 1000);
+  assert.equal((await checkUpstashDailyRequests()).reason, "filing-in-flight");
+  assert.equal(tasks.created, 1);
 
   tasks.ticketId = 4242;
   backdateSample(redis, 1000);
   assert.equal((await checkUpstashDailyRequests()).reason, "already-filed");
+  assert.equal(tasks.created, 1);
+});
+
+test("a failed ticket write can retry instead of silencing the alarm for a day", async () => {
+  const redis = new FakeRedis();
+  const tasks = { created: 0, ticketId: null, failCreate: true };
+  const { checkUpstashDailyRequests } = alarmModule(redis, tasks);
+  redis.infoText = "total_commands_processed:1000";
+  await checkUpstashDailyRequests();
+  backdateSample(redis, 0);
+  redis.infoText = "total_commands_processed:501000";
+  await assert.rejects(checkUpstashDailyRequests(), /Ticket write failed/);
+  tasks.failCreate = false;
+  backdateSample(redis, 0);
+  assert.equal((await checkUpstashDailyRequests()).filedTaskId, 4242);
   assert.equal(tasks.created, 1);
 });
 

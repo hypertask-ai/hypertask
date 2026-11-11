@@ -39,12 +39,15 @@ async function createTicket(day: string, projected: number) {
     select: {
       uniqueIdentifier: true,
       section: { where: { deleted: false, visibility: true, section_title: BOARD_SECTION_TITLE }, select: { id: true, section_title: true }, take: 1 },
-      labels: { where: { value: BOARD_LABEL_VALUE }, select: { id: true }, take: 1 },
+      labels: { where: { value: { in: [BOARD_LABEL_VALUE, "brain-medium"] } }, select: { id: true, value: true } },
     },
   });
   const section = project?.section[0];
   if (!project?.uniqueIdentifier || !section) {
     throw new Error("Upstash request alarm cannot resolve the Bugs section on board 15");
+  }
+  if (!project.labels.some((label) => label.value === "brain-medium")) {
+    throw new Error("Upstash request alarm needs the existing brain-medium label");
   }
   const { task } = await createProvisionedTaskCore({
     title: `Upstash requests projected above ${UPSTASH_DAILY_REQUEST_ALARM.toLocaleString("en-GB")} a day on ${day}`,
@@ -112,6 +115,11 @@ export async function checkUpstashDailyRequests() {
     const raced = await findTicket(marker);
     return { total, projectedDailyRequests: projected, alarm: true, filedTaskId: raced, reason: raced ? "already-filed" : "filing-in-flight" };
   }
-  const filedTaskId = await createTicket(day, projected);
-  return { total, projectedDailyRequests: projected, alarm: true, filedTaskId, reason: "filed" };
+  try {
+    const filedTaskId = await createTicket(day, projected);
+    return { total, projectedDailyRequests: projected, alarm: true, filedTaskId, reason: "filed" };
+  } catch (error) {
+    await redis.del(`${MARKER}:claim:${day}`);
+    throw error;
+  }
 }
