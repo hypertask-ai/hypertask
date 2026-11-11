@@ -696,6 +696,10 @@ export interface ISection {
 }
 
 export interface INotification {
+  needsYouEnabled?: boolean;
+  needsYouScore?: number | null;
+  needsYouReason?: string | null;
+  needsYouSource?: string | null;
   boardAccessRequest?: BoardAccessSummary;
   id: string;
   waitingOnSynthetic?: boolean;

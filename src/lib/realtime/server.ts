@@ -126,6 +126,10 @@ export async function broadcastInboxChange(
   excludeSocketId?: string
 ): Promise<void> {
   if (userId == null) return;
+  waitUntil(import("@/utils/controllers/notifications/scoreNeedsYou")
+    .then(async ({ scoreNeedsYouInbox }) => {
+      if (await scoreNeedsYouInbox(userId)) await broadcast(userChannel(userId), INBOX_EVENT);
+    }).catch((error) => console.warn("[needs-you] background scoring failed", error)));
   await broadcast(userChannel(userId), INBOX_EVENT, payload, excludeSocketId);
 }
 
