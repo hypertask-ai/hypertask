@@ -29,6 +29,16 @@ function fixture(files, overrides = {}) {
   const methods = { files: Symbol('files'), comments: Symbol('comments') };
   const github = {
     rest: {
+      repos: {
+        getCommit: async options => {
+          assert.equal(options.ref, 'production');
+          return { data: { sha: 'c'.repeat(40) } };
+        },
+        compareCommitsWithBasehead: async options => {
+          calls.comparison = options.basehead;
+          return { data: { files } };
+        },
+      },
       pulls: { listFiles: methods.files, get: async () => ({ data: pr }) },
       issues: {
         listComments: methods.comments,
@@ -198,20 +208,18 @@ test('renames crossing an exclusion boundary still count', async () => {
   ], {}, result => assert.deepEqual([result.counted, result.ignored, result.overCap], [420, 900, true]));
 });
 
-test('pagination includes late files rather than measuring only the first page', async () => {
+test('comparison includes late files rather than measuring only the first 100', async () => {
   await run(Array.from({ length: 101 }, (_, n) => file(`src/${n}.ts`, 4)), {}, (result, f) => {
     assert.equal(result.counted, 404);
     assert.equal(result.overCap, true);
-    assert.deepEqual(f.calls.pageSizes, [100, 100]);
+    assert.deepEqual(f.calls.pageSizes, [100]);
+    assert.equal(f.calls.comparison, `${'c'.repeat(40)}...${'a'.repeat(40)}`);
   });
 });
 
-test('partial, truncated, inconsistent and malformed counts leave error evidence, not a false pass', async () => {
+test('truncated comparisons and malformed counts leave error evidence, not a false pass', async () => {
   const cases = [
-    [[file('src/a.ts', 10)], { changed_files: 2 }],
-    [[file('src/a.ts', 10)], { changed_files: 3001 }],
-    [[file('src/a.ts', 10)], { changed_files: undefined }],
-    [[file('src/a.ts', 10)], { additions: 11 }],
+    [Array.from({ length: 300 }, (_, n) => file(`src/${n}.ts`, 1)), {}],
     [[file('src/a.ts', -1)], {}],
     [[file('tests/fixtures/a', 10, 0, { status: 'renamed' })], {}],
   ];
@@ -315,5 +323,29 @@ test('rerun attempts preserve distinct measurement artifacts', async () => {
     await reportSize(f);
     assert.equal(readdirSync(f.reportDirectory).length, 2);
     assert.match(steps.find(s => s.name === 'Save size measurement').with.name, /github\.run_attempt/);
+  } finally { f.close(); }
+});
+
+
+test('stale PR metadata cannot inflate the current production comparison', async () => {
+  await run([file('src/auto.ts', 366, 34)], agent({
+    changed_files: 38, additions: 431, deletions: 98,
+    base: { ref: 'production', sha: 'b'.repeat(40) },
+  }), (result, f) => {
+    assert.equal(result.counted, 400);
+    assert.equal(result.verdict, 'within-cap');
+    assert.equal(result.base, 'c'.repeat(40));
+    assert.equal(f.calls.outputs.blocked, 'false');
+    assert.equal(f.calls.comparison, `${result.base}...${f.pr.head.sha}`);
+  }, BLOCKING);
+});
+
+test('missing comparison files cannot become a passing measurement', async () => {
+  const f = fixture([]);
+  try {
+    f.github.rest.repos.compareCommitsWithBasehead = async () => ({ data: {} });
+    const result = await reportSize(f);
+    assert.equal(result.verdict, 'error');
+    assert.equal(f.calls.outputs.blocked, undefined);
   } finally { f.close(); }
 });

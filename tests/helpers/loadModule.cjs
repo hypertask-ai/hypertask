@@ -20,7 +20,7 @@ function loadModule(file, stubs = {}) {
     cache.set(filename, mod);
     const localRequire = createRequire(filename);
     const source = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-      fileName: filename,
+      fileName: filename.endsWith(".mjs") ? filename.replace(/\.mjs$/, ".ts") : filename,
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     new Function("require", "module", "exports", "__filename", "__dirname", source)(
