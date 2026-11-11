@@ -115,7 +115,7 @@ function runWorkflow(t, {
     RUN_URL: "https://example.invalid/actions/runs/1",
     PR_NUMBER: "42",
     RECONCILE_PR_NUMBER: "42",
-    GH_TOKEN: "workflow-token", GH_READ_TOKEN: apiFailure ? "" : "unusable-app-token",
+    GH_TOKEN: "workflow-token", GH_READ_TOKEN: apiFailure ? "" : "app-token",
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
     FIXTURE_PR: path.join(fixture, "pull.json"),
     FIXTURE_STATUSES: path.join(fixture, "statuses.json"),
@@ -197,7 +197,6 @@ const args = process.argv.slice(2);
 const pull = JSON.parse(fs.readFileSync(process.env.FIXTURE_PR, "utf8"));
 const repo = "repos/" + process.env.REPO;
 let endpoint = args.find((arg) => arg.startsWith("repos/"));
-if (args.includes("graphql")) endpoint = "graphql";
 assert.equal(args[0], "api");
 const failure = JSON.parse(process.env.FIXTURE_API_FAILURE);
 const previous = fs.readFileSync(process.env.FIXTURE_API_CALLS, "utf8").trim().split("\\n").filter(Boolean).map(JSON.parse);
@@ -217,6 +216,7 @@ const commitSha = endpoint && endpoint.match(/\\/commits\\/([0-9a-f]{40})\\/stat
 const pullNumber = endpoint && endpoint.match(/\\/pulls\\/(\\d+)$/);
 if (args.includes("POST")) {
   assert.equal(args[args.indexOf("-X") + 1], "POST");
+  assert.equal(process.env.GH_TOKEN, "workflow-token", "status writes retain workflow authorship");
   assert.match(endpoint, new RegExp("^" + repo + "/statuses/[0-9a-f]{40}$"));
   const payload = JSON.parse(fs.readFileSync(args[args.indexOf("--input") + 1], "utf8"));
   fs.appendFileSync(process.env.FIXTURE_POSTS, JSON.stringify({ endpoint, payload }) + "\\n");
@@ -240,19 +240,13 @@ if (args.includes("POST")) {
 } else if (commitSha) {
   const statuses = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATUSES, "utf8"));
   console.log(JSON.stringify(statuses[commitSha[1]] || []));
-} else if (endpoint === "graphql") {
-  assert.equal(process.env.GH_TOKEN, "workflow-token", "GraphQL must retain the usable workflow token");
-  const current = JSON.parse(fs.readFileSync(process.env.FIXTURE_CURRENT_PR, "utf8"));
-  const rows = [current];
+} else if (endpoint === repo + "/commits/" + process.env.RECONCILE_HEAD_SHA + "/pulls?per_page=100") {
+  assert.ok(args.includes("--paginate") && args.includes("--slurp"));
+  assert.equal(process.env.GH_TOKEN, failure ? "workflow-token" : "app-token", "associated-head reads use the App pool");
+  const rows = [JSON.parse(fs.readFileSync(process.env.FIXTURE_CURRENT_PR, "utf8"))];
   if (process.env.FIXTURE_EXTRA_PULLS) rows.push(...JSON.parse(fs.readFileSync(process.env.FIXTURE_EXTRA_PULLS, "utf8")));
-  if (process.env.FIXTURE_SHARED_HEAD === "true" || process.env.FIXTURE_FRESH_SHARED_HEAD === "true") rows.push({ ...current, number: 43 });
-  const nodes = rows.filter((item) => item.head.sha === process.env.RECONCILE_HEAD_SHA).map((item) => ({
-    number: item.number, state: item.state.toUpperCase(), baseRefName: item.base.ref,
-    headRefOid: item.head.sha, repository: { nameWithOwner: process.env.REPO },
-  }));
-  console.log(JSON.stringify([{ data: { repository: { object: { associatedPullRequests: {
-    pageInfo: { hasNextPage: false, endCursor: null }, nodes,
-  } } } } }]));
+  if (process.env.FIXTURE_SHARED_HEAD === "true" || process.env.FIXTURE_FRESH_SHARED_HEAD === "true") rows.push({ ...rows[0], number: 43 });
+  console.log(JSON.stringify([rows]));
 } else {
   throw new Error("Unexpected gh arguments: " + JSON.stringify(args));
 }
@@ -343,10 +337,10 @@ for (const change of ["base", "title", "head", "error", "pending", "missing fing
     assert.equal(posts[0].state, "success");
     assert.equal(posts[0].description, "ok");
     assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
-    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 1);
-    assert.equal(calls.filter((call) => call.endpoint === "graphql").length, 1);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/statuses?")).length, 1);
+    assert.equal(calls.filter((call) => /\/commits\/[^/]+\/pulls\?/.test(call.endpoint)).length, 1);
     assert.equal(calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).length, 1);
-    assert.equal(calls.filter((call) => call.endpoint.includes("/pulls?")).length, 0);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/pulls?state=")).length, 0);
   });
 }
 
@@ -371,8 +365,8 @@ for (const state of ["success", "failure"]) {
     assert.match(output, /evaluated 1, skipped 0/);
     assert.equal(posts.length, 1);
     assert.ok(posts.every((post) => post.state === "failure" && /shared by multiple/.test(post.description)));
-    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 1);
-    assert.equal(calls.filter((call) => call.endpoint === "graphql").length, 1);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/statuses?")).length, 1);
+    assert.equal(calls.filter((call) => /\/commits\/[^/]+\/pulls\?/.test(call.endpoint)).length, 1);
   });
 }
 
@@ -535,7 +529,7 @@ for (const job of [reconciliation, singlePullRequest]) {
     assert.ok(posts.every((post) => post.state === 'pending'), 'no stale verdict published');
   });
 
-  for (const endpoint of job === singlePullRequest ? ['/pulls/42', '/pulls?', '/statuses/'] : ['graphql', '/statuses/']) {
+  for (const endpoint of job === singlePullRequest ? ['/pulls/42', '/pulls?', '/statuses/'] : ['/pulls?', '/statuses/']) {
     test(`${name}: evaluation exit 2 before rate limit at ${endpoint} remains exit 2`, (t) => {
       const after = job === singlePullRequest ? 1 : 0;
       const { result, output, posts } = runWorkflow(t, {
@@ -558,7 +552,7 @@ for (const job of [reconciliation, singlePullRequest]) {
   }
 }
 
-for (const endpoint of ['/commits/', 'graphql', '/statuses/']) {
+for (const endpoint of ['/commits/', '/pulls?', '/statuses/']) {
   test(`reconcile: rate limit at ${endpoint} exits the parent shell without publishing an error`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
       apiFailure: { endpoint, after: 0, status: 403, rate: true, reset: 3600 },
@@ -656,16 +650,16 @@ test("reconcile: a matrix job reads and publishes only its selected PR among 256
   });
   const counts = {
     status: result.status,
-    list: calls.filter((call) => call.endpoint.includes("/pulls?")).length,
+    list: calls.filter((call) => call.endpoint.includes("/pulls?state=")).length,
     perPull: calls.filter((call) => /\/pulls\/\d+$/.test(call.endpoint)).length,
-    statuses: calls.filter((call) => call.endpoint.includes("/commits/")).length,
-    graphql: calls.filter((call) => call.endpoint === "graphql").length,
+    statuses: calls.filter((call) => call.endpoint.includes("/statuses?")).length,
+    associated: calls.filter((call) => /\/commits\/[^/]+\/pulls\?/.test(call.endpoint)).length,
     posts: calls.filter((call) => call.args.includes("POST")).length,
   };
   assert.equal(result.status, 0, output);
   assert.match(output, /evaluated 1, skipped 0/);
   assert.equal(counts.statuses, 1, JSON.stringify(counts));
-  assert.equal(counts.graphql, 1, JSON.stringify(counts));
+  assert.equal(counts.associated, 1, JSON.stringify(counts));
   assert.equal(counts.list, 0, JSON.stringify(counts));
   assert.equal(counts.perPull, 1, JSON.stringify(counts));
   assert.equal(counts.posts, 1, JSON.stringify(counts));

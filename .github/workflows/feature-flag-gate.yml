@@ -540,15 +540,8 @@ jobs:
             fi
           done <"$rows"
 
-          if [ "$evaluated" -gt 0 ] && ! GH_API_NO_WAIT=1 gh_api graphql --paginate --slurp \
-            -f query='query($owner: String!, $name: String!, $sha: GitObjectID!, $endCursor: String) {
-              repository(owner: $owner, name: $name) { object(oid: $sha) { ... on Commit {
-                associatedPullRequests(first: 100, after: $endCursor) {
-                  pageInfo { hasNextPage endCursor }
-                  nodes { number state baseRefName headRefOid repository { nameWithOwner } }
-                }
-              } } }
-            }' -f owner="${REPO%/*}" -f name="${REPO#*/}" -f sha="$RECONCILE_HEAD_SHA" >"$fresh_heads_json"; then
+          if [ "$evaluated" -gt 0 ] && ! GH_API_NO_WAIT=1 gh_api --paginate --slurp \
+            "repos/$REPO/commits/$RECONCILE_HEAD_SHA/pulls?per_page=100" >"$fresh_heads_json"; then
             while IFS= read -r decision; do
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")
               publish_reconciliation_error "$(jq -r '.head_sha' <<<"$decision")" "$(jq -r '.payload' <<<"$decision")" \
@@ -569,13 +562,12 @@ jobs:
               statuses_file=$(jq -r '.statuses_file' <<<"$decision")
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")
               result=$(jq -r '.result' <<<"$decision")
-              if ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" --arg repo "$REPO" '
-                if any(.[]; (.errors != null) or (.data.repository.object.associatedPullRequests.nodes | type != "array")) then
+              if ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '
+                if any(.[]; type != "array") then
                   error("Cannot read associated pull requests")
                 else
-                  [.[] | .data.repository.object.associatedPullRequests.nodes[] |
-                    select(.state == "OPEN" and .baseRefName == "production" and
-                      .headRefOid == $sha and .repository.nameWithOwner == $repo)] | unique_by(.number) | length
+                  [flatten[] | select(.state == "open" and .base.ref == "production" and
+                    .head.sha == $sha)] | unique_by(.number) | length
                 end
               ' "$fresh_heads_json"); then
                 echo "::error::Cannot re-check whether pull request #$number shares its head commit."

@@ -81,7 +81,7 @@ test('a read after the verdict (GH_API_NO_WAIT=1) skips without sleeping, so no 
 test('the shell reaches the post-verdict reads with GH_API_NO_WAIT=1', () => {
   const workflow = require('node:fs').readFileSync(require('node:path').join(__dirname, '../.github/workflows/feature-flag-gate.yml'), 'utf8');
   assert.equal(workflow.match(/GH_API_NO_WAIT=1 gh_api --paginate --slurp "repos\/\$REPO\/pulls\?state=open/g)?.length, 1);
-  assert.match(workflow, /GH_API_NO_WAIT=1 gh_api graphql --paginate --slurp/);
+  assert.match(workflow, /GH_API_NO_WAIT=1 gh_api --paginate --slurp \\?\n\s*"repos\/\$REPO\/commits\/\$RECONCILE_HEAD_SHA\/pulls\?per_page=100"/);
   assert.match(workflow, /GH_API_NO_WAIT=1 gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER" >"\$current_json"/);
   assert.match(workflow, /GH_API_NO_WAIT=1 gh_api "repos\/\$REPO\/pulls\/\$number" >"\$gate_tmp\/current.json"/);
 });
