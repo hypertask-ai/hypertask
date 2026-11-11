@@ -39,7 +39,7 @@ const handler: NextApiHandler = async (
       if (!text || !creatorId || !taskId || !ownerId)
         return res.status(400).json({ message: "Bad request" });
 
-      let kind: ReturnType<typeof parseCommentKind>;
+      let kind: ReturnType<typeof parseCommentKind> | undefined = undefined;
       if (agentId) {
         try {
           kind = parseCommentKind(req.body.kind);
