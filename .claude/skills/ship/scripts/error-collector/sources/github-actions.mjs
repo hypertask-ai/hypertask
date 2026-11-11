@@ -7,7 +7,7 @@ const failed = run => ['failure', 'timed_out'].includes(run.conclusion);
 export function parseRun(run, jobs, repo = 'hypertask-ai/hypertask') {
   if (!Array.isArray(jobs)) throw new Error('invalid GitHub jobs');
   const job = jobs.find(failed);
-  return { service: name, board: 2060, message: `${repo === 'hypertask-ai/docs' ? 'docs: ' : ''}${run.workflowName} failed${job ? `: ${job.name}` : ''}`, route: '', stack: `https://github.com/${repo}/actions/runs/${run.databaseId}`, ts: run.updatedAt, count: 1 };
+  return { service: name, board: 11514, message: `${repo === 'hypertask-ai/docs' ? 'docs: ' : ''}${run.workflowName} failed${job ? `: ${job.name}` : ''}`, route: '', stack: `https://github.com/${repo}/actions/runs/${run.databaseId}`, ts: run.updatedAt, count: 1 };
 }
 
 export async function fetch({ since, until, env }) {
