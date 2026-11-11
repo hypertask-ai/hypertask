@@ -18,20 +18,17 @@ SESSION_CREDS=${VCC_SESSION_CREDENTIALS_DIR:-$CREDS/sessions}
 fail() { printf 'setup-agents: %s\n' "$1" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-usage: setup-agents [--name "<name>"] [--identity "<session name>"] [--project <id>]... [--check]
+usage: setup-agents [--name "<name>"] [--identity "<session>"] [--check]
 
-Sets up or reuses one Hypertask agent login on this machine, then asks the server
-to verify it. Prints no token and never replaces an existing credential.
-
-  --name "<name>"     agent display name (or the first plain argument)
+Sets up or reuses one Hypertask agent login here, then asks the server to verify
+it. Prints no token and never replaces an existing credential.
+  --name "<name>"     display name (or the first plain argument)
   --identity "<name>" session name that owns the login (default: --name)
-  --project <id>      project id to join, repeatable (default 15 and 11514)
-  --check             tools and login smoke only, no writes, under 5s; with
-                      --name it checks that agent's existing credential
-  --identity-required this session already carries the name; a mismatch is fatal
+  --check             tools and login smoke only, no writes; with --name, that
+                      agent's existing credential
+  --identity-required this session carries the name; a mismatch is fatal
   -h, --help          show this text
-
-Needs: hypertask, jq, flock, mktemp, ln, cat, readlink, sed, tr.
+Needs: hypertask jq flock mktemp ln cat readlink sed tr.
 EOF
 }
 
@@ -39,16 +36,11 @@ name=
 identity_name=
 check_only=0
 identity_required=0
-projects=()
 while [ "$#" -gt 0 ]; do
   case $1 in
-    --name|--identity|--project)
+    --name|--identity)
       [ "$#" -ge 2 ] || fail "$1 needs a value"
-      case $1 in
-        --name) name=$2 ;;
-        --identity) identity_name=$2 ;;
-        *) projects+=("$2") ;;
-      esac
+      if [ "$1" = --name ]; then name=$2; else identity_name=$2; fi
       shift 2
       ;;
     --check) check_only=1; shift ;;
@@ -88,9 +80,8 @@ login_ok() {
 
 if [ "$check_only" -eq 1 ]; then
   check_args=()
-  if [ -n "$name" ]; then
-    check_token=$CREDS/$(slug_of "$name")-agent-token
-    if [ -f "$check_token" ] && [ -s "$check_token" ]; then check_args=(--token "$(cat "$check_token")"); fi
+  if [ -n "$name" ] && [ -s "$CREDS/$(slug_of "$name")-agent-token" ]; then
+    check_args=(--token "$(cat "$CREDS/$(slug_of "$name")-agent-token")")
   fi
   login_ok "${check_args[@]}"
   printf 'setup-agents: check ok (tools present, login ok)\n'
@@ -112,10 +103,6 @@ slug=$(slug_of "$name")
 [[ $slug =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail 'agent name needs at least one letter or digit'
 [ "$(slug_of "$identity_name")" = "$slug" ] \
   || fail 'the identity name and the display name must share a slug; use names that differ only in case or punctuation'
-[ "${#projects[@]}" -gt 0 ] || projects=(15 11514)
-for project in "${projects[@]}"; do
-  [[ $project =~ ^[0-9]+$ ]] || fail "project id must be a number, got: $project"
-done
 
 mkdir -p "$CREDS"
 exec 8>"$CREDS/.setup-agents.lock"
@@ -124,9 +111,7 @@ token=$CREDS/$slug-agent-token
 tmp=
 trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
 if [ ! -e "$token" ] && [ ! -L "$token" ]; then
-  create_args=(agents create --name "$name")
-  for project in "${projects[@]}"; do create_args+=(--project "$project"); done
-  response=$(hypertask "${create_args[@]}" --json 2>/dev/null) \
+  response=$(hypertask agents create --name "$name" --project 15 --project 11514 --json 2>/dev/null) \
     || fail "could not create agent \"$name\": log in as a board owner (hypertask login) or pass a management key, then rerun (CLI output withheld to protect tokens)"
   tmp=$(mktemp "$CREDS/.$slug-token.XXXXXX")
   jq -er '.token | select(type == "string" and length > 0 and (test("\\s") | not))' <<<"$response" >"$tmp" 2>/dev/null \
@@ -136,9 +121,8 @@ if [ ! -e "$token" ] && [ ! -L "$token" ]; then
   tmp=
   unset response
 fi
-if [ ! -f "$token" ] || [ ! -s "$token" ] || [ ! -r "$token" ]; then
-  fail "the existing credential $token is empty, unreadable or not a regular file; refusing to replace it"
-fi
+[ -f "$token" ] && [ -s "$token" ] && [ -r "$token" ] \
+  || fail "the existing credential $token is empty, unreadable or not a regular file; refusing to replace it"
 mkdir -p "$SESSION_CREDS"
 link=$SESSION_CREDS/$slug-agent-token
 if [ -e "$link" ] && [ ! -L "$link" ]; then
