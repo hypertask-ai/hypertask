@@ -11,6 +11,7 @@ import { mapOpenBlockingTasksForRead } from '@/lib/blockingTasks'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { accessibleAgentWhere } from '@/lib/agents/visibility'
+import { scrubStoredTaskSummary } from '@/lib/tasks/redactWaitingActivities'
 import type { McpTaskAssignee } from '@/lib/mcp/tasks/types'
 import {
   mapMcpTaskLabel,
@@ -403,7 +404,7 @@ export async function GET(request: NextRequest) {
           return {
             ...mapped,
             ai_summary: summary ? {
-              content: summary.content,
+              content: (await scrubStoredTaskSummary(summary.content, task.id, user.id, task.projectId)) ?? summary.content,
               updated_at: (summary.updatedAt ?? summary.createdAt).toISOString(),
             } : null,
           }

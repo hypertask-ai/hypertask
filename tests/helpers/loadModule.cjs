@@ -27,6 +27,7 @@ function loadModule(file, stubs = {}) {
       (specifier) => {
         const listImport = blockingStubs.resolveListImport(specifier);
         if (listImport !== undefined && !(specifier in stubs)) return listImport;
+        if (specifier in require("./stub-map.cjs").waitingActivityStubs && !(specifier in stubs)) return require("./stub-map.cjs").waitingActivityStubs[specifier];
         if (specifier in stubs) {
           const stub = specifier === "@/utils/controllers/projects/getAllIncludes"
             ? blockingStubs.mergeGetAllIncludesStub(stubs[specifier])

@@ -60,6 +60,7 @@ function load(file, mocks = {}, sourceRoot = root) {
 function questionsRoute(options = {}) {
   const calls = [], scopes = [], lookups = [], cacheInputs = [];
   const route = load("src/app/api/ai/task-questions/route.ts", {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/app/api/ai/_lib/allowanceRefusal": { warnIfAllowanceRefused: () => null },
     "@/lib/flags/definitions/htpr-7716-allowance-fallbacks": { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG: "htpr-7716-allowance-fallbacks" },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ agentId: options.agentId }) },

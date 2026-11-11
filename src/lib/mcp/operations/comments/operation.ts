@@ -12,6 +12,7 @@ import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
+import { withPublicWaitingActivities } from '@/lib/tasks/redactWaitingActivities'
 
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import {
@@ -459,6 +460,10 @@ export async function GET(request: NextRequest) {
       ...(cursorId ? { cursor: { id: cursorId } } : {}),
     })
 
+    const visibleComments = includeActivity
+      ? await withPublicWaitingActivities(comments, user.id, task.projectId)
+      : comments
+
     const reactionAgents = await loadVisibleReactionAgents(
       [...new Set([
         ...reactionAgentIds(comments),
@@ -468,12 +473,12 @@ export async function GET(request: NextRequest) {
       task.projectId
     )
 
-    const commentList: CommentItem[] = comments.map((comment) =>
+    const commentList: CommentItem[] = visibleComments.map((comment) =>
       mapCommentToResponse(comment, user.id, task.projectId, includeActivity, reactionAgents)
     ).map((mapped, index) =>
       applyDurableCommentAttribution(
         mapped,
-        comments[index],
+        visibleComments[index],
         user.id,
         task.projectId
       )
