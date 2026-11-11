@@ -170,7 +170,7 @@ function harness(options = {}) {
     '@/utils/controllers/projects/getAllIncludes': access,
     '@/utils/controllers/pages/pageService': service,
     '@/lib/auth/currentUser': { loadCurrentUser: async () => options.noSession ? null : { userId } },
-    '@/lib/flags': { isFeatureEnabled: async () => options.flag !== false },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key === 'htpr-9017-smart-page-search' ? false : options.flag !== false },
     'next/headers': { cookies: async () => ({ get: () => options.noSession ? undefined : { value: 'synthetic' } }) },
     '@/utils/edgeHelpers': { isValidUser: () => ({ isValid: true, user: { id: userId } }) },
     '@/lib/api/rateLimit': { checkRestRateLimit: async () => options.rateLimited ? new Response('{}', { status: 429 }) : null },

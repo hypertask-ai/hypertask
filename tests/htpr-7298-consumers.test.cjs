@@ -75,6 +75,7 @@ function harness({ boards = [1, 2], task = hiddenTask, agentId = 'credential-age
       return boards.includes(rawPage.projectId) ? [safePage()] : [];
     },
     async searchPages(args) {
+      assert.equal(args.hybridSearchEnabled, true, 'MCP and AI resolve the page search rollout for the viewer');
       read('searchPages', args);
       return args.projectIds.includes(rawPage.projectId) && boards.includes(rawPage.projectId) ? [safePage()] : [];
     },

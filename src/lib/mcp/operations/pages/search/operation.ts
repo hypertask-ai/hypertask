@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_9017_SMART_PAGE_SEARCH_FLAG } from '@/lib/flags/definitions/htpr-9017-smart-page-search'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
@@ -51,6 +53,7 @@ export async function GET(request: NextRequest) {
     })
 
     const matches = await searchPages({
+      hybridSearchEnabled: await isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, ctx.user.id),
       query,
       projectIds: projects.map((project) => project.id),
       userId: ctx.user.id,

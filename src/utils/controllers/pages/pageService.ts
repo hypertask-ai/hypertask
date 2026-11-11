@@ -7,6 +7,7 @@ import {
   convertToPlain,
   deletePageFromTurbopuffer,
   upsertPageToTurbopuffer,
+  searchPagesInTurbopuffer,
 } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import { markdownToHtml } from '@/utils/helperFunctions/markdownToHtml'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
@@ -402,6 +403,7 @@ export async function searchPages({
   agentId,
   teamScope,
   standalonePagesEnabled = true,
+  hybridSearchEnabled = false,
 }: {
   query: string
   projectIds: number[]
@@ -409,20 +411,28 @@ export async function searchPages({
   agentId?: string | null
   teamScope?: AgentTokenTeamScope | null
   standalonePagesEnabled?: boolean
+  hybridSearchEnabled?: boolean
 }) {
   const normalizedQuery = query.trim()
   if (!normalizedQuery || projectIds.length === 0) return []
 
+  const rankedRows = hybridSearchEnabled
+    ? await searchPagesInTurbopuffer({ searchQuery: normalizedQuery, projectIds })
+    : []
+  const rankedIds = [...new Set(rankedRows.map(row => Number(row.id)).filter(id => Number.isSafeInteger(id) && id > 0))]
+  const useIndex = rankedIds.length > 0
   const pages = await prisma.page.findMany({
     where: {
       archived: false,
       ...(standalonePagesEnabled ? {} : { taskId: { not: null } }),
       projectId: { in: projectIds },
       project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)) },
-      OR: [
-        { title: { contains: normalizedQuery, mode: 'insensitive' } },
-        { contentText: { contains: normalizedQuery, mode: 'insensitive' } },
-      ],
+      ...(useIndex ? { id: { in: rankedIds } } : {
+        OR: [
+          { title: { contains: normalizedQuery, mode: 'insensitive' } },
+          { contentText: { contains: normalizedQuery, mode: 'insensitive' } },
+        ],
+      }),
     },
     select: {
       id: true,
@@ -443,7 +453,12 @@ export async function searchPages({
       updatedAt: true,
     },
     orderBy: { updatedAt: 'desc' },
+    ...(hybridSearchEnabled ? { take: 50 } : {}),
   })
+  if (useIndex) {
+    const ranks = new Map(rankedIds.map((id, rank) => [id, rank]))
+    pages.sort((a, b) => (ranks.get(a.id) ?? rankedIds.length) - (ranks.get(b.id) ?? rankedIds.length))
+  }
   return pages.map(({ task, ...page }) => ({ ...page, taskId: task?.id ?? null }))
 }
 

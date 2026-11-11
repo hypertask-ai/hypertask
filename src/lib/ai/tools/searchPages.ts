@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9017_SMART_PAGE_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-9017-smart-page-search";
 import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { tool } from "ai";
 import { z } from "zod";
@@ -20,6 +22,7 @@ export function createSearchPagesTool(context: ToolContext) {
         sendStatus("hypertask_search_pages");
         const projectIds = await getAccessibleProjectIds(user.id);
         const matches = await searchPages({
+          hybridSearchEnabled: await isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, user.id),
           query: input.query,
           projectIds,
           userId: user.id,

@@ -55,6 +55,7 @@ async function run(operation, requestedMode = 'OFF', options = {}) {
     },
   };
   const mocks = {
+    '@/lib/flags': { isFeatureEnabled: async () => false },
     'next/headers': { cookies: async () => ({ get: () => options.noProfile ? undefined : { value: 'profile' } }) },
     '@/utils/edgeHelpers': { isValidUser: (value) => ({ isValid: Boolean(value) && !options.invalidProfile, user: value && !options.invalidProfile ? { id: profileId, displayName: 'Actor' } : null }) },
     '@/lib/auth/getSessionUser': { getSessionUser: async (requestHeaders) => {
@@ -265,6 +266,7 @@ const baseline = {
       [
         "search",
         {
+          "hybridSearchEnabled": false,
           "query": "hello",
           "standalonePagesEnabled": true,
           "userId": 985,

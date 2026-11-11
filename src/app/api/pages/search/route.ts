@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_9017_SMART_PAGE_SEARCH_FLAG } from '@/lib/flags/definitions/htpr-9017-smart-page-search'
 import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
@@ -52,6 +54,7 @@ export async function GET(request: NextRequest) {
     })
 
     const matches = await searchPages({
+      hybridSearchEnabled: await isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, userId),
       query,
       userId,
       standalonePagesEnabled: await standalonePagesEnabled(userId),

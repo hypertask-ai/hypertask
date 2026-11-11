@@ -894,6 +894,51 @@ export async function searchTasks({
   }
 }
 
+export async function searchPagesInTurbopuffer({
+  searchQuery,
+  projectIds,
+}: {
+  searchQuery: string;
+  projectIds: number[];
+}): Promise<TurbopufferPageRow[]> {
+  const query = searchQuery.trim();
+  const filters = buildProjectFilter(projectIds);
+  if (!query || !filters) return [];
+
+  const keywordQuery = {
+    rank_by: ["Sum", [
+      ["Product", [4, ["title", "BM25", query, { last_as_prefix: true }]]],
+      ["contentText", "BM25", query, { last_as_prefix: true }],
+    ]],
+    top_k: 50,
+    filters,
+    include_attributes: ["title", "contentText", "projectId", "projectTitle", "updatedAt"],
+  };
+  const queryVector = await embedQueryForSearch(query, "turbopuffer searchPages", projectIds);
+  const namespace = turbopuffer.namespace(turbopufferNamespaces.page.name);
+  if (queryVector) {
+    try {
+      const response = await namespace.query({
+        queries: [
+          { ...keywordQuery, rank_by: ["vector", "ANN", queryVector] },
+          keywordQuery,
+        ],
+        rerank_by: ["RRF"],
+      } as any);
+      return getMultiQueryRows<TurbopufferPageRow>(response);
+    } catch (error) {
+      console.error("turbopuffer searchPages hybrid error, falling back to BM25:", error);
+    }
+  }
+  try {
+    const response = await namespace.query(keywordQuery as any);
+    return (response.rows ?? []) as unknown as TurbopufferPageRow[];
+  } catch (error) {
+    console.error("turbopuffer searchPages error:", error);
+    return [];
+  }
+}
+
 export async function searchComments({
   searchQuery,
   projectIds,
