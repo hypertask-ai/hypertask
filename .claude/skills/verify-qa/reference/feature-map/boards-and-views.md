@@ -70,6 +70,19 @@ Record the screen: one `/api/tasks/bulk-archive` request, all 50 hidden within f
 after a stale refresh or reload, with Running-only off and on. Failed cards stay selected and named.
 Flag-off users keep the existing per-card path.
 
+### Table sort and per-view columns
+
+With `htpr-8973-table-sort-columns` at Owner + QA, use QA 985 on board 7049.
+Sort Priority then Shift-click Updated; the header and Sort menu must agree.
+Hide Due, reorder Updated before Priority, resize Updated, then reload.
+Switch to another saved view and back, including within 400ms of hiding a column.
+Both sort levels, column order and widths must survive. A second view without
+saved columns keeps the defaults. Repeat in a fresh phone browser context:
+settings come from the account, not browser storage. Clear sorting and reload:
+an empty personal sort must not resurrect a saved view's sort. Capture every
+theme and restore only the settings changed during this run. Table preferences
+are personal; shared filters and another member's columns must not change.
+
 ### Bulk move between boards
 
 With HTPR-8737 enabled for Owner + QA, use two writable boards. On the

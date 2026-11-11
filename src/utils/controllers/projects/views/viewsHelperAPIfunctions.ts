@@ -15,7 +15,7 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
             include: {
               ViewLastUsed: {
                 where: { userId: currentUserId },
-                select: { board_empty_sections: true },
+                select: { board_empty_sections: true, table_sort_stack: true, table_columns: true },
                 take: 1,
               },
             },
@@ -31,7 +31,7 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
         include: {
           ViewLastUsed: {
             where: { userId: currentUserId },
-            select: { board_empty_sections: true },
+            select: { board_empty_sections: true, table_sort_stack: true, table_columns: true },
             take: 1,
           },
         },
@@ -61,6 +61,8 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
             select: {
               lastUsedAt: true,
               board_empty_sections: true,
+              table_sort_stack: true,
+              table_columns: true,
             },
             take: 1,
           },

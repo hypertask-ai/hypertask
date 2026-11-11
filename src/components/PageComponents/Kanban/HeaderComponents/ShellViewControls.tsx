@@ -73,9 +73,9 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
   const tableViewId =
-    project.project_view?.user_project_views?.[0]?.unsavedView?.id ??
     project.project_view?.user_project_views?.[0]?.appliedView?.id ??
-    project.project_view?.default_view?.id
+    project.project_view?.default_view?.id ??
+    project.project_view?.user_project_views?.[0]?.unsavedView?.id
   const tableSortMode = tableSortColumnsEnabled && boardLayout === "table"
   const projectTableSort = getActiveTableSortStackFromProject(project)
   const tableSort = tableSortMode && sortAccount && sortAccount.viewId === tableViewId

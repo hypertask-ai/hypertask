@@ -383,6 +383,8 @@ export interface IView_Last_Used {
   createdAt: Date;
   lastUsedAt?: Date | null;
   board_empty_sections?: EmptySections | null;
+  table_sort_stack?: IView["table_sort_stack"];
+  table_columns?: IView["table_columns"];
   userId: number;
   viewId: string;
   user: IUser;

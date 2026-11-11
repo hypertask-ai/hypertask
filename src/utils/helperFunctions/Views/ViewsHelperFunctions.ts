@@ -628,7 +628,15 @@ const activeTableView = (project?: IProject | null) => {
     return view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view
 }
 
+export const getTableSettingsViewFromProject = (project?: IProject | null) =>
+    project?.project_view?.user_project_views?.[0]?.appliedView ?? project?.project_view?.default_view
+
+const personalTableSettings = (project?: IProject | null) =>
+    getTableSettingsViewFromProject(project)?.ViewLastUsed?.[0]
+
 export const getActiveTableSortStackFromProject = (project?: IProject | null): { column: string; direction: "asc" | "desc" }[] => {
+    const personal = personalTableSettings(project)?.table_sort_stack
+    if (Array.isArray(personal)) return personal
     const stored = activeTableView(project)?.table_sort_stack
     if (Array.isArray(stored) && stored.length) return stored as { column: string; direction: "asc" | "desc" }[]
     const single = getActiveTableSortFromProject(project)
@@ -637,7 +645,7 @@ export const getActiveTableSortStackFromProject = (project?: IProject | null): {
 }
 
 export const getActiveTableColumnsFromProject = (project?: IProject | null) => {
-    const saved = activeTableView(project)?.table_columns
+    const saved = personalTableSettings(project)?.table_columns ?? activeTableView(project)?.table_columns
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) return null
     return saved
 }

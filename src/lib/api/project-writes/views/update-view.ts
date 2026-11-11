@@ -11,7 +11,8 @@ import {
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
-import { tableViewChangedJson, tableViewSettingsForWrite } from "./gate-table-view-settings";
+import { tableViewChangedJson, tableViewSettingsForWrite, toJsonField } from "./gate-table-view-settings";
+import { isFeatureEnabled } from "@/lib/flags";
 import { viewColumnsToWrite } from "@/utils/controllers/section/viewColumnVisibility";
 import { ISection } from "@/models/model";
 import {
@@ -46,6 +47,10 @@ const route = taskWriteRoute({
     );
 
     try {
+      if (req.body.updateMode === "personal-table-settings" &&
+        (!Number.isSafeInteger(projectId) || projectId <= 0 || typeof viewId !== "string" || !viewId.trim())) {
+        return viewWriteJson({ message: "Missing required information" }, 400);
+      }
       if (!projectId)
         return viewWriteJson({ message: "Authentication required" }, 401);
       const targetView = await prisma.view.findFirst({
@@ -70,6 +75,22 @@ const route = taskWriteRoute({
       });
       if (!targetView) {
         return viewWriteJson({ message: "View not found on this board" }, 404);
+      }
+      if (req.body.updateMode === "personal-table-settings") {
+        if (!await isFeatureEnabled("htpr-8973-table-sort-columns", userId)) {
+          return viewWriteJson({ message: "Table settings are not enabled" }, 403);
+        }
+        const settings = await tableViewSettingsForWrite(userId, view_settings ?? {}, null);
+        const data = {
+          ...tableViewChangedJson(settings),
+          ...(settings.persistStack ? { table_sort_stack: toJsonField(settings.table_sort_stack ?? []) } : {}),
+        };
+        await prisma.view_Last_Used.upsert({
+          where: { user_view_last_used: { userId, viewId } },
+          create: { userId, viewId, ...data },
+          update: data,
+        });
+        return viewWriteJson(await getProjectView(projectId, userId), 200);
       }
       if (personalEmptySectionsOnly) {
         const boardEmptySections = view_settings?.board_empty_sections;

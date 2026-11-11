@@ -1084,6 +1084,8 @@ model View_Last_Used {
   createdAt            DateTime       @default(now())
   lastUsedAt            DateTime?
   board_empty_sections EmptySections?
+  table_sort_stack     Json?
+  table_columns        Json?
   userId                Int
   user       User      @relation(fields: [userId], references: [id])
   viewId     String
