@@ -153,7 +153,8 @@ write token.
 
 The installed service sets `ERROR_COLLECTOR_VERCEL_HOSTED=1`. Its three sources
 share one download of the latest successful production workflow artifact per
-collector process. `gh` needs Actions read permission. Failed decryption, missing
+collector process. Downloads use a hypertask-runners app token from `gh-app-token`
+and ignore a stored human login. Failed decryption, missing
 sources, uncovered starts, replayed or future ends leave checkpoints unchanged.
 The collector advances only to the snapshot's end, never download time, and
 filters overlapping events before counting. Other sources and ticket filing
