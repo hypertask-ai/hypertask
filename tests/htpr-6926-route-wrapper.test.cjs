@@ -27,7 +27,7 @@ function load(file, stubs, extra = '', env = {}, clock = performance) {
   return mod.exports
 }
 
-function harness({ legacy = false, count = 1, revoked = false, agent = false, userId = 6, env = {}, clock = performance } = {}) {
+function harness({ legacy = false, count = 1, revoked = false, agent = false, agentLocalLimit = false, userId = 6, env = {}, clock = performance } = {}) {
   const events = []
   const secret = crypto.randomBytes(32).toString('hex')
   const user = { id: userId, email: 'fixture@example.test', mcpTokensRevokedAt: null }
@@ -72,8 +72,10 @@ function harness({ legacy = false, count = 1, revoked = false, agent = false, us
   const rate = load('src/lib/mcp/auth/rateLimit.ts', {
     'next/server': { NextRequest, NextResponse }, crypto,
     '@/lib/flags/keys': { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: 'htpr-7462-mcp-ratelimit-exact-count' },
-    '@/lib/flags': { featureFlagCandidateUserIds: async () => null },
-    '@/lib/redis': { getRedis: async () => ({ incr: async () => { events.push('rate'); return count }, expire: async () => {} }) },
+    '@/lib/flags': { featureFlagCandidateUserIds: async () => null, isFeatureEnabled: async () => { events.push('agent-limit-flag'); return agentLocalLimit } },
+    '@/lib/flags/definitions/htpr-8978-upstash-traffic': load('src/lib/flags/definitions/htpr-8978-upstash-traffic.ts', {}),
+    '@/lib/flags/modeCache': load('src/lib/flags/modeCache.ts', { 'node:async_hooks': require('node:async_hooks') }),
+    '@/lib/redis': { getRedis: async () => { events.push('redis'); return { incr: async () => { events.push('rate'); return count }, expire: async () => {} } } },
     '@/lib/mcp/rateLimitDecision': decision, './session': { ...session, validateMcpAuth: async request => { authCalls++; return session.validateMcpAuth(request) } },
     '../operationContext': context,
   })
@@ -386,7 +388,7 @@ test('all adopted REST methods preserve unwrapped wire results and scaffold orde
 })
 
 
-test('successful agent-tier requests reuse the authenticated context while legacy still performs both auth passes', () => quiet(async () => {
+test('with local agent limits off, wrapped requests reuse authentication while legacy still authenticates twice', () => quiet(async () => {
   const on = harness({ count: 121, agent: true })
   const off = harness({ legacy: true, count: 121, agent: true })
   const a = await scaffold(on)(on.request())
@@ -399,6 +401,22 @@ test('successful agent-tier requests reuse the authenticated context while legac
   assert.equal(off.counts().authCalls, 2)
   assert.equal(on.events.filter(e => e === 'rate').length, 1)
   assert.equal(off.events.filter(e => e === 'rate').length, 1)
+}))
+
+test('local agent limits skip Redis without skipping authentication or revocation on either route', () => quiet(async () => {
+  for (const legacy of [false, true]) {
+    for (const revoked of [false, true]) {
+      const h = harness({ legacy, revoked, agent: true, agentLocalLimit: true, count: 601 })
+      const response = await scaffold(h)(h.request())
+      assert.equal(response.status, revoked ? 401 : 200)
+      if (revoked) assert.equal((await response.json()).reason, 'token_revoked')
+      assert.equal(h.counts().authCalls, 1)
+      assert.deepEqual(h.events.filter(e => ['redis', 'rate', 'agent-limit-flag'].includes(e)), ['agent-limit-flag'])
+    }
+    const human = harness({ legacy, agentLocalLimit: true, count: 121 })
+    assert.equal((await scaffold(human)(human.request())).status, 429)
+    assert.deepEqual(human.events.filter(e => ['redis', 'rate', 'agent-limit-flag'].includes(e)), ['redis', 'rate'])
+  }
 }))
 
 test('wrapped responses carry existing and diagnostic Server-Timing names without caller identity', () => quiet(async () => {
