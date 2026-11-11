@@ -9,7 +9,11 @@ import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/
 
 export const TICKET_NUMBER_CANDIDATE_LIMIT = 8;
 
-export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string): Promise<number[]> => {
+const LIKE_WILDCARD = /[\\%_]/;
+
+export const needsIlikeSemantics = (ticketNumber: string) => LIKE_WILDCARD.test(ticketNumber);
+
+export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string): Promise<number[] | null> => {
   try {
     const rows = await prisma.$queryRaw<{ id: number }[]>`
       SELECT id FROM "Task"
@@ -19,7 +23,7 @@ export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string
     `;
     return rows.map((row) => row.id);
   } catch {
-    return [];
+    return null;
   }
 };
 
@@ -100,16 +104,18 @@ export async function findTaskByIdentifier(
       take: project_id ? 1 : 2,
     });
   let matches: { id: number; projectId: number }[] = [];
+  let indexedMiss = false;
   const scope = { status: { not: 'Deleted' as const }, project: projectFilter };
   if (ticket_number && await isFeatureEnabled("htpr-8977-indexed-ticket-lookup", user.id)) {
-    const candidates = await caseInsensitiveTicketNumberCandidates(ticket_number);
-    matches = candidates.length > 0 && candidates.length <= TICKET_NUMBER_CANDIDATE_LIMIT
-      ? await findMatches({
-          id: { in: candidates },
-          ...(project_id ? { projectId: project_id } : {}),
-          ...scope,
-        })
-      : await findMatches({ ...identityWhere, ...scope });
+    const candidates = needsIlikeSemantics(ticket_number)
+      ? null
+      : await caseInsensitiveTicketNumberCandidates(ticket_number);
+    indexedMiss = candidates != null && candidates.length === 0;
+    matches = indexedMiss
+      ? []
+      : candidates != null && candidates.length <= TICKET_NUMBER_CANDIDATE_LIMIT
+        ? await findMatches({ id: { in: candidates }, ...identityWhere, ...scope })
+        : await findMatches({ ...identityWhere, ...scope });
   } else {
     matches = await findMatches({ ...identityWhere, ...scope });
   }
@@ -121,11 +127,13 @@ export async function findTaskByIdentifier(
     return matches[0];
   }
 
-  const liveTask = await prisma.task.findFirst({
-    where: { ...identityWhere, status: { not: 'Deleted' } },
-    select: { id: true },
-  });
-  if (liveTask) return null;
+  if (!indexedMiss) {
+    const liveTask = await prisma.task.findFirst({
+      where: { ...identityWhere, status: { not: 'Deleted' } },
+      select: { id: true },
+    });
+    if (liveTask) return null;
+  }
 
   const aliases = await prisma.taskNumberAlias.findMany({
     where: {

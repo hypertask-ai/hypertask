@@ -264,6 +264,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   let aliasQueries = 0;
   const flagCalls = [];
   const taskQueries = [];
+  const rawQueries = [];
   const prisma = {
     section: { findMany: async () => [] },
     task: {
@@ -272,10 +273,10 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     },
     projectPrefixAlias: { findMany: async ({ where }) => { aliasQueries++; return aliases.filter(row => matches(row, where)); } },
     taskNumberAlias: { findMany: async ({ where }) => moveAliases.filter(row => matches(row, where)) },
-    $queryRaw: async (_strings, ticketNumber) => tasks
+    $queryRaw: async (_strings, ticketNumber) => { rawQueries.push(String(ticketNumber)); return tasks
       .filter(row => (row.ticketNumber ?? "").toLowerCase() === String(ticketNumber).toLowerCase())
       .sort((left, right) => left.projectId - right.projectId || left.id - right.id)
-      .map(row => ({ id: row.id })),
+      .map(row => ({ id: row.id })); },
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -311,7 +312,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/keys": { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer" }, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
     "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
-  return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
+  return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, rawQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
 }
 test("old prefix alias lookup resolves in MCP, CLI batch and detail", async () => {
   const f = lookups();
@@ -963,4 +964,30 @@ test("round 3: MCP prefix history needs the flag, keeps legacy prefixes, and ID-
   }
   const f = lookups();
   assert.equal(await f.resolver.resolveTaskIdOnly({ ticket_number: "OLD-123" }), null);
+});
+
+test("round 4: an indexed miss does not scan Task again", async () => {
+  const f = lookups();
+  assert.equal(await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "UNKNOWN-123" }), null);
+  assert.deepEqual(f.rawQueries, ["UNKNOWN-123"]);
+  assert.deepEqual(f.taskQueries.filter(where => where.ticketNumber !== undefined), [], "an unknown number must not repeat the case-insensitive Task scan");
+});
+
+test("round 4: a wildcard identifier keeps the old case-insensitive match", async () => {
+  const indexed = lookups({ prefixAliases: [] });
+  const legacy = lookups({ enabled: false, prefixAliases: [] });
+  for (const number of ["NEW_123", "TEAM%A-1", "OLD\\-123"]) {
+    assert.deepEqual(
+      await indexed.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number }),
+      await legacy.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number }),
+      `${number} must resolve the way it did before the index`,
+    );
+  }
+  assert.deepEqual(indexed.rawQueries, [], "LIKE wildcards must not be treated as an exact indexed match");
+});
+
+test("round 4: a candidate rechecks the ticket number before it is returned", async () => {
+  const f = lookups({ prefixAliases: [] });
+  f.prisma.$queryRaw = async () => [{ id: 101 }];
+  assert.equal(await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-999" }), null);
 });
