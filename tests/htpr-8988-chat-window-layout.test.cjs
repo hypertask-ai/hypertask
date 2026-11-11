@@ -125,9 +125,10 @@ test("real controller and stack tile three frames, share one minimized dock, res
     const secondaryIds = view.values.windows.map(({ id }) => id);
     const primaryFrame = view.container.querySelector('[data-chat-body="primary"]').closest('[role="dialog"]');
     React.act(() => primaryFrame.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, button: 0 })));
-    assert.equal(primaryFrame.style.zIndex, "calc(var(--z-popup) + 1)", "primary can be brought above overlapping secondary windows");
+    assert.ok(primaryFrame.classList.contains("z-popup"), "primary can be brought above overlapping secondary windows");
+    assert.ok(frames().at(-1).classList.contains("z-floating"));
     React.act(() => frames().at(-1).dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, button: 0 })));
-    assert.equal(primaryFrame.style.zIndex, "", "focusing a secondary returns primary to its normal layer");
+    assert.ok(primaryFrame.classList.contains("z-floating"), "focusing a secondary returns primary to its normal layer");
     for (const id of ["primary", ...secondaryIds]) {
       React.act(() => view.container.querySelector(`[aria-label="Minimize ${id}"]`).click());
     }

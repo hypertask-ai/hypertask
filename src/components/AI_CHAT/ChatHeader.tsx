@@ -1,4 +1,3 @@
-import { HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8988-chat-window-layout";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
@@ -154,8 +153,6 @@ function ChatSessionRow({
 }
 
 export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !windowDrag }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean; allowDocking?: boolean } = {}) => {
-  const sideBySide = useFlag(HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG);
-  const dockingAvailable = sideBySide ? allowDocking : !windowDrag;
   const [agentsOpen, setAgentsOpen] = useState(false);
   const agentButtonRef = useRef<HTMLButtonElement>(null);
   const closeAgents = useCallback(() => setAgentsOpen(false), []);
@@ -760,7 +757,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
                       }}
                     />
                   )}
-                  {!isMbl && aiSessionActionsAvailable && dockingAvailable && (
+                  {!isMbl && aiSessionActionsAvailable && allowDocking && (
                     <MenuRow
                       icon={isSidebarMode ? PictureInPicture2 : PanelRight}
                       label={isSidebarMode ? "Floating window" : "Sidebar"}
@@ -841,7 +838,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
                 )}
                 <span>{aiChatPinned ? "Unpin AI chat" : "Pin AI chat open"}</span>
               </button>
-              {!isMbl && aiSessionActionsAvailable && dockingAvailable && (
+              {!isMbl && aiSessionActionsAvailable && allowDocking && (
                 <button
                   type="button"
                   role="menuitem"

@@ -97,14 +97,13 @@ export function ChatWindowFrame({
       role="dialog"
       aria-label="AI chat window"
       onPointerDownCapture={onFocus}
-      className={`fixed z-popup flex flex-col overflow-hidden rounded-[4px] border border-border-light-gray-thin bg-ai-chat text-meta ${floatingElevation ? "shadow-floating" : "shadow-customshadow-4"}`}
+      className={`fixed ${sideBySide && !inFront ? "z-floating" : "z-popup"} flex flex-col overflow-hidden rounded-[4px] border border-border-light-gray-thin bg-ai-chat text-meta ${floatingElevation ? "shadow-floating" : "shadow-customshadow-4"}`}
       style={{
         left: state.x,
         top: state.y,
         width: state.width,
         height: state.height,
         display: state.minimized ? "none" : undefined,
-        zIndex: sideBySide && inFront ? "calc(var(--z-popup) + 1)" : undefined,
       }}
       onPointerDown={startDrag}
     >
