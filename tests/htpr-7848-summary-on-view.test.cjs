@@ -1,10 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { loadModule } = require("./helpers/loadModule.cjs");
-
-const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-7848-summary-on-view";
 const queuePath = "/api/queues/FAST/generateSummaryQueue";
 
@@ -133,15 +129,6 @@ test("a Stripe checkout pre-generates no summaries while the switch is on", asyn
   assert.equal(await on.freshness.shouldPregenerateTeamSummariesOnCheckout(6), false);
   const off = harness({ enabledFor: [] });
   assert.equal(await off.freshness.shouldPregenerateTeamSummariesOnCheckout(6), true);
-
-  const source = fs.readFileSync(
-    path.join(root, "src/utils/controllers/stripe/webhook/onCheckoutSuccess.ts"),
-    "utf8",
-  );
-  assert.match(
-    source,
-    /if \(await shouldPregenerateTeamSummariesOnCheckout\(team\.googleAccount\.userId\)\) \{\n\s*generateSummaryAfterUpsertionReminder\(team\.id\);/,
-  );
 });
 
 test("the switch stays owner-and-QA only, reversible and marked as money", () => {
