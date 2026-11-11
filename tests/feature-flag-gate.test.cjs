@@ -1656,6 +1656,39 @@ function perFlagLayout(dir) {
   writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
 }
 
+test("copied production definitions retain rollout approval only while unchanged", async (t) => {
+  for (const highRisk of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const common = commit(git, "common per-file base");
+    const file = "src/lib/flags/definitions/htpr-2-new.ts";
+    const source = `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-11", description: "Shipped flag", releaseRisk: { risk: "small", reason: "Shipped behavior"${highRisk ? ', highRisk: "access"' : ""} } } as const;`;
+    writeFile(dir, file, source);
+    const base = commit(git, "production ships unrelated restricted flag");
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, file, source);
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "copy shipped definition alongside own UI repair");
+    const result = await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    const definitions = await evaluateFlagDefinitions(base, head, dir);
+    assert.equal(definitions.pass, true, definitions.reason);
+
+    const unshipped = await evaluateFlagDefinitions(common, head, dir);
+    assert.equal(unshipped.pass, false, unshipped.reason);
+    assert.match(unshipped.reason, highRisk ? /harmEvidence/ : /must set defaultMode/);
+
+    writeFile(dir, file, highRisk
+      ? source.replace('reason: "Shipped behavior"', 'reason: "Changed risk"')
+      : source.replace('defaultMode: "OWNER_AND_QA"', 'defaultMode: "OFF"'));
+    const changedHead = commit(git, "alter copied definition");
+    const changed = await evaluateFlagDefinitions(base, changedHead, dir);
+    assert.equal(changed.pass, false, changed.reason);
+    assert.match(changed.reason, highRisk ? /harmEvidence/ : /must set defaultMode/);
+  }
+});
+
 test("runtime flag keys must come from their own registered definition or a supported barrel", async (t) => {
   const { dir, git } = makeRepo(t);
   perFlagLayout(dir);

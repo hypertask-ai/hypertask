@@ -1902,9 +1902,19 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
   for (const key of headDefinitions.keys) {
     if (!baseDefinitions.keys.includes(key)) added.add(key);
   }
-  if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
   const baseFiles = new Set(flagDefinitionPaths(mergeBase));
+  const productionFiles = new Set(flagDefinitionPaths(baseSha));
+  const copiedFiles = new Set();
   for (const path of flagDefinitionPaths(headSha)) {
+    if (baseFiles.has(path) || !productionFiles.has(path)) continue;
+    const source = git(["show", `${headSha}:${path}`]);
+    if (source !== git(["show", `${baseSha}:${path}`])) continue;
+    copiedFiles.add(path);
+    added.delete(parseFlagFile(source, path).definition.key);
+  }
+  if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
+  for (const path of flagDefinitionPaths(headSha)) {
+    if (copiedFiles.has(path)) continue;
     const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
     if (definition.releaseRisk?.highRisk && !definition.releaseRisk.harmEvidence) {
       const baseDefinition = !added.has(definition.key) && baseFiles.has(path)
