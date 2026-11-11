@@ -9,6 +9,8 @@ test("a detected break is the negative control and a missed break is not", async
   try {
     assert.equal(finish("board", [{ name: "columns visible", pass: false }], "columns", "columns visible"), 0);
     assert.match(logs.at(-1), /^negative control ok: columns break failed the step$/);
+    assert.equal(finish("board", [{ name: "columns visible", pass: false }, { name: "fixture cleaned", pass: false }], "columns", "columns visible"), 1);
+    assert.equal(finish("board", [{ name: "columns visible", pass: false }, { name: "run", pass: false }], "columns", "columns visible"), 1);
     assert.equal(finish("board", [{ name: "columns visible", pass: true }], "columns", "columns visible"), 1);
     assert.match(logs.at(-1), /^negative control FAIL: columns break was not detected$/);
     assert.equal(finish("board", [{ name: "columns visible", pass: true }, { name: "card visible", pass: false }], "", "columns visible"), 1);

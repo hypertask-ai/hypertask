@@ -19,12 +19,13 @@ picker.
 your own comment, and if the ticket touches mentions, `@` a user and confirm
 the picker resolves and the mention renders as a link/chip, not plain text.
 
-**Hands-free drive, every comment change:**
+**Hands-free drive:**
 `node .claude/skills/verify-qa/scripts/comments-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
-posts a comment, reloads, deletes that comment through the API, and prints
-`PASS` or `FAIL` per step and ends with `comments ok`. It refuses any base
-that is not loopback. `--break post` blocks comment create on purpose; the run
-must then end with `negative control ok`.
+Posts, reloads and deletes a comment.
+Prints PASS/FAIL per step and `comments ok`. Loopback only.
+`--break post` must print `negative control ok`.
+Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+
 
 ## Gotchas
 

@@ -17,7 +17,7 @@ export function finish(area, steps, broken, targetName) {
   const failed = steps.filter((step) => !step.pass);
   if (broken) {
     const target = steps.find((step) => step.name === targetName);
-    const detected = Boolean(target) && target.pass === false;
+    const detected = Boolean(target) && target.pass === false && !failed.some(step => ["run", "fixture cleaned"].includes(step.name));
     console.log(`negative control ${detected ? "ok" : "FAIL"}: ${broken} break ${detected ? "failed the step" : "was not detected"}`);
     return detected ? 0 : 1;
   }
