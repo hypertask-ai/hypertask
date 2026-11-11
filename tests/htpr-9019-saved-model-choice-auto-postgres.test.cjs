@@ -20,7 +20,7 @@ async function connect(container) {
       let result = await client.query(sql);
       if (Array.isArray(result)) result = result.at(-1);
       return result.command === "SELECT"
-        ? result.rows.map((row) => Object.values(row).join("|")).join("\n")
+        ? result.rows.map((row) => Object.values(row).map((value) => value !== null && typeof value === "object" ? JSON.stringify(value) : value).join("|")).join("\n")
         : `${result.command} ${result.rowCount}`;
     },
     close: () => client.end(),
