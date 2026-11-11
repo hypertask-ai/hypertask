@@ -268,7 +268,7 @@ export const InboxZeroSheetContent = ({
                 : `Will archive ${preview.totalToArchive} of ${preview.totalActive} visible Inbox items · ${preview.totalLeft} left`}
             {jevTriage && typeof preview.jevNoiseCount === "number" && !previewLoading && (
               <span className="block">
-                Jev says {preview.jevNoiseCount} need nothing from you.
+                {preview.jevNoiseCount} of them need nothing from you.
               </span>
             )}
             {previewError && (

@@ -455,7 +455,6 @@ export const evaluateInboxZero = (
   }
 
   const jevRequestedIds = new Set(rules.jevNotificationIds ?? []);
-  const jevOn = rules.jevNotificationIds !== undefined;
   const jevItems = jevRequestedIds.size === 0 ? [] : items.filter(
     (item) =>
       item.notifications.every((notification) => jevRequestedIds.has(notification.id)) &&
@@ -479,7 +478,7 @@ export const evaluateInboxZero = (
 
   return {
     categoryCounts,
-    ...(jevOn ? { jevNoiseCount: jevItems.length, jevNotificationIds: jevItems.flatMap((item) => item.notifications.map((notification) => notification.id)) } : {}),
+    ...(jevRequestedIds.size > 0 ? { jevNoiseCount: jevItems.length, jevNotificationIds: jevItems.flatMap((item) => item.notifications.map((notification) => notification.id)) } : {}),
     notificationIds,
     totalActive: items.length,
     totalToArchive: selectedItemKeys.size,
