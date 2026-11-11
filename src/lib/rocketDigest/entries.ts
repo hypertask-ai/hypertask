@@ -16,8 +16,9 @@ export type DigestEntry = {
 };
 
 export const FIXES_ENTRY_TITLE = "Fixes & polish";
-export const DIGEST_VERSION = 2;
+export const DIGEST_VERSION = 3;
 export const MAX_TOPIC_ENTRIES = 12;
+export const MAX_CATCHUP_TOPIC_ENTRIES = 40;
 
 const MAX_TITLE_LENGTH = 80;
 const MAX_SUMMARY_LENGTH = 170;
@@ -38,6 +39,7 @@ const NEXT_FIELD =
 const POINTER_ONLY =
   /^(?:follow[- ]?up\b|see\b|refs?\b|part of\b|related to\b|blocked by\b|as discussed\b|ready to build\b|now ready to build\b|n\/a\b)/i;
 const TITLE_PREFIX = /^(?:\[[^\]]{1,40}\]\s*|[A-Z][A-Z0-9]*-\d+\s+)/;
+const BARE_URL = /https?:\/\/\S+/gi;
 
 export function plainText(html: string): string {
   return html
@@ -100,7 +102,11 @@ export function entryTitle(title: string): string {
 }
 
 export function entrySummary(description: string): string {
-  const text = plainText(description).replace(FLAG_NOTE, "").trim();
+  const text = plainText(description)
+    .replace(FLAG_NOTE, "")
+    .replace(BARE_URL, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!text) return "";
   const trimmed = stripLeadingFields(text);
   const firstField = trimmed.search(NEXT_FIELD);
@@ -111,7 +117,7 @@ export function entrySummary(description: string): string {
 
 function fixesContent(tickets: readonly ShippedTicket[]): string {
   return tickets
-    .slice(0, MAX_LISTED_TITLES)
+    .slice(-MAX_LISTED_TITLES)
     .map((ticket) => entryTitle(ticket.title))
     .join("; ");
 }
@@ -134,11 +140,13 @@ export function buildDigestEntries(
   );
   const entries: DigestEntry[] = [];
 
-  for (const ticket of sorted) {
-    if (ticket.kind === "fix") continue;
-    if (entries.length >= maxTopics) break;
-    const summary = entrySummary(ticket.description);
-    if (!summary) continue;
+  const candidates = sorted
+    .filter((ticket) => ticket.kind !== "fix")
+    .map((ticket) => ({ ticket, summary: entrySummary(ticket.description) }))
+    .filter((candidate) => Boolean(candidate.summary));
+  const topics = maxTopics > 0 ? candidates.slice(-maxTopics) : [];
+
+  for (const { ticket, summary } of topics) {
     entries.push(toEntry(entryTitle(ticket.title), summary, [ticket]));
   }
 
