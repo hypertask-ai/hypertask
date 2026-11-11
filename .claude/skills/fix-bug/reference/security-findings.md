@@ -7,9 +7,10 @@ description: How to handle a Strix scanner finding, and how the weekly scan runs
 
 ## Read production Vercel Security Review states
 
-The server's saved `vercel-ht` token is invalid. Do not copy another login,
-print credentials, or request broader access. Use the existing Actions secret
-from a GitHub-hosted runner instead:
+Read the states on a GitHub-hosted runner with the existing Actions secret, so
+no server login is involved and it keeps working when the saved `vercel-ht`
+login is rejected or challenged. Never copy another login, print credentials,
+or request broader access:
 
 ```bash
 gh workflow run vercel-security-findings.yml --repo hypertask-ai/hypertask \
