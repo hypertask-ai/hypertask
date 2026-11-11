@@ -19,7 +19,6 @@ import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib
 import {
   getAiModelPreferenceIds,
   mergeAiModelPreferenceUpdates,
-  storedAutoModelRequested,
   teamAiFeatureModelsQueryKey,
   type TAiModelPreferenceSurface,
 } from "@/lib/aiModelPreferences";
@@ -110,11 +109,7 @@ export function useAiModelPreference(
     includeBoardFallback ? boardDefaultId : undefined,
   ];
   const autoModelRequested = autoModelEnabled &&
-    storedAutoModelRequested(
-      userPreferences.aiModelPreferences,
-      surface,
-      currentTeamId,
-    ) &&
+    (storedOptionIds.teamScoped ?? storedOptionIds.global) === AUTO_MODEL_OPTION_ID &&
     !teamFeatureModels.data?.[surface]?.model;
   const usesPlanDefault = !(savedModelAutoEnabled && autoModelRequested) && !chosenOptionIds.some((id) => getAiModelOptionById(id, haiku55Enabled));
   const openAiOnlyDefaultApplies = usesPlanDefault &&
@@ -136,15 +131,6 @@ export function useAiModelPreference(
         haiku55Enabled,
       );
     },
-    [
-              storedOptionIds.teamScoped,
-              storedOptionIds.global,
-              teamFeatureModels.data?.[surface]?.model,
-              includeBoardFallback ? boardDefaultId : undefined,
-            ],
-            planDefault,
-            haiku55Enabled,
-          ),
     [
       autoModelRequested,
       haiku55Enabled,

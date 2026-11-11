@@ -13,7 +13,7 @@ import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
 import { getAiFeatureModelOverride, isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { getAiProviderInfo, resolveTeamProviderEnabled } from "@/lib/aiProviders";
-import { getAiModelPreferenceIds, isAutoModelChoice, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
+import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
@@ -181,7 +181,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     const selectionLookupContext = usesTeamOpenAiDefault ? teamKeyLookupContext : keyLookupContext;
     const autoRequested = isAutoRequest(body.modelOptionId) ||
       (!body.modelOptionId && !body.model &&
-        isAutoModelChoice(personalModelOptionId) &&
+        (personalModelOptionId === "auto") &&
         !getAiFeatureModelOverride(body.aiFeature, teamProviderSettings, haiku55Enabled) &&
         await import("@/lib/flags")
           .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, dbUser.id))

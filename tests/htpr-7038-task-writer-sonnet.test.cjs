@@ -243,6 +243,11 @@ async function main() {
       const result = await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, modelOptionId });
       assert.match(result.modelId, expected);
     }
+    for (const modelOptionId of ["auto", "claude-opus-5-5-thinking"]) {
+      const h = harness({ plan: "Pro", savedAuto: true, saved: "auto", settings: { featureModels: { [feature]: "claude-haiku-5-5" } } });
+      const result = await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, modelOptionId });
+      assert.match(result.modelId, /claude-haiku-5[.-]5$/);
+    }
   }
   assert.equal(catalog.isPremiumAiModelDefinition(catalog.getAiModelDefinition("claude-sonnet-5-5")), true);
   for (const kind of ["app", "mcp"]) {

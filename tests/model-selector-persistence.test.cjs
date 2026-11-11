@@ -5,7 +5,7 @@ const React = require("react");
 const { act } = React;
 const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
-const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
+const { QueryClient, QueryClientProvider, useQueryClient } = require("@tanstack/react-query");
 const axios = require("axios");
 
 const root = path.resolve(__dirname, "..");
@@ -34,7 +34,7 @@ stubSource("src/hooks/General/useCurrentBoardBilling.ts", {
 });
 stubSource("src/hooks/General/useGetUserPreferences.tsx", {
   USER_PREFERENCES_QUERY_KEY: ["preferences"],
-  useGetUserPreferences: () => ({ data: { aiModelPreferences: { aiChat: "claude-haiku-5-5" } } }),
+  useGetUserPreferences: () => ({ data: useQueryClient().getQueryData(["preferences"]) ?? { aiModelPreferences: { aiChat: "claude-haiku-5-5" } } }),
 });
 stubSource("src/hooks/useTeamAiProviders.ts", {
   useTeamAiProviders: () => ({ enabledProviders, isLoading: providersLoading }),
@@ -60,7 +60,7 @@ for (const [filename, cached] of originalCache) require.cache[filename] = cached
 
 const flagValues = (haiku) => ({});
 
-async function withPicker(run, { preferenceHook = false, initialFlags, mobile = false, selectedId = "claude-haiku-5-5" } = {}) {
+async function withPicker(run, { preferenceHook = false, initialFlags, mobile = false, selectedId = "claude-haiku-5-5", surface = "aiChat" } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://fixture.invalid/chat" });
   const previous = {
     React: global.React, window: global.window, document: global.document,
@@ -78,8 +78,9 @@ async function withPicker(run, { preferenceHook = false, initialFlags, mobile = 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const reactRoot = createRoot(document.getElementById("root"));
   const chosen = [];
+  let preference;
   function PreferencePicker() {
-    const preference = useAiModelPreference("aiChat");
+    preference = useAiModelPreference(surface);
     return React.createElement(ModelSelectorDropdown, {
       aiSelected: preference.currentAiOption,
       optionCallback: preference.setAiOption,
@@ -102,7 +103,7 @@ async function withPicker(run, { preferenceHook = false, initialFlags, mobile = 
   };
   try {
     await update();
-    await run({ chosen, writes, update, client, container: document.getElementById("root") });
+    await run({ chosen, writes, update, client, getPreference: () => preference, container: document.getElementById("root") });
   } finally {
     await act(async () => reactRoot.unmount());
     client.clear();
@@ -225,3 +226,34 @@ test("the model picker lists Fast only while its ticket flag is On", async () =>
     assert.equal(hasFast(), false);
   });
 });
+
+for (const surface of ["aiChat", "taskWriter", "writeWithAi", "improveWriting", "askAi"]) {
+  test(`migrated ${surface} replaces the browser's old choice once and later manual picks stick`, async () => {
+    await withPicker(async ({ writes, update, client, getPreference, container }) => {
+      assert.equal(getPreference().currentAiOption.id, "claude-haiku-5-5");
+      await act(async () => {
+        client.setQueryData(["preferences"], { aiModelPreferences: { [surface]: "auto" } });
+      });
+      await update();
+      assert.equal(getPreference().currentAiOption.id, "auto");
+      assert.match(container.textContent, /Auto/);
+      assert.deepEqual(writes, [], "rendering saved Auto must not persist a concrete fallback");
+      await act(async () => {
+        getPreference().setAiOption(getAiModelOptionById("claude-haiku-5-5", true));
+      });
+      assert.equal(writes.length, 1);
+      assert.deepEqual(writes[0], {
+        aiModelPreferences: { [surface]: "claude-haiku-5-5" },
+        aiModelPreferencesTeamId: "fixture-team",
+      });
+      await update();
+      assert.equal(getPreference().currentAiOption.id, "claude-haiku-5-5");
+      assert.equal(client.getQueryData(["preferences"]).aiModelPreferences.teams["fixture-team"][surface], "claude-haiku-5-5");
+      assert.equal(writes.length, 1, "the reset must not repeat after a manual pick");
+    }, {
+      preferenceHook: true,
+      surface,
+      initialFlags: { "htpr-7915-auto-model": true, "htpr-9019-saved-model-auto": true },
+    });
+  });
+}

@@ -24,7 +24,7 @@ import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-aut
 import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 import { getAiFeatureModelOverride, resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
-import { getAiModelPreferenceIds, isAutoModelChoice, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
+import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
 import { assertModelAllowedForPlan, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
@@ -702,12 +702,8 @@ export async function selectTaskWriterModel(args: {
     defaultContext.haikuDefaultEnabled,
     defaultContext,
   );
-  let savedModelAutoEnabled = false;
-  if (typeof args.userId === "number") {
-    if (await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, args.userId)) {
-      savedModelAutoEnabled = true;
-    }
-  }
+  const savedModelAutoEnabled = Boolean(args.aiFeature && typeof args.userId === "number" &&
+    await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, args.userId));
   const personalModelOptionId = args.aiFeature && (!taskWriterSonnet || savedModelAutoEnabled)
     ? await getPersonalModelOptionId(
         args.userId,
@@ -715,9 +711,11 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  const savedAutoChoiceEnabled = savedModelAutoEnabled && isAutoModelChoice(personalModelOptionId);
+  const savedAutoChoiceEnabled = savedModelAutoEnabled && (personalModelOptionId === "auto");
   const requestAuto = args.modelOptionId === "auto" && savedModelAutoEnabled;
-  const explicitOption = savedModelAutoEnabled ? getAiModelOptionById(args.modelOptionId, haiku55Enabled) : undefined;
+  const explicitOption = savedModelAutoEnabled && args.aiFeature && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
+    ? getAiModelOptionById(args.modelOptionId, haiku55Enabled)
+    : undefined;
   const autoPick = args.aiFeature && args.userId && !explicitOption && (requestAuto || !personalModelOptionId || savedAutoChoiceEnabled) && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
     ? pickAutoModelOption({
         feature: args.aiFeature,

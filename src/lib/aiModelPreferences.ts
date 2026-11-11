@@ -1,5 +1,4 @@
 import type { TAiThinkingPreference } from "@/lib/aiThinkingPreference";
-import { AUTO_MODEL_OPTION_ID } from "@/lib/aiModelOptions";
 
 export const AI_MODEL_PREFERENCE_SURFACES = [
   "aiChat",
@@ -75,19 +74,6 @@ export function getAiModelPreferenceIds(
         ? storedPreferences[surface]
         : undefined,
   };
-}
-
-export function isAutoModelChoice(optionId: string | null | undefined) {
-  return optionId?.trim() === AUTO_MODEL_OPTION_ID;
-}
-
-export function storedAutoModelRequested(
-  preferences: TAiModelPreferences | null | undefined,
-  surface: TAiModelPreferenceSurface,
-  teamId: string | number | null | undefined,
-) {
-  const ids = getAiModelPreferenceIds(preferences, surface, teamId);
-  return isAutoModelChoice(ids.teamScoped ?? ids.global);
 }
 
 export function mergeAiModelPreferenceUpdates(

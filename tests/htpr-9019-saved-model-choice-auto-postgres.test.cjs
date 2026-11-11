@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
-const { spawn, spawnSync } = require("node:child_process");
+const { spawnSync } = require("node:child_process");
+const { Client } = require("pg");
 const fs = require("node:fs");
 const test = require("node:test");
 const { loadModule } = require("./helpers/loadModule.cjs");
@@ -10,31 +11,19 @@ function run(args) {
   return result.stdout.trim();
 }
 
-function connect(container) {
-  const child = spawn("docker", ["exec", "-i", container, "psql", "-X", "-h", "/tmp", "-U", "postgres", "-At"], { stdio: ["pipe", "pipe", "pipe"] });
-  let buffer = "", pending, sequence = 0;
-  child.stdout.on("data", (chunk) => {
-    buffer += chunk;
-    if (!pending || !buffer.includes(pending.marker)) return;
-    const output = buffer.slice(0, buffer.indexOf(pending.marker)).trim();
-    buffer = buffer.slice(buffer.indexOf(pending.marker) + pending.marker.length);
-    const current = pending;
-    pending = null;
-    current.resolve(output);
-  });
-  child.stderr.on("data", (chunk) => { if (pending) { pending.reject(new Error(String(chunk))); pending = null; } });
-  child.on("error", (error) => pending?.reject(error));
-  child.on("exit", () => pending?.reject(new Error("psql exited")));
+async function connect(container) {
+  const port = Number(run(["port", container, "5432/tcp"]).split(":").at(-1));
+  const client = new Client({ host: "127.0.0.1", port, user: "postgres", database: "postgres", query_timeout: 30000 });
+  await client.connect();
   return {
-    query(sql) {
-      assert.ok(!pending);
-      return new Promise((resolve, reject) => {
-        const marker = `HTPR9019_END_${++sequence}`;
-        pending = { marker, resolve, reject };
-        child.stdin.write(`${sql};\n\\echo ${marker}\n`);
-      });
+    async query(sql) {
+      let result = await client.query(sql);
+      if (Array.isArray(result)) result = result.at(-1);
+      return result.command === "SELECT"
+        ? result.rows.map((row) => Object.values(row).join("|")).join("\n")
+        : `${result.command} ${result.rowCount}`;
     },
-    close() { child.stdin.end(); },
+    close: () => client.end(),
   };
 }
 
@@ -47,16 +36,17 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
   const container = `htpr-9019-${process.pid}-${Date.now()}`;
   let db;
   try {
-    run(["run", "-d", "--rm", "--name", container, "--network", "none", "--user", "postgres", "--tmpfs", "/tmp:rw,mode=1777",
+    run(["run", "-d", "--rm", "--name", container, "-p", "127.0.0.1::5432", "--user", "postgres", "--tmpfs", "/tmp:rw,mode=1777",
       process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea", "tail", "-f", "/dev/null"]);
-    run(["exec", container, "sh", "-c", "initdb -D /tmp/db -A trust >/dev/null && pg_ctl -D /tmp/db -l /tmp/log -o \"-c listen_addresses='' -k /tmp\" -w start >/dev/null"]);
-    db = connect(container);
+    run(["exec", container, "sh", "-c", "initdb -D /tmp/db -A trust >/dev/null && pg_ctl -D /tmp/db -l /tmp/log -o \"-c listen_addresses='*' -k /tmp\" -w start >/dev/null"]);
+    db = await connect(container);
     await db.query('CREATE TABLE "UserSetting" ("userId" int PRIMARY KEY, "aiModelPreferences" jsonb); CREATE TABLE htpr_7038_model_choice_reset_done(user_id int PRIMARY KEY)');
     await db.query(fs.readFileSync("src/prisma/migrations/20261110140000_htpr_9019_saved_model_choice_auto/migration.sql", "utf8"));
     const original = { aiChat: "old-chat", taskWriter: "old-writer", writeWithAi: "old-write", improveWriting: "old-improve", askAi: "old-ask", imageGeneration: "keep-image", thinking: { mode: "high" }, teams: { 'odd.team,{"': { aiChat: "team-pick", imageGeneration: "team-image" }, broken: null } };
     await db.query(`INSERT INTO "UserSetting" VALUES (1, '${JSON.stringify(original)}'::jsonb), (2, '{}'::jsonb)`);
     let enabled = false, baseEnabled = true, failCache = false;
     const prisma = {
+      htpr7038ModelChoiceResetDone: { findUnique: async ({ where }) => (await db.query(`SELECT user_id FROM htpr_7038_model_choice_reset_done WHERE user_id=${where.userId}`)) ? { userId: where.userId } : null },
       htpr9019ModelChoiceAutoDone: { findUnique: async ({ where }) => (await db.query(`SELECT user_id FROM htpr_9019_model_choice_auto_done WHERE user_id=${where.userId}`)) ? { userId: where.userId } : null },
       $transaction: async (callback) => {
         await db.query("BEGIN");
@@ -64,7 +54,7 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
           const result = await callback({
             $queryRaw: (parts, ...values) => db.query(sql(parts, values)),
             $executeRaw: async (parts, ...values) => Number(/UPDATE (\d+)/.exec(await db.query(sql(parts, values)))?.[1] ?? 0),
-            htpr9019ModelChoiceAutoDone: { createMany: async ({ data }) => ({ count: Number(/INSERT 0 (\d+)/.exec(await db.query(`INSERT INTO htpr_9019_model_choice_auto_done(user_id) VALUES (${data.userId}) ON CONFLICT DO NOTHING`))?.[1] ?? 0) }) },
+            htpr9019ModelChoiceAutoDone: { createMany: async ({ data }) => ({ count: Number(/INSERT (\d+)/.exec(await db.query(`INSERT INTO htpr_9019_model_choice_auto_done(user_id) VALUES (${data.userId}) ON CONFLICT DO NOTHING`))?.[1] ?? 0) }) },
           });
           await db.query("COMMIT");
           return result;
@@ -89,7 +79,11 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
     assert.deepEqual(await preferences(), original);
     assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_backup"), "0");
     failCache = false;
-    assert.equal(await switchChoices(1), "switched");
+    const { ensureHtpr7038ModelReset: reset } = loadModule("src/lib/ai/htpr7038ModelReset.ts", {
+      react: { cache: (fn) => fn }, "@/lib/prisma": { default: prisma },
+      "@/lib/ai/htpr9019ModelChoiceAuto": { ensureHtpr9019ModelChoiceAuto: switchChoices },
+    });
+    assert.equal(await reset(1), "done");
     const expected = { ...original, aiChat: "auto", taskWriter: "auto", writeWithAi: "auto", improveWriting: "auto", askAi: "auto", teams: { ...original.teams, 'odd.team,{"': { aiChat: "auto", imageGeneration: "team-image" } } };
     assert.deepEqual(await preferences(), expected);
     const backups = JSON.parse(await db.query("SELECT jsonb_agg(jsonb_build_object('path', location::jsonb, 'value', previous_value)) FROM htpr_9019_model_choice_backup"));
@@ -103,7 +97,7 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
     await db.query(fs.readFileSync("scripts/htpr-9019-undo-model-choice-auto.sql", "utf8"));
     assert.deepEqual(await preferences(), { ...original, aiChat: "later-choice" });
   } finally {
-    db?.close();
+    await db?.close();
     spawnSync("docker", ["rm", "-f", container], { stdio: "ignore", timeout: 10000 });
   }
 });

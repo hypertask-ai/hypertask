@@ -216,9 +216,7 @@ const AIModelDropDownList = ({
   const thinkingFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
   const { preference: thinkingPreference, setPreference: setThinkingPreference } = useAiThinkingPreference();
   const savedModelAuto = useFlag(HTPR_9019_SAVED_MODEL_AUTO_FLAG);
-  const autoOption = autoFlag
-    ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID)
-    : undefined;
+  const autoOption = autoFlag ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID) : undefined;
   const defaultContext = useAiDefaultModelContext(settingsTeamId);
   const freePlan = scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(

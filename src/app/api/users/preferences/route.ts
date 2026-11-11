@@ -329,10 +329,7 @@ export async function POST(request: NextRequest) {
       }
 
       const preferenceUpdates = Object.entries(body.aiModelPreferences);
-      let savedModelAutoEnabled = false;
-      if (await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, user.id)) {
-        savedModelAutoEnabled = true;
-      }
+      const savedModelAutoEnabled = await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, user.id);
       const invalidPreference = preferenceUpdates.find(
         ([surface, optionId]) =>
           !isAiModelPreferenceSurface(surface) ||
