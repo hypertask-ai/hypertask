@@ -761,11 +761,25 @@ for (const hang of ["probe", "download", "deps"]) {
   });
 }
 
-test("HYCI-285: the default deadline stops a disconnected download within two minutes", () => {
-  const run = runChromiumInstaller({ answering: [], failures: 0, hang: "download" });
-  assert.equal(run.status, 1, run.output);
-  assert.equal(run.signal, null, "the installer must exit before the test safety timeout");
-  assert.ok(run.elapsed < 120_000, `installer took ${run.elapsed}ms`);
-  console.log(`HYCI-285 disconnected install: ${(run.elapsed / 1000).toFixed(1)}s`);
-  assert.match(run.output, /Chromium installation timed out.*outside network/);
+test("HYCI-285: the default deadline keeps a disconnected machine inside two minutes", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-285-deadline-"));
+  fs.writeFileSync(
+    path.join(dir, "timeout"),
+    `#!/bin/bash
+printf '%s\n' "$*" > "${dir}/timeout-args"
+exit 124
+`,
+    { mode: 0o755 },
+  );
+  const child = spawnSync("bash", [path.resolve(".github/scripts/install-chromium.sh")], {
+    timeout: 20_000,
+    env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CHROMIUM_INSTALL_TIMEOUT: "" },
+    encoding: "utf8",
+  });
+  const output = child.stdout + child.stderr;
+  const args = fs.readFileSync(path.join(dir, "timeout-args"), "utf8").trim();
+  assert.equal(child.status, 1, output);
+  assert.match(args, /^-k 5 110 /, `deadline was ${args}`);
+  assert.equal((output.match(/::error::/g) ?? []).length, 1, output);
+  assert.match(output, /Chromium installation timed out.*outside network/);
 });

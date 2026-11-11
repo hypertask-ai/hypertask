@@ -44,12 +44,14 @@ exit 43
         PATH: `${dir}:${process.env.PATH}`,
         TEST_MIRROR: mirror,
         APT_MIRROR_FILE: mirror,
+        APT_CONF_FILE: path.join(dir, '99-ci-timeouts'),
         RETRY_SLEEP: '0',
       },
     });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(fs.readFileSync(mirror, 'utf8'), 'https://archive.ubuntu.com/ubuntu/\n');
     assert.match(result.stdout, /official archive selected before browser dependencies/);
+    assert.match(fs.readFileSync(path.join(dir, '99-ci-timeouts'), 'utf8'), /Acquire::Retries "0"/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

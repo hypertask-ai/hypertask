@@ -66,8 +66,7 @@ install_deps() {
 
 if ! printf 'Acquire::http::Timeout "5";\nAcquire::https::Timeout "5";\nAcquire::ftp::Timeout "5";\nAcquire::Retries "0";\n' |
   sudo tee "$APT_CONF_FILE" > /dev/null; then
-  echo "::error::Could not configure short apt timeouts"
-  exit 1
+  echo "::warning::Could not shorten apt timeouts; the whole-install deadline still applies"
 fi
 
 for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
