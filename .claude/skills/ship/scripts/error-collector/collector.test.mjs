@@ -63,7 +63,10 @@ if (name === 'ht') {
   const plain = args[0] === '--json' ? args.slice(1) : args;
   if (plain[0] === 'task' && plain[1] === 'create') {
     if (args[0] !== '--json') throw new Error('must request JSON');
-    if (cfg.createFail) exit();
+    if (cfg.createFail) { console.error('Project not found or access denied'); process.exit(1); }
+    if (cfg.firstCreateRefusal && readFileSync(calls, 'utf8').trim().split('\\n').map(line => JSON.parse(line)).filter(call => call.name === 'vcc' && call.args.includes('create')).length === 1) {
+      console.error(cfg.firstCreateRefusal); process.exit(5);
+    }
     const board = Number(args[args.indexOf('--project') + 1]);
     const task = { ticketNumber: (board === 15 ? 'HTPR-' : 'YPER4-') + (100 + remote.length), projectId: board, description: row.description, status: 'Normal' };
     remote.push(task);
@@ -71,7 +74,7 @@ if (name === 'ht') {
     if (cfg.ambiguousCreate) exit();
     console.log(JSON.stringify({ success: true, task: cfg.badReceipt ? { ticketNumber: 'invalid receipt' } : task }));
   } else if (plain[0] === 'activity' && plain[1] === 'add') {
-    if (cfg.activityFail) exit();
+    if (cfg.activityFail || plain[2] === 'YPER4-354' || plain[2] === cfg.deadActivityTicket) exit();
     const saved = read('activities.json', []);
     saved.unshift({ ticket: plain[2], text: plain[3], createdAt: new Date().toISOString() });
     writeFileSync(join(home, 'activities.json'), JSON.stringify(saved));
@@ -105,7 +108,8 @@ async function withHarness(fn) { const h = harness(); try { await fn(h); } final
 const longValue = 'Xy'.repeat(20);
 const event = (overrides = {}) => ({ service: 'web', board: 15, message: 'Checkout failed for user 123', route: '/checkout/123', stack: 'Error: checkout failed\n  at checkout', ts: new Date(NOW - 1000).toISOString(), ...overrides });
 const creates = h => h.calls().filter(c => c.name === 'vcc' && c.args.includes('create'));
-const activities = (h, ticket) => h.calls().filter(c => c.name === 'vcc' && c.args[0] === 'activity' && (!ticket || c.args[2] === ticket));
+const activities = (h, ticket) => h.calls().filter(c => c.name === 'vcc' && c.args[0] === 'activity' && (!ticket || c.args[2] === ticket) && !String(c.args[3] ?? '').includes('[error-detail:'));
+const details = h => h.calls().filter(c => c.name === 'vcc' && String(c.args[3] ?? '').includes('[error-detail:'));
 
 check('sources', 'normalization strips every dynamic value and hash matches independent SHA-256', () => {
   const values = ['123e4567-e89b-12d3-a456-426614174000', 'abcdefabcdef1234567890', 'person@example.invalid', '"quoted value"', "'literal 7'", '`a b`', 'clm123456789abcdefghijklmn'];
@@ -194,7 +198,7 @@ check('tickets', 'groups parked before a fingerprint rule change join the curren
   seedState();
   assert.equal(await h.run(), 0);
   assert.equal(creates(h).length, 1);
-  assert.match(creates(h)[0].description, new RegExp(`error-fingerprint:${current}<`));
+  assert.match(creates(h)[0].description, new RegExp(`error-fingerprint:${current}(?![a-f0-9])`));
 }));
 
 check('tickets', 'a group parked under the current rules keeps its key even when its saved sample is redacted', () => withHarness(async h => {
@@ -272,7 +276,8 @@ check('sources', 'fixture filters boundaries, groups counts/times/routes and rep
   assert.equal(records[0].firstSeen, new Date(NOW - 5000).toISOString());
   assert.equal(records[0].lastSeen, new Date(NOW - 1000).toISOString());
   const body = creates(h)[0].description;
-  assert.match(body, /\/checkout\/123, \/checkout\/456/);
+  assert.match(body, /\/checkout\/123/);
+  assert.match(body, /\/checkout\/456/);
   assert.match(body, /Count in window: 5/);
   h.events([]);
   await h.run({ now: NOW + 1000 });
@@ -321,12 +326,16 @@ check('tickets', 'creation options, redacted escaped HTML, atomic private state 
   h.events([event({ message: `Checkout failed ${unsafe}`, stack: Array.from({ length: 50 }, (_, i) => `${i}: ${unsafe}`).join('\n') })]);
   await h.run();
   const call = creates(h)[0];
-  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log', '--priority', 'high', '--title']);
+  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title']);
   assert.match(call.description, /^<p><strong>/);
-  assert.match(call.description, /error-fingerprint:[a-f0-9]{16}<\/p>$/);
+  assert.match(call.description, /error-fingerprint:[a-f0-9]{16}(?![a-f0-9])/);
+  for (const head of ['Problem', 'Fix', 'Done when', 'Risk', 'Decision']) assert.match(call.description, new RegExp(`<h2>${head}</h2>`));
   assert.ok(!call.description.includes('<script>'));
-  const stack = call.description.match(/<pre>([\s\S]*?)<\/pre>/)[1];
+  assert.ok(!call.description.includes('<pre>'));
+  const note = details(h)[0].args[3];
+  const stack = note.split('Stack:\n')[1].split('\n[error-detail:')[0];
   assert.equal(stack.split('\n').length, 40);
+  assert.match(note, /Redacted sample:/);
   const sensitive = ['fake-password', 'fake-bearer', 'user@example.invalid', 'fake-key', fakeStripe];
   const output = JSON.stringify(h.calls()) + readFileSync(h.statePath, 'utf8');
   for (const value of sensitive) assert.ok(!output.includes(value), 'redaction leaked a fixture value');
@@ -369,6 +378,7 @@ check('tickets', 'routes 11514 to live Backlog, falls back to Todo and refuses a
     const args = creates(h)[0].args;
     assert.equal(args[args.indexOf('--project') + 1], '11514');
     assert.equal(args[args.indexOf('--section') + 1], '2');
+    assert.equal(args[args.indexOf('--labels') + 1], 'Infra,brain-medium');
     assert.ok(h.calls().some(c => c.name === 'ht' && c.args[1] === '/mcp/projects/11514/sections'));
   });
   await withHarness(async h => { h.events([event({ board: 11514 })]); h.config({ sections: [] }); await h.run(); assert.equal(creates(h).length, 0); assert.equal(Object.keys(h.state().pending).length, 1); });
@@ -468,10 +478,104 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
     h.events([event()]); h.config({ [flag]: true }); assert.equal(await h.run(), 0);
     assert.equal(Object.keys(h.state().pending).length, 1);
     if (flag !== 'createFail') assert.equal(creates(h).length, 0);
+    if (flag === 'createFail') assert.deepEqual(h.state().created, []);
     h.config({}); await h.run({ now: NOW + 1000 });
     assert.equal(Object.keys(h.state().pending).length, 0);
   });
 });
+
+check('tickets', 'HYCI-271 ambiguous create stops the run and the next run files each sample once', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ ambiguousCreate: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+  h.config({});
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 2);
+  assert.equal(Object.keys(h.state().pending).length, 0);
+  assert.equal(details(h).length, 2);
+  assert.equal(details(h).filter(call => call.args[3].includes('[error-occurrence:')).length, 2);
+  await h.run({ now: NOW + 2000 });
+  assert.equal(details(h).length, 2);
+}));
+
+check('tickets', 'HYCI-271 a malformed receipt stops further creates', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ badReceipt: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+}));
+
+check('tickets', 'HYCI-271 a refused create leaves the slot free and still tries the next group', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ createFail: true });
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+}));
+
+check('tickets', 'HYCI-271 local wrapper refusals allow the next group to file', async () => {
+  for (const refusal of [
+    'vcc: task create refused: filing-gate missing',
+    'vcc: Ticket description refused by the house ticket rules (skills/tickets).',
+    'vcc: not filed. The same problem is already open on Fleet CI & Infra: HYCI-100',
+  ]) await withHarness(async h => {
+    h.events([event(), event({ message: 'Payment failed for user 456' })]);
+    h.config({ firstCreateRefusal: refusal });
+    await h.run();
+    assert.equal(creates(h).length, 2);
+    assert.equal(h.state().created.length, 1);
+    assert.equal(Object.keys(h.state().pending).length, 1);
+    assert.equal(details(h).length, 1);
+  });
+});
+
+check('tickets', 'HYCI-271 an ambiguous detail note is not posted twice', () => withHarness(async h => {
+  h.events([event()]);
+  h.config({ ambiguousActivity: true });
+  await h.run();
+  assert.equal(details(h).length, 1);
+  assert.equal(Object.keys(h.state().occurrences).length, 1);
+  h.config({});
+  await h.run({ now: NOW + 1000 });
+  assert.equal(details(h).length, 1);
+  assert.equal(Object.keys(h.state().occurrences).length, 0);
+}));
+
+check('tickets', 'HYCI-271 a saved error-detail marker blocks a second detail note', () => withHarness(async h => {
+  h.events([event()]);
+  await h.run();
+  const fp = Object.keys(h.state().fingerprints)[0];
+  const ticket = h.state().fingerprints[fp].ticket;
+  const id = createHash('sha256').update(`detail|${fp}`).digest('hex').slice(0, 24);
+  const state = h.state();
+  state.occurrences[id] = { ticket, queuedAt: new Date(NOW).toISOString(), text: `Redacted sample: kept\n[error-detail:${id}]` };
+  h.seed(state);
+  writeFileSync(join(h.home, 'activities.json'), JSON.stringify([{ ticket, text: `already posted\n[error-detail:${id}]`, createdAt: new Date(NOW).toISOString() }]));
+  await h.run({ now: NOW + 1000 });
+  assert.equal(details(h).length, 1);
+  assert.equal(h.state().occurrences[id], undefined);
+}));
+
+check('tickets', 'a refused create does not spend the hourly slot', () => withHarness(async h => {
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
+  h.events([event()]);
+  h.config({ createFail: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 1);
+  h.config({});
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().created.length, 1);
+  assert.equal(Object.keys(h.state().pending).length, 0);
+}));
 
 check('tickets', 'hourly cap files a product Vercel error before an infra group', () => withHarness(async h => {
   h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
@@ -491,7 +595,7 @@ check('reporting', 'default rolling cap, pending counts/routes survive and exact
   h.events(items); await h.run();
   assert.equal(creates(h).length, 5);
   assert.equal(Object.keys(h.state().pending).length, 2);
-  assert.equal(activities(h, 'YPER4-354').filter(c => c.args[3].includes('held back')).length, 1);
+  assert.equal(activities(h, 'HYCI-291').filter(c => c.args[3].includes('held back')).length, 1);
   h.events([event({ message: 'failure kind F', route: '/checkout/456', count: 4, ts: new Date(NOW + HOUR / 2).toISOString() })]);
   await h.run({ now: NOW + HOUR / 2 });
   assert.equal(creates(h).length, 5);
@@ -502,7 +606,8 @@ check('reporting', 'default rolling cap, pending counts/routes survive and exact
   const record = Object.values(h.state().fingerprints).find(r => r.total === 5);
   assert.ok(record);
   assert.match(creates(h)[5].description, /Count in window: 5/);
-  assert.match(creates(h)[5].description, /\/checkout\/123, \/checkout\/456/);
+  assert.match(creates(h)[5].description, /\/checkout\/123/);
+  assert.match(creates(h)[5].description, /\/checkout\/456/);
   assert.equal(h.state().days['2026-10-14'].web.newGroups, 7);
 }));
 
@@ -522,8 +627,8 @@ check('reporting', 'noise alert threshold plans exactly one ticket above the lim
     assert.equal((planned.stdout.match(/"create"/g) ?? []).length, count > 50 ? 1 : 0);
     if (count > 50) {
       assert.match(planned.stdout, /SSL configuration warning repeated 51 times in one hour/);
-      assert.match(planned.stdout, /warning on stderr/);
-      assert.match(planned.stdout, /Fix the noisy warning at the source/);
+      assert.match(planned.stdout, /One warning repeats too often/);
+      assert.match(planned.stdout, /Quiet the warning/);
       assert.match(planned.stdout, /\/route\/0, \/route\/1/);
     }
     assert.equal(existsSync(h.statePath), false);
@@ -592,7 +697,7 @@ check('reporting', 'noise alert second run reuses its ticket via activity, and c
   await h.run({ now: NOW + 6 * HOUR });
   assert.equal(creates(h).length, 1);
   assert.equal(activities(h, ticket).length, 2);
-  assert.ok(h.calls().filter(call => call.name === 'ht').every(call => call.args[1].includes(`error-fingerprint%3A${fp}`)));
+  assert.ok(h.calls().filter(call => call.name === 'ht' && call.args[1].includes('/mcp/tasks?')).every(call => call.args[1].includes(`error-fingerprint%3A${fp}`)));
 }));
 
 check('reporting', 'noise alert overrides, pending cap, retry reconciliation and sample redaction', async () => {
@@ -710,12 +815,12 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   h.events([event({ message: 'Unexpected internal 500 error', count: 2, ts: new Date(NOW + 1000).toISOString() })]);
   await h.run({ now: NOW + 1000 });
   assert.equal(creates(h).length, 1);
-  assert.equal(activities(h, 'YPER4-354').length, 0);
+  assert.equal(activities(h, 'HYCI-291').length, 0);
   h.events([]); await h.run({ now: NOW + DAY, summary: true });
   assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-14: 2 errors (2026-10-13: no complete data), 1 new kinds, 7 noise'));
-  const posted = activities(h, 'YPER4-354').length;
+  const posted = activities(h, 'HYCI-291').length;
   await h.run({ now: NOW + DAY + 2 * HOUR }); await h.run({ now: NOW + DAY + 2 * HOUR, summary: true });
-  assert.equal(activities(h, 'YPER4-354').length, posted);
+  assert.equal(activities(h, 'HYCI-291').length, posted);
   await h.run({ now: NOW + 2 * DAY + 2 * HOUR });
   assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-15: 0 errors (2026-10-14: 2), 0 new kinds, 0 noise'));
 }));
@@ -825,9 +930,10 @@ check('reporting', 'SSH daemon identifier fallback ignores client resets but ret
   assert.equal(creates(h).length, 3);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 3);
-  assert.ok(creates(h).some(call => call.description.includes('Address already in use')));
-  assert.ok(creates(h).some(call => call.description.includes('Permission denied')));
-  assert.ok(creates(h).some(call => call.description.includes('database: fatal: ssh_packet_send_debug')));
+  const notes = details(h).map(call => call.args[3]).join('\n');
+  assert.ok(notes.includes('Address already in use'));
+  assert.ok(notes.includes('Permission denied'));
+  assert.ok(notes.includes('database: fatal: ssh_packet_send_debug'));
 }));
 
 check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures still file', () => withHarness(async h => {
@@ -847,7 +953,7 @@ check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe fail
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 4);
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
   assert.equal(creates(h).length, 5);
-  assert.ok(creates(h).some(call => call.description.includes('Access denied.')));
+  assert.ok(details(h).some(call => call.args[3].includes('Access denied.')));
 }));
 
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
@@ -890,7 +996,7 @@ check('reporting', 'dry-run plans create/activity/summary/spike and never change
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run', '--summary');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /DRY-RUN.*"vcc".*"create"/);
-  assert.match(result.stdout, /DRY-RUN.*"activity".*"YPER4-354"/);
+  assert.match(result.stdout, /DRY-RUN.*"activity".*"HYCI-291"/);
   assert.match(result.stdout, /DRY-RUN.*"runner-deliver"/);
   assert.ok(h.calls().every(c => c.name === 'ht' && c.args[0] === 'GET'));
   assert.deepEqual(readFileSync(h.statePath), initial);
@@ -914,6 +1020,25 @@ check('reporting', 'dry-run plans one held-back notice without writes', () => wi
   assert.equal(result.stdout.split('held back').length - 1, 1);
   assert.equal(existsSync(h.statePath), false);
   assert.ok(h.calls().every(call => call.name === 'ht'));
+}));
+
+check('reporting', 'dead summary target retries on the live control ticket without duplicate delivery', () => withHarness(async h => {
+  h.events([event({ ticket: false, count: 7 })]);
+  await h.run();
+  h.events([]); h.config({ deadActivityTicket: 'HYCI-291' });
+  await h.run({ now: NOW + DAY, summary: true });
+  assert.equal(h.state().summaries['2026-10-14']?.web, undefined);
+  assert.equal(existsSync(join(h.home, 'activities.json')), false);
+  h.config({}); h.events([]);
+  await h.run({ now: NOW + DAY + 1000, summary: true });
+  assert.equal(h.state().summaries['2026-10-14'].web, true);
+  const delivered = () => JSON.parse(readFileSync(join(h.home, 'activities.json'), 'utf8'))
+    .filter(item => item.ticket === 'HYCI-291' && item.text.includes('web on 2026-10-14:'));
+  assert.equal(delivered().length, 1);
+  assert.match(delivered()[0].text, /7 errors/);
+  await h.run({ now: NOW + DAY + 2000, summary: true });
+  assert.equal(delivered().length, 1);
+  assert.ok(activities(h).every(call => call.args[2] === 'HYCI-291'));
 }));
 
 check('reporting', 'summary failure retries; secret detector rejects positive controls', () => withHarness(async h => {
@@ -976,7 +1101,7 @@ check('review', 'a day is summarised only after its source read past the day end
   await h.run({ sources: [ok, flaky] });
   fail = true;
   await h.run({ sources: [ok, flaky], now: NOW + DAY, summary: true });
-  const lines = () => activities(h, 'YPER4-354').map(call => call.args[3]);
+  const lines = () => activities(h, 'HYCI-291').map(call => call.args[3]);
   assert.ok(lines().some(line => line.startsWith('ok on 2026-10-14:')));
   assert.ok(!lines().some(line => line.startsWith('flaky on 2026-10-14')));
   await h.run({ sources: [ok, flaky], now: NOW + 3 * DAY, summary: true });
@@ -1478,12 +1603,12 @@ check('reporting', 'stale unfiled groups count once in daily summaries without t
   assert.equal(creates(h).length, 0);
   h.events([]);
   await h.run({ now: NOW + DAY, summary: true });
-  const summary = activities(h, 'YPER4-354').find(call => /web on 2026-10-14/.test(call.args[3]));
+  const summary = activities(h, 'HYCI-291').find(call => /web on 2026-10-14/.test(call.args[3]));
   assert.match(summary.args[3], /9 errors.*1 stale, not filed/);
   assert.doesNotMatch(summary.args[3], /HTPR-/);
   await h.run({ now: NOW + DAY + 1000, summary: true });
   assert.equal(h.state().days['2026-10-14'].web.stale, 1);
-  assert.equal(activities(h, 'YPER4-354').filter(call => /web on 2026-10-14/.test(call.args[3])).length, 1);
+  assert.equal(activities(h, 'HYCI-291').filter(call => /web on 2026-10-14/.test(call.args[3])).length, 1);
 }));
 
 check('tickets', 'stale same-route groups emit one due activity and newer events can file their own tickets', () => withHarness(async h => {
@@ -1590,7 +1715,7 @@ check('reporting', 'midnight-spanning stale group is counted on disposition day 
   assert.equal(h.state().days['2026-10-14'].web.stale, 1);
   assert.equal(Object.values(h.state().stale)[0].count, 5);
   await h.run({ now: NOW + DAY, summary: true });
-  const lines = activities(h, 'YPER4-354').map(call => call.args[3]);
+  const lines = activities(h, 'HYCI-291').map(call => call.args[3]);
   assert.equal(lines.filter(line => /web on 2026-10-13/.test(line)).length, 1);
   assert.ok(lines.some(line => /web on 2026-10-14:.*1 stale, not filed/.test(line)));
 }));
@@ -1644,7 +1769,7 @@ check('incidents', 'new root ticket groups operations and preserves activities a
   h.config({ ambiguousActivity: true });
   await h.run();
   assert.equal(creates(h).length, 1);
-  assert.equal(Object.keys(h.state().occurrences).length, 2);
+  assert.equal(Object.keys(h.state().occurrences).length, 3);
   h.config({});
   await h.run();
   assert.equal(activities(h, 'HTPR-100').length, 2, 'saved activity markers recover ambiguous writes');
@@ -1700,7 +1825,7 @@ check('incidents', 'long matching dumps keep distinct-root activities and redact
   h.events(['firstField', 'secondField'].map(field => event({ service: 'vercel', route, message: prefix + `Unknown argument \`${field}\`.` })));
   await h.run();
   assert.equal(creates(h).length, 2);
-  assert.equal(activities(h).filter(call => call.args[2] !== 'YPER4-354').length, 2);
+  assert.equal(activities(h).filter(call => call.args[2] !== 'HYCI-291').length, 2);
   assert.doesNotMatch(JSON.stringify(h.state()) + JSON.stringify(creates(h)), /person@example|sk-abcdefghijkl/);
 }));
 

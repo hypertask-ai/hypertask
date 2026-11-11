@@ -220,7 +220,8 @@ const AIModelDropDownList = ({
   const thinkingFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
   const { preference: thinkingPreference, setPreference: setThinkingPreference } = useAiThinkingPreference();
   const autoOption = autoFlag || pickerAutoFlag
-    ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID)
+    ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID) ??
+      (aiSelected?.id === AUTO_MODEL_OPTION_ID ? aiSelected : undefined)
     : undefined;
   const autoSelected = Boolean(autoOption) && aiSelected?.id === AUTO_MODEL_OPTION_ID;
   const defaultContext = useAiDefaultModelContext(settingsTeamId);

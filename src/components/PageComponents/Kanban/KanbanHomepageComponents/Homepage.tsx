@@ -114,6 +114,7 @@ const HomePage = ({
   const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG);
   const archiveShortcutAlwaysRuns = useFlag(HTPR_8427_KANBAN_ARCHIVE_SHORTCUT_FLAG);
   const bulkArchiveInstantHide = useFlag(HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG);
+  const bulkArchiveBatch = useFlag("htpr-9066-bulk-archive");
   const store = useStore();
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
   const getFocusedTaskId = useCallback(
@@ -157,19 +158,25 @@ const HomePage = ({
       ? getAppliedSearchedTasks(sectionsToDisplay, kw)
       : sectionsToDisplay;
 
+    const pendingFiltered = bulkArchiveBatch
+      ? searchedSections.map((section) => ({
+          ...section,
+          items: (section.items ?? []).filter((task) => !pendingBulkArchiveIds.has(task.id)),
+        }))
+      : searchedSections;
     if (
       !runningOnly ||
       !_currentProject.timeTrackingEnabled ||
       !timerDataReady
     ) {
-      return searchedSections;
+      return pendingFiltered;
     }
 
-    const runningFiltered = searchedSections.map((section) => ({
+    const runningFiltered = pendingFiltered.map((section) => ({
       ...section,
       items: (section.items ?? []).filter((task) => runningTimers.has(task.id)),
     }));
-    if (pendingBulkArchiveIds.size === 0) return runningFiltered;
+    if (bulkArchiveBatch || pendingBulkArchiveIds.size === 0) return runningFiltered;
     return runningFiltered.map((section) => ({
       ...section,
       items: (section.items ?? []).filter(
@@ -186,6 +193,7 @@ const HomePage = ({
     searchKeyword,
     searchProjectId,
     pendingBulkArchiveIds,
+    bulkArchiveBatch,
   ]);
   const hiddenSectionIndexes = useMemo(() => {
     const kw = searchProjectId === _currentProject.id ? searchKeyword.trim() : "";
@@ -699,7 +707,6 @@ const HomePage = ({
   const archiveSelectedBatchForBulk = useCallback(
     async (tasks: ITask[]) => {
       const pendingIds = new Set(tasks.map((task) => task.id));
-      setPendingBulkArchiveIds(pendingIds);
       const tasksBySection = new Map<number, number[]>();
       for (const task of tasks) {
         const sourceSectionId = getBulkSourceSectionId(task);
@@ -708,6 +715,7 @@ const HomePage = ({
         taskIds.push(task.id);
         tasksBySection.set(sourceSectionId, taskIds);
       }
+      setPendingBulkArchiveIds((current) => new Set([...current, ...pendingIds]));
 
       for (const [sectionId, taskIds] of tasksBySection) {
         await removeFromListWithStatus(
@@ -722,13 +730,26 @@ const HomePage = ({
 
       const failures: ITask[] = [];
       const successes: ITask[] = [];
-      for (const task of tasks) {
+      if (bulkArchiveBatch) {
         try {
-          await globalAPIHandlers.archiveTask(task.id, "Archive");
-          successes.push(task);
+          const { data } = await axios.post<{ archivedIds: number[] }>("/api/tasks/bulk-archive", {
+            ids: tasks.map((task) => task.id), projectId: _currentProject.id,
+          });
+          const archivedIds = new Set(data.archivedIds);
+          for (const task of tasks) (archivedIds.has(task.id) ? successes : failures).push(task);
         } catch (error) {
-          console.error("Kanban bulk archive failed", task.id, error);
-          failures.push(task);
+          console.error("Kanban bulk archive failed", error);
+          failures.push(...tasks);
+        }
+      } else {
+        for (const task of tasks) {
+          try {
+            await globalAPIHandlers.archiveTask(task.id, "Archive");
+            successes.push(task);
+          } catch (error) {
+            console.error("Kanban bulk archive failed", task.id, error);
+            failures.push(task);
+          }
         }
       }
 
@@ -751,7 +772,7 @@ const HomePage = ({
       }
 
       try {
-        if (failures.length > 0 && currentUser?.id) {
+        if ((bulkArchiveBatch || failures.length > 0) && currentUser?.id) {
           await reconcileActiveBoardTasks(
             queryClient,
             _currentProject.id,
@@ -770,6 +791,7 @@ const HomePage = ({
     [
       _currentProject.id,
       currentUser.id,
+      bulkArchiveBatch,
       getBulkSourceSectionId,
       queryClient,
       registerArchiveUndo,
