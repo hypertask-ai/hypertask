@@ -20,7 +20,7 @@ async function readFindings(token, request = fetch) {
     if (!response.ok) throw new Error(`Vercel findings read: HTTP ${response.status}`);
     let page;
     try { page = await response.json(); } catch { throw new Error('Vercel findings read: invalid JSON'); }
-    if (!Array.isArray(page?.findings) || !Object.hasOwn(page, 'nextCursor') || !(page.nextCursor === null || typeof page.nextCursor === 'string')) {
+    if (!Array.isArray(page?.findings) || !(page.nextCursor == null || typeof page.nextCursor === 'string')) {
       throw new Error('Vercel findings read: unexpected schema');
     }
     findings.push(...page.findings);
@@ -39,7 +39,9 @@ function formatFindings(findings) {
         !Number.isSafeInteger(finding.number) || finding.number < 1 ||
         !['open', 'closed', 'dismissed'].includes(finding.status) ||
         !['critical', 'high', 'medium', 'low'].includes(finding.severity) ||
-        finding.target?.kind !== 'project' || finding.target.id !== PROJECT_ID || finding.environment !== 'production') {
+        typeof finding.target?.kind !== 'string' || finding.target.kind === '' ||
+        typeof finding.target?.id !== 'string' || finding.target.id === '' ||
+        (finding.environment != null && finding.environment !== 'production')) {
       throw new Error('Vercel findings read: unexpected finding metadata');
     }
     const resolvedSha = finding.resolvedIn?.commitSha;

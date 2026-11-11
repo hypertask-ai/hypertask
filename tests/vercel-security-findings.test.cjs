@@ -66,7 +66,19 @@ test('refuses denied, challenged, malformed and incomplete responses', async () 
   }
   await assert.rejects(readFindings('token', async () => ({ ok: true, json: async () => { throw Error('<html>'); } })), /invalid JSON/);
   await assert.rejects(readFindings('token', async () => ({ ok: true, json: async () => ({}) })), /schema/);
+  await assert.rejects(readFindings('token', async () => ({ ok: true, json: async () => ({ findings: [], nextCursor: 42 }) })), /schema/);
   await assert.rejects(readFindings('token', async () => page([], 'same')), /incomplete pagination/);
+});
+
+test('accepts a final page with no cursor and findings for the project or its repositories', async () => {
+  let calls = 0;
+  const result = await readFindings('fixture-token', async () => {
+    calls += 1;
+    return { ok: true, json: async () => ({ findings: [finding({ target: { kind: 'repository', id: 'repo_123' }, environment: undefined })] }) };
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.length, 1);
+  assert.match(formatFindings(result), /#12 01ARZ3NDEKTSV4RRFFQ69G5FAV closed medium resolved-in=a{40}/);
 });
 
 test('reports empty results distinctly and allows only state metadata', () => {
@@ -75,7 +87,7 @@ test('reports empty results distinctly and allows only state metadata', () => {
   assert.match(output, /#12 01ARZ3NDEKTSV4RRFFQ69G5FAV closed medium resolved-in=a{40}/);
   assert.match(output, /open medium/);
   assert.doesNotMatch(output, /secret-title|secret-description|secret-code/);
-  for (const override of [{ findingId: '<script>' }, { status: 'unknown' }, { severity: 'unknown' }, { environment: 'preview' }, { target: { id: 'other-project' } }, { resolvedIn: { commitSha: 'secret' } }]) {
+  for (const override of [{ findingId: '<script>' }, { status: 'unknown' }, { severity: 'unknown' }, { environment: 'preview' }, { target: { kind: '', id: 'x' } }, { target: { id: 'other-project' } }, { resolvedIn: { commitSha: 'secret' } }]) {
     assert.throws(() => formatFindings([finding(override)]));
   }
   const report = formatFindings(Array.from({ length: 150 }, (_, i) => finding({ number: i + 1 })));
