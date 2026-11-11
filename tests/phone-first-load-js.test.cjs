@@ -98,6 +98,7 @@ test("inbox content remains identical, with parser code needed only by seeded se
     "@/lib/flags/definitions/htpr-7582-agent-access-request": { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG: "htpr-7582-agent-access-request" },
     "@/lib/flags/definitions/htpr-8264-inbox-row-fill": { HTPR_8264_INBOX_ROW_FILL_FLAG: "htpr-8264-inbox-row-fill" },
     "@/lib/flags/definitions/htpr-8264-inbox-name-column": { HTPR_8264_INBOX_NAME_COLUMN_FLAG: "htpr-8264-inbox-name-column" },
+    "@/lib/flags/definitions/htpr-9076-narrow-inbox-tabs": { HTPR_9076_NARROW_INBOX_TABS_FLAG: "htpr-9076-narrow-inbox-tabs" },
     "@/lib/inbox/inboxRowFill": { buildInboxRowFillParts: () => [], clipInboxPreview: text => text, INBOX_ROW_FILL_FALLBACK_TEXT: "No comments or description yet" },
     "next/link": { default: noop },
     "@/models/model": {},
