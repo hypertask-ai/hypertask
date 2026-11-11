@@ -206,7 +206,7 @@ function createPageReplay({ corpus, tokenize }) {
         return request === "@/lib/prisma" ? stub.default : stub;
       }
       if (request === "@/utils/controllers/turbopuffer/pageSearch") return load("src/utils/controllers/turbopuffer/pageSearch.ts");
-      if (request.startsWith("@/lib/flags/definitions/")) return load(`${request.slice(2)}.ts`);
+      if (request.startsWith("@/lib/flags/definitions/")) return load(`src/${request.slice(2)}.ts`);
       if (["crypto", "node-html-parser"].includes(request)) return require(request);
       throw new Error(`Unexpected production dependency: ${request} (${file})`);
     };
