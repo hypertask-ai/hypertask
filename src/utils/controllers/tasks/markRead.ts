@@ -1,6 +1,5 @@
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { waitUntil } from "@vercel/functions";
 
 const isPrismaError = (error: unknown, ...codes: string[]) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -11,21 +10,6 @@ const isMissingTask = (taskId: number) =>
     .findUnique({ where: { id: taskId }, select: { id: true } })
     .then((task) => !task)
     .catch(() => false);
-
-const requestSummaryRefreshOnOpen = (taskId: number) => {
-  const refresh = import("@/app/api/ai/_lib/taskSummaryFreshness")
-    .then(({ requestTaskSummaryRefreshOnView }) =>
-      requestTaskSummaryRefreshOnView({ taskId })
-    )
-    .catch((error) =>
-      console.warn("[task-summary] Refresh on open failed", taskId, error)
-    );
-  try {
-    waitUntil(refresh);
-  } catch {
-    void refresh;
-  }
-};
 
 export const markTaskRead = async (taskId: number, userId: number) => {
   if (!Number.isFinite(taskId) || !Number.isFinite(userId)) {
@@ -67,8 +51,6 @@ export const getTaskReadStateLastReadAt = async (
   userId: number
 ) => {
   if (!Number.isFinite(taskId) || !Number.isFinite(userId)) return null;
-
-  requestSummaryRefreshOnOpen(taskId);
 
   const readState = await prisma.taskReadState.findUnique({
     where: {

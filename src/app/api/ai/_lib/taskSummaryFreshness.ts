@@ -11,15 +11,9 @@ const staleMarkerKey = (taskId: number) => `ai-summary:stale:${taskId}`;
 const viewRefreshLockKey = (taskId: number) => `ai-summary:view-refresh:${taskId}`;
 const viewRefreshJobId = (taskId: number) => `ai-summary-view-for-taskId:${taskId}`;
 
-export type SummaryOnViewDecision =
-  | "fresh"
-  | "coalesced"
-  | "scheduled"
-  | "unavailable";
+export type SummaryOnViewDecision = "off" | "fresh" | "coalesced" | "scheduled" | "unavailable";
 
-export async function taskSummaryOnViewEnabled(
-  userId: number | null | undefined,
-): Promise<boolean> {
+export async function taskSummaryOnViewEnabled(userId: number | null | undefined) {
   if (!userId) return false;
   try {
     if (await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, userId)) return true;
@@ -90,7 +84,9 @@ export async function clearTaskSummaryStaleMarker(
 
 export async function requestTaskSummaryRefreshOnView(args: {
   taskId: number;
+  ownerUserId?: number | null;
 }): Promise<SummaryOnViewDecision> {
+  if (!(await taskSummaryOnViewEnabled(args.ownerUserId))) return "off";
   if (!(await readTaskSummaryStaleMarker(args.taskId))) return "fresh";
 
   const redis = await getRedis().catch((error) => {
@@ -125,10 +121,4 @@ export async function requestTaskSummaryRefreshOnView(args: {
     console.error("[taskSummaries] Could not refresh summary on view for task", args.taskId, error);
     return "unavailable";
   }
-}
-
-export async function shouldPregenerateTeamSummariesOnCheckout(
-  billingUserId: number | null | undefined,
-): Promise<boolean> {
-  return !(await taskSummaryOnViewEnabled(billingUserId));
 }

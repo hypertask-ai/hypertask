@@ -33,20 +33,30 @@ function memoryRedis() {
   };
 }
 
-function harness({ enabledFor = [], extraFlags = [] } = {}) {
+function harness({ enabledFor = [], extraFlags = [], owners = {} } = {}) {
   const jobs = [];
   const redis = memoryRedis();
   const flags = {
     isFeatureEnabled: async (key, userId) =>
       key === flagKey ? enabledFor.includes(userId) : extraFlags.includes(key),
   };
-  const qstash = {
-    scheduleJobById: async (job) => { jobs.push(job); return { messageId: "job" }; },
+  const prisma = {
+    __esModule: true,
+    default: {
+      task: {
+        findUnique: async ({ where }) =>
+          owners[where.id] === undefined ? null : { userId: owners[where.id] },
+        findMany: async ({ where }) => where.project.teamId === "team-fail"
+          ? Promise.reject(new Error("db down"))
+          : Object.entries(owners).map(([id, userId]) => ({ id: Number(id), userId })),
+      },
+    },
   };
   const stubs = {
-    "@/lib/qstash": qstash,
+    "@/lib/qstash": { scheduleJobById: async (job) => { jobs.push(job); return { messageId: "job" }; } },
     "@/lib/redis": { getRedis: async () => redis },
     "@/lib/flags": flags,
+    "@/lib/prisma": prisma,
     "@/lib/flags/definitions/htpr-7848-summary-on-view": { HTPR_7848_SUMMARY_ON_VIEW_FLAG: flagKey },
   };
   const freshness = loadModule("src/app/api/ai/_lib/taskSummaryFreshness.ts", stubs);
@@ -54,42 +64,49 @@ function harness({ enabledFor = [], extraFlags = [] } = {}) {
     ...stubs,
     "@/app/api/ai/_lib/taskSummaryFreshness": freshness,
   }).default;
-  return { freshness, scheduler, jobs, redis };
-}
-
-function loadSeed(prisma, freshness) {
-  return loadModule("src/app/api/ai/_lib/taskSummaryCheckoutSeed.ts", {
-    "@/lib/prisma": { __esModule: true, default: prisma },
+  const seed = loadModule("src/app/api/ai/_lib/taskSummaryCheckoutSeed.ts", {
+    "@/lib/prisma": prisma,
     "@/app/api/ai/_lib/taskSummaryFreshness": freshness,
   });
+  return { freshness, scheduler, seed, jobs, redis };
 }
 
 test("a burst of changes marks one record and starts no AI run", async () => {
-  const h = harness({ enabledFor: [6] });
+  const h = harness({ enabledFor: [6], owners: { 42: 6 } });
   for (let i = 0; i < 10; i += 1) await h.scheduler({ taskId: 42, ownerUserId: 6 });
   assert.equal(h.jobs.length, 0);
   assert.equal(h.redis.values.get("ai-summary:stale:42"), "10");
   assert.equal(h.redis.ttls.size, 0, "the mark must survive until a refresh");
+  const started = await h.freshness.readTaskSummaryStaleMarker(42);
+  await h.scheduler({ taskId: 42, ownerUserId: 6 });
+  await h.freshness.clearTaskSummaryStaleMarker(42, started);
+  assert.equal(h.redis.values.get("ai-summary:stale:42"), "11");
 });
 
-test("an agent change and an activity-only change still mark out of date", async () => {
-  const h = harness({ enabledFor: [6], extraFlags: ["htpr-8904-agent-automatic-ai"] });
-  await h.scheduler({ taskId: 45, ownerUserId: 6, agentId: "agent-1" });
-  await h.scheduler({ taskId: 46, activityOnlyOwnerId: 6 });
-  assert.equal(h.jobs.length, 0);
+test("the switch follows the ticket owner, not the caller, and agent changes count", async () => {
+  const h = harness({
+    enabledFor: [6],
+    extraFlags: ["htpr-8904-agent-automatic-ai"],
+    owners: { 45: 6, 46: 7, 47: 6 },
+  });
+  await h.scheduler({ taskId: 45, ownerUserId: 7 });
+  await h.scheduler({ taskId: 46, ownerUserId: 6 });
+  await h.scheduler({ taskId: 47, ownerUserId: 6, agentId: "agent-1" });
   assert.equal(h.redis.values.get("ai-summary:stale:45"), "1");
-  assert.equal(h.redis.values.get("ai-summary:stale:46"), "1");
+  assert.equal(h.redis.values.get("ai-summary:stale:47"), "1");
+  assert.equal(h.redis.values.has("ai-summary:stale:46"), false);
+  assert.equal(h.jobs.length, 1);
 });
 
 test("nothing changed means no run, and many opens make exactly one", async () => {
   const quiet = harness({ enabledFor: [6] });
-  assert.equal(await quiet.freshness.requestTaskSummaryRefreshOnView({ taskId: 43 }), "fresh");
+  assert.equal(await quiet.freshness.requestTaskSummaryRefreshOnView({ taskId: 43, ownerUserId: 6 }), "fresh");
   assert.equal(quiet.jobs.length, 0);
-  const h = harness({ enabledFor: [6] });
-  await h.scheduler({ taskId: 42, ownerUserId: 6 });
+  const h = harness({ enabledFor: [6], owners: { 42: 6 } });
+  await h.scheduler({ taskId: 42 });
   const decisions = [];
   for (let i = 0; i < 3; i += 1) {
-    decisions.push(await h.freshness.requestTaskSummaryRefreshOnView({ taskId: 42 }));
+    decisions.push(await h.freshness.requestTaskSummaryRefreshOnView({ taskId: 42, ownerUserId: 6 }));
   }
   assert.deepEqual(decisions, ["scheduled", "coalesced", "coalesced"]);
   assert.equal(h.jobs.length, 1);
@@ -97,48 +114,34 @@ test("nothing changed means no run, and many opens make exactly one", async () =
   assert.equal(h.jobs[0].jobId, "ai-summary-view-for-taskId:42");
 });
 
-test("a change during a run keeps its mark until the next run clears it", async () => {
-  const h = harness({ enabledFor: [6] });
-  await h.scheduler({ taskId: 42, ownerUserId: 6 });
-  await h.scheduler({ taskId: 42, ownerUserId: 6 });
-  const started = await h.freshness.readTaskSummaryStaleMarker(42);
-  await h.scheduler({ taskId: 42, ownerUserId: 6 });
-  await h.freshness.clearTaskSummaryStaleMarker(42, started);
-  assert.equal(h.redis.values.get("ai-summary:stale:42"), "3");
-  await h.freshness.clearTaskSummaryStaleMarker(42, "3");
-  assert.equal(h.redis.values.has("ai-summary:stale:42"), false);
+test("switching the flag off stops the on-view run for an existing mark", async () => {
+  const h = harness({ enabledFor: [], owners: { 48: 6 } });
+  await h.freshness.markTaskSummaryStale(48);
+  assert.equal(await h.freshness.requestTaskSummaryRefreshOnView({ taskId: 48, ownerUserId: 6 }), "off");
+  assert.equal(h.jobs.length, 0);
 });
 
 test("the switch off keeps the scheduled run and marks nothing", async () => {
-  const h = harness({ enabledFor: [] });
+  const h = harness({ enabledFor: [], owners: { 44: 7 } });
   await h.scheduler({ taskId: 44, ownerUserId: 7 });
   assert.deepEqual(h.jobs.map((job) => job.body), [{ taskId: 44 }]);
   assert.equal(h.jobs[0].jobId, "ai-summary-for-taskId:44");
   assert.equal(h.redis.values.has("ai-summary:stale:44"), false);
-  assert.equal(await h.freshness.requestTaskSummaryRefreshOnView({ taskId: 44 }), "fresh");
-  assert.equal(h.jobs.length, 1);
 });
 
-test("a checkout marks the team's tickets instead of generating summaries", async () => {
-  const h = harness({ enabledFor: [6] });
-  const asked = [];
-  const seed = loadSeed({ task: { findMany: async (args) => {
-    asked.push(args);
-    return [{ id: 51 }, { id: 52 }];
-  } } }, h.freshness);
-  assert.equal(await h.freshness.shouldPregenerateTeamSummariesOnCheckout(6), false);
-  assert.equal(await seed.seedTeamSummaryRefreshesOnCheckout("team-1"), 2);
-  assert.deepEqual(asked[0].where.project, { teamId: "team-1" });
-  assert.equal(h.redis.values.get("ai-summary:stale:51"), "1");
-  assert.equal(h.redis.values.get("ai-summary:stale:52"), "1");
-  assert.equal((await harness({ enabledFor: [] }).freshness
-    .shouldPregenerateTeamSummariesOnCheckout(6)), true);
-});
+test("a checkout marks in-scope tickets and asks for the backfill otherwise", async () => {
+  const inScope = harness({ enabledFor: [6], owners: { 51: 6, 52: 6 } });
+  assert.equal(await inScope.seed.seedTeamSummaryRefreshesOnCheckout("team-1"), true);
+  assert.equal(inScope.redis.values.get("ai-summary:stale:51"), "1");
+  assert.equal(inScope.redis.values.get("ai-summary:stale:52"), "1");
+  assert.equal(inScope.jobs.length, 0);
 
-test("a failed seed reports zero so the caller can ask for today's backfill", async () => {
-  const h = harness({ enabledFor: [6] });
-  const seed = loadSeed({ task: { findMany: async () => { throw new Error("db down"); } } }, h.freshness);
-  assert.equal(await seed.seedTeamSummaryRefreshesOnCheckout("team-1"), 0);
+  const mixed = harness({ enabledFor: [6], owners: { 53: 6, 54: 7 } });
+  assert.equal(await mixed.seed.seedTeamSummaryRefreshesOnCheckout("team-1"), false);
+  assert.equal(mixed.redis.values.size, 0);
+
+  const broken = harness({ enabledFor: [6] });
+  assert.equal(await broken.seed.seedTeamSummaryRefreshesOnCheckout("team-fail"), false);
 });
 
 test("the switch stays owner-and-QA only, reversible and marked as money", () => {

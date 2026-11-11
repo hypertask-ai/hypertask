@@ -9,7 +9,6 @@ import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
 import type { ISubscriptionPlan } from "@/models/model";
 import generateSummaryAfterUpsertionReminder from "@/pages/api/queues/AiSummary/generateSummaryAfterUpsertionReminder";
-import { shouldPregenerateTeamSummariesOnCheckout } from "@/app/api/ai/_lib/taskSummaryFreshness";
 import { convertTimestampToDate } from "@/utils/helperFunctions/helperFunctions";
 
 import { applySubscriptionUpdatedWithTeamLockHeld } from "./onSubscriptionUpdated";
@@ -161,23 +160,12 @@ const sessionOnSuccess = async (
       return createdPlan;
     });
 
-    if (await shouldPregenerateTeamSummariesOnCheckout(team.googleAccount.userId)) {
-      generateSummaryAfterUpsertionReminder(team.id);
-    } else {
-      const seeded = await import("@/app/api/ai/_lib/taskSummaryCheckoutSeed")
-        .then(({ seedTeamSummaryRefreshesOnCheckout }) =>
-          seedTeamSummaryRefreshesOnCheckout(team.id)
-        )
-        .catch((error) => {
-          console.error(
-            "[stripe] Could not mark team summaries out of date for team",
-            team.id,
-            error,
-          );
-          return 0;
-        });
-      if (seeded === 0) generateSummaryAfterUpsertionReminder(team.id);
-    }
+    const seeded = await import("@/app/api/ai/_lib/taskSummaryCheckoutSeed")
+      .then(({ seedTeamSummaryRefreshesOnCheckout }) =>
+        seedTeamSummaryRefreshesOnCheckout(team.id)
+      )
+      .catch(() => false);
+    if (!seeded) generateSummaryAfterUpsertionReminder(team.id);
     assertHeld();
     await completePendingStripeCancellation(storedPlan, assertHeld);
   });
