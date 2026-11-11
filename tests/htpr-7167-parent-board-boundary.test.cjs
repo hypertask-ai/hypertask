@@ -283,7 +283,7 @@ function readerStubs(prisma) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@prisma/client": client,
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags": { isFeatureEnabled: async () => false, featureFlagsForUser: async () => ({}) },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}), getProjectWhere: () => ({}) },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), isAgentVisibleToUser: () => false, accessibleAgentWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/lib/agents/publicAgent": { projectPublicAgent: () => null, redactAgentIdentitiesForPublicShare: (value) => value },

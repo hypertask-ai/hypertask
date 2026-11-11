@@ -43,4 +43,11 @@ assert.deepEqual(
   ["mine"],
 );
 
+const share = require("node:fs").readFileSync(
+  require("node:path").join(__dirname, "..", "src/utils/controllers/share/getProject.ts"),
+  "utf8",
+);
+assert.match(share, /featureFlagsForUser\(inviteObj\.userId\)/);
+assert.match(share, /tagHideFilterEnabled: flags\[HTPR_8171_HIDE_TAGS_FLAG\] === true/);
+
 console.log("HIDE-TAG-OK");
