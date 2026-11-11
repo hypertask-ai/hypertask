@@ -170,7 +170,7 @@ elif args[0] == 'api':
                'html_url': 'https://example.invalid/run'}
         print(json.dumps({'check_runs': [] if missing else [run]}))
     elif '/compare/' in endpoint:
-        print('0')
+        print(os.environ.get('BEHIND', '0'))
     elif '/statuses/' in endpoint:
         print('{}')
     elif '/actions/jobs/' in endpoint:
@@ -218,7 +218,8 @@ else:
             self.assertIn('passed before that on an older production', result.stderr.decode())
         self.env['SHIP_BASE'] = 'production'
         for config, message in (({'MISSING_HEAD': '1'}, 'ci-tests is missing on head'),
-                                ({'READ_ERROR': '/commits/production/'}, 'cannot read ci-tests')):
+                                ({'READ_ERROR': '/commits/production/'}, 'cannot read ci-tests'),
+                                ({'BEHIND': '2', 'PRODUCTION': 'success'}, 'is 2 commit(s) behind production')):
             self.env.update(config)
             result = self.call(*args)
             self.assertNotEqual(result.returncode, 0)
@@ -234,10 +235,26 @@ else:
             calls = [json.loads(line) for line in self.log.read_text().splitlines()]
             self.assertTrue(any(call[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]
                                 and 'state=success' in call for call in calls))
+            posted = next(i for i, call in enumerate(calls)
+                          if call[0] == 'api' and '/statuses/' in call[1] and 'state=success' in call)
+            compared = [i for i, call in enumerate(calls) if call[0] == 'api' and '/compare/' in call[1]]
+            self.assertTrue(any(i > posted for i in compared), 'freshness must be read again after the premerge status waits on its lock')
             merges.unlink()
             self.log.unlink()
             for key in config:
                 self.env.pop(key)
+
+    def test_auto_merge_refused(self):
+        self.assertEqual(self.install().returncode, 0)
+        self.fake_checker(0)
+        result = self.call('pr', 'merge', '42', '--auto', '-R', 'hypertask-ai/hypertask')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('--auto is refused', result.stderr.decode())
+        self.assertFalse((self.home / 'input').exists())
+        self.assertFalse(self.log.exists())
+        self.assertEqual(self.call('pr', 'merge', '42', '--disable-auto', '-R', 'hypertask-ai/hypertask').returncode, 0)
+        self.assertEqual(json.loads(self.log.read_text()),
+                         ['pr', 'merge', '42', '--disable-auto', '-R', 'hypertask-ai/hypertask'])
 
     def test_invalid_install_shape_unchanged(self):
         self.wrapper.write_text(self.original.replace('exec $REAL "$@"', 'exec "$REAL" "$@"'))

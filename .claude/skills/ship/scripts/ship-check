@@ -1130,6 +1130,8 @@ PY
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
       out=$(check_fresh "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
+      # The publication above can wait minutes on its lock, so read the base tip again after it.
+      out=$(check_fresh "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
     fi
     # Move to the board's done column, by task move or task update --section: needs merge, deploy and
     # docs (FEATURE/IMPROVE); app tickets also need proof.md.

@@ -108,6 +108,8 @@ def guard(args):
             if repo is not None:
                 raise ValueError('multiple repositories')
             repo = arg.split('=', 1)[1] if arg.startswith('--repo=') else arg[2:].removeprefix('=')
+        elif arg == '--auto':
+            raise ValueError('--auto is refused: a delayed merge can land after production moves, so its checks go stale; merge now, when the guard has just read the branch')
         elif arg in options:
             if arg in values:
                 i += 1
