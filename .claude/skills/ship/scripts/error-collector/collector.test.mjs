@@ -377,7 +377,7 @@ check('tickets', 'routes 2060 to live Backlog, falls back to Todo and refuses ab
 check('tickets', 'retired board state moves to the live infra board and drops its archived tickets', () => withHarness(async h => {
   const seen = new Date(NOW - 1000).toISOString();
   const pending = { board: 4060, service: 'vps-journal', normalized: 'Boom failed', message: 'Boom failed', stack: '', routes: ['/mcp'], count: 3, firstSeen: seen, lastSeen: seen };
-  h.seed({ version: 1, sources: {}, fingerprints: { deadbeefdeadbeef: { ticket: 'YPER4-100', deleted: false, board: 4060, firstSeen: seen, lastSeen: seen, total: 1, routes: [] } }, pending: { cafebabecafebabe: pending }, days: {}, summaries: {}, activities: { 'YPER4-100': { count: 1, since: seen, at: null } }, created: [] });
+  h.seed({ version: 1, sources: {}, fingerprints: { deadbeefdeadbeef: { ticket: 'YPER4-100', deleted: false, board: 4060, firstSeen: seen, lastSeen: seen, total: 1, routes: [] } }, pending: { cafebabecafebabe: pending }, days: {}, summaries: {}, activities: { 'YPER4-100': { count: 1, since: seen, at: null } }, noiseWindows: { cafebabecafebabe: [{ board: 4060, service: 'vps-journal', ts: seen, count: 1, message: 'Boom failed', route: '/mcp', stack: '' }] }, occurrences: { deadbeefdeadbeefcafe: { ticket: 'YPER4-100', queuedAt: seen, text: 'Retained occurrence' } }, created: [] });
   h.config({ sections: [{ id: 4351, section_title: 'Todo', projectId: 2060, deleted: false }] });
   h.events([]);
   await h.run();
@@ -390,6 +390,8 @@ check('tickets', 'retired board state moves to the live infra board and drops it
   assert.deepEqual(Object.keys(h.state().pending), []);
   assert.equal(Object.values(h.state().fingerprints).every(record => record.board === 2060), true);
   assert.deepEqual(Object.keys(h.state().activities), []);
+  assert.ok(Object.values(h.state().noiseWindows).flat().every(event => event.board === 2060));
+  assert.deepEqual(Object.keys(h.state().occurrences), []);
 }));
 
 check('tickets', 'activity aggregates six hours, retries failures and throttles per ticket', () => withHarness(async h => {

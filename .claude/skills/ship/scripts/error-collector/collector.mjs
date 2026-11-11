@@ -110,12 +110,16 @@ export function migrateBoards(state) {
   for (const record of Object.values(state.stale ?? {})) {
     record.board = liveBoard(record.board);
   }
+  for (const events of Object.values(state.noiseWindows ?? {})) {
+    for (const event of events) event.board = liveBoard(event.board);
+  }
   for (const [fp, record] of Object.entries(state.fingerprints)) {
     if (!RETIRED_BOARDS.has(record.board)) continue;
     retired.add(record.ticket);
     delete state.fingerprints[fp];
   }
   for (const ticket of retired) delete state.activities?.[ticket];
+  for (const [id, occurrence] of Object.entries(state.occurrences ?? {})) if (retired.has(occurrence.ticket)) delete state.occurrences[id];
   return state;
 }
 
