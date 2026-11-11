@@ -7,6 +7,8 @@ const bot = 'chatgpt-codex-connector[bot]';
 const badge = level => `![P${level} Badge](https://img.shields.io/badge/P${level}-orange) Title`;
 const pr = extra => ({ headOid: head, reviews: [], comments: [], ...extra });
 const review = (comments, extra) => ({ author: bot, commit: head, body: 'Codex Review', url: 'https://example.test/r/1', comments, ...extra });
+const older = 'b'.repeat(40);
+const inline = (body, commit) => ({ body, commit });
 const stateComment = (code_review, extra) => ({
   author: bot, url: 'https://example.test/c/1', ...extra,
   body: `<!-- codex-review-state:v1 ${JSON.stringify({ code_review })} -->`,
@@ -28,8 +30,28 @@ test('P2-only findings and findingless reviews pass', () => {
 });
 
 test('reviews of an older commit or by someone else are ignored', () => {
-  assert.equal(stateOf({ reviews: [review([badge(1)], { commit: 'b'.repeat(40) })] }), 'pending');
+  assert.equal(stateOf({ reviews: [review([badge(1)], { commit: older })] }), 'pending');
   assert.equal(stateOf({ reviews: [review([], { author: 'someone' })] }), 'pending');
+});
+
+test('a P1 inline comment on the head fails even when its review is on an older commit', () => {
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), head)], { commit: older })] }), 'failure');
+});
+
+test('a P2-only inline comment from an older review on the head passes', () => {
+  assert.equal(stateOf({ reviews: [review([inline(badge(2), head)], { commit: older })] }), 'success');
+});
+
+test('an inline comment on an older commit is not attributed to the head', () => {
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), older)], { commit: older })] }), 'pending');
+  assert.equal(stateOf({ reviews: [review([inline(badge(2), head), inline(badge(1), older)], { commit: older })] }), 'success');
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), head), inline(badge(2), older)], { commit: older })] }), 'failure');
+});
+
+test('unread comments on an older review fail closed instead of passing', () => {
+  const unread = review(['Further comments were not read.'], { commit: older });
+  assert.match(evaluate(pr({ reviews: [unread] })).description, /unrated/);
+  assert.equal(stateOf({ reviews: [unread, review([])] }), 'success');
 });
 
 test('a completed Codex summary with no findings passes only for the exact head', () => {

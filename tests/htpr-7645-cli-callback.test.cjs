@@ -18,12 +18,12 @@ const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
 }).outputText;
 const code = 'dummy code+&=?#/%';
 
-async function withPage(query, check, { agentCodeSignIn = false, theme = 'light' } = {}) {
+async function withPage(query, check, { agentCodeSignIn = false, theme = 'light', paintedDark = false } = {}) {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', {
     url: 'https://app.hypertask.ai/cli-auth',
   });
   const previous = new Map(
-    ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [
+    ['window', 'document', 'navigator', 'MutationObserver', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [
       key, Object.getOwnPropertyDescriptor(globalThis, key),
     ]),
   );
@@ -36,10 +36,12 @@ async function withPage(query, check, { agentCodeSignIn = false, theme = 'light'
       window: dom.window,
       document: dom.window.document,
       navigator: dom.window.navigator,
+      MutationObserver: dom.window.MutationObserver,
       IS_REACT_ACT_ENVIRONMENT: true,
     })) {
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
     }
+    if (paintedDark) dom.window.document.documentElement.classList.add('dark');
     const mocks = {
       react: React,
       'next/navigation': {
@@ -179,6 +181,12 @@ test('agent-page repair leaves legacy and flag-off sign-in unchanged', async () 
       assert.ok(container.querySelector('#cli-auth-code').classList.contains('rounded'));
     }, { agentCodeSignIn });
   }
+});
+
+test('flagged agent page uses the light mark when the page is already painted dark', async () => {
+  await withPage('agent=1', async ({ container }) => {
+    assert.equal(container.querySelector('img').getAttribute('src'), '/loginLogoMain.png');
+  }, { agentCodeSignIn: true, theme: 'light', paintedDark: true });
 });
 
 test('flagged agent page uses theme marks and 4px cards, fields, buttons and links', async () => {

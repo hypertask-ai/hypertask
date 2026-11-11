@@ -15,6 +15,12 @@ const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rul
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
 const CONTROL = 'YPER4-354';
+export const PRODUCT_BOARD = 15;
+export const INFRA_BOARD = 2060;
+const LIVE_BOARDS = [PRODUCT_BOARD, INFRA_BOARD];
+const PRODUCT_INTAKE = '4389';
+const RETIRED_BOARDS = new Map([[4060, INFRA_BOARD]]);
+const liveBoard = board => RETIRED_BOARDS.get(board) ?? board;
 const iso = time => new Date(time).toISOString();
 const day = time => iso(time).slice(0, 10);
 const html = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -96,11 +102,32 @@ async function save(state, root) {
   } finally { await fs.rm(temp, { force: true }); }
 }
 
+export function migrateBoards(state) {
+  const retired = new Set();
+  for (const group of Object.values(state.pending)) {
+    group.board = liveBoard(group.board);
+  }
+  for (const record of Object.values(state.stale ?? {})) {
+    record.board = liveBoard(record.board);
+  }
+  for (const events of Object.values(state.noiseWindows ?? {})) {
+    for (const event of events) event.board = liveBoard(event.board);
+  }
+  for (const [fp, record] of Object.entries(state.fingerprints)) {
+    if (!RETIRED_BOARDS.has(record.board)) continue;
+    retired.add(record.ticket);
+    delete state.fingerprints[fp];
+  }
+  for (const ticket of retired) delete state.activities?.[ticket];
+  for (const [id, occurrence] of Object.entries(state.occurrences ?? {})) if (retired.has(occurrence.ticket)) delete state.occurrences[id];
+  return state;
+}
+
 async function load(root) {
   try {
     const state = JSON.parse(await fs.readFile(join(root, 'state.json'), 'utf8'));
     if (state.version !== 1 || !state.sources || !state.fingerprints || !state.pending || !state.days || !state.summaries || !state.activities || !Array.isArray(state.created)) throw new Error('invalid state');
-    return state;
+    return migrateBoards(state);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
     return { version: 1, sources: {}, fingerprints: {}, pending: {}, days: {}, summaries: {}, activities: {}, created: [] };
@@ -121,8 +148,9 @@ export async function loadSources(names) {
 }
 
 function validate(event) {
-  if (!event || (event.ticket != null && typeof event.ticket !== 'boolean') || ![15, 4060].includes(event.board) || typeof event.service !== 'string' || !/^[A-Za-z][A-Za-z0-9 ._-]{0,79}$/.test(event.service) || ['__proto__', 'constructor', 'prototype'].includes(event.service) || typeof event.message !== 'string' || (event.route != null && typeof event.route !== 'string') || (event.stack != null && typeof event.stack !== 'string') || !Number.isFinite(Date.parse(event.ts)) || !Number.isSafeInteger(event.count ?? 1) || (event.count ?? 1) < 1) throw new Error('invalid event');
-  return { ...event, ts: iso(Date.parse(event.ts)), count: event.count ?? 1, route: event.route ?? '', stack: event.stack ?? '' };
+  const board = liveBoard(event?.board);
+  if (!event || (event.ticket != null && typeof event.ticket !== 'boolean') || !LIVE_BOARDS.includes(board) || typeof event.service !== 'string' || !/^[A-Za-z][A-Za-z0-9 ._-]{0,79}$/.test(event.service) || ['__proto__', 'constructor', 'prototype'].includes(event.service) || typeof event.message !== 'string' || (event.route != null && typeof event.route !== 'string') || (event.stack != null && typeof event.stack !== 'string') || !Number.isFinite(Date.parse(event.ts)) || !Number.isSafeInteger(event.count ?? 1) || (event.count ?? 1) < 1) throw new Error('invalid event');
+  return { ...event, board, ts: iso(Date.parse(event.ts)), count: event.count ?? 1, route: event.route ?? '', stack: event.stack ?? '' };
 }
 
 function merge(group, event) {
@@ -212,10 +240,10 @@ export function findRelatedIncident(group, env) {
   return found;
 }
 
-function intake(env) {
-  const value = payload(command('ht', ['GET', '/mcp/projects/4060/sections'], env));
+function intake(env, board) {
+  const value = payload(command('ht', ['GET', `/mcp/projects/${board}/sections`], env));
   if (!Array.isArray(value.sections)) throw new Error('invalid sections');
-  const active = value.sections.filter(section => section.projectId === 4060 && !section.deleted && section.isDone !== true && Number.isSafeInteger(section.id));
+  const active = value.sections.filter(section => section.projectId === board && !section.deleted && section.isDone !== true && Number.isSafeInteger(section.id));
   const section = active.find(section => /^backlog$/i.test(section.section_title)) ?? active.find(section => /^(to[ -]?do|todo)$/i.test(section.section_title));
   if (!section) throw new Error('no intake section');
   return String(section.id);
@@ -289,9 +317,20 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const revived = new Map();
       const previous = Date.parse(state.sources[source.name]);
       const since = iso(Math.max(now - DAY, Math.min(now, Number.isFinite(previous) ? previous : now - DAY)));
-      const until = iso(now);
+      let until = iso(now);
       const fetched = await bounded(source.fetch({ since, until, env, signal, cursor: structuredClone(state.sourceCursors?.[source.name]) }));
       timeLeft(Infinity);
+      if (!Array.isArray(fetched) && fetched?.until != null) {
+        const end = Date.parse(fetched.until);
+        if (!Number.isFinite(end) || end <= Date.parse(since) || end > now) throw new Error('invalid source coverage end');
+        until = iso(end);
+      }
+      let retained = since;
+      if (!Array.isArray(fetched) && fetched?.since != null) {
+        const start = Date.parse(fetched.since);
+        if (!Number.isFinite(start) || start < Date.parse(since) || start > Date.parse(until)) throw new Error('invalid source coverage start');
+        retained = iso(start);
+      }
       const rows = Array.isArray(fetched) ? fetched : fetched?.events;
       let cursor;
       if (!Array.isArray(fetched)) {
@@ -365,14 +404,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const prior = state.coverage[source.name];
       const continuous = prior && prior.until === state.sources[source.name] && previous >= Date.parse(since);
       const coverage = {
-        since: continuous ? prior.since : since, until,
+        since: retained !== since ? retained : (continuous ? prior.since : since), until,
         services: [...new Set([...(prior?.services ?? []), source.name, ...events.map(event => event.service)])],
       };
       const start = Math.max(now - 13 * DAY, Number.isFinite(previous) ? Math.min(previous, Date.parse(since)) : Date.parse(since));
       for (let date = Date.parse(`${day(start)}T00:00:00Z`); date <= now; date += DAY) {
         for (const service of coverage.services) {
           const counts = stats(day(date), service);
-          counts.complete = Date.parse(coverage.since) <= date && now >= date + DAY;
+          counts.complete = Date.parse(coverage.since) <= date && Date.parse(until) >= date + DAY;
         }
       }
       state.coverage[source.name] = coverage;
@@ -417,7 +456,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   }
   await checkpoint();
   let held = 0;
-  let section;
+  const sections = new Map();
   for (const [fp, group] of Object.entries(state.pending)) {
     if (signal.aborted) break;
     try {
@@ -448,7 +487,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           continue;
         }
         if (state.created.length >= cap) { held++; continue; }
-        const column = group.board === 15 ? '4389' : (section ??= intake(env));
+        const column = group.board === PRODUCT_BOARD ? PRODUCT_INTAKE : (sections.get(group.board) ?? sections.set(group.board, intake(env, group.board)).get(group.board));
         const text = description(group, fp);
         let temp;
         const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);
@@ -564,7 +603,7 @@ async function install(env) {
   await fs.mkdir(units, { recursive: true });
   await fs.mkdir(join(home, '.local/state/error-collector'), { recursive: true, mode: 0o700 });
   if (HERE !== target) {
-    for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
+    for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs', 'vercel-hosted.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
     await fs.copyFile(join(HERE, 'ticketDescription.mjs'), join(target, 'ticketDescription.mjs'));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }

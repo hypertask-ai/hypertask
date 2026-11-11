@@ -52,6 +52,7 @@ const nextConfig = {
   serverExternalPackages: [
     "isomorphic-dompurify", "jsdom", "pusher", "aws-sdk",
     "stripe", "posthog-node", "@modelcontextprotocol/sdk", "mcp-handler",
+    "evlog",
   ],
   // The public onboarding page reads this markdown relative to process.cwd().
   outputFileTracingIncludes: {

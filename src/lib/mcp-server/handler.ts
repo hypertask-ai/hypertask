@@ -16,6 +16,7 @@ import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { resolvePortableTools } from './listQueryContract'
 import { selectMcpTools } from './consolidated-tools'
+import { appendAgentChatTools } from './tools/chat-inbox.tool'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
 import { HTPR_7893_BOARD_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7893-board-alias'
@@ -153,7 +154,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     )
     const actAsAgent = await actAsAgentAvailable(ctx)
     const availableTools = await boardAccessCatalog(resolvedTools, ctx)
-    const portableTools = observeFeedbackTools(selectMcpTools(
+    const portableTools = observeFeedbackTools(await appendAgentChatTools(selectMcpTools(
       availableTools,
       true,
       {
@@ -173,7 +174,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
       await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, ctx.user.id),
       await isFeatureEnabled(HTPR_7910_RENAMED_FIELD_HINT_FLAG, ctx.user.id),
       await isFeatureEnabled(HTPR_7934_NEAREST_FIELD_HINT_FLAG, ctx.user.id),
-    ), ctx.user.id)
+    ), ctx), ctx.user.id)
     const unknownToolHint = await isFeatureEnabled(HTPR_8453_UNKNOWN_TOOL_HINT_FLAG, ctx.user.id)
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)

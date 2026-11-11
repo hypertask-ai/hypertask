@@ -84,6 +84,11 @@
     "reason": "HTPR-8265 does not add a request or a provider. It is the same Ctrl+J writer call to Hypertask's own same-origin task writer route; only modelSelected and sourceSelected can now come from the Ctrl+J picker instead of the board default, and that route applies the same team plan, key and BYOK limits to whichever model it receives.",
     "source": "https://app.hypertask.ai/detail/project-15/8265"
   },
+  "src/lib/pullRequests/githubLinkAuth.ts:6733e7778b3d8693e30cd26563956cc65d74fd041a697094e8288278fc97945f": {
+    "maxUsdPerDay": 0,
+    "reason": "HYCI-254 asks GitHub for a one-hour read-only token so pull request checks are not stuck on the shared anonymous limit. GitHub does not bill these reads.",
+    "source": "https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#create-an-installation-access-token-for-an-app"
+  },
   "src/lib/pullRequests/taskPullRequests.ts:0740d7598d70bd9dcd9f21aaab7545bd3941c4fa96937a39b4b8fa0e6ee70073": {
     "maxUsdPerDay": 0,
     "reason": "HTPR-8301 reads a linked pull request's head check runs from the free public GitHub REST API so its check state stops sitting on the pending default. It runs at most once per linked pull request per minute, needs no token and bills nothing; a refused or rate-limited response leaves the stored state untouched.",

@@ -39,6 +39,18 @@ const RAW_TOOL_METADATA = {
       'Shows live per-agent status (active, idle, or offline) and the current task for a team, derived from session heartbeats. Requires team_id; get it from hypertask_get_user_context or hypertask_hello.',
   },
 
+  CHAT_INBOX: {
+    name: buildToolName('chat_inbox'),
+    description:
+      'Lists up to 50 oldest unanswered sidebar chat messages for this agent token. Returns id, sessionId, text and userName. Does not claim the messages. Refreshes the online heartbeat at most every 30 seconds. Call at startup and again on the next run. No separate chat registration is needed.',
+  },
+
+  CHAT_REPLY: {
+    name: buildToolName('chat_reply'),
+    description:
+      'Replies in the same sidebar chat. Use sessionId and id from hypertask_chat_inbox as session_id and reply_to_message_id. Requires this agent token. A repeat of the same reply returns the existing reply.',
+  },
+
   LIST_AGENTS: {
     name: buildToolName('list_agents'),
     description:
@@ -281,7 +293,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   ADD_COMMENT: {
     name: buildToolName('add_comment_to_task'),
     description: DECISIONS_GUIDANCE + ' ' +
-      'Without a kind, agent text goes only to the hidden ticket agent log, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Add, update, or delete a comment. Set has_attachments: true when files will be attached after creation; agents must also choose an explicit kind. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only), pin (pin or unpin a comment at the top of its thread, requires comment_id), star (save or remove your own private star on a comment, requires comment_id). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
+      'An agent comment with no kind is refused and nothing is saved, even for replies or mentions. Resend with kind question, qa or done for people, or use hypertask activity add for the agent log. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Add, update, or delete a comment. Set has_attachments: true when files will be attached after creation; agents must also choose an explicit kind. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only), pin (pin or unpin a comment at the top of its thread, requires comment_id), star (save or remove your own private star on a comment, requires comment_id). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
   },
 
   UPDATE_COMMENT: {

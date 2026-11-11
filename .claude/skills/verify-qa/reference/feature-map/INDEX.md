@@ -31,21 +31,21 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Board invites | [board-invites.md](board-invites.md) | no smoke id; owner resend 200, outsider 403 on `/api/invite/reSendInvite` and `cancelInvite` |
 | Board member list | [board-member-list.md](board-member-list.md) | no smoke id; query `teamId` ignored on `/api/members/getAll` |
 | Board skills | [board-skills.md](board-skills.md) | no smoke id; create one skill from the textarea, prove POST /api/ai/skills 201 and the reload, delete it |
-| Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |
+| Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `node .claude/skills/verify-qa/scripts/board-drive-live.mjs` |
 | CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | live repository visibility, trusted workflow rejection, title binding |
 | Server feature-flag check | [ci-server-feature-flags.md](ci-server-feature-flags.md) | historical first/final CLI replay, server helper and owner-review routing |
 | Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
 | CI tests and parallel checks | [ci-tests.md](ci-tests.md) | hosted job overlap, fail-closed summary, shard execution proof |
 | CLI install commands and login | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots, real install and read-only token-login guided start |
 | Command palette | [command-palette.md](command-palette.md) | no smoke id; `ctrl-j-drive.mjs` hands-free drive, palette rows and Share Task tooltip shots |
-| Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
+| Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `node .claude/skills/verify-qa/scripts/comments-drive-live.mjs` |
 | Create task attachments | [create-task-attachments.md](create-task-attachments.md) | `create-task` covers save only; attachments verify by hand |
 | Board custom instructions | [custom-instructions.md](custom-instructions.md) | QA 985 saved multiline text, reload/reopen, failed and empty saves |
 | Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
 | Desktop human CLI login | [desktop-login.md](desktop-login.md) | QA 985 bearer exchange, shared and legacy route checks, isolated task save, cookie/flag-off/permission controls |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
-| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | no smoke id; agent `ht-flag get` and a refused `ht-flag set` |
+| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | `node .claude/skills/verify-qa/scripts/flags-drive-live.mjs` |
 | Figma connect | [figma-connect.md](figma-connect.md) | none; verify by hand on Settings > Accounts |
 | In-app feedback | [in-app-feedback.md](in-app-feedback.md) | POST /api/feedback on board 15; brain-medium only when the flag is on |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
@@ -67,7 +67,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); suggestions verify by hand |
 | Slack app | [slack-app.md](slack-app.md) | read-only install/support pages and redirects; real workspace parity needs a human |
 | Starred tasks and comments | [starred.md](starred.md) | real document shortcut regression; live tab change, unstar and reload |
-| Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
+| Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `node .claude/skills/verify-qa/scripts/task-drive-live.mjs` |
 | Task share links | [task-share-links.md](task-share-links.md) | no smoke id; no-login 401 and signed-in join checks on `/api/members/share` |
 | Board task templates | [task-templates.md](task-templates.md) | QA 985 settings edit, authoring, saved reload and permission controls |
 | Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | production workflow dispatch, QA-only fixtures and score artifacts |

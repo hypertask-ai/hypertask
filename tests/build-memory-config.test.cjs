@@ -73,6 +73,7 @@ for (const smoke of [false, true]) {
       assert.deepEqual(config.serverExternalPackages, [
         "isomorphic-dompurify", "jsdom", "pusher", "aws-sdk",
         "stripe", "posthog-node", "@modelcontextprotocol/sdk", "mcp-handler",
+        "evlog",
       ]);
       const productionCache = {
         cache: { type: "filesystem", maxMemoryGenerations: Infinity },

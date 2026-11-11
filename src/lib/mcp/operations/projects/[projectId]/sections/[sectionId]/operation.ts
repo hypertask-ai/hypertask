@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 
 import prisma from '@/lib/prisma'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { updateSection, deleteSection } from '@/lib/mcp/sections/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 import { isFeatureEnabled } from '@/lib/flags'
@@ -195,7 +196,8 @@ export async function PATCH(
       where: {
         projectId,
         section: result.section.section_title,
-        status: 'Normal'
+        status: 'Normal',
+        project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
       }
     })
 

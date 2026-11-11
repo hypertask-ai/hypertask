@@ -86,6 +86,7 @@ const ALLOWED_FOR_READ_AGENTS = {
   [`POST ${API}/agents/runs/[id]/stop/route.ts`]: "stops the agent's own run",
   [`POST ${API}/agents/runtime-heartbeat/route.ts`]: "the agent's own runtime heartbeat",
   [`POST ${API}/chat/activity/route.ts`]: "activity lines in the agent's own chat thread",
+  [`POST ${API}/chat/heartbeat/route.ts`]: "refreshes only the authenticated agent's own presence, without changing shared content",
   [`POST ${API}/chat/rooms/messages/[messageId]/handled/route.ts`]: "marks the agent's own delivery as handled",
   [`POST ${API}/cli-error/route.ts`]: "client error telemetry",
   [`POST ${API}/feedback/route.ts`]: "feedback report",

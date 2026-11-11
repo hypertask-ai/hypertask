@@ -299,10 +299,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.filters !== undefined && body.board_filters !== undefined) {
-      return NextResponse.json(
-        { success: false, error: 'Use either filters or board_filters, not both' },
-        { status: 400 }
-      )
+      return viewInputRefusal('Use either filters or board_filters, not both', 'filters')
     }
 
     if (body.subtask_setting !== undefined && !isSubtaskSetting(body.subtask_setting)) {

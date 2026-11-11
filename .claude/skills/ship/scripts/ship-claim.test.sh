@@ -374,6 +374,8 @@ cat > "$D/hold-gh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$HOLD_READS"
 case " $* " in
+  *' api '*'/pulls?'*) [ -n "${HOLD_REST_OPEN:-}" ] || exit 1; cat "$HOLD_REST_OPEN" ;;
+  *' api '*'search/issues'*) [ -n "${HOLD_REST_MERGED:-}" ] || exit 1; cat "$HOLD_REST_MERGED" ;;
   *' --state open '*) [ -z "${HOLD_OPEN_FAIL:-}" ] || exit 1; cat "$HOLD_OPEN" ;;
   *' --state merged '*) [ -z "${HOLD_MERGED_FAIL:-}" ] || exit 1; cat "$HOLD_MERGED" ;;
   *) exit 1 ;;
@@ -731,5 +733,48 @@ done
 SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK_FAIL=1 ./ship-claim YPER4-999 >/dev/null 2>&1
 eq 'failed eligibility read fails closed' "$?" 2
 [ ! -s "$D/log" ] && ok 'failed eligibility read writes nothing' || bad 'failed eligibility read wrote a claim'
+
+cp "$D/valid-board" "$HOLD_BOARD"
+printf '[]' > "$HOLD_OPEN"
+printf '[]' > "$HOLD_MERGED"
+export HOLD_OPEN_FAIL=1 HOLD_REST_OPEN=$D/rest-open.json
+printf '[[]]' > "$HOLD_REST_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST backup permits an empty complete queue' "$?" 0
+jq -n '[[{number:99,title:"HTPR-456 [BUGFIX] Existing work",head:{ref:"runner6/htpr-456"},draft:false}]]' > "$HOLD_REST_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST backup preserves another open PR hold' "$?" 4
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-456 >/dev/null
+eq 'REST backup permits resuming the same PR' "$?" 0
+jq -n '[[{number:7,title:"Other work",head:{ref:"other/work"},draft:false}],
+  [{number:99,title:"HTPR-456 [BUGFIX] Existing work",head:{ref:"runner6/htpr-456"},draft:false}]]' > "$HOLD_REST_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST backup reads ownership on later pages' "$?" 4
+for payload in '{}' '[]' '[{}]' '[[{"number":1}]]' '[[{"number":1}],[{"number":1}]]'; do
+  printf '%s' "$payload" > "$HOLD_REST_OPEN"
+  SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1
+  eq 'REST backup refuses malformed or repeated pages' "$?" 4
+done
+printf '[[]]' > "$HOLD_REST_OPEN"
+export HOLD_MERGED_FAIL=1 HOLD_REST_MERGED=$D/rest-merged.json
+jq -n '{incomplete_results:false,total_count:1,items:[{number:42,title:"HTPR-123 [BUGFIX] Existing work",pull_request:{url:"fixture"}}]}' > "$HOLD_REST_MERGED"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST search preserves unfinished merged work hold' "$?" 4
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-123 >/dev/null
+eq 'REST search permits resuming merged work' "$?" 0
+jq -n '{incomplete_results:false,total_count:0,items:[]}' > "$HOLD_REST_MERGED"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST search complete empty result permits new work' "$?" 0
+for payload in '{}' '{"incomplete_results":true,"total_count":0,"items":[]}' \
+  '{"incomplete_results":false,"total_count":1,"items":[]}' \
+  '{"incomplete_results":false,"total_count":100,"items":[]}' \
+  '{"incomplete_results":false,"total_count":1,"items":[{"number":1,"title":"Issue"}]}'; do
+  printf '%s' "$payload" > "$HOLD_REST_MERGED"
+  : > "$D/log"
+  SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null 2>&1
+  eq 'REST search refuses incomplete results before claiming' "$?" 4
+  [ ! -s "$D/log" ] && ok 'incomplete REST search writes nothing' || bad 'incomplete REST search wrote a claim'
+done
+unset HOLD_OPEN_FAIL HOLD_REST_OPEN HOLD_MERGED_FAIL HOLD_REST_MERGED
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]

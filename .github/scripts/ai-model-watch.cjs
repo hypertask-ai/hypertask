@@ -5,16 +5,113 @@ const { selectWatched, worthFiling } = require("./model-watch-allowlist.cjs");
 
 const APP = "https://app.hypertask.ai";
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-const GUIDANCE = `<p>Follow the update-ai-models skill. Replace the old version in every picker. Migrate saved picks. Check gateway input and output prices. Get a live chat answer after release. New classes and providers need Valentin's yes. Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`;
+const priceLine = (finding) => `Price per million input tokens: ${finding.inputPerMillion == null ? "unknown; check before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.`;
+
+const actionSentences = (finding) => String(finding.action ?? "")
+  .split(/;\s*/)
+  .map((part) => part.trim().replace(/[.\s]+$/, ""))
+  .filter(Boolean)
+  .map((part) => `${part}.`)
+  .join(" ");
+
+const opensWithoutAsking = (finding) => finding.kind === "new-version" && ["openai", "anthropic"].includes(finding.provider);
+const needsValentin = (finding) => finding.kind !== "stale" && !opensWithoutAsking(finding);
+
+const gateSentences = (finding) => {
+  if (finding.kind === "stale") return [];
+  if (finding.inputPerMillion == null) return ["the gateway price is checked"];
+  if (finding.inputPerMillion > 5) return ["HTPR-7746 ships the premium gate"];
+  return [];
+};
+
+const decideFor = (needsYes, gated, subject) => {
+  if (!needsYes) return "nothing";
+  return gated ? `May ${subject} ship once the earlier steps are done?` : `May ${subject} ship?`;
+};
+
+const decisionFor = (finding) => {
+  if (finding.kind === "stale") return "Nothing; a runner removes the stale entry.";
+  const steps = gateSentences(finding);
+  const approval = needsValentin(finding);
+  if (!steps.length && !approval) return "Nothing; a runner ships it.";
+  const lines = steps.map((step) => `${step[0].toUpperCase()}${step.slice(1)} first.`);
+  if (approval) lines.push(steps.length ? "Valentin must then say yes before this model ships." : "Valentin must say yes before this model ships.");
+  return lines.join(" ");
+};
+
+async function refusalDetail(response) {
+  if (typeof response.text !== "function") return "";
+  const body = await response.text().catch(() => "");
+  if (!body) return "";
+  let message = body;
+  try {
+    const parsed = JSON.parse(body);
+    message = parsed.message || parsed.error || body;
+  } catch {
+    message = body;
+  }
+  const flat = String(message).replace(/\s+/g, " ").trim();
+  return flat ? `: ${flat.slice(0, 300)}` : "";
+}
+
+const plainBlock = ({ wanted, affects, course, decide, undo }) => [
+  `<p><strong>What's wrong or wanted:</strong> ${wanted}</p>`,
+  `<p><strong>Who it affects:</strong> ${affects}</p>`,
+  `<p><strong>Recommended course and why:</strong> ${course}</p>`,
+  `<p><strong>What Valentin must decide:</strong> ${decide}</p>`,
+  `<p><strong>How to undo:</strong> ${undo}</p>`,
+].join("");
+
+const plainParts = ({ problem, fix, done, risk, decision }) => [
+  `<p>Problem</p>`,
+  problem,
+  `<p>Fix</p>`,
+  fix,
+  `<p>Done when</p>`,
+  done,
+  `<p>Risk</p>`,
+  risk,
+  `<p>Decision</p>`,
+  decision,
+].join("");
 
 function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
+  const entry = escapeHtml((finding.current ?? []).join(", ") || "none");
+  const decision = decisionFor(finding);
+  const decide = decideFor(needsValentin(finding), gateSentences(finding).length > 0, "this model");
+  const plain = plainBlock({
+    wanted: "A watched model differs from our catalog or the gateway list.",
+    affects: "people who pick a model in chat; the count is unknown.",
+    course: `change the catalog entry. Why: the pickers should offer the models we watch.`,
+    decide,
+    undo: "revert the catalog change and the saved pick migration.",
+  });
+  const parts = plainParts({
+    problem: `<p>Model ${escapeHtml(model)}, class ${escapeHtml(finding.modelClass ?? "unknown")}.</p><p>Reason: ${escapeHtml(finding.reason ?? "not stated")}.</p><p>Catalog now: ${entry}.</p><p>${priceLine(finding)}</p>`,
+    fix: `<p>${escapeHtml(actionSentences(finding))}</p><p>Follow the update-ai-models skill. Replace the old model in every picker.</p><p>Migrate saved picks and check gateway input and output prices.</p>`,
+    done: `<p>A live chat answer uses the new model.</p>`,
+    risk: `<p>Saved picks can break. Undo by reverting the catalog change.</p>`,
+    decision: `<p>${decision}</p>`,
+  });
   return {
     marker,
     title: `AI model ${finding.kind}: ${model} [${marker}]`,
-    description: `<p><strong>${escapeHtml(finding.action)}.</strong></p><p>${escapeHtml(finding.reason)}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p><p>Gateway input price per million tokens: ${finding.inputPerMillion === null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.</p>${GUIDANCE}`,
+    description: `${plain}<hr>${parts}`,
   };
+}
+
+function rollupGate(findings) {
+  const gated = findings.filter((finding) => finding.inputPerMillion == null || finding.inputPerMillion > 5);
+  const needsYes = findings.some(needsValentin);
+  const noun = findings.length > 1 ? "these model classes" : "this model class";
+  const classes = findings.length > 1 ? "these classes" : "this class";
+  const wait = `${gated.length} of these wait for the price check or HTPR-7746.`;
+  const lines = needsYes
+    ? [gated.length && wait, gated.length ? "Valentin must then say yes before they ship." : `Valentin must say yes before ${classes} can ship.`].filter(Boolean)
+    : [gated.length && wait, gated.length ? "Nothing else; a runner ships the rest." : "Nothing; a runner ships these classes."].filter(Boolean);
+  return { decide: decideFor(needsYes, gated.length > 0, noun), decision: lines.join(" ") };
 }
 
 function rollupTicket(findings, now = new Date()) {
@@ -22,11 +119,26 @@ function rollupTicket(findings, now = new Date()) {
   const families = [...new Set(models.map((model) => identity(model).family))].sort();
   const fingerprint = createHash("sha256").update(models.join("\n")).digest().readBigUInt64BE(0).toString().slice(0, 9);
   const marker = `modelwatchrollup-${families.slice(0, 3).join("-")}-${models.length}-${fingerprint}`;
-  const items = findings.map((finding) => `<li><code>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}</code>. Gateway input price per million tokens: ${finding.inputPerMillion == null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}. ${escapeHtml(finding.action)}.</li>`).join("");
+  const items = findings.map((finding) => `<li>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}. ${priceLine(finding)} ${escapeHtml(finding.action)}.</li>`).join("");
+  const gate = rollupGate(findings);
+  const plain = plainBlock({
+    wanted: "New model classes are on the gateway and not in our catalog.",
+    affects: "people who pick a model in chat; the count is unknown.",
+    course: "add the classes below to the catalog. Why: people cannot pick a model we do not list.",
+    decide: gate.decide,
+    undo: "revert the catalog change and the saved pick migration.",
+  });
+  const parts = plainParts({
+    problem: `<p>New classes on the gateway: ${findings.length}. None are in our catalog.</p><p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p>`,
+    fix: `<ul>${items}</ul>`,
+    done: `<p>Every model below shows in each picker. A live chat answer uses one.</p>`,
+    risk: `<p>A wrong saved pick is the worst case. Undo by reverting the change.</p>`,
+    decision: `<p>${gate.decision}</p>`,
+  });
   return {
     marker,
     title: `AI model watch new classes [${marker}]`,
-    description: `<p><strong>${findings.length} new model classes are not in our catalog.</strong></p><p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p><ul>${items}</ul>${GUIDANCE}`,
+    description: `${plain}<hr>${parts}`,
   };
 }
 
@@ -53,7 +165,7 @@ async function fileFindings(report, { fetchImpl = fetch, token = process.env.HYP
         ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    if (!response.ok) throw new Error(`Hypertask ticket API returned HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`Hypertask ticket API returned HTTP ${response.status}${await refusalDetail(response)}`);
     const result = await response.json();
     if (result.success !== true) throw new Error("Hypertask ticket API rejected the operation");
     return result;

@@ -121,4 +121,24 @@ export default defineConfig([
       oxlintOwnedRules().map((rule) => [rule, "off"]),
     ),
   },
+  {
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
+    plugins: { import: nextConfigs[0].plugins["import"] },
+    rules: {
+      "import/no-duplicates": "error",
+    },
+  },
+  {
+    files: ["**/*.{js,jsx,mjs,cjs}"],
+    rules: {
+      "no-redeclare": "error",
+    },
+  },
+  {
+    files: ["**/*.{ts,tsx,mts,cts}"],
+    rules: {
+      "no-redeclare": "off",
+      "@typescript-eslint/no-redeclare": "error",
+    },
+  },
 ]);

@@ -11,7 +11,7 @@ import { inlineAttachmentsSchema } from './attachment.validation';
 const config = getConfig();
 
 const commentKindSchema = z.enum(['question', 'qa', 'done']).optional()
-  .describe('Without a kind, agent text goes only to the hidden ticket agent log, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary.');
+  .describe('An agent comment with no kind is refused and nothing is saved, even for replies or mentions. Resend with kind question, qa or done for people, or use hypertask activity add for the agent log. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary.');
 
 const hasAttachmentsSchema = z.boolean().optional()
   .describe('Set true when files will be attached after creation. Agents must also choose kind: question, qa or done.');
