@@ -90,6 +90,31 @@ test("watcher names the prerequisite before shipping each kind of finding", () =
   assert.match(decision({ ...base, provider: "meta", inputPerMillion: 1, action: "ask Valentin before shipping" }), /Valentin says yes or no before this ships\./);
 });
 
+test("watcher keeps internal ids and prerequisites below the plain-language divider", () => {
+  for (const ticket of tickets()) {
+    const [plain, parts = ""] = ticket.description.split("<hr>");
+    assert.doesNotMatch(plain, /\b(?:htpr|hyci)-\d+/i, ticket.title);
+    assert.ok(parts.length > 0, ticket.title);
+    const decide = plain.match(/What Valentin must decide:<\/strong> ([^<]+)</)[1];
+    assert.ok(
+      decide === "nothing" || /\byes or no\b/.test(decide),
+      `${ticket.title}: ${decide}`,
+    );
+  }
+});
+
+test("watcher rollup names the premium gate instead of authorising every class", () => {
+  const base = { kind: "new-class", provider: "meta", modelClass: "llama" };
+  const cheap = { ...base, model: "meta/llama-5", inputPerMillion: 1, action: "ask Valentin before shipping" };
+  const premium = { ...base, model: "meta/llama-5-pro", inputPerMillion: 9, action: "waits for HTPR-7746" };
+  const gated = rollupTicket([cheap, premium], new Date("2026-10-25T12:00:00Z"));
+  assert.match(gated.description.split("<hr>")[1], /Nothing yet; 1 of these wait for the price check or HTPR-7746\./);
+  assert.match(gated.description.split("<hr>")[0], /What Valentin must decide:<\/strong> nothing<\/p>/);
+  const open = rollupTicket([cheap], new Date("2026-10-25T12:00:00Z"));
+  assert.match(open.description.split("<hr>")[1], /Valentin says yes or no to these classes\./);
+  assert.match(open.description.split("<hr>")[0], /What Valentin must decide:<\/strong> yes or no to these model classes\.<\/p>/);
+});
+
 test("watcher reports the board refusal text instead of a bare status code", async () => {
   const { fileFindings } = require("../.github/scripts/ai-model-watch.cjs");
   const finding = everyFinding().find((candidate) => candidate.kind === "new-version");

@@ -63,7 +63,7 @@ function ticketFor(finding) {
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
   const entry = escapeHtml((finding.current ?? []).slice(0, 3).join(", ") || "none");
   const decision = decisionFor(finding);
-  const decide = decision.startsWith("Valentin") ? "yes or no before this model ships." : `${decision[0].toLowerCase()}${decision.slice(1)}`;
+  const decide = decision.startsWith("Valentin") ? "yes or no before this model ships." : "nothing";
   const plain = plainBlock({
     wanted: "A watched model differs from our catalog or the gateway list.",
     affects: "people who pick a model in chat.",
@@ -91,11 +91,15 @@ function rollupTicket(findings, now = new Date()) {
   const fingerprint = createHash("sha256").update(models.join("\n")).digest().readBigUInt64BE(0).toString().slice(0, 9);
   const marker = `modelwatchrollup-${families.slice(0, 3).join("-")}-${models.length}-${fingerprint}`;
   const items = findings.map((finding) => `<li>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}. ${priceLine(finding)} ${escapeHtml(finding.action)}.</li>`).join("");
+  const gated = findings.filter((finding) => finding.inputPerMillion == null || finding.inputPerMillion > 5);
+  const decision = gated.length
+    ? `Nothing yet; ${gated.length} of these wait for the price check or HTPR-7746.`
+    : "Valentin says yes or no to these classes.";
   const plain = plainBlock({
     wanted: "New model classes are on the gateway and not in our catalog.",
     affects: "people who pick a model in chat.",
     course: "add the classes below to the catalog. Why: people cannot pick a model we do not list.",
-    decide: "yes or no to these model classes.",
+    decide: gated.length ? "nothing" : "yes or no to these model classes.",
     undo: "revert the catalog change and the saved pick migration.",
   });
   const parts = plainParts({
@@ -103,7 +107,7 @@ function rollupTicket(findings, now = new Date()) {
     fix: `<ul>${items}</ul>`,
     done: `<p>Every model below shows in each picker. A live chat answer uses one.</p>`,
     risk: `<p>A wrong saved pick is the worst case. Undo by reverting the change.</p>`,
-    decision: `<p>Valentin says yes or no to these classes.</p>`,
+    decision: `<p>${decision}</p>`,
   });
   return {
     marker,
