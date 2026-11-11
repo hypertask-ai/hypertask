@@ -401,16 +401,7 @@ esac
         page = '.claude/skills/verify-qa/reference/feature-map/' + 'fixture.md'
         (self.repo / page).parent.mkdir(parents=True)
         (self.repo / page).write_text('## Gotchas\n\n- Cursor lost after reload.\n  Check the box.\n\n### Proof\n- Not a gotcha.\n')
-        ops = {
-            'pr-drain-picker': [
-                'Dry-run creates or renews a PR claim.',
-                'A failed read returns NONE and admits new work.',
-                "An active owner's PR is offered to another runner."],
-            'runner-pickup': [
-                'Preview changes inbox or ownership state.',
-                'Incomplete reads release an active domain lease.',
-                'A conflicting relabel displaces an active holder.'],
-        }
+        ops = ('pr-drain-picker', 'runner-pickup')
         recipes = SCRIPT.parents[2] / 'verify-qa/reference/ops-map'
         for name in ops:
             target = self.repo / '.claude/skills/verify-qa/reference/ops-map' / f'{name}.md'
@@ -428,10 +419,7 @@ case "$1:$2" in
   *) exit 1 ;;
 esac
 ''')
-        self.write('hypertask', '''#!/usr/bin/env python3
-import json, os, sys
-print(json.dumps({'success':True,'tasks':[{'ticketNumber':'HTPR-7766','boardId':15,'description':os.environ.get('DESCRIPTION', '<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>')}]}))
-''')
+        description = self.env['DESCRIPTION'] = '<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>'
         activity = self.root / 'activity.json'
         builder = dict(id='builder-note', agentId='builder-id', agentName='Runner 1', runId='builder-run', createdAt='2026-11-09T00:00:00Z', text='Proof builder: PR 42')
         activity.write_text(json.dumps([builder]))
@@ -518,9 +506,11 @@ print('recorded')
         self.env['DESCRIPTION'] = nested
         rerun(19)
         self.assertIn('proof ok', self.check('proof', ticket))
-        del self.env['DESCRIPTION']
-        for number, (name, breakage) in enumerate(ops.items(), 20):
+        self.env['DESCRIPTION'] = description
+        for number, name in enumerate(ops, 20):
             with self.subTest(recipe=name):
+                breakage = [line[2:] for line in (recipes / f'{name}.md').read_text().split('## What usually breaks\n')[1].splitlines() if line.startswith('- ')]
+                self.assertTrue(breakage)
                 ops_page = '.claude/skills/verify-qa/reference/ops-map/' + name + '.md'
                 proof.write_text(complete.replace(page, ops_page).split('## What usually breaks')[0]
                                  + '## What usually breaks\n'
