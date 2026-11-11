@@ -16,7 +16,8 @@ const createMentionData = (contextCallback, getProjectId) => {
     },
     shouldShow: ({ editor, transaction }) =>
       Boolean(SuggestionPluginKey.getState(editor.state)?.active) ||
-      Boolean(transaction?.docChanged),
+      (Boolean(transaction?.docChanged) &&
+        !transaction?.getMeta?.("preventUpdate")),
     items: async ({ query }) => {
       try {
         const projectId = getProjectId?.();

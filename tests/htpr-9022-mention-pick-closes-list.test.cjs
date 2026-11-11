@@ -113,14 +113,16 @@ test("escape and exit after a pick do not throw when the picker is gone", () => 
   renderer.onExit();
 });
 
-test("a suggestion only starts from a document change, never from a restored draft", () => {
+test("a suggestion only starts from typing, never from a restored draft", () => {
   const { createMentionData } = harness();
   const suggestion = createMentionData(() => {});
+  const transaction = (docChanged, meta = null) => ({ docChanged, getMeta: (key) => (key === "preventUpdate" ? meta : undefined) });
 
   const idleEditor = { state: { suggestionState: { active: false } } };
-  assert.equal(suggestion.shouldShow({ editor: idleEditor, transaction: { docChanged: false } }), false);
-  assert.equal(suggestion.shouldShow({ editor: idleEditor, transaction: { docChanged: true } }), true);
+  assert.equal(suggestion.shouldShow({ editor: idleEditor, transaction: transaction(false) }), false);
+  assert.equal(suggestion.shouldShow({ editor: idleEditor, transaction: transaction(true) }), true);
+  assert.equal(suggestion.shouldShow({ editor: idleEditor, transaction: transaction(true, true) }), false);
 
   const typingEditor = { state: { suggestionState: { active: true } } };
-  assert.equal(suggestion.shouldShow({ editor: typingEditor, transaction: { docChanged: false } }), true);
+  assert.equal(suggestion.shouldShow({ editor: typingEditor, transaction: transaction(false) }), true);
 });
