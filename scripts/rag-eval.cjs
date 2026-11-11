@@ -14,6 +14,7 @@ const B = 0.75;
 const INDEX_FIELDS = ["title", "ticketNumber", "searchText"];
 const SURFACES = ["rag", "search"];
 const { createProductionRetriever } = require("./rag-eval/production.cjs");
+const { measurePages, validatePageFixtures } = require("./rag-eval/pages.cjs");
 const MODES = ["keyword", "semantic", "hybrid"];
 const readJson = (name) => JSON.parse(readFileSync(join(FIXTURES, name), "utf8"));
 const round = (value) => Math.round(value * 1000) / 1000;
@@ -26,6 +27,10 @@ function fixtureHash() {
 
 function loadFixtures() {
   return { corpus: readJson("corpus.json"), queries: readJson("queries.json") };
+}
+
+function loadPageFixtures() {
+  return { corpus: readJson("pages.json"), queries: readJson("page-queries.json") };
 }
 
 function documents(corpus) {
@@ -181,29 +186,35 @@ function vectorsFor({ corpus, queries }) {
   return vectors;
 }
 
-function printTable(result) {
+function printTable(result, pages) {
   const lines = [`AI search test set: ${result.pairs} pairs over ${result.documents} documents (board ${result.board})`, "", "surface  mode      recall@10  mrr@10  nDCG@10  deleted-in-top10  deleted-canary-leak"];
   for (const [surface, modes] of Object.entries(result.surfaces)) for (const mode of MODES) lines.push(`${surface.padEnd(8)} ${mode.padEnd(9)} ${String(modes[mode].recall10).padEnd(10)} ${String(modes[mode].mrr10).padEnd(7)} ${String(modes[mode].ndcg10).padEnd(8)} ${String(modes[mode].deletedRate).padEnd(17)} ${modes[mode].canaryLeak}`);
+  if (pages) {
+    lines.push("", `Page search test set: ${pages.pairs} pairs over ${pages.pages} pages, plus ${pages.probes} access probes (board ${pages.board})`, "", "surface  mode      recall@10  mrr@10  pages-outside-board-returned");
+    for (const mode of ["literal", "index"]) lines.push(`${"pages".padEnd(8)} ${mode.padEnd(9)} ${String(pages.modes[mode].recall10).padEnd(10)} ${String(pages.modes[mode].mrr10).padEnd(7)} ${pages.modes[mode].leakedPages}`);
+  }
   return lines.join("\n");
 }
 
 async function main(argv) {
   const fixtures = loadFixtures();
+  const pageFixtures = loadPageFixtures();
   if (argv.includes("--check-set")) {
-    const problems = validate(fixtures.corpus, fixtures.queries);
+    const problems = [...validate(fixtures.corpus, fixtures.queries), ...validatePageFixtures(pageFixtures.corpus, pageFixtures.queries)];
     if (problems.length) {
       console.error(problems.join("\n"));
       return 1;
     }
-    console.log(`check-set ok: ${fixtures.queries.pairs.length} pairs, ${fixtures.corpus.tasks.length} tickets, ${fixtures.corpus.canaries.length} deleted canaries`);
+    console.log(`check-set ok: ${fixtures.queries.pairs.length} pairs, ${fixtures.corpus.tasks.length} tickets, ${fixtures.corpus.canaries.length} deleted canaries, ${pageFixtures.queries.pairs.length} page pairs, ${pageFixtures.corpus.pages.length} pages`);
     return 0;
   }
   const vectors = vectorsFor(fixtures);
   const result = await measure(fixtures, vectors);
-  console.log(printTable(result));
-  console.log(`\nReport only; offline ${vectors.model} vectors, not a live Turbopuffer benchmark.`);
+  const pages = await measurePages(pageFixtures, { tokenize });
+  console.log(printTable(result, pages));
+  console.log(`\nReport only; offline ${vectors.model} vectors for tickets, production page-service replay for pages, not a live Turbopuffer benchmark.`);
   const output = argv.indexOf("--output");
-  if (output !== -1) writeFileSync(argv[output + 1], `${JSON.stringify(result, null, 2)}\n`);
+  if (output !== -1) writeFileSync(argv[output + 1], `${JSON.stringify({ ...result, pageSearch: pages }, null, 2)}\n`);
   return 0;
 }
 
@@ -214,4 +225,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { validate, measure, documents, buildIndex, bm25Field, cosineRank, fuse, score, tokenize, loadFixtures, printTable, fixtureHash, vectorsFor, decode };
+module.exports = { validate, measure, documents, buildIndex, bm25Field, cosineRank, fuse, score, tokenize, loadFixtures, loadPageFixtures, printTable, fixtureHash, vectorsFor, decode };

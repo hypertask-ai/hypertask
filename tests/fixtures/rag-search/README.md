@@ -55,10 +55,35 @@ status exclusions must expose a deleted canary; zeroing production task-search
 weights must lose a known keyword answer. A detached copy of retrieval policy
 would fail these controls.
 
+## Pages (HTPR-9017)
+
+`pages.json` holds real page titles and capped plain text exported from project 15
+through the `hypertask pages` CLI, with links and email addresses removed. Two
+invented pages with id 9001 and 9002 belong to a different project: they are
+access probes, never exported client content. `page-queries.json` holds 28
+natural-language questions written from the page text with different words, plus
+two probes that name the outside-board pages.
+
+`scripts/rag-eval/pages.cjs` replays the production `searchPages` entry point. The
+real page service and the real page reader run with only their external
+boundaries substituted: `prisma.page.findMany` filters the fixture rows through
+the same access, archive and Normal-board conditions, the Turbopuffer namespace
+interprets production BM25 weights and the project filter, and the flag resolves
+from the fixture. Two page modes are measured:
+
+- `literal`: today's whole-string match, reached by the production code path when
+the page search flag is off. The query must appear as one substring.
+- `index`: the page index branch of the new reader, with embeddings unavailable so
+it measures the BM25 arm of the same request. This is lexical, not a measurement
+of embedding quality.
+
+The page section reports recall@10, reciprocal rank and how many pages outside
+the board came back. No vectors are used for pages.
+
 ## Reports and limitations
 
 ```bash
-node --test tests/rag-search-eval.test.cjs
+node --test tests/rag-search-eval.test.cjs tests/htpr-9017-page-eval.test.cjs
 node scripts/rag-eval.cjs --check-set
 node scripts/rag-eval.cjs --output rag-search-report.json
 ```
