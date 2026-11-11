@@ -1111,7 +1111,7 @@ for (const entry of ["editor", "chat"]) {
           "@/lib/aiModelOptions": { ...options, getDefaultAiModelOptionForPlan: () => fallback },
           "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (option) => option },
           "@/lib/aiProviders": { resolveTeamProviderEnabled: () => true },
-          "@/lib/aiModelPreferences": { getAiModelPreferenceIds: () => ({}) },
+          "@/lib/aiModelPreferences": { getAiModelPreferenceIds: () => ({}), isAutoModelChoice: () => false },
           "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true, resolveUserFacingModelOption: () => fallback },
           "@/app/api/ai/chat/stream/modelFallback": { previousModelForFailedStream: () => null },
           "@/app/api/ai/_lib/autoModel": { isAutoRequest: () => false },

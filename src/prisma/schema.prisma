@@ -706,6 +706,13 @@ model Htpr7038ModelChoiceResetDone {
   @@map("htpr_7038_model_choice_reset_done")
 }
 
+model Htpr9019ModelChoiceAutoDone {
+  userId              Int      @id @map("user_id")
+  previousPreferences Json? @map("previous_preferences")
+
+  @@map("htpr_9019_model_choice_auto_done")
+}
+
 model Favorites {
   id            String      @id @default(uuid())
   userSettingId String
