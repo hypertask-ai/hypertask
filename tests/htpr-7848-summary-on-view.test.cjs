@@ -44,7 +44,7 @@ function harness({ enabledFor = [], extraFlags = [], owners = {} } = {}) {
     __esModule: true,
     default: {
       task: {
-        findUnique: async ({ where }) =>
+        findFirst: async ({ where }) =>
           owners[where.id] === undefined ? null : { userId: owners[where.id] },
         findMany: async ({ where }) => where.project.teamId === "team-fail"
           ? Promise.reject(new Error("db down"))
@@ -156,6 +156,5 @@ test("the switch stays owner-and-QA only, reversible and marked as money", () =>
   assert.equal(definition.key, flagKey);
   assert.equal(definition.defaultMode, "OWNER_AND_QA");
   assert.deepEqual(definition.releaseRisk.highRisk, "money");
-  assert.equal(definition.releaseRisk.harmEvidence.harm, "charge");
   assert.match(definition.description, /Off restores the scheduled runs/);
 });

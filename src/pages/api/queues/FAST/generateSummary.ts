@@ -27,7 +27,8 @@ function buildJobId(taskId: number) {
 async function summaryOwnerUserId(taskId: number): Promise<number | null> {
   try {
     const { default: prisma } = await import("@/lib/prisma");
-    const task = await prisma.task.findUnique({ where: { id: taskId }, select: { userId: true } });
+    const where = { id: taskId, status: { not: "Deleted" as const } };
+    const task = await prisma.task.findFirst({ where, select: { userId: true } });
     return task?.userId ?? null;
   } catch (error) {
     console.warn("[taskSummaries] Could not read the ticket owner", taskId, error);
