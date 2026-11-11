@@ -13,11 +13,12 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
 import { HTPR_8997_ID_ROW_FLAG } from "@/lib/flags/definitions/htpr-8997-id-row";
 import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-sticky-title";
+import { HTPR_9054_REMOVE_AGENT_CHIP_FLAG } from "@/lib/flags/definitions/htpr-9054-remove-agent-chip-under-title";
+import TaskDetailAgentStatusChip from "@/lib/agentStatus/TaskDetailAgentStatusChip";
+import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
 import useCopyURL from "@/hooks/General/useCopyURL";
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import TaskDetailAgentStatusChip from "@/lib/agentStatus/TaskDetailAgentStatusChip";
-import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
 
 interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
@@ -27,12 +28,13 @@ interface TaskDetailTitleContainerProps {
 
 const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNavigation = false }: TaskDetailTitleContainerProps) => {
   const { currentTask, parsedTask, cachedLayout } = useTaskContext();
-  const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG);
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
   const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
   const idRowFlag = useFlag(HTPR_8997_ID_ROW_FLAG);
   const stickyTitleLine = useFlag(HTPR_8992_STICKY_TITLE_FLAG);
+  const removeHeaderAgentChip = useFlag(HTPR_9054_REMOVE_AGENT_CHIP_FLAG);
+  const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG);
   const { copyTicketNumber } = useCopyURL();
   const isApple = useDeviceContext();
   const ticketNumber = currentTask?.ticketNumber?.toUpperCase();
@@ -91,7 +93,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
           </>
         }
       >
-        {agentPulseDot ? <TaskDetailAgentStatusChip /> : null}
+        {agentPulseDot && !removeHeaderAgentChip ? <TaskDetailAgentStatusChip /> : null}
         {cachedLayout && (_mbl || hasSummary) ? (
           <div data-task-summary-slot className={_mbl ? "h-10 w-full shrink-0" : "h-[21px] w-full shrink-0"}>
             {summary}
