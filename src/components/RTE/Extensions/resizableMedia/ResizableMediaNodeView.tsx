@@ -13,10 +13,12 @@ import {
   IMAGE_FALLBACK_MIME,
 } from "@/utils/helperFunctions/getFileTypeFromUrl";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import "./styles.scss";
 
-const Spinner = () => (
-  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg">
+const Spinner = ({ radiusClass }: { radiusClass: string }) => (
+  <div className={`absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 ${radiusClass}`}>
     <div className="loader animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-white"></div>
   </div>
 );
@@ -351,6 +353,11 @@ export const ResizableMediaNodeView = ({
     setIsAlign(node.attrs.dataAlign);
   }, [node.attrs]);
 
+  const inlineScreenshotCorners = useFlag(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG);
+  const imageRadiusClass = inlineScreenshotCorners ? "rounded-[4px]" : "rounded-lg";
+  const shownMediaType = mediaType ?? node.attrs["media-type"];
+  const loadingRadiusClass = shownMediaType === "video" ? "rounded-lg" : imageRadiusClass;
+
   const currentWidth = node.attrs.width || "300";
   const currentHeight = node.attrs.height || "200";
 
@@ -384,7 +391,7 @@ export const ResizableMediaNodeView = ({
             src={normalizeImageSource(node.attrs.src)}
             onError={() => setImageFailed(true)}
             ref={resizableImgRef as any}
-            className={`rounded-lg ${isLoading ? "opacity-50" : ""}`}
+            className={`${imageRadiusClass} ${isLoading ? "opacity-50" : ""}`}
             alt={node.attrs.alt || node.attrs.src}
             style={{
               width: `${currentWidth}px`,
@@ -415,7 +422,7 @@ export const ResizableMediaNodeView = ({
           </video>
         )}
 
-        {isLoading && <Spinner />}
+        {isLoading && <Spinner radiusClass={loadingRadiusClass} />}
 
         {!isLoading && editor.isEditable && (
           <div
