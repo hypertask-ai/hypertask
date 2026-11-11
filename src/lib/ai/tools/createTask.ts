@@ -149,7 +149,7 @@ export function createCreateTaskTool(context: ToolContext) {
             }
             sectionId = found.id;
           }
-          const sectionCheck = await getSectionForTask(input.project_id, sectionId, user.id);
+          const sectionCheck = await getSectionForTask(input.project_id, sectionId);
           if (sectionCheck.error) {
             return { success: false, error: sectionCheck.error.message };
           }
