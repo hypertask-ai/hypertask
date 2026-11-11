@@ -211,3 +211,34 @@ test("a pass already recorded for today is not scanned again", async () => {
   assert.equal(lib.driftPassRecorded([{ date: "2026-11-10", found: 0 }], "2026-11-11"), false);
   assert.equal(lib.driftPassRecorded([], "2026-11-11"), false);
 });
+
+test("the failure cap counts across pages, not per page", async () => {
+  const repair = load("src/lib/search/runIndexDriftRepair.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/lib/turbopuffer": { default: {}, turbopufferNamespaces: {} },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+  });
+  const tasks = totalTasks(400);
+  let writes = 0;
+  const result = await repair.runIndexDriftRepair(
+    { afterId: 0, found: 0, results: [] },
+    {
+      loadPage: async (afterId, take) => {
+        const next = tasks.filter((task) => task.id > afterId).slice(0, take);
+        return {
+          tasks: next,
+          indexedTasks: new Map(next.map((task) => [task.id, null])),
+          indexedComments: new Map(),
+          batchFull: next.length === take,
+        };
+      },
+      reindexTask: async () => { writes += 1; throw new Error("index down"); },
+      reindexComments: async () => {},
+      today: () => "2026-11-11",
+      now: () => 0,
+    },
+  );
+  assert.equal(result.failed.length, repair.DRIFT_MAX_FAILURES);
+  assert.equal(writes, repair.DRIFT_MAX_FAILURES);
+  assert.equal(result.passComplete, false);
+});

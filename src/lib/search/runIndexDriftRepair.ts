@@ -20,6 +20,7 @@ import {
 export const DRIFT_SCAN_BATCH = 50;
 export const DRIFT_PAGE_CAP = 400;
 export const DRIFT_MAX_REINDEX = 100;
+export const DRIFT_MAX_FAILURES = 20;
 export const DRIFT_TIME_BUDGET_MS = 250_000;
 export const DRIFT_STATE_KEY = "search-index-drift:htpr-9016";
 
@@ -128,6 +129,7 @@ export async function runIndexDriftRepair(
       indexedComments: page.indexedComments,
       batchFull: page.batchFull,
       maxReindex: DRIFT_MAX_REINDEX - reindexed,
+      maxFailures: DRIFT_MAX_FAILURES - failed.length,
       state: current,
       reindexTask: deps.reindexTask,
       reindexComments: deps.reindexComments,
@@ -135,6 +137,7 @@ export async function runIndexDriftRepair(
     current = outcome.state;
     reindexed += outcome.reindexed;
     failed.push(...outcome.failed);
+    if (failed.length >= DRIFT_MAX_FAILURES) break;
     if (outcome.passComplete && outcome.passFound != null) {
       return {
         state: {
