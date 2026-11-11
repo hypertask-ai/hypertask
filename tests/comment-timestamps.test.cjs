@@ -338,7 +338,7 @@ function commentsRouteFixture(editorId, refetch = true) {
     '@/lib/mcp/agents': agents,
   })
   const route = load('src/lib/mcp/operations/comments/operation.ts', {
-    '@/utils/controllers/projects/getAllIncludes': {},
+    '@/utils/controllers/projects/getAllIncludes': require('./helpers/agent-board-scope.cjs').access,
     'next/server': { NextResponse: { json } },
     '@prisma/client': { Prisma: { DbNull: null } },
     '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId: null }), readMcpRouteJsonBody: async (request) => ({ ok: true, body: await request.json() }) },

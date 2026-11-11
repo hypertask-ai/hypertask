@@ -809,7 +809,7 @@ export async function POST(request: NextRequest) {
     }
 
     const taskWithOwner = await prisma.task.findUnique({
-      where: { id: task.id },
+      where: { id: task.id, project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) },
       select: { userId: true, projectId: true, uniqueIndex: true }
     })
 
@@ -1157,7 +1157,7 @@ export async function POST(request: NextRequest) {
         )
 
         const commentWithAttachments = await prisma.comment.findUnique({
-          where: { id: comment.id },
+          where: { id: comment.id, task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } },
           include: commentInclude(user.id, task.projectId)
         })
 
