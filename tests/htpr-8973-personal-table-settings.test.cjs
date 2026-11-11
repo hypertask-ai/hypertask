@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fixture } = require('./helpers/htpr-7166-fixture.cjs');
+const { loadModule } = require('./helpers/loadModule.cjs');
 
 const stack = [{ column: 'priority', direction: 'desc' }, { column: 'updated', direction: 'desc' }];
 const columns = { keys: ['ticket', 'title', 'updated', 'priority'], widths: { updated: 173, title: 420 } };
@@ -110,7 +111,8 @@ test('the table write entry points target the saved view, not its draft or the n
   }) };
   mocks['@/utils/helperFunctions/helperFunctions'].deepCopy = value => structuredClone(value);
   mocks.axios = { post: async (url, body) => { requests.push({ url, body }); return { status: 200, data: h.pv }; } };
-  const hook = h.load('src/hooks/Homepage/Views/useKanbanViews.ts').default(project);
+  mocks['@/lib/boardSync/reconcileActiveBoardQuery'] = {};
+  const hook = loadModule('src/hooks/Homepage/Views/useKanbanViews.ts', mocks).default(project);
   await hook.setTableSortViewAndReturn(project, stack[0], stack);
   await hook.setTableColumnsViewAndReturn(project, columns);
   await hook.setTableSortViewAndReturn(project, stack[0]);
@@ -137,7 +139,7 @@ for (const [name, screen, index] of [
     Object.assign(h.view, { table_sort_stack: sharedStack, table_columns: sharedColumns,
       table_sort_column: 'title', table_sort_direction: 'asc' });
     await h.call({ table_sort_stack: stack, table_columns: columns });
-    const project = await h.project();
+    const project = { id: 17, project_view: h.pv };
     assert.deepEqual(h.helpers.getActiveTableSortStackFromProject(project), stack);
     assert.deepEqual(h.helpers.getActiveTableColumnsFromProject(project), columns);
     const requests = [];
@@ -157,16 +159,8 @@ for (const [name, screen, index] of [
       '@tanstack/react-query': { useQueryClient: () => ({ getQueryData: () => ({ updatedProjects: [project] }) }) },
       '@/hooks/useFlag': { useFlag: () => true },
     };
-    const fs = require('node:fs');
-    const ts = require('typescript');
-    const file = require('node:path').join(__dirname, '../src/components/Modals/ViewModals/SaveViewModal.tsx');
-    const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), { fileName: file, compilerOptions: {
-      module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
-    } }).outputText;
-    const exports = {};
-    new Function('require', 'exports', compiled)(specifier =>
-      specifier in overrides ? { __esModule: true, ...overrides[specifier] } : require(specifier), exports);
-    const modal = exports.default({ project, toggle: () => {} });
+    const { default: SaveViewModal } = loadModule('src/components/Modals/ViewModals/SaveViewModal.tsx', overrides);
+    const modal = SaveViewModal({ project, toggle: () => {} });
     const content = modal.type(modal.props);
     await content.props.onSelect({ id: screen }, index, 'New view');
     assert.equal(requests.length, 1);

@@ -50,6 +50,7 @@ async function clickDelete(status = 200, repeated = false, baseline = false) {
       "@/lib/state": { useRecoilState: atom => React.useState(values[atom]), useRecoilValue: atom => values[atom], useSetRecoilState: () => () => {} },
       "@/hooks/useFlag": { useFlag: () => false },
       "@/lib/flags/keys": { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG: "htpr-7097-deleted-view-leaves-tabs" },
+      "@/lib/table-view/tableViewSettings": load("src/lib/table-view/tableViewSettings.ts"),
       "@/lib/table-view/tableGroupByTag": {
         getActiveTableGroupByFromProject: () => "column",
         buildTableSectionsGroupedByTag: sections => sections,
