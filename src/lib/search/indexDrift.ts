@@ -4,9 +4,15 @@ import {
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 export type DriftPass = { date: string; found: number };
 export type DriftState = { afterId: number; found: number; results: DriftPass[] };
-export type DriftTask = { id: number; title: string; updatedAt: string; commentCount: number };
+export type DriftTask = {
+  id: number; title: string; updatedAt: string; commentCount: number;
+  status: string; ticketNumber: string; uniqueIndex: string; projectId: string;
+};
 export type IndexedTaskTime = { updatedAt: string };
-export type IndexedCommentCopy = { taskTitle: string; taskUpdatedAt: string };
+export type IndexedCommentCopy = {
+  taskTitle: string; taskStatus: string; taskTicketNumber: string;
+  taskUniqueIndex: string; taskProjectId: string;
+};
 export function emptyDriftState(): DriftState {
   return { afterId: 0, found: 0, results: [] };
 }
@@ -22,8 +28,14 @@ export function taskRowDrifted(task: { updatedAt: string }, indexed: IndexedTask
 }
 export function commentCopyDrifted(task: DriftTask, indexed: IndexedCommentCopy | null): boolean {
   if (task.commentCount === 0) return false;
-  if (!indexed || indexed.taskTitle !== task.title) return true;
-  return laterEdit(task.updatedAt, indexed.taskUpdatedAt);
+  if (!indexed) return true;
+  return (
+    indexed.taskTitle !== task.title ||
+    indexed.taskStatus !== task.status ||
+    indexed.taskTicketNumber !== task.ticketNumber ||
+    indexed.taskUniqueIndex !== task.uniqueIndex ||
+    indexed.taskProjectId !== task.projectId
+  );
 }
 export function commentsFollowTaskEdit(args: {
   titleChanged: boolean; status?: unknown; ticketNumber?: unknown; uniqueIndex?: unknown; projectId?: unknown;

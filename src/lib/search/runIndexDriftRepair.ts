@@ -54,7 +54,10 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
     where: { id: { gt: afterId } },
     orderBy: { id: "asc" },
     take,
-    select: { id: true, title: true, updatedAt: true },
+    select: {
+      id: true, title: true, updatedAt: true,
+      status: true, ticketNumber: true, uniqueIndex: true, projectId: true,
+    },
   });
   const ids = rows.map((row) => row.id);
   const groups = ids.length
@@ -70,6 +73,10 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
     title: row.title ?? "",
     updatedAt: row.updatedAt?.toISOString() ?? "",
     commentCount: counts.get(row.id) ?? 0,
+    status: row.status ?? "",
+    ticketNumber: row.ticketNumber ?? "",
+    uniqueIndex: row.uniqueIndex == null ? "" : String(row.uniqueIndex),
+    projectId: row.projectId == null ? "" : String(row.projectId),
   }));
   const indexedTasks = new Map<number, IndexedTaskTime | null>();
   const taskIds = tasks.map((task) => String(task.id));
@@ -94,11 +101,17 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
       filters: ["taskId", "Eq", String(task.id)],
       rank_by: ["taskUpdatedAt", "asc"],
       top_k: 1,
-      include_attributes: ["taskTitle", "taskUpdatedAt"],
+      include_attributes: ["taskTitle", "taskStatus", "taskTicketNumber", "taskUniqueIndex", "taskProjectId"],
       consistency: { level: "strong" },
     });
     indexedComments.set(task.id, row
-      ? { taskTitle: textAttr(row, "taskTitle"), taskUpdatedAt: textAttr(row, "taskUpdatedAt") }
+      ? {
+          taskTitle: textAttr(row, "taskTitle"),
+          taskStatus: textAttr(row, "taskStatus"),
+          taskTicketNumber: textAttr(row, "taskTicketNumber"),
+          taskUniqueIndex: textAttr(row, "taskUniqueIndex"),
+          taskProjectId: textAttr(row, "taskProjectId"),
+        }
       : null);
   }
   return { tasks, indexedTasks, indexedComments, batchFull: rows.length === take };

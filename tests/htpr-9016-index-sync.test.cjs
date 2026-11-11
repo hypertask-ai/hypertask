@@ -16,6 +16,17 @@ function drift() {
   });
 }
 
+function indexCopy(overrides) {
+  return {
+    taskTitle: "T",
+    taskStatus: "Normal",
+    taskTicketNumber: "HTPR-0",
+    taskUniqueIndex: "0",
+    taskProjectId: "15",
+    ...overrides,
+  };
+}
+
 test("a title edit waits for the task index before comment copies update", async () => {
   const taskWrite = deferred();
   let commentsStarted = false;
@@ -39,13 +50,13 @@ test("a stale comment title is repaired", async () => {
   const comments = [];
   const outcome = await lib.advanceIndexDrift({
     tasks: [
-      { id: 7, title: "New title", updatedAt: at, commentCount: 2 },
-      { id: 8, title: "Same", updatedAt: at, commentCount: 1 },
+      { id: 7, title: "New title", updatedAt: at, commentCount: 2, status: "Normal", ticketNumber: "HTPR-7", uniqueIndex: "7", projectId: "15" },
+      { id: 8, title: "Same", updatedAt: at, commentCount: 1, status: "Normal", ticketNumber: "HTPR-8", uniqueIndex: "8", projectId: "15" },
     ],
     indexedTasks: new Map([[7, { updatedAt: at }], [8, { updatedAt: at }]]),
     indexedComments: new Map([
-      [7, { taskTitle: "Old title", taskUpdatedAt: at }],
-      [8, { taskTitle: "Same", taskUpdatedAt: at }],
+      [7, indexCopy({ taskTitle: "Old title", taskTicketNumber: "HTPR-7", taskUniqueIndex: "7" })],
+      [8, indexCopy({ taskTitle: "Same", taskTicketNumber: "HTPR-8", taskUniqueIndex: "8" })],
     ]),
     batchFull: false,
     maxReindex: 10,
@@ -55,6 +66,58 @@ test("a stale comment title is repaired", async () => {
   });
   assert.deepEqual(comments, [7]);
   assert.equal(outcome.passFound, 1);
+});
+
+test("an edit that changes no copied label does not flag the comment copies", async () => {
+  const lib = drift();
+  const edited = "2026-11-11T09:00:00.000Z";
+  const comments = [];
+  const outcome = await lib.advanceIndexDrift({
+    tasks: [{ id: 21, title: "Untouched title", updatedAt: edited, commentCount: 3, status: "Normal", ticketNumber: "HTPR-21", uniqueIndex: "21", projectId: "15" }],
+    indexedTasks: new Map([[21, { updatedAt: edited }]]),
+    indexedComments: new Map([[21, indexCopy({ taskTitle: "Untouched title", taskTicketNumber: "HTPR-21", taskUniqueIndex: "21" })]]),
+    batchFull: false,
+    maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async () => {},
+    reindexComments: async (id) => comments.push(id),
+  });
+  assert.deepEqual(comments, []);
+  assert.equal(outcome.passFound, 0);
+});
+
+test("a copied label that changed on the ticket flags the comment copies", async () => {
+  const lib = drift();
+  const at = "2026-11-11T09:00:00.000Z";
+  const comments = [];
+  await lib.advanceIndexDrift({
+    tasks: [{ id: 22, title: "T22", updatedAt: at, commentCount: 1, status: "Archive", ticketNumber: "HTPR-22", uniqueIndex: "22", projectId: "15" }],
+    indexedTasks: new Map([[22, { updatedAt: at }]]),
+    indexedComments: new Map([[22, indexCopy({ taskTitle: "T22", taskStatus: "Normal", taskTicketNumber: "HTPR-22", taskUniqueIndex: "22" })]]),
+    batchFull: false,
+    maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async () => {},
+    reindexComments: async (id) => comments.push(id),
+  });
+  assert.deepEqual(comments, [22]);
+});
+
+test("comment copies missing from the index are repaired", async () => {
+  const lib = drift();
+  const at = "2026-11-11T09:00:00.000Z";
+  const comments = [];
+  await lib.advanceIndexDrift({
+    tasks: [{ id: 23, title: "T23", updatedAt: at, commentCount: 4, status: "Normal", ticketNumber: "HTPR-23", uniqueIndex: "23", projectId: "15" }],
+    indexedTasks: new Map([[23, { updatedAt: at }]]),
+    indexedComments: new Map([[23, null]]),
+    batchFull: false,
+    maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async () => {},
+    reindexComments: async (id) => comments.push(id),
+  });
+  assert.deepEqual(comments, [23]);
 });
 
 test("a failed write names the task and the scan keeps moving", async () => {
