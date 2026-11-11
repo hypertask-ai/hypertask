@@ -87,7 +87,7 @@
     },
     {
       "path": "/api/cron/upstash-daily-alarm",
-      "schedule": "11 * * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }

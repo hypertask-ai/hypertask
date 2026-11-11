@@ -38,20 +38,9 @@ function localAgentRateLimit(token: string): NextResponse | null {
   }
   const tokenHash = createHash('sha256').update(token).digest('hex')
   const key = `${tokenHash}:${windowStartSeconds}`
-  const count = (agentLocalCounts.get(key) ?? 0) + 1
-  if (!agentLocalCounts.has(key) && agentLocalCounts.size >= MAX_LOCAL_COUNTS) {
-    const decision = decideMcpRateLimit(
-      MCP_AGENT_RATE_LIMIT_PER_MINUTE + 1,
-      MCP_AGENT_RATE_LIMIT_PER_MINUTE,
-      windowStartSeconds,
-      nowSeconds,
-    )
-    return NextResponse.json(
-      { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
-      { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } },
-    )
-  }
-  agentLocalCounts.set(key, count)
+  const full = !agentLocalCounts.has(key) && agentLocalCounts.size >= MAX_LOCAL_COUNTS
+  const count = full ? MCP_AGENT_RATE_LIMIT_PER_MINUTE + 1 : (agentLocalCounts.get(key) ?? 0) + 1
+  if (!full) agentLocalCounts.set(key, count)
   const decision = decideMcpRateLimit(count, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
   if (!decision.limited) return null
   return NextResponse.json(
@@ -94,10 +83,16 @@ export async function checkMcpRateLimit(
   if (getMcpOperationContext(request)?.rateLimitChecked) return null
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return null
-  if (agentShapedMcpToken(token)) return localAgentRateLimit(token)
 
   let key: string | undefined
   try {
+    if (agentShapedMcpToken(token)) {
+      const { isFeatureEnabled } = await import('@/lib/flags')
+      const { HTPR_8978_UPSTASH_TRAFFIC_FLAG } = await import('@/lib/flags/definitions/htpr-8978-upstash-traffic')
+      const { withFeatureFlagSnapshot } = await import('@/lib/flags/modeCache')
+      const enabled = await withFeatureFlagSnapshot(() => isFeatureEnabled(HTPR_8978_UPSTASH_TRAFFIC_FLAG, 0), 'agent')
+      if (enabled) return localAgentRateLimit(token)
+    }
     const tokenHash = createHash('sha256').update(token).digest('hex')
     const nowSeconds = Math.floor(Date.now() / 1000)
     const windowStartSeconds = Math.floor(nowSeconds / MCP_RATE_LIMIT_WINDOW_SECONDS) * MCP_RATE_LIMIT_WINDOW_SECONDS

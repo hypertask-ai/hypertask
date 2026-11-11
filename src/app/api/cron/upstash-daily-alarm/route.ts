@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import { getRedis } from "@/lib/redis";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8978_UPSTASH_TRAFFIC_FLAG } from "@/lib/flags/definitions/htpr-8978-upstash-traffic";
 import {
   advanceDayCursor,
   parseTotalCommands,
@@ -55,12 +57,12 @@ async function fileAlarm(day: string, commandsToday: number): Promise<number> {
   if (!project?.uniqueIdentifier || !section) {
     throw new Error("Upstash daily alarm cannot resolve the Bugs section on board 15");
   }
-  if (!project.labels.some((label) => label.value === "brain-medium")) {
-    throw new Error("Upstash daily alarm needs the existing brain-medium label");
+  if (!["Infra", "brain-medium"].every((value) => project.labels.some((label) => label.value === value))) {
+    throw new Error("Upstash daily alarm needs the existing Infra and brain-medium labels");
   }
   const { task } = await createProvisionedTaskCore({
     title: `Upstash requests went above ${UPSTASH_DAILY_REQUEST_ALARM.toLocaleString("en-GB")} on ${day}`,
-    description: `<p data-ht-marker="${MARKER}:${day}">Upstash handled ${commandsToday.toLocaleString("en-GB")} commands on ${day}, above the ${UPSTASH_DAILY_REQUEST_ALARM.toLocaleString("en-GB")} daily alarm.</p>`,
+    description: `<h2>Problem</h2><p data-ht-marker="${MARKER}:${day}">Upstash requests reached ${commandsToday.toLocaleString("en-GB")} on ${day}.</p><p>The daily warning starts above 300,000 requests.</p><h2>Fix</h2><p>Find and stop the extra requests.</p><h2>Done when</h2><p>Daily requests stay below 200,000.</p><h2>Risk</h2><p>Keep live updates and background jobs working.</p><h2>Decision</h2><p>None needed.</p>`,
     userId: OPS_USER_ID,
     creationChannel: "api",
     projectId: BOARD_PROJECT_ID,
@@ -83,19 +85,26 @@ export async function GET(request: NextRequest) {
   if (process.env.NODE_ENV !== "production" || process.env.VERCEL_ENV !== "production") {
     return NextResponse.json({ checked: 0 });
   }
+  if (!await isFeatureEnabled(HTPR_8978_UPSTASH_TRAFFIC_FLAG, OPS_USER_ID)) {
+    return NextResponse.json({ checked: 0 });
+  }
   const redis = await getRedis();
   const total = parseTotalCommands(String(await redis.info("stats")));
   if (total === null) {
     return NextResponse.json({ error: "missing total_commands_processed" }, { status: 503 });
   }
-  const day = new Date().toISOString().slice(0, 10);
-  const advanced = advanceDayCursor(readCursor(await redis.get(CURSOR_KEY)), day, total);
-  await redis.set(CURSOR_KEY, JSON.stringify(advanced.cursor), "EX", 48 * 60 * 60);
+  const today = new Date().toISOString().slice(0, 10);
+  const advanced = advanceDayCursor(readCursor(await redis.get(CURSOR_KEY)), today, total);
+  const { day } = advanced;
   if (!shouldFileDailyAlarm(advanced.commandsToday)) {
+    await redis.set(CURSOR_KEY, JSON.stringify(advanced.cursor), "EX", 48 * 60 * 60);
     return NextResponse.json({ day, commandsToday: advanced.commandsToday, filedTaskId: null });
   }
   const existing = await filedTaskId(day);
-  if (existing) return NextResponse.json({ day, commandsToday: advanced.commandsToday, filedTaskId: existing });
+  if (existing) {
+    await redis.set(CURSOR_KEY, JSON.stringify(advanced.cursor), "EX", 48 * 60 * 60);
+    return NextResponse.json({ day, commandsToday: advanced.commandsToday, filedTaskId: existing });
+  }
   const claimKey = `${MARKER}:claim:${day}`;
   const claimed = await redis.set(claimKey, "1", "EX", 26 * 60 * 60, "NX");
   if (claimed !== "OK") {
@@ -103,6 +112,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     const filed = await fileAlarm(day, advanced.commandsToday!);
+    await redis.set(CURSOR_KEY, JSON.stringify(advanced.cursor), "EX", 48 * 60 * 60);
     return NextResponse.json({ day, commandsToday: advanced.commandsToday, filedTaskId: filed });
   } catch (error) {
     await redis.del(claimKey);

@@ -13,11 +13,19 @@ export function advanceDayCursor(
   cursor: DayCursor | null,
   day: string,
   total: number,
-): { cursor: DayCursor; commandsToday: number | null } {
-  if (!Number.isSafeInteger(total) || total < 0 || cursor?.day !== day || total < cursor.startTotal) {
-    return { cursor: { day, startTotal: total }, commandsToday: null }
+): { cursor: DayCursor; day: string; commandsToday: number | null } {
+  if (!Number.isSafeInteger(total) || total < 0 || !cursor || total < cursor.startTotal) {
+    return { cursor: { day, startTotal: total }, day, commandsToday: null }
   }
-  return { cursor, commandsToday: total - cursor.startTotal }
+  if (cursor.day !== day) {
+    const consecutive = Date.parse(day) - Date.parse(cursor.day) === 86_400_000
+    return {
+      cursor: { day, startTotal: total },
+      day: consecutive ? cursor.day : day,
+      commandsToday: consecutive ? total - cursor.startTotal : null,
+    }
+  }
+  return { cursor, day, commandsToday: total - cursor.startTotal }
 }
 
 export function shouldFileDailyAlarm(commandsToday: number | null): boolean {
