@@ -41,6 +41,7 @@ function createComponent(enabled, apple = true, setShowShortcuts = () => {}) {
     react: React,
     "lucide-react": require("lucide-react"),
     "@/lib/flags/keys": keys,
+    "@/lib/flags/definitions/htpr-8929-column-select-all": jiti(path.join(root, "src/lib/flags/definitions/htpr-8929-column-select-all.ts")),
     "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
     "@/lib/state": { useRecoilValue: () => false, useRecoilState: () => [true, setShowShortcuts] },
     "@/store": { appShellRailAtom: {}, showShortcutsAtom: {} },
