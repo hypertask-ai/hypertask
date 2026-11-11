@@ -12,6 +12,9 @@ import { z } from "zod";
 import { parseCookies } from "better-auth/cookies";
 import { Prisma } from "@prisma/client";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
+import { AgentWritingError } from "@/lib/agents/writing";
+import { enforceAgentWriting } from "@/lib/agents/writingEnforcement";
+import { HTPR_8905_SHARED_TICKET_WRITING_FLAG } from "@/lib/flags/definitions/htpr-8905-shared-ticket-writing";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
@@ -30,6 +33,32 @@ import { taskWriteRoute, type TaskWriteRoute } from "./route";
 
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 class TaskSectionValidationError extends Error {}
+
+export async function refuseSharedTicketWriting(
+  userId: number,
+  agentId: string | null,
+  fields: { title: unknown; description: unknown },
+  headers: Headers,
+) {
+  if (!agentId) return null;
+  let sharedWriting = true;
+  try {
+    const sharedWritingOn = await isFeatureEnabled(HTPR_8905_SHARED_TICKET_WRITING_FLAG, userId);
+    if (!sharedWritingOn) sharedWriting = false;
+  } catch {
+    sharedWriting = true;
+  }
+  if (!sharedWriting) return null;
+  try {
+    await enforceAgentWriting(userId, agentId, fields, {}, { create: true });
+  } catch (error) {
+    if (error instanceof AgentWritingError) {
+      return NextResponse.json({ message: error.message, code: error.code, field: error.field }, { status: 400, headers });
+    }
+    throw error;
+  }
+  return null;
+}
 
 const route = (requestStartedAt: number) => taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -206,6 +235,8 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       await Promise.all([broadcastBoardChange(projectId, { originUserId: userId }), broadcastTaskChange(taskId)]);
       return NextResponse.json({ newTask: result.json }, { status: 200, headers: responseHeaders });
     }
+    const writingRefusal = await refuseSharedTicketWriting(userId, agentId, { title, description: storedDescription }, responseHeaders);
+    if (writingRefusal) return writingRefusal;
     let tagIds: string[] = [];
     if (tags != null && !Array.isArray(tags)) {
       return NextResponse.json({ message: "Invalid labels" }, { status: 400, headers: responseHeaders });
