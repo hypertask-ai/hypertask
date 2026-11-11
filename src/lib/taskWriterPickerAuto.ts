@@ -4,6 +4,23 @@ import {
   toAutoModelOption,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
+import type { TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
+
+export function autoDefaultForSurface(
+  surface: TAiModelPreferenceSurface,
+  taskWriterAuto: boolean,
+  autoModelEnabled: boolean,
+): boolean {
+  if (surface === "taskWriter") return taskWriterAuto;
+  return surface === "aiChat" && autoModelEnabled;
+}
+
+export function preferredPickerOption(
+  resolved: TAiModelOption,
+  autoDefault: boolean,
+): TAiModelOption {
+  return autoDefault ? toAutoModelOption(resolved) : resolved;
+}
 
 export function taskWriterShowsAuto(
   storedPick: string | null | undefined,
