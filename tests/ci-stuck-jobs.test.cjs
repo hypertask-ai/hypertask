@@ -5,7 +5,9 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const {
   decide, apply, plan, resume, recover, sweep, tick, handOff, sweepInFlight, readPending, sweepOnce,
+  overdueRuns, cancelOverdueGuards,
   STUCK_SECONDS, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, PENDING_LIMIT,
+  GUARD_PENDING_MINUTES,
 } = require('../.github/scripts/ci-stuck-jobs.cjs');
 
 const now = Date.parse('2026-11-01T09:00:00Z');
@@ -672,4 +674,32 @@ test('the nine real stuck jobs of run 41286623269 paid minutes and now pay secon
   assert.equal(realStuckLastSteps.length, 9);
   assert.ok(oldWorst > 180000, `the old cadence paid ${oldWorst} ms`);
   assert.ok(newWorst < CAP_BUDGET_MS, `the new cadence pays ${newWorst} ms`);
+});
+
+const guardRun = (id, minutesAgo) => ({
+  id,
+  status: 'pending',
+  created_at: new Date(now - minutesAgo * 60 * 1000).toISOString(),
+});
+
+test('a guard run waiting under thirty minutes keeps its turn and one waiting longer is cancelled', async () => {
+  assert.equal(GUARD_PENDING_MINUTES, 30);
+  const runs = [guardRun(41, 29), guardRun(42, 31), { ...guardRun(43, 90), status: 'completed' }];
+  assert.deepEqual(overdueRuns(runs, { now }).map(run => run.id), [42]);
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    if (path === '/repos/o/r/actions/workflows/feature-flag-gate.yml/runs?status=pending&per_page=100') return { workflow_runs: runs };
+    return {};
+  };
+  assert.deepEqual(await cancelOverdueGuards('o/r', { now, api }), { checked: 3, cancelled: 1 });
+  assert.deepEqual(calls.slice(1), ['POST /repos/o/r/actions/runs/42/cancel']);
+});
+
+test('an unreadable guard queue is reported and never stops the sweep', async () => {
+  const outcome = await cancelOverdueGuards('o/r', {
+    now,
+    api: async () => { throw new Error('gh api failed: HTTP 502'); },
+  });
+  assert.deepEqual(outcome, { checked: 0, cancelled: 0, unread: 'gh api failed: HTTP 502' });
 });

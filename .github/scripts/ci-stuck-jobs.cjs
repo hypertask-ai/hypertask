@@ -44,6 +44,15 @@ const { readFileSync } = require('node:fs');
 
 const STUCK_SECONDS = 45;
 const RECENT_MINUTES = 30;
+// HYCI-298: a required guard run can be held by GitHub before any job starts. On
+// 2026-11-11 run 43087008686 took the feature-flag-gate concurrency group at
+// 19:25:07Z, its job was never given a runner, the cancel API answered 409
+// because nothing was running, and every later run of that workflow sat pending
+// with no jobs, so no pull request published its required verdict. A run that is
+// still pending has run nothing, so cancelling it is free, and cancelling the
+// queue is the only lever this repository has over a head run it cannot clear.
+const GUARD_WORKFLOW = 'feature-flag-gate.yml';
+const GUARD_PENDING_MINUTES = 30;
 // A cancel usually settles in one or two polls; a slower one is now carried by a
 // tick that is TICK_GAP_MS away instead of a whole chain wait.
 const SETTLE_ATTEMPTS = 10;
@@ -201,6 +210,40 @@ async function plan(repo, { now = Date.now(), stuckSeconds = STUCK_SECONDS, rece
     if (decision) decisions.push(decision);
   }
   return { decisions, unread };
+}
+
+function overdueRuns(runs, { now = Date.now(), minutes = GUARD_PENDING_MINUTES } = {}) {
+  const limit = minutes * 60 * 1000;
+  return runs.filter((run) => {
+    if (run.status !== 'pending') return false;
+    const created = run.created_at ? Date.parse(run.created_at) : NaN;
+    return Number.isFinite(created) && now - created >= limit;
+  });
+}
+
+// Cancelling a pending run posts no status for its head, so a pull request whose
+// event is dropped here keeps waiting for the guard's next event or the fifteen
+// minute sweep, which is a verdict a few minutes later instead of a queue that
+// never moves. A failed cancel is reported and does not stop the sweep.
+async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PENDING_MINUTES, api = json } = {}) {
+  let runs;
+  try {
+    const payload = await api(`/repos/${repo}/actions/workflows/${GUARD_WORKFLOW}/runs?status=pending&per_page=100`);
+    runs = payload.workflow_runs ?? [];
+  } catch (error) {
+    return { checked: 0, cancelled: 0, unread: String(error.message).slice(0, 120) };
+  }
+  let cancelled = 0;
+  for (const run of overdueRuns(runs, { now, minutes })) {
+    try {
+      await api(`/repos/${repo}/actions/runs/${run.id}/cancel`, 'POST');
+      cancelled += 1;
+      console.log(`::notice::guard run ${run.id} waited over ${minutes} minutes for its turn; cancelled.`);
+    } catch (error) {
+      console.log(`::warning::guard run ${run.id} could not be cancelled: ${String(error.message).slice(0, 120)}.`);
+    }
+  }
+  return { checked: runs.length, cancelled };
 }
 
 async function jobsOf(repo, runId, api = json) {
@@ -599,8 +642,10 @@ async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = 
   let discovery = null;
   let stored = { ok: true, pending: [] };
   let recovery = { done: [], pending: [], saved: true };
+  let guards = { checked: 0, cancelled: 0 };
   if (live) {
     ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now }));
+    guards = await cancelOverdueGuards(repo, { now });
   } else {
     try {
       ({ decisions, unread } = fixture
@@ -610,15 +655,18 @@ async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = 
       discovery = String(error.message).slice(0, 120);
     }
   }
-  const report = { repo, decisions, unread, discovery, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, readOnly: !live };
+  const report = { repo, decisions, unread, discovery, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, guards, readOnly: !live };
   if (quiet) {
     const recovered = recovery.done.filter(outcome => outcome.action === 'recover').length;
-    console.log(`::notice::tick: ${decisions.length} candidate run(s), ${recovered} recovered, ${recovery.pending.length} carried.`);
+    console.log(`::notice::tick: ${decisions.length} candidate run(s), ${recovered} recovered, ${recovery.pending.length} carried, ${guards.cancelled} overdue guard run(s) cancelled.`);
   } else {
     console.log(JSON.stringify(report, null, 2));
   }
   if (discovery) {
     console.log(`::warning::the run list could not be read this sweep (${discovery}); stored recoveries were still finished.`);
+  }
+  if (guards.unread) {
+    console.log(`::warning::the guard run queue could not be read this sweep (${guards.unread}).`);
   }
   for (const entry of unread) {
     console.log(`::warning::run ${entry.runId} was not judged: ${entry.reason}.`);
@@ -701,7 +749,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, sweepOnce, nowFrom, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, sweepOnce, nowFrom, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, overdueRuns, cancelOverdueGuards, GUARD_PENDING_MINUTES, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
 
 if (require.main === module) {
   main().catch(error => {

@@ -83,7 +83,8 @@ pr_job_budget:
     - workflow: .github/workflows/feature-flag-gate.yml
       jobs: 2
       published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
-      concurrency_group: feature-flag-gate-production
+      concurrency_group: feature-flag-gate-<pull_request_number>
+      sweep_concurrency_group: feature-flag-gate-sweep
       queue: max
       cancel_in_progress: false
     - workflow: .github/workflows/ux-signoff-gate.yml
@@ -570,7 +571,7 @@ policies:
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
-    non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-lane, ci-tests]
+    non_cancelling_reconciliation: [feature-flag-gate-<pull_request_number>, feature-flag-gate-sweep, ux-signoff-gate, dependabot-lane, ci-tests]
     prefer_queue_over_oom: true
   review:
     required_check_name: ai-review

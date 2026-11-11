@@ -533,10 +533,10 @@ for (const endpoint of ['graphql', '/pulls?', '/statuses/']) {
 
 test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
   assert.deepEqual(yaml.load(workflow).concurrency, {
-    group: "feature-flag-gate-production",
+    group: "feature-flag-gate-${{ github.event.pull_request.number || 'sweep' }}",
     queue: "max",
     "cancel-in-progress": false,
-  }, "fleet sweeps and PR edits must serialize without replacing pending metadata events");
+  }, "one pull request's edits still serialize without replacing pending metadata events, and no single run can hold every pull request");
 });
 
 function openPullFleet(pull) {
@@ -615,7 +615,7 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   assert.deepEqual(selected("schedule"), ["reconcile-open-pull-requests"]);
   assert.deepEqual(Object.keys(config.on).sort(), ["pull_request_target", "schedule"]);
   assert.deepEqual(config.on.schedule, [{ cron: "*/15 * * * *" }]);
-  assert.equal(config.concurrency.group, "feature-flag-gate-production");
+  assert.equal(config.concurrency.group, "feature-flag-gate-${{ github.event.pull_request.number || 'sweep' }}");
   assert.equal(config.concurrency["cancel-in-progress"], false);
 
   const { result, output, posts, calls, pull } = runWorkflow(t, {
