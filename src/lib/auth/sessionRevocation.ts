@@ -102,11 +102,10 @@ export async function isSessionTokenRevoked(
   try {
     const [revoked, revokedBefore] = await withDeadline(async () => {
       const redis = await getRedis()
-      const [token, user] = await redis.mget(
-        `ht_session:revoked:${verified.fingerprint}`,
-        userRevokedBeforeKey(verified.userId),
-      )
-      return [token, user]
+      return await Promise.all([
+        redis.get(`ht_session:revoked:${verified.fingerprint}`),
+        redis.get(userRevokedBeforeKey(verified.userId)),
+      ])
     }, READ_DEADLINE_MS)
     if (revokedBefore !== null && verified.issuedAt < Number(revokedBefore)) return true
     if (revoked !== null) {
