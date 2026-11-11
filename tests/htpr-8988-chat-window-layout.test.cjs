@@ -7,9 +7,7 @@ const flag = "htpr-8988-chat-window-layout";
 const user = 985;
 const geometry = loadModule("src/lib/aiChat/chatWindows.ts");
 
-function dialogPresence(container) {
-  return container.querySelector('[role="dialog"]') ? "present" : "absent";
-}
+function dialogPresence(container) { return container.querySelector('[role="dialog"]') ? "present" : "absent"; }
 
 function assertSeparate(rects, viewport) {
   assert.ok(rects.length >= 3);
