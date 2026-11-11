@@ -897,8 +897,6 @@ allowed bash "$vcc" --project 15 --json tasks create --labels brain-extra-hard -
 allowed bash "$vcc" task create --help
 allowed bash "$vcc" task update X-1 --title 'No brain label needed on update'
 printf 'ok task create needs exactly one brain label\n'
-# The app rejects a label its board does not offer (HTPR-9077): our own feedback script tags brain-light
-# while HT Agent Feedback (12057) offers brain-medium only. Follow the ticket's own board labels.
 run bash "$vcc" task create --project 12057 --labels 'Infra,Agent Feedback,brain-light' --title T
 [ "$status" = 0 ] || fail "a board label swap did not reach the CLI: $(< "$T/err")"
 [[ $(< "$T/err") == *'offers no brain-light; using brain-medium'* ]] || fail "no board label swap warning: $(< "$T/err")"
