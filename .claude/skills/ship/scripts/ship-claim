@@ -120,8 +120,24 @@ incident_ok() {
     and ((.section // "") | IN("Done", "Archive", "Archived") | not))' <<<"$got" >/dev/null 2>&1
 }
 
+# shared_open_prs: the fleet's one open PR copy (fleet/pr-snapshot, written every ten minutes), the same list a
+# claim counts. A missing, stale, other-repo or malformed copy returns 1, so the caller reads GitHub live.
+shared_open_prs() {
+  local snapshot=${SHIP_CLAIM_SNAPSHOT:-$HOME/.local/share/house-rules/fleet/pr-snapshot} body
+  [ -x "$snapshot" ] || return 1
+  body=$("$snapshot" read --max-age 900 2>/dev/null) || return 1
+  jq -e 'if all(.prs[]; (.number | type == "number") and (.headRefName | type == "string"))
+    then [ .prs[] | {number, title, headRefName, isDraft} ]
+    else error("unusable copy") end' <<<"$body" 2>/dev/null && return 0
+  return 1
+}
+
 open_prs() {
   local result
+  if result=$(shared_open_prs); then
+    printf '%s\n' "$result"
+    return
+  fi
   if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft); then
     printf '%s\n' "$result"
     return

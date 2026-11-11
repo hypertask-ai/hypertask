@@ -417,6 +417,21 @@ eq "open PR on runner10/yper4-998 holds RUNNER 10" "$(pool_hold 10 runner10/yper
 for branch in infra-runner-1/yper4-998 ci-runner-1/yper4-998 ceo-runner-1/yper4-998 hax-runner-1/yper4-998 cursor/runner-1/yper4-998 lead/runner1-yper4-998; do
   eq "open PR on $branch never holds RUNNER 1" "$(pool_hold 1 "$branch")" 0
 done
+cat > "$D/hold-snapshot" <<'EOF'
+#!/usr/bin/env bash
+[ -z "${HOLD_SNAPSHOT_BAD:-}" ] || exit 2
+printf '%s' '{"prs":[{"number":77,"title":"YPER4-997 [BUGFIX] Copy work","headRefName":"runner-9/yper4-997","isDraft":false}]}'
+EOF
+chmod +x "$D/hold-snapshot"
+printf '[]' > "$HOLD_OPEN"
+SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+snap_rc=$?
+eq "an open PR in the shared copy holds RUNNER 9" "$snap_rc" 4
+SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+eq "the same copy does not hold RUNNER 9 for its own PR" "$?" 0
+echo "$(jq -c '.[0].headRefName = "runner-1/yper4-997"' "$HOLD_OPEN")" > "$HOLD_OPEN"
+SHIP_SESSION_NAME='RUNNER 1' HOLD_SNAPSHOT_BAD=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+eq "an unusable copy falls back to GitHub" "$?" 4
 mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 printf '[{"number":7,"headRefName":"runner-3/yper4-999","title":"YPER4-999 [BUGFIX] Own work","isDraft":false}]' > "$HOLD_OPEN"
 jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"
