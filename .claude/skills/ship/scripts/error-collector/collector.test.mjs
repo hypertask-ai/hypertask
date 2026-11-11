@@ -472,6 +472,19 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
   });
 });
 
+check('tickets', 'hourly cap files a product Vercel error before an infra group', () => withHarness(async h => {
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
+  h.events([
+    event({ board: 2060, service: 'vps-journal', message: 'infra unit failed', route: 'init.scope' }),
+    event({ board: 15, service: 'vercel', message: 'Failed to update view', route: '/mcp' }),
+  ]);
+  await h.run();
+  const made = creates(h);
+  assert.equal(made.length, 1);
+  assert.equal(made[0].args[made[0].args.indexOf('--project') + 1], '15');
+  assert.equal(Object.values(h.state().pending).every(group => group.board !== 15), true);
+}));
+
 check('reporting', 'default rolling cap, pending counts/routes survive and exactly one hold notice per run', () => withHarness(async h => {
   const items = Array.from({ length: 7 }, (_, i) => event({ message: `failure kind ${String.fromCharCode(65 + i)}` }));
   h.events(items); await h.run();
