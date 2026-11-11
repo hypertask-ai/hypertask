@@ -1,24 +1,7 @@
 import { includedAllowanceError, isOwnKeyAuthFailure } from "@/lib/ai/chatStream/errors";
-import { redactErrorText } from "@/lib/telemetry/errorSanitization";
 import type { AiChatTurnOutcome } from "@/lib/telemetry/aiChatObservability";
 
 const ROUTE = "/api/ai/chat/stream";
-const ERROR_TEXT_LIMIT = 300;
-
-const BARE_SECRET_PATTERNS = [
-  /\b(?:sk|rk|pk|ak)[-_][A-Za-z0-9_-]{8,}/g,
-  /\bAIza[A-Za-z0-9_-]{16,}/g,
-  /\bgh[pousr]_[A-Za-z0-9]{16,}/g,
-  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
-  /\b[A-Za-z0-9_+/=-]{32,}/g,
-];
-
-function withoutBareSecrets(text: string) {
-  return BARE_SECRET_PATTERNS.reduce(
-    (value, pattern) => value.replace(pattern, "[redacted]"),
-    text,
-  );
-}
 
 export type AiChatRequestLogInput = {
   requestId: string;
@@ -43,9 +26,8 @@ export type AiChatFailureStory = {
 };
 
 function errorName(error: unknown) {
-  if (error && typeof error === "object") {
-    const name = (error as { name?: unknown }).name;
-    if (typeof name === "string" && name.trim()) return name.trim();
+  if (error && typeof error === "object" && "name" in error) {
+    if (typeof error.name === "string" && error.name.trim()) return error.name.trim();
   }
   return error === undefined || error === null ? "NoError" : "Error";
 }
@@ -61,14 +43,11 @@ export function aiChatFailureStory(
       : typeof error === "string"
         ? error
         : "The AI chat turn failed without a message.";
-  const message = redactErrorText(
-    withoutBareSecrets(raw.trim() || "The AI chat turn failed."),
-    ERROR_TEXT_LIMIT,
-  );
+  const message = "The AI chat turn failed.";
 
   if (includedAllowanceError(error)) {
     return {
-      name,
+      name: "SharedAiAllowanceExceededError",
       message,
       why: "The team used up its included AI allowance for this period.",
       fix: "Raise the team AI allowance in Settings, AI usage, or wait for the next period.",
@@ -76,7 +55,7 @@ export function aiChatFailureStory(
   }
   if (isOwnKeyAuthFailure(provider, error) || name === "AiProviderAuthenticationError") {
     return {
-      name,
+      name: "AiProviderAuthenticationError",
       message,
       why: "The AI provider rejected the key used for this turn.",
       fix: "Update the key in Settings, AI, bring your own key, then ask again.",
@@ -84,15 +63,15 @@ export function aiChatFailureStory(
   }
   if (name === "ForcedTeamKeyError") {
     return {
-      name,
+      name: "ForcedTeamKeyError",
       message,
       why: "A team rule forced a shared key and the provider refused the call.",
       fix: "Check the team AI key in Settings, AI, then ask again.",
     };
   }
-  if (/deadline|timed out|timeout/i.test(message)) {
+  if (/deadline|timed out|timeout/i.test(raw)) {
     return {
-      name,
+      name: "TimeoutError",
       message,
       why: "The turn ran past the time limit for one reply.",
       fix: "Ask a smaller question or split it into two turns.",
@@ -100,17 +79,17 @@ export function aiChatFailureStory(
   }
   if (name.startsWith("Prisma")) {
     return {
-      name,
+      name: "PrismaError",
       message,
       why: "A database call inside the turn failed.",
       fix: "Ask again. If it repeats, check database health for this deployment.",
     };
   }
   return {
-    name,
+    name: "Error",
     message,
-    why: "The turn stopped with the message above.",
-    fix: "Ask again; the failing step is in this line's error name.",
+    why: "The AI chat turn stopped unexpectedly.",
+    fix: "Ask again. Use the request ID to find related diagnostics.",
   };
 }
 

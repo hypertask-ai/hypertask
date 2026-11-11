@@ -66,7 +66,7 @@ test("a successful turn is one event and a failure names the next step", () => {
     [named("ForcedTeamKeyError", "Team key forced"), /shared key/, /team AI key/],
     [named("PrismaClientKnownRequestError", "Connection pool exhausted"), /database call/, /database health/],
     [named("SharedAiAllowanceExceededError", "Included AI allowance used up."), /included AI allowance/, /Raise the team AI allowance/],
-    [undefined, /message above/, /Ask again/],
+    [undefined, /stopped unexpectedly/, /Ask again/],
   ];
   for (const [error, why, fix] of cases) {
     const story = requestLog.aiChatFailureStory(error, "byok:openai");
@@ -104,6 +104,16 @@ test("the line drops keys and emails, carries no prompt field, and stays quiet o
     assert.equal(calls.length, 0);
   } finally {
     console.error = original;
+  }
+});
+
+test("provider errors cannot copy private text into any logged error field", () => {
+  const privateText = "Private acquisition plans for the Northwind deal";
+  for (const error of [new Error(privateText), privateText, named(privateText, privateText), named(`Prisma${privateText}`, privateText), named("TimeoutError", `timeout: ${privateText}`)]) {
+    const event = requestLog.buildAiChatRequestEvent({ ...turn, outcome: "failed", error });
+    assert.equal(JSON.stringify(event).includes(privateText), false);
+    assert.match(event.error.why, /.+/);
+    assert.match(event.error.fix, /.+/);
   }
 });
 
