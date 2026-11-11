@@ -272,6 +272,10 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     },
     projectPrefixAlias: { findMany: async ({ where }) => { aliasQueries++; return aliases.filter(row => matches(row, where)); } },
     taskNumberAlias: { findMany: async ({ where }) => moveAliases.filter(row => matches(row, where)) },
+    $queryRaw: async (_strings, ticketNumber) => tasks
+      .filter(row => (row.ticketNumber ?? "").toLowerCase() === String(ticketNumber).toLowerCase())
+      .sort((left, right) => left.projectId - right.projectId || left.id - right.id)
+      .map(row => ({ id: row.id })),
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },

@@ -44,6 +44,12 @@ const sharedTicketWritingStubs = {
   },
 };
 
+const ticketNumberLookupStubs = {
+  "@/lib/flags/definitions/htpr-8977-indexed-ticket-lookup": {
+    HTPR_8977_INDEXED_TICKET_LOOKUP_FLAG: "htpr-8977-indexed-ticket-lookup",
+  },
+};
+
 const agentPulseDotStubs = {
   "@/utils/controllers/tasks/attachAgentStatus": {
     attachAgentStatus: async (tasks) => tasks.map((task) => ({ ...task, agentStatus: null })),
@@ -88,13 +94,14 @@ function withStubs(base = {}, extra = {}) {
     defaults[USER_COMMENT_COUNTS] = { userCommentCountsByTaskId: async () => new Map() }
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,
+    has: (_target, request) => request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in ticketNumberLookupStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,
     get: (_target, request) =>
       request in extra ? extra[request]
       : request in base ? base[request]
       : request in defaults ? defaults[request]
       : request in sharedTicketWritingStubs ? sharedTicketWritingStubs[request]
       : request in agentPulseDotStubs ? agentPulseDotStubs[request]
+      : request in ticketNumberLookupStubs ? ticketNumberLookupStubs[request]
       : request in emailStraightBoardStubs ? emailStraightBoardStubs[request]
       : request in waitingActivityStubs ? waitingActivityStubs[request]
       : plainLanguageTicketStubs[request],
