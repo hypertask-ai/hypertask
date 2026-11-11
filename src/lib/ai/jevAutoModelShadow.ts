@@ -10,7 +10,6 @@ import prisma from "@/lib/prisma";
 export const JEV_AUTO_MODEL_SLUG = "openrouter/typesafe/jev-1.14";
 export const JEV_AUTO_MODEL_CALL_TIMEOUT_MS = 900;
 export const JEV_AUTO_MODEL_TEXT_LIMIT = 1200;
-
 export type JevAutoModelLevel = "light" | "standard" | "high";
 export type JevAutoModelGuess = { level: JevAutoModelLevel; confidence: number | null };
 export type AutoModelTurnSignals = { longThread: boolean; resent: boolean; codeFence: boolean; stepUp: number };

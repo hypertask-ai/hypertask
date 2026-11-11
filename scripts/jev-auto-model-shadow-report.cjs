@@ -23,10 +23,7 @@ function markRetries(rows) {
     const session = String(left.chatSessionId ?? "").localeCompare(String(right.chatSessionId ?? ""));
     return session !== 0 ? session : stamp(left.createdAt).localeCompare(stamp(right.createdAt));
   });
-  return ordered.map((row, index) => {
-    const next = ordered[index + 1];
-    return { ...row, retried: Boolean(row.chatSessionId && next && next.chatSessionId === row.chatSessionId && next.resent) };
-  });
+  return ordered.map((row, index) => ({ ...row, retried: Boolean(row.chatSessionId && ordered[index + 1] && ordered[index + 1].chatSessionId === row.chatSessionId && ordered[index + 1].resent) }));
 }
 
 const tally = (subset) => Object.fromEntries(COMPARISONS.map((name) => [name, subset.filter((row) => comparisonOf(row) === name).length]));
@@ -37,8 +34,7 @@ function analyze(inputRows) {
   const counts = tally(answered);
   const retried = answered.filter((row) => row.retried);
   const retriedCounts = tally(retried);
-  const changed = share(answered.length - counts.agree, answered.length);
-  const shuffled = share(retriedCounts["jev-higher"], retried.length);
+  const changed = share(answered.length - counts.agree, answered.length), shuffled = share(retriedCounts["jev-higher"], retried.length);
   const bars = [
     { name: "1000 Auto turns logged", pass: rows.length >= MIN_ROWS, detail: `${rows.length} of ${MIN_ROWS} turns` },
     { name: "Jev answers almost every turn", pass: (share(answered.length, rows.length) ?? 0) >= MIN_PARSED, detail: `${pct(share(answered.length, rows.length))} parsed` },
