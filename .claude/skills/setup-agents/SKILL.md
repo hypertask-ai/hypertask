@@ -11,15 +11,12 @@ the same script with `--name "Runner <n>" --identity "RUNNER <n>"`.
 
 - Checks `hypertask`, `jq`, `flock`, `mktemp`, `ln`, `cat`, `readlink`, `sed` and `tr`
   before writing, names each missing tool with its install step, and exits 2 with
-  nothing created. `--check` is that smoke plus a login check with no writes; with
-  `--name` it checks that agent's credential.
+  nothing created. `--check` is that smoke plus a login check with no writes.
 - Creates the agent in projects 15 and 11514 when no credential exists, otherwise
   reuses it. Publishes the token 0600 through a hard link so a racing writer is never
   overwritten, links it into `sessions/` for `ship-identity`, and never prints it.
-- Verifies the login with the server, requires the agent to be a member of both boards
-  and listed under this name, then prints `<name>: login ok, identity ok` or the exact
-  `/rename` line.
+- Verifies the login with the server and requires membership of both boards, then
+  prints `<name>: login ok, identity ok` or the exact `/rename` line.
 
 Needs agent-create rights (`hypertask login`) or a management key. A bad name, an empty
-credential, a broken session link, a refused board call or a mismatched identity stop
-it with a plain reason; fix the cause and rerun.
+credential, a broken session link or a refused board call stops it with a plain reason.
