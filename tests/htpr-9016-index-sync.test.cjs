@@ -242,3 +242,88 @@ test("the failure cap counts across pages, not per page", async () => {
   assert.equal(writes, repair.DRIFT_MAX_FAILURES);
   assert.equal(result.passComplete, false);
 });
+
+function commentRow(id, projectId) {
+  return {
+    id: String(id),
+    taskId: "1",
+    commentText: "hello",
+    creatorName: "Runner",
+    projectId,
+    createdAt: "2026-11-10T00:00:00.000Z",
+    searchText: "hello",
+    taskProjectId: projectId,
+    taskProjectTitle: "Board",
+    taskTicketNumber: "HTPR-1",
+    taskTitle: "Ticket",
+    taskStatus: "Normal",
+    taskUpdatedAt: "2026-11-10T00:00:00.000Z",
+    taskUniqueIndex: 1,
+  };
+}
+
+function turbopufferHelper({ route, fetchImpl }) {
+  const writes = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  process.once("beforeExit", () => { globalThis.fetch = realFetch; });
+  const helper = load("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
+    "@/app/api/ai/_lib/boardMemoryContract": { buildCustomInstructionSearchFilters: () => [] },
+    "@/utils/controllers/search/rankHits": {
+      buildSearchStatusFilter: () => null,
+      parseTicketSearchQuery: () => null,
+      TRASHED_STATUSES: [],
+    },
+    "@/lib/ai/spend/embeddingRoute": {
+      embeddingSpendMode: async () => route,
+      withSpendCharge: async (_route, _teamId, _texts, run) => run(),
+    },
+    "@/lib/turbopuffer": {
+      default: {
+        namespace: () => ({
+          write: async (body) => { writes.push(body); return {}; },
+          query: async () => ({ rows: [] }),
+        }),
+      },
+      turbopufferNamespaces: {
+        task: { name: "tasks" },
+        comment: { name: "comments" },
+        page: { name: "pages-v2" },
+        customInstructionFile: { name: "custom-instruction-files" },
+      },
+    },
+  });
+  return { helper, writes };
+}
+
+function assertKeywordVectors(writes, dimension) {
+  assert.equal(writes.length, 1, "one comment write reaches the index");
+  const rows = writes[0].upsert_rows;
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.vector.length, dimension);
+    assert.equal(row.vector[0], 1);
+    assert.equal(row.vector[1], 0);
+    assert.equal(row.commentText, "hello");
+  }
+}
+
+test("a keyword-only board writes comment rows that the index accepts", async () => {
+  const { helper, writes } = turbopufferHelper({
+    route: { mode: "keyword" },
+    fetchImpl: async () => { throw new Error("keyword teams must not embed"); },
+  });
+  await helper.upsertCommentRowsToTurbopuffer([commentRow(1, 15), commentRow(2, 15)]);
+  assertKeywordVectors(writes, helper.EMBEDDING_DIM);
+});
+
+test("a failed embedding still writes a row the index accepts", async () => {
+  const { helper, writes } = turbopufferHelper({
+    route: { mode: "customer-key", httpKey: "not-a-real-key" },
+    fetchImpl: async () => ({ ok: false, status: 400, text: async () => "bad request" }),
+  });
+  await helper.upsertCommentRowsToTurbopuffer([commentRow(1, 15), commentRow(2, 15)]);
+  assertKeywordVectors(writes, helper.EMBEDDING_DIM);
+});
