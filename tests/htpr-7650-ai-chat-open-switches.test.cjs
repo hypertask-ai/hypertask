@@ -392,6 +392,7 @@ function preferencesApi(enabled, body, stored = { aiChatOpenNewTickets: null, ai
     "@/lib/configs/boardSortMode.config": empty, "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": empty,
     "@/lib/flags/definitions/htpr-8971-card-settings": { HTPR_8971_CARD_SETTINGS_FLAG: "htpr-8971-card-settings" },
     "@/lib/flags/definitions/htpr-8995-picker-auto": { HTPR_8995_PICKER_AUTO_FLAG: "htpr-8995-picker-auto" },
+    "@/lib/flags/definitions/htpr-9019-saved-model-auto": empty,
   });
   return { post: () => api.POST({ headers: {} }), writes, flagReads, fills, stored };
 }

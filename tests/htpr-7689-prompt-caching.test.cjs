@@ -352,6 +352,7 @@ test("only an ownership-checked chat session becomes a trusted cache scope", asy
       "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
       "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
       "@/lib/flags/definitions/htpr-7681-agent-team-openai-default": { HTPR_7681_AGENT_TEAM_OPENAI_DEFAULT_FLAG: "htpr-7681-agent-team-openai-default" },
+      "@/lib/flags/definitions/htpr-9019-saved-model-auto": { HTPR_9019_SAVED_MODEL_AUTO_FLAG: "htpr-9019-saved-model-auto" },
       "@/lib/ai/settings/catalog": { settingsPages: {}, settingProposalCard: () => ({}) },
       "./ticketGroups": {},
       "@/lib/ai/tools/showTicketRows": { TICKET_ROWS_PROMPT: "rows prompt" },
