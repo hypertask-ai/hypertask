@@ -10,7 +10,15 @@ Agents owned by the flag owner switch flags through `PATCH /api/mcp/flags` (scri
 
 ## Driving it with agent-browser
 
-With the runner's own agent identity, `ht-flag get` must list the flags. For the refusal path, `ht-flag set <key> <its current mode> --reason <ticket URL>#comment-<id>` pointing at a comment that is not an approved flag question must answer 403 with the approval error text, and a fresh `ht-flag get` must show the flag mode unchanged. Never switch a production flag merely for QA. Failure-hold validation can safely use an unknown key (400), an empty failure reason (400), or an unrestricted mode (Everyone, Owner, Off) with failure evidence (403). Read the same known flag before and after to prove it stayed unchanged. Actual successful hold, retry and audit/rollback behavior is covered against disposable local data. Record live successful switches UNREACHABLE when no approved disposable flag exists.
+**Hands-free drive, every flag-state change:**
+`node .claude/skills/verify-qa/scripts/flags-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+reads `GET /api/flags` with the seeded session, tries `PATCH /api/mcp/flags`
+without an agent token, expects 401 or 403, then reads the flag states again
+and expects them unchanged. It prints `PASS` or `FAIL` per step and ends with
+`flags ok`. It refuses any base that is not loopback, so it never switches a
+production flag. `--break refusal` answers the switch with HTTP 200 on
+purpose; the run must then end with `negative control ok`. The runner check
+on a real agent token is still `ht-flag get` and a refused `ht-flag set <key> <its current mode> --reason <ticket URL>#comment-<id>` that is not an approved flag question: 403, then the mode unchanged. Failure-hold validation can safely use an unknown key (400), an empty failure reason (400), or an unrestricted mode (Everyone, Owner, Off) with failure evidence (403). Read the same known flag before and after to prove it stayed unchanged. Actual successful hold, retry and audit/rollback behavior is covered against disposable local data. Record live successful switches UNREACHABLE when no approved disposable flag exists.
 
 ## Gotchas
 

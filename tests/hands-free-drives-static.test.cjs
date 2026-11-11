@@ -7,7 +7,14 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const read = (file) => readFileSync(path.join(root, file), "utf8");
-const drives = ["ai-chat-drive.mjs", "ctrl-j-drive.mjs"];
+const drives = [
+  "ai-chat-drive.mjs",
+  "ctrl-j-drive.mjs",
+  "board-drive-live.mjs",
+  "task-drive-live.mjs",
+  "comments-drive-live.mjs",
+  "flags-drive-live.mjs",
+];
 
 test("hands-free drives parse and refuse any non-loopback base", () => {
   for (const drive of drives) {
@@ -25,9 +32,13 @@ test("hands-free drives parse and refuse any non-loopback base", () => {
 test("each drive is linked from its feature page and the hosted journey", async () => {
   assert.match(read(".claude/skills/verify-qa/reference/feature-map/ai-chat.md"), /scripts\/ai-chat-drive\.mjs[\s\S]*ai-chat drive ok[\s\S]*negative control ok/);
   assert.match(read(".claude/skills/verify-qa/reference/feature-map/command-palette.md"), /scripts\/ctrl-j-drive\.mjs[\s\S]*ctrl-j drive ok[\s\S]*negative control ok/);
+  assert.match(read(".claude/skills/verify-qa/reference/feature-map/boards-and-views.md"), /scripts\/board-drive-live\.mjs[\s\S]*board ok[\s\S]*negative control ok/);
+  assert.match(read(".claude/skills/verify-qa/reference/feature-map/task-detail-and-description.md"), /scripts\/task-drive-live\.mjs[\s\S]*task ok[\s\S]*negative control ok/);
+  assert.match(read(".claude/skills/verify-qa/reference/feature-map/comments-and-mentions.md"), /scripts\/comments-drive-live\.mjs[\s\S]*comments ok[\s\S]*negative control ok/);
+  assert.match(read(".claude/skills/verify-qa/reference/feature-map/feature-flags-api.md"), /scripts\/flags-drive-live\.mjs[\s\S]*flags ok[\s\S]*negative control ok/);
   const { HANDS_FREE_DRIVES } = await import(path.join(root, "scripts/verify-qa-run.mjs"));
   assert.deepEqual([...new Set(HANDS_FREE_DRIVES.map((drive) => drive.script))].sort(), [...drives].sort());
-  assert.equal(HANDS_FREE_DRIVES.filter((drive) => drive.expect === "negative control ok").length, 2);
+  assert.equal(HANDS_FREE_DRIVES.filter((drive) => drive.expect === "negative control ok").length, drives.length);
   assert.match(read(".github/workflows/visual-regression.yml"), /options: \[visual, inbox-cycle, inbox-cycle-broken, hands-free-drives\]/);
   assert.match(read("docs/ci-policy.yml"), /journeys: \[inbox-cycle, inbox-cycle-broken, hands-free-drives\]/);
 });

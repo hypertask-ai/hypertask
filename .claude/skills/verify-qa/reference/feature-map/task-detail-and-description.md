@@ -18,6 +18,13 @@ description, save, then leave and reopen the task (or reload) to confirm the
 edit stuck. If the ticket involves AI-edited descriptions, trigger that flow
 specifically rather than a manual edit.
 
+**Hands-free drive, every task-page change:**
+`node .claude/skills/verify-qa/scripts/task-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+opens a seeded-board task, saves a description with a bold word, reloads, and
+prints `PASS` or `FAIL` per step and ends with `task ok`. It deletes the task.
+It refuses any base that is not loopback. `--break title` removes the title
+field on purpose; the run must then end with `negative control ok`.
+
 ## Gotchas
 
 - Open task not refreshing its description when a realtime update drops

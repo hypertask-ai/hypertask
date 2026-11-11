@@ -34,6 +34,17 @@ from the sidebar is the `switch-boards` journey.
 switch views, then switch to a second board and back, since the bugs below
 cluster around what happens on that second switch, not the first load.
 
+**Hands-free drive, every board, column, drag or theme change:**
+`node .claude/skills/verify-qa/scripts/board-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+creates one `[qa-runner]` card on the seeded board, checks columns, drags the
+card, reloads, then reloads under porcelain, graphite, amoled and graphite-2.
+Graphite may land as graphite-2 when that theme is the dark theme. It prints
+`PASS` or `FAIL` per step and ends with `board ok`. It deletes the card. It
+refuses any base that is not loopback, so it never drives production: run it
+on the seeded browser-smoke stack (`scripts/verify-qa <branch> hands-free-drives`
+runs it hosted). `--break columns` removes column titles on purpose; the run
+must then end with `negative control ok`.
+
 ### Bulk move between boards
 
 With HTPR-8737 enabled for Owner + QA, use two writable boards. On the

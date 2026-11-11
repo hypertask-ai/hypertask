@@ -19,6 +19,13 @@ picker.
 your own comment, and if the ticket touches mentions, `@` a user and confirm
 the picker resolves and the mention renders as a link/chip, not plain text.
 
+**Hands-free drive, every comment change:**
+`node .claude/skills/verify-qa/scripts/comments-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+posts a comment, reloads, deletes that comment through the API, and prints
+`PASS` or `FAIL` per step and ends with `comments ok`. It refuses any base
+that is not loopback. `--break post` blocks comment create on purpose; the run
+must then end with `negative control ok`.
+
 ## Gotchas
 
 - Edit control ordering on your own comment ([HTPR-6514](https://app.hypertask.ai/detail/project-15/6514), "keep Edit first on
@@ -43,8 +50,9 @@ persisted with the same formatting.
 
 ### Cleanup
 
-Delete any test comment you posted on the account's own board. Comments
-don't currently have a bulk-cleanup script, so do it by hand through the UI.
+`comments-drive-live.mjs` deletes the comment it posted, then deletes the
+sandbox task. A comment you posted outside that script still needs deleting
+on the account's own board.
 
 ### Local writing corrections
 
