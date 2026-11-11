@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
+import { HTPR_8863_EVLOG_CHAT_LOG_FLAG } from "@/lib/flags/definitions/htpr-8863-evlog-chat-log";
 
 import { releaseAiChatStreamLease, createTurnDeadline, AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS, isAiChatCancellationRequested, AI_CHAT_TURN_DEADLINE_USER_MESSAGE, AI_CHAT_TURN_DEADLINE_REASON, watchAiChatCancellation } from "@/app/api/ai/chat/stream/streamLease";
 import { failHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
@@ -17,6 +18,7 @@ import { reportHandledChatError, errorMessage, sseFrame, userFacingErrorMessage,
 
 import type { StreamState } from "./streamState";
 
+import { writeAiChatRequestLog } from "./requestLog";
 import { routeAgentMention } from "./fleetTurn";
 import { runModelTurn } from "./modelTurn";
 
@@ -24,6 +26,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
   const { body, dbUser, requestMessage, heartbeatExecutionId, contextTaskId, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, turnStartedAtMs, maxDuration, encoder } = state;
 
   state.doneSent = false;
+  state.requestLogEnabled = false;
   state.errorSent = false;
   state.cancelled = false;
   state.providerAbort = new AbortController();
@@ -159,7 +162,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
   state.turnOutcomeRecorded = false;
   state.recordTurnOutcome = (
     outcome: AiChatTurnOutcome,
-    _error?: unknown,
+    turnError?: unknown,
   ) => {
     if (state.turnOutcomeRecorded) return;
     state.turnOutcomeRecorded = true;
@@ -188,6 +191,30 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       outcome,
       latencyMs: Date.now() - state.generationStartedAt,
     });
+    if (state.requestLogEnabled) {
+      const logged = writeAiChatRequestLog({
+        requestId: streamId,
+        userId: dbUser.id,
+        projectId: usageProjectId,
+        taskId: contextTaskId,
+        agentId: state.observedAgentId,
+        model: state.observedModel,
+        provider: state.observedProvider,
+        outcome,
+        durationMs: Date.now() - state.generationStartedAt,
+        inputTokens: state.turnUsage?.inputTokens,
+        outputTokens: state.turnUsage?.outputTokens,
+        error: turnError,
+      });
+      try {
+        waitUntil(logged);
+      } catch (logError) {
+        console.warn(
+          "[ai/chat/stream] request log could not outlive the request",
+          logError,
+        );
+      }
+    }
     try {
       waitUntil(observation);
       waitUntil(alertObservation);
@@ -201,6 +228,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
   let stopClosesStream = false;
   try {
     stopClosesStream = await isFeatureEnabled(HTPR_7794_STOP_CLOSES_STREAM_FLAG, dbUser.id).catch(() => false);
+    state.requestLogEnabled = await isFeatureEnabled(HTPR_8863_EVLOG_CHAT_LOG_FLAG, dbUser.id).catch(() => false);
     const skillResolution = await resolveSkillsForAiRequest(
       requestMessage,
       {
@@ -232,7 +260,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       }
       return;
     }
-    if (!includedAllowanceError(error) && !(error instanceof Error && error.name === "AiProviderAuthenticationError")) console.error("[ai/chat/stream] stream error", error);
+    if (!state.requestLogEnabled && !includedAllowanceError(error) && !(error instanceof Error && error.name === "AiProviderAuthenticationError")) console.error("[ai/chat/stream] stream error", error);
     await reportHandledChatError(error, "stream-handler", {
       model: state.selected.resolvedModelId,
       provider: state.selected.usageProvider,
@@ -242,7 +270,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       const ownKeyProvider = state.selected.usageProvider === "byok:deepseek" ? undefined : state.selected.usageProvider;
       const nameOwnKey = Boolean(ownKeyProvider) && await isFeatureEnabled("htpr-7751-own-key-rejected", dbUser.id);
       state.send("error", {
-        content: userFacingErrorMessage(error, "stream-handler", nameOwnKey ? ownKeyProvider : undefined),
+        content: userFacingErrorMessage(error, "stream-handler", nameOwnKey ? ownKeyProvider : undefined, state.requestLogEnabled),
         ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
       });
       state.finish("error");
@@ -250,7 +278,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     if (heartbeatExecutionId && !state.heartbeatExecutionTerminal) {
       await failHeartbeatExecution(
         heartbeatExecutionId,
-        errorMessage(error)
+        errorMessage(error, state.requestLogEnabled)
       ).catch(() => undefined);
       state.heartbeatExecutionTerminal = true;
     }
