@@ -319,14 +319,7 @@ def main():
         )
     status, _, raw = api("GET", f"/tasks?task_id={task_id}")
     if task_still_present(status, raw, task_id):
-        seen = ""
-        try:
-            match = matching_task(json.loads(raw.decode()), task_id)
-            if isinstance(match, dict) and isinstance(match.get("status"), str):
-                seen = match["status"]
-        except json.JSONDecodeError:
-            seen = ""
-        fail("temporary task still exists" + (f" status {seen}" if seen else ""))
+        fail(f"temporary task still exists after a {status} readback")
     status, _, raw = api("GET", "/inbox/list")
     if status != 200:
         fail(f"inbox cleanup check status {status}")
