@@ -84,10 +84,6 @@ pr_job_budget:
       jobs: 3
       published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
       concurrency_group: feature-flag-gate-<head-sha>
-      concurrency_scope: job
-      concurrency_key: head_sha
-      reconciliation_discovery: scheduled_matrix
-      reconciliation_max_parallel: 4
       queue: max
       cancel_in_progress: false
     - workflow: .github/workflows/ux-signoff-gate.yml
@@ -556,9 +552,6 @@ feature_flag_gate:
   # Bugfix flags share ticket naming. /api/cron/feature-flag-removals files cleanup after 7 days on Everyone; money, access and data-deletion stay at 14 days.
   open_pull_request_reconciliation: scheduled_every_15_minutes
   pull_request_event_evaluation: changed_pr_only
-  reconciliation_snapshot: discovery_metadata_bound_to_locked_head_sha
-  reconciliation_shared_head_refresh: paginated_commit_associated_pull_requests
-  reconciliation_publication: serialize_all_writers_per_head_sha_and_fail_closed_on_metadata_change_or_drift
 
 policies:
   previews:

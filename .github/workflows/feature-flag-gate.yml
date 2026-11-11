@@ -597,6 +597,15 @@ jobs:
                  [ "$(jq -r '.base.sha' <<<"$current")" != "$base_sha" ] ||
                  [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
                  ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
+                current_fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$(jq -r '.title' <<<"$current")" "$(jq -c '[.labels[]?.name // empty] | sort' <<<"$current")" | sha256sum | cut -c1-16)"
+                if [ "$fresh_head_pr_count" -eq 1 ] && jq -e --arg sha "$head_sha" --arg base "$base_sha" --arg fingerprint "$current_fingerprint" --slurpfile pull "$gate_tmp/current.json" '
+                  $pull[0] as $pr | map(select(.context == "feature-flag-gate"))[0] |
+                  $pr.state == "open" and $pr.base.ref == "production" and $pr.head.sha == $sha and $pr.base.sha == $base and
+                  (.state == "success" or .state == "failure") and (.target_url // "" | split("#")[1:] | join("#")) == $fingerprint
+                ' "$statuses_file" >/dev/null; then
+                  echo "Preserving the verdict for pull request #$number current metadata."
+                  continue
+                fi
                 echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
                 publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file"
                 continue

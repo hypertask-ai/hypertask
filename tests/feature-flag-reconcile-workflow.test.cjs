@@ -405,14 +405,24 @@ for (const [field, change] of [
   ["base", (pull) => ({ ...pull, base: { ...pull.base, sha: "e".repeat(40) } })],
   ["state", (pull) => ({ ...pull, state: "closed" })],
 ]) {
-  test(`reconcile: publication refresh blocks changed ${field} after the fleet snapshot`, (t) => {
-    const { result, output, posts } = runWorkflow(t, { publicationPull: change });
-    assert.equal(result.status, 0, output);
-    assert.match(output, /changed during reconciliation/);
-    assert.equal(posts.length, 1);
-    assert.equal(posts[0].state, "error");
-    assert.match(posts[0].description, /waiting for the updated pull request/);
-  });
+  for (const state of ["absent", "success", "failure", "stale success", "shared success"]) {
+    test(`reconcile: changed ${field} with ${state} preserves only a current unique-head verdict`, (t) => {
+      const preserve = ["title", "labels"].includes(field) && ["success", "failure"].includes(state);
+      const { result, output, posts } = runWorkflow(t, {
+        publicationPull: change, freshSharedHead: state === "shared success",
+        statuses: (pull) => ({ [pull.head.sha]: state === "absent" ? [] : [featureFlagStatus(state === "stale success" ? pull : change(pull), {
+          state: state === "failure" ? "failure" : "success", updated_at: "2020-01-01T00:00:00Z",
+        })] }),
+      });
+      assert.equal(result.status, 0, output);
+      assert.match(output, preserve ? /Preserving the verdict/ : /changed during reconciliation/);
+      assert.equal(posts.length, preserve ? 0 : 1);
+      if (!preserve) {
+        assert.equal(posts[0].state, "error");
+        assert.match(posts[0].description, /waiting for the updated pull request/);
+      }
+    });
+  }
 }
 
 test("reconcile: publication refresh failure replaces an old success with an error and fails closed", (t) => {
@@ -567,14 +577,11 @@ for (const endpoint of ['/commits/', 'graphql', '/statuses/']) {
 test("events and reconciliation serialize per head commit, never per workflow run", () => {
   const config = yaml.load(workflow);
   assert.equal(config.concurrency, undefined, "a completed-job zombie cannot hold a workflow-wide lock");
-  const event = config.jobs["feature-flag-gate"].concurrency;
-  const sweep = config.jobs["reconcile-open-pull-requests"].concurrency;
-  assert.equal(event.group, "feature-flag-gate-${{ github.event.pull_request.head.sha }}");
-  assert.equal(sweep.group, "feature-flag-gate-${{ matrix.head_sha }}");
+  assert.equal(config.jobs["feature-flag-gate"].concurrency.group, "feature-flag-gate-${{ github.event.pull_request.head.sha }}");
+  assert.equal(config.jobs["reconcile-open-pull-requests"].concurrency.group, "feature-flag-gate-${{ matrix.head_sha }}");
   assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["fail-fast"], false);
   assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["max-parallel"], 4);
 });
-
 const headAt = (index) => (index + 1).toString(16).padStart(40, "0");
 const discovered = (number) => ({ number, head_sha: headAt(number),
   pull: { number, state: null, title: null, base: { ref: null, sha: null }, head: { sha: headAt(number), repo: { full_name: null } }, labels: [] }, head_pr_count: 1 });
@@ -592,35 +599,28 @@ for (const [name, pages, expected, rateLimited = false] of [
     t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
     const discovery = yaml.load(workflow).jobs["reconciliation-pull-requests"];
     assert.equal(discovery.permissions.statuses, undefined, "discovery cannot publish statuses");
-    const script = discovery.steps.find((step) => step.id === "pulls").run;
-    fs.writeFileSync(path.join(fixture, "pages.json"), JSON.stringify(pages));
     fs.writeFileSync(path.join(fixture, "gh"), `#!/bin/sh
-printf '%s\\n' "$*" >"$FIXTURE_CALL"
+case "$*" in *"--paginate --slurp"*) ;; *) exit 1 ;; esac
 if [ "$FIXTURE_RATE_LIMITED" = "true" ]; then
   printf 'HTTP/2.0 403 Forbidden\\nX-Ratelimit-Remaining: 0\\nX-Ratelimit-Reset: %s\\n\\n{}\\n' "$(( $(date +%s) + 3600 ))"
   exit 1
 fi
 printf 'HTTP/2.0 200 OK\\nContent-Type: application/json\\n\\n'
-cat "$FIXTURE_PAGES"
+printf '%s\\n' "$FIXTURE_PAGES"
 `, { mode: 0o755 });
     const output = path.join(fixture, "output");
-    const call = path.join(fixture, "call");
     fs.writeFileSync(output, "");
-    const result = spawnSync("bash", ["-e", "-c", script], {
+    const result = spawnSync("bash", ["-e", "-c", discovery.steps.find((step) => step.id === "pulls").run], {
       cwd: path.join(__dirname, ".."), encoding: "utf8", timeout: 5000,
       env: { ...process.env, PATH: `${fixture}:${process.env.PATH}`, REPO: "fixture/repository", RUNNER_TEMP: fixture,
-        GITHUB_OUTPUT: output, FIXTURE_CALL: call, FIXTURE_PAGES: path.join(fixture, "pages.json"),
+        GITHUB_OUTPUT: output, FIXTURE_PAGES: JSON.stringify(pages),
         FIXTURE_RATE_LIMITED: String(rateLimited) },
     });
     assert.ifError(result.error);
-    const contents = fs.readFileSync(output, "utf8");
-    assert.ok(fs.existsSync(call), result.stdout + result.stderr);
-    assert.match(fs.readFileSync(call, "utf8"), /--paginate --slurp/);
     assert.deepEqual(fs.readdirSync(fixture).filter((name) => name.startsWith("feature-flag-discovery.")), [], "discovery removes its private scratch");
-    if (expected === null) assert.notEqual(result.status, 0, result.stdout + result.stderr);
-    else assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.status === 0, expected !== null, result.stdout + result.stderr);
     if (rateLimited) assert.match(result.stderr, /skipped: GitHub rate limited/);
-    assert.equal(contents, expected == null ? "" : `matrix=${JSON.stringify(expected)}\n`, "never publish a partial matrix");
+    assert.equal(fs.readFileSync(output, "utf8"), expected == null ? "" : `matrix=${JSON.stringify(expected)}\n`, "never publish a partial matrix");
   });
 }
 
