@@ -213,7 +213,9 @@ BRAIN_LEVELS=(brain-light brain-medium brain-hard brain-extra-hard)
 brain_board_labels() {
   local out
   out=$(hypertask labels list --project "$1" --json 2>/dev/null) || return 1
-  jq -r '(.labels // [])[] | (.name? // "") | ascii_downcase | select(test("^brain-(light|medium|hard|extra-hard)$"))' <<< "$out" 2>/dev/null || return 1
+  jq -r 'if (.success == true) and ((.labels | type) == "array")
+    then (.labels[] | (.name? // "") | ascii_downcase | select(test("^brain-(light|medium|hard|extra-hard)$")))
+    else error("invalid label response") end' <<< "$out" 2>/dev/null || return 1
 }
 brain_level_nearest() {
   local wanted=$1 i level want_at=-1

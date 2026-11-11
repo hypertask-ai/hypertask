@@ -93,6 +93,7 @@ export VCC_FILING_GATE="$T/bin/filing-gate"
 mkdir -p "$T/labels"
 printf '%s\n' '{"success":true,"labels":[{"id":"l1","name":"Infra"},{"id":"l2","name":"Agent Feedback"},{"id":"l3","name":"brain-medium"}]}' > "$T/labels/12057.json"
 printf '%s\n' '{"success":true,"labels":[{"id":"l4","name":"Bug"}]}' > "$T/labels/2101.json"
+printf '%s\n' '{"success":false}' > "$T/labels/12058.json"
 export VCC_TEST_LABELS="$T/labels"
 
 
@@ -912,6 +913,9 @@ run bash "$vcc" task create --project 2101 --labels 'Bug,brain-medium' --title T
 run bash "$vcc" task create --project 2101 --labels brain-medium --title T
 [ "$status" = 0 ] || fail "a brain label alone was refused on a board without any: $(< "$T/err")"
 [[ $(< "$T/out") != *'--labels'* ]] || fail "an empty label list still reached the CLI: $(< "$T/out")"
+run bash "$vcc" task create --project 12058 --labels 'Infra,brain-light' --title T
+[ "$status" = 0 ] || fail "an unreadable label response blocked the create: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Infra,brain-light>'* ]] || fail "an unreadable label response changed the create: $(< "$T/out")"
 printf 'ok brain labels follow the board labels\n'
 filing_refused() {
   local code=$1 message=$2
