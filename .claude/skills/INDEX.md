@@ -17,6 +17,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | scriptify | Weekly routine discovery, deterministic scripts and runner handoff | .claude/skills/scriptify/SKILL.md |
 | update-ai-models | Model-watch tickets or catalog refresh: automatic existing-class OpenAI/Anthropic updates, new-class approval and premium holds | .claude/skills/update-ai-models/SKILL.md |
 | setup-runner | `/setup-runner [number]` in a fresh session: set up its runner login and identity, then follow /ship without a ticket | .claude/skills/setup-runner/SKILL.md |
+| setup-agents | `/setup-agents "<name>"` on a clean machine: one command checks the tools, sets up or reuses one agent login, proves it, and never prints a token; `/setup-runner` is its runner shortcut | .claude/skills/setup-agents/SKILL.md |
 | clean-up | After Done (from /ship), or by hand with `/clean-up`: removes this session's own finished worktrees and branches | .claude/skills/clean-up/SKILL.md |
 | reflect | Last /ship step, once after the last ticket's Clean up: three reviewers and a synthesizer turn this session's lessons into proposed repo skill edits for HT Product Lead to approve (pstack by Lauren Tan, MIT) | .claude/skills/reflect/SKILL.md |
 | drain-board | `/drain-board <board>`: works every open ticket on a board until each is Done or waiting on Valentin, one ledger gate per ticket | .claude/skills/drain-board/SKILL.md |

@@ -8,6 +8,7 @@ on:
       - '.claude/skills/ship/scripts/**'
       - '.claude/skills/vcc/bin/**'
       - '.claude/skills/setup-runner/scripts/**'
+      - '.claude/skills/setup-agents/scripts/**'
       - '.claude/skills/scriptify/scripts/**'
       - '.claude/skills/maintain-verification-skill/scripts/**'
       - '.claude/systemd/**'
@@ -78,6 +79,7 @@ jobs:
           set -euo pipefail
           bash .claude/skills/vcc/bin/vcc.test.sh
           bash .claude/skills/setup-runner/scripts/setup-runner.test.sh
+          bash .claude/skills/setup-agents/scripts/setup-agents.test.sh
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/ship-check-finish.test.py
           python3 .claude/skills/ship/scripts/gh-merge-guard.test.py -v

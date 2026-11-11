@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap a neutral runner without exposing or replacing its token.
+# Runner shortcut: reserve a free runner number, then use the one setup-agents path.
 set +x
 set -euo pipefail
 for runner_command_dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
@@ -14,7 +14,6 @@ unset runner_command_dir
 umask 077
 SELF=$(readlink -f "$0")
 CREDS=$HOME/.config/hypertask-agents/credentials
-SESSION_CREDS=$CREDS/sessions
 fail() { printf 'setup-runner: %s\n' "$1" >&2; exit 1; }
 
 [ "$#" -le 1 ] || fail 'usage: setup-runner [positive runner number]'
@@ -40,7 +39,7 @@ while [ "$pid" -gt 1 ]; do
 done
 name=${name%% | *}
 
-mkdir -p "$SESSION_CREDS"
+mkdir -p "$CREDS"
 # Serialize picking and provisioning so simultaneous setups cannot claim one number.
 exec 9>"$CREDS/.setup-runner.lock"
 flock -x 9
@@ -73,42 +72,13 @@ elif [ "$#" -eq 1 ]; then
 else
   n=1
   while [ -e "$CREDS/runner-$n-agent-token" ] || [ -L "$CREDS/runner-$n-agent-token" ] || busy "$n"; do
-    n=$((n+1))
+    n=$((n + 1))
   done
 fi
 if busy "$n"; then fail "RUNNER $n is already used by another live session"; fi
-token=$CREDS/runner-$n-agent-token
-tmp=
-trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
-if [ ! -e "$token" ] && [ ! -L "$token" ]; then
-  response=$(hypertask agents create --name "Runner $n" --project 15 --project 11514 --json 2>/dev/null) || fail 'agent creation failed (output withheld to protect tokens)'
-  tmp=$(mktemp "$CREDS/.runner-$n-token.XXXXXX")
-  if ! jq -er '.token | select(type == "string" and length > 0 and (test("\\s") | not))' <<<"$response" >"$tmp" 2>/dev/null; then
-    fail 'agent creation did not return a valid token'
-  fi
-  # Hard-link publication refuses to overwrite even if a different writer races us.
-  ln "$tmp" "$token" || fail 'token already exists; rerun to reuse it'
-  rm -f "$tmp"
-  tmp=
-  unset response
-fi
-if [ ! -f "$token" ] || [ ! -s "$token" ] || [ ! -r "$token" ]; then
-  fail 'existing token is empty or unreadable; refusing to replace it'
-fi
-link=$SESSION_CREDS/runner-$n-agent-token
-if [ -e "$link" ] && [ ! -L "$link" ]; then
-  fail 'session credential is not a symlink; refusing to overwrite it'
-fi
-ln -sfn "../runner-$n-agent-token" "$link"
-
-# CLI errors may echo credentials, so show only our own failure messages.
-ticket=$(hypertask --json --token "$(cat "$token")" tasks get YPER4-159 2>/dev/null) || fail 'login verification failed (output withheld to protect tokens)'
-jq -e '.success == true and any(.tasks[]; .ticketNumber == "YPER4-159")' <<<"$ticket" >/dev/null 2>&1 || fail 'login verification did not return YPER4-159'
 if [ "$name" = "RUNNER $n" ]; then
-  identity=$("$(dirname "$SELF")/../../ship/scripts/ship-identity") || fail 'identity verification failed'
-  [ "$identity" = "RUNNER $n"$'\t'"$link" ] || fail 'ship-identity does not match the runner credential'
-  printf 'RUNNER %s: login ok, identity ok\n' "$n"
+  set -- --identity-required
 else
-  printf 'RUNNER %s: login ok; type /rename RUNNER %s then rerun\n' "$n" "$n"
-  printf '/rename RUNNER %s\n' "$n"
+  set --
 fi
+exec "${SELF%/*}/../../setup-agents/scripts/setup-agents" --name "Runner $n" --identity "RUNNER $n" "$@"

@@ -7,7 +7,7 @@ description: Turn a fresh Claude Code session into a neutral runner with /setup-
 
 ## One way to set up agents
 
-`/setup-agents` is now the one way to set up agents for any project. `/setup-runner` stays as the Hypertask runner shortcut, equivalent to `setup-agents --new-agent "RUNNER <n>"` for the Hypertask repo. For a new project or a new lead, use `/setup-agents`. The existing runner steps below still apply.
+`.claude/skills/setup-agents/scripts/setup-agents` in this repo is the one onboarding command. `/setup-runner` is its runner shortcut: it picks a free runner number and calls that same script with `--name "Runner <n>" --identity "RUNNER <n>"`. Use `/setup-agents` directly for a lead or any other name. The runner steps below still apply.
 
 Valentin types `/setup-runner` or `/setup-runner 5` in a fresh session in `~/projects/hypertask`.
 

@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+# One agent onboarding path: check the machine, then set up or reuse one agent login.
+# Prints no token and never replaces an existing credential.
+set +x
+set -euo pipefail
+for agent_command_dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
+  [ -d "$agent_command_dir" ] || continue
+  case ":${PATH-}:" in
+    *":$agent_command_dir:"*) ;;
+    *) PATH="$agent_command_dir${PATH:+:$PATH}" ;;
+  esac
+done
+export PATH
+unset agent_command_dir
+umask 077
+SELF=$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")
+SCRIPTS=${SELF%/*}
+CREDS=${VCC_CREDENTIALS_DIR:-$HOME/.config/hypertask-agents/credentials}
+SESSION_CREDS=${VCC_SESSION_CREDENTIALS_DIR:-$CREDS/sessions}
+fail() { printf 'setup-agents: %s\n' "$1" >&2; exit 1; }
+usage() {
+  cat <<'EOF'
+usage: setup-agents [options] ["<agent name>"]
+
+Sets up one Hypertask agent login for this machine: creates the agent when no
+credential exists, reuses the credential when one does, then asks the server to
+verify the login. Prints no token.
+
+  --name "<name>"     agent display name (or the first plain argument)
+  --identity "<name>" session name that owns this login (default: --name);
+                      messages and the rename hint use it
+  --project <id>      project id to add the agent to; repeatable
+                      (default: 15 and 11514)
+  --check             machine smoke only: tools and login, no writes, under 5s;
+                      with --name it checks that agent's existing credential
+  --identity-required this session already carries the name; a mismatch is fatal
+  -h, --help          show this text
+
+Needs: hypertask, jq, flock, mktemp, ln, cat, readlink.
+EOF
+}
+
+projects=()
+name=
+identity_name=
+check_only=0
+identity_required=0
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    --name)
+      [ "$#" -ge 2 ] || fail '--name needs an agent name'
+      name=$2
+      shift 2
+      ;;
+    --name=*)
+      name=${1#--name=}
+      shift
+      ;;
+    --identity)
+      [ "$#" -ge 2 ] || fail '--identity needs a session name'
+      identity_name=$2
+      shift 2
+      ;;
+    --identity=*)
+      identity_name=${1#--identity=}
+      shift
+      ;;
+    --project)
+      [ "$#" -ge 2 ] || fail '--project needs a project id'
+      projects+=("$2")
+      shift 2
+      ;;
+    --project=*)
+      projects+=("${1#--project=}")
+      shift
+      ;;
+    --check)
+      check_only=1
+      shift
+      ;;
+    --identity-required)
+      identity_required=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --*)
+      fail "unknown option: $1 (run setup-agents --help)"
+      ;;
+    *)
+      [ -z "$name" ] || fail "unexpected argument: $1 (run setup-agents --help)"
+      name=$1
+      shift
+      ;;
+  esac
+done
+
+missing=0
+for tool in hypertask jq flock mktemp ln cat readlink; do
+  command -v "$tool" >/dev/null 2>&1 && continue
+  missing=1
+  case $tool in
+    hypertask) fix='install it from https://github.com/hypertask-ai/cli' ;;
+    jq) fix='install it with: sudo apt-get install jq' ;;
+    flock) fix='install it with: sudo apt-get install util-linux' ;;
+    *) fix='install it with your package manager' ;;
+  esac
+  printf 'setup-agents: missing %s; %s\n' "$tool" "$fix" >&2
+done
+if [ "$missing" -eq 1 ]; then
+  printf 'setup-agents: nothing was created; install the tools above and rerun\n' >&2
+  exit 2
+fi
+
+slug_of() {
+  local value=$1 c out=
+  for ((i = 0; i < ${#value}; i++)); do
+    c=${value:i:1}
+    case $c in
+      [A-Z]) c=${c,,} ;;
+    esac
+    case $c in
+      [a-z0-9]) out+=$c ;;
+      *) out+=- ;;
+    esac
+  done
+  while [[ $out == *--* ]]; do out=${out//--/-}; done
+  out=${out#-}
+  printf '%s' "${out%-}"
+}
+
+login_ok() {
+  local status
+  status=$(hypertask --json "$@" status 2>/dev/null) \
+    || fail 'the server rejected this login; run hypertask login or pass a management key, then rerun (CLI output withheld to protect tokens)'
+  jq -e '.authenticated == true and .verified == true' <<<"$status" >/dev/null 2>&1 \
+    || fail 'the login is not authenticated; run hypertask login or pass a management key, then rerun (CLI output withheld to protect tokens)'
+}
+
+if [ "$check_only" -eq 1 ]; then
+  check_args=()
+  if [ -n "$name" ]; then
+    check_slug=$(slug_of "$name")
+    [[ $check_slug =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail 'agent name needs at least one letter or digit'
+    check_token=$CREDS/$check_slug-agent-token
+    if [ -f "$check_token" ] && [ -s "$check_token" ]; then
+      check_args=(--token "$(cat "$check_token")")
+    fi
+  fi
+  login_ok "${check_args[@]}"
+  printf 'setup-agents: check ok (tools present, login ok)\n'
+  exit 0
+fi
+
+if [ -z "$name" ]; then
+  usage >&2
+  fail 'no agent name: pass --name "<agent name>" or a name as the first argument'
+fi
+case $name in
+  *[[:cntrl:]]*|*'|'*|*'${'*) fail 'agent name has a control character, a pipe or a template marker; use plain words' ;;
+esac
+[ "${#name}" -le 64 ] || fail "agent name is ${#name} characters; the limit is 64"
+identity_name=${identity_name:-$name}
+case $identity_name in
+  *[[:cntrl:]]*|*'|'*|*'${'*) fail 'identity name has a control character, a pipe or a template marker; use plain words' ;;
+esac
+[ "${#identity_name}" -le 64 ] || fail "identity name is ${#identity_name} characters; the limit is 64"
+case $name in
+  ht_*|htmk_*|eyJ*) fail 'agent name looks like a credential; pass the agent display name instead' ;;
+esac
+slug=$(slug_of "$name")
+[[ $slug =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail 'agent name needs at least one letter or digit'
+[ "$(slug_of "$identity_name")" = "$slug" ] \
+  || fail 'the identity name and the display name must produce the same slug; use one name or rerun with matching names'
+if [ "${#projects[@]}" -eq 0 ]; then
+  projects=(15 11514)
+fi
+for project in "${projects[@]}"; do
+  [[ $project =~ ^[0-9]+$ ]] || fail "project id must be a number, got: $project"
+done
+
+mkdir -p "$CREDS"
+exec 8>"$CREDS/.setup-agents.lock"
+flock -x 8
+
+token=$CREDS/$slug-agent-token
+tmp=
+trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
+if [ ! -e "$token" ] && [ ! -L "$token" ]; then
+  create_args=(agents create --name "$name")
+  for project in "${projects[@]}"; do
+    create_args+=(--project "$project")
+  done
+  create_args+=(--json)
+  response=$(hypertask "${create_args[@]}" 2>/dev/null) \
+    || fail "could not create agent \"$name\": log in as a board owner (hypertask login) or pass a management key, then rerun (CLI output withheld to protect tokens)"
+  tmp=$(mktemp "$CREDS/.$slug-token.XXXXXX")
+  jq -er '.token | select(type == "string" and length > 0 and (test("\\s") | not))' <<<"$response" >"$tmp" 2>/dev/null \
+    || fail 'agent creation returned no usable token; nothing was saved, rerun after checking the board'
+  ln "$tmp" "$token" || fail "a credential for \"$name\" appeared while setup was running; rerun to reuse it"
+  rm -f "$tmp"
+  tmp=
+  unset response
+fi
+if [ ! -f "$token" ] || [ ! -s "$token" ] || [ ! -r "$token" ]; then
+  fail "the existing credential $token is empty, unreadable or not a regular file; refusing to replace it"
+fi
+mkdir -p "$SESSION_CREDS"
+link=$SESSION_CREDS/$slug-agent-token
+if [ -e "$link" ] && [ ! -L "$link" ]; then
+  fail "the session credential $link is not a symlink; refusing to overwrite it"
+fi
+ln -sfn "../$slug-agent-token" "$link"
+
+login_ok --token "$(cat "$token")"
+identity=$("$SCRIPTS/../../ship/scripts/ship-identity") || fail 'identity verification failed'
+if [ "$identity" = "$identity_name"$'\t'"$link" ]; then
+  printf '%s: login ok, identity ok\n' "$identity_name"
+elif [ "$identity_required" -eq 1 ] || [ "${identity%%$'\t'*}" = "$identity_name" ]; then
+  fail "ship-identity does not match the agent credential: expected $identity_name, got ${identity%%$'\t'*}"
+else
+  printf '%s: login ok; type /rename %s then rerun\n' "$identity_name" "$identity_name"
+  printf '/rename %s\n' "$identity_name"
+fi
