@@ -1,8 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const ts = require('typescript');
+const { loadModule } = require('./helpers/loadModule.cjs');
 const source = ts.createSourceFile('Homepage.tsx', fs.readFileSync(path.join(__dirname, '../src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 function expression(name, values) {
   let initializer;
@@ -12,8 +14,14 @@ function expression(name, values) {
   }
   visit(source);
   assert.ok(initializer, name);
-  const code = ts.transpileModule(`return ${initializer.getText(source)}`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return new Function(...Object.keys(values), code)(...Object.values(values));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'htpr-9066-'));
+  const file = path.join(dir, 'initializer.tsx');
+  try {
+    fs.writeFileSync(file, `export default ({ ${Object.keys(values).join(', ')} }) => (${initializer.getText(source)});`);
+    return loadModule(file).default(values);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 const tasks = Array.from({ length: 50 }, (_, i) => ({ id: i + 1, projectId: 15, sectionId: 10, title: `Card ${i}` }));
 function display(overrides = {}) {
@@ -37,7 +45,7 @@ test('one batch request, exact failed cards, one successful Undo and pending hid
   const started = new Promise(resolve => { reconciling = resolve; });
   const reconcile = new Promise(resolve => { release = resolve; });
   const callback = expression('archiveSelectedBatchForBulk', {
-    useCallback: fn => fn(), _currentProject: { id: 15 }, currentUser: { id: 985 }, bulkArchiveBatch: true, queryClient: {},
+    useCallback: fn => fn, _currentProject: { id: 15 }, currentUser: { id: 985 }, bulkArchiveBatch: true, queryClient: {},
     setPendingBulkArchiveIds: update => { pending = typeof update === 'function' ? update(pending) : update; },
     getBulkSourceSectionId: task => task.sectionId, removeFromListWithStatus: async () => {},
     axios: { post: async (url, body) => { calls.push([url, body]); return { data: { archivedIds: tasks.slice(0, 49).map(t => t.id) } }; } },
@@ -59,7 +67,7 @@ test('failed batch restores failure selection without an Undo or stuck pending I
   let pending = new Set();
   let reconciled = false;
   const callback = expression('archiveSelectedBatchForBulk', {
-    useCallback: fn => fn(), _currentProject: { id: 15 }, currentUser: { id: 985 }, bulkArchiveBatch: true, queryClient: {},
+    useCallback: fn => fn, _currentProject: { id: 15 }, currentUser: { id: 985 }, bulkArchiveBatch: true, queryClient: {},
     setPendingBulkArchiveIds: update => { pending = update(pending); },
     getBulkSourceSectionId: task => task.sectionId, removeFromListWithStatus: async () => {},
     axios: { post: async () => { throw Error('connection lost'); } },
