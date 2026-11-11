@@ -4,6 +4,7 @@ const ENDPOINT = 'https://vercel.com/api/omniagent/v1/security-findings';
 const ALL_STATUSES = 'open,closed,dismissed';
 const GITHUB_API = 'https://api.github.com';
 const REVIEW_CHECK = 'Vercel Security Review';
+const REVIEW_CONCLUSIONS = new Set(['success', 'failure', 'neutral']);
 const REVIEW_WINDOW_DAYS = 7;
 const REVIEW_PAGES = 3;
 const MAX_CHECKED = 200;
@@ -50,6 +51,16 @@ function readCommit(commit) {
   return { sha, at };
 }
 
+function readReview(run) {
+  if (run?.name !== REVIEW_CHECK) return null;
+  if (run.status !== 'completed') return null;
+  if (!REVIEW_CONCLUSIONS.has(run.conclusion)) return null;
+  if (typeof run.completed_at !== 'string' || Number.isNaN(Date.parse(run.completed_at))) {
+    throw new Error('GitHub check read: unexpected schema');
+  }
+  return new Date(run.completed_at).toISOString();
+}
+
 async function readCoverage(repository, token, request = fetch) {
   if (!token) throw new Error('GITHUB_TOKEN is missing');
   if (typeof repository !== 'string' || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
@@ -88,9 +99,10 @@ async function readCoverage(repository, token, request = fetch) {
     let page;
     try { page = await checkResponse.json(); } catch { throw new Error('GitHub check read: invalid JSON'); }
     if (!Array.isArray(page?.check_runs)) throw new Error('GitHub check read: unexpected schema');
-    const run = page.check_runs.find(candidate => candidate?.name === REVIEW_CHECK && typeof candidate.started_at === 'string' && !Number.isNaN(Date.parse(candidate.started_at)));
-    if (run) {
-      return { repository, head, reviewedSha: candidate.sha, reviewedAt: new Date(run.started_at).toISOString(), checked, horizon: candidate.at };
+    const run = page.check_runs.find(candidate => candidate?.name === REVIEW_CHECK);
+    const reviewedAt = run ? readReview(run) : null;
+    if (reviewedAt) {
+      return { repository, head, reviewedSha: candidate.sha, reviewedAt, checked, horizon: candidate.at };
     }
   }
   const horizon = checked === 0 ? head.at : commits[checked - 1].at;
@@ -100,9 +112,9 @@ async function readCoverage(repository, token, request = fetch) {
 function formatCoverage(coverage) {
   if (coverage.reviewedSha) {
     const coversHead = coverage.reviewedSha === coverage.head.sha;
-    return `Scan coverage: Vercel last reviewed production ${coverage.reviewedSha} at ${coverage.reviewedAt}, ${coverage.checked} commit(s) back. Production HEAD is ${coverage.head.sha} at ${coverage.head.at}, ${coversHead ? 'so this review covers it' : 'so this review does not cover it'}.`;
+    return `Scan coverage: the newest completed ${REVIEW_CHECK} covered production ${coverage.reviewedSha} and finished at ${coverage.reviewedAt}, ${coverage.checked} commit(s) back. Production HEAD is ${coverage.head.sha} at ${coverage.head.at}, ${coversHead ? 'so this review covers it' : 'so this review does not cover it'}.`;
   }
-  return `Scan coverage: no ${REVIEW_CHECK} on any of the ${coverage.checked} production commits checked, back to ${coverage.horizon} (HEAD ${coverage.head.sha} at ${coverage.head.at}). Security Reviews are off or not running, so no scan covers production until they report again.`;
+  return `Scan coverage: no completed ${REVIEW_CHECK} on any of the ${coverage.checked} production commits checked, back to ${coverage.horizon} (HEAD ${coverage.head.sha} at ${coverage.head.at}). A review that is queued or still running covers nothing yet, and Security Reviews are off or not running, so no scan covers production until they report again.`;
 }
 
 function formatFindings(findings, coverage) {
@@ -133,10 +145,8 @@ function formatFindings(findings, coverage) {
 }
 
 async function main(env = process.env, request = fetch, log = console.log) {
-  const [findings, coverage] = await Promise.all([
-    readFindings(env.VERCEL_TOKEN, request),
-    readCoverage(env.GITHUB_REPOSITORY, env.GITHUB_TOKEN, request),
-  ]);
+  const coverage = await readCoverage(env.GITHUB_REPOSITORY, env.GITHUB_TOKEN, request);
+  const findings = await readFindings(env.VERCEL_TOKEN, request);
   const report = formatFindings(findings, coverage);
   log(report);
 }

@@ -44,7 +44,10 @@ const head = commit('b', '2026-11-11T19:40:22Z');
 const reviewed = commit('c', '2026-11-08T18:48:05Z');
 const unreviewed = commit('d', '2026-11-07T23:19:30Z');
 const reviewRuns = runs => ({ ok: true, status: 200, json: async () => ({ check_runs: runs }) });
-const review = startedAt => ({ name: 'Vercel Security Review', started_at: startedAt });
+const review = (at, overrides = {}) => ({ name: 'Vercel Security Review', status: 'completed', conclusion: 'success', started_at: at, completed_at: at, ...overrides });
+const isGitHubUrl = url => {
+  try { return new URL(String(url)).hostname === 'api.github.com'; } catch { return false; }
+};
 const repo = 'hypertask-ai/hypertask';
 const commitsPage = commits => ({ ok: true, status: 200, json: async () => commits });
 
@@ -105,7 +108,7 @@ test('names the newest production commit a Vercel review covered and whether it 
   assert.equal(covered.reviewedSha, head.sha);
   assert.equal(covered.reviewedAt, '2026-11-10T00:31:00.000Z');
   assert.equal(covered.checked, 1);
-  assert.match(formatCoverage(covered), /Scan coverage: Vercel last reviewed production b{40} at 2026-11-10T00:31:00.000Z, 1 commit\(s\) back\. Production HEAD is b{40} at 2026-11-11T19:40:22Z, so this review covers it\./);
+  assert.match(formatCoverage(covered), /Scan coverage: the newest completed Vercel Security Review covered production b{40} and finished at 2026-11-10T00:31:00.000Z, 1 commit\(s\) back\. Production HEAD is b{40} at 2026-11-11T19:40:22Z, so this review covers it\./);
 
   const behind = await readCoverage(repo, 'github-secret', coverageRequest([head, reviewed, unreviewed], { [reviewed.sha]: [review('2026-11-08T18:50:00Z')] }));
   assert.equal(behind.reviewedSha, reviewed.sha);
@@ -118,7 +121,49 @@ test('states plainly when no production commit in the window carries a review', 
   assert.equal(coverage.reviewedSha, null);
   assert.equal(coverage.checked, 3);
   assert.equal(coverage.horizon, '2026-11-07T23:19:30Z');
-  assert.match(formatCoverage(coverage), /Scan coverage: no Vercel Security Review on any of the 3 production commits checked, back to 2026-11-07T23:19:30Z \(HEAD b{40} at 2026-11-11T19:40:22Z\)\. Security Reviews are off or not running, so no scan covers production until they report again\./);
+  assert.match(formatCoverage(coverage), /Scan coverage: no completed Vercel Security Review on any of the 3 production commits checked, back to 2026-11-07T23:19:30Z \(HEAD b{40} at 2026-11-11T19:40:22Z\)\./);
+});
+
+test('treats only a finished review as coverage and reports when it finished', async () => {
+  for (const unfinished of [{ status: 'in_progress', conclusion: null }, { status: 'queued', conclusion: null }, { status: 'in_progress', conclusion: null, completed_at: '2026-11-10T00:40:00Z' }]) {
+    const coverage = await readCoverage(repo, 'github-secret', coverageRequest([head, reviewed], {
+      [head.sha]: [review('2026-11-10T00:00:00Z', { ...unfinished, completed_at: undefined })],
+    }));
+    assert.equal(coverage.reviewedSha, null, `${unfinished.status} must not count as coverage`);
+    assert.equal(coverage.checked, 2);
+  }
+  for (const conclusion of ['cancelled', 'skipped', 'timed_out', 'startup_failure']) {
+    const coverage = await readCoverage(repo, 'github-secret', coverageRequest([head], { [head.sha]: [review('2026-11-10T00:31:00Z', { conclusion })] }));
+    assert.equal(coverage.reviewedSha, null, `${conclusion} must not count as coverage`);
+  }
+  const finished = await readCoverage(repo, 'github-secret', coverageRequest([head], {
+    [head.sha]: [review('2026-11-10T00:31:00Z', { started_at: '2026-11-10T00:01:00Z', conclusion: 'failure' })],
+  }));
+  assert.equal(finished.reviewedSha, head.sha);
+  assert.equal(finished.reviewedAt, '2026-11-10T00:31:00.000Z');
+  const running = await readCoverage(repo, 'github-secret', coverageRequest([head, reviewed], {
+    [head.sha]: [review('2026-11-10T00:31:00Z', { status: 'in_progress' })],
+    [reviewed.sha]: [review('2026-11-08T18:50:00Z')],
+  }));
+  assert.equal(running.reviewedSha, reviewed.sha);
+  assert.equal(running.checked, 2);
+  await assert.rejects(readCoverage(repo, 'github-secret', coverageRequest([head], { [head.sha]: [review('2026-11-10T00:31:00Z', { completed_at: undefined })] })), /check read: unexpected schema/);
+  await assert.rejects(readCoverage(repo, 'github-secret', coverageRequest([head], { [head.sha]: [review('not-a-date')] })), /check read: unexpected schema/);
+});
+
+test('reads findings only after the coverage snapshot is fixed', async () => {
+  const order = [];
+  const env = { VERCEL_TOKEN: 'vercel-secret', GITHUB_TOKEN: 'github-secret', GITHUB_REPOSITORY: repo };
+  await main(env, async url => {
+    if (isGitHubUrl(url)) {
+      order.push(String(url).includes('/check-runs') ? 'check' : 'commits');
+      if (String(url).includes('/check-runs')) return reviewRuns([review('2026-11-10T00:31:00Z')]);
+      return commitsPage([head]);
+    }
+    order.push('findings');
+    return page([finding()]);
+  }, () => {});
+  assert.deepEqual(order, ['commits', 'check', 'findings']);
 });
 
 test('refuses a coverage read that cannot be trusted', async () => {
@@ -139,7 +184,7 @@ test('reports empty results distinctly, requires coverage, and allows only state
   const empty = { reviewedSha: null, head, checked: 1, horizon: head.commit.committer.date };
   assert.match(formatFindings([], empty), /No production findings returned/);
   const output = formatFindings([finding(), finding({ status: 'open' })], { reviewedSha: head.sha, reviewedAt: '2026-11-10T00:31:00.000Z', head, checked: 1, horizon: head.at });
-  assert.match(output, /Scan coverage: Vercel last reviewed production/);
+  assert.match(output, /Scan coverage: the newest completed Vercel Security Review covered production/);
   assert.match(output, /#12 01ARZ3NDEKTSV4RRFFQ69G5FAV closed medium resolved-in=a{40}/);
   assert.match(output, /open medium/);
   assert.doesNotMatch(output, /secret-title|secret-description|secret-code/);
@@ -161,7 +206,7 @@ test('publishes one complete redacted report with coverage after every read vali
   await main(env, async (url, options) => {
     const href = url instanceof URL ? url.href : String(url);
     assert.equal(reports.length, 0);
-    if (href.startsWith('https://api.github.com/')) {
+    if (isGitHubUrl(href)) {
       if (href.includes('/check-runs')) return reviewRuns([review('2026-11-10T00:31:00Z')]);
       return commitsPage([head]);
     }
@@ -171,13 +216,13 @@ test('publishes one complete redacted report with coverage after every read vali
   }, report => reports.push(report));
   assert.equal(reports.length, 1);
   assert.match(reports[0], /All statuses, 2 findings/);
-  assert.match(reports[0], /Scan coverage: Vercel last reviewed production b{40} at 2026-11-10T00:31:00.000Z/);
+  assert.match(reports[0], /Scan coverage: the newest completed Vercel Security Review covered production b{40} and finished at 2026-11-10T00:31:00.000Z/);
   assert.match(reports[0], /#8 /);
   assert.doesNotMatch(reports[0], /secret-title|secret-description|secret-code|vercel-secret|github-secret/);
   const coverageOk = href => href.includes('/check-runs') ? reviewRuns([review('2026-11-10T00:31:00Z')]) : commitsPage([head]);
   const route = vercel => async (url) => {
     const href = url instanceof URL ? url.href : String(url);
-    return href.startsWith('https://api.github.com/') ? coverageOk(href) : vercel(url);
+    return isGitHubUrl(href) ? coverageOk(href) : vercel(url);
   };
   for (const [vercel, error] of [
     [() => page([finding({ status: 'bad' })]), /unexpected finding metadata/],
@@ -187,6 +232,6 @@ test('publishes one complete redacted report with coverage after every read vali
   ]) {
     await assert.rejects(main(env, route(vercel), () => assert.fail('Incomplete results must not be published')), error);
   }
-  await assert.rejects(main(env, async url => String(url).includes('api.github.com') ? commitsPage([]) : page([finding()]), () => assert.fail('Incomplete results must not be published')), /commits read: unexpected schema/);
+  await assert.rejects(main(env, async url => isGitHubUrl(url) ? commitsPage([]) : page([finding()]), () => assert.fail('Incomplete results must not be published')), /commits read: unexpected schema/);
   await assert.rejects(main({}, async () => assert.fail(), () => assert.fail()), /missing/);
 });

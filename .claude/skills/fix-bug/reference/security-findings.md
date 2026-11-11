@@ -53,10 +53,16 @@ no API, CLI or GitHub command that requests a review: `vercel security
 vulnerabilities` reads and triages findings only, and this workflow reads. The
 only lever is that team setting, which the team owner flips in the dashboard.
 
-The workflow therefore prints a `Scan coverage:` line in every report:
+The workflow therefore prints a `Scan coverage:` line in every report. Only a
+review whose check run is `completed` counts, and the date it prints is that
+run's completion time; a review that is queued or still running covers nothing
+yet, so a dispatch that lands mid-scan reads as uncovered instead of claiming
+the fix. Findings are read only after that coverage snapshot is fixed, so a
+review that finishes during a run cannot lend its commit to older states.
 
-- `Vercel last reviewed production <sha> at <date> ... does not cover it` means
-the newest review is older than production HEAD, so no scan covers it.
+- `the newest completed Vercel Security Review covered production <sha> and
+finished at <date> ... does not cover it` means the newest finished review is
+older than production HEAD, so no scan covers it.
 - `none of the last 30 production commits ... carries a Vercel Security Review
 check` means no review is running at all, and no scan can be requested until an
 owner turns Security Reviews back on.
