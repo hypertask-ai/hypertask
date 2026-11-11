@@ -153,3 +153,36 @@ window; durable markers recover interrupted writes. Ordinary errors retain their
 six-hour activity policy. Tagged product alerts get the same related-incident
 check before `ship-claim` writes. The sanitized historical replay lives in
 `fixtures/project-validation.json`; hosted tests prove writes with fake CLIs.
+
+## GitHub-hosted Vercel feed (HYCI-260)
+
+`error-collector-vercel.yml` runs every fifteen minutes on GitHub-hosted Ubuntu,
+using the existing Vercel secret. Each source independently reads the preceding
+24 hours through the existing bounded adapter. This overlapping snapshot lets
+the VPS recover missed timer runs without another state writer or ticket writer.
+A failed source is absent, never an empty successful batch. An all-failed run
+fails and publishes nothing. The existing Vercel retention limits still apply;
+this cannot recover expired logs from the outage.
+
+Production messages never appear in Actions output or plaintext artifacts.
+Snapshots use AES-256-GCM with a random key wrapped by the committed RSA public
+key. The matching private key stays only on the VPS at
+`~/.local/state/error-collector/vercel-feed.pem` (mode 600); back it up privately.
+Replacing that key requires replacing `vercel-feed.pub.pem` and a new hosted run.
+Artifacts expire after two days. Neither workflow nor snapshot holds a board
+write token.
+
+The installed service sets `ERROR_COLLECTOR_VERCEL_HOSTED=1`. Its three sources
+share one download of the latest successful production workflow artifact per
+collector process. `gh` needs Actions read permission. Failed decryption, missing
+sources, uncovered starts, replayed or future ends leave checkpoints unchanged.
+The collector advances only to the snapshot's end, never download time, and
+filters overlapping events before counting. Other sources and ticket filing
+keep using the same durable collector state.
+
+Before installing, ensure the private key exists and dispatch the production
+workflow once. Install the merged collector with the existing installer, then
+check that all three `state.sources` timestamps advance and a production error
+is associated with its existing or new ticket. To undo feed consumption, set
+`ERROR_COLLECTOR_VERCEL_HOSTED=0` in the private service environment file and
+restart the service; direct reads remain unavailable while Vercel blocks the VPS.
