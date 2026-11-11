@@ -15,22 +15,9 @@ SANDBOX_TITLE = "QA Sandbox"
 FORBIDDEN_BOARDS = {15, 4060}
 MARKERS = ("BOARD_READBACK", "TASK_READBACK", "INBOX_READBACK", "LIVE_READBACK_OK")
 CHILD_ENV_KEYS = (
-    "PATH",
-    "HOME",
-    "LANG",
-    "LC_ALL",
-    "SSL_CERT_FILE",
-    "SSL_CERT_DIR",
-    "REQUESTS_CA_BUNDLE",
-    "CURL_CA_BUNDLE",
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "NO_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "no_proxy",
-    "TMPDIR",
-    "SYSTEMROOT",
+    "PATH", "HOME", "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY",
+    "NO_PROXY", "http_proxy", "https_proxy", "no_proxy", "TMPDIR", "SYSTEMROOT",
 )
 
 def fail(message):
@@ -78,14 +65,14 @@ def safe_lines(text):
             kept.append(line[:300])
     return "\n".join(kept[-40:])
 
-def contains_id(value, wanted):
-    if isinstance(value, dict):
-        if value.get("id") == wanted:
-            return True
-        return any(contains_id(item, wanted) for item in value.values())
-    if isinstance(value, list):
-        return any(contains_id(item, wanted) for item in value)
-    return False
+def restored_notification(payload, wanted):
+    if not isinstance(payload, dict) or payload.get("success") is not True:
+        return False
+    rows = payload.get("user_notifications")
+    return isinstance(rows, list) and any(
+        isinstance(row, dict) and row.get("id") == wanted and row.get("status") == "Normal"
+        for row in rows
+    )
 
 def choose_board(projects):
     if not isinstance(projects, list):
@@ -137,6 +124,18 @@ def self_check():
         fail("branch dispatch was accepted")
     if not production_dispatch("refs/heads/production"):
         fail("production dispatch was refused")
+    row = {"id": 1, "status": "Normal", "task": {"id": 9}}
+    listing = {"success": True, "user_notifications": [row]}
+    if not restored_notification(listing, 1) or restored_notification(listing, 9):
+        fail("notification identity check failed")
+    row["status"] = "Archive"
+    if restored_notification(listing, 1):
+        fail("archived notification counted as restored")
+    row["status"] = "Normal"
+    for invalid in ({"success": False, "user_notifications": [row]}, [], {"success": True}):
+        if restored_notification(invalid, 1):
+            fail("invalid notification response counted as restored")
+    print("NOTIFICATION_IDENTITY_OK")
     print("PRODUCTION_REF_OK")
     print("CLEANUP_STATUS_OK")
     env = {key: os.environ[key] for key in CHILD_ENV_KEYS if key in os.environ}
@@ -330,7 +329,7 @@ def main():
         listing = json.loads(raw.decode())
     except json.JSONDecodeError:
         fail("inbox cleanup check was not JSON")
-    if not contains_id(listing, int(note_id)):
+    if not restored_notification(listing, int(note_id)):
         fail("archived inbox row was not restored")
     print("TASK_CLEANED")
     print("INBOX_RESTORED")
