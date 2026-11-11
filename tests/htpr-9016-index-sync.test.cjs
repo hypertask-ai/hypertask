@@ -33,7 +33,7 @@ test("a title edit waits for the task index before comment copies update", async
   assert.equal(drift().commentsFollowTaskEdit({ titleChanged: false, status: "Archive" }), true);
 });
 
-test("a stale comment title is repaired and a failed reindex stays put", async () => {
+test("a stale comment title is repaired", async () => {
   const lib = drift();
   const at = "2026-11-10T12:00:00.000Z";
   const comments = [];
@@ -55,18 +55,51 @@ test("a stale comment title is repaired and a failed reindex stays put", async (
   });
   assert.deepEqual(comments, [7]);
   assert.equal(outcome.passFound, 1);
-  const failed = await lib.advanceIndexDrift({
-    tasks: [{ id: 3, title: "A", updatedAt: at, commentCount: 0 }],
-    indexedTasks: new Map([[3, null]]),
+});
+
+test("a failed write names the task and the scan keeps moving", async () => {
+  const lib = drift();
+  const at = "2026-11-10T12:00:00.000Z";
+  const outcome = await lib.advanceIndexDrift({
+    tasks: [
+      { id: 3, title: "A", updatedAt: at, commentCount: 0 },
+      { id: 4, title: "B", updatedAt: at, commentCount: 0 },
+    ],
+    indexedTasks: new Map([[3, null], [4, null]]),
     indexedComments: new Map(),
-    batchFull: true,
+    batchFull: false,
     maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async (id) => { if (id === 3) throw new Error("index down"); },
+    reindexComments: async () => {},
+  });
+  assert.equal(outcome.stopped, false);
+  assert.equal(outcome.state.afterId, 4);
+  assert.equal(outcome.state.found, 2);
+  assert.equal(outcome.failed.length, 1);
+  assert.equal(outcome.failed[0].id, 3);
+  assert.equal(outcome.failed[0].stage, "task");
+  assert.equal(outcome.failed[0].message, "index down");
+  assert.equal(outcome.passFound, 2);
+});
+
+test("a run stops once writes keep failing", async () => {
+  const lib = drift();
+  const at = "2026-11-10T12:00:00.000Z";
+  const outcome = await lib.advanceIndexDrift({
+    tasks: [3, 4, 5].map((id) => ({ id, title: `T${id}`, updatedAt: at, commentCount: 0 })),
+    indexedTasks: new Map([[3, null], [4, null], [5, null]]),
+    indexedComments: new Map(),
+    batchFull: false,
+    maxReindex: 10,
+    maxFailures: 2,
     state: lib.emptyDriftState(),
     reindexTask: async () => { throw new Error("index down"); },
     reindexComments: async () => {},
   });
-  assert.equal(failed.stopped, true);
-  assert.equal(failed.state.afterId, 0);
+  assert.equal(outcome.stopped, true);
+  assert.equal(outcome.failed.length, 2);
+  assert.equal(outcome.state.afterId, 4);
 });
 
 test("a deleted task stays in the drift scan", async () => {
@@ -177,4 +210,35 @@ test("a pass already recorded for today is not scanned again", async () => {
   assert.equal(lib.driftPassRecorded([{ date: "2026-11-11", found: 0 }], "2026-11-11"), true);
   assert.equal(lib.driftPassRecorded([{ date: "2026-11-10", found: 0 }], "2026-11-11"), false);
   assert.equal(lib.driftPassRecorded([], "2026-11-11"), false);
+});
+
+test("the failure cap counts across pages, not per page", async () => {
+  const repair = load("src/lib/search/runIndexDriftRepair.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/lib/turbopuffer": { default: {}, turbopufferNamespaces: {} },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+  });
+  const tasks = totalTasks(400);
+  let writes = 0;
+  const result = await repair.runIndexDriftRepair(
+    { afterId: 0, found: 0, results: [] },
+    {
+      loadPage: async (afterId, take) => {
+        const next = tasks.filter((task) => task.id > afterId).slice(0, take);
+        return {
+          tasks: next,
+          indexedTasks: new Map(next.map((task) => [task.id, null])),
+          indexedComments: new Map(),
+          batchFull: next.length === take,
+        };
+      },
+      reindexTask: async () => { writes += 1; throw new Error("index down"); },
+      reindexComments: async () => {},
+      today: () => "2026-11-11",
+      now: () => 0,
+    },
+  );
+  assert.equal(result.failed.length, repair.DRIFT_MAX_FAILURES);
+  assert.equal(writes, repair.DRIFT_MAX_FAILURES);
+  assert.equal(result.passComplete, false);
 });
