@@ -18,7 +18,8 @@ test('secret-bearing reader runs only on the production branch and hosted runner
   assert.equal(step.run, 'node .github/scripts/vercel-security-findings.cjs');
   assert.equal(step.env.VERCEL_TOKEN, '${{ secrets.VERCEL_TOKEN }}');
   assert.deepEqual(Object.keys(step.env), ['VERCEL_TOKEN']);
-  assert.doesNotMatch(source, /upload-artifact|pull_request_target|MCP_TOKEN/);
+  assert.equal(job.env, undefined);
+  assert.equal(job.steps.some(other => other.uses?.startsWith('actions/upload-artifact')), false);
   const manifest = readFileSync('.github/actions/action-archive-cache-manifest.txt', 'utf8');
   const actions = job.steps.map(step => step.uses).filter(Boolean);
   assert.equal(actions.length, 2);
