@@ -39,13 +39,38 @@ closing commit when Vercel supplies one. Record the relevant states and full
 Actions run URL on the ticket using your own `vcc activity add` identity.
 
 Actions logs include only validated finding numbers, IDs, status, severity,
-closing commit and a read timestamp. Titles, source, descriptions, fixes and
-secret values are excluded. No raw findings are uploaded as artifacts and
-no MCP credential or ticket writes are needed in Actions. This is finding-state
-proof, not a request to trigger a new scan or dismiss a warning.
+closing commit, the `Scan coverage` line and a read timestamp. Titles, source,
+descriptions, fixes and secret values are excluded. No raw findings are
+uploaded as artifacts and no MCP credential or ticket writes are needed in
+Actions.
+
+## How a Vercel scan is requested
+
+Security Review is push-triggered. Vercel's GitHub app reviews the code a push
+adds, so a review only covers a commit that existed when
+`Review Deployments Automatically` was on in the team's Agent settings. There is
+no API, CLI or GitHub command that requests a review: `vercel security
+vulnerabilities` reads and triages findings only, and this workflow reads. The
+only lever is that team setting, which the team owner flips in the dashboard.
+
+The workflow therefore prints a `Scan coverage:` line in every report:
+
+- `Vercel last reviewed production <sha> at <date> ... does not cover it` means
+the newest review is older than production HEAD, so no scan covers it.
+- `none of the last 30 production commits ... carries a Vercel Security Review
+check` means no review is running at all, and no scan can be requested until an
+owner turns Security Reviews back on.
+
+Never present a reader run as a fresh scan. A fixed warning can only be called
+verified when `Scan coverage` names a reviewed commit at or after the fix. Never
+dismiss a warning to shorten the list; a dismissed finding hides the defect from
+every future read.
 
 An authentication failure, unexpected response or incomplete page sequence
 fails the job without publishing a report rather than reporting zero findings.
+It also fails when the coverage read cannot be trusted, so a missing scan can
+never look like a clean one.
+
 Check the run once, record a recheck time on the ticket, and let the launcher
 resume; do not watch/poll.
 

@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 jobs:
   findings:
@@ -22,4 +23,5 @@ jobs:
       - name: Read production finding states
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node .github/scripts/vercel-security-findings.cjs
