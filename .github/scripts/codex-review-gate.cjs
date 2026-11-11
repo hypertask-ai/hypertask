@@ -122,7 +122,7 @@ query($owner: String!, $name: String!, $after: String) {
     pullRequests(states: OPEN, first: 25, after: $after, baseRefName: "production") {
       pageInfo { hasNextPage endCursor }
       nodes {
-        number isCrossRepository headRefOid
+        number isDraft isCrossRepository headRefOid
         commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
         reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } } } } }
         comments(last: 100) { nodes { author { login } url body } }
@@ -154,6 +154,21 @@ async function run({ github, context, core }) {
       })),
       comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
     });
+
+    const requestMarker = `<!-- codex-review-request:${node.headRefOid} -->`;
+    const comments = node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login }));
+    const running = codeReviewStateFor(comments, node.headRefOid)?.status === 'running';
+    const requested = comments.some(comment =>
+      String(comment.author ?? '').replace(/\[bot\]$/, '') === 'github-actions' && comment.body?.includes(requestMarker));
+    if (result.state === 'pending' && !node.isDraft && !running && !requested) {
+      const current = await github.rest.pulls.get({ owner, repo, pull_number: node.number });
+      if (current.data.head.sha === node.headRefOid && current.data.state === 'open' && !current.data.draft) {
+        await github.rest.issues.createComment({
+          owner, repo, issue_number: node.number,
+          body: `@codex review\n\nReview the current head ${node.headRefOid}.\n${requestMarker}`,
+        });
+      }
+    }
 
     const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
     const existing = new Map((head.status?.contexts ?? []).map(entry => [entry.context, entry]));
