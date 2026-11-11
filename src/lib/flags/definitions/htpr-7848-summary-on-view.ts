@@ -14,5 +14,10 @@ export default {
     reason:
       "Changes when paid summary calls happen, so a summary can show an older version until someone opens the ticket. Off restores the scheduled runs.",
     highRisk: "money",
+    harmEvidence: {
+      harm: "charge",
+      scenario:
+        "A team on the metered AI allowance can be charged for a summary run started by a page view it did not trigger, because the paid call now follows whoever opens a stale ticket.",
+    },
   },
 } as const satisfies FeatureFlagDefinition;
