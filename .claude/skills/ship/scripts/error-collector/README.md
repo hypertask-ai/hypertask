@@ -162,7 +162,9 @@ using the existing Vercel secret. Each source independently reads the preceding
 the VPS recover missed timer runs without another state writer or ticket writer.
 A failed source is absent, never an empty successful batch. An all-failed run
 fails and publishes nothing. The existing Vercel retention limits still apply;
-this cannot recover expired logs from the outage.
+this cannot recover expired logs from the outage. A retention-truncated snapshot
+reports its actual retained start. Checkpoints remain unchanged until the next
+collector window starts within that retained range.
 
 Production messages never appear in Actions output or plaintext artifacts.
 Snapshots use AES-256-GCM with a random key wrapped by the committed RSA public

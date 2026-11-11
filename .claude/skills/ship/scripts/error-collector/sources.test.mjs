@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { collect, loadSources, fingerprint, isNoise } from './collector.mjs';
 import * as vercel from './sources/vercel.mjs';
+import { selectWindow } from './vercel-hosted.mjs';
 import * as proxy from './sources/vercel-5xx.mjs';
 import * as realtime from './sources/realtime.mjs';
 import * as github from './sources/github-actions.mjs';
@@ -90,6 +91,23 @@ test('Vercel halves oversized windows, advances retention and stops immediately 
   await assert.rejects(vercel.fetch(context), /incomplete/);
   mockHTTP([[200, { ...fixtures.vercel, pagination: { hasMore: true } }]]);
   await assert.rejects(vercel.fetch(context), /cursor/);
+});
+
+test('hosted snapshots expose retained coverage rather than claiming lost history', async () => {
+  const retained = new Date(Date.parse(since) + 600000).toISOString();
+  for (const service of ['vercel', 'vercel-5xx', 'realtime']) {
+    mockHTTP([[400, { error: 'retention gap' }], [200, fixtures.vercel]]);
+    const batch = await vercel.fetchVercel({ ...context, coverage: true }, service);
+    assert.equal(batch.since, retained);
+    assert.equal(batch.until, until);
+    const snapshot = { version: 1, sources: { [service]: batch } };
+    assert.throws(() => selectWindow(snapshot, service, since, until), /coverage unavailable/);
+    assert.deepEqual(selectWindow(snapshot, service, retained, until).events, batch.events);
+  }
+  mockHTTP([[200, fixtures.vercel]]);
+  const batch = await vercel.fetchVercel({ ...context, coverage: true });
+  assert.equal(batch.since, since);
+  assert.equal(selectWindow({ version: 1, sources: { vercel: batch } }, 'vercel', since, until).events.length, 1);
 });
 
 test('GitHub recorded failure and timeout jobs, production plus scheduled runs, dedupe and 20 lookup bound', async () => {
