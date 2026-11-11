@@ -74,7 +74,7 @@ if (name === 'ht') {
     if (cfg.ambiguousCreate) exit();
     console.log(JSON.stringify({ success: true, task: cfg.badReceipt ? { ticketNumber: 'invalid receipt' } : task }));
   } else if (plain[0] === 'activity' && plain[1] === 'add') {
-    if (cfg.activityFail) exit();
+    if (cfg.activityFail || plain[2] === 'YPER4-354' || plain[2] === cfg.deadActivityTicket) exit();
     const saved = read('activities.json', []);
     saved.unshift({ ticket: plain[2], text: plain[3], createdAt: new Date().toISOString() });
     writeFileSync(join(home, 'activities.json'), JSON.stringify(saved));
@@ -595,7 +595,7 @@ check('reporting', 'default rolling cap, pending counts/routes survive and exact
   h.events(items); await h.run();
   assert.equal(creates(h).length, 5);
   assert.equal(Object.keys(h.state().pending).length, 2);
-  assert.equal(activities(h, 'YPER4-354').filter(c => c.args[3].includes('held back')).length, 1);
+  assert.equal(activities(h, 'HYCI-291').filter(c => c.args[3].includes('held back')).length, 1);
   h.events([event({ message: 'failure kind F', route: '/checkout/456', count: 4, ts: new Date(NOW + HOUR / 2).toISOString() })]);
   await h.run({ now: NOW + HOUR / 2 });
   assert.equal(creates(h).length, 5);
@@ -815,12 +815,12 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   h.events([event({ message: 'Unexpected internal 500 error', count: 2, ts: new Date(NOW + 1000).toISOString() })]);
   await h.run({ now: NOW + 1000 });
   assert.equal(creates(h).length, 1);
-  assert.equal(activities(h, 'YPER4-354').length, 0);
+  assert.equal(activities(h, 'HYCI-291').length, 0);
   h.events([]); await h.run({ now: NOW + DAY, summary: true });
   assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-14: 2 errors (2026-10-13: no complete data), 1 new kinds, 7 noise'));
-  const posted = activities(h, 'YPER4-354').length;
+  const posted = activities(h, 'HYCI-291').length;
   await h.run({ now: NOW + DAY + 2 * HOUR }); await h.run({ now: NOW + DAY + 2 * HOUR, summary: true });
-  assert.equal(activities(h, 'YPER4-354').length, posted);
+  assert.equal(activities(h, 'HYCI-291').length, posted);
   await h.run({ now: NOW + 2 * DAY + 2 * HOUR });
   assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-15: 0 errors (2026-10-14: 2), 0 new kinds, 0 noise'));
 }));
@@ -996,7 +996,7 @@ check('reporting', 'dry-run plans create/activity/summary/spike and never change
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run', '--summary');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /DRY-RUN.*"vcc".*"create"/);
-  assert.match(result.stdout, /DRY-RUN.*"activity".*"YPER4-354"/);
+  assert.match(result.stdout, /DRY-RUN.*"activity".*"HYCI-291"/);
   assert.match(result.stdout, /DRY-RUN.*"runner-deliver"/);
   assert.ok(h.calls().every(c => c.name === 'ht' && c.args[0] === 'GET'));
   assert.deepEqual(readFileSync(h.statePath), initial);
@@ -1020,6 +1020,25 @@ check('reporting', 'dry-run plans one held-back notice without writes', () => wi
   assert.equal(result.stdout.split('held back').length - 1, 1);
   assert.equal(existsSync(h.statePath), false);
   assert.ok(h.calls().every(call => call.name === 'ht'));
+}));
+
+check('reporting', 'dead summary target retries on the live control ticket without duplicate delivery', () => withHarness(async h => {
+  h.events([event({ ticket: false, count: 7 })]);
+  await h.run();
+  h.events([]); h.config({ deadActivityTicket: 'HYCI-291' });
+  await h.run({ now: NOW + DAY, summary: true });
+  assert.equal(h.state().summaries['2026-10-14']?.web, undefined);
+  assert.equal(existsSync(join(h.home, 'activities.json')), false);
+  h.config({}); h.events([]);
+  await h.run({ now: NOW + DAY + 1000, summary: true });
+  assert.equal(h.state().summaries['2026-10-14'].web, true);
+  const delivered = () => JSON.parse(readFileSync(join(h.home, 'activities.json'), 'utf8'))
+    .filter(item => item.ticket === 'HYCI-291' && item.text.includes('web on 2026-10-14:'));
+  assert.equal(delivered().length, 1);
+  assert.match(delivered()[0].text, /7 errors/);
+  await h.run({ now: NOW + DAY + 2000, summary: true });
+  assert.equal(delivered().length, 1);
+  assert.ok(activities(h).every(call => call.args[2] === 'HYCI-291'));
 }));
 
 check('reporting', 'summary failure retries; secret detector rejects positive controls', () => withHarness(async h => {
@@ -1082,7 +1101,7 @@ check('review', 'a day is summarised only after its source read past the day end
   await h.run({ sources: [ok, flaky] });
   fail = true;
   await h.run({ sources: [ok, flaky], now: NOW + DAY, summary: true });
-  const lines = () => activities(h, 'YPER4-354').map(call => call.args[3]);
+  const lines = () => activities(h, 'HYCI-291').map(call => call.args[3]);
   assert.ok(lines().some(line => line.startsWith('ok on 2026-10-14:')));
   assert.ok(!lines().some(line => line.startsWith('flaky on 2026-10-14')));
   await h.run({ sources: [ok, flaky], now: NOW + 3 * DAY, summary: true });
@@ -1584,12 +1603,12 @@ check('reporting', 'stale unfiled groups count once in daily summaries without t
   assert.equal(creates(h).length, 0);
   h.events([]);
   await h.run({ now: NOW + DAY, summary: true });
-  const summary = activities(h, 'YPER4-354').find(call => /web on 2026-10-14/.test(call.args[3]));
+  const summary = activities(h, 'HYCI-291').find(call => /web on 2026-10-14/.test(call.args[3]));
   assert.match(summary.args[3], /9 errors.*1 stale, not filed/);
   assert.doesNotMatch(summary.args[3], /HTPR-/);
   await h.run({ now: NOW + DAY + 1000, summary: true });
   assert.equal(h.state().days['2026-10-14'].web.stale, 1);
-  assert.equal(activities(h, 'YPER4-354').filter(call => /web on 2026-10-14/.test(call.args[3])).length, 1);
+  assert.equal(activities(h, 'HYCI-291').filter(call => /web on 2026-10-14/.test(call.args[3])).length, 1);
 }));
 
 check('tickets', 'stale same-route groups emit one due activity and newer events can file their own tickets', () => withHarness(async h => {
@@ -1696,7 +1715,7 @@ check('reporting', 'midnight-spanning stale group is counted on disposition day 
   assert.equal(h.state().days['2026-10-14'].web.stale, 1);
   assert.equal(Object.values(h.state().stale)[0].count, 5);
   await h.run({ now: NOW + DAY, summary: true });
-  const lines = activities(h, 'YPER4-354').map(call => call.args[3]);
+  const lines = activities(h, 'HYCI-291').map(call => call.args[3]);
   assert.equal(lines.filter(line => /web on 2026-10-13/.test(line)).length, 1);
   assert.ok(lines.some(line => /web on 2026-10-14:.*1 stale, not filed/.test(line)));
 }));
@@ -1806,7 +1825,7 @@ check('incidents', 'long matching dumps keep distinct-root activities and redact
   h.events(['firstField', 'secondField'].map(field => event({ service: 'vercel', route, message: prefix + `Unknown argument \`${field}\`.` })));
   await h.run();
   assert.equal(creates(h).length, 2);
-  assert.equal(activities(h).filter(call => call.args[2] !== 'YPER4-354').length, 2);
+  assert.equal(activities(h).filter(call => call.args[2] !== 'HYCI-291').length, 2);
   assert.doesNotMatch(JSON.stringify(h.state()) + JSON.stringify(creates(h)), /person@example|sk-abcdefghijkl/);
 }));
 
