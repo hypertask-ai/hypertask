@@ -8,25 +8,29 @@ const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
 });
-
 const { parseGithubPullRequestUrl } = jiti(
   path.join(root, "src/lib/pullRequests/githubPullRequests.ts"),
 );
-const {
-  fetchGithubPullRequest,
-  PullRequestLinkError,
-} = jiti(path.join(root, "src/lib/pullRequests/taskPullRequests.ts"));
-const {
-  PULL_REQUEST_LINK_READ_PERMISSIONS,
-  resetPullRequestGithubAuthCache,
-} = jiti(path.join(root, "src/lib/pullRequests/githubLinkAuth.ts"));
+const { fetchGithubPullRequest, PullRequestLinkError } = jiti(
+  path.join(root, "src/lib/pullRequests/taskPullRequests.ts"),
+);
+const { PULL_REQUEST_LINK_READ_PERMISSIONS, resetPullRequestGithubAuthCache } = jiti(
+  path.join(root, "src/lib/pullRequests/githubLinkAuth.ts"),
+);
 
-const canonicalPullRequestUrl = "https://github.com/hypertask-ai/hypertask/pull/110";
-const foreignPullRequestUrl = "https://github.com/nodejs/node/pull/1";
-const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const pem = privateKey.export({ type: "pkcs8", format: "pem" });
+const canonical = "https://github.com/hypertask-ai/hypertask/pull/110";
+const foreign = "https://github.com/nodejs/node/pull/1";
+const pem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
+  type: "pkcs8",
+  format: "pem",
+});
+const saved = {
+  token: process.env.GITHUB_TOKEN,
+  id: process.env.GITHUB_PR_LINK_APP_ID,
+  key: process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY,
+};
 
-function pullJson(url, id, title) {
+function pull(url, id, title) {
   return {
     id,
     html_url: url,
@@ -34,180 +38,131 @@ function pullJson(url, id, title) {
     state: "open",
     merged_at: null,
     updated_at: "2026-11-11T00:00:00Z",
-    base: { repo: { id: id } },
+    base: { repo: { id } },
     head: { sha: "abc123" },
   };
 }
 
-function checkRuns() {
-  return Response.json({
-    total_count: 1,
-    check_runs: [{ status: "completed", conclusion: "success" }],
-  });
+function route(calls, repositories, pulls) {
+  return async (url, init) => {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    const authorization = init?.headers?.Authorization ?? null;
+    const request = { url: String(url), authorization, body };
+    calls.push(request);
+    const packed = `${authorization ?? ""} ${body ? JSON.stringify(body) : ""}`;
+    assert.equal(packed.includes(String(pem)), false);
+    assert.equal(packed.includes("PRIVATE KEY"), false);
+    assert.equal(request.url.startsWith("https://api.github.com/"), true);
+    if (request.url.endsWith("/app/installations")) {
+      return Response.json([{ id: 77, suspended_at: null }]);
+    }
+    if (request.url.includes("/access_tokens")) {
+      const name = body?.repositories ? "read-token" : "list-token";
+      return Response.json(
+        { token: name, expires_at: new Date(Date.now() + 3600_000).toISOString() },
+        { status: 201 },
+      );
+    }
+    if (request.url.includes("/installation/repositories")) {
+      return Response.json({ repositories });
+    }
+    if (request.url.includes("/check-runs")) {
+      return Response.json({
+        total_count: 1,
+        check_runs: [{ status: "completed", conclusion: "success" }],
+      });
+    }
+    const found = pulls(request);
+    return found instanceof Response ? found : Response.json(found);
+  };
 }
 
-function installationResponse() {
-  return Response.json([{ id: 77, suspended_at: null, account: { login: "hypertask-ai" } }]);
-}
-
-function tokenResponse(token) {
-  return Response.json(
-    { token, expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString() },
-    { status: 201 },
-  );
-}
-
-function repositoryPage(repositories) {
-  return Response.json({ total_count: repositories.length, repositories });
-}
-
-async function withFetch(mock, callback) {
-  const originalFetch = global.fetch;
-  global.fetch = mock;
+async function withApp(appId, repositories, pulls, run) {
+  const calls = [];
+  const original = global.fetch;
+  delete process.env.GITHUB_TOKEN;
+  process.env.GITHUB_PR_LINK_APP_ID = appId;
+  process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = pem;
+  resetPullRequestGithubAuthCache();
+  global.fetch = route(calls, repositories, pulls);
   try {
-    await callback();
+    await run(calls);
   } finally {
-    global.fetch = originalFetch;
+    global.fetch = original;
+    resetPullRequestGithubAuthCache();
   }
 }
 
 test("fetchGithubPullRequest uses a read-only token for public installation repositories", async () => {
-  const previousToken = process.env.GITHUB_TOKEN;
-  const previousAppId = process.env.GITHUB_PR_LINK_APP_ID;
-  const previousAppKey = process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
-  delete process.env.GITHUB_TOKEN;
-  process.env.GITHUB_PR_LINK_APP_ID = "424242";
-  process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = pem;
-  resetPullRequestGithubAuthCache();
-  const calls = [];
-  const record = async (url, init) => {
-    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
-    const authorization = init?.headers?.Authorization ?? null;
-    calls.push({ url: String(url), authorization, body });
-    assert.equal(String(url).startsWith("https://api.github.com/"), true);
-    if (authorization) assert.equal(String(authorization).includes(pem), false);
-    if (authorization) assert.equal(String(authorization).includes("PRIVATE KEY"), false);
-    if (body) assert.equal(JSON.stringify(body).includes("PRIVATE KEY"), false);
-    return { url: String(url), authorization, body };
-  };
-
+  const publicRepos = [
+    { name: "hypertask", private: false },
+    { name: "secret", private: true },
+    { name: "unmarked" },
+  ];
   try {
-    await withFetch(async (url, init) => {
-      const call = await record(url, init);
-      if (call.url.endsWith("/app/installations")) return installationResponse();
-      if (call.url.includes("/access_tokens") && call.body?.repositories) {
-        return tokenResponse("read-token");
-      }
-      if (call.url.includes("/access_tokens")) return tokenResponse("list-token");
-      if (call.url.includes("/installation/repositories")) {
-        return repositoryPage([
-          { name: "hypertask", private: false },
-          { name: "secret", private: true },
-          { name: "unmarked" },
-        ]);
-      }
-      if (call.url.includes("/check-runs")) return checkRuns();
-      if (call.url.includes("/nodejs/node/")) {
-        return Response.json(pullJson(foreignPullRequestUrl, 1, "Foreign public"));
-      }
-      return Response.json(pullJson(canonicalPullRequestUrl, 110, "Linked property"));
-    }, async () => {
-      const metadata = await fetchGithubPullRequest(
-        parseGithubPullRequestUrl(canonicalPullRequestUrl),
-      );
+    await withApp("424242", publicRepos, (request) => {
+      if (request.url.includes("/nodejs/node/")) return pull(foreign, 1, "Foreign public");
+      return pull(canonical, 110, "Linked property");
+    }, async (calls) => {
+      const metadata = await fetchGithubPullRequest(parseGithubPullRequestUrl(canonical));
+      const other = await fetchGithubPullRequest(parseGithubPullRequestUrl(foreign));
       assert.equal(metadata.title, "Linked property");
-      const foreign = await fetchGithubPullRequest(
-        parseGithubPullRequestUrl(foreignPullRequestUrl),
+      assert.equal(other.title, "Foreign public");
+      const narrow = calls.filter((call) => call.body?.repositories);
+      assert.equal(narrow.length, 1);
+      assert.deepEqual(narrow[0].body.permissions, PULL_REQUEST_LINK_READ_PERMISSIONS);
+      assert.deepEqual(narrow[0].body.repositories, ["hypertask"]);
+      assert.equal(JSON.stringify(narrow[0].body).includes("write"), false);
+      assert.deepEqual(
+        calls.filter((call) => call.url.includes("/pulls/")).map((call) => call.authorization),
+        ["Bearer read-token", "Bearer read-token"],
       );
-      assert.equal(foreign.title, "Foreign public");
     });
 
-    const narrow = calls.filter((call) => call.body?.repositories);
-    assert.equal(narrow.length, 1);
-    assert.deepEqual(narrow[0].body.permissions, PULL_REQUEST_LINK_READ_PERMISSIONS);
-    assert.deepEqual(narrow[0].body.repositories, ["hypertask"]);
-    assert.equal(JSON.stringify(narrow[0].body).includes("write"), false);
-    const pullCalls = calls.filter((call) => call.url.includes("/pulls/"));
-    assert.deepEqual(
-      pullCalls.map((call) => call.authorization),
-      ["Bearer read-token", "Bearer read-token"],
-    );
-    assert.equal(calls.some((call) => call.authorization === "Bearer list-token" && call.url.includes("/pulls/")), false);
-
-    calls.length = 0;
-    resetPullRequestGithubAuthCache();
-    await withFetch(async (url, init) => {
-      const call = await record(url, init);
-      if (call.url.endsWith("/app/installations")) return installationResponse();
-      if (call.url.includes("/access_tokens") && call.body?.repositories) {
-        return tokenResponse("read-token");
-      }
-      if (call.url.includes("/access_tokens")) return tokenResponse("list-token");
-      if (call.url.includes("/installation/repositories")) {
-        return repositoryPage([{ name: "hypertask", private: false }]);
-      }
-      if (call.url.includes("/check-runs")) return checkRuns();
-      if (call.authorization) {
-        return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
-      }
-      return Response.json(pullJson(canonicalPullRequestUrl, 110, "Anonymous public"));
-    }, async () => {
-      const metadata = await fetchGithubPullRequest(
-        parseGithubPullRequestUrl(canonicalPullRequestUrl),
-      );
+    await withApp("424242", [{ name: "hypertask", private: false }], (request) => {
+      if (request.authorization) return new Response("missing", { status: 404 });
+      return pull(canonical, 110, "Anonymous public");
+    }, async (calls) => {
+      const metadata = await fetchGithubPullRequest(parseGithubPullRequestUrl(canonical));
       assert.equal(metadata.title, "Anonymous public");
+      assert.deepEqual(
+        calls.filter((call) => call.url.includes("/pulls/110")).map((call) => call.authorization),
+        ["Bearer read-token", null],
+      );
     });
-    const fallbackPulls = calls.filter((call) => call.url.includes("/pulls/110"));
-    assert.deepEqual(
-      fallbackPulls.map((call) => call.authorization),
-      ["Bearer read-token", null],
-    );
 
-    calls.length = 0;
-    resetPullRequestGithubAuthCache();
     process.env.GITHUB_TOKEN = "scoped-token";
-    await withFetch(async (url, init) => {
-      await record(url, init);
-      return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
-    }, async () => {
+    const denied = [];
+    const original = global.fetch;
+    resetPullRequestGithubAuthCache();
+    global.fetch = route(denied, [], () => new Response("missing", { status: 404 }));
+    try {
       await assert.rejects(
-        fetchGithubPullRequest(parseGithubPullRequestUrl(canonicalPullRequestUrl)),
+        fetchGithubPullRequest(parseGithubPullRequestUrl(canonical)),
         (error) => error instanceof PullRequestLinkError && error.code === "pr_not_found",
       );
-    });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].authorization, "Bearer scoped-token");
-    assert.equal(calls.some((call) => call.url.includes("/app/")), false);
+    } finally {
+      global.fetch = original;
+    }
+    assert.equal(denied.length, 1);
+    assert.equal(denied[0].authorization, "Bearer scoped-token");
 
-    delete process.env.GITHUB_TOKEN;
-    process.env.GITHUB_PR_LINK_APP_ID = "424243";
-    calls.length = 0;
-    resetPullRequestGithubAuthCache();
-    await withFetch(async (url, init) => {
-      const call = await record(url, init);
-      if (call.url.endsWith("/app/installations")) return installationResponse();
-      if (call.url.includes("/access_tokens")) return tokenResponse("list-token");
-      if (call.url.includes("/installation/repositories")) {
-        return repositoryPage([{ name: "secret", private: true }]);
-      }
-      if (call.url.includes("/check-runs")) return checkRuns();
-      return Response.json(pullJson(canonicalPullRequestUrl, 110, "Still anonymous"));
-    }, async () => {
-      const metadata = await fetchGithubPullRequest(
-        parseGithubPullRequestUrl(canonicalPullRequestUrl),
-      );
+    await withApp("424243", [{ name: "secret", private: true }], () => pull(canonical, 110, "Still anonymous"), async (calls) => {
+      const metadata = await fetchGithubPullRequest(parseGithubPullRequestUrl(canonical));
       assert.equal(metadata.title, "Still anonymous");
+      assert.equal(calls.some((call) => call.body?.repositories), false);
+      assert.deepEqual(
+        calls.filter((call) => call.url.includes("/pulls/")).map((call) => call.authorization),
+        [null],
+      );
     });
-    assert.equal(calls.some((call) => call.body?.repositories), false);
-    const anonymousPulls = calls.filter((call) => call.url.includes("/pulls/110"));
-    assert.deepEqual(anonymousPulls.map((call) => call.authorization), [null]);
   } finally {
     resetPullRequestGithubAuthCache();
-    if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
-    else process.env.GITHUB_TOKEN = previousToken;
-    if (previousAppId === undefined) delete process.env.GITHUB_PR_LINK_APP_ID;
-    else process.env.GITHUB_PR_LINK_APP_ID = previousAppId;
-    if (previousAppKey === undefined) delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
-    else process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = previousAppKey;
+    if (saved.token === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = saved.token;
+    if (saved.id === undefined) delete process.env.GITHUB_PR_LINK_APP_ID;
+    else process.env.GITHUB_PR_LINK_APP_ID = saved.id;
+    if (saved.key === undefined) delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+    else process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = saved.key;
   }
 });
