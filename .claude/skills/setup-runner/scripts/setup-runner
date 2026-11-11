@@ -15,6 +15,7 @@ SELF=$(readlink -f "$0")
 CREDS=${VCC_CREDENTIALS_DIR:-$HOME/.config/hypertask-agents/credentials}
 fail() { printf 'setup-runner: %s\n' "$1" >&2; exit 1; }
 
+"${SELF%/*}/../../setup-agents/scripts/setup-agents" --preflight || exit 2
 [ "$#" -le 1 ] || fail 'usage: setup-runner [positive runner number]'
 if [ "$#" -eq 1 ]; then
   [[ "$1" =~ ^[1-9][0-9]*$ ]] || fail 'runner number must be a positive integer (no leading zeros)'

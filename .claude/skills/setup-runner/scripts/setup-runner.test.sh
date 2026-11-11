@@ -24,6 +24,8 @@ mode = os.environ.get('FAKE_MODE', '')
 if args[:2] == ['agents', 'create']:
     assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '11514', '--json']
     call = ['create', args[3]]
+elif 'members' in args:
+    call = ['members']
 else:
     assert args == ['--json', '--token', secret, 'status']
     call = ['read', 'verified token']
@@ -40,8 +42,11 @@ if call[0] == 'create':
         print(secret)
     else:
         print(json.dumps({'token': '' if mode == 'empty-token' else secret}))
+elif call[0] == 'members':
+    token = next((pathlib.Path.home() / '.config/hypertask-agents/credentials').glob('runner-*-agent-token'))
+    print(json.dumps({'success': True, 'members': [{'id': 'agent-1', 'displayName': 'Runner ' + token.name.split('-')[1]}]}))
 else:
-    print(json.dumps({'authenticated': mode != 'wrong-ticket', 'verified': True}))
+    print(json.dumps({'authenticated': mode != 'wrong-ticket', 'verified': True, 'agentId': 'agent-1'}))
 ''')
     cli.chmod(0o755)
     base_env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'])
@@ -68,7 +73,7 @@ else:
 
     def calls(home):
         p = home / 'calls'
-        return [json.loads(line) for line in p.read_text().splitlines()] if p.exists() else []
+        return [c for c in ([json.loads(line) for line in p.read_text().splitlines()] if p.exists() else []) if c[0] != 'members']
 
     def token(creds, n, contents=secret):
         p = creds / f'runner-{n}-agent-token'
@@ -185,7 +190,6 @@ else:
     assert r.returncode != 0 and link.read_text() == 'do not overwrite' and not calls(home)
     link.unlink()
     session(sessions, os.getpid(), 'RUNNER 1')
-    # A custom session folder gets an absolute link, so the identity still resolves.
     custom = home / 'custom-identity-creds'
     custom.mkdir()
     r = run(dict(env, VCC_SESSION_CREDENTIALS_DIR=str(custom)))

@@ -19,6 +19,7 @@ Prints no token and never replaces a credential.
   --name "<name>"     display name (or the first plain argument)
   --identity "<name>" session name that owns the login (default: --name)
   --check             tools and login smoke only; with --name, that credential
+  --preflight         tools only, for callers that need them before parsing
   --identity-required this session carries the name; a mismatch is fatal
 EOF
 }
@@ -26,6 +27,7 @@ EOF
 name=
 identity_name=
 check_only=0
+preflight=0
 identity_required=0
 while [ "$#" -gt 0 ]; do
   case $1 in
@@ -35,6 +37,7 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --check) check_only=1; shift ;;
+    --preflight) preflight=1; shift ;;
     --identity-required) identity_required=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --*) fail "unknown option: $1 (run setup-agents --help)" ;;
@@ -54,6 +57,7 @@ if [ "$missing" -eq 1 ]; then
   printf 'setup-agents: nothing was created; install the tools above and rerun\n' >&2
   exit 2
 fi
+[ "$preflight" -eq 1 ] && exit 0
 
 slug_of() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'; }
 
@@ -64,7 +68,7 @@ login_ok() {
   jq -e '.authenticated == true and .verified == true' <<<"$status" >/dev/null 2>&1 \
     || fail 'the login is not authenticated; run hypertask login or pass a management key, then rerun (CLI output withheld to protect tokens)'
   id=$(jq -r '.agentId // ""' <<<"$status")
-  [ -n "$id" ] || return 0
+  [ -n "$id" ] || { [ -n "$name" ] && fail 'this credential is not an agent login; named setup needs the agent token'; return 0; }
   for project in 15 11514; do
     members=$(hypertask --json "$@" projects members "$project" 2>/dev/null) \
       || fail "could not confirm access to project $project; check the login, then rerun (CLI output withheld to protect tokens)"
