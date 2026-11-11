@@ -6,13 +6,11 @@ WITH RECURSIVE choices AS (
            row_number() OVER (PARTITION BY user_id ORDER BY location) AS n
     FROM htpr_9019_model_choice_backup
 ), restored(user_id, n, preferences) AS (
-    SELECT "userId", 0::bigint, "aiModelPreferences" FROM "UserSetting"
-    WHERE "userId" IN (SELECT user_id FROM choices)
+    SELECT s."userId", 0::bigint, s."aiModelPreferences" FROM "UserSetting" s
+    JOIN htpr_9019_model_choice_auto_done d ON d.user_id = s."userId" AND d.xmin = s.xmin
+    WHERE s."userId" IN (SELECT user_id FROM choices)
     UNION ALL
-    SELECT r.user_id, c.n,
-           CASE WHEN r.preferences #> c.path = '"auto"'::jsonb
-                THEN jsonb_set(r.preferences, c.path, to_jsonb(c.previous_value), false)
-                ELSE r.preferences END
+    SELECT r.user_id, c.n, jsonb_set(r.preferences, c.path, to_jsonb(c.previous_value), false)
     FROM restored r JOIN choices c ON c.user_id = r.user_id AND c.n = r.n + 1
 )
 UPDATE "UserSetting" s SET "aiModelPreferences" = r.preferences FROM restored r

@@ -43,7 +43,7 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
     await db.query('CREATE TABLE "UserSetting" ("userId" int PRIMARY KEY, "aiModelPreferences" jsonb); CREATE TABLE htpr_7038_model_choice_reset_done(user_id int PRIMARY KEY)');
     await db.query(fs.readFileSync("src/prisma/migrations/20261110140000_htpr_9019_saved_model_choice_auto/migration.sql", "utf8"));
     const original = { aiChat: "old-chat", taskWriter: "old-writer", writeWithAi: "old-write", improveWriting: "old-improve", askAi: "old-ask", imageGeneration: "keep-image", thinking: { mode: "high" }, teams: { 'odd.team,{"': { aiChat: "team-pick", imageGeneration: "team-image" }, broken: null } };
-    await db.query(`INSERT INTO "UserSetting" VALUES (1, '${JSON.stringify(original)}'::jsonb), (2, '{}'::jsonb)`);
+    await db.query(`INSERT INTO "UserSetting" VALUES (1, '${JSON.stringify(original)}'::jsonb), (2, '${JSON.stringify(original)}'::jsonb), (3, '{}'::jsonb)`);
     let enabled = false, baseEnabled = true, failCache = false;
     const prisma = {
       htpr7038ModelChoiceResetDone: { findUnique: async ({ where }) => (await db.query(`SELECT user_id FROM htpr_7038_model_choice_reset_done WHERE user_id=${where.userId}`)) ? { userId: where.userId } : null },
@@ -92,10 +92,13 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
     await db.query(`UPDATE "UserSetting" SET "aiModelPreferences" = jsonb_set("aiModelPreferences", '{aiChat}', '"later-choice"') WHERE "userId"=1`);
     assert.equal(await switchChoices(1), "done");
     assert.equal((await preferences()).aiChat, "later-choice");
-    assert.equal(await switchChoices(2), "done");
-    assert.equal(await db.query("SELECT count(*) FROM htpr_7038_model_choice_reset_done"), "2");
+    await db.query(`UPDATE "UserSetting" SET "aiModelPreferences" = jsonb_set("aiModelPreferences", '{aiChat}', '"auto"') WHERE "userId"=1`);
+    assert.equal(await switchChoices(2), "switched");
+    assert.equal(await switchChoices(3), "done");
+    assert.equal(await db.query("SELECT count(*) FROM htpr_7038_model_choice_reset_done"), "3");
     await db.query(fs.readFileSync("scripts/htpr-9019-undo-model-choice-auto.sql", "utf8"));
-    assert.deepEqual(await preferences(), { ...original, aiChat: "later-choice" });
+    assert.deepEqual(await preferences(), expected, "later explicit Auto is not migration-owned");
+    assert.deepEqual(JSON.parse(await db.query('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=2')), original, "untouched migration-owned choices are restored");
   } finally {
     await db?.close();
     spawnSync("docker", ["rm", "-f", container], { stdio: "ignore", timeout: 10000 });

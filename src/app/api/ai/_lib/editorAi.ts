@@ -720,12 +720,11 @@ export async function selectTaskWriterModel(args: {
     }
   }
   const namedPickerOption = pickerSelection && pickerSelection !== "auto" ? pickerSelection : null;
-  const savedAutoChoiceEnabled = savedModelAutoEnabled && (personalModelOptionId === "auto");
   const requestAuto = pickerSelection === "auto" || (args.modelOptionId === "auto" && savedModelAutoEnabled && args.aiFeature && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled));
   const explicitOption = savedModelAutoEnabled && args.aiFeature && !namedPickerOption && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
     ? getAiModelOptionById(args.modelOptionId, haiku55Enabled)
     : undefined;
-  const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !explicitOption && (!personalModelOptionId || savedAutoChoiceEnabled) && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))
+  const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !explicitOption && (!personalModelOptionId || (savedModelAutoEnabled && personalModelOptionId === "auto")) && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))
     ? pickAutoModelOption({
         feature: args.aiFeature,
         settings: teamContext.settings,
