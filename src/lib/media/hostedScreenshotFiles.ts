@@ -1,4 +1,4 @@
-import { startCreateTaskUpload } from "@/lib/createTaskAttachmentUploads";
+import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
 
 type ScreenshotInput = { source?: string | null; url?: string | null; name?: string | null; fileName?: string | null; type?: string | null; mimeType?: string | null } | File | undefined;
 export type ScreenshotFile = { url?: string; fileName?: string; mimeType?: string };
@@ -31,7 +31,7 @@ export async function hostedScreenshotFiles(files: ScreenshotInput[]): Promise<S
     let url = uploaded.get(key);
     if (!url) {
       try {
-        url = (await startCreateTaskUpload(uploadable).promise).url;
+        url = await uploadSingleFileViaApi(uploadable);
         uploaded.set(key, url);
       } catch {
         hosted.push({ url: source ?? undefined, fileName, mimeType });

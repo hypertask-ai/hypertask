@@ -296,7 +296,7 @@ test("base64 screenshots are hosted before embedding", async () => {
 test("a base64 writer preview is hosted before the modal description is guaranteed", async () => {
   const uploads = [];
   const { hostedScreenshotFiles } = load("src/lib/media/hostedScreenshotFiles.ts", {
-    "@/lib/createTaskAttachmentUploads": { startCreateTaskUpload: (file) => { uploads.push(file.name); return { id: "one", promise: Promise.resolve({ url: shot }) }; } },
+    "@/lib/storage/uploadViaApi": { uploadSingleFileViaApi: async (file) => { uploads.push(file.name); return shot; } },
   });
   const attachable = new File([new Uint8Array([137, 80, 78, 71])], "attached.png", { type: "image/png" });
   const result = await hostedScreenshotFiles([
@@ -311,7 +311,7 @@ test("a base64 writer preview is hosted before the modal description is guarante
 test("a data URL attachment is uploaded once and reused", async () => {
   const uploads = [];
   const { hostedScreenshotFiles } = load("src/lib/media/hostedScreenshotFiles.ts", {
-    "@/lib/createTaskAttachmentUploads": { startCreateTaskUpload: () => { uploads.push(1); return { id: "one", promise: Promise.resolve({ url: shot }) }; } },
+    "@/lib/storage/uploadViaApi": { uploadSingleFileViaApi: async () => { uploads.push(1); return shot; } },
   });
   const pending = { name: "pasted.png", type: "image/png", source: base64Png };
   const saved = await hostedScreenshotFiles([pending, { ...pending }]);

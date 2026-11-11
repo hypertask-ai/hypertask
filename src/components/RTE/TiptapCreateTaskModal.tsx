@@ -665,9 +665,14 @@ const TiptapCreateTaskModal = () => {
       return;
     }
     if (guaranteeScreenshots) {
+      const hostedFiles = await hostedScreenshotFiles(attachmentsAtSave.map((attachment) => attachment.file));
+      if (saveEpochRef.current !== epochAtSave) {
+        releaseSubmission();
+        return;
+      }
       descriptionAtSave = guaranteeCreationScreenshots(descriptionAtSave, {
         instructions: `${titleAtSave} ${descriptionAtSave}`,
-        attachments: creationScreenshotAttachments(await hostedScreenshotFiles(attachmentsAtSave.map((attachment) => attachment.file))),
+        attachments: creationScreenshotAttachments(hostedFiles),
       });
     }
     if (param === "Save") {
