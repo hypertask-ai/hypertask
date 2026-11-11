@@ -356,6 +356,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Refresh production merge for static checks
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin production
+          git -c user.name=github-actions -c user.email=github-actions@github.com merge --no-edit FETCH_HEAD
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ^24.22.1
@@ -513,11 +519,7 @@ jobs:
           }
 
           lane_eslint() {
-            if [ -n "$BASE_SHA" ]; then
-              npm run lint:changed -- "$BASE_SHA"
-            else
-              npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
-            fi
+            npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
           }
 
           lane_lint_overlap_guard() {
