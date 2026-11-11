@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { needsYouRules, type NeedsYouNotice } from "@/lib/inbox/needsYou";
-
 const reasons = {
   decision: "Needs your decision", money_access: "Money or access", review: "Needs your review",
   blocked: "Waiting on you", fyi: "For your information", noise: "Routine update",
@@ -15,10 +14,9 @@ const responseSchema = z.object({
 
 export async function needsYouScore(notice: NeedsYouNotice) {
   const rules = needsYouRules(notice);
-  const fallback = { needsYouScore: rules.score, needsYouReason: rules.reason, needsYouSource: "rules", needsYouCostUsd: 0 };
   const key = process.env.OPENROUTER_API_KEY?.trim();
+  const fallback = { needsYouScore: rules.score, needsYouReason: rules.reason, needsYouSource: "rules", needsYouCostUsd: key ? null : 0 };
   if (!key) return fallback;
-  const failed = { ...fallback, needsYouCostUsd: null };
   try {
     const response = await fetch("https://openrouter.ai/api/alpha/decisions", {
       method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -38,15 +36,15 @@ export async function needsYouScore(notice: NeedsYouNotice) {
         },
       }),
     });
-    if (!response.ok) return failed;
+    if (!response.ok) return fallback;
     const parsed = responseSchema.safeParse(await response.json());
-    if (!parsed.success) return failed;
+    if (!parsed.success) return fallback;
     return {
       needsYouScore: Math.round(parsed.data.answers.urgency.score * 25) + rules.score,
       needsYouReason: [reasons[parsed.data.answers.kind.choice], rules.reason].join("; "),
       needsYouSource: "jev", needsYouCostUsd: parsed.data.usage?.cost ?? null,
     };
   } catch {
-    return failed;
+    return fallback;
   }
 }

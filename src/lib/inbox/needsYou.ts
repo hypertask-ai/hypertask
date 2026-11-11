@@ -1,7 +1,6 @@
 import type { Comment, Notification, Priority, Task } from "@prisma/client";
 
 export const NEEDS_YOU_SPLIT = "Needs you";
-
 export type NeedsYouNotice = Pick<Notification, "type" | "userId"> &
   Partial<Pick<Notification, "taskId" | "fromAgentId" | "message" | "needsYouScore" | "needsYouSource">> & {
     comment?: Partial<Pick<Comment, "text" | "kind">> | null;

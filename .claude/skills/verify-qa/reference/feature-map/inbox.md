@@ -2,17 +2,8 @@
 
 ## Sub-features
 
-### Needs you
-
-With `htpr-9055-needs-you` at Owner + QA, open `/inbox?split=Needs%20you`.
-Check one row per ticket, descending stored score, across dates. Open by click
-and Enter; next-ticket navigation must keep that order after reload. Archive
-and undo must preserve ranking. Ordinary tabs and the flag-off account keep
-their old order. Own-AI-account teams send no text to Jev. Outages use rules;
-model calls happen in background delivery, never inbox reads. Record the cron's
-UTC daily cost and before/after inbox-read timings. Compare existing tabs in
-Light, AMOLED and Graphite 2; the builder cannot approve its own visual QA.
-
+- `needs-you` With `htpr-9055-needs-you` at Owner + QA, open `/inbox?split=Needs%20you`: one row per ticket, descending stored scores across dates. Click, Enter, next-ticket, reload, archive and undo preserve ranking; ordinary tabs and flag-off order stay unchanged.
+  Own-AI teams send nothing; outages use rules; reads never call models. Record daily cost and before/after inbox-read timings. Another runner compares Light, AMOLED and Graphite 2.
 - `quiet-agent-moves-and-description-edits` Quiet agent moves and description edits.
 - `blocked-by-you-bulk-archive` Blocked by you bulk archive.
 - `boundary-keyboard-jumps` Boundary keyboard jumps.

@@ -24,14 +24,11 @@ export async function scoreNeedsYouInbox(userId: number) {
   const eligible = (teamId: string, team: NonNullable<NonNullable<typeof rows[number]["project"]>["team"]>) => {
     let pending = eligibleTeams.get(teamId);
     if (!pending) {
-      pending = (async () => {
-        if (isOwnKeyOnlySettings(team.aiProviderSettings) || team.byokApiKeys.some(({ provider }) => !["gateway", "openai", "claude", "managed_gateway"].includes(provider))) return false;
-        const [plan, funding, openai, claude] = await Promise.all([
-          storePlanIdForProject(null, teamId), getTeamGatewayFunding({ trustedTeamId: teamId }),
-          resolveTeamByokApiKey("openai", { trustedTeamId: teamId }), resolveTeamByokApiKey("claude", { trustedTeamId: teamId }),
-        ]);
-        return plan !== "BYOK" && funding?.source !== "customer" && ![openai, claude].some((key) => key && !isOurGatewayKey(key));
-      })().catch(() => false);
+      if (isOwnKeyOnlySettings(team.aiProviderSettings) || team.byokApiKeys.some(({ provider }) => !["gateway", "openai", "claude", "managed_gateway"].includes(provider))) return false;
+      pending = Promise.all([
+        storePlanIdForProject(null, teamId), getTeamGatewayFunding({ trustedTeamId: teamId }),
+        resolveTeamByokApiKey("openai", { trustedTeamId: teamId }), resolveTeamByokApiKey("claude", { trustedTeamId: teamId }),
+      ]).then(([plan, funding, openai, claude]) => plan !== "BYOK" && funding?.source !== "customer" && ![openai, claude].some((key) => key && !isOurGatewayKey(key))).catch(() => false);
       eligibleTeams.set(teamId, pending);
     }
     return pending;

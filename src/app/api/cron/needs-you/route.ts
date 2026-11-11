@@ -4,7 +4,6 @@ import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import { featureFlagCandidateUserIds } from "@/lib/flags";
 import { HTPR_9055_NEEDS_YOU_FLAG } from "@/lib/flags/definitions/htpr-9055-needs-you";
 import { scoreNeedsYouInbox } from "@/utils/controllers/notifications/scoreNeedsYou";
-
 export const maxDuration = 300;
 export async function GET(request: NextRequest) {
   if (!hasValidCronAuthorization(request.headers.get("authorization"), process.env.CRON_SECRET)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

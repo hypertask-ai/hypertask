@@ -5,6 +5,9 @@ const rules = loadModule("src/lib/inbox/needsYou.ts");
 const { getInboxTabs } = loadModule("src/utils/helperFunctions/inboxHelpers.ts");
 const { groupInboxItemsByDate } = loadModule("src/lib/inbox/inboxDateGroups.ts");
 const { buildInboxTasksPlaylist } = loadModule("src/lib/inbox/inboxTasksPlaylist.ts");
+const originalEnv = process.env;
+process.env = { ...originalEnv, OPENROUTER_API_KEY: "fixture-not-a-key", CRON_SECRET: "fixture-secret" };
+test.after(() => { process.env = originalEnv; });
 const notice = (extra = {}) => ({ id: 1, taskId: 1, userId: 985, type: "TaskMoved", projectId: 7049,
   task: { uniqueIndex: 1, title: "Routine move", waitingOnUserId: null }, project: { id: 7049, title: "QA" },
   createdAt: "2026-11-11T00:00:00Z", needsYouEnabled: true, ...extra });
@@ -25,9 +28,6 @@ test("rules cap boosts; highest distinct ticket wins, never date order", () => {
 });
 
 test("Jev converts a five-point score to 0-100 and stores cost; all failures return rules", async (t) => {
-  const previous = process.env.OPENROUTER_API_KEY;
-  process.env.OPENROUTER_API_KEY = "fixture-not-a-key";
-  t.after(() => { if (previous === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = previous; });
   const { needsYouScore } = loadModule("src/lib/ai/needsYouScore.ts");
   let sent;
   t.mock.method(global, "fetch", async (_url, options) => {
@@ -67,33 +67,22 @@ function worker({ enabled = true, source = "managed", plan = "Pro", settings = {
 }
 
 test("arrival retries and concurrent delivery score once; own-AI teams and revoked access send nothing", async () => {
-  const allowed = worker();
-  assert.equal((await Promise.all([allowed.run(985), allowed.run(985)])).reduce((a, b) => a + b), 1);
-  assert.equal(allowed.row.needsYouScore, 95);
-  assert.equal(allowed.paid(), 1);
-  assert.equal(await allowed.run(985), 0);
-  for (const options of [{ source: "customer" }, { plan: "BYOK" }, { settings: { ownKeyOnly: true } }, { providers: ["custom"] }, { ownKey: "customer-key" }, { access: false }]) {
-    const skipped = worker(options);
-    assert.equal(await skipped.run(985), 1);
-    assert.equal(skipped.row.needsYouSource, "skipped");
-    assert.equal(skipped.paid(), 0);
+  for (const [options, source, paid, score] of [
+    [{}, "jev", 1, 95], [{ source: "customer" }, "skipped", 0, 0], [{ plan: "BYOK" }, "skipped", 0, 0],
+    [{ settings: { ownKeyOnly: true } }, "skipped", 0, 0], [{ providers: ["custom"] }, "skipped", 0, 0],
+    [{ ownKey: "customer-key" }, "skipped", 0, 0], [{ access: false }, "skipped", 0, 0],
+    [{ settings: {} }, "rules", 0, 0], [{ settings: { providers: { openrouter: false } } }, "rules", 0, 0],
+    [{ enabled: false }, undefined, 0, null],
+  ]) {
+    const { run, row, paid: calls } = worker(options);
+    assert.equal((await Promise.all([run(985), run(985)])).reduce((a, b) => a + b), options.enabled === false ? 0 : 1);
+    assert.deepEqual([row.needsYouSource, calls(), row.needsYouScore ?? null], [source, paid, score]);
+    assert.equal(await run(985), 0);
+    if (options.enabled === false) assert.equal(row.needsYouScoredAt, null);
   }
-  for (const settings of [{}, { providers: { openrouter: false } }]) {
-    const disabled = worker({ settings });
-    assert.equal(await disabled.run(985), 1);
-    assert.equal(disabled.paid(), 0);
-    assert.equal(disabled.row.needsYouSource, "rules");
-  }
-  const off = worker({ enabled: false });
-  assert.equal(await off.run(985), 0);
-  assert.equal(off.row.needsYouScoredAt, null);
 });
 
-
-test("catch-up route rejects unsigned calls and reports stored daily cost", async (t) => {
-  const previous = process.env.CRON_SECRET;
-  process.env.CRON_SECRET = "fixture-secret";
-  t.after(() => { if (previous === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = previous; });
+test("catch-up route rejects unsigned calls and reports stored daily cost", async () => {
   const { GET } = loadModule("src/app/api/cron/needs-you/route.ts", {
     "@/lib/prisma": { default: { notification: { findMany: async () => [{ userId: 985 }], aggregate: async () => ({ _sum: { needsYouCostUsd: 0.00003 }, _count: { _all: 1, needsYouCostUsd: 1 } }) } } },
     "@/lib/flags": { featureFlagCandidateUserIds: async () => [985] },

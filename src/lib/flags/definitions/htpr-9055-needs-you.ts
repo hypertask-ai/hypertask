@@ -1,7 +1,5 @@
 import type { FeatureFlagDefinition } from "../definitions";
-
 export const HTPR_9055_NEEDS_YOU_FLAG = "htpr-9055-needs-you";
-
 export default {
   key: HTPR_9055_NEEDS_YOU_FLAG,
   kind: "feature",
