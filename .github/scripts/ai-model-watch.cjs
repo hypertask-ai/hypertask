@@ -14,6 +14,14 @@ const actionSentences = (finding) => String(finding.action ?? "")
   .map((part) => `${part}.`)
   .join(" ");
 
+const decisionFor = (finding) => {
+  if (finding.kind === "stale") return "Nothing; a runner removes the stale entry.";
+  if (finding.inputPerMillion != null && finding.inputPerMillion > 5) return "Nothing yet; HTPR-7746 must ship first.";
+  if (finding.inputPerMillion == null) return "Nothing until the gateway price is checked.";
+  if (["openai", "anthropic"].includes(finding.provider)) return "Nothing; a runner ships it.";
+  return "Valentin says yes or no before this ships.";
+};
+
 async function refusalDetail(response) {
   if (typeof response.text !== "function") return "";
   const body = await response.text().catch(() => "");
@@ -54,9 +62,8 @@ function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
   const entry = escapeHtml((finding.current ?? []).slice(0, 3).join(", ") || "none");
-  const needsValentin = /valentin|htpr/i.test(String(finding.action ?? ""));
-  const decide = needsValentin ? "yes or no before this model ships." : "nothing.";
-  const decision = needsValentin ? "Valentin says yes or no before this ships." : "Nothing needed. A runner ships it.";
+  const decision = decisionFor(finding);
+  const decide = decision.startsWith("Valentin") ? "yes or no before this model ships." : `${decision[0].toLowerCase()}${decision.slice(1)}`;
   const plain = plainBlock({
     wanted: "A watched model differs from our catalog or the gateway list.",
     affects: "people who pick a model in chat.",

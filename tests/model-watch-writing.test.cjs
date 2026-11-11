@@ -80,10 +80,14 @@ test("watcher keeps each finding's action in the per-model ticket body", () => {
   }
 });
 
-test("watcher asks Valentin only when the finding needs his yes", () => {
-  const base = { kind: "new-version", provider: "openai", model: "openai/gpt-5.5", inputPerMillion: 2, modelClass: "gpt-5", current: [] };
-  assert.ok(ticketFor({ ...base, action: "waits for HTPR-7746" }).description.includes("Valentin says yes or no before this ships."));
-  assert.ok(ticketFor({ ...base, action: "ship automatically" }).description.includes("Nothing needed. A runner ships it."));
+test("watcher names the prerequisite before shipping each kind of finding", () => {
+  const base = { kind: "new-version", provider: "openai", model: "openai/gpt-5.5", modelClass: "gpt-5", current: [] };
+  const decision = (finding) => ticketFor(finding).description.split("<p>Decision</p>")[1];
+  assert.match(decision({ ...base, inputPerMillion: 9, action: "waits for HTPR-7746" }), /Nothing yet; HTPR-7746 must ship first\./);
+  assert.match(decision({ ...base, inputPerMillion: null, action: "ship automatically when the gateway price is at most $5 per million" }), /Nothing until the gateway price is checked\./);
+  assert.match(decision({ ...base, inputPerMillion: 2, action: "ship automatically" }), /Nothing; a runner ships it\./);
+  assert.match(decision({ ...base, kind: "stale", inputPerMillion: null, action: "remove stale entry; migrate saved picks to the current model of its class" }), /Nothing; a runner removes the stale entry\./);
+  assert.match(decision({ ...base, provider: "meta", inputPerMillion: 1, action: "ask Valentin before shipping" }), /Valentin says yes or no before this ships\./);
 });
 
 test("watcher reports the board refusal text instead of a bare status code", async () => {
