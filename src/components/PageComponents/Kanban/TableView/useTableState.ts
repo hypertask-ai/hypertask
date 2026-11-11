@@ -218,6 +218,7 @@ export function useTableState(context: Context) {
     setTableSortViewAndReturn,
     setTableColumnsViewAndReturn,
     setTableCollapsedSectionsViewAndReturn,
+    setTableGroupVisibilityViewAndReturn,
     changeBoardLayout,
   } = useKanbanViews(_currentProject);
   const lastSavedColumns = useRef("");
@@ -328,7 +329,7 @@ export function useTableState(context: Context) {
   }
   if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled)) {
     const grouping = effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled);
-    if (grouping.mode !== "column") sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
+    sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
   }
 
   useEffect(() => {
@@ -386,7 +387,7 @@ export function useTableState(context: Context) {
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
   expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
-  setTableSortViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
+  setTableSortViewAndReturn, setTableGroupVisibilityViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
   };

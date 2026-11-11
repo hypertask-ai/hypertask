@@ -19,6 +19,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableM
 
 export function useTableRows(context: Context) {
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
   if (tableSortColumnsEnabled) getSortComparator("updated", "desc", new Map());
   const snapshot = useFirstScreenSurface();
@@ -33,7 +34,7 @@ export function useTableRows(context: Context) {
   const isPrioritySort = sortState[0]?.column === "priority";
   const savedViewPrioritySort = myTasksSort?.field === "priority";
   const effectiveCollapsed = tableGroupFoldEnabled ? collapsedSections : NO_COLLAPSED_SECTIONS;
-  const foldGroups = tableGroupFoldEnabled && Boolean(_currentProject);
+  const foldGroups = (tableGroupFoldEnabled || tableGroupModesEnabled) && Boolean(_currentProject);
 
   const rows = useMemo(() => {
     if (sortState.length > 0) {

@@ -54,7 +54,7 @@ import {
   TTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
-import { effectiveTableGrouping, getActiveTableCollapsedSectionsFromProject, getActiveTableGroupByFromProject, serializeEffectiveTableGrouping, serializeTableCollapsedSections, serializeTableGrouping } from "@/lib/table-view/tableGroupByTag";
+import { applyTableGroupAction, effectiveTableGrouping, getActiveTableCollapsedSectionsFromProject, getActiveTableGroupByFromProject, serializeEffectiveTableGrouping, serializeTableCollapsedSections, serializeTableGrouping, type TableGroupAction } from "@/lib/table-view/tableGroupByTag";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -454,6 +454,22 @@ const useKanbanViews = (project: IProject | null) => {
     );
   };
 
+  const setTableGroupVisibilityViewAndReturn = async (
+    project: IProject,
+    action: TableGroupAction,
+    groupId: string,
+  ) => {
+    if (!tableGroupModesEnabled) return;
+    return apiHandler(
+      (queuedProject) => buildUnsavedBody(queuedProject, {
+        table_group_by: serializeEffectiveTableGrouping(applyTableGroupAction(
+          effectiveTableGrouping(queuedProject, true, tableGroupByTagEnabled), action, groupId,
+        )),
+      }),
+      project,
+    );
+  };
+
   const setTableCollapsedSectionsViewAndReturn = async (
     project: IProject,
     collapsedSections: Set<string>,
@@ -647,6 +663,7 @@ const useKanbanViews = (project: IProject | null) => {
     setTableSortViewAndReturn,
     setTableColumnsViewAndReturn,
     setTableGroupByViewAndReturn,
+    setTableGroupVisibilityViewAndReturn,
     setTableCollapsedSectionsViewAndReturn,
     saveFilterAPI,
     setBoardColumnsViewAPI,
