@@ -11,8 +11,6 @@ import type { Prisma } from '@prisma/client';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { taskDetailInclude } from './mappers';
 import { unresolvedLabelMessage } from '@/lib/mcp/labelMessages';
-import { sectionRefusal } from '@/lib/mcp/boards/sectionLookup';
-import { HTPR_9050_SECTION_COLUMNS_FLAG } from '@/lib/flags/definitions/htpr-9050-section-columns';
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import createLabelActivity from '@/utils/controllers/activities/createLabelActivity';
 import {
@@ -125,8 +123,7 @@ export async function validateParentTask(
 
 export async function getSectionForTask(
     projectId: number,
-    sectionId?: number,
-    userId?: number
+    sectionId?: number
 ): Promise<{ section: any; error: null } | { section: null; error: { status: number; message: string } }> {
     let section;
 
@@ -140,10 +137,9 @@ export async function getSectionForTask(
         });
 
         if (!section) {
-            const listColumns = userId !== undefined && await isFeatureEnabled(HTPR_9050_SECTION_COLUMNS_FLAG, userId);
             return {
                 section: null,
-                error: { status: 404, message: await sectionRefusal(projectId, sectionId, listColumns) }
+                error: { status: 404, message: `Section with ID ${sectionId} not found in project ${projectId}` }
             };
         }
     } else {

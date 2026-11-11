@@ -287,3 +287,13 @@ Production deployment `df912192` (pull request 3148) was the first green build w
 `3840` MB failed on merge `0d635b84165` before HYCI-220 while the same tree still built at 4096 MB. That gap was the in-RAM cache peak, not the compile heap alone. With `maxMemoryGenerations=0` live, 3840 MB targets the headroom model from the HYCI-180 note without the RAM cache term that pushed 4000 MB merges into repeated container OOM.
 
 If the next production build reports "Reached heap limit", the compiler genuinely needs more than 3840 MB V8 heap on the current tree and the next step is the paid Enhanced Build Machine, which is Valentin's decision.
+
+## Server SDK compilation (2026-11-11, HYCI-245)
+
+Deployment `dpl_D9bBLCjW12Kc514j3d6AsUM5yL3g`, commit `0b5475a22b`, was killed about 127 seconds into compilation. The log reports `SIGKILL` and container `out_of_memory`, not a V8 heap abort. Next's worker order is server, edge, then client. No compiler completed before this failure. The old log contains no numeric heap peak, so elapsed time or the heap cap cannot establish a before/after memory saving.
+
+`serverExternalPackages` now also contains `stripe`, `posthog-node`, `@modelcontextprotocol/sdk`, and `mcp-handler`. Node loads their published server entry points instead of webpack compiling and minifying their dependency graphs. Next still traces their runtime files; no tracing exclusions, browser imports, SDK features, source maps, or type/style gates are removed. The 3840 MiB heap cap, single-module parallelism, compiler isolation, and filesystem cache policy remain unchanged. Hosted tests exercise Node exports with `require(esm)` disabled and trace the external entry points and SDK resource files.
+
+Every production webpack compiler emits `[build-memory]` JSON at start, module optimization, asset optimization, completion, and every 15 seconds while compiling. Each row identifies the compiler and process. `sampledHeapPeakMiB` is the largest V8 heap sample, taken every second and at those hooks; brief peaks between samples can be missed. `processMaxRssMiB` is the process-wide operating-system RSS high-water mark, not V8 heap or aggregate container memory. Samples cannot run while JavaScript blocks the event loop. A killed worker has periodic rows but no completion row. Development builds do not install the reporter.
+
+The change remains unproven until hosted checks and a successful production build supply measurements. HYCI-245 requires a production peak at least 500 MiB below 3840 MiB and a full 24-hour failure-free window after deployment. Neither a passing fixture nor a green PR check proves those production outcomes.

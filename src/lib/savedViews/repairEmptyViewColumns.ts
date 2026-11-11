@@ -36,9 +36,24 @@ export async function findViewsWithoutColumns(limit = EMPTY_VIEW_COLUMNS_BATCH):
     WHERE p."status" = 'Normal'
       AND NOT EXISTS (SELECT 1 FROM "User_Project_View" upv WHERE upv."unsavedViewId" = v."id")
       AND (v."board_columns_view" IS NULL OR jsonb_typeof(v."board_columns_view") <> 'array' OR jsonb_array_length(v."board_columns_view") = 0)
+      AND EXISTS (SELECT 1 FROM "Section" s WHERE s."projectId" = pv."projectId" AND s."deleted" = false)
     ORDER BY pv."projectId" ASC, v."createdAt" ASC
     LIMIT ${limit}
   `;
+}
+
+export async function countBoardsWithoutLiveColumns(): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ boards: bigint | number }>>`
+    SELECT COUNT(DISTINCT pv."projectId") AS "boards"
+    FROM "View" v
+    JOIN "Project_View" pv ON pv."id" = v."project_view_id"
+    JOIN "Project" p ON p."id" = pv."projectId"
+    WHERE p."status" = 'Normal'
+      AND NOT EXISTS (SELECT 1 FROM "User_Project_View" upv WHERE upv."unsavedViewId" = v."id")
+      AND (v."board_columns_view" IS NULL OR jsonb_typeof(v."board_columns_view") <> 'array' OR jsonb_array_length(v."board_columns_view") = 0)
+      AND NOT EXISTS (SELECT 1 FROM "Section" s WHERE s."projectId" = pv."projectId" AND s."deleted" = false)
+  `;
+  return Number(rows[0]?.boards ?? 0);
 }
 
 async function fillViewColumns(viewId: string, columns: ISection[]): Promise<boolean> {
@@ -51,20 +66,17 @@ async function fillViewColumns(viewId: string, columns: ISection[]): Promise<boo
 }
 
 export async function repairEmptyViewColumns(limit = EMPTY_VIEW_COLUMNS_BATCH): Promise<EmptyViewColumnRepair> {
+  const boardsWithoutColumns = await countBoardsWithoutLiveColumns();
   const found = await findViewsWithoutColumns(limit);
   const byBoard = new Map<number, EmptyViewRow[]>();
   for (const row of found) byBoard.set(row.projectId, [...(byBoard.get(row.projectId) ?? []), row]);
 
   const boards: RepairedBoard[] = [];
   let viewsRepaired = 0;
-  let boardsWithoutColumns = 0;
 
   for (const [projectId, rows] of byBoard) {
     const columns = await boardColumnsForProject(projectId);
-    if (columns.length === 0) {
-      boardsWithoutColumns += 1;
-      continue;
-    }
+    if (columns.length === 0) continue;
     const repaired: string[] = [];
     for (const row of rows) {
       if (await fillViewColumns(row.id, columns)) {

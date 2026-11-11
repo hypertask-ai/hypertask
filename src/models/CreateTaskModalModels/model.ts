@@ -1,6 +1,7 @@
 import { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { IAgent, ILabel, IProject, ITask, IUser } from "../model";
 import { IEstimateConstants, IPrioritiesConstants } from "@/lib/constants/constants";
+import type { TaskWriterSnapshotSource } from "@/lib/ai/boardMemoryClient";
 import type { DictationCoordinator } from "@/lib/dictationCoordinator";
 
 export interface IForm{
@@ -51,6 +52,7 @@ export interface ITaskGlobalStates{
       formValuesOverride?: IForm,
     ) => Promise<string | undefined>;
     applyTaskWriterTitle: (title: string) => void;
+    recordTaskWriterDraft: (note: string, draft: TaskWriterSnapshotSource) => void;
     enableAutoTitleGeneration: () => void;
     scheduleTitleGeneration: (description: string) => void;
     generateTitleFromDescription: (

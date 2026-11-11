@@ -98,6 +98,84 @@ class TaskDescriptionChangedError extends Error {}
 class TaskTitleChangedError extends Error {}
 class TaskTargetChangedError extends Error {}
 class FlagColumnMismatchError extends Error {}
+class OpenObservationGateError extends Error {}
+
+const DONE_COLUMN_NAME =
+  /^(?:done|complete|completed|shipped|closed|finished|live|released)$/i;
+const OBSERVATION_OPEN_WORD =
+  /\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b/gi;
+const OBSERVATION_NEGATED_OPEN = /(?:\bno longer|\bnot|\bnever)\s+$/i;
+const OBSERVATION_GATE_LABEL =
+  /^(?:[-*•]\s*)?(?:the\s+|this\s+|our\s+)?(?:full[- ]day\s+)?observation(?:\s+gate)?\b/i;
+const CHECKLIST_ITEM = /<li\b([^>]*)>([\s\S]*?)(?=<\/li>|<li\b|<\/ul>|$)/gi;
+
+function plainText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function uncheckedObservationItem(html: string): string | null {
+  for (const item of html.matchAll(CHECKLIST_ITEM)) {
+    const checked = /data-checked\s*=\s*["']?([a-z]+)/i.exec(item[1]);
+    if (!checked || checked[1].toLowerCase() === "true") continue;
+    const label = plainText(item[2]);
+    if (/\bobservation\b/i.test(label)) return label;
+  }
+  return null;
+}
+
+function gateLines(html: string): string[] {
+  return html
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .split("\n");
+}
+
+function openObservationLine(html: string): string | null {
+  for (const line of gateLines(html)) {
+    const text = line
+      .replace(/&nbsp;|&#160;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const label = OBSERVATION_GATE_LABEL.exec(text);
+    if (!label) continue;
+    const statusClause = text.slice(label[0].length).split(/[.;,]/)[0];
+    for (const word of statusClause.matchAll(new RegExp(OBSERVATION_OPEN_WORD.source, "gi"))) {
+      if (!OBSERVATION_NEGATED_OPEN.test(text.slice(0, label[0].length + (word.index ?? 0)))) {
+        return text;
+      }
+    }
+  }
+  return null;
+}
+
+function openObservationGates(...sources: Array<string | null | undefined>): string[] {
+  const gates: string[] = [];
+  for (const source of sources) {
+    if (!source) continue;
+    for (const gate of [uncheckedObservationItem(source), openObservationLine(source)]) {
+      if (gate && !gates.includes(gate)) gates.push(gate);
+    }
+  }
+  return gates;
+}
+
+function openObservationGateMessage(gates: string[]): string {
+  return `Cannot mark this ticket done. The full-day observation gate is still unfinished: ${gates
+    .map((gate) => `"${gate}"`)
+    .join("; ")}.`;
+}
+
+function destinationIsDoneColumn(section: {
+  section_title: string;
+  isDone: boolean | null;
+}): boolean {
+  return section.isDone ?? DONE_COLUMN_NAME.test(section.section_title.trim());
+}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -374,6 +452,7 @@ export async function updateTaskSingle(
         }
         const requestedSectionId = requestedMutation.sectionId;
         const requestedSectionName = requestedMutation.section;
+        let destinationSection: { section_title: string; isDone: boolean | null } | null = null;
         sectionIdChanged =
           requestedSectionId !== undefined &&
           requestedSectionId !== currentState.sectionId;
@@ -400,7 +479,7 @@ export async function updateTaskSingle(
                 projectId:
                   requestedMutation.projectId ?? currentState.projectId,
               },
-              select: { section_title: true },
+              select: { section_title: true, isDone: true },
             });
             if (!targetSection) throw new Error("Section not found");
             if (
@@ -410,6 +489,7 @@ export async function updateTaskSingle(
               throw new Error("Section does not match sectionId");
             }
             updateData.section = targetSection.section_title;
+            destinationSection = targetSection;
           }
         }
         if (
@@ -446,6 +526,42 @@ export async function updateTaskSingle(
           }, await listFeatureFlagModes());
           if (blocked.length) {
             throw new FlagColumnMismatchError(`Cannot move to Flag: Everyone. Not released: ${blocked.map(({ key, mode }) => `${key} (${mode})`).join(", ")}.`);
+          }
+        }
+        if (
+          sectionNameChanged &&
+          !destinationSection &&
+          typeof requestedSectionName === "string" &&
+          requestedSectionName !== ""
+        ) {
+          const namedSections = await tx.section.findMany({
+            where: {
+              section_title: requestedSectionName,
+              projectId: requestedMutation.projectId ?? currentState.projectId,
+            },
+            select: { section_title: true, isDone: true },
+          });
+          if (namedSections.length === 1) destinationSection = namedSections[0];
+        }
+        if (
+          sectionChanged &&
+          destinationSection &&
+          destinationIsDoneColumn(destinationSection)
+        ) {
+          const gateDescription =
+            typeof requestedMutation.description === "string"
+              ? requestedMutation.description
+              : currentState.description_?.content ||
+                currentState.description ||
+                "";
+          const openGates = openObservationGates(
+            gateDescription,
+            typeof requestedMutation.acceptanceCriteria === "string"
+              ? requestedMutation.acceptanceCriteria
+              : currentState.acceptanceCriteria,
+          );
+          if (openGates.length) {
+            throw new OpenObservationGateError(openObservationGateMessage(openGates));
           }
         }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
@@ -823,6 +939,9 @@ export async function updateTaskSingle(
     }
     if (error instanceof FlagColumnMismatchError) {
       return { status: 409, json: { message: error.message, code: "FLAG_COLUMN_MISMATCH" } };
+    }
+    if (error instanceof OpenObservationGateError) {
+      return { status: 409, json: { message: error.message, code: "OPEN_OBSERVATION_GATE" } };
     }
     if (error instanceof PlainLanguageTicketError) {
       return { status: 400, json: { message: error.message, code: "PLAIN_LANGUAGE_TICKET_REQUIRED" } };

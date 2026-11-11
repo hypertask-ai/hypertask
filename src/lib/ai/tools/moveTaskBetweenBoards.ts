@@ -58,8 +58,7 @@ export function createMoveTaskBetweenBoardsTool(context: ToolContext) {
 
         const sectionResult = await getSectionForTask(
           input.target_project_id,
-          input.target_section_id,
-          user.id
+          input.target_section_id
         );
         if (sectionResult.error) {
           return { success: false, error: sectionResult.error.message };

@@ -101,7 +101,7 @@ async function send(api, { currentProject = project(), destinationProject, pathn
     axios: { get: async () => ({ data: { id: existingTaskId, projectId: 15, uniqueIndex: 1 } }) },
     isEmptyComposeTarget: () => true, composeTaskBoardId: api.composeTaskBoardId,
     parseCookies: () => ({ previousBoard: "project-15|&|todo" }), lastUsedBoards: {},
-    user: { id: 985 }, inlineAgentImages: false, currentProject, globalAPIHandlers: { getAllProjectsMinimal: async () => [project()] }, mounted,
+    user: { id: 985 }, inlineAgentImages: false, guaranteeScreenshots: false, currentProject, globalAPIHandlers: { getAllProjectsMinimal: async () => [project()] }, mounted,
     createComposedTask: async body => {
       calls.push(body);
       const result = await api.createComposedTask(body);

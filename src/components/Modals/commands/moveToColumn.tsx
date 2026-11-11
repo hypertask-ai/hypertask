@@ -116,7 +116,10 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
     mutationFn: async ({ section, ranking }: { section: ISection; ranking?: string }) => {
       if (!taskIdentity) throw new Error("Unable to find task");
       const response = await moveTaskRequest({ projectId: taskIdentity.projectId, taskId: taskIdentity.taskId, section_title: section.section_title, sectionId: section.id!, section: section.section_title, ranking });
-      if (!response.ok) throw new Error("Unable to move task");
+      if (!response.ok) {
+        const refusal = await response.json().catch(() => null);
+        throw new Error(refusal?.message ?? "Unable to move task");
+      }
       return readMoveTaskResponse(response);
     },
     onMutate: async ({ section }) => {
@@ -207,11 +210,12 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
         );
       }
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       queryClient.setQueryData(["projectsAll"], context?.previousProjects);
       queryClient.setQueryData(["task-", context?.taskId], context?.previousTask);
       if (context?.previousSection) callback?.(context.previousSection);
       if (context?.taskId) setActiveItem(context.taskId);
+      toast.error(error.message || "Unable to move task");
     },
     onSettled: async (_data, _error, _variables, context) => {
       await Promise.all([

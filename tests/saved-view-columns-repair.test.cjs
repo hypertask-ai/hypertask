@@ -14,9 +14,14 @@ let existingTicket = null;
 let redisSets = [];
 let redisSetResult = "OK";
 let redisDeletes = [];
+let skippedBoards = 0;
 
 const prisma = {
-  $queryRaw: async () => emptyViews,
+  $queryRaw: async (strings) => {
+    const sql = Array.isArray(strings) ? strings.join(" ") : String(strings);
+    if (/COUNT\(DISTINCT/.test(sql)) return [{ boards: BigInt(skippedBoards) }];
+    return emptyViews;
+  },
   $executeRaw: async (strings, ...values) => {
     updates.push({ columns: JSON.parse(values[0]), viewId: values[1] });
     return 1;
@@ -89,6 +94,7 @@ test.beforeEach(() => {
   redisSets = [];
   redisSetResult = "OK";
   redisDeletes = [];
+  skippedBoards = 0;
   previousSecret = process.env.CRON_SECRET;
   process.env.CRON_SECRET = "test-cron-secret";
 });
@@ -131,8 +137,22 @@ test("a quiet day and a board with no live columns repair nothing and file nothi
   let body = await (await callRoute()).json();
   assert.deepEqual([updates, filed, body.viewsRepaired, body.ticket], [[], [], 0, null]);
   emptyViews = [{ id: "view-9", title: "Blank", projectId: 42, board: "Blank Board" }];
+  skippedBoards = 1;
   body = await (await callRoute()).json();
   assert.deepEqual([updates, filed, body.boardsWithoutColumns, body.ticket], [[], [], 1, null]);
+});
+
+test("every board left alone is counted, even when the batch is full of them", async () => {
+  skippedBoards = 108;
+  emptyViews = Array.from({ length: 200 }, (_, index) => ({
+    id: `blank-${index}`,
+    title: `Blank ${index}`,
+    projectId: 500 + index,
+    board: "Blank Board",
+  }));
+  boardColumns = new Map();
+  const body = await (await callRoute()).json();
+  assert.deepEqual([updates, filed, body.viewsRepaired, body.boardsWithoutColumns, body.truncated], [[], [], 0, 108, true]);
 });
 
 test("a same-day retry skips and an existing ticket for the day is not filed twice", async () => {
@@ -179,4 +199,16 @@ test("the ticket marker and description name the day, the boards and the views",
   for (const text of ["saved-view-columns:2026-11-10", "Client Board", "Sprint", "2 boards left alone because they had no live columns"]) {
     assert.match(description, new RegExp(text));
   }
+  assert.doesNotMatch(description, /still waiting/);
+  const capped = repairTicketDescription(
+    {
+      viewsFound: 200,
+      viewsRepaired: 92,
+      boards: [{ projectId: 41, board: "Client Board", views: ["Sprint"] }],
+      boardsWithoutColumns: 108,
+      truncated: true,
+    },
+    now,
+  );
+  assert.match(capped, /More views are still waiting/);
 });

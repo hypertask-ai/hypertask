@@ -27,6 +27,7 @@ stubModule("src/app/api/ai/_lib/editorAi.ts", {
     return currentUser;
   },
 });
+stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => true });
 stubModule("src/app/api/ai/_lib/boardMemory.ts", {
   BoardMemoryProjectAccessError: StubBoardMemoryProjectAccessError,
   deleteBoardMemory: async (input) => {

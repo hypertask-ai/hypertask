@@ -42,6 +42,7 @@ export function repairTicketDescription(repair: EmptyViewColumnRepair, now: Date
     `<p><strong>How to undo:</strong> hide or show columns in each named view, or remove the daily check.</p>` +
     `<hr><h2>Repaired on ${dayKey(now)}</h2><ul>${boards}</ul>` +
     `<p>Filters and sorting were not touched. ${boardsWithout} left alone because they had no live columns to copy.</p>` +
+    (repair.truncated ? `<p>More views are still waiting; the next run continues where this one stopped.</p>` : "") +
     `<p>Marker: ${escapeHtml(repairTicketMarker(now))}</p>`
   );
 }

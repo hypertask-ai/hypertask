@@ -58,6 +58,10 @@ const UNSAFE_BOARD_MEMORY_PATTERNS = [
   /\b(?:reveal|show|print|return) (?:the )?(?:system|developer) prompt\b/i,
 ];
 
+export function containsUnsafeBoardMemoryContent(text: string) {
+  return UNSAFE_BOARD_MEMORY_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 export function buildCustomInstructionSearchFilters(
   projectId: number,
   includeBoardMemory: boolean,
@@ -101,7 +105,7 @@ export function normalizeLearnedMemoryFacts(
     if (
       !fact ||
       fact.length > BOARD_MEMORY_MAX_FACT_LENGTH ||
-      UNSAFE_BOARD_MEMORY_PATTERNS.some((pattern) => pattern.test(fact)) ||
+      containsUnsafeBoardMemoryContent(fact) ||
       existing.has(key) ||
       seen.has(key)
     ) {

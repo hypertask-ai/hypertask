@@ -143,7 +143,8 @@ async function runLive(corpus, api, persist) {
   return recording;
 }
 async function main() {
-  const corpus = JSON.parse(fs.readFileSync(path.join(directory, 'cases.json'), 'utf8'));
+  if (process.argv.includes('--pinned')) return require('./task-writer-eval-pinned.cjs').main();
+  const corpus =JSON.parse(fs.readFileSync(path.join(directory, 'cases.json'), 'utf8'));
   if (process.argv.includes('--live')) {
     const { request } = require('playwright');
     const context = await request.newContext({ baseURL: 'https://app.hypertask.ai', ...(process.env.QA_STATE ? { storageState: process.env.QA_STATE } : {}), timeout: 30000 });
