@@ -35,7 +35,6 @@ import { taskTemplatePickerForProject, type TaskTemplatePickerState } from "@/li
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_8737_BULK_MOVE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8737-bulk-move-board";
-import { HTPR_8929_COLUMN_SELECT_ALL_FLAG } from "@/lib/flags/definitions/htpr-8929-column-select-all";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
 
@@ -51,7 +50,6 @@ export function useCommandsState(context: Context) {
   const queryClient = useQueryClient();
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   const bulkMoveBoardFlag = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
-  const columnSelectAllHintEnabled = useFlag(HTPR_8929_COLUMN_SELECT_ALL_FLAG);
   const myTasksViewsEnabled = true;
   const myTasksSnoozeEnabled = true;
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
@@ -96,7 +94,6 @@ export function useCommandsState(context: Context) {
     bulkSelectionCount: hasBulkSelection ? bulkSelection?.selectedCount : 0,
     kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!kanbanBulkSelection,
     bulkMoveBoardEnabled: bulkMoveBoardFlag && !!kanbanBulkSelection?.bulkMoveBoardEnabled,
-    ...(columnSelectAllHintEnabled ? { columnSelectAllHintEnabled: true } : {}),
   });
   const paletteContextOptions = hasBulkSelection
     ? {
@@ -107,11 +104,9 @@ export function useCommandsState(context: Context) {
         bulkSelectionCount: bulkSelection?.selectedCount,
         bulkMoveBoardEnabled: !!bulkBoardCommands?.commandLists.some((command) => command.key === "bulkMoveToBoard"),
         kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!kanbanBulkSelection,
-        ...(columnSelectAllHintEnabled ? { columnSelectAllHintEnabled: true } : {}),
       }
     : contextOptions && {
         ...contextOptions,
-        ...(columnSelectAllHintEnabled ? { columnSelectAllHintEnabled: true } : {}),
         commentOptions: contextOptions.commentOptions && {
           ...contextOptions.commentOptions,
           blockerCommentEnabled: blockerCommentEnabled && contextOptions.commentOptions.blockerCommentEnabled,

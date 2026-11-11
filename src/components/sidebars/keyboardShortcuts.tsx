@@ -1,5 +1,4 @@
 import { HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG, HTPR_7564_PHONE_SHORTCUTS_HEADER_FLAG } from "@/lib/flags/keys";
-import { HTPR_8929_COLUMN_SELECT_ALL_FLAG } from "@/lib/flags/definitions/htpr-8929-column-select-all";
 import { useContext, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
@@ -18,7 +17,6 @@ import { useFlag } from "@/hooks/useFlag";
 const KeyboardShortcuts = () => {
   const shortcutsHelpPhone = useFlag(HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG);
   const phoneShortcutsHeader = useFlag(HTPR_7564_PHONE_SHORTCUTS_HEADER_FLAG);
-  const columnSelectAllEnabled = useFlag(HTPR_8929_COLUMN_SELECT_ALL_FLAG);
   const panelClassName = "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-menu pt-[env(safe-area-inset-top)]";
   const rowClassName = shortcutsHelpPhone
     ? "flex flex-row items-center mb-2 gap-2 max-sm:flex-wrap"
@@ -42,15 +40,6 @@ const KeyboardShortcuts = () => {
     true,
     true,
   );
-  if (columnSelectAllEnabled) {
-    const boardGroup = mainData.find((group) => group.title === "Board");
-    if (boardGroup) {
-      boardGroup.sub.push({
-        shortTitle: "Select all in this column",
-        pressKey: ["SHIFT", "A"],
-      });
-    }
-  }
 
   const onKeyChange = (e: any) => {
     setKeyword(e.target.value);

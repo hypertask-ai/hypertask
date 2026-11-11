@@ -46,7 +46,6 @@ function render(enabled, phoneHelp, legacy = false) {
     react: React,
     "lucide-react": require("lucide-react"),
     "@/lib/flags/keys": keys,
-    "@/lib/flags/definitions/htpr-8929-column-select-all": jiti(path.join(root, "src/lib/flags/definitions/htpr-8929-column-select-all.ts")),
     "@/hooks/useFlag": { useFlag: (key) => key === flagKey ? enabled : key === phoneHelpKey && phoneHelp },
     "@/lib/state": { useRecoilValue: () => false, useRecoilState: () => [true, () => {}] },
     "@/store": { appShellRailAtom: {}, showShortcutsAtom: {} },

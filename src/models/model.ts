@@ -1140,7 +1140,6 @@ export interface IAllCommands {
   bulkSelectionCount?: number;
   bulkMoveBoardEnabled?: boolean;
   kanbanSelectAllEnabled?: boolean;
-  columnSelectAllHintEnabled?: boolean;
   task?: {
     taskId: number;
     projectId: number;

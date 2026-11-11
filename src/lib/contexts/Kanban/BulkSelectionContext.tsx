@@ -24,7 +24,6 @@ import { BULK_MOVE_BOARD_LIMIT, getInclusiveRange, toggleId } from "@/lib/kanban
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
 import { HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG } from "@/lib/flags/definitions/htpr-8928-bulk-archive-instant-hide";
-import { HTPR_8929_COLUMN_SELECT_ALL_FLAG } from "@/lib/flags/definitions/htpr-8929-column-select-all";
 
 type Assignee = IUser | IAgent;
 type AssigneeIntent = "assign" | "unassign" | "toggle";
@@ -79,22 +78,6 @@ interface KanbanBulkSelectionProviderProps {
 const KanbanBulkSelectionContext =
   createContext<KanbanBulkSelectionContextValue | null>(null);
 
-const COLUMN_CONTAINER_PREFIX = "droppable-section-container-";
-
-const sectionIdFromElement = (
-  element: Element | null | undefined,
-): number | null => {
-  if (!element) return null;
-  const column = element.closest(`[id^="${COLUMN_CONTAINER_PREFIX}"]`)
-    ?? element
-      .closest(".section-container")
-      ?.querySelector(`[id^="${COLUMN_CONTAINER_PREFIX}"]`);
-  const columnId = column?.id;
-  if (!columnId?.startsWith(COLUMN_CONTAINER_PREFIX)) return null;
-  const sectionId = Number(columnId.slice(COLUMN_CONTAINER_PREFIX.length));
-  return Number.isInteger(sectionId) ? sectionId : null;
-};
-
 export const KanbanBulkSelectionProvider = ({
   children,
   items,
@@ -115,8 +98,6 @@ export const KanbanBulkSelectionProvider = ({
   }, [focusedTaskId]);
   const bulkArchiveUndoAll = useFlag(HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG);
   const bulkArchiveInstantHide = useFlag(HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG);
-  const columnSelectAllEnabled = useFlag(HTPR_8929_COLUMN_SELECT_ALL_FLAG);
-  const hoveredSectionIdRef = useRef<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -173,10 +154,7 @@ export const KanbanBulkSelectionProvider = ({
     if (!selectAllEnabled) return;
     const latestTask = items.find((task) => task.id === latestTaskIdRef.current)
       ?? selectedTasks.at(-1);
-    const targetSectionId = sectionId
-      ?? sectionIdFromElement(document.activeElement)
-      ?? hoveredSectionIdRef.current
-      ?? latestTask?.sectionId;
+    const targetSectionId = sectionId ?? latestTask?.sectionId;
     if (targetSectionId == null) return;
     setSelectedIds(new Set(taskIdsBySection.get(targetSectionId) ?? []));
     setFailedIds(new Set());
@@ -392,22 +370,6 @@ export const KanbanBulkSelectionProvider = ({
     [onLabelTask, runTaskOperation, selectedTasks.length],
   );
 
-  useEffect(
-    columnSelectAllEnabled
-      ? () => {
-          const trackHoveredColumn = (event: MouseEvent) => {
-            hoveredSectionIdRef.current = sectionIdFromElement(
-              event.target as Element | null,
-            );
-          };
-          document.addEventListener("mouseover", trackHoveredColumn);
-          return () =>
-            document.removeEventListener("mouseover", trackHoveredColumn);
-        }
-      : () => {},
-    [columnSelectAllEnabled],
-  );
-
   const handleBulkKeyDown = useCallback(
     (
       event: KeyboardEvent,
@@ -428,19 +390,6 @@ export const KanbanBulkSelectionProvider = ({
       ) {
         event.preventDefault();
         selectAll();
-        return true;
-      }
-
-      if (
-        columnSelectAllEnabled &&
-        event.keyCode === KeyCodes.A &&
-        event.shiftKey &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey
-      ) {
-        event.preventDefault();
-        if (!event.repeat) selectColumn();
         return true;
       }
 
@@ -512,13 +461,11 @@ export const KanbanBulkSelectionProvider = ({
     [
       archiveSelected,
       clearSelection,
-      columnSelectAllEnabled,
       items,
       openBulkCommand,
       selectedTasks,
       selectAll,
       selectAllEnabled,
-      selectColumn,
       toggleTaskSelection,
     ],
   );
