@@ -56,7 +56,7 @@ test("the flag, the prompt, Jev's answer and Auto's step-up signals", () => {
   assert.deepEqual([shadow.autoModelTurnSignals({ message: "next", history: long, longThreadMessages: 20 }).stepUp, resent.resent, resent.stepUp, shadow.autoModelTurnSignals({ message: "same", history: [...long.slice(1), { role: "human", content: "same" }], longThreadMessages: 20 }).stepUp, shadow.autoModelTurnSignals({ message: "```js", history: null, longThreadMessages: 20 }).stepUp], [1, true, 1, 2, 1]);
 });
 
-test("a managed turn logs one row next to Auto's level", async () => {
+test("a managed turn logs one row next to Auto's level, and the skips make no call", async () => {
   const managed = runtime();
   try {
     managed.mod.shadowAutoModelTurnInBackground(turn());
@@ -66,13 +66,10 @@ test("a managed turn logs one row next to Auto's level", async () => {
   } finally {
     managed.restore();
   }
-});
-
-for (const [name, options, input] of [
-  ["customer-funded", { funding: { apiKey: "vck_customer", source: "customer" } }, turn()],
-  ["untied", { funding: null }, turn({ teamId: null, projectId: null })],
-]) {
-  test(`a ${name} turn makes no shadow call or write`, async () => {
+  for (const [options, input] of [
+    [{ funding: { apiKey: "vck_customer", source: "customer" } }, turn()],
+    [{ funding: null }, turn({ teamId: null, projectId: null })],
+  ]) {
     const skipped = runtime(options);
     try {
       await skipped.mod.shadowAutoModelTurn(input);
@@ -80,8 +77,8 @@ for (const [name, options, input] of [
     } finally {
       skipped.restore();
     }
-  });
-}
+  }
+});
 
 for (const [answer, error] of [["no idea", "no-level"], [null, "no-answer"]]) {
   test(`a shadow ${error} stores only the error category`, async () => {
