@@ -2128,6 +2128,7 @@ jobs:
               fi
             fi
             if grep -Eq '^scripts/driven-proof\.cjs$' "$VERIFY_QA_CHANGED_FILES"; then
+              BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle &&
               VERIFY_QA_NAMED_JOURNEY=inbox-cycle VERIFY_QA_OUT=verify-qa-premerge/driven-control \
                 timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
             fi

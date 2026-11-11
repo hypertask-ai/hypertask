@@ -105,6 +105,15 @@ test('report-only check reuses real seeded evidence, checks failed producers, an
   const smoke = workflow.jobs['browser-smoke-flags'].steps.find((step) => step.id === 'smoke')
   assert.match(smoke.run, /grep -Eq '\^scripts\/driven-proof\\\.cjs\$'/)
   assert.doesNotMatch(smoke.run, /tests\/driven-proof\.test\.cjs/)
+  const control = smoke.run.split("if grep -Eq '^scripts/driven-proof\\.cjs$' \"$VERIFY_QA_CHANGED_FILES\"; then\n")[1].split('\n  fi')[0]
+  const { spawnSync } = require('node:child_process')
+  const stubs = 'node() { printf seed; return "${SEED_EXIT:-0}"; }; timeout() { printf drive; }; '
+  const seeded = spawnSync('bash', ['-c', stubs + control], { encoding: 'utf8', env: { ...process.env, SEED_EXIT: '0' } })
+  assert.equal(seeded.status, 0)
+  assert.equal(seeded.stdout, 'seeddrive')
+  const failed = spawnSync('bash', ['-c', stubs + control], { encoding: 'utf8', env: { ...process.env, SEED_EXIT: '1' } })
+  assert.equal(failed.status, 1)
+  assert.equal(failed.stdout, 'seed')
 })
 
 test('a test-only edit does not ask for a seeded control the heavy lane will not produce', () => {
