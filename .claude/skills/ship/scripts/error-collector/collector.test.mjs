@@ -467,10 +467,26 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
   for (const flag of ['searchFail', 'badSearch', 'createFail']) await withHarness(async h => {
     h.events([event()]); h.config({ [flag]: true }); assert.equal(await h.run(), 0);
     assert.equal(Object.keys(h.state().pending).length, 1);
-    if (flag === 'createFail') assert.deepEqual(h.state().created, []);
+    if (flag === 'createFail') assert.equal(h.state().created.length, 1);
     if (flag !== 'createFail') assert.equal(creates(h).length, 0);
     h.config({}); await h.run({ now: NOW + 1000 });
     assert.equal(Object.keys(h.state().pending).length, 0);
+  });
+});
+
+check('tickets', 'uncertain creates retain their hourly slot across groups and retries', async () => {
+  for (const flag of ['ambiguousCreate', 'badReceipt', 'createFail']) await withHarness(async h => {
+    h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
+    h.events([event(), event({ message: 'Upload failure', route: '/uploads' })]);
+    h.config({ [flag]: true });
+    await h.run();
+    assert.equal(creates(h).length, 1);
+    assert.equal(h.state().created.length, 1);
+    h.config({});
+    await h.run({ now: NOW + 1000 });
+    assert.equal(creates(h).length, 1);
+    await h.run({ now: NOW + HOUR });
+    assert.equal(creates(h).length, 2);
   });
 });
 

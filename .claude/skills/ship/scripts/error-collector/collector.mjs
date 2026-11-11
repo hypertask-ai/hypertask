@@ -514,15 +514,9 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
           state.created.push(iso(now));
           await checkpoint();
-          try {
-            const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title', plainTitle(group), '--description-file', path]);
-            if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
-            else found = { ticket: ticketRef(payload(output).task), deleted: false };
-          } catch (error) {
-            state.created.pop();
-            await checkpoint();
-            throw error;
-          }
+          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title', plainTitle(group), '--description-file', path]);
+          if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
+          else found = { ticket: ticketRef(payload(output).task), deleted: false };
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };
         } finally { if (temp) await fs.rm(temp, { force: true }); }
       } else {
