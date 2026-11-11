@@ -48,9 +48,7 @@ export async function POST(request: Request) {
     const { noiseIds } = await jevInboxTriage({ items: candidates.map((candidate) => candidate.item), userId: session.userId });
     const noise = new Set(noiseIds);
     const jevNotificationIds: number[] = [];
-    for (const candidate of candidates) {
-      if (noise.has(candidate.key) && jevNotificationIds.length + candidate.notificationIds.length <= JEV_TRIAGE_MAX_ITEMS) jevNotificationIds.push(...candidate.notificationIds);
-    }
+    for (const candidate of candidates) if (noise.has(candidate.key) && jevNotificationIds.length + candidate.notificationIds.length <= JEV_TRIAGE_MAX_ITEMS) jevNotificationIds.push(...candidate.notificationIds);
     evaluationRules = { ...rules, jevNotificationIds };
   }
   const doneTitlesByProject = await loadInboxZeroDoneTitlesByProject(notifications);

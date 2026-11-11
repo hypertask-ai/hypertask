@@ -46,35 +46,40 @@ const eachBatch = async <T,>(batches: T[], work: (batch: T) => Promise<void>) =>
   }));
 };
 
-const teamsFor = async (items: JevTriageItem[]) => {
+const teamsFor = async (items: JevTriageItem[], userId: number) => {
   const projectIds = Array.from(new Set(items.flatMap((item) => (item.projectId === null ? [] : [item.projectId]))));
   const projects = projectIds.length
     ? await prisma.project.findMany({ where: { id: { in: projectIds } }, select: { id: true, teamId: true } })
     : [];
   const teamByProject = new Map(projects.map((project) => [project.id, project.teamId]));
+  const fallback = items.some((item) => item.projectId === null)
+    ? (await prisma.team.findFirst({ where: { googleAccount: { userId } }, select: { id: true } }))?.id
+    : undefined;
   const grouped = new Map<string, JevTriageItem[]>();
   for (const item of items) {
-    const teamId = item.projectId === null ? undefined : teamByProject.get(item.projectId);
+    const teamId = item.projectId === null ? fallback : teamByProject.get(item.projectId);
     if (teamId) grouped.set(teamId, [...(grouped.get(teamId) ?? []), item]);
   }
   return grouped;
 };
 
 export async function jevInboxTriage(args: { items: JevTriageItem[]; userId: number }): Promise<JevTriageResult> {
-  const grouped = await teamsFor(args.items.slice(0, JEV_TRIAGE_MAX_ITEMS));
+  const grouped = await teamsFor(args.items, args.userId);
   if (grouped.size === 0) return { noiseIds: [], checked: 0, skipped: "no_team" };
   const noiseIds = new Set<string>();
   let checked = 0;
   let skipped: JevTriageSkipped = "no_team";
   for (const [teamId, items] of grouped) {
+    if (checked >= JEV_TRIAGE_MAX_ITEMS) break;
     const funding = await getTeamGatewayFunding({ trustedTeamId: teamId }).catch(() => undefined);
     if (!funding?.apiKey || funding.source === "customer") {
       skipped = funding?.apiKey ? "customer_funding" : "no_funding";
       continue;
     }
     const tags: AiGatewayTags = { teamId, userId: args.userId };
-    checked += items.length;
-    await eachBatch(jevTriageBatches(items), async (batch) => {
+    const batch = items.slice(0, JEV_TRIAGE_MAX_ITEMS - checked);
+    checked += batch.length;
+    await eachBatch(jevTriageBatches(batch), async (batch) => {
       for (const id of selectJevNoiseIds(await triage(batch, funding.apiKey, tags))) noiseIds.add(id);
     });
   }

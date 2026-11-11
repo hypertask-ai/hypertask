@@ -457,7 +457,7 @@ export const evaluateInboxZero = (
   const jevRequestedIds = new Set(rules.jevNotificationIds ?? []);
   const jevItems = jevRequestedIds.size === 0 ? [] : items.filter(
     (item) =>
-      item.notifications.some((notification) => jevRequestedIds.has(notification.id)) &&
+      item.notifications.every((notification) => jevRequestedIds.has(notification.id)) &&
       jevNoiseEligible(item, userId, rules.keep)
   );
   const categoryCounts = Object.fromEntries(

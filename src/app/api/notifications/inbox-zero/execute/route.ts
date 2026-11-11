@@ -29,12 +29,7 @@ const loadPreview = async (
   now: Date
 ) => {
   const jevOn = await isFeatureEnabled(HTPR_9045_JEV_INBOX_TRIAGE_FLAG, userId);
-  const notifications = await loadActiveInboxZeroNotifications(
-    userId,
-    db,
-    undefined,
-    Boolean(rules.safeUpdates) || jevOn
-  );
+  const notifications = await loadActiveInboxZeroNotifications(userId, db, undefined, Boolean(rules.safeUpdates) || jevOn);
   const doneTitlesByProject = await loadInboxZeroDoneTitlesByProject(
     notifications,
     db
