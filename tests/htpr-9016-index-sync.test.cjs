@@ -98,3 +98,83 @@ test("a finished pass records one drift count for that date", async () => {
   assert.deepEqual(result.state.results, [{ date: "2026-11-09", found: 4 }, { date: "2026-11-10", found: 2 }]);
   assert.equal(result.state.afterId, 0);
 });
+
+function totalTasks(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: index + 1,
+    title: `T${index + 1}`,
+    updatedAt: "2026-11-10T12:00:00.000Z",
+    commentCount: 0,
+  }));
+}
+
+test("one run scans past the old 400-row budget until the pass finishes", async () => {
+  const repair = load("src/lib/search/runIndexDriftRepair.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/lib/turbopuffer": { default: {}, turbopufferNamespaces: {} },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+  });
+  const tasks = totalTasks(900);
+  const result = await repair.runIndexDriftRepair(
+    { afterId: 0, found: 0, results: [] },
+    {
+      loadPage: async (afterId, take) => {
+        const next = tasks.filter((task) => task.id > afterId).slice(0, take);
+        return {
+          tasks: next,
+          indexedTasks: new Map(next.map((task) => [task.id, { updatedAt: task.updatedAt }])),
+          indexedComments: new Map(),
+          batchFull: next.length === take,
+        };
+      },
+      reindexTask: async () => {},
+      reindexComments: async () => {},
+      today: () => "2026-11-11",
+      now: () => 0,
+    },
+  );
+  assert.equal(result.scanned, 900);
+  assert.equal(result.passComplete, true);
+  assert.equal(result.passFound, 0);
+  assert.deepEqual(result.state.results, [{ date: "2026-11-11", found: 0 }]);
+});
+
+test("a run that runs out of time keeps its cursor for the next run", async () => {
+  const repair = load("src/lib/search/runIndexDriftRepair.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/lib/turbopuffer": { default: {}, turbopufferNamespaces: {} },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+  });
+  const tasks = totalTasks(900);
+  let clock = 0;
+  const result = await repair.runIndexDriftRepair(
+    { afterId: 0, found: 0, results: [] },
+    {
+      loadPage: async (afterId, take) => {
+        clock += 60_000;
+        const next = tasks.filter((task) => task.id > afterId).slice(0, take);
+        return {
+          tasks: next,
+          indexedTasks: new Map(next.map((task) => [task.id, { updatedAt: task.updatedAt }])),
+          indexedComments: new Map(),
+          batchFull: next.length === take,
+        };
+      },
+      reindexTask: async () => {},
+      reindexComments: async () => {},
+      today: () => "2026-11-11",
+      now: () => clock,
+    },
+  );
+  assert.equal(result.passComplete, false);
+  assert.ok(result.scanned > 0 && result.scanned < 900);
+  assert.equal(result.state.afterId, result.scanned);
+  assert.deepEqual(result.state.results, []);
+});
+
+test("a pass already recorded for today is not scanned again", async () => {
+  const lib = drift();
+  assert.equal(lib.driftPassRecorded([{ date: "2026-11-11", found: 0 }], "2026-11-11"), true);
+  assert.equal(lib.driftPassRecorded([{ date: "2026-11-10", found: 0 }], "2026-11-11"), false);
+  assert.equal(lib.driftPassRecorded([], "2026-11-11"), false);
+});

@@ -45,6 +45,10 @@ export function recordDriftPass(results: DriftPass[], date: string, found: numbe
   return [...results.filter((pass) => pass.date !== date), { date, found }].slice(-8);
 }
 
+export function driftPassRecorded(results: DriftPass[], date: string): boolean {
+  return results.some((pass) => pass.date === date);
+}
+
 export async function advanceIndexDrift(args: {
   tasks: DriftTask[]; indexedTasks: Map<number, IndexedTaskTime | null>;
   indexedComments: Map<number, IndexedCommentCopy | null>; batchFull: boolean; maxReindex: number;

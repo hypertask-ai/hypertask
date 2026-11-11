@@ -83,7 +83,7 @@
     },
     {
       "path": "/api/cron/search-index-drift",
-      "schedule": "11 2 * * *"
+      "schedule": "*/15 * * * *"
     }
   ]
 }
