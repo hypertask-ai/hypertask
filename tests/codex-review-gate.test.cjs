@@ -44,12 +44,14 @@ test('a P2-only inline comment from an older review on the head passes', () => {
 
 test('an inline comment on an older commit is not attributed to the head', () => {
   assert.equal(stateOf({ reviews: [review([inline(badge(1), older)], { commit: older })] }), 'pending');
-  assert.equal(stateOf({ reviews: [review([inline(badge(1), head), inline(badge(2), older)], { commit: older })] }), 'success');
+  assert.equal(stateOf({ reviews: [review([inline(badge(2), head), inline(badge(1), older)], { commit: older })] }), 'success');
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), head), inline(badge(2), older)], { commit: older })] }), 'failure');
 });
 
 test('unread comments on an older review fail closed instead of passing', () => {
   const unread = review(['Further comments were not read.'], { commit: older });
   assert.match(evaluate(pr({ reviews: [unread] })).description, /unrated/);
+  assert.equal(stateOf({ reviews: [unread, review([])] }), 'success');
 });
 
 test('a completed Codex summary with no findings passes only for the exact head', () => {

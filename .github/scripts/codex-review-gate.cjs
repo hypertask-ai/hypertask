@@ -73,14 +73,14 @@ function evaluate(pr) {
   const codexReviews = pr.reviews.filter(review => isCodex(review.author));
   const headReviews = codexReviews.filter(review => review.commit === pr.headOid);
   const staleReviews = codexReviews.filter(review => review.commit !== pr.headOid);
-  const headComments = staleReviews.flatMap(review => review.comments.filter(
-    comment => commentCommit(comment, review) === pr.headOid));
-  const unreadStale = staleReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
+  const headCommentBodies = staleReviews.flatMap(review => review.comments.filter(
+    comment => commentCommit(comment, review) === pr.headOid)).map(commentBody);
+  const unreadStale = !headReviews.length && staleReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
 
   const rawBlocking = headReviews.flatMap(review => review.comments.length
     ? review.comments.map(commentBody).filter(blocks)
     : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : [])
-    .concat(headComments.map(commentBody), unreadStale ? [UNREAD] : []);
+    .concat(headCommentBodies.filter(blocks), unreadStale ? [UNREAD] : []);
   const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   if (blocking.length) {
     const levels = blocking.map(priorityOf);
@@ -98,7 +98,7 @@ function evaluate(pr) {
       evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
-  if (headReviews.length || headComments.length) {
+  if (headReviews.length || headCommentBodies.length) {
     return {
       state: 'success',
       description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
