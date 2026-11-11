@@ -688,6 +688,16 @@ test("HYCI-279: a browser shard installs Chromium from the first mirror that ans
   assert.doesNotMatch(await source(".github/workflows/e2e-ai-pilot.yml"), /archive\.ubuntu\.com/);
 });
 
+test("HYCI-286: production health installs Chromium through the mirror-fallback installer", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/prod-health.yml"));
+  const step = workflow.jobs.smoke.steps.find((candidate) => candidate.id === "setup-pw");
+  assert.ok(step);
+  assert.equal(step.run, "bash .github/scripts/install-chromium.sh");
+  assert.equal(step["continue-on-error"], true);
+  assert.equal(step["timeout-minutes"], 8);
+});
+
 test("HYCI-279: a dead mirror name is skipped, kept working, and retried once", () => {
   const skipped = runChromiumInstaller({ answering: ["azure.archive.ubuntu.com"], failures: 1 });
   assert.equal(skipped.status, 0, skipped.output);
