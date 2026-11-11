@@ -28,7 +28,7 @@ function fixture(content = '<p>Please check this.</p>') {
     '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => ctx },
     '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },
     '@/lib/mcp/tasks/agentMutationFence': { TaskTeamScopeError: class extends Error {} },
-    '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: () => ({}) },
+    '@/utils/controllers/projects/getAllIncludes': require('./helpers/agent-board-scope.cjs').access,
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     '@/lib/mcp/tasks/resolveTask': { validateTaskIdentifier: () => ({ valid: true }), findTaskByIdentifier: async () => ({ id: 42, projectId: 15 }), taskIdentifierErrorResponse: () => null },
     '@/utils/controllers/comments/createCommentService': { createCommentService: async (input) => {

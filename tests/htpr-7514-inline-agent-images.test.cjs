@@ -489,7 +489,11 @@ for (const [creatorId, expectedInline] of [[985, true], [7, false]]) {
       "@/lib/mcp/routeWrapper": { wrapMcpRoute: (handler) => handler },
       "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 985 }, agentId: null }) },
       "@/lib/prisma": { default: { comment: { findFirst: async ({ where, select }) => {
-        assert.deepEqual(where, { id: 44, taskId: 91 });
+        assert.deepEqual(where, {
+          id: 44,
+          taskId: 91,
+          task: { project: require('./helpers/agent-board-scope.cjs').access.getProjectWhere(985, null) },
+        });
         assert.deepEqual(select, { id: true, creatorId: true });
         return { id: 44, creatorId };
       } } } },

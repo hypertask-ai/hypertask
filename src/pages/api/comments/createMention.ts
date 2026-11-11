@@ -60,7 +60,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         let commentExists: { creatorId: number | null; agentId: string | null } | null = null;
         if (commentId) {
             commentExists = await prisma.comment.findFirst({
-                where: { id: commentId, taskId },
+                where: {
+                    id: commentId,
+                    taskId,
+                    task: { project: projectContentAccessWhere(mentionedBy, fromAgentId, session.teamScope) },
+                },
                 select: { creatorId: true, agentId: true }
             });
             if (!commentExists) {
@@ -109,7 +113,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             try {
                 const [comment, mentionedUser, recipientUser, commentAgent] = await Promise.all([
                     prisma.comment.findFirst({
-                        where: { id: commentId, taskId },
+                        where: {
+                            id: commentId,
+                            taskId,
+                            task: { project: projectContentAccessWhere(mentionedBy, fromAgentId, session.teamScope) },
+                        },
                         include: {
                             creator: {
                                 select: { displayName: true, photoURL: true }
