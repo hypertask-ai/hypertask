@@ -8,6 +8,7 @@ import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264
 import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
 import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
+import { HTPR_9076_NARROW_INBOX_TABS_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-tabs";
 
 import {
   FC,
@@ -131,6 +132,7 @@ const Inbox = ({
   const inboxKeepsScroll = useFlag(HTPR_7841_INBOX_KEEPS_SCROLL_FLAG);
   const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
   const inboxFirstRow = useFlag(HTPR_8868_INBOX_FIRST_ROW_FLAG);
+  const narrowInboxTabs = useFlag(HTPR_9076_NARROW_INBOX_TABS_FLAG);
   const snapshot = useFirstScreenSurface(currentUser.id);
   const queryClient = useQueryClient();
   const [inboxDocument] = useState(() => {
@@ -876,6 +878,8 @@ const Inbox = ({
           >
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
+              narrowLayout={narrowInboxTabs}
+              hidden={narrowInboxTabs && isMbl}
               SelectedCount={showSelectedCount ? InboxSelectedCount : null}
               trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
             >
@@ -983,7 +987,7 @@ const Inbox = ({
                 </>
               ))}
             </div>
-            {!isMbl && (
+            {!isMbl && !narrowInboxTabs && (
               <div
                 className={`flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 ${
                   isInboxZero ? "bg-transparent" : "bg-hoverCardBackground"
@@ -1060,12 +1064,16 @@ export default Inbox;
 interface IProps {
   children?: ReactNode;
   contentGap?: boolean;
+  narrowLayout?: boolean;
+  hidden?: boolean;
   SelectedCount?: typeof InboxSelectedCount | null;
   trailingAction?: ReactNode;
 }
 const SplitTitlesContainer: FC<IProps> = ({
   children,
   contentGap = false,
+  narrowLayout = false,
+  hidden = false,
   SelectedCount = null,
   trailingAction,
 }) => {
@@ -1098,9 +1106,9 @@ const SplitTitlesContainer: FC<IProps> = ({
         stickySplits
           ? `sticky top-0 z-sticky ${contentGap ? "bg-taskDetailPage" : "bg-containerBackground"} ${listScrolled ? "shadow-[0_1px_0_0_var(--border-light-gray-thin)]" : ""}`
           : "relative"
-      } hidden items-baseline pr-[16px] pt-4 ${
+      } ${hidden ? "hidden" : narrowLayout ? "flex" : "hidden @md:flex"} items-baseline pr-[16px] pt-4 ${
         contentGap ? "mx-[12px] w-[calc(100%-24px)] pb-4" : "w-full"
-      } responsive-inbox-padding @md:flex @md:gap-[9px] h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
+      } responsive-inbox-padding @md:gap-[9px] h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
     >
       <div className="pills-row group relative flex min-h-8 grow flex-wrap items-center gap-[9px]">
         {children}

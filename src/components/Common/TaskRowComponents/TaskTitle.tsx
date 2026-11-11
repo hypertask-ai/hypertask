@@ -29,6 +29,7 @@ interface IRenderMessageTag {
 
 export const TaskMetaChips: React.FC<{ task: ITask; showDueDate?: boolean }> = ({ task, showDueDate }) => {
     const { isIbxSlctd } = useNotificationContext();
+    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_TABS_FLAG);
     const snapshot = useFirstScreenSurface();
     const [now] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
     const MAX_LABELS = 3;
@@ -38,14 +39,19 @@ export const TaskMetaChips: React.FC<{ task: ITask; showDueDate?: boolean }> = (
     const isOverdue = !!dueDate && new Date(dueDate).getTime() < now;
     const chipClassName = cn(
         inboxConfig.bulkSelectionStyling.taskLabels(isIbxSlctd),
-        'min-w-0 max-w-[120px] overflow-hidden whitespace-nowrap'
+        narrowRow
+            ? 'shrink-0 max-w-[120px] overflow-hidden whitespace-nowrap'
+            : 'min-w-0 max-w-[120px] overflow-hidden whitespace-nowrap'
     );
 
     if (!dueDate && !task.priority && !task.estimate && labels.length === 0) return null;
 
 
     return (
-        <div className="flex shrink-0 items-center gap-1 overflow-hidden md:max-w-[180px]">
+        <div className={cn(
+            "flex shrink-0 items-center gap-1 overflow-hidden md:max-w-[180px]",
+            narrowRow && "hidden @min-[700px]:flex"
+        )}>
             {dueDate && (
                 <DueDateLabel
                     flexBasis={false}
