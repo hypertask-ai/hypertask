@@ -40,7 +40,6 @@ export function createToolContext(
   };
 
   const bulkPreviewsIssued = new Set<string>();
-  const creationScreenshotsUsed = new Set<string>();
   const provisionalTickets = new Map<number, ProvisionalTicketState>();
   const bulkScopePreviews = bulkScopeConfirmationEnabled
     ? new Map<string, { pending: number; changed: boolean }>()
@@ -89,7 +88,7 @@ export function createToolContext(
       : null;
   };
   const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued, bulkScopeConfirmationEnabled, bulkScopePreviews });
-  return { provisionalTickets, docsRoutingEnabled, ticketRows, skillDraftsEnabled, bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, creationScreenshotsUsed, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
+  return { provisionalTickets, docsRoutingEnabled, ticketRows, skillDraftsEnabled, bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
 }
 
 export type TicketRowsSink = { executions: ToolExecution[]; setGroups: (groups: ChatTicketGroupReferences) => void };

@@ -1,5 +1,4 @@
 import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
-import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7393_COMMENT_INLINE_AI_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showAIChatInterfaceAtom, showCommandsAtom } from "@/store";
@@ -32,16 +31,10 @@ type AIGeneratedAttachment = {
   preview: string;
 };
 import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentation";
-
-function blankCreationDescription(html = "") {
-  return html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim().length === 0 && !/<img\b/i.test(html);
-}
-
 export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
   const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, chatHandoffOpen, setChatHandoffOpen, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
 
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
-  const guaranteeScreenshots = useFlag(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG);
   const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
   const sidebarEditWithAi = !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
   const showAiChatInterface = useRecoilValue(showAIChatInterfaceAtom);
@@ -142,7 +135,6 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
                 attachments={newCommentAttachments}
                 returnTitleAndDescription={handleTitleAndDescriptionReturn}
                 defaultMode={getDefaultMode()}
-                guaranteeScreenshots={guaranteeScreenshots && getDefaultMode() === "WriteWithAI" && blankCreationDescription(getBackgroundContent())}
                 toggleRecording={toggleRecording}
                 isRecording={isRecording}
                 autoTrigger={taskWriterOpening.autoTrigger}

@@ -24,7 +24,6 @@ import {
 import { getTaskWriterTaskIds } from "@/lib/ai/taskWriterTaskIds";
 import type { CurrentBoardBilling } from "@/store";
 import { buildTaskWriterRequestScope } from "@/lib/ai/taskWriterBoardContext";
-import { creationScreenshotCandidates, guaranteeCreationScreenshots, type AgentImageAttachment } from "@/lib/media/inlineAgentImages";
 const INLINE_IMAGE_RESEND_LIMIT = 100_000;
 
 const useAITaskWriter = (
@@ -37,7 +36,6 @@ const useAITaskWriter = (
   currentTask?: ITask,
   billingOverride?: CurrentBoardBilling | null,
   requestKind: "manual" | "auto-description" = "manual",
-  guaranteeScreenshots = false,
 ) => {
   const [isLoading, setLoading] = useState(false);
   const [aiResponse, setAIResponse] = useState("");
@@ -47,10 +45,8 @@ const useAITaskWriter = (
     prompt: string;
     loadingText: string;
     requestKind: "manual" | "auto-description";
-    sourcePrompt?: string;
   } | null>(null);
   const taskWriterMediaRef = useRef<TaskWriterMedia[] | null>(null);
-  const shotRef = useRef<{ instructions: string; attachments: AgentImageAttachment[] } | null>(null);
   const requestGenerationRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const boardBilling = useCurrentBoardBilling();
@@ -132,15 +128,13 @@ const useAITaskWriter = (
       prompt: string,
       requestLoadingText = "Thinking...",
       requestKindOverride = requestKind,
-      options?: { userRetrievalTexts?: string[]; sourcePrompt?: string },
+      options?: { userRetrievalTexts?: string[] },
     ) => {
       const requestGeneration = requestGenerationRef.current + 1;
       requestGenerationRef.current = requestGeneration;
       abortControllerRef.current?.abort();
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
-      let failed = false;
-      let pendingShots: { instructions: string; attachments: AgentImageAttachment[] } | null = null;
 
       try {
         if (shouldBlockAiDueToByokProvider(billing, currentAiOption.source)) return;
@@ -149,7 +143,6 @@ const useAITaskWriter = (
           prompt,
           loadingText: requestLoadingText,
           requestKind: requestKindOverride,
-          sourcePrompt: options?.sourcePrompt ?? prompt,
         };
         setLoadingText(requestLoadingText);
         setAIResponse("");
@@ -193,17 +186,6 @@ const useAITaskWriter = (
         const images = processedURLS.filter((item) =>
           item.mimeType?.startsWith("image/")
         );
-        const sourcePrompt = options?.sourcePrompt ?? prompt;
-        pendingShots = guaranteeScreenshots
-          ? {
-              instructions: sourcePrompt,
-              attachments: creationScreenshotCandidates(
-                images.filter((item) => /^https?:\/\//i.test(item.url ?? "")),
-                sourcePrompt,
-                media.map((item) => item.html),
-              ),
-            }
-          : null;
         const pdfs = processedURLS.filter(
           (item) => item.mimeType === "application/pdf"
         );
@@ -273,7 +255,6 @@ const useAITaskWriter = (
           setAIResponse((prev) => prev + chunk);
         }
       } catch (error) {
-        failed = true;
         if (
           abortController.signal.aborted ||
           requestGenerationRef.current !== requestGeneration
@@ -287,7 +268,6 @@ const useAITaskWriter = (
         );
       } finally {
         if (requestGenerationRef.current === requestGeneration) {
-          shotRef.current = !failed && pendingShots ? pendingShots : null;
           abortControllerRef.current = null;
           setLoading(false);
         }
@@ -301,8 +281,6 @@ const useAITaskWriter = (
       additionalContext,
       processImagesForTaskWriter,
       requestKind,
-      guaranteeScreenshots,
-      attachments,
     ]
   );
 
@@ -314,20 +292,17 @@ const useAITaskWriter = (
       lastRequest.prompt,
       lastRequest.loadingText,
       lastRequest.requestKind,
-      { sourcePrompt: lastRequest.sourcePrompt },
     );
   }, [sendAIRequest]);
 
   const restoreMedia = useCallback(
     (html: string, appendMissing = true) => {
       const media = taskWriterMediaRef.current;
-      const restored = media === null
+      return media === null
         ? html
         : restoreTaskWriterMedia(html, media, appendMissing);
-      if (!guaranteeScreenshots || !appendMissing || !shotRef.current) return restored;
-      return guaranteeCreationScreenshots(restored, shotRef.current);
     },
-    [guaranteeScreenshots]
+    []
   );
 
   return {
