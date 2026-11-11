@@ -20,6 +20,7 @@ import { SaveView } from "./SaveViewHeaderKanban"
 import SearchFilter from "./SearchFilter"
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews"
 import { useFlag } from "@/hooks/useFlag"
+import { HTPR_8974_TABLE_GROUP_MODES_FLAG } from "@/lib/flags/definitions/htpr-8974-table-group-modes"
 import {
   effectiveTableGrouping,
   getActiveTableGroupByFromProject,
@@ -55,7 +56,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const setShowCommands = useSetRecoilState(showCommandsAtom)
   const [runningOnly, setRunningOnly] = useRecoilState(kanbanRunningOnlyAtom)
   const boardLayout = useRecoilValue(boardLayoutAtom)
-  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes")
+  const tableGroupModesEnabled = useFlag(HTPR_8974_TABLE_GROUP_MODES_FLAG)
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled
   const { setTableGroupByViewAndReturn, setTableGroupVisibilityViewAndReturn, setTableSortViewAndReturn } = useKanbanViews(project)
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns")

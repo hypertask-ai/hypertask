@@ -11,11 +11,12 @@ import { useTableKeyboard } from "./useTableKeyboard";
 import { createTableRowRenderer } from "./TableTaskRow";
 
 import { lazy, Suspense, useCallback, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { ChevronDown, MoreHorizontal } from "lucide-react";
+import { ChevronDown, MoreHorizontal, RotateCcw } from "lucide-react";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { ViewControlButton } from "../HeaderComponents/ShellViewControls";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
+import { HTPR_8974_TABLE_GROUP_MODES_FLAG } from "@/lib/flags/definitions/htpr-8974-table-group-modes";
 import { effectiveTableGrouping, tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 
 
@@ -189,11 +190,13 @@ const TableView = ({
   });
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
-  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
+  const tableGroupModesEnabled = useFlag(HTPR_8974_TABLE_GROUP_MODES_FLAG);
   const [groupMenu, setGroupMenu] = useState<{ id: string; title: string } | null>(null);
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const tableGrouping = effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled);
+  const hasHiddenGroups = Boolean(tableGrouping.hiddenGroupIds?.length || tableGrouping.onlyGroupId);
   let tagGroupingActive = false;
-  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled) && effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled).mode !== "column") tagGroupingActive = true;
+  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled) && tableGrouping.mode !== "column") tagGroupingActive = true;
   const {
   visibleColumns, getColumnWidth, frozenColumnOffset, setColumnWidth, freezeTitleWidth,
   gridTemplateColumns, tableMinWidth, reorderColumn, normalizedColumnOrder, storedColumnKeys,
@@ -275,6 +278,17 @@ const TableView = ({
       style={{ maxHeight: "calc(100vh - 64px)" }}
     >
       <div className="w-full px-4 pb-6 pt-3">
+        {tableGroupModesEnabled && _currentProject && hasHiddenGroups && (
+          <ViewControlButton
+            label="Show all groups"
+            tooltipLeft={0}
+            className="min-h-11 !w-auto gap-2 px-2 text-dense md:hidden"
+            onClick={() => { void setTableGroupVisibilityViewAndReturn(_currentProject, "reset", ""); }}
+          >
+            <RotateCcw size={18} strokeWidth={1.75} />
+            <span>Show all groups</span>
+          </ViewControlButton>
+        )}
         <TableCreateTaskControl
           {...getTableCreateTaskControlProps({
             currentProject: _currentProject,

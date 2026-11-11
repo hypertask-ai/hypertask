@@ -46,6 +46,8 @@ not just its rows, and must not move its multi-tag tickets into another group.
 **Filter to this group** leaves exactly that group's original membership, including
 when filtering Other. Reload after both actions. **Group table → Show all groups**
 restores the same tag order and memberships, even after every group was hidden.
+On phones, use **Show all groups** above the table instead: it must remain reachable
+when the last group is hidden and after reload. It disappears after restoring groups.
 Repeat hide/filter in Column, Assignee, Priority and Size, including with table sorting
 active. Changing grouping clears the previous group's visibility restriction.
 Save a private QA view and reload; check that another view and the board layout
