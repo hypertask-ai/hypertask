@@ -107,8 +107,7 @@ else:
         link.write_text('do not overwrite')
         must_fail(env, 'not a symlink', '--name', 'Setup Smoke')
         assert link.read_text() == 'do not overwrite' and not (home / 'calls').exists()
-        for mode, needle in [('create-fail', 'could not create agent'), ('read-fail', 'the server rejected this login'),
-                             ('wrong-ticket', 'not authenticated')]:
+        for mode, needle in [('create-fail', 'could not create agent'), ('read-fail', 'the server rejected this login'), ('wrong-ticket', 'not authenticated')]:
             home, env = fixture(mode)
             must_fail(env, needle, '--name', 'Setup Smoke', mode=mode)
             if mode == 'create-fail':
@@ -143,11 +142,8 @@ else:
         assert calls(home)[0] == ['--json', '--token', secret, 'status'], calls(home)
         print('check-mode: ok')
     cases = {'missing-deps': missing_deps, 'clean-home': clean_home, 'safety': safety, 'check-mode': check_mode}
-    if sys.argv[2]:
-        assert sys.argv[2] in cases, 'unknown case: ' + sys.argv[2]
-        cases[sys.argv[2]]()
-    else:
-        for case in cases.values():
-            case()
+    for name in [sys.argv[2]] if sys.argv[2] else cases:
+        assert name in cases, 'unknown case: ' + name
+        cases[name]()
         print('setup-agents tests passed')
 PY
