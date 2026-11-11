@@ -121,8 +121,8 @@ export function capacityLimit(liveRunners: number): number {
 export function shouldPostCapacityWarning(inProgress: number, liveRunners: number, recentAlerts: number): boolean {
   return recentAlerts === 0 && inProgress > capacityLimit(liveRunners);
 }
-export function capacityWarning(projectId: number, inProgress: number, liveRunners: number): string {
-  return `Abandoned work capacity: board ${projectId} has ${inProgress} tickets In Progress. Live runners are ${liveRunners}. The limit is ${capacityLimit(liveRunners)}.`;
+export function capacityWarning(board: Pick<BoardSpec, "projectId" | "inProgress">, inProgress: number, liveRunners: number): string {
+  return `Abandoned work capacity: board ${board.projectId} has ${inProgress} tickets in ${board.inProgress}. Live runners are ${liveRunners}. The limit is ${capacityLimit(liveRunners)}.`;
 }
 export async function commitIfStillAbandoned(snapshot: AbandonedRow, nowMs: number, board: BoardSpec, io: {
   lockAndReread: (id: number) => Promise<AbandonedRow | null>;

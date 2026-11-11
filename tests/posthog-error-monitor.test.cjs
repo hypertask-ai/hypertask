@@ -132,7 +132,7 @@ test("watchdog reuses archived incidents and rejects untrusted run links", async
   await assert.rejects(reportFailure({ fetchImpl, token: "fixture", runId: "10001", runUrl: "https://attacker.test/10001" }), /identity are invalid/);
 });
 
-test("nightly and independent workflow_run watchdog use trusted production code and existing CI identity", () => {
+test("nightly and independent workflow_run watchdog use trusted production code and the fleet board identity", () => {
   const nightly = yaml.load(readFileSync(new URL("../.github/workflows/posthog-error-nightly.yml", `file://${__filename}`), "utf8"));
   const watcher = yaml.load(readFileSync(new URL("../.github/workflows/posthog-error-watchdog.yml", `file://${__filename}`), "utf8"));
   assert.equal(nightly.on.schedule[0].cron, "17 2 * * *");
@@ -146,7 +146,7 @@ test("nightly and independent workflow_run watchdog use trusted production code 
   for (const job of [nightly.jobs.canary, watcher.jobs.report]) {
     assert.equal(job["runs-on"], "ubuntu-latest");
     assert.equal(job.steps[0].with.ref, "production");
-    assert.equal(job.steps[1].env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_MCP_TOKEN }}");
+    assert.equal(job.steps[1].env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}");
   }
 });
 

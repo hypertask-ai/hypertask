@@ -121,7 +121,7 @@ export async function sweepAbandonedWork(options: { dryRun?: boolean } = {}) {
     const remaining = rows.length - releasedIds.size;
     const oldest = rows.filter((row) => !releasedIds.has(row.id)).sort((left, right) => Date.parse(left.sectionChangedAt ?? left.createdAt) - Date.parse(right.sectionChangedAt ?? right.createdAt))[0];
     if (!options.dryRun && oldest && shouldPostCapacityWarning(remaining, liveRunners, Number(raw[0]?.recentAlerts ?? 0))) {
-      const plain = capacityWarning(board.projectId, remaining, liveRunners);
+      const plain = capacityWarning(board, remaining, liveRunners);
       await prisma.comment.create({ data: { taskId: oldest.id, text: "", commentText: plain, agentDisplayName: "Hypertask", activity: { type: "AiFeedbackLog", data: { text: plain } } } });
       result.capacityWarning = true;
       touched.add(oldest.id);

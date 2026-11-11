@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BOARDS, capacityLimit, commitIfStillAbandoned, decideAbandoned, handCount, planBoard, releaseNote, sampleRow, shouldPostCapacityWarning } from "../src/lib/abandonedWork/policy";
+import { BOARDS, capacityLimit, capacityWarning, commitIfStillAbandoned, decideAbandoned, handCount, planBoard, releaseNote, sampleRow, shouldPostCapacityWarning } from "../src/lib/abandonedWork/policy";
 
 const NOW = Date.parse("2026-11-07T12:00:00.000Z");
 const QUIET = "2026-11-07T00:00:00.000Z";
@@ -9,6 +9,12 @@ const DAY = "2026-11-06T11:00:00.000Z";
 const board = BOARDS[0];
 const agent = (at = QUIET) => ({ userId: 6, agentId: "runner", assignedAt: at });
 const url = "https://github.com/hypertask-ai/hypertask/pull/9";
+
+test("the capacity warning names the column the board actually works in", () => {
+  assert.match(capacityWarning(BOARDS[0], 9, 1), /board 15 has 9 tickets in In Progress/);
+  assert.match(capacityWarning(BOARDS[1], 4, 1), /board 2060 has 4 tickets in Doing/);
+  assert.doesNotMatch(capacityWarning(BOARDS[1], 4, 1), /In Progress/);
+});
 
 test("quiet work returns, active work stays, and a fresh reread is not released", async () => {
   assert.deepEqual(decideAbandoned(sampleRow({ sectionChangedAt: QUIET, assignees: [agent()], sectionEvents: [{ from: "Bugs", to: "In Progress", at: QUIET }] }), NOW, board), { action: "release", toSection: "Bugs", reason: "quiet for 6 hours", pullRequestUrls: [] });
