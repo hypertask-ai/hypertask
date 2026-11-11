@@ -551,7 +551,11 @@ export async function updateTaskSingle(
           const gateDescription =
             typeof requestedMutation.description === "string"
               ? requestedMutation.description
-              : currentState.description_?.content ||
+              : (await tx.description.findUnique({
+                  where: { taskId: newTask.id },
+                  select: { content: true },
+                }))?.content ||
+                currentState.description_?.content ||
                 currentState.description ||
                 "";
           const openGates = openObservationGates(
