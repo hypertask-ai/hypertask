@@ -12,10 +12,7 @@ async function demo() {
 
   const globals = globalThis as typeof globalThis & { redis?: unknown }
   const originalRedis = globals.redis
-  globals.redis = {
-    get: async () => null,
-    mget: async (...keys: string[]) => keys.map(() => null),
-  }
+  globals.redis = { get: async () => null }
 
   const require = createRequire(import.meta.url)
   const nextHeaders = require('next/headers')
