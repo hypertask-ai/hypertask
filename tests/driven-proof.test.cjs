@@ -53,6 +53,16 @@ test('a majority-feature drive cannot cover another feature or an unmapped app f
   }
 })
 
+test('exempt catalog paths cannot change the feature required by runtime changes', async (t) => {
+  const boardFiles = ['src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx']
+  const boardMap = '.claude/skills/verify-qa/reference/feature-map/boards-and-views.md'
+  const recordDir = seededRun(t, { featureMap: boardMap, steps: ['open-board', 'switch-boards', 'drag-card'].map((name) => ({ name, pass: true })) })
+  const mixedFiles = [...boardFiles, '.claude/skills/verify-qa/scripts/inbox-cycle-live.mjs']
+  assert.equal((await check(recordDir, { files: mixedFiles })).detail, `seeded ${boardMap}`)
+  assert.equal((await check(seededRun(t), { files: mixedFiles })).verdict, 'FAIL')
+  assert.equal((await check(recordDir, { files: [...mixedFiles, ...files] })).verdict, 'FAIL')
+})
+
 test('replaying the eight merged pull requests without proof is red, including 3066', async () => {
   assert.deepEqual(Object.keys(replay).sort(), ['3042', '3044', '3050', '3058', '3062', '3066', '3067', '3076'])
   for (const [number, pull] of Object.entries(replay)) {

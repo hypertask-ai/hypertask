@@ -24,9 +24,10 @@ async function acceptRecord(dir, head, root, files) {
     if (record.verdict !== 'PASS') return { ok: false, reason: `drive ${record.verdict || 'failed'}` }
     if (!/^[a-f0-9]{40}$/.test(head || '') || record.head !== head) return { ok: false, reason: 'proof head does not match the pull request' }
     assertLoopback(record.base)
-    const choice = selectJourney(files)
+    const runtimeFiles = files.filter((file) => !exemptKind(file))
+    const choice = selectJourney(runtimeFiles)
     if (!choice.journey || record.featureMap !== choice.featureMap || !existsSync(path.join(root, choice.featureMap)) ||
-        files.filter((file) => !exemptKind(file)).some((file) => selectJourney([file]).featureMap !== record.featureMap)) {
+        runtimeFiles.some((file) => selectJourney([file]).featureMap !== record.featureMap)) {
       return { ok: false, reason: 'proof does not cover the changed feature' }
     }
     if (!Array.isArray(record.steps) || !record.steps.length || record.steps.some((step) => step.pass !== true)) {
@@ -90,4 +91,4 @@ async function main() {
 
 if (require.main === module) main().catch((error) => { console.error(error); process.exitCode = 1 })
 
-module.exports = { classify, decide, acceptRecord, controlNeeded }
+module.exports = { exemptKind, classify, decide, acceptRecord, controlNeeded }

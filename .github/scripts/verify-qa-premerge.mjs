@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { access, appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { exemptKind } from '../../scripts/driven-proof.cjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const FEATURE_MAP_DIR = '.claude/skills/verify-qa/reference/feature-map'
@@ -417,7 +418,7 @@ async function main() {
   const namedJourney = process.env.VERIFY_QA_NAMED_JOURNEY
   const choice = namedJourney === 'inbox-cycle'
     ? { journey: ['inbox-cycle'], featureMap: `${FEATURE_MAP_DIR}/inbox.md`, matchedPage: 'inbox.md', reason: 'explicit named journey', counts: {} }
-    : selectJourney(await readChangedFiles(process.env.VERIFY_QA_CHANGED_FILES))
+    : selectJourney((await readChangedFiles(process.env.VERIFY_QA_CHANGED_FILES)).filter((file) => !exemptKind(file)))
   const baseRaw = process.env.VERIFY_QA_BASE || process.env.BASE_URL || ''
   const result = {
     ticket: 'https://app.hypertask.ai/detail/project-4060/695',

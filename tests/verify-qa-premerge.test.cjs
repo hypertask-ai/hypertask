@@ -149,6 +149,25 @@ test('unmatched, unsupported and tied diffs write UNREACHABLE without loading a 
   }
 })
 
+test('the real producer selects runtime changes without exempt catalog paths', (t) => {
+  const dir = tempDir(t)
+  const changed = path.join(dir, 'changed.txt')
+  fs.writeFileSync(changed, [
+    'src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx',
+    '.claude/skills/verify-qa/scripts/inbox-cycle-live.mjs',
+  ].join('\n'))
+  const out = path.join(dir, 'evidence')
+  const child = spawnSync(process.execPath, [script], { encoding: 'utf8', env: {
+    ...process.env, VERIFY_QA_REPORT_ONLY: '0', VERIFY_QA_BASE: 'https://app.hypertask.ai',
+    VERIFY_QA_CHANGED_FILES: changed, VERIFY_QA_OUT: out,
+  } })
+  assert.equal(child.status, 1, child.stderr)
+  const result = JSON.parse(fs.readFileSync(path.join(out, 'result.json'), 'utf8'))
+  assert.equal(result.featureMap, '.claude/skills/verify-qa/reference/feature-map/boards-and-views.md')
+  assert.deepEqual(result.journey, ['open-board', 'switch-boards', 'drag-card'])
+  assert.match(result.failure, /refuses non-loopback/)
+})
+
 test('report-only mode records a production refusal as a warning and still exits 0', (t) => {
   const dir = tempDir(t)
   const changed = path.join(dir, 'changed.txt')
