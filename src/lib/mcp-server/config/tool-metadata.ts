@@ -39,6 +39,18 @@ const RAW_TOOL_METADATA = {
       'Shows live per-agent status (active, idle, or offline) and the current task for a team, derived from session heartbeats. Requires team_id; get it from hypertask_get_user_context or hypertask_hello.',
   },
 
+  CHAT_INBOX: {
+    name: buildToolName('chat_inbox'),
+    description:
+      'Lists up to 50 oldest unanswered sidebar chat messages for this agent token. Returns id, sessionId, text and userName. Does not claim the messages. Refreshes the online heartbeat at most every 30 seconds. Call at startup and again on the next run. No separate chat registration is needed.',
+  },
+
+  CHAT_REPLY: {
+    name: buildToolName('chat_reply'),
+    description:
+      'Replies in the same sidebar chat. Use sessionId and id from hypertask_chat_inbox as session_id and reply_to_message_id. Requires this agent token. A repeat of the same reply returns the existing reply.',
+  },
+
   LIST_AGENTS: {
     name: buildToolName('list_agents'),
     description:

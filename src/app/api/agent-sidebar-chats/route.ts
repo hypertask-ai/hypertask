@@ -9,6 +9,7 @@ import { loadSidebarChatBoard, loadUserAgentChatSession, userTeamIds } from "@/l
 import { openAgentChat } from "@/lib/agents/chatService";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import { agentChatDeliveryMode, hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
+import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from "@/lib/flags/definitions/htpr-7742-agent-chat-all";
 import { getAgentTeamIds } from "@/utils/controllers/agents/boardMembers";
 import { isFeatureEnabled } from "@/lib/flags";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
     userTeamIds(viewer.userId), getAgentTeamIds(agents.map((agent) => agent.id)),
   ]);
   const pastChatsFirst = await isFeatureEnabled(HTPR_7688_PAST_CHATS_FIRST_FLAG, viewer.userId);
+  const chatAllEnabled = await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, viewer.userId);
   const roster = await Promise.all(agents.map(async (agent) => {
     if (agent.runtimeType === "NATIVE" && agent.userId !== viewer.userId) return null;
     const session = await prisma.chatSession.findUnique({
@@ -87,7 +89,7 @@ export async function GET(request: NextRequest) {
       runtimeType: agent.runtimeType, sessionId: session?.id ?? null,
       ...(agentSessions ? { sessions: sessions.slice(0, 50), hasMoreSessions: sessions.length > 50 } : {}),
       status,
-      deliveryMode: agentChatDeliveryMode({ heartbeatAt: agent.heartbeatAt, subscription: agent.agentWebhookSubscription }),
+      deliveryMode: agentChatDeliveryMode({ heartbeatAt: agent.heartbeatAt, subscription: agent.agentWebhookSubscription }, new Date(), chatAllEnabled),
     };
   }));
   const authorizedAgents = roster.filter((agent) => agent !== null);

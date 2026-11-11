@@ -6,7 +6,9 @@ import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/definitions/htpr-7734-agent-chat-context";
+import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from "@/lib/flags/definitions/htpr-7742-agent-chat-all";
 import { agentChatContextPayload, readableAgentChatContextIds } from "@/lib/agents/chatContext";
+import { refreshAgentChatHeartbeat } from "@/lib/agents/chatHeartbeat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +47,11 @@ export async function GET(request: NextRequest) {
     }
 
     const contextEnabled = await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id);
+    const chatAllEnabled = await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, ctx.user.id);
+    const unanswered = new URL(request.url).searchParams.get("unanswered") === "true";
+    if (unanswered && !chatAllEnabled) {
+      return NextResponse.json({ success: false, error: "Chat inbox is not enabled" }, { status: 404 });
+    }
     const result = await prisma.$transaction(async (tx) => {
       const agents = await tx.$queryRaw<Array<{ id: string; userId: number }>>`
         SELECT "id", "userId"
@@ -55,12 +62,17 @@ export async function GET(request: NextRequest) {
       `;
       if (agents.length !== 1) return { found: false, messages: [], readableContextIds: new Set<string>() };
       const agent = agents[0];
+      if (unanswered && !await refreshAgentChatHeartbeat(tx, agentId, ctx.user.id)) {
+        return { found: false, messages: [], readableContextIds: new Set<string>() };
+      }
 
       const subscription = await tx.agentWebhookSubscription.findUnique({
         where: { agentId: agentId },
-        select: { active: true },
+        select: { active: true, events: true },
       });
-      if (subscription?.active) return { found: true, messages: [], readableContextIds: new Set<string>() };
+      if (!unanswered && subscription?.active && (!chatAllEnabled || subscription.events?.includes("chat.message"))) {
+        return { found: true, messages: [], readableContextIds: new Set<string>() };
+      }
 
       const allowedSessions = ctx.teamScope != null ? await tx.chatSession.findMany({
         where: { agentId, ...await chatContentScopeWhere({ userId: ctx.user.id, agentId, teamScope: ctx.teamScope }, tx) }, select: { id: true },
@@ -82,7 +94,7 @@ export async function GET(request: NextRequest) {
           WHERE session."agentId" = ${agentId}
             ${sessionScope}
             AND message."role" = 'human'::"ChatRole"
-            AND message."isDelivered" = false
+            ${unanswered ? Prisma.empty : Prisma.sql`AND message."isDelivered" = false`}
             AND NOT EXISTS (
               SELECT 1
               FROM "ChatMessage" reply
@@ -92,11 +104,13 @@ export async function GET(request: NextRequest) {
           FOR UPDATE OF message SKIP LOCKED
           LIMIT ${PENDING_MESSAGE_LIMIT}
         ), delivered AS (
-          UPDATE "ChatMessage" message
-          SET "isDelivered" = true
-          FROM pending
-          WHERE message."id" = pending."id"
-          RETURNING message."id"
+          ${unanswered ? Prisma.sql`SELECT "id" FROM pending` : Prisma.sql`
+            UPDATE "ChatMessage" message
+            SET "isDelivered" = true
+            FROM pending
+            WHERE message."id" = pending."id"
+            RETURNING message."id"
+          `}
         )
         SELECT pending."id", pending."sessionId", pending."text", pending."context", pending."userName"
         FROM pending
