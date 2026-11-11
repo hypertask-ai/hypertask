@@ -81,8 +81,8 @@ function createProductionRetriever({ rows, index, vectors, bm25Field, cosineRank
     const filename = join(__dirname, "../..", file);
     const source = transformSource(file, readFileSync(filename, "utf8"));
     const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
-    const module = { exports: {} };
-    cache.set(file, module);
+    const loaded = { exports: {} };
+    cache.set(file, loaded);
     const localRequire = (request) => {
       if (Object.hasOwn(stubs, request)) return stubs[request];
       if (request === "@/utils/controllers/turbopuffer/turbopufferHelper") return load("src/utils/controllers/turbopuffer/turbopufferHelper.ts");
@@ -93,8 +93,8 @@ function createProductionRetriever({ rows, index, vectors, bm25Field, cosineRank
       const error = new Error(`Unexpected production dependency: ${request} (${file})`);
       failures.push(error); throw error;
     };
-    new Function("require", "module", "exports", "fetch", "process", code)(localRequire, module, module.exports, fixtureFetch, { env: { TURBOPUFFER_EMBEDDINGS_API_KEY: "offline-fixture" } });
-    return module.exports;
+    new Function("require", "module", "exports", "fetch", "process", code)(localRequire, loaded, loaded.exports, fixtureFetch, { env: { TURBOPUFFER_EMBEDDINGS_API_KEY: "offline-fixture" } });
+    return loaded.exports;
   }
   return {
     trace,
