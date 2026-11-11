@@ -866,8 +866,11 @@ task_writer_pinned_eval:
   triggers: [workflow_dispatch]
   trusted_ref: production
   schedule: none
-  credentials: [ANTHROPIC_API_KEY]
+  credentials: [OPENROUTER_EVAL_KEY]
   new_provider_keys: false
+  provider: anthropic
+  provider_fallbacks: false
+  approved_key_limit_usd: 10
   script: scripts/task-writer-eval-pinned.cjs
   command: node scripts/task-writer-eval.cjs --pinned
   models: [claude-haiku-5-5 low, claude-sonnet-5-5 thinking, claude-sonnet-5-5 judge]

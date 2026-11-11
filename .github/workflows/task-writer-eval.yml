@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       pinned:
-        description: Run the model-pinned Haiku and Sonnet quality eval (calls the Anthropic API)
+        description: Run the model-pinned Haiku and Sonnet quality eval (uses the approved capped OpenRouter key)
         type: boolean
         default: false
   schedule:
@@ -36,7 +36,7 @@ jobs:
       - run: npx prisma generate
       - name: Score Haiku 5.5 low and Sonnet 5.5 thinking against the real tickets
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_EVAL_KEY: ${{ secrets.OPENROUTER_EVAL_KEY }}
           WRITER_EVAL_OUTPUT: ${{ runner.temp }}/writer-eval-pinned
         run: node scripts/task-writer-eval.cjs --pinned
       - name: Publish report

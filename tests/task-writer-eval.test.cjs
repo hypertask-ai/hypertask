@@ -132,6 +132,37 @@ const gold = require('./fixtures/task-writer-eval/gold.json');
 const fs = require('node:fs');
 const path = require('node:path');
 
+test('pinned requests use the approved OpenRouter models, reasoning and no provider fallback', async () => {
+  const requests = [];
+  const generate = await pinned.sdkGenerate('test-eval-key', async (url, init) => {
+    requests.push({ url: String(url), body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({
+      id: 'eval-test', created: 1, model: 'test',
+      choices: [{ index: 0, message: { role: 'assistant', content: 'draft' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+    }), { headers: { 'content-type': 'application/json' } });
+  });
+  const pins = pinned.modelPins();
+  for (const model of [pins.haiku, pins.sonnet, pins.judge]) {
+    const result = await generate({ model, instructions: 'Write a ticket', input: 'Fix typo', maxOutputTokens: 20 });
+    assert.equal(result.text, 'draft');
+    assert.equal(result.inputTokens, 10);
+    assert.equal(result.outputTokens, 2);
+  }
+  assert.deepEqual(requests.map(({ body }) => body.model), [
+    'anthropic/claude-haiku-5.5', 'anthropic/claude-sonnet-5.5', 'anthropic/claude-sonnet-5.5',
+  ]);
+  assert.deepEqual(requests.map(({ body }) => body.reasoning), [
+    { enabled: true, effort: 'low' }, { enabled: true, effort: 'high' }, { enabled: false, effort: 'none' },
+  ]);
+  for (const { url, body } of requests) {
+    assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
+    assert.deepEqual(body.provider, { only: ['anthropic'], allow_fallbacks: false, require_parameters: true });
+    assert.ok(body.messages.some((message) => message.role === 'system' && message.content === 'Write a ticket'));
+    assert.ok(body.messages.some((message) => message.role === 'user' && message.content === 'Fix typo'));
+  }
+});
+
 test('label scoring ignores process labels and counts abstaining on a blank gold as right', () => {
   const rows = [
     { gold: ['Bug', 'INBOX'], predicted: ['Bug', 'Billing'] },

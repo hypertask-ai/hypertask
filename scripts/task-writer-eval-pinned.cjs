@@ -30,9 +30,9 @@ function modelPins() {
   const haiku = option('claude-haiku-5-5');
   const instant = option('claude-sonnet-5-5-instant');
   return {
-    haiku: { key: 'haiku', label: 'Haiku 5.5 low', directModel: haiku.directModel, providerOptions: { anthropic: { ...haiku.providerOptions.anthropic, effort: 'low' } } },
-    sonnet: { key: 'sonnet', label: 'Sonnet 5.5 thinking', directModel: sonnet.directModel, providerOptions: { anthropic: { ...sonnet.providerOptions.anthropic } } },
-    judge: { key: 'judge', label: 'Sonnet 5.5 judge', directModel: instant.directModel, providerOptions: { anthropic: { ...instant.providerOptions.anthropic } } },
+    haiku: { key: 'haiku', label: 'Haiku 5.5 low', directModel: haiku.directModel, openrouterModel: `anthropic/${haiku.model}`, providerOptions: { anthropic: { ...haiku.providerOptions.anthropic, effort: 'low' } } },
+    sonnet: { key: 'sonnet', label: 'Sonnet 5.5 thinking', directModel: sonnet.directModel, openrouterModel: `anthropic/${sonnet.model}`, providerOptions: { anthropic: { ...sonnet.providerOptions.anthropic } } },
+    judge: { key: 'judge', label: 'Sonnet 5.5 judge', directModel: instant.directModel, openrouterModel: `anthropic/${instant.model}`, providerOptions: { anthropic: { ...instant.providerOptions.anthropic } } },
   };
 }
 
@@ -389,16 +389,21 @@ async function runPinned({ corpus, gold, generate, pins, models, concurrency = 3
   return result;
 }
 
-async function sdkGenerate(apiKey) {
+async function sdkGenerate(apiKey, fetch = globalThis.fetch) {
   const { generateText } = await import('ai');
-  const { createAnthropic } = await import('@ai-sdk/anthropic');
-  const anthropic = createAnthropic({ apiKey });
+  const { createOpenRouter } = await import('@openrouter/ai-sdk-provider');
+  const openrouter = createOpenRouter({ apiKey, fetch });
   return async ({ model, instructions, input, maxOutputTokens }) => {
+    const options = model.providerOptions.anthropic;
     const result = await generateText({
-      model: anthropic(model.directModel),
+      model: openrouter.chat(model.openrouterModel, {
+        provider: { only: ['anthropic'], allow_fallbacks: false, require_parameters: true },
+        reasoning: options.thinking.type === 'disabled'
+          ? { enabled: false, effort: 'none' }
+          : { enabled: true, effort: options.effort },
+      }),
       instructions,
       messages: [{ role: 'user', content: input }],
-      providerOptions: model.providerOptions,
       maxOutputTokens,
       maxRetries: 2,
       abortSignal: AbortSignal.timeout(300000),
@@ -408,8 +413,8 @@ async function sdkGenerate(apiKey) {
 }
 
 async function main() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  assert.ok(apiKey, 'The pinned eval requires ANTHROPIC_API_KEY');
+  const apiKey = process.env.OPENROUTER_EVAL_KEY;
+  assert.ok(apiKey, 'The pinned eval requires OPENROUTER_EVAL_KEY');
   const output = process.env.WRITER_EVAL_OUTPUT;
   assert.ok(output && !path.resolve(output).startsWith(directory + path.sep), 'Save pinned output outside committed fixtures; promote only after review');
   fs.mkdirSync(output, { recursive: true });
@@ -437,4 +442,4 @@ async function main() {
   for (const [key, model] of Object.entries(result.models)) assert.ok(model.summary.errors < model.summary.cases, `${key}: every case failed: ${model.summary.writerErrorSamples.join('; ')}`);
 }
 
-module.exports = { main, modelPins, renderReport, runPinned, scoreFields, exactStats, labelStats, stripLateAdditions, validateGold, styleRows, assemble, parseVerdict, judgeCase, aggregate, median, LABEL_RULE, JUDGE_SYSTEM };
+module.exports = { main, sdkGenerate, modelPins, renderReport, runPinned, scoreFields, exactStats, labelStats, stripLateAdditions, validateGold, styleRows, assemble, parseVerdict, judgeCase, aggregate, median, LABEL_RULE, JUDGE_SYSTEM };

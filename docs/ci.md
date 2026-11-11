@@ -876,8 +876,8 @@ The live workflow cannot choose a model, so it cannot compare Haiku with Sonnet.
 `task-writer-pinned` job in the same workflow runs
 `node scripts/task-writer-eval.cjs --pinned` on manual dispatch from production only, with the
 `pinned` input set to true. It never runs on a schedule. It builds the real writer
-prompt from the product's own prompt builders, calls Anthropic directly with
-`ANTHROPIC_API_KEY` for Haiku 5.5 at low effort and Sonnet 5.5 thinking, and scores
+prompt from the product's own prompt builders, uses the approved $10-capped
+`OPENROUTER_EVAL_KEY` for Haiku 5.5 at low effort and Sonnet 5.5 thinking, and scores
 each draft against the real ticket: label F1, brain, priority and size exact match
 with always-blank baselines and abstain precision, plus a blind Sonnet judge that
 runs both orders and counts a win or loss only when both agree. It reports input
