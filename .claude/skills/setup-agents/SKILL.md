@@ -9,8 +9,7 @@ One command on a clean machine, from the repo root:
 `.claude/skills/setup-agents/scripts/setup-agents --name "HT Growth Lead"`.
 
 `/setup-runner <n>` is the runner shortcut: it picks a free runner number and calls
-the same script with `--name "Runner <n>" --identity "RUNNER <n>"`. There is no
-second implementation.
+the same script with `--name "Runner <n>" --identity "RUNNER <n>"`.
 
 - Checks `hypertask`, `jq`, `flock`, `mktemp`, `ln`, `cat`, `readlink`, `sed` and `tr`
   before writing. Each missing tool gets its own line with the install step and the
@@ -20,10 +19,9 @@ second implementation.
   reuses it. The token is published 0600 through a hard link so a racing writer is
   not overwritten, linked into the `sessions/` folder `ship-identity` reads, and
   never printed.
-- Asks the server to verify the login and to confirm the board lists the credential
-  under this name, so a slug shared by two names cannot write as the wrong agent.
-  Prints `<name>: login ok, identity ok`, or the exact `/rename` line when this
-  session does not carry the name yet.
+- Asks the server to verify the login and that both boards list this agent under
+  this name, so a slug shared by two names cannot write as the wrong agent. Prints
+  `<name>: login ok, identity ok`, or the exact `/rename` line when needed.
 
 A clean machine also needs agent-create rights (`hypertask login`) or a management
 key; without one the command names that fix and saves nothing. A bad name, an empty
