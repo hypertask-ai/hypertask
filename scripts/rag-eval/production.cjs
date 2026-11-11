@@ -22,6 +22,7 @@ function createProductionRetriever({ rows, index, vectors, bm25Field, cosineRank
     "@prisma/client": {},
     "@/lib/prisma": { project: { findMany: async () => [{ id: 15 }] } },
     "@/lib/auth/agentScope": { recordAgentBoardScopeMiss: () => {} },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
     "@/lib/ai/spend/embeddingRoute": { embeddingSpendMode: async () => ({ mode: active.mode === "keyword" ? "keyword" : "current" }) },
@@ -88,6 +89,7 @@ function createProductionRetriever({ rows, index, vectors, bm25Field, cosineRank
       if (request === "@/utils/controllers/turbopuffer/turbopufferHelper") return load("src/utils/controllers/turbopuffer/turbopufferHelper.ts");
       if (request === "@/utils/controllers/search/rankHits") return load("src/utils/controllers/search/rankHits.ts");
       if (request === "./authorizeIndexedRows") return load("src/lib/rag/authorizeIndexedRows.ts");
+      if (request === "@/lib/flags/definitions/htpr-9013-rag-comments") return load("src/lib/flags/definitions/htpr-9013-rag-comments.ts");
       if (request === "@/app/api/ai/_lib/boardMemoryContract") return { buildCustomInstructionSearchFilters: () => { throw new Error("Unexpected custom instruction search"); } };
       if (["crypto", "node-html-parser"].includes(request)) return require(request);
       const error = new Error(`Unexpected production dependency: ${request} (${file})`);
