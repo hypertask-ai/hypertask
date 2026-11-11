@@ -52,6 +52,11 @@ function fake({ pulls = [], files = {}, comments = {}, runs = [], guardRuns = []
         rerunWorkflowRun: async query => { calls.reruns.push(query); return { data: {} }; },
       },
       repos: {
+        getCommit: async () => ({ data: { sha: 'production-sha' } }),
+        compareCommitsWithBasehead: async ({ basehead }) => {
+          const number = Number(basehead.split('...sha')[1]);
+          return { data: { files: files[number] ?? (pulls.find(p => p.number === number)?.changed_files ? undefined : []) } };
+        },
         createCommitStatus: async () => {
           throw new Error('the sweep must never publish a commit status');
         },
