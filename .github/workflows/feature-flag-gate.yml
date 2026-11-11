@@ -283,7 +283,6 @@ jobs:
           trap 'rm -rf "$gate_tmp"' EXIT
           source .github/scripts/github-api-retry.sh
           gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$gate_tmp/pulls.json"
-          pages=$(cat "$gate_tmp/pulls.json")
           matrix=$(jq -ce '
             [flatten[] | {number, head_sha: (.head.sha // ""),
               pull: {number, state, title, base: {ref: .base.ref, sha: .base.sha},
@@ -296,9 +295,8 @@ jobs:
                 group_by(.head_sha) | map(. as $group | .[] + {head_pr_count: ($group | length)}) | sort_by(.number)
               else error("Too many pull requests for reconciliation matrix")
               end
-          ' <<<"$pages")
+          ' "$gate_tmp/pulls.json")
           echo "matrix=$matrix" >>"$GITHUB_OUTPUT"
-
   reconcile-open-pull-requests:
     needs: reconciliation-pull-requests
     if: github.event_name == 'schedule' && needs['reconciliation-pull-requests'].outputs.matrix != '' && needs['reconciliation-pull-requests'].outputs.matrix != '[]'
@@ -535,7 +533,7 @@ jobs:
             fi
           done <"$rows"
 
-          if [ "$evaluated" -gt 0 ] && ! GH_TOKEN="${GH_READ_TOKEN:-$GH_TOKEN}" GH_API_NO_WAIT=1 gh_api graphql --paginate --slurp \
+          if [ "$evaluated" -gt 0 ] && ! GH_API_NO_WAIT=1 gh_api graphql --paginate --slurp \
             -f query='query($owner: String!, $name: String!, $sha: GitObjectID!, $endCursor: String) {
               repository(owner: $owner, name: $name) {
                 object(oid: $sha) { ... on Commit {

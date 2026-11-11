@@ -115,6 +115,7 @@ function runWorkflow(t, {
     RUN_URL: "https://example.invalid/actions/runs/1",
     PR_NUMBER: "42",
     RECONCILE_PR_NUMBER: "42",
+    GH_TOKEN: "workflow-token", GH_READ_TOKEN: apiFailure ? "" : "unusable-app-token",
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
     FIXTURE_PR: path.join(fixture, "pull.json"),
     FIXTURE_STATUSES: path.join(fixture, "statuses.json"),
@@ -240,6 +241,7 @@ if (args.includes("POST")) {
   const statuses = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATUSES, "utf8"));
   console.log(JSON.stringify(statuses[commitSha[1]] || []));
 } else if (endpoint === "graphql") {
+  assert.equal(process.env.GH_TOKEN, "workflow-token", "GraphQL must retain the usable workflow token");
   const current = JSON.parse(fs.readFileSync(process.env.FIXTURE_CURRENT_PR, "utf8"));
   const rows = [current];
   if (process.env.FIXTURE_EXTRA_PULLS) rows.push(...JSON.parse(fs.readFileSync(process.env.FIXTURE_EXTRA_PULLS, "utf8")));
