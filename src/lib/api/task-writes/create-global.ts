@@ -212,7 +212,8 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     let sharedWriting = false;
     if (agentId) {
       try {
-        sharedWriting = await isFeatureEnabled(HTPR_8905_SHARED_TICKET_WRITING_FLAG, userId);
+        const sharedWritingOn = await isFeatureEnabled(HTPR_8905_SHARED_TICKET_WRITING_FLAG, userId);
+        if (sharedWritingOn) sharedWriting = true;
       } catch {
         sharedWriting = true;
       }
