@@ -32,7 +32,7 @@ test("private waiting names stay hidden from people who cannot see the agent", (
   assert.equal(redact(stored, [], 9).data.waitingOnDisplayName, "Private agent");
   assert.equal(redact(stored, [], 6).data.waitingOnDisplayName, "Secret helper");
   assert.equal(redact(waiting({ waitingOnDisplayName: "Secret helper" }), [], 9).data.waitingOnDisplayName, "Secret helper");
-  assert.match(read("src/lib/agents/visibility.ts"), /waitingOnPrivate[\s\S]*#- '\{data,waitingOnPrivate\}'[\s\S]*DELETE FROM "Task_Summary"/);
+  assert.match(read("src/lib/agents/visibility.ts"), /waitingOnPrivate[\s\S]*DELETE FROM "Task_Summary"[\s\S]*#- '\{data,waitingOnPrivate\}'/);
   assert.match(read("src/lib/mcp/agents/ownedAgents.ts"), /visibility === "PRIVATE"[\s\S]*DELETE FROM "Task_Summary"/);
   for (const file of ["src/utils/controllers/taskDetail/load.ts", "src/utils/controllers/tasks/getSharedTask.ts", "src/app/api/ai/_lib/currentTaskContext.ts", "src/lib/mcp/operations/tasks/operation.ts", "src/app/api/ai/_lib/taskSummaries.ts"]) {
     assert.match(read(file), /scrubStoredTaskSummary|replaceConcealedNames/, file);

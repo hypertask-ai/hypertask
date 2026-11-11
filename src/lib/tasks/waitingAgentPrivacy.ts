@@ -23,6 +23,7 @@ const hides = (data: WaitingData, hiddenIds: ReadonlySet<string>, hiddenNames: R
   const agentId = typeof data.waitingOnAgentId === "string" ? data.waitingOnAgentId : "";
   const name = typeof data.waitingOnDisplayName === "string" ? data.waitingOnDisplayName : "";
   const ownerId = typeof data.waitingOnAgentOwnerId === "number" ? data.waitingOnAgentOwnerId : null;
+  if (data.waitingOnPrivate === true && ownerId === viewerUserId) return false;
   return (data.waitingOnPrivate === true && ownerId !== viewerUserId)
     || Boolean(agentId && hiddenIds.has(agentId))
     || Boolean(!agentId && name && hiddenNames.has(name));
