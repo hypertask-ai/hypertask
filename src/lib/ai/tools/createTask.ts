@@ -269,7 +269,8 @@ export function createCreateTaskTool(context: ToolContext) {
               const note = [body?.message, "brief" in input ? input.brief : ""].filter(Boolean).join("\n");
               const requested = creationScreenshotCandidates([...(body?.images64 ?? []), ...(body?.attachments ?? [])], note)
                 .filter((shot) => !context.creationScreenshotsUsed.has(shot.url));
-              const shots = await hostInlineScreenshots(requested);
+              const shots = await hostInlineScreenshots(requested, abortSignal);
+              abortSignal?.throwIfAborted();
               if (shots.length) {
                 description = guaranteeCreationScreenshots(description ?? "", { instructions: note, attachments: shots });
                 for (const shot of requested) context.creationScreenshotsUsed.add(shot.url);
