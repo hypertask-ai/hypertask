@@ -11,9 +11,9 @@ function fixture() {
   let failWrite = false;
   const tx = {
     task: { findFirst: async ({ where }) => { const task = tasks.find(task => task.description.includes(where.description_.is.content.contains)); return task ? { id: task.id } : null; } },
-    project: { findFirst: async ({ where }) => {
-      const label = where?.labels?.where?.value;
-      const matches = where?.id === 2060 && where?.status === 'Normal' && where?.section?.where?.section_title === 'Todo' && label?.equals === 'Infra' && label?.mode === 'insensitive';
+    project: { findFirst: async ({ where, select }) => {
+      const label = select?.labels?.where?.value;
+      const matches = where?.id === 2060 && where?.status === 'Normal' && select?.section?.where?.section_title === 'Todo' && label?.equals === 'Infra' && label?.mode === 'insensitive';
       return available && matches ? { uniqueIdentifier: 'IGSH', section: [{ id: 4351, section_title: 'Todo' }], labels: [{ id: 'existing-infra' }] } : null;
     } },
   };
