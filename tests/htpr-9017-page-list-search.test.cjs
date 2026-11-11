@@ -106,6 +106,6 @@ test('an agent without a viewer keeps the literal match on the pages screen', as
   const pages = await service.listPages({ ...listArgs, userId: undefined, query: 'planning notes' });
   assert.deepEqual(calls.index, []);
   assert.equal(calls.findMany.length, 1);
-  assert.equal(calls.findMany[0].where.OR[0].contentText.contains, 'planning notes');
+  assert.equal(calls.findMany[0].where.OR[1].contentText.contains, 'planning notes');
   assert.deepEqual(pages.map((page) => page.id), [5]);
 });
