@@ -22,8 +22,9 @@ export function agentShapedMcpToken(token: string): boolean {
   const parts = token.split('.')
   if (parts.length !== 3) return false
   try {
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as { agentId?: unknown }
-    return typeof payload.agentId === 'string' && payload.agentId.length > 0
+    const payload: unknown = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+    return payload !== null && typeof payload === 'object' && 'agentId' in payload
+      && typeof payload.agentId === 'string' && payload.agentId.length > 0
   } catch {
     return false
   }

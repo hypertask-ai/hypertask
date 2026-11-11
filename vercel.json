@@ -84,10 +84,6 @@
     {
       "path": "/api/cron/search-index-drift",
       "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/upstash-daily-alarm",
-      "schedule": "0 * * * *"
     }
   ]
 }

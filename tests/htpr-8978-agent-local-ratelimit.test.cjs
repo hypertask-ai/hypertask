@@ -79,11 +79,13 @@ test('htk_ and agent JWTs count in memory and never acquire Redis', async t => {
 
 test('human tokens and malformed JWTs keep the shared Redis window', async t => {
   const h = harness(t)
-  for (const token of ['htmk_human', 'httk_human', 'fixture-token', 'a.invalid.c']) {
+  const invalidPayloads = [null, [], 'agent', { agentId: '' }, { agentId: 7 }]
+    .map(payload => `header.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`)
+  for (const token of ['htmk_human', 'httk_human', 'fixture-token', 'a.invalid.c', ...invalidPayloads]) {
     assert.equal(h.rate.agentShapedMcpToken(token), false)
     assert.equal(await h.call(token), null)
   }
-  assert.equal(h.redisCalls.length, 4)
+  assert.equal(h.redisCalls.length, 4 + invalidPayloads.length)
   assert.deepEqual(h.scopes, [])
 })
 

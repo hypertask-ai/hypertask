@@ -7,7 +7,7 @@ export default {
   kind: "improvement",
   defaultMode: "EVERYONE",
   shippedOn: "2026-11-11",
-  description: "Counts agent tool requests in memory and files one urgent warning when daily Upstash requests exceed 300,000. Off restores shared agent counting and stops the warning job.",
+  description: "Counts agent tool requests in memory instead of Upstash. Off restores shared agent counting.",
   releaseRisk: {
     risk: "new",
     reason: "Agent request limits become per server process. Authentication, human limits, spending controls and background locks stay unchanged.",
