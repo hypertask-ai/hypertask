@@ -23,7 +23,7 @@ async function withPage(query, check, { agentCodeSignIn = false, theme = 'light'
     url: 'https://app.hypertask.ai/cli-auth',
   });
   const previous = new Map(
-    ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [
+    ['window', 'document', 'navigator', 'MutationObserver', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [
       key, Object.getOwnPropertyDescriptor(globalThis, key),
     ]),
   );
@@ -36,6 +36,7 @@ async function withPage(query, check, { agentCodeSignIn = false, theme = 'light'
       window: dom.window,
       document: dom.window.document,
       navigator: dom.window.navigator,
+      MutationObserver: dom.window.MutationObserver,
       IS_REACT_ACT_ENVIRONMENT: true,
     })) {
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
