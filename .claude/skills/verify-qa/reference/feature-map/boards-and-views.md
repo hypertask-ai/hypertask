@@ -19,6 +19,7 @@
 - `empty-views-with-hidden-empty-columns` Empty views with hidden empty columns.
 - `agent-status-chips` Agent status chips.
 - `card-hover-layout` Card hover layout.
+- `table-group-actions` Table grouping, tag checklist, hide and filter.
 
 ## How to get to it (user POV)
 
@@ -33,6 +34,25 @@ from the sidebar is the `switch-boards` journey.
 `agent-browser`, headless, `?realtime=on` on the board URL. Open a board,
 switch views, then switch to a second board and back, since the bugs below
 cluster around what happens on that second switch, not the first load.
+
+### Table grouping and group actions
+
+With `htpr-8974-table-group-modes` enabled (Owner + QA), open a board's table view.
+Choose **Group table → Tags**; select Mobile, Desktop and Agent Features in that order.
+Check the search and counts; empty tags stay absent. Each ticket belongs to its first
+selected tag, exactly once, with unmatched tickets in **Other** at the end.
+Open a header's **Group actions** button. **Hide this group** removes that group,
+not just its rows, and must not move its multi-tag tickets into another group.
+**Filter to this group** leaves exactly that group's original membership, including
+when filtering Other. Reload after both actions. **Group table → Show all groups**
+restores the same tag order and memberships, even after every group was hidden.
+Repeat hide/filter in Column, Assignee, Priority and Size, including with table sorting
+active. Changing grouping clears the previous group's visibility restriction.
+Save a private QA view and reload; check that another view and the board layout
+remain unchanged. Restore the QA account's original view and remove only that fixture.
+Capture desktop and phone in Light, AMOLED and Graphite 2, plus the action menu.
+Flag-off users retain the existing grouping with no actions or visibility restriction.
+CI behavior coverage: `tests/htpr-8974-table-groups.test.ts`.
 
 ### Bulk move between boards
 

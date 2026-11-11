@@ -1,8 +1,16 @@
+import { z } from "zod";
 import type { IProject, ISection, ITask, ITaskLabel } from "@/models/model";
-import type { TableCreateTaskSection } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
+import { tableSectionKey, type TableCreateTaskSection } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
 
 export type TableGroupBy = "column" | "tag" | "assignee" | "priority" | "size";
-export type TableGrouping = { mode: TableGroupBy; tagIds: string[]; allTags: boolean };
+export type TableGrouping = {
+  mode: TableGroupBy;
+  tagIds: string[];
+  allTags: boolean;
+  hiddenGroupIds?: string[];
+  onlyGroupId?: string;
+};
+export type TableGroupAction = "hide" | "filter" | "reset";
 export type TableTagGroupedSection = TableCreateTaskSection & { items: ITask[] };
 export const TABLE_GROUP_BY_TAG_NONE = "tag:none" as const;
 export const NO_TAG_SECTION_TITLE = "No tag";
@@ -28,15 +36,50 @@ export const serializeTableGrouping = (mode: TableGroupBy, tagIds: unknown = [])
   return ids.length > 0 ? `${TAG_PREFIX}${ids.join(",")}` : TABLE_GROUP_BY_TAG_NONE;
 };
 
-export const sanitizeTableGrouping = (value: unknown): string | null => {
+const sanitizeBaseTableGrouping = (value: unknown): string | null => {
   if (isTableGroupBy(value) || value === TABLE_GROUP_BY_TAG_NONE) return value as string;
   if (typeof value !== "string" || !value.startsWith(TAG_PREFIX)) return null;
   const ids = cleanTagIds(value.slice(TAG_PREFIX.length));
   return ids.length > 0 ? `${TAG_PREFIX}${ids.join(",")}` : null;
 };
 
+const groupVisibilitySchema = z.object({
+  groupBy: z.string(),
+  hiddenGroupIds: z.array(z.string().min(1).max(200)).max(500).optional(),
+  onlyGroupId: z.string().min(1).max(200).optional(),
+});
+
+const parseGroupVisibility = (value: unknown) => {
+  if (typeof value !== "string" || !value.startsWith("{")) return null;
+  try {
+    const result = groupVisibilitySchema.safeParse(JSON.parse(value));
+    if (!result.success) return null;
+    const groupBy = sanitizeBaseTableGrouping(result.data.groupBy);
+    if (!groupBy) return null;
+    return { ...result.data, groupBy };
+  } catch {
+    return null;
+  }
+};
+
+export const sanitizeTableGrouping = (value: unknown): string | null => {
+  const visibility = parseGroupVisibility(value);
+  if (!visibility) return sanitizeBaseTableGrouping(value);
+  return serializeEffectiveTableGrouping({
+    ...parseTableGrouping(visibility.groupBy),
+    hiddenGroupIds: visibility.hiddenGroupIds,
+    onlyGroupId: visibility.onlyGroupId,
+  });
+};
+
 export const parseTableGrouping = (value: unknown): TableGrouping => {
-  const sanitized = sanitizeTableGrouping(value);
+  const visibility = parseGroupVisibility(value);
+  if (visibility) return {
+    ...parseTableGrouping(visibility.groupBy),
+    hiddenGroupIds: visibility.hiddenGroupIds,
+    onlyGroupId: visibility.onlyGroupId,
+  };
+  const sanitized = sanitizeBaseTableGrouping(value);
   if (!sanitized) return { mode: "column", tagIds: [], allTags: false };
   if (sanitized === "tag") return { mode: "tag", tagIds: [], allTags: true };
   if (sanitized === TABLE_GROUP_BY_TAG_NONE) return { mode: "tag", tagIds: [], allTags: false };
@@ -66,8 +109,22 @@ export const effectiveTableGrouping = (project: IProject | null | undefined, mod
   if (legacyTagEnabled && grouping.mode === "tag") return { mode: "tag", tagIds: [], allTags: true };
   return { mode: "column", tagIds: [], allTags: false };
 };
-export const serializeEffectiveTableGrouping = (grouping: TableGrouping): string =>
-  grouping.mode === "tag" && grouping.allTags ? "tag" : serializeTableGrouping(grouping.mode, grouping.tagIds);
+export const serializeEffectiveTableGrouping = (grouping: TableGrouping): string => {
+  const groupBy = grouping.mode === "tag" && grouping.allTags ? "tag" : serializeTableGrouping(grouping.mode, grouping.tagIds);
+  const hiddenGroupIds = [...new Set(grouping.hiddenGroupIds ?? [])].sort();
+  if (!hiddenGroupIds.length && !grouping.onlyGroupId) return groupBy;
+  return JSON.stringify({
+    groupBy,
+    ...(hiddenGroupIds.length ? { hiddenGroupIds } : {}),
+    ...(grouping.onlyGroupId ? { onlyGroupId: grouping.onlyGroupId } : {}),
+  });
+};
+
+export const applyTableGroupAction = (grouping: TableGrouping, action: TableGroupAction, groupId: string): TableGrouping => {
+  if (action === "reset") return { mode: grouping.mode, tagIds: grouping.tagIds, allTags: grouping.allTags };
+  if (action === "filter") return { ...grouping, hiddenGroupIds: [], onlyGroupId: groupId };
+  return { ...grouping, hiddenGroupIds: [...new Set([...(grouping.hiddenGroupIds ?? []), groupId])] };
+};
 
 type GroupSpec = { key: string; title: string; order: number };
 const byTitle = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
@@ -156,11 +213,20 @@ export const buildTableSectionsGroupedBySize = (sections: ISection[]) =>
     return { key: `size:${index}`, title: task.estimate?.estimate_value?.trim() || NO_SIZE_GROUP_TITLE, order: index === 0 ? LAST : index };
   });
 export function buildTableSectionsForGrouping(sections: ISection[], grouping: TableGrouping): TableTagGroupedSection[] {
-  if (grouping.mode === "assignee") return buildTableSectionsGroupedByAssignee(sections);
-  if (grouping.mode === "priority") return buildTableSectionsGroupedByPriority(sections);
-  if (grouping.mode === "size") return buildTableSectionsGroupedBySize(sections);
-  if (grouping.mode === "tag") return buildTableSectionsGroupedByTag(sections, grouping.tagIds, grouping.allTags);
-  return sections as TableTagGroupedSection[];
+  let groups: TableTagGroupedSection[];
+  switch (grouping.mode) {
+    case "assignee": groups = buildTableSectionsGroupedByAssignee(sections); break;
+    case "priority": groups = buildTableSectionsGroupedByPriority(sections); break;
+    case "size": groups = buildTableSectionsGroupedBySize(sections); break;
+    case "tag": groups = buildTableSectionsGroupedByTag(sections, grouping.tagIds, grouping.allTags); break;
+    case "column": groups = sections as TableTagGroupedSection[]; break;
+  }
+  if (!grouping.hiddenGroupIds?.length && !grouping.onlyGroupId) return groups;
+  const hidden = new Set(grouping.hiddenGroupIds);
+  return groups.filter((section, index) => {
+    const key = String(tableSectionKey(section) ?? `i${index}`);
+    return !hidden.has(key) && (!grouping.onlyGroupId || grouping.onlyGroupId === key);
+  });
 }
 
 export function parseTableCollapsedSections(value: unknown): Set<string> {

@@ -57,7 +57,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const boardLayout = useRecoilValue(boardLayoutAtom)
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes")
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled
-  const { setTableGroupByViewAndReturn, setTableSortViewAndReturn } = useKanbanViews(project)
+  const { setTableGroupByViewAndReturn, setTableGroupVisibilityViewAndReturn, setTableSortViewAndReturn } = useKanbanViews(project)
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns")
   const sortAccount = useRecoilValue(tableSortAccountAtom)
   const setSortAccount = useSetRecoilState(tableSortAccountAtom)
@@ -65,7 +65,9 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const [groupOpen, setGroupOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const { timers: runningTimers } = useBoardRunningTimers(project.id)
-  const tableGroupBy = tableGroupModesEnabled ? getActiveTableGroupByFromProject(project) : effectiveTableGrouping(project, false, tableGroupByTagEnabled).mode
+  const tableGrouping = effectiveTableGrouping(project, tableGroupModesEnabled, tableGroupByTagEnabled)
+  const tableGroupBy = tableGroupModesEnabled ? getActiveTableGroupByFromProject(project) : tableGrouping.mode
+  const hasHiddenGroups = Boolean(tableGrouping.hiddenGroupIds?.length || tableGrouping.onlyGroupId)
   const groupByLabel: Record<TableGroupBy, string> = { column: "Column", tag: "Tags", assignee: "Assignee", priority: "Priority", size: "Size" }
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
@@ -162,9 +164,9 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
         <>
           <ViewControlButton
             label="Group table"
-            tooltipText={`Group: ${groupByLabel[tableGroupBy]}`}
+            tooltipText={`Group: ${groupByLabel[tableGroupBy]}${hasHiddenGroups ? " (filtered)" : ""}`}
             tooltipLeft={-88}
-            active={tableGroupBy !== "column"}
+            active={tableGroupBy !== "column" || hasHiddenGroups}
             onClick={() => setGroupOpen(true)}
           >
             <Layers size={18} strokeWidth={1.75} />
@@ -180,8 +182,14 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
                   { id: "size", label: "Size", hint: "Ticket estimate", checked: tableGroupBy === "size" },
                 ] : []),
                 { id: "tag", label: "Tags", hint: "Choose which tags", checked: tableGroupBy === "tag" },
+                ...(hasHiddenGroups ? [{ id: "reset-groups", label: "Show all groups" }] : []),
               ]}
               onSelect={(option) => {
+                if (option.id === "reset-groups") {
+                  setGroupOpen(false)
+                  void setTableGroupVisibilityViewAndReturn(project, "reset", "")
+                  return
+                }
                 if (option.id !== "column" && option.id !== "tag" && option.id !== "assignee" && option.id !== "priority" && option.id !== "size") return
                 setGroupOpen(false)
                 if (option.id === "tag" && tableGroupModesEnabled) {

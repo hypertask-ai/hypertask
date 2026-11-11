@@ -10,8 +10,10 @@ import { useTableActions } from "./useTableActions";
 import { useTableKeyboard } from "./useTableKeyboard";
 import { createTableRowRenderer } from "./TableTaskRow";
 
-import { lazy, Suspense, useCallback, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { lazy, Suspense, useCallback, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { ChevronDown, MoreHorizontal } from "lucide-react";
+import OptionPickerModal from "@/components/Modals/OptionPicker";
+import { ViewControlButton } from "../HeaderComponents/ShellViewControls";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
 import { effectiveTableGrouping, tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
@@ -178,7 +180,7 @@ const TableView = ({
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
   expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
-  setTableSortViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
+  setTableSortViewAndReturn, setTableGroupVisibilityViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
   } = useTableState({
@@ -188,6 +190,7 @@ const TableView = ({
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
+  const [groupMenu, setGroupMenu] = useState<{ id: string; title: string } | null>(null);
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   let tagGroupingActive = false;
   if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled) && effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled).mode !== "column") tagGroupingActive = true;
@@ -375,7 +378,7 @@ const TableView = ({
               Boolean(_currentProject),
               sortState.length > 0,
               isPrioritySort,
-            ) || savedViewPrioritySort) && !(tableGroupFoldEnabled && Boolean(_currentProject))
+            ) || savedViewPrioritySort) && !((tableGroupFoldEnabled || tableGroupModesEnabled) && Boolean(_currentProject))
           ) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
@@ -415,6 +418,7 @@ const TableView = ({
                     }}
                     className={`${destinationSectionId !== null && dragOverSectionId === destinationSectionId ? "bg-hover-active" : "bg-containerBackground"} shadow-md rounded-md py-2`}
                   >
+                    <div className={tableGroupModesEnabled && _currentProject ? "flex items-center justify-between pr-[10px]" : undefined}>
                     <div
                       role={tableGroupFoldEnabled ? "button" : undefined}
                       tabIndex={tableGroupFoldEnabled ? 0 : undefined}
@@ -436,6 +440,16 @@ const TableView = ({
                         />
                       )}
                       <SplitTitle isSelected onClick={() => {}} tab={{ idx: sectionIndex, project: section.section_title, length: rawItems.length, hasUnseen: false, overdueCount: myTasksSectionOverdueCounts?.[sectionIndex] ?? 0 }} />
+                    </div>
+                    {tableGroupModesEnabled && _currentProject && (
+                      <ViewControlButton
+                        label={`Group actions: ${section.section_title}`}
+                        tooltipLeft={-80}
+                        onClick={() => setGroupMenu({ id: String(sid), title: section.section_title })}
+                      >
+                        <MoreHorizontal size={18} strokeWidth={1.75} />
+                      </ViewControlButton>
+                    )}
                     </div>
                     {!folded && (
                     <ul className="px-0">
@@ -473,6 +487,21 @@ const TableView = ({
           )}
         </div>
       </div>
+      {tableGroupModesEnabled && _currentProject && groupMenu && (
+        <OptionPickerModal
+          header={groupMenu.title}
+          options={[
+            { id: "hide", label: "Hide this group" },
+            { id: "filter", label: "Filter to this group" },
+          ]}
+          onSelect={(option) => {
+            if (option.id !== "hide" && option.id !== "filter") return;
+            void setTableGroupVisibilityViewAndReturn(_currentProject, option.id, groupMenu.id);
+            setGroupMenu(null);
+          }}
+          onClose={() => setGroupMenu(null)}
+        />
+      )}
       {showCommands.show && (
         <Suspense fallback={null}>
           <HypertasksCommands contextOptions={buildCommandContext()} />
