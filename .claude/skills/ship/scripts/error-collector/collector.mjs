@@ -73,7 +73,7 @@ function noiseFingerprint(service, id) {
 
 function command(name, args, env, input) {
   const result = spawnSync(name, args, { env, input, encoding: 'utf8', timeout: timeLeft(30000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
-  if (result.error || result.status !== 0) throw new Error('command failed');
+  if (result.error || result.status !== 0) throw new Error(`command failed status=${result.status ?? result.error?.code ?? 'unknown'}`);
   return result.stdout;
 }
 
@@ -496,7 +496,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           state.created.push(iso(now));
           await checkpoint();
           try {
-            const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
+            const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
             if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
             else found = { ticket: ticketRef(payload(output).task), deleted: false };
           } catch (error) {
@@ -524,7 +524,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       }
       delete state.pending[fp];
       await checkpoint();
-    } catch { diagnostic(`group ${fp} reporting failed; kept pending`); }
+    } catch (error) { diagnostic(`group ${fp} reporting failed (${error instanceof Error ? error.message : 'unknown'}); kept pending`); }
   }
   for (const [id, occurrence] of Object.entries(state.occurrences)) {
     if (signal.aborted) break;
