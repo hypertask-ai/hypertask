@@ -1,1 +1,1 @@
-| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | no smoke id; agent `ht-flag get` and a refused `ht-flag set` |
+| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | `node .claude/skills/verify-qa/scripts/flags-drive-live.mjs` |
