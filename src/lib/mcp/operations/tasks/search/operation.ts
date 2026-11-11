@@ -1,3 +1,4 @@
+import { HTPR_9072_SEARCH_DESCRIPTION_FLAG } from '@/lib/flags/definitions/htpr-9072-search-description'
 import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG } from '@/lib/flags/keys'
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -7,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
+import { searchTaskDescription } from '@/lib/mcp/tasks/searchDescription'
 import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { isFeatureEnabled } from '@/lib/flags'
@@ -320,6 +322,29 @@ export async function GET(request: NextRequest) {
         listQuery?.filter.has_pr ||
         listQuery?.filter.assignee !== undefined,
     )
+    const fullSearchDescription = await isFeatureEnabled(HTPR_9072_SEARCH_DESCRIPTION_FLAG, user.id)
+    const searchTaskSelect = {
+      id: true,
+      ticketNumber: true,
+      uniqueIndex: true,
+      title: true,
+      description: true,
+      ...(fullSearchDescription ? { description_: { select: { content: true } } } : {}),
+      section: true,
+      projectId: true,
+      project: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+      dueDate: true,
+      createdAt: true,
+      updatedAt: true,
+      agent: {
+        select: mcpVisibleAgentSelect(user.id),
+      },
+    }
     let operatorResult: Awaited<ReturnType<typeof legacySearch>> | null = null
     let operatorPartial = false
     let commentById: Awaited<ReturnType<typeof rankedSearchWhere>>['commentById'] | undefined
@@ -347,27 +372,7 @@ export async function GET(request: NextRequest) {
       const primaryIds = filtered.paged ? rankedIds : cursorId && rankedCursor < 0 ? [] : rankedIds.slice(rankedCursor + 1, rankedCursor + 1 + limit)
       const operatorTasks = await prisma.task.findMany({
         where: filtered.paged || rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where,
-        select: {
-          id: true,
-          ticketNumber: true,
-          uniqueIndex: true,
-          title: true,
-          description: true,
-          section: true,
-          projectId: true,
-          project: {
-            select: {
-              id: true,
-              title: true
-            }
-          },
-          dueDate: true,
-          createdAt: true,
-          updatedAt: true,
-          agent: {
-            select: mcpVisibleAgentSelect(user.id),
-          },
-        },
+        select: searchTaskSelect,
         ...(!rankedResults || sortField ? { orderBy: sortField
           ? [{ [sortField]: sortOrder }, { id: 'asc' as const }]
           : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}),
@@ -426,27 +431,7 @@ export async function GET(request: NextRequest) {
 
     const tasks = await prisma.task.findMany({
       where,
-      select: {
-        id: true,
-        ticketNumber: true,
-        uniqueIndex: true,
-        title: true,
-        description: true,
-        section: true,
-        projectId: true,
-        project: {
-          select: {
-            id: true,
-            title: true
-          }
-        },
-        dueDate: true,
-        createdAt: true,
-        updatedAt: true,
-        agent: {
-          select: mcpVisibleAgentSelect(user.id),
-        },
-      },
+      select: searchTaskSelect,
       ...(orderBy ? { orderBy } : {}),
       ...(useTurbopufferWindow
         ? {}
@@ -484,7 +469,7 @@ export async function GET(request: NextRequest) {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
         title: task.title,
-        description: task.description,
+        description: fullSearchDescription ? searchTaskDescription(task, true) : task.description,
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         projectId: task.projectId,
