@@ -60,17 +60,23 @@ yet, so a dispatch that lands mid-scan reads as uncovered instead of claiming
 the fix. Findings are read only after that coverage snapshot is fixed, so a
 review that finishes during a run cannot lend its commit to older states.
 
-- `the newest completed Vercel Security Review covered production <sha> and
+- `the newest completed Vercel Security Review covered production tip <sha> and
 finished at <date> ... does not cover it` means the newest finished review is
 older than production HEAD, so no scan covers it.
-- `none of the last 30 production commits ... carries a Vercel Security Review
-check` means no review is running at all, and no scan can be requested until an
-owner turns Security Reviews back on.
+- `none of the 200 first-parent production tips ... carries a completed Vercel
+Security Review` means no review is running at all, and no scan can be requested
+until an owner turns Security Reviews back on.
+
+The read walks production's first-parent history only, so a commit that reached
+production inside someone else's merge is never offered as production's last
+reviewed tip.
 
 Never present a reader run as a fresh scan. A fixed warning can only be called
-verified when `Scan coverage` names a reviewed commit at or after the fix. Never
-dismiss a warning to shorten the list; a dismissed finding hides the defect from
-every future read.
+verified when `Scan coverage` names the commit that carries the fix itself, or a
+first-parent production tip whose review covered that fix commit. A review of a
+later, unrelated commit does not cover the fix, because a Security Review covers
+only the code its own push changed. Never dismiss a warning to shorten the list;
+a dismissed finding hides the defect from every future read.
 
 An authentication failure, unexpected response or incomplete page sequence
 fails the job without publishing a report rather than reporting zero findings.

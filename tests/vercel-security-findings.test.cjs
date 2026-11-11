@@ -39,10 +39,10 @@ const finding = (overrides = {}) => ({
   ...overrides,
 });
 const page = (findings, nextCursor = null) => ({ ok: true, status: 200, json: async () => ({ findings, nextCursor }) });
-const commit = (digit, date) => ({ sha: String(digit).repeat(40), commit: { committer: { date } } });
-const head = commit('b', '2026-11-11T19:40:22Z');
-const reviewed = commit('c', '2026-11-08T18:48:05Z');
+const commit = (digit, date, parent = null) => ({ sha: String(digit).repeat(40), commit: { committer: { date } }, parents: parent ? [{ sha: parent }] : [] });
 const unreviewed = commit('d', '2026-11-07T23:19:30Z');
+const reviewed = commit('c', '2026-11-08T18:48:05Z', unreviewed.sha);
+const head = commit('b', '2026-11-11T19:40:22Z', reviewed.sha);
 const reviewRuns = runs => ({ ok: true, status: 200, json: async () => ({ check_runs: runs }) });
 const review = (at, overrides = {}) => ({ name: 'Vercel Security Review', status: 'completed', conclusion: 'success', started_at: at, completed_at: at, ...overrides });
 const isGitHubUrl = url => {
@@ -108,7 +108,7 @@ test('names the newest production commit a Vercel review covered and whether it 
   assert.equal(covered.reviewedSha, head.sha);
   assert.equal(covered.reviewedAt, '2026-11-10T00:31:00.000Z');
   assert.equal(covered.checked, 1);
-  assert.match(formatCoverage(covered), /Scan coverage: the newest completed Vercel Security Review covered production b{40} and finished at 2026-11-10T00:31:00.000Z, 1 commit\(s\) back\. Production HEAD is b{40} at 2026-11-11T19:40:22Z, so this review covers it\./);
+  assert.match(formatCoverage(covered), /Scan coverage: the newest completed Vercel Security Review covered production tip b{40} and finished at 2026-11-10T00:31:00.000Z, 1 tip\(s\) back\. Production HEAD is b{40} at 2026-11-11T19:40:22Z, so this review covers it\./);
 
   const behind = await readCoverage(repo, 'github-secret', coverageRequest([head, reviewed, unreviewed], { [reviewed.sha]: [review('2026-11-08T18:50:00Z')] }));
   assert.equal(behind.reviewedSha, reviewed.sha);
@@ -121,7 +121,20 @@ test('states plainly when no production commit in the window carries a review', 
   assert.equal(coverage.reviewedSha, null);
   assert.equal(coverage.checked, 3);
   assert.equal(coverage.horizon, '2026-11-07T23:19:30Z');
-  assert.match(formatCoverage(coverage), /Scan coverage: no completed Vercel Security Review on any of the 3 production commits checked, back to 2026-11-07T23:19:30Z \(HEAD b{40} at 2026-11-11T19:40:22Z\)\./);
+  assert.match(formatCoverage(coverage), /Scan coverage: no completed Vercel Security Review on any of the 3 first-parent production tips checked, back to 2026-11-07T23:19:30Z \(HEAD b{40} at 2026-11-11T19:40:22Z\)\./);
+});
+
+test('walks only production first parents, never commits that arrived through a merge', async () => {
+  const branchCommit = commit('e', '2026-11-09T10:00:00Z', unreviewed.sha);
+  const mergeTip = commit('f', '2026-11-10T10:00:00Z', reviewed.sha);
+  mergeTip.parents.push({ sha: branchCommit.sha });
+  const coverage = await readCoverage(repo, 'github-secret', coverageRequest([mergeTip, reviewed, branchCommit, unreviewed], { [branchCommit.sha]: [review('2026-11-09T10:30:00Z')] }));
+  assert.equal(coverage.reviewedSha, null, 'a review of a merged branch commit must not count as production coverage');
+  assert.equal(coverage.checked, 3);
+  assert.equal(coverage.horizon, '2026-11-07T23:19:30Z');
+  const chain = await readCoverage(repo, 'github-secret', coverageRequest([mergeTip, reviewed, branchCommit, unreviewed], { [reviewed.sha]: [review('2026-11-09T12:00:00Z')] }));
+  assert.equal(chain.reviewedSha, reviewed.sha);
+  assert.equal(chain.checked, 2);
 });
 
 test('treats only a finished review as coverage and reports when it finished', async () => {
@@ -189,7 +202,7 @@ test('reports empty results distinctly, requires coverage, and allows only state
   const empty = { reviewedSha: null, head, checked: 1, horizon: head.commit.committer.date };
   assert.match(formatFindings([], empty), /No production findings returned/);
   const output = formatFindings([finding(), finding({ status: 'open' })], { reviewedSha: head.sha, reviewedAt: '2026-11-10T00:31:00.000Z', head, checked: 1, horizon: head.at });
-  assert.match(output, /Scan coverage: the newest completed Vercel Security Review covered production/);
+  assert.match(output, /Scan coverage: the newest completed Vercel Security Review covered production tip/);
   assert.match(output, /#12 01ARZ3NDEKTSV4RRFFQ69G5FAV closed medium resolved-in=a{40}/);
   assert.match(output, /open medium/);
   assert.doesNotMatch(output, /secret-title|secret-description|secret-code/);
@@ -221,7 +234,7 @@ test('publishes one complete redacted report with coverage after every read vali
   }, report => reports.push(report));
   assert.equal(reports.length, 1);
   assert.match(reports[0], /All statuses, 2 findings/);
-  assert.match(reports[0], /Scan coverage: the newest completed Vercel Security Review covered production b{40} and finished at 2026-11-10T00:31:00.000Z/);
+  assert.match(reports[0], /Scan coverage: the newest completed Vercel Security Review covered production tip b{40} and finished at 2026-11-10T00:31:00.000Z/);
   assert.match(reports[0], /#8 /);
   assert.doesNotMatch(reports[0], /secret-title|secret-description|secret-code|vercel-secret|github-secret/);
   const coverageOk = href => href.includes('/check-runs') ? reviewRuns([review('2026-11-10T00:31:00Z')]) : commitsPage([head]);

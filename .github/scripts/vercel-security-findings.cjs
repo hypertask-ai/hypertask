@@ -45,10 +45,25 @@ async function readFindings(token, request = fetch) {
 function readCommit(commit) {
   const sha = commit?.sha;
   const at = commit?.commit?.committer?.date;
-  if (typeof sha !== 'string' || !/^[a-f0-9]{40}$/.test(sha) || typeof at !== 'string' || Number.isNaN(Date.parse(at))) {
+  const parents = commit?.parents;
+  if (typeof sha !== 'string' || !/^[a-f0-9]{40}$/.test(sha) ||
+      typeof at !== 'string' || Number.isNaN(Date.parse(at)) ||
+      !Array.isArray(parents) ||
+      parents.length > 0 && (typeof parents[0]?.sha !== 'string' || !/^[a-f0-9]{40}$/.test(parents[0].sha))) {
     throw new Error('GitHub commits read: unexpected schema');
   }
-  return { sha, at };
+  return { sha, at, parent: parents.length ? parents[0].sha : null };
+}
+
+function firstParentChain(commits) {
+  const bySha = new Map(commits.map(commit => [commit.sha, commit]));
+  const chain = [];
+  let next = commits[0];
+  while (next && chain.length < MAX_CHECKED) {
+    chain.push(next);
+    next = next.parent ? bySha.get(next.parent) : undefined;
+  }
+  return chain;
 }
 
 function readReview(run) {
@@ -88,8 +103,9 @@ async function readCoverage(repository, token, request = fetch) {
   }
   if (commits.length === 0) throw new Error('GitHub commits read: unexpected schema');
   const head = commits[0];
+  const tips = firstParentChain(commits);
   let checked = 0;
-  for (const candidate of commits.slice(0, MAX_CHECKED)) {
+  for (const candidate of tips) {
     if (Date.now() - startedAt > READ_BUDGET_MS) break;
     checked += 1;
     const checkResponse = await request(`${GITHUB_API}/repos/${repository}/commits/${candidate.sha}/check-runs?check_name=${encodeURIComponent(REVIEW_CHECK)}&filter=latest&per_page=1`, {
@@ -105,16 +121,16 @@ async function readCoverage(repository, token, request = fetch) {
       return { repository, head, reviewedSha: candidate.sha, reviewedAt, checked, horizon: candidate.at };
     }
   }
-  const horizon = checked === 0 ? head.at : commits[checked - 1].at;
+  const horizon = checked === 0 ? head.at : tips[checked - 1].at;
   return { repository, head, reviewedSha: null, checked, horizon };
 }
 
 function formatCoverage(coverage) {
   if (coverage.reviewedSha) {
     const coversHead = coverage.reviewedSha === coverage.head.sha;
-    return `Scan coverage: the newest completed ${REVIEW_CHECK} covered production ${coverage.reviewedSha} and finished at ${coverage.reviewedAt}, ${coverage.checked} commit(s) back. Production HEAD is ${coverage.head.sha} at ${coverage.head.at}, ${coversHead ? 'so this review covers it' : 'so this review does not cover it'}.`;
+    return `Scan coverage: the newest completed ${REVIEW_CHECK} covered production tip ${coverage.reviewedSha} and finished at ${coverage.reviewedAt}, ${coverage.checked} tip(s) back. Production HEAD is ${coverage.head.sha} at ${coverage.head.at}, ${coversHead ? 'so this review covers it' : 'so this review does not cover it'}.`;
   }
-  return `Scan coverage: no completed ${REVIEW_CHECK} on any of the ${coverage.checked} production commits checked, back to ${coverage.horizon} (HEAD ${coverage.head.sha} at ${coverage.head.at}). A review that is queued or still running covers nothing yet, and Security Reviews are off or not running, so no scan covers production until they report again.`;
+  return `Scan coverage: no completed ${REVIEW_CHECK} on any of the ${coverage.checked} first-parent production tips checked, back to ${coverage.horizon} (HEAD ${coverage.head.sha} at ${coverage.head.at}). A review that is queued or still running covers nothing yet, and Security Reviews are off or not running, so no scan covers production until they report again.`;
 }
 
 function formatFindings(findings, coverage) {
