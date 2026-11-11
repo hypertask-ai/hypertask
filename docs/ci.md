@@ -673,7 +673,7 @@ Exempt classes, and a pull request is exempt only when every changed file is in 
 
 An empty or unreadable diff fails. Any other file, including `src/**`, `e2e/**`, and `package.json`, needs a record.
 
-`browser-smoke-flags` already drives the disposable app at `http://127.0.0.1:3100` with `scripts/seed-browser-smoke.mjs` and `.github/scripts/verify-qa-premerge.mjs`. `scripts/driven-proof-record.cjs` keeps a record only when that drive passes, names a real feature-map page, and saves a screenshot. The record uses the same feature-map line, Cases section, PASS evidence file, and screenshot rule as `ship-check proof`. The Doctor line stays on the post-merge check, because it names the merge SHA. The drive never targets production. A preview URL can satisfy the checker later; this landing only produces the seeded record.
+`browser-smoke-flags` already drives the disposable app at `http://127.0.0.1:3100` with `scripts/seed-browser-smoke.mjs` and `.github/scripts/verify-qa-premerge.mjs`. Its existing `result.json` records the PR head. The checker reuses that artifact, feature-map journey selection and loopback guard; it accepts only a passing run for the changed feature, with passing cases and PNG screenshots. It requires the same feature-map, passing-case and screenshot facts as `ship-check proof`, without converting evidence into a second format. The Doctor line stays on the post-merge check, because it names the merge SHA. The drive never targets production. A preview URL can satisfy the checker later; this landing only produces the seeded record.
 
 The check replays pull requests 3076, 3067, 3066, 3062, 3058, 3050, 3044, and 3042 as file lists. Each touches the app and has no record, so each is red. Pull request 3066 is the kanban cleanup.
 

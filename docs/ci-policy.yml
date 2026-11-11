@@ -449,10 +449,10 @@ driven_proof:
   workflow: .github/workflows/ci-tests.yml
   job: driven-proof
   producer: browser-smoke-flags
-  record: scripts/driven-proof-record.cjs
+  record: verify-qa-premerge/result.json
   decide: scripts/driven-proof.cjs
   source: seeded browser-smoke stack at http://127.0.0.1:3100
-  preview: accepted by the checker, not produced in this landing
+  preview: not accepted in this landing
   production_drive: refused
   required: false
   report_only: true
@@ -466,14 +466,14 @@ driven_proof:
   empty_diff: fail
   proof:
     feature_map: ".claude/skills/verify-qa/reference/feature-map/<page>.md"
-    source: [seeded, preview]
+    source: [seeded]
     head: pull_request_head_sha
-    cases: PASS lines with one evidence file and no FAIL line
-    screenshot: non-empty png in the run folder
+    cases: nonempty steps with every pass true
+    screenshot: every listed screenshot exists with a PNG signature
   reuses:
     - .github/scripts/verify-qa-premerge.mjs
     - scripts/seed-browser-smoke.mjs
-  shared_with_ship_check_proof: [feature_map_line, cases_section, pass_evidence_file, screenshot]
+  shared_with_ship_check_proof: [feature_map, passing_cases, evidence_file, screenshot]
   not_shared: ship-check Doctor line names the merge sha and stays the post-merge check
   negative_replay: [3076, 3067, 3066, 3062, 3058, 3050, 3044, 3042]
 

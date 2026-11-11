@@ -2109,6 +2109,7 @@ jobs:
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
           reseed_status=$?
           if [ "$reseed_status" -eq 0 ]; then
+            export VERIFY_QA_HEAD="${{ github.event.pull_request.head.sha || github.sha }}"
             export VERIFY_QA_REPORT_ONLY=1
             export VERIFY_QA_BASE="$BASE_URL"
             export VERIFY_QA_STATE_FILE=e2e/smoke/.state/smoke-state.json
@@ -2125,6 +2126,10 @@ jobs:
               if [ "$control_status" -ne 0 ]; then
                 echo "::warning::verify-qa matched control exited ${control_status}; evidence is report-only"
               fi
+            fi
+            if grep -Eq '^(scripts/driven-proof\.cjs|tests/driven-proof\.test\.cjs)$' "$VERIFY_QA_CHANGED_FILES"; then
+              VERIFY_QA_NAMED_JOURNEY=inbox-cycle VERIFY_QA_OUT=verify-qa-premerge/driven-control \
+                timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
             fi
           else
             verify_qa_status=$reseed_status
@@ -2147,21 +2152,6 @@ jobs:
         if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
         run: |
           printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
-      - name: Write the driven-proof record
-        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          VERIFY_QA_OUT: verify-qa-premerge
-          DRIVEN_PROOF_OUT: driven-proof-record
-        run: node scripts/driven-proof-record.cjs || echo "driven-proof record was not written"
-      - name: Upload the driven-proof record
-        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: driven-proof-record
-          path: driven-proof-record/
-          if-no-files-found: ignore
-          retention-days: 7
       - name: Upload failing smoke screenshots
         if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -2592,10 +2582,8 @@ jobs:
 
   driven-proof:
     name: driven-proof
-    # HTPR-8938: red when a non-exempt change has no seeded drive record.
-    # Report-only. Not a need of browser-smoke, and not a required context.
     needs: [browser-smoke-flags]
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.browser-smoke-flags.result == 'success'
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -2606,16 +2594,23 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
           persist-credentials: false
-      - name: Download the seeded drive record
+      - name: Download the existing seeded drive evidence
         id: record
         continue-on-error: true
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
-          name: driven-proof-record
-          path: ${{ runner.temp }}/driven-proof-record
+          name: verify-qa-premerge
+          path: ${{ runner.temp }}/verify-qa-premerge
       - name: Require a drive record unless the diff is docs, tests, or CI
+        id: proof
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          DRIVEN_PROOF_RECORD: ${{ runner.temp }}/driven-proof-record
+          DRIVEN_PROOF_RECORD: ${{ runner.temp }}/verify-qa-premerge
         run: node scripts/driven-proof.cjs
+      - name: Prove a real seeded drive passes the checker
+        if: steps.proof.outputs.control_needed == 'true'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DRIVEN_PROOF_RECORD: ${{ runner.temp }}/verify-qa-premerge/driven-control
+        run: node scripts/driven-proof.cjs --control

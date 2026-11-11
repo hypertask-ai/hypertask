@@ -421,6 +421,7 @@ async function main() {
   const baseRaw = process.env.VERIFY_QA_BASE || process.env.BASE_URL || ''
   const result = {
     ticket: 'https://app.hypertask.ai/detail/project-4060/695',
+    head: process.env.VERIFY_QA_HEAD || null,
     featureMap: choice.featureMap,
     matchedPage: choice.matchedPage,
     journey: choice.journey,
