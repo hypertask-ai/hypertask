@@ -3,9 +3,13 @@
 ## Measurement boundary
 
 Baseline: 2026-11-10 03:30:16 UTC through 2026-11-11 03:30:16 UTC.
+After: 2026-11-11 08:05:32 UTC (installed revision) through the read at
+2026-11-11 13:58:00 UTC, 5.891 hours. Partial window: the 24-hour verdict is due
+2026-11-12 08:05:32 UTC.
 Source: `~/.local/state/gh-call-log/calls.tsv`, filtered to the `app` bucket,
 `hypertask-ai/hypertask`, `pr list`, and `--state open`.
-Rates below are logged command invocations divided by 24 hours. They are not
+Rates below are logged command invocations divided by the hours in each window.
+They are not
 GraphQL points or HTTP requests: `gh pr list` can paginate internally, and the
 log does not record success, response size, or GraphQL cost. Identical command
 signatures cannot distinguish the picker from the legacy drain tool.
@@ -13,22 +17,69 @@ signatures cannot distinguish the picker from the legacy drain tool.
 ## Before and after
 
 | Reader/signature family | Before invocations/hour | After invocations/hour | Change |
-| --- | ---: | --- | --- |
-| `fleet/pick` and `pr-drain-pick`, identical 1,000-PR rollup signature | 23.042 | Pending live measurement | Drain reuses the picker's complete snapshot while 0–120 seconds old |
-| `ship-claim`, all-base 300-PR metadata | 23.625 | Pending live measurement | REST backup for both open PRs and merged-ticket searches |
-| `fleet/slo-watch.py`, default-limit rollup | 15.208 | Pending live measurement | Unchanged; aggregate red state, not merge authorization |
-| Agent runtime collector, 60-PR rollup | 10.542 | Pending live measurement | Unchanged; names and timestamps exceed the picker snapshot |
-| Agent feed shared open-pulls metadata, 1,000 PRs | 7.792 | Pending live measurement | Unchanged; already omits rollups |
-| Agent cards collector, 100-PR rollup | 4.792 | Pending live measurement | Unchanged; needs named required checks |
-| CI Boss `ship-watch`, 100-PR rollup | 3.917 | Pending live measurement | Unchanged; needs check names and start times |
-| Poteto `flow_metrics.py`, 200-PR author metadata | 3.750 | Pending live measurement | Unchanged; already omits rollups |
+| --- | ---: | ---: | --- |
+| `fleet/pick` and `pr-drain-pick`, identical 1,000-PR rollup signature | 23.042 (553 calls) | 20.030 (118 calls) | −13%; drain reuses the picker's complete snapshot while 0–120 seconds old, the picker still produces it |
+| `ship-claim`, all-base 300-PR metadata | 23.625 (567 calls) | 19.860 (117 calls) | −16%; REST backup for both open PRs and merged-ticket searches |
+| `fleet/slo-watch.py`, default-limit rollup | 15.208 (365 calls) | 15.956 (94 calls) | Flat within noise; aggregate red state, not merge authorization |
+| Agent runtime collector, 60-PR rollup | 10.542 (253 calls) | 10.694 (63 calls) | Flat within noise; names and timestamps exceed the picker snapshot |
+| Agent feed shared open-pulls metadata, 1,000 PRs | 7.792 (187 calls) | 7.639 (45 calls) | Flat within noise; already omits rollups |
+| Agent cards collector, 100-PR rollup | 4.792 (115 calls) | 4.753 (28 calls) | Flat within noise; needs named required checks |
+| CI Boss `ship-watch`, 100-PR rollup | 3.917 (94 calls) | 4.074 (24 calls) | Flat within noise; needs check names and start times |
+| Poteto `flow_metrics.py`, 200-PR author metadata | 3.750 (90 calls) | 3.734 (22 calls) | Flat within noise; already omits rollups |
 
 The first row combines 553 calls; the claim row combines 567 calls across
 logged caller classes. These are signature totals, not unique executable counts.
 A shared-snapshot drain invocation makes zero PR-list calls, versus one command
 before. A missing, stale, future-dated, duplicate or malformed snapshot retains
-the original complete live read. There is no measured fleet-wide reduction yet.
-The picker remains the snapshot producer; this change does not extend its TTL.
+the original complete live read. The picker remains the snapshot producer; this
+change does not extend its TTL.
+
+## What the partial window shows
+
+Every family left unchanged by this ticket still reports its baseline rate, so
+the fleet total only fell from 101.7 to 96.9 invocations per hour (−4.7%) in the
+first 5.9 hours. The two families the ticket touched fell 13% and 16%; the six it
+left alone account for 46 of the 97 remaining calls per hour. `fleet/slo-watch.py`
+(16.0 per hour) is now the largest single open-PR list reader, and three agent
+feed collectors plus CI Boss `ship-watch` repeat the same production reads.
+Cutting the rate further means giving those readers a shared copy, not shrinking
+the picker TTL.
+
+No rate-limit claim hold appears in the picker park events or the runner logs
+between the install and this read.
+
+## Finish the 24-hour verdict
+
+Run this after 2026-11-12 08:05:32 UTC, then fill the after column for the full
+window and move HYCI-247 to Done only when no rate-limit hold appears in the
+same 24 hours:
+
+```sh
+python3 - <<'PY'
+import re, time, collections
+B0, B1, A0 = 1794281416, 1794367816, 1794384332
+A1 = int(time.time())
+sig = re.compile(r"[0-9]+")
+before, after = collections.Counter(), collections.Counter()
+for line in open("/home/valentin/.local/state/gh-call-log/calls.tsv", errors="replace"):
+    p = line.rstrip("\n").split("\t")
+    if len(p) != 6 or not p[0].isdigit():
+        continue
+    ts, c = int(p[0]), p[3]
+    if p[4] != "app" or p[2] != "pr" or not c.startswith("pr list"):
+        continue
+    if "hypertask-ai/hypertask" not in c or "--state open" not in c:
+        continue
+    if B0 <= ts < B1:
+        before[sig.sub("N", c)] += 1
+    elif ts >= A0:
+        after[sig.sub("N", c)] += 1
+bh, ah = (B1 - B0) / 3600, (A1 - A0) / 3600
+print("total before/h", round(sum(before.values()) / bh, 2), "after/h", round(sum(after.values()) / ah, 2))
+for s, n in before.most_common():
+    print(f"{n/bh:7.2f} -> {after.get(s, 0)/ah:7.2f}  {s[:100]}")
+PY
+```
 
 ## Reader inventory
 
@@ -83,4 +134,4 @@ After installation, the acceptance window is 24 hours without a rate-limit
 claim hold. Record the installed revision and start time, then compare the same
 log filters over the full following day. Inspect runner and picker logs for
 failed reads as well: fewer logged calls caused by failed work is not success.
-The post-installation rate column and 24-hour verdict remain pending until then.
+The after column covers the first 5.891 hours; the 24-hour verdict is still open.
