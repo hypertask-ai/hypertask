@@ -99,7 +99,7 @@ test("cleanup puts the microphone immediately before Send", () => {
   }
 });
 
-test("collapsed chat corners follow the cleanup flag", () => {
+test("collapsed chats keep four-pixel corners in both cleanup states", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
   const mobileContext = React.createContext(false);
@@ -115,7 +115,7 @@ test("collapsed chat corners follow the cleanup flag", () => {
     "./AI_Tiptap_Container": { AI_Tiptap_Container: () => null },
   });
   const render = () => renderToStaticMarkup(React.createElement(ChatWindow));
-  assert.match(render(), /rounded-t-lg/);
+  assert.match(render(), /rounded-t-\[4px\]/);
   cleanup = true;
   const html = render();
   assert.match(html, /rounded-t-\[4px\]/);

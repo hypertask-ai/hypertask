@@ -8,15 +8,17 @@ import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Ch
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { AI_Tiptap_Container } from "./AI_Tiptap_Container";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { Loader2, Sparkles, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
+import { HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8988-chat-window-layout";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 
 export const ChatWindow = ({ framed = false, primary = false }: { framed?: boolean; primary?: boolean } = {}) => {
+  const sideBySide = useFlag(HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG);
   const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const isMbl = useContext(MobileViewContext);
   const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover, runningSessionIds, chatWindows } =
@@ -41,11 +43,8 @@ export const ChatWindow = ({ framed = false, primary = false }: { framed?: boole
         ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "floating" : undefined}
         onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined}
         onClick={restoreChat}
-        className={cn("group flex items-center gap-2 border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-[0_-8px_30px_rgba(0,0,0,0.45)]", chatCleanupEnabled ? "rounded-t-[4px]" : "rounded-t-lg")}
+        className={cn("group flex items-center gap-2 border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-[0_-8px_30px_rgba(0,0,0,0.45)] rounded-t-[4px]", sideBySide && "shrink-0")}
       >
-        {!chatCleanupEnabled && (
-          <Sparkles size={14} className="text-hypertasks-ai-purple" strokeWidth={1.75} />
-        )}
         <span className="max-w-[160px] truncate text-meta font-medium">
           {currentSession?.title ?? "AI Chat"}
         </span>
@@ -90,7 +89,7 @@ export const ChatWindow = ({ framed = false, primary = false }: { framed?: boole
       }}
     >
       {shortcuts.modal}
-      <ChatHeader windowDrag={windowFramed} allowDocking={primary || !windowFramed} />
+      <ChatHeader windowDrag={windowFramed} allowDocking={(sideBySide && primary) || !windowFramed} />
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
       </div>

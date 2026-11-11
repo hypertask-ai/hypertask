@@ -73,7 +73,6 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
     minimized,
   } = chat;
   const sideBySide = useFlag(HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG);
-  const stackOwnsFloatingChat = sideBySide && chat.chatWindows?.enabled;
   const chatCleanup = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const dockMinimizedTab = chatCleanup && minimized && !showQuickTips;
   const idempotentChatOpen = useFlag(HTPR_8030_CHAT_OPEN_RACE_FLAG);
@@ -153,7 +152,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
             >
               <ChatWindow />
             </AppSheet>
-          ) : stackOwnsFloatingChat ? null : (
+          ) : sideBySide && chat.chatWindows?.enabled ? null : (
             <div
               className={cn(
                 "fixed right-[0.5rem] z-floating",

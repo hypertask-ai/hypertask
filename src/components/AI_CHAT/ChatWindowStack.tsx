@@ -17,12 +17,14 @@ const COLLAPSED_ROW_BOTTOM_PX = 68;
 const SecondaryChatWindow = memo(function SecondaryChatWindow({
   state,
   controller,
+  onFocus,
 }: {
   state: ChatWindowState;
   controller: ChatWindowsController;
+  onFocus: () => void;
 }) {
   const { id, sessionId } = state;
-  const focus = useCallback(() => controller.focus(id), [controller, id]);
+  const focus = useCallback(() => { onFocus(); controller.focus(id); }, [controller, id, onFocus]);
   const move = useCallback(
     (rect: { x: number; y: number; width: number; height: number }) => controller.resize(id, rect),
     [controller, id],
@@ -73,6 +75,9 @@ export default function ChatWindowStack({ userId }: { userId: number | null }) {
 
   const { viewport } = controller;
   const [primaryRect, setPrimaryRect] = useState<ChatWindowRect | null>(null);
+  const [primaryInFront, setPrimaryInFront] = useState(false);
+  const focusPrimary = useCallback(() => setPrimaryInFront(true), []);
+  const focusSecondary = useCallback(() => setPrimaryInFront(false), []);
   const count = windows.length + 1;
   useEffect(() => {
     if (sideBySide && viewport.width > 0) setPrimaryRect(tileChatWindowRect(0, count, viewport));
@@ -97,7 +102,8 @@ export default function ChatWindowStack({ userId }: { userId: number | null }) {
             minimized: false,
           }}
           viewport={viewport}
-          onFocus={() => {}}
+          onFocus={focusPrimary}
+          inFront={primaryInFront}
           onMove={movePrimary}
           onResize={movePrimary}
         >
@@ -105,12 +111,12 @@ export default function ChatWindowStack({ userId }: { userId: number | null }) {
         </ChatWindowFrame>
       )}
       {windows.map((state) => (
-        <SecondaryChatWindow key={state.id} state={state} controller={controller} />
+        <SecondaryChatWindow key={state.id} state={state} controller={controller} onFocus={focusSecondary} />
       ))}
       {(collapsed.length > 0 || (primaryVisible && chat.minimized)) && (
         <div
           data-chat-window-dock
-          className="fixed right-2 z-popup flex max-w-[calc(100vw-1rem)] flex-wrap items-center justify-end gap-1"
+          className={`fixed right-2 z-popup flex max-w-[calc(100vw-1rem)] items-center gap-1 ${sideBySide ? "flex-nowrap overflow-x-auto" : "flex-wrap justify-end"}`}
           style={{ bottom: sideBySide ? 0 : COLLAPSED_ROW_BOTTOM_PX }}
         >
           {primaryVisible && chat.minimized && <ChatWindow />}
@@ -119,7 +125,7 @@ export default function ChatWindowStack({ userId }: { userId: number | null }) {
               key={state.id}
               type="button"
               onClick={() => controller.restore(state.id)}
-              className="group flex items-center gap-2 rounded-t-[4px] border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-customshadow-4"
+              className="group flex shrink-0 items-center gap-2 rounded-t-[4px] border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-customshadow-4"
             >
               <span className="max-w-[160px] truncate text-meta font-medium">
                 {state.title ?? "AI chat"}

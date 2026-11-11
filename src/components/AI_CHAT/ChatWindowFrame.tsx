@@ -12,6 +12,7 @@ export function ChatWindowFrame({
   onFocus,
   onMove,
   onResize,
+  inFront = false,
   children,
 }: {
   state: ChatWindowState;
@@ -19,6 +20,7 @@ export function ChatWindowFrame({
   onFocus: () => void;
   onMove: (rect: ChatWindowRect) => void;
   onResize: (rect: ChatWindowRect) => void;
+  inFront?: boolean;
   children: React.ReactNode;
 }) {
   const sideBySide = useFlag(HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG);
@@ -102,6 +104,7 @@ export function ChatWindowFrame({
         width: state.width,
         height: state.height,
         display: state.minimized ? "none" : undefined,
+        zIndex: sideBySide && inFront ? "calc(var(--z-popup) + 1)" : undefined,
       }}
       onPointerDown={startDrag}
     >

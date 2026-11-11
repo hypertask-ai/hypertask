@@ -577,21 +577,15 @@ message merely to verify navigation.
 
 ### Floating window layout
 
-With `htpr-8334-multi-chat-windows` and `htpr-8988-chat-window-layout`
-reaching QA, open chat on Sandbox 7049. In sidebar mode, New chat
-replaces the sidebar conversation; Ctrl+Shift+O must not open a floating
-window. Choose Floating window, then open two more conversations.
-Count three top-level frames and compare their bounding rectangles: no
-pair may intersect at 1920x1032. At narrower desktop sizes, additional
-rows keep every frame inside the screen without intersection.
-
-Drag and resize each window independently. The primary window retains
-its Sidebar menu action; choosing it removes extra windows without
-deleting their conversations. Minimize all three windows: their restore
-buttons share one flex row at the screen bottom, outside the frames.
-Restore and close each separately; untouched conversations remain. Reload
-and check the saved secondary conversations still open without overlap.
-Capture both modes, minimized/restore and phone at 390x844 in Light,
-AMOLED and Graphite 2. Compare with the ticket's failure captures, not an
-invented Figma frame. Layout-flag Off retains the old single primary panel
-and legacy secondary positions. No model reply is needed for this check.
+With `htpr-8334-multi-chat-windows` and `htpr-8988-chat-window-layout`,
+open chat on Sandbox 7049. Sidebar New chat and Ctrl+Shift+O must
+stay in the sidebar. Choose Floating window, then add two chats.
+Three top-level frames must not intersect at 1920x1032; narrower
+screens use rows. Drag, resize, close and focus each independently.
+The primary retains Sidebar; choosing it removes extra windows,
+not their conversations. Minimized restore buttons share one bottom
+row, scrolling horizontally when full. Restore each, then reload:
+saved secondary conversations must remain without overlap. Record both
+modes and phone at 390x844 in Light, AMOLED and Graphite 2, comparing
+with failure captures, not an invented frame. Layout-flag Off keeps
+the old primary panel and legacy positions. No model reply is needed.
