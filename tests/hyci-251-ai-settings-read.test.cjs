@@ -39,6 +39,7 @@ function fixture(options = {}) {
     "@/utils/controllers/teams/getTeamAiSettingsForViewer": {
       getTeamAiSettingsForViewer: async (userId, accountId, teamId) => {
         viewerCalls.push({ userId, accountId, teamId });
+        if (options.viewerThrow) throw new Error("settings read failed");
         return options.viewerRefusal ?? {
           ok: true,
           settings: { providers: { openai: true, anthropic: false } },
@@ -136,4 +137,17 @@ test("a team-scoped token cannot read another team", async () => {
 test("the legacy shape stays when the state flag is off", async () => {
   const body = await (await fixture({ stateFlag: false }).get()).json();
   assert.deepEqual(Object.keys(body).sort(), ["checkedAt", "models", "success"]);
+});
+
+test("a failed settings read keeps the canary rows and says the settings are unreadable", async () => {
+  const f = fixture({ viewerThrow: true });
+  const response = await f.get();
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.equal(body.state, "disabled");
+  assert.equal(body.settings.unreadable, true);
+  assert.equal(body.settings.teamId, null);
+  assert.deepEqual(body.settings.providers, []);
+  assert.equal(body.settings.jev.flag, "htpr-9046-jev-duplicate-hint");
 });

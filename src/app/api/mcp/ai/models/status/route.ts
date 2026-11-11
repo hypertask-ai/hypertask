@@ -41,39 +41,50 @@ async function readSettings(ctx: AuthContext, request: NextRequest) {
     model: DUPLICATE_DECISION_MODEL_SLUG,
     enabled: jevEnabled,
   };
-  const teamId = await resolveTeamId(
-    ctx,
-    request.nextUrl.searchParams.get("team_id")?.trim() || null,
-  );
-  if (!teamId) return { teamId: null, gateway: null, jev };
+  try {
+    const teamId = await resolveTeamId(
+      ctx,
+      request.nextUrl.searchParams.get("team_id")?.trim() || null,
+    );
+    if (!teamId) return { teamId: null, gateway: null, jev };
 
-  const account = await prisma.user.findUnique({
-    where: { id: ctx.user.id },
-    select: { accountId: true },
-  });
-  const lookup = await getTeamAiSettingsForViewer(
-    ctx.user.id,
-    account?.accountId ?? undefined,
-    teamId,
-  );
-  if (!lookup.ok) return { teamId: null, gateway: null, jev };
+    const account = await prisma.user.findUnique({
+      where: { id: ctx.user.id },
+      select: { accountId: true },
+    });
+    const lookup = await getTeamAiSettingsForViewer(
+      ctx.user.id,
+      account?.accountId ?? undefined,
+      teamId,
+    );
+    if (!lookup.ok) return { teamId: null, gateway: null, jev };
 
-  const funding = await getTeamGatewayFunding({
-    trustedTeamId: teamId,
-    projectId: null,
-    userId: ctx.user.id,
-    agentId: ctx.agentId,
-    teamScope: ctx.teamScope,
-  }).catch(() => undefined);
+    const funding = await getTeamGatewayFunding({
+      trustedTeamId: teamId,
+      projectId: null,
+      userId: ctx.user.id,
+      agentId: ctx.agentId,
+      teamScope: ctx.teamScope,
+    }).catch(() => undefined);
 
-  return {
-    teamId,
-    gdprSafeMode: isGdprSafeModeEnabled(lookup.settings),
-    ownKeyOnly: isOwnKeyOnlySettings(lookup.settings),
-    providers: providerRows(lookup.settings),
-    gateway: { configured: Boolean(funding), source: funding?.source ?? null },
-    jev,
-  };
+    return {
+      teamId,
+      gdprSafeMode: isGdprSafeModeEnabled(lookup.settings),
+      ownKeyOnly: isOwnKeyOnlySettings(lookup.settings),
+      providers: providerRows(lookup.settings),
+      gateway: { configured: Boolean(funding), source: funding?.source ?? null },
+      jev,
+    };
+  } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI settings read failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/models/status",
+      source: "handled",
+      extra: { stage: "settings" },
+    });
+    return { teamId: null, gateway: null, providers: [], jev, unreadable: true };
+  }
 }
 
 export const GET = wrapMcpRoute(async (request: NextRequest) => {
