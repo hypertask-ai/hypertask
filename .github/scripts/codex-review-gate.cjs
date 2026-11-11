@@ -60,7 +60,7 @@ function codeReviewStateFor(comments, headOid) {
     if (!raw) continue;
     try {
       const state = JSON.parse(raw).code_review;
-      if (state?.commit_sha === headOid) return { ...state, url: comment.url ?? '' };
+      if (state?.commit_sha === headOid) return { ...state, url: comment.url ?? '', updatedAt: comment.updatedAt };
     } catch {
       continue;
     }
@@ -71,12 +71,12 @@ function codeReviewStateFor(comments, headOid) {
 const CLEAN_RECEIPT = /Didn['’]t find any major issues[\s\S]{0,500}?Reviewed commit:\**\s*`([0-9a-f]{10,40})`/i;
 
 function cleanHeadReceipt(comments, headOid) {
-  for (const comment of comments ?? []) {
+  for (const comment of [...(comments ?? [])].sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))) {
     if (!isCodex(comment.author)) continue;
     const match = CLEAN_RECEIPT.exec(String(comment.body ?? ''));
-    if (match && headOid.startsWith(match[1])) return comment.url ?? '';
+    if (match && headOid.startsWith(match[1])) return comment;
   }
-  return '';
+  return null;
 }
 
 function evaluate(pr) {
@@ -84,19 +84,26 @@ function evaluate(pr) {
   const codexReviews = pr.reviews.filter(review => isCodex(review.author));
   const headReviews = codexReviews.filter(review => review.commit === pr.headOid);
   const staleReviews = codexReviews.filter(review => review.commit !== pr.headOid);
-  const remappedBodies = staleReviews.flatMap(review => review.comments.filter(
-    comment => commentCommit(comment, review) === pr.headOid)).map(commentBody);
   const summary = codeReviewStateFor(pr.comments, pr.headOid);
-  const receiptUrl = cleanHeadReceipt(pr.comments, pr.headOid);
+  const receipt = cleanHeadReceipt(pr.comments, pr.headOid);
+  const receiptUrl = receipt?.url ?? '';
   const summaryClean = summary?.status === 'completed' && (
     summary.has_any_findings === false || summary.has_unresolved_findings === false);
-  const headReviewed = headReviews.length > 0 || summaryClean || (summary?.status === 'completed' && Boolean(receiptUrl));
-  const unreadStale = !headReviewed && staleReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
+  const reviewedAt = Math.max(0, ...[
+    ...headReviews.map(review => review.submittedAt),
+    summaryClean ? summary.updatedAt : null,
+    summary?.status === 'completed' ? receipt?.createdAt : null,
+  ].map(value => Date.parse(value) || 0));
+  const unclearedReviews = staleReviews.filter(review =>
+    !(Date.parse(review.submittedAt) > 0 && Date.parse(review.submittedAt) < reviewedAt));
+  const remappedBodies = unclearedReviews.flatMap(review => review.comments.filter(
+    comment => commentCommit(comment, review) === pr.headOid)).map(commentBody);
+  const unreadStale = unclearedReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
 
   const rawBlocking = headReviews.flatMap(review => review.comments.length
     ? review.comments.map(commentBody).filter(blocks)
     : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : [])
-    .concat(headReviewed ? [] : remappedBodies.filter(blocks), unreadStale ? [UNREAD] : []);
+    .concat(remappedBodies.filter(blocks), unreadStale ? [UNREAD] : []);
   const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   if (blocking.length) {
     const levels = blocking.map(priorityOf);
@@ -114,7 +121,7 @@ function evaluate(pr) {
       evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
-  if (headReviews.length || (!headReviewed && remappedBodies.length)) {
+  if (headReviews.length || remappedBodies.length) {
     return {
       state: 'success',
       description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
@@ -156,8 +163,8 @@ query($owner: String!, $name: String!, $after: String) {
       nodes {
         number isDraft isCrossRepository headRefOid
         commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
-        comments(last: 100) { nodes { author { login } url body } }
+        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body submittedAt commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
+        comments(last: 100) { nodes { author { login } url body createdAt updatedAt } }
       }
     }
   }
@@ -181,7 +188,7 @@ async function run({ github, context, core }) {
       headOid: node.headRefOid,
       statusContexts: head?.status?.contexts ?? [],
       reviews: node.reviews.nodes.map(review => ({
-        author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid,
+        author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid, submittedAt: review.submittedAt,
         comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => ({ body: comment.body ?? '', commit: comment.commit?.oid })).concat(review.comments.pageInfo.hasNextPage ? [UNREAD] : []),
       })),
       comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
