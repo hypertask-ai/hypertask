@@ -80,21 +80,13 @@ test('collector advances to the hosted end, not wall clock; replay cannot recoun
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('invalid source coverage start cannot advance a collector checkpoint', async () => {
-  for (const start of ['invalid', '2026-11-09T00:00:00.000Z', '2026-11-11T00:00:00.000Z']) {
-    const root = mkdtempSync(join(tmpdir(), 'hosted-start-'));
-    try {
-      assert.equal(await collect({ env: { HOME: root, PATH: '', ERROR_COLLECTOR_STATE_DIR: root }, now, sources: [{ name: 'vercel', fetch: async () => ({ events: [], cursor: null, until, since: start }) }] }), 1);
-      assert.throws(() => readFileSync(join(root, 'state.json')));
-    } finally { rmSync(root, { recursive: true, force: true }); }
-  }
-});
-
-test('invalid source end cannot advance a collector checkpoint', async () => {
-  for (const end of ['invalid', new Date(now + 1).toISOString(), '2026-11-09T00:00:00.000Z']) {
+test('invalid source coverage cannot advance a collector checkpoint', async () => {
+  const invalid = [{ until: 'invalid' }, { until: new Date(now + 1).toISOString() }, { until: '2026-11-09T00:00:00.000Z' },
+    { until, since: 'invalid' }, { until, since: '2026-11-09T00:00:00.000Z' }, { until, since: '2026-11-11T00:00:00.000Z' }];
+  for (const coverage of invalid) {
     const root = mkdtempSync(join(tmpdir(), 'hosted-invalid-'));
     try {
-      assert.equal(await collect({ env: { HOME: root, PATH: '', ERROR_COLLECTOR_STATE_DIR: root }, now, sources: [{ name: 'vercel', fetch: async () => ({ events: [], cursor: null, until: end }) }] }), 1);
+      assert.equal(await collect({ env: { HOME: root, PATH: '', ERROR_COLLECTOR_STATE_DIR: root }, now, sources: [{ name: 'vercel', fetch: async () => ({ events: [], cursor: null, ...coverage }) }] }), 1);
       assert.throws(() => readFileSync(join(root, 'state.json')));
     } finally { rmSync(root, { recursive: true, force: true }); }
   }
