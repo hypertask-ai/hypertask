@@ -25,10 +25,10 @@ import { AuthedUser, ProviderId } from "@/lib/ai/chatStream/types";
 
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { resolveModelSelection, selectionFromModelOption, ModelSelection, defaultModelSelection, selectModel } from "@/lib/ai/chatStream/models";
-import type { AutoModelShadowTurn } from "@/lib/ai/jevAutoModelShadowRun";
+import type { AutoModelShadowTurn } from "@/lib/ai/jevAutoModelShadow";
 
 function startAutoModelShadow(turn: AutoModelShadowTurn) {
-  import("@/lib/ai/jevAutoModelShadowRun")
+  import("@/lib/ai/jevAutoModelShadow")
     .then(({ shadowAutoModelTurnInBackground }) => shadowAutoModelTurnInBackground(turn))
     .catch(() => undefined);
 }

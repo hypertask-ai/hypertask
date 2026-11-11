@@ -3,12 +3,11 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
-const shadow = () => loadModule("src/lib/ai/jevAutoModelShadow.ts");
 const report = require(path.resolve(__dirname, "../scripts/jev-auto-model-shadow-report.cjs"));
 
 function runtime({ funding = { apiKey: "vck_fixture", source: "managed" }, answer = "standard 0.82", enabled = true } = {}) {
   const calls = [], writes = [], tasks = [];
-  const mod = loadModule("src/lib/ai/jevAutoModelShadowRun.ts", {
+  const mod = loadModule("src/lib/ai/jevAutoModelShadow.ts", {
     ai: { generateText: (input) => (calls.push(input), Promise.resolve({ text: answer })) },
     "@vercel/functions": { waitUntil: (task) => tasks.push(task) },
     "@/lib/flags": { isFeatureEnabled: async () => enabled },
@@ -28,7 +27,7 @@ const row = (index, overrides = {}) => ({ createdAt: new Date(Date.UTC(2026, 10,
 test("the flag, the prompt, Jev's answer and Auto's signals", () => {
   const definition = loadModule("src/lib/flags/definitions/htpr-9048-jev-auto-model-shadow.ts").default;
   assert.deepEqual([definition.key, definition.kind, definition.defaultMode], ["htpr-9048-jev-auto-model-shadow", "feature", "EVERYONE"]);
-  const { buildJevAutoModelPrompt, parseJevAutoModelGuess, tierForJevLevel, compareAutoModelTiers, autoModelTurnSignals } = shadow();
+  const { buildJevAutoModelPrompt, parseJevAutoModelGuess, tierForJevLevel, compareAutoModelTiers, autoModelTurnSignals } = runtime({ enabled: false }).mod;
   const prompt = buildJevAutoModelPrompt("  Fix   the\n export button  ");
   assert.match(prompt, /level <light\|standard\|high>/);
   assert.match(prompt, /REQUEST: Fix the export button$/);
