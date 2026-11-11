@@ -9,9 +9,9 @@ await withDeadline(12 * 60 * 1000, async () => {
   const sources = {};
   for (const service of ['vercel', 'vercel-5xx', 'realtime']) {
     try {
-      const events = await fetchVercel({ since, until, env: process.env }, service);
-      sources[service] = { since, until, events };
-      console.log(`${service}: ${events.length} events`);
+      const batch = await fetchVercel({ since, until, env: process.env, coverage: true }, service);
+      sources[service] = batch;
+      console.log(`${service}: ${batch.events.length} events`);
     } catch { console.error(`${service}: fetch failed; no coverage published`); }
   }
   if (!Object.keys(sources).length) throw new Error('all Vercel sources failed');
