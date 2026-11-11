@@ -30,13 +30,13 @@ export function parseEvents(rows, service = name) {
   if (!Array.isArray(rows)) throw new Error('invalid Vercel events');
   return rows.filter(row => service === 'realtime' ? realtimeFailure(row) : service === name ? !realtimeFailure(row) : Number(row.httpStatus) >= 500).map(row => {
     const event = {
-      service, board: service === 'realtime' ? 4060 : 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
+      service, board: service === 'realtime' ? 11514 : 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
       ...(service === 'vercel-5xx' ? { message: `HTTP ${row.httpStatus} ${row.requestMethod ?? ''} response`, stack: '', ticket: false } : messageParts(row.message)),
     };
-    if (service === name && infra.some(rule => rule(event))) event.board = 4060;
+    if (service === name && infra.some(rule => rule(event))) event.board = 11514;
     if (service === name && event.message.startsWith('[email-event]')) {
       event.service = 'email';
-      event.board = 4060;
+      event.board = 11514;
     }
     if (service === name && event.message.startsWith('[cli-error]')) {
       event.service = 'cli';
