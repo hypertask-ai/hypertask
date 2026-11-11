@@ -48,6 +48,6 @@ test("the chat rail toggles sections behind the flag and pins survive reload", (
   );
   assert.match(
     store,
-    /export const aiChatCollapsedRailSectionsAtom = atom<string\[\]>\(\{[\s\S]*?effects_UNSTABLE: \[persistAtom\],/,
+    /export const aiChatCollapsedRailSectionsAtom = atom<string\[\]>\(\{[\s\S]*?default: \["Older"\],[\s\S]*?effects_UNSTABLE: \[persistAtom\],/,
   );
 });
