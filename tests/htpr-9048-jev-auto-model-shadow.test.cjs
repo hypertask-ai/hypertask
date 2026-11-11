@@ -56,30 +56,44 @@ test("the flag, the prompt, Jev's answer and Auto's step-up signals", () => {
   assert.deepEqual([shadow.autoModelTurnSignals({ message: "next", history: long, longThreadMessages: 20 }).stepUp, resent.resent, resent.stepUp, shadow.autoModelTurnSignals({ message: "same", history: [...long.slice(1), { role: "human", content: "same" }], longThreadMessages: 20 }).stepUp, shadow.autoModelTurnSignals({ message: "```js", history: null, longThreadMessages: 20 }).stepUp], [1, true, 1, 2, 1]);
 });
 
-test("a managed turn logs one row next to Auto's level, and the skips make no call", async () => {
+test("a managed turn logs one row next to Auto's level", async () => {
   const managed = runtime();
   try {
     managed.mod.shadowAutoModelTurnInBackground(turn());
     await Promise.all(managed.tasks);
     const sent = JSON.parse(managed.calls[0].body);
     assert.deepEqual([managed.calls[0].url, sent.model, managed.calls[0].authorization, managed.writes[0].autoTier, managed.writes[0].jevLevel, managed.writes[0].jevTier, managed.writes[0].comparison, managed.writes[0].error], ["https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.14", "Bearer test-openrouter-key", 1, "standard", 2, "jev-higher", null]);
-    const customer = runtime({ funding: { apiKey: "vck_customer", source: "customer" } });
-    await customer.mod.shadowAutoModelTurn(turn());
-    const untied = runtime({ funding: null });
-    await untied.mod.shadowAutoModelTurn(turn({ teamId: null, projectId: null }));
-    const silent = runtime({ answer: "no idea" });
-    const failed = runtime({ answer: null });
-    await failed.mod.shadowAutoModelTurn(turn());
-    await silent.mod.shadowAutoModelTurn(turn({ message: "fix ```js\nx\n```" }));
-    assert.deepEqual([customer.calls.length, customer.writes.length, untied.calls.length, untied.writes.length, silent.writes[0].jevLevel, silent.writes[0].error, silent.writes[0].error.includes("no idea"), failed.writes[0].error, failed.writes[0].jevLevel, silent.writes[0].autoTier], [0, 0, 0, 0, null, "no-level", false, "no-answer", null, 2]);
-    customer.restore();
-    untied.restore();
-    silent.restore();
-    failed.restore();
   } finally {
     managed.restore();
   }
 });
+
+for (const [name, options, input] of [
+  ["customer-funded", { funding: { apiKey: "vck_customer", source: "customer" } }, turn()],
+  ["untied", { funding: null }, turn({ teamId: null, projectId: null })],
+]) {
+  test(`a ${name} turn makes no shadow call or write`, async () => {
+    const skipped = runtime(options);
+    try {
+      await skipped.mod.shadowAutoModelTurn(input);
+      assert.deepEqual([skipped.calls.length, skipped.writes.length], [0, 0]);
+    } finally {
+      skipped.restore();
+    }
+  });
+}
+
+for (const [answer, error] of [["no idea", "no-level"], [null, "no-answer"]]) {
+  test(`a shadow ${error} stores only the error category`, async () => {
+    const failed = runtime({ answer });
+    try {
+      await failed.mod.shadowAutoModelTurn(turn({ message: "fix ```js\nx\n```" }));
+      assert.deepEqual([failed.calls.length, failed.writes.length, failed.writes[0].jevLevel, failed.writes[0].error, failed.writes[0].autoTier], [1, 1, null, error, 2]);
+    } finally {
+      failed.restore();
+    }
+  });
+}
 
 test("the shadow flag gate reads the ticket flag and refuses a turn with no user", async () => {
   const on = loadModule("src/app/api/ai/_lib/autoModelShadow.ts", { "@/lib/flags": { isFeatureEnabled: async () => true } });
