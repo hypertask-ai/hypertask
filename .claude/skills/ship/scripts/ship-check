@@ -837,12 +837,70 @@ if any(local_failure(statement) for statement in statements):
 PYCODE
 }
 
+open_observation_gate() {
+  python3 -c 'import html,json,re,sys
+try:
+    payload=json.loads(sys.stdin.read() or "{}")
+except json.JSONDecodeError:
+    sys.exit(1)
+task=(payload.get("tasks") or [{}])[0]
+open_words=r"\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b"
+negated=r"(?:\bno longer\b|\bnot\b|\bnever\b)\s+$"
+label=r"^(?:[-*\u2022]\s*)?(?:the\s+|this\s+|our\s+)?(?:full[- ]day\s+)?observation(?:\s+gate)?\b"
+def text_of(value):
+    return re.sub(r"\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",value))).strip()
+def open_item(source):
+    for match in re.finditer(r"<li\b([^>]*)>(.*?)(?=</li>|<li\b|</ul>|$)", source, re.I | re.S):
+        checked=re.search(r"data-checked\s*=\s*[\"\x27]?([a-z]+)", match.group(1), re.I)
+        if not checked or checked.group(1).lower() == "true":
+            continue
+        label_text=text_of(match.group(2))
+        if re.search(r"\bobservation\b", label_text, re.I):
+            return label_text
+    return None
+def open_line(source):
+    blocks=re.sub(r"<\s*br\s*/?\s*>", "\n", source, flags=re.I)
+    blocks=re.sub(r"</\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>", "\n", blocks, flags=re.I)
+    for line in re.split(r"\n", re.sub(r"<[^>]+>", " ", blocks)):
+        line=re.sub(r"\s+"," ",html.unescape(line)).strip()
+        match=re.match(label, line, re.I)
+        if not match:
+            continue
+        clause=re.split(r"[.;,]", line[match.end():])[0]
+        for word in re.finditer(open_words, clause, re.I):
+            if not re.search(negated, line[:match.end() + word.start()], re.I):
+                return line
+    return None
+def gates(source):
+    found=[]
+    for label_text in (open_item(source), open_line(source)):
+        if label_text and label_text not in found:
+            found.append(label_text)
+    return found
+found=[]
+for source in (str(task.get(key) or "") for key in ("description","acceptanceCriteria")):
+    for gate in gates(source):
+        if gate not in found:
+            found.append(gate)
+if not found:
+    sys.exit(1)
+print(" and ".join(found))
+'
+}
+
+check_observation_gate() {
+  local t=$1 payload=$2 labels
+  labels=$(printf "%s" "$payload" | open_observation_gate) || return 0
+  fail "$t has an unfinished full-day observation gate: $labels"
+}
+
 check_move() {
-  local ref=${1:-} section=${2:-} project=${3:-} destination=${4:-} t rc
+  local ref=${1:-} section=${2:-} project=${3:-} destination=${4:-} t rc payload
   local -a args=(tasks get "$ref" --json)
   [ -z "$project" ] || args+=(--project "$project")
-  t=$(hypertask "${args[@]}" 2>/dev/null | jq -er --arg prefixes "^($PREFIXES)-[0-9]+$" \
-    '.tasks | select(length == 1) | .[0].ticketNumber | select(test($prefixes))') || fail "cannot resolve ticket $ref for completion checks"
+  payload=$(hypertask "${args[@]}" 2>/dev/null) || fail "cannot resolve ticket $ref for completion checks"
+  t=$(jq -er --arg prefixes "^($PREFIXES)-[0-9]+$" \
+    '.tasks | select(length == 1) | .[0].ticketNumber | select(test($prefixes))' <<<"$payload") || fail "cannot resolve ticket $ref for completion checks"
   local title="$section" board=${destination:-$project}
   if [[ $section =~ ^[0-9]+$ ]]; then
     [ -n "$board" ] || board=$(hypertask tasks get "$t" --json | jq -er '.tasks[0].boardId // .tasks[0].projectId') \
@@ -855,6 +913,7 @@ check_move() {
   is_done_section "$t" "$section" "${destination:-$project}"; rc=$?
   [ "$rc" != 3 ] || fail "cannot resolve destination column $section; refusing section change"
   if [ "$rc" = 0 ]; then
+    check_observation_gate "$t" "$payload"
     local explicit=false explicit_base=false
     [ "${SHIP_REPO+x}" != x ] || explicit=true
     [ "${SHIP_BASE+x}" != x ] || explicit_base=true
@@ -885,12 +944,14 @@ is_done_section() {
 }
 
 check_done() {
-  local section rc
-  section=$(hypertask tasks get "$1" --json 2>/dev/null | jq -r '.tasks[0].section // empty')
+  local payload section rc
+  payload=$(hypertask tasks get "$1" --json 2>/dev/null) || payload=''
+  section=$(jq -r '.tasks[0].section // empty' <<<"$payload" 2>/dev/null || true)
   [ -n "$section" ] || fail "cannot read the section of $1"
   is_done_section "$1" "$section"; rc=$?
   [ "$rc" = 3 ] && fail "cannot match \"$section\" against the columns of the board holding $1; retry when the board answers"
   [ "$rc" = 0 ] || fail "$1 is in \"$section\", which is not the board's done column"
+  check_observation_gate "$1" "$payload"
   echo "done ok"
 }
 
