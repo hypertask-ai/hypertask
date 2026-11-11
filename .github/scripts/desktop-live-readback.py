@@ -33,20 +33,16 @@ CHILD_ENV_KEYS = (
     "SYSTEMROOT",
 )
 
-
 def fail(message):
     print(f"::error::{message}")
     raise SystemExit(1)
 
-
 def production_dispatch(ref):
     return ref == "refs/heads/production"
-
 
 def mask(value):
     if value:
         print(f"::add-mask::{value}")
-
 
 def request(method, url, body=None, headers=None):
     data = None if body is None else json.dumps(body).encode()
@@ -56,7 +52,6 @@ def request(method, url, body=None, headers=None):
             return response.status, response.headers, response.read()
     except urllib.error.HTTPError as error:
         return error.code, error.headers, error.read()
-
 
 def cookie_header(headers):
     values = headers.get_all("Set-Cookie") if hasattr(headers, "get_all") else None
@@ -70,13 +65,11 @@ def cookie_header(headers):
             pairs.append(pair)
     return "; ".join(pairs)
 
-
 def redact(text, secrets):
     for secret in secrets:
         if secret:
             text = text.replace(secret, "[redacted]")
     return text
-
 
 def safe_lines(text):
     kept = []
@@ -84,7 +77,6 @@ def safe_lines(text):
         if any(marker in line for marker in (*MARKERS, "LIVE_READBACK", "INBOX_EMPTY", "API ", "cli ", "queued", "SystemExit")):
             kept.append(line[:300])
     return "\n".join(kept[-40:])
-
 
 def contains_id(value, wanted):
     if isinstance(value, dict):
@@ -94,7 +86,6 @@ def contains_id(value, wanted):
     if isinstance(value, list):
         return any(contains_id(item, wanted) for item in value)
     return False
-
 
 def choose_board(projects):
     if not isinstance(projects, list):
@@ -110,7 +101,6 @@ def choose_board(projects):
         if project_id == SANDBOX_BOARD_ID and project.get("title") == SANDBOX_TITLE:
             return str(project_id)
     return None
-
 
 def self_check():
     archived = [{"id": 2069, "title": "Old board", "status": "Archive"}]
@@ -161,7 +151,6 @@ def self_check():
         fail("missing login did not fail closed")
     print("board selection passed")
 
-
 def matching_task(payload, task_id):
     task = payload.get("task")
     if isinstance(task, dict) and str(task.get("id")) == task_id:
@@ -172,7 +161,6 @@ def matching_task(payload, task_id):
             if isinstance(item, dict) and str(item.get("id")) == task_id:
                 return item
     return None
-
 
 def task_still_present(status, raw, task_id):
     if status == 404:
@@ -187,7 +175,6 @@ def task_still_present(status, raw, task_id):
     if task is None:
         return False
     return task.get("status") != "Deleted"
-
 
 def sandbox_board(token):
     offset = 0
@@ -223,7 +210,6 @@ def sandbox_board(token):
         offset += len(projects)
     fail("QA sandbox board is not available")
 
-
 def main():
     if "--self-check" in sys.argv[1:]:
         self_check()
@@ -234,7 +220,6 @@ def main():
         fail("not tested: QA login is missing")
     if not production_dispatch(os.environ.get("GITHUB_REF", "")):
         fail("desktop readback runs only from production")
-
     status, headers, raw = request(
         "POST",
         APP + "/api/auth/qa-login",
@@ -249,12 +234,10 @@ def main():
         fail("QA login returned a non-JSON body")
     if not isinstance(payload, dict) or payload.get("success") is not True:
         fail("QA login refused")
-
     session = cookie_header(headers)
     if not session:
         fail("QA login returned no session")
     mask(session)
-
     status, _, raw = request(
         "POST",
         APP + "/api/mcp/token",
@@ -277,7 +260,6 @@ def main():
     mask(token)
     board = sandbox_board(token)
     print(f"API board {board}")
-
     cli = os.path.abspath("desktop/target/release/ht-core-cli")
     script = os.path.abspath("desktop/gates/live-readback.py")
     if not os.path.isfile(cli) or not os.path.isfile(script):
@@ -290,7 +272,6 @@ def main():
     )
     if revision.stdout.strip() != DESKTOP_SHA:
         fail("desktop checkout is not the reviewed commit")
-
     child = {key: os.environ[key] for key in CHILD_ENV_KEYS if key in os.environ}
     child["HT_TOKEN"] = token
     child["HT_BOARD"] = board
@@ -317,7 +298,6 @@ def main():
     if len(task_ids) != 1 or len(note_ids) != 1:
         fail("readback ids were not singular")
     task_id, note_id = task_ids[0], note_ids[0]
-
     def api(method, path):
         return request(
             method,
@@ -328,7 +308,6 @@ def main():
                 "Content-Type": "application/json",
             },
         )
-
     status, _, raw = api("GET", f"/tasks?task_id={task_id}")
     if task_still_present(status, raw, task_id):
         seen = ""
@@ -351,7 +330,6 @@ def main():
     print("TASK_CLEANED")
     print("INBOX_RESTORED")
     print("DESKTOP_READBACK_PASSED")
-
 
 if __name__ == "__main__":
     main()
