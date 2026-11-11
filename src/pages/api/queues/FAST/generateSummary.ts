@@ -24,14 +24,21 @@ function buildJobId(taskId: number) {
   return "ai-summary-for-taskId:" + taskId;
 }
 
+function summaryOwnerUserId(req: IReq): number | null {
+  if (typeof req.ownerUserId === "number") return req.ownerUserId;
+  if (typeof req.activityOnlyOwnerId === "number") return req.activityOnlyOwnerId;
+  return null;
+}
+
 export default async function scheduleTaskSummaryGeneration(req: IReq) {
   const { taskId, agentId } = req;
-  if (!(typeof agentId === "string" && agentId.length > 0) || !(await isFeatureEnabled("htpr-8904-agent-automatic-ai", req.ownerUserId ?? 0))) {
+  const ownerUserId = summaryOwnerUserId(req);
+  if (await taskSummaryOnViewEnabled(ownerUserId)) {
+    if (await markTaskSummaryStale(taskId)) return;
+  }
+  if (!(typeof agentId === "string" && agentId.length > 0) || !(await isFeatureEnabled("htpr-8904-agent-automatic-ai", ownerUserId ?? 0))) {
     if (req.activityOnlyOwnerId) {
       if (await isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, req.activityOnlyOwnerId)) return;
-    }
-    if (await taskSummaryOnViewEnabled(req.ownerUserId)) {
-      if (await markTaskSummaryStale(taskId)) return;
     }
     const runAt = new Date(new Date().getTime() + 5 * 60000);
 

@@ -7,8 +7,28 @@ const queuePath = "/api/queues/FAST/generateSummaryQueue";
 function memoryRedis() {
   const values = new Map();
   const ttls = new Map();
+  const pipeline = () => {
+    const queued = [];
+    return {
+      incr(key) {
+        queued.push(key);
+        return this;
+      },
+      exec: async () => {
+        const results = [];
+        for (const key of queued) {
+          const next = (Number(values.get(key)) || 0) + 1;
+          values.set(key, String(next));
+          results.push([null, next]);
+        }
+        return results;
+      },
+    };
+  };
   return {
     values,
+    ttls,
+    pipeline,
     incr: async (key) => {
       const next = (Number(values.get(key)) || 0) + 1;
       values.set(key, String(next));
@@ -33,14 +53,15 @@ function memoryRedis() {
   };
 }
 
-function harness({ enabledFor = [] } = {}) {
+function harness({ enabledFor = [], extraFlags = [] } = {}) {
   const jobs = [];
   const redis = memoryRedis();
   const flagChecks = [];
   const flags = {
     isFeatureEnabled: async (key, userId) => {
       flagChecks.push({ key, userId });
-      return key === flagKey && enabledFor.includes(userId);
+      if (key === flagKey) return enabledFor.includes(userId);
+      return extraFlags.includes(key);
     },
   };
   const qstash = {
@@ -73,6 +94,45 @@ test("a burst of changes marks the summary out of date and starts no AI run", as
   }
   assert.equal(h.jobs.length, 0);
   assert.equal(h.redis.values.get("ai-summary:stale:42"), "10");
+  assert.equal(h.redis.ttls.size, 0, "the out-of-date mark stays until a summary refreshes");
+});
+
+test("an agent-authored change still marks the summary out of date", async () => {
+  const h = harness({ enabledFor: [6], extraFlags: ["htpr-8904-agent-automatic-ai"] });
+  await h.scheduler({ taskId: 45, ownerUserId: 6, agentId: "agent-1" });
+  assert.equal(h.jobs.length, 0);
+  assert.equal(h.redis.values.get("ai-summary:stale:45"), "1");
+});
+
+test("a change that passes only the activity owner still uses the switch", async () => {
+  const h = harness({ enabledFor: [6] });
+  await h.scheduler({ taskId: 46, activityOnlyOwnerId: 6 });
+  assert.equal(h.jobs.length, 0);
+  assert.equal(h.redis.values.get("ai-summary:stale:46"), "1");
+});
+
+test("a checkout marks the team's tickets out of date and creates no summary job", async () => {
+  const h = harness({ enabledFor: [6] });
+  const asked = [];
+  const seed = loadModule("src/app/api/ai/_lib/taskSummaryCheckoutSeed.ts", {
+    "@/lib/prisma": {
+      __esModule: true,
+      default: {
+        task: {
+          findMany: async (args) => {
+            asked.push(args);
+            return [{ id: 51 }, { id: 52 }, { id: 53 }];
+          },
+        },
+      },
+    },
+    "@/app/api/ai/_lib/taskSummaryFreshness": h.freshness,
+  });
+  assert.equal(await seed.seedTeamSummaryRefreshesOnCheckout("team-1"), 3);
+  assert.deepEqual(asked[0].where.project, { teamId: "team-1" });
+  assert.equal(h.redis.values.get("ai-summary:stale:51"), "1");
+  assert.equal(h.redis.values.get("ai-summary:stale:53"), "1");
+  assert.equal(h.jobs.length, 0);
 });
 
 test("opening a ticket with nothing changed starts no run", async () => {

@@ -163,6 +163,19 @@ const sessionOnSuccess = async (
 
     if (await shouldPregenerateTeamSummariesOnCheckout(team.googleAccount.userId)) {
       generateSummaryAfterUpsertionReminder(team.id);
+    } else {
+      try {
+        const { seedTeamSummaryRefreshesOnCheckout } = await import(
+          "@/app/api/ai/_lib/taskSummaryCheckoutSeed"
+        );
+        await seedTeamSummaryRefreshesOnCheckout(team.id);
+      } catch (error) {
+        console.error(
+          "[stripe] Could not mark team summaries out of date for team",
+          team.id,
+          error,
+        );
+      }
     }
     assertHeld();
     await completePendingStripeCancellation(storedPlan, assertHeld);

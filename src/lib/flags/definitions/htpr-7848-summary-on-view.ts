@@ -8,7 +8,7 @@ export default {
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-11",
   description:
-    "Ticket changes only mark the AI summary out of date. The summary runs when someone opens the ticket, at most once a minute per ticket, and a Stripe checkout starts none. Off restores the scheduled runs.",
+    "Ticket changes only mark the AI summary out of date. The summary runs when someone opens the ticket, at most once a minute per ticket. A Stripe checkout marks the team's tickets out of date instead of generating summaries. Off restores the scheduled runs.",
   releaseRisk: {
     risk: "new",
     reason:
