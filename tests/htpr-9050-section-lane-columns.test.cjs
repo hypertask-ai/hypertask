@@ -122,6 +122,29 @@ test('flag off keeps the bare update refusal agents saw before', async () => {
   });
 });
 
+test('a valid column still moves the task without loading refusal hints', async (t) => {
+  const seen = [];
+  const { updateTaskSection } = loadUpdate(loadLookup(boardColumns, seen), true);
+  const context = updateContext();
+  context.sectionInfo = { projectId: 15, section_title: 'In Review' };
+  context.requestBody.sectionId = 43;
+  const requests = [];
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  global.fetch = async (url, options) => {
+    requests.push({ url, body: JSON.parse(options.body) });
+    return { ok: true, json: async () => ({}) };
+  };
+  await updateTaskSection(context, task);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://app.hypertask.ai/api/tasks/moveTask');
+  assert.equal(requests[0].body.taskId, 1);
+  assert.equal(requests[0].body.projectId, 15);
+  assert.equal(requests[0].body.sectionId, 43);
+  assert.equal(requests[0].body.section_title, 'In Review');
+  assert.equal(seen.length, 0);
+});
+
 test('the flag ships for everyone as a bugfix', () => {
   const definition = load('src/lib/flags/definitions/htpr-9050-section-columns.ts', {});
   assert.equal(definition.HTPR_9050_SECTION_COLUMNS_FLAG, 'htpr-9050-section-columns');
