@@ -7,6 +7,14 @@ import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/projects/getAllIncludes';
 
+export const ticketNumberCaseVariants = (ticketNumber: string): string[] => [
+  ...new Set([ticketNumber, ticketNumber.toUpperCase(), ticketNumber.toLowerCase()]),
+];
+
+export const exactTicketNumberWhere = (ticketNumber: string): Prisma.TaskWhereInput => ({
+  ticketNumber: { in: ticketNumberCaseVariants(ticketNumber) },
+});
+
 export class TaskIdentifierAmbiguityError extends Error {
   readonly status = 400;
   readonly code = 'ambiguous_ticket_number';
@@ -76,12 +84,27 @@ export async function findTaskByIdentifier(
   const identityWhere = ticket_number
     ? { ticketNumber: { equals: ticket_number, mode: 'insensitive' as const }, ...(project_id ? { projectId: project_id } : {}) }
     : { projectId: project_id!, uniqueIndex: unique_index! };
-  const matches = await prisma.task.findMany({
-    where: { ...identityWhere, status: { not: 'Deleted' }, project: projectFilter },
-    select: { id: true, projectId: true },
-    orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
-    take: project_id ? 1 : 2,
-  });
+  const findMatches = (where: Prisma.TaskWhereInput) =>
+    prisma.task.findMany({
+      where,
+      select: { id: true, projectId: true },
+      orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
+      take: project_id ? 1 : 2,
+    });
+  let matches: { id: number; projectId: number }[] = [];
+  const scope = { status: { not: 'Deleted' as const }, project: projectFilter };
+  if (ticket_number) {
+    matches = await findMatches({
+      ...exactTicketNumberWhere(ticket_number),
+      ...(project_id ? { projectId: project_id } : {}),
+      ...scope,
+    });
+    if (matches.length === 0) {
+      matches = await findMatches({ ...identityWhere, ...scope });
+    }
+  } else {
+    matches = await findMatches({ ...identityWhere, ...scope });
+  }
   if (!project_id && matches.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
