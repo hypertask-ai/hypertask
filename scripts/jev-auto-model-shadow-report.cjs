@@ -37,7 +37,6 @@ function analyze(inputRows) {
   const counts = tally(answered);
   const retried = answered.filter((row) => row.retried);
   const retriedCounts = tally(retried);
-  const sure = answered.filter((row) => typeof row.jevConfidence === "number" && row.jevConfidence >= CONFIDENT);
   const changed = share(answered.length - counts.agree, answered.length);
   const shuffled = share(retriedCounts["jev-higher"], retried.length);
   const bars = [
@@ -51,7 +50,6 @@ function analyze(inputRows) {
     answered: answered.length,
     counts,
     retried: { count: retried.length, counts: retriedCounts },
-    sure: `${pct(share(tally(sure).agree, sure.length))} over ${sure.length} turns at ${CONFIDENT} or higher`,
     bars,
     verdict: bars.every((bar) => bar.pass) ? "KEEP" : "DROP",
   };
@@ -63,7 +61,7 @@ function renderReport(result) {
     "",
     `${result.rows} Auto chat turns logged, ${result.answered} with a Jev level. Jev guessed the level only; Auto's own pick answered every turn.`,
     `Jev agrees with Auto on ${pct(share(result.counts.agree, result.answered))}; it wanted higher on ${result.counts["jev-higher"]} and lower on ${result.counts["jev-lower"]}.`,
-    `Agreement when sure: ${result.sure}. Retried turns: ${result.retried.count} (${result.retried.counts["jev-higher"]} higher, ${result.retried.counts["jev-lower"]} lower).`,
+    `Retried turns: ${result.retried.count} (${result.retried.counts["jev-higher"]} higher, ${result.retried.counts["jev-lower"]} lower, ${result.retried.counts.agree} agree).`,
     "",
     "## Verdict",
     ...result.bars.map((bar) => `- ${bar.pass ? "PASS" : "FAIL"} ${bar.name}: ${bar.detail}`),
@@ -89,12 +87,7 @@ function main() {
 }
 
 if (require.main === module) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error.message);
-    process.exitCode = 1;
-  }
+  try { main(); } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
 
 module.exports = { MIN_ROWS, CONFIDENT, analyze, renderReport, markRetries, comparisonOf };
