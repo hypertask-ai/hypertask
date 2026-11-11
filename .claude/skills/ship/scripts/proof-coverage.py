@@ -7,6 +7,14 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
+
+
+ACCEPTANCE_HEADINGS = {
+    'done when', 'acceptance', 'acceptance criteria', 'akzeptanzkriterien',
+    "critères d'acceptation", 'critères d’acceptation', 'criterios de aceptación',
+    'acceptatiecriteria',
+}
 
 
 def require(condition, message):
@@ -27,15 +35,16 @@ def normalize(text):
 
 
 class TicketItems(HTMLParser):
-    def __init__(self):
+    def __init__(self, structured=False):
         super().__init__()
+        self.structured = structured
         self.lines, self.text, self.bullets, self.heading = [], '', [], False
 
     def flush(self, heading=False):
         if self.text.strip():
             text = normalize(self.text)
-            label = re.match(r'^([A-Za-z][A-Za-z ]{0,40}):', text)
-            heading = heading or text.lower() in {'done when', 'acceptance', 'acceptance criteria'}
+            label = None if self.structured else re.match(r'^([A-Za-z][A-Za-z ]{0,40}):', text)
+            heading = heading or text.lower().rstrip(':') in ACCEPTANCE_HEADINGS
             if heading or label:
                 self.lines.append('## ' + (label[1] if label else text))
             else:
@@ -90,16 +99,19 @@ def items(text, headings):
     return found
 
 
+def ticket_text(source, structured=False):
+    if '<' not in source:
+        return source
+    parser = TicketItems(structured)
+    parser.feed(source)
+    parser.flush()
+    return '\n'.join(parser.lines)
+
+
 def activities(ticket):
-    result = []
-    while True:
-        page = json.loads(call('ht', 'GET', f'/mcp/tasks/{ticket}/agent-activity?limit=100&offset={len(result)}'))
-        require(page.get('success') is True and isinstance(page.get('activities'), list), 'cannot read agent activity')
-        rows = page['activities']
-        require(not {r['id'] for r in result} & {r['id'] for r in rows}, 'agent activity pagination repeated rows')
-        result += rows
-        if len(rows) < 100:
-            return sorted(result, key=lambda r: r['createdAt'])
+    page = json.loads(call('hypertask', 'task', 'agent-log', ticket, '--limit', '100', '--json'))
+    require(page.get('success') is True and isinstance(page.get('activities'), list), 'cannot read agent activity')
+    return sorted(page['activities'], key=lambda r: r['createdAt'])
 
 
 def evidence(folder, relative):
@@ -118,14 +130,13 @@ def main():
     run = re.search(r'^Run: (\d{4}-\d{2}-\d{2}-qa-run-\d+)\s*$', text, re.M)[1]
     task = json.loads(call('hypertask', 'tasks', 'get', ticket, '--json'))
     require(task.get('success') is True and len(task['tasks']) == 1, 'cannot read ticket acceptance items')
-    description = task['tasks'][0]['description']
-    if '<' in description:
-        parser = TicketItems()
-        parser.feed(description)
-        parser.flush()
-        description = '\n'.join(parser.lines)
-    acceptance = items(description, {'done when', 'acceptance', 'acceptance criteria'})
-    require(acceptance, 'ticket has no acceptance bullets under Done when or Acceptance criteria')
+    task = task['tasks'][0]
+    acceptance = items(ticket_text(task.get('description') or ''), ACCEPTANCE_HEADINGS)
+    structured = ticket_text(task.get('acceptanceCriteria') or '', structured=True)
+    structured_items = [normalize(re.sub(r'^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s*)?', '', line))
+                        for line in structured.splitlines() if line.strip() and not line.startswith('#')]
+    acceptance = list(dict.fromkeys(acceptance + structured_items))
+    require(acceptance, 'ticket has no acceptance items in its description or acceptanceCriteria')
     page = re.search(r'^Feature map: (\.claude/skills/verify-qa/reference/(?:feature|ops)-map/[a-z0-9-]+\.md)\s*$', text, re.M)
     require(page, 'proof needs a feature-map or ops-map page')
     recipe = call('git', '-C', str(root), 'show', f'{sha}:{page[1]}')
@@ -159,21 +170,27 @@ def main():
         require(identity.lower() != builder['agentName'].lower(), 'builder cannot record their own independent rerun')
         name = args[1]
         require(re.fullmatch(r'\d{4}-\d{2}-\d{2}-qa-run-\d+', name) and name != run, 'rerun needs a fresh QA run name')
-        installed = root / script
-        require(installed.resolve().is_relative_to(root) and digest(installed) == drive_hash, 'drive script differs from merged source')
-        require(subprocess.run(['git', '-C', str(root), 'diff', '--quiet', sha, '--']).returncode == 0, 'drive checkout differs from the merge')
+        require(not call('git', '-C', str(root), 'status', '--porcelain').strip(), 'drive checkout has local changes')
         output = folder / name
         output.mkdir(exist_ok=False)
-        command = [{'.mjs': 'node', '.py': 'python3', '.sh': 'bash'}[installed.suffix], str(installed), str(output)]
-        try:
-            result = subprocess.run(command, cwd=root, capture_output=True, timeout=300)
-            code, transcript = result.returncode, result.stdout + result.stderr
-        except subprocess.TimeoutExpired as error:
-            code, transcript = 124, (error.stdout or b'') + (error.stderr or b'')
+        with tempfile.TemporaryDirectory(prefix='proof-rerun-') as temporary:
+            checkout = Path(temporary) / 'checkout'
+            call('git', '-C', str(root), 'worktree', 'add', '--detach', str(checkout), sha)
+            try:
+                installed = checkout / script
+                require(installed.resolve().is_relative_to(checkout) and digest(installed) == drive_hash, 'drive script differs from merged source')
+                command = [{'.mjs': 'node', '.py': 'python3', '.sh': 'bash'}[installed.suffix], str(installed), str(output)]
+                try:
+                    result = subprocess.run(command, cwd=checkout, env=dict(os.environ, SHIP_CHECKOUT=str(checkout)), capture_output=True, timeout=300)
+                    code, transcript = result.returncode, result.stdout + result.stderr
+                except subprocess.TimeoutExpired as error:
+                    code, transcript = 124, (error.stdout or b'') + (error.stderr or b'')
+                require(digest(proof) == binding['proof_sha256'] and digest(installed) == drive_hash, 'proof or drive script changed during rerun')
+            finally:
+                call('git', '-C', str(root), 'worktree', 'remove', '--force', str(checkout))
         record = output / 'drive-result.log'
         record.write_bytes(f'exit: {code}\n'.encode() + transcript)
         binding.update(run=name, result='PASS' if code == 0 else 'FAIL', evidence='drive-result.log', evidence_sha256=digest(record))
-        require(digest(proof) == binding['proof_sha256'] and digest(installed) == drive_hash, 'proof or drive script changed during rerun')
         call('vcc', 'activity', 'add', ticket, '--text', 'Proof rerun: ' + json.dumps(binding, sort_keys=True))
         require(code == 0, f'drive rerun failed: exit {code}; recorded in agent activity')
         print('rerun recorded; authenticated identity is verified by ship-check proof')

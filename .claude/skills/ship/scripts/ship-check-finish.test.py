@@ -45,6 +45,10 @@ elif sys.argv[1:3] in [['section', 'list'], ['sections', 'list']]:
         {'id': 4, 'section_title': 'Flag: Off', 'isDone': None},
         {'id': 5, 'section_title': 'Agent Blocked (Infra)', 'isDone': False},
         {'id': 6, 'section_title': 'In Progress', 'isDone': False}]}))
+elif sys.argv[1:3] == ['task', 'agent-log']:
+    assert sys.argv[4:] == ['--limit', '100', '--json'], sys.argv
+    rows = json.loads((root / 'activity.json').read_text())
+    print(json.dumps({'success': True, 'activities': sorted(rows, key=lambda row: row['createdAt'], reverse=True)[:100]}))
 elif sys.argv[1:3] == ['comment', 'list']:
     print((root / 'comments.json').read_text())
 else:
@@ -408,7 +412,8 @@ esac
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text((recipes / f'{name}.md').read_text())
         script = 'drive.py'
-        (self.repo / script).write_text('import os, sys\nprint("drive reached", sys.argv[1])\nsys.exit(int(os.environ.get("DRIVE_EXIT", "0")))\n')
+        (self.repo / 'drive-version.txt').write_text('merged')
+        (self.repo / script).write_text('import os, sys\nfrom pathlib import Path\nassert Path("drive-version.txt").read_text() == "merged"\nassert Path(os.environ["SHIP_CHECKOUT"]) == Path.cwd()\nprint("drive reached", sys.argv[1])\nsys.exit(int(os.environ.get("DRIVE_EXIT", "0")))\n')
         self.run_git('add', '.')
         self.run_git('commit', '-qm', 'proof fixture')
         sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
@@ -423,11 +428,7 @@ esac
         activity = self.root / 'activity.json'
         builder = dict(id='builder-note', agentId='builder-id', agentName='Runner 1', runId='builder-run', createdAt='2026-11-09T00:00:00Z', text='Proof builder: PR 42')
         activity.write_text(json.dumps([builder]))
-        self.write('ht', '''#!/usr/bin/env python3
-import json, os
-from pathlib import Path
-print(json.dumps({'success':True,'activities':json.loads((Path(os.environ['FIXTURE_ROOT'])/'activity.json').read_text())}))
-''')
+        self.write('ht', '#!/bin/sh\nexit 10\n')
         self.write('vcc', '''#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -524,6 +525,50 @@ print('recorded')
         self.assertIn('different authenticated agent', self.check('proof', ticket, success=False))
         rerun(23, ACTOR='third-agent-id', ACTOR_NAME='Runner 3')
         self.assertIn('proof ok', self.check('proof', ticket))
+        for number, (criteria, expected) in enumerate([
+            ('Structured keys work.', 'Structured keys work.'),
+            ('- Structured keys work.', 'Structured keys work.'),
+            ('1. Structured keys work.', 'Structured keys work.'),
+            ('<ul><li>Structured keys work.</li></ul>', 'Structured keys work.'),
+            ('<p>Structured keys work.</p>', 'Structured keys work.'),
+            ('<p>Keys: Structured keys work.</p>', 'Keys: Structured keys work.'),
+            ('<p>Structured keys work.</p><ul><li>Board keys still work.</li></ul>', 'Structured keys work.'),
+        ], 24):
+            with self.subTest(acceptanceCriteria=criteria):
+                proof.write_text(complete)
+                self.assertIn('missing Acceptance item: ' + expected, self.check('proof', ticket, success=False, ACCEPTANCE=criteria))
+                proof.write_text(complete.replace('## What usually breaks', f'- PASS: {expected} -> result.json\n\n## What usually breaks'))
+                rerun(number, ACTOR='third-agent-id', ACTOR_NAME='Runner 3', ACCEPTANCE=criteria)
+                self.assertIn('proof ok', self.check('proof', ticket, ACCEPTANCE=criteria))
+                self.assertIn('proof ok', self.check('proof', ticket, ACCEPTANCE=criteria, DESCRIPTION=''))
+        for number, heading in enumerate([
+            'Akzeptanzkriterien', "Critères d’acceptation", "Critères d'acceptation",
+            'Criterios de aceptación', 'Acceptatiecriteria',
+        ], 28):
+            for rich in [False, True]:
+                with self.subTest(heading=heading, rich=rich):
+                    localized = (f'<p><strong>{heading}:</strong></p><ul><li>Board keys still work.</li></ul>' if rich
+                                 else f'## {heading}\n- Board keys still work.\n')
+                    proof.write_text(complete.replace('- PASS: Board keys still work. -> result.json', ''))
+                    self.assertIn('missing Acceptance item: Board keys still work.', self.check('proof', ticket, success=False, DESCRIPTION=localized))
+                    proof.write_text(complete)
+                    rerun(number * 2 + int(rich), ACTOR='third-agent-id', ACTOR_NAME='Runner 3', DESCRIPTION=localized)
+                    self.assertIn('proof ok', self.check('proof', ticket, DESCRIPTION=localized))
+        proof.write_text(complete)
+        (self.repo / 'drive-version.txt').write_text('later production')
+        (self.repo / script).write_text('raise SystemExit("must not execute the later drive")\n')
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'unrelated newer production')
+        rerun(70, ACTOR='third-agent-id', ACTOR_NAME='Runner 3')
+        self.assertIn('proof ok', self.check('proof', ticket))
+        self.assertIn('drive reached', (folder / '2026-11-09-qa-run-70/drive-result.log').read_text())
+        self.assertEqual(len(self.run_git('worktree', 'list', '--porcelain').stdout.split('worktree ')) - 1, 1)
+        (self.repo / 'drive-version.txt').write_text('dirty')
+        self.assertIn('local changes', rerun(71, success=False, ACTOR='third-agent-id', ACTOR_NAME='Runner 3'))
+        self.assertFalse((folder / '2026-11-09-qa-run-71').exists())
+        (self.repo / 'drive-version.txt').write_text('later production')
+        (self.repo / 'untracked.py').write_text('untracked')
+        self.assertIn('local changes', rerun(72, success=False, ACTOR='third-agent-id', ACTOR_NAME='Runner 3'))
 
 
 if __name__ == '__main__':

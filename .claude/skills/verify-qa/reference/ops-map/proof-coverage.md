@@ -2,7 +2,8 @@
 
 Compare installed hashes with production. Read hosted fixture logs; never run fixtures on the VPS.
 A different runner inspects the merged script, then runs `ship-check rerun TICKET SCRIPT FRESH-QA-RUN` and `ship-check proof TICKET`.
-Copy every acceptance and breakage bullet below. `SHIP_PROOF_STRICT=0` restores shape-only checks.
+Copy acceptance items from both the description and structured acceptance criteria, plus every breakage bullet below. English, German, French, Spanish and Dutch acceptance headings are recognized. `SHIP_PROOF_STRICT=0` restores shape-only checks.
+Reruns require a clean checkout and execute in a temporary worktree at the target merge, even after newer production commits. Agent metadata comes from `hypertask task agent-log`; a builder binding outside its latest 100 entries must be renewed before independent QA.
 
 ```text
 Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md
