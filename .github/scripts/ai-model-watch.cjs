@@ -17,9 +17,9 @@ function opening({ wrong, course, decision, undo }) {
     `<p><strong>How to undo:</strong> ${undo}</p><hr>`;
 }
 
-function parts({ problem, fix, decision, undo }) {
+function parts({ problem, fix, decision, undo, done = "The pickers show it, and saved picks still work. A live chat answers from it after release." }) {
   return `<h2>Problem</h2>${problem}<h2>Fix</h2><p>${fix}</p>` +
-    `<h2>Done when</h2><p>The pickers show it, and saved picks still work.</p><p>A live chat answers from it after release.</p>` +
+    `<h2>Done when</h2><p>${done}</p>` +
     `<h2>Risk</h2><p>A new model could answer badly or cost more than planned.</p><p>Undo: ${undo}</p>` +
     `<h2>Decision</h2><p>${decision}</p>`;
 }
@@ -41,6 +41,7 @@ function planFor(finding, automatic, premium) {
     course: "Check the direct provider before any removal. Why: one source cannot prove it was retired.",
     decision: "nothing.",
     fix: "Confirm the model is retired before removing it from a picker.",
+    done: "The direct provider check is recorded. If retired, the model leaves every picker. Saved picks still work. A remaining model answers a live chat.",
     partsDecision: "Nothing. This is a check, not a picker change.",
     undo: NOTHING_TO_UNDO,
   };
@@ -52,7 +53,7 @@ function planFor(finding, automatic, premium) {
     undo: NOTHING_TO_UNDO,
   };
   if (automatic) return {
-    course: "Ship it now and keep the old version as a fallback. Why: OpenAI and Anthropic classes always update.",
+    course: "Replace the old version in every picker. Move saved picks to the new version. Why: OpenAI and Anthropic classes always update.",
     decision: "nothing.",
     fix: "Replace the old version in every picker.",
     partsDecision: "Nothing. This is an automatic update.",
@@ -95,6 +96,7 @@ function ticketFor(finding) {
       problem: `<p>${sentence(escapeHtml(finding.reason))}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p>` +
         `<p>Gateway input price per million tokens: ${price(finding)}.</p><p>${sentence(escapeHtml(finding.action))}.</p>`,
       fix: plan.fix,
+      done: plan.done,
       decision: plan.partsDecision,
       undo: plan.undo,
     }),

@@ -57,6 +57,30 @@ test("a stale entry tells nobody to add it back, and an unpriced finding waits f
   assert.match(unknown.description, /Confirm the model is retired/);
   assert.match(unknown.description, /How to undo:<\/strong> nothing to undo/);
   assert.doesNotMatch(unknown.description, /the old one no longer answers/);
+  const done = unknown.description.match(/<h2>Done when<\/h2>([\s\S]*?)<h2>Risk<\/h2>/)[1];
+  assert.match(done, /The direct provider check is recorded/);
+  assert.match(done, /If retired, the model leaves every picker/);
+  assert.match(done, /Saved picks still work/);
+  assert.match(done, /A remaining model answers a live chat/);
+  assert.doesNotMatch(done, /The pickers show it|answers from it/);
+  const replacementDone = stale.description.match(/<h2>Done when<\/h2>([\s\S]*?)<h2>Risk<\/h2>/)[1];
+  assert.match(replacementDone, /The pickers show it/);
+  assert.match(replacementDone, /A live chat answers from it/);
   const replacement = ticketFor({ ...base, kind: "new-version", provider: "moonshotai", model: "moonshotai/kimi-k3.2", modelClass: "kimi-k", current: ["kimi-k3"], inputPerMillion: 2, action: "ask Valentin before shipping" });
   assert.match(replacement.description, /Replace the old version and move saved picks to the new one/);
 });
+
+for (const [provider, model, modelClass] of [
+  ["openai", "openai/gpt-6.2-terra", "gpt-terra"],
+  ["anthropic", "anthropic/claude-sonnet-5.6", "claude-sonnet"],
+]) {
+  test(`${provider} automatic updates replace the picker version without a fallback`, () => {
+    const ticket = ticketFor({ kind: "new-version", provider, model, modelClass, current: ["previous-version"], inputPerMillion: 2, reason: "newer version in an existing class", action: "ship automatically" });
+    const course = ticket.description.match(/Recommended course and why:<\/strong>\s*([^<]+)</)[1];
+    assert.match(course, /Replace the old version in every picker/);
+    assert.match(course, /Move saved picks to the new version/);
+    assert.doesNotMatch(ticket.description, /fallback|keep the old version/);
+    assert.match(ticket.description, /What Valentin must decide:<\/strong> nothing\./);
+    assert.match(ticket.description, /How to undo:<\/strong> point saved picks back at the old version\./);
+  });
+}
