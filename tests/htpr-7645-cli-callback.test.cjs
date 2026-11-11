@@ -18,7 +18,7 @@ const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
 }).outputText;
 const code = 'dummy code+&=?#/%';
 
-async function withPage(query, check) {
+async function withPage(query, check, { agentCodeSignIn = false, theme = 'light' } = {}) {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', {
     url: 'https://app.hypertask.ai/cli-auth',
   });
@@ -46,7 +46,7 @@ async function withPage(query, check) {
         useSearchParams: () => new URLSearchParams(query),
         useRouter: () => ({ push: (url) => navigated.push(url) }),
       },
-      'next/image': { __esModule: true, default: ({ alt }) => React.createElement('img', { alt }) },
+      'next/image': { __esModule: true, default: (props) => React.createElement('img', props) },
       '@/hooks/General/useCurrentUserCheckFromCookies': {
         __esModule: true, default: () => ({ id: 42, email: 'fixture@example.test' }),
       },
@@ -56,24 +56,39 @@ async function withPage(query, check) {
       'react-hot-toast': { toast: { success() {}, error: (message) => errors.push(message) } },
       '@/utils/undoActions/helperFuncs': { cn: (...values) => values.join(' ') },
       '@/assets/hypertaskLogoWhite.png': { __esModule: true, default: 'fixture.png' },
+      '@/assets/HTC_without_text.png': { __esModule: true, default: 'dark-mark.png' },
+      '@/hooks/MultiPages/HTC/useDarkMode': {
+        __esModule: true, default: () => ({ effectiveTheme: theme }),
+      },
       '@/lib/auth/safeReturnTo': {
         POST_CLI_NEXT_REDIRECT_KEY: 'fixture-next',
         parseSafePostCliRedirect: () => null,
         CLI_CALLBACK_WINDOW_NAME: 'fixture-callback',
       },
       'lucide-react': { Copy: () => React.createElement('svg') },
-      'next/link': { __esModule: true, default: ({ children, href }) => React.createElement('a', { href }, children) },
-      '@/hooks/useFlag': { useFlag: () => false },
+      'next/link': { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) },
+      '@/hooks/useFlag': { useFlag: (key) => {
+        assert.equal(key, 'htpr-7552-agent-code-signin');
+        return agentCodeSignIn;
+      } },
       zod: require('zod'),
     };
     const mod = { exports: {} };
     const browser = { location: { set href(url) { navigated.push(url); } } };
-    new Function('require', 'module', 'exports', 'React', 'window', 'localStorage', 'console', compiled)(
+    new Function('require', 'module', 'exports', 'React', 'window', 'localStorage', 'console', 'fetch', compiled)(
       (name) => {
         assert.ok(Object.hasOwn(mocks, name), `unexpected import: ${name}`);
         return mocks[name];
       },
       mod, mod.exports, React, browser, dom.window.localStorage, { error() {} },
+      async (url) => {
+        assert.equal(url, '/api/cli/device/start');
+        return { ok: true, json: async () => ({
+          id: '313a1ed0-d258-4086-9abd-41a122e44e3d',
+          code: 'ABCD-1234',
+          expiresAt: new Date(Date.now() + 300_000).toISOString(),
+        }) };
+      },
     );
     root = require('react-dom/client').createRoot(dom.window.document.getElementById('root'));
     await React.act(async () => root.render(React.createElement(mod.exports.default)));
@@ -147,4 +162,40 @@ test('CLI consent cancellation does not mint or navigate', async () => {
     assert.deepEqual(minted, []);
     assert.deepEqual(navigated, []);
   });
+});
+
+test('agent-page repair leaves legacy and flag-off sign-in unchanged', async () => {
+  for (const [query, agentCodeSignIn] of [['agent=1', false], ['', true]]) {
+    await withPage(query, async ({ container, click, minted }) => {
+      assert.match(container.textContent, /Authenticating HyperTask CLI/);
+      assert.doesNotMatch(container.textContent, /Get a five-minute code/);
+      const mark = container.querySelector('img');
+      assert.equal(mark.getAttribute('src'), 'fixture.png');
+      assert.equal(mark.getAttribute('width'), '200');
+      assert.equal(mark.getAttribute('height'), '28');
+      assert.ok(mark.parentElement.parentElement.classList.contains('rounded'));
+      await click('Allow and continue');
+      assert.deepEqual(minted, ['/api/cli/generate-code']);
+      assert.ok(container.querySelector('#cli-auth-code').classList.contains('rounded'));
+    }, { agentCodeSignIn });
+  }
+});
+
+test('flagged agent page uses theme marks and 4px cards, fields, buttons and links', async () => {
+  for (const [theme, src] of [['light', 'dark-mark.png'], ['dark', '/loginLogoMain.png']]) {
+    await withPage('agent=1', async ({ container, click, minted }) => {
+      assert.match(container.textContent, /Sign in an agent/);
+      const mark = container.querySelector('img');
+      assert.equal(mark.getAttribute('src'), src);
+      assert.equal(mark.getAttribute('width'), '47');
+      assert.equal(mark.getAttribute('height'), '59');
+      assert.ok(mark.parentElement.parentElement.classList.contains('rounded-[4px]'));
+      await click('Get a five-minute code');
+      assert.equal(container.querySelector('#agent-login-command').value, 'hypertask login --code ABCD-1234');
+      for (const element of container.querySelectorAll('button, input, a')) {
+        assert.ok(element.classList.contains('rounded-[4px]'), element.outerHTML);
+      }
+      assert.deepEqual(minted, []);
+    }, { agentCodeSignIn: true, theme });
+  }
 });
