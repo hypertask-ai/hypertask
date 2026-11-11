@@ -73,11 +73,15 @@ if (process.env.HTPR_8982_PERF === '1') {
   })
 
   test('question inside a list keeps its own context point count', () => {
-    assert.equal(checkWriting(question.replace('<p><strong>Question:', '<li><p><strong>Question:')), undefined)
+    const listed = question.replace('<p><strong>Question:', '<li><p><strong>Question:')
+    assert.equal(checkWriting(listed), undefined)
+    assert.throws(() => checkWriting(listed.replace('</ul>', '<li>Four.</li></ul>')), /three points/)
   })
 
   test('oversized legacy text does not block a legitimate short edit', () => {
-    assert.equal(checkWriting('<p>Search works.</p>', { text: '<'.repeat(1_048_576) }), undefined)
+    const previous = { text: '<'.repeat(1_048_576) }
+    assert.equal(checkWriting('<p>Search works.</p>', previous), undefined)
+    assert.throws(() => checkWriting('Next: retry', previous), /agent log/)
   })
 
   test('linear HTML scans preserve complete quotes, mixed case and malformed tails', () => {
