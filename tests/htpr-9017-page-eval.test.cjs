@@ -33,9 +33,9 @@ test("the index is only read when the page search flag is on", async () => {
   assert.equal(replay.trace.length, 0);
   const found = await replay.retrieve({ query: pair.query, mode: "index" });
   assert.ok(replay.trace.length > 0);
-  assert.equal(replay.trace[0].plan.rank_by[0], "Product");
+  assert.equal(replay.trace[0].plan.rank_by[0], "Sum");
   assert.deepEqual(
-    replay.trace[0].plan.rank_by[1][1][1],
+    replay.trace[0].plan.rank_by[1][0][1][1],
     ["title", "BM25", pair.query, { last_as_prefix: true }]
   );
   assert.ok(found.length <= 50);

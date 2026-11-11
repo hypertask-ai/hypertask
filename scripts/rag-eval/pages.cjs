@@ -81,6 +81,7 @@ function pageDocuments(corpus) {
     ...page,
     id: String(page.id),
     projectTitle: page.projectId === BOARD_ID ? "Hypertask Product" : "Other Board",
+    updatedAt: page.updatedAt ?? "2026-11-10T00:00:00.000Z",
     searchText: [page.title, page.contentText].filter(Boolean).join(" "),
   }));
 }
@@ -204,6 +205,7 @@ function createPageReplay({ corpus, tokenize }) {
         if (typeof stub === "function") return stub();
         return request === "@/lib/prisma" ? stub.default : stub;
       }
+      if (request === "@/utils/controllers/turbopuffer/pageSearch") return load("src/utils/controllers/turbopuffer/pageSearch.ts");
       if (request.startsWith("@/lib/flags/definitions/")) return load(`${request.slice(2)}.ts`);
       if (["crypto", "node-html-parser"].includes(request)) return require(request);
       throw new Error(`Unexpected production dependency: ${request} (${file})`);
