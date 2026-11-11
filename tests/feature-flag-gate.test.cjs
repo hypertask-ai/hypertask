@@ -1689,6 +1689,44 @@ export default { key: NEW_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10
   }
 });
 
+test("flag ownership reads current production when the pull request base is stale", async (t) => {
+  for (const shipped of [true, false]) {
+    const { dir, git } = makeRepo(t);
+    const common = commit(git, "common base");
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const WRONG_FLAG = "htpr-9-wrong";\n');
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"']));
+    const production = commit(git, "production ships an unrelated flag");
+    if (shipped) git(["update-ref", "refs/remotes/origin/production", production]);
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"']));
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "repair carries a flag production already shipped");
+    const result = await evaluate("HTPR-1 [FEATURE] update widget", common, head, dir);
+    assert.equal(result.pass, shipped, result.reason);
+    if (!shipped) assert.match(result.reason, /New feature flag keys must start with htpr-1-/);
+  }
+});
+
+test("copied definitions follow current production when the pull request base is stale", async (t) => {
+  for (const altered of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const common = commit(git, "common per-file base");
+    const file = "src/lib/flags/definitions/htpr-2-new.ts";
+    const source = `export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-11", description: "Shipped flag", releaseRisk: { risk: "small", reason: "Shipped behavior" } } as const;`;
+    writeFile(dir, file, source);
+    const production = commit(git, "production ships the restricted flag");
+    git(["update-ref", "refs/remotes/origin/production", production]);
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, file, altered ? source.replace('defaultMode: "OWNER_AND_QA"', 'defaultMode: "OFF"') : source);
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "repair copies the shipped definition");
+    const result = await evaluateFlagDefinitions(common, head, dir);
+    assert.equal(result.pass, !altered, result.reason);
+    if (altered) assert.match(result.reason, /must set defaultMode/);
+  }
+});
+
 test("runtime flag keys must come from their own registered definition or a supported barrel", async (t) => {
   const { dir, git } = makeRepo(t);
   perFlagLayout(dir);

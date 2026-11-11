@@ -1892,6 +1892,22 @@ function runtimeFilesFrom(changedFiles) {
     !/\.stories\.[jt]sx?$/.test(path));
 }
 
+function currentProductionSha(baseSha) {
+  let tip = "";
+  try {
+    tip = git(["rev-parse", "--verify", "refs/remotes/origin/production^{commit}"]).trim();
+  } catch {
+    return baseSha;
+  }
+  if (!/^[0-9a-f]{40}$/.test(tip) || tip === baseSha) return baseSha;
+  try {
+    git(["merge-base", "--is-ancestor", baseSha, tip]);
+  } catch {
+    return baseSha;
+  }
+  return tip;
+}
+
 function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles, runtimeFiles = runtimeFilesFrom(changedFiles) }) {
   const mergeBase = git(["merge-base", baseSha, headSha]).trim();
   const baseRegistry = parseFlagRegistry(mergeBase);
@@ -1903,12 +1919,13 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
     if (!baseDefinitions.keys.includes(key)) added.add(key);
   }
   const baseFiles = new Set(flagDefinitionPaths(mergeBase));
-  const productionFiles = new Set(flagDefinitionPaths(baseSha));
+  const productionSha = currentProductionSha(baseSha);
+  const productionFiles = new Set(flagDefinitionPaths(productionSha));
   const copiedFiles = new Set();
   for (const path of flagDefinitionPaths(headSha)) {
     if (baseFiles.has(path) || !productionFiles.has(path)) continue;
     const source = git(["show", `${headSha}:${path}`]);
-    if (source !== git(["show", `${baseSha}:${path}`])) continue;
+    if (source !== git(["show", `${productionSha}:${path}`])) continue;
     copiedFiles.add(path);
     added.delete(parseFlagFile(source, path).definition.key);
   }
@@ -2059,7 +2076,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
 
-    const productionDefinitions = parseDefinitions(baseSha);
+    const productionDefinitions = parseDefinitions(currentProductionSha(baseSha));
     const added = headDefinitions.keys.filter((key) =>
       !baseDefinitions.keys.includes(key) && !productionDefinitions.keys.includes(key));
     const ticketPrefix = `${title.slice(0, 4).toLowerCase()}-${titleMatch[1]}-`;
