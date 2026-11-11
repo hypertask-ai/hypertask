@@ -351,13 +351,13 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   CREATE_VIEW: {
     name: buildToolName('create_view'),
     description:
-      'Creates a saved filtered tab on a board. Provide project_id and title; optional subtask_setting controls how subtasks appear. Filters is a nested object containing optional label_names, assignee_ids, and match. Use hypertask_list_views afterward to find saved view IDs.',
+      'Creates a saved filtered tab on a board. Provide project_id and title; optional subtask_setting controls how subtasks appear. Filters is a nested object containing optional label_names, assignee_ids, match, and label_match. label_match HIDE leaves out tickets that have any of those tags. Use hypertask_list_views afterward to find saved view IDs.',
   },
 
   UPDATE_VIEW: {
     name: buildToolName('update_view'),
     description:
-      'Updates a saved board view, including its subtask display setting. Filter fields are flat for updates: label_names, assignee_ids, and match. Find the ID with hypertask_list_views first.',
+      'Updates a saved board view, including its subtask display setting. Filter fields are flat for updates: label_names, assignee_ids, match, and label_match. label_match HIDE leaves out tickets that have any of those tags. Find the ID with hypertask_list_views first.',
   },
 
   DELETE_VIEW: {

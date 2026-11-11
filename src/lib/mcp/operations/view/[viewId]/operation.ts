@@ -214,7 +214,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
     const filtersProvided =
       body.label_names !== undefined ||
       body.assignee_ids !== undefined ||
-      body.match !== undefined
+      body.match !== undefined ||
+      body.label_match !== undefined
     if (filtersProvided && body.board_filters !== undefined) {
       return NextResponse.json(
         { success: false, error: 'Use either label_names/assignee_ids/match or board_filters, not both' },
@@ -230,6 +231,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
         { success: false, error: "match must be 'ALL' or 'ANY'" },
         { status: 400 }
       )
+    }
+    if (body.label_match !== undefined && !['ALL', 'ANY', 'HIDE'].includes(body.label_match)) {
+      return NextResponse.json({ success: false, error: "label_match must be 'ALL', 'ANY', or 'HIDE'" }, { status: 400 })
     }
     if (body.subtask_setting !== undefined && !isSubtaskSetting(body.subtask_setting)) {
       return NextResponse.json(
@@ -260,7 +264,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
       title,
       visibility: body.visibility,
       filters: filtersProvided
-        ? { label_names: body.label_names, assignee_ids: body.assignee_ids, match: body.match }
+        ? { label_names: body.label_names, assignee_ids: body.assignee_ids, match: body.match, label_match: body.label_match }
         : undefined,
       board_filters: body.board_filters,
       visible_section_ids: body.visible_section_ids,

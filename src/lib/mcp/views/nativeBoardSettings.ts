@@ -122,7 +122,7 @@ export function normalizeNativeBoardFilters(value: unknown) {
     ) {
       throw new Error(`board_filters.${entry.type} contains an invalid value`);
     }
-    if (entry.match !== undefined && entry.match !== 'ALL' && entry.match !== 'ANY') {
+    if (entry.match !== undefined && entry.match !== 'ALL' && entry.match !== 'ANY' && !(entry.type === 'Labels' && entry.match === 'HIDE')) {
       throw new Error("Each board filter match must be 'ALL' or 'ANY'");
     }
     if (

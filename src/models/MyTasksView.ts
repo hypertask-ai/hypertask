@@ -223,7 +223,7 @@ const parseFilterSettings = (
         searchPayload: Array.isArray(entry.searchPayload)
           ? entry.searchPayload
           : [],
-        ...(entry.match === "ALL" || entry.match === "ANY"
+        ...(entry.match === "ALL" || entry.match === "ANY" || entry.match === "HIDE"
           ? { match: entry.match }
           : {}),
       })),

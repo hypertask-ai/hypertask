@@ -7,6 +7,7 @@ import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8144_PHONE_MY_TASKS_FLAG } from "@/lib/flags/definitions/htpr-8144-phone-my-tasks";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import { HTPR_6940_DROP_BOARD_TABS_FLAG } from "@/lib/flags/definitions/htpr-6940-drop-board-tabs";
 import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
@@ -405,12 +406,16 @@ const MyTasks = ({
     [availableBoards],
   );
 
+  const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
+  let tagHideOn = false;
+  if (tagHideFilterEnabled) tagHideOn = true;
   const runtimeContext = useMemo(() => {
-    if (!Array.isArray(runningTimerEntries)) return undefined;
+    if (!Array.isArray(runningTimerEntries)) return { tagHideFilterEnabled: tagHideOn };
     return {
       runningTaskIds: new Set(runningTimerEntries.map((timer) => timer.taskId)),
+      tagHideFilterEnabled: tagHideOn,
     };
-  }, [runningTimerEntries]);
+  }, [runningTimerEntries, tagHideOn]);
 
   const allTasksForBoardTabs = useMemo(() => {
     if (groupBy !== "time") return [];
