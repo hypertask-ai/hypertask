@@ -25,8 +25,9 @@ export function open(text, privateKey) {
 
 export function selectWindow(snapshot, service, since, until) {
   const batch = snapshot?.sources?.[service];
-  if (snapshot?.version !== 1 || !batch || !Number.isFinite(Date.parse(batch.since)) || !Number.isFinite(Date.parse(batch.until)) || Date.parse(batch.since) > Date.parse(since) || Date.parse(batch.until) <= Date.parse(since) || Date.parse(batch.until) > Date.parse(until) || !Array.isArray(batch.events)) throw new Error('hosted Vercel coverage unavailable');
-  return { events: batch.events.filter(event => Date.parse(event.ts) > Date.parse(since) && Date.parse(event.ts) <= Date.parse(batch.until)), cursor: null, until: batch.until };
+  if (snapshot?.version !== 1 || !batch || !Number.isFinite(Date.parse(batch.since)) || !Number.isFinite(Date.parse(batch.until)) || Date.parse(batch.until) <= Date.parse(since) || Date.parse(batch.until) > Date.parse(until) || !Array.isArray(batch.events)) throw new Error('hosted Vercel coverage unavailable');
+  const truncated = Date.parse(batch.since) > Date.parse(since);
+  return { events: batch.events.filter(event => Date.parse(event.ts) > Date.parse(since) && Date.parse(event.ts) <= Date.parse(batch.until)), cursor: null, until: batch.until, ...(truncated ? { since: batch.since } : {}) };
 }
 
 function githubEnv(env) {

@@ -167,8 +167,10 @@ the VPS recover missed timer runs without another state writer or ticket writer.
 A failed source is absent, never an empty successful batch. An all-failed run
 fails and publishes nothing. The existing Vercel retention limits still apply;
 this cannot recover expired logs from the outage. A retention-truncated snapshot
-reports its actual retained start. Checkpoints remain unchanged until the next
-collector window starts within that retained range.
+reports its actual retained start. A checkpoint older than that retained start
+fast-forwards to the snapshot end and records the dropped interval as a coverage
+gap, so the sliding 24-hour window cannot stall the source and no day claims
+coverage it never read.
 
 Production messages never appear in Actions output or plaintext artifacts.
 Snapshots use AES-256-GCM with a random key wrapped by the committed RSA public
@@ -182,7 +184,7 @@ The installed service sets `ERROR_COLLECTOR_VERCEL_HOSTED=1`. Its three sources
 share one download of the latest successful production workflow artifact per
 collector process. Downloads use a hypertask-runners app token from `gh-app-token`
 and ignore a stored human login. Failed decryption, missing
-sources, uncovered starts, replayed or future ends leave checkpoints unchanged.
+sources, invalid coverage starts, replayed or future ends leave checkpoints unchanged.
 The collector advances only to the snapshot's end, never download time, and
 filters overlapping events before counting. Other sources and ticket filing
 keep using the same durable collector state.

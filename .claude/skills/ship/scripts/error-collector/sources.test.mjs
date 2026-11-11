@@ -101,7 +101,7 @@ test('hosted snapshots expose retained coverage rather than claiming lost histor
     assert.equal(batch.since, retained);
     assert.equal(batch.until, until);
     const snapshot = { version: 1, sources: { [service]: batch } };
-    assert.throws(() => selectWindow(snapshot, service, since, until), /coverage unavailable/);
+    assert.deepEqual(selectWindow(snapshot, service, since, until), { events: batch.events, cursor: null, until, since: retained });
     assert.deepEqual(selectWindow(snapshot, service, retained, until).events, batch.events);
   }
   mockHTTP([[200, fixtures.vercel]]);

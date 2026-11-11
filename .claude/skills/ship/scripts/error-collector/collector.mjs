@@ -297,6 +297,12 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         if (!Number.isFinite(end) || end <= Date.parse(since) || end > now) throw new Error('invalid source coverage end');
         until = iso(end);
       }
+      let retained = since;
+      if (!Array.isArray(fetched) && fetched?.since != null) {
+        const start = Date.parse(fetched.since);
+        if (!Number.isFinite(start) || start < Date.parse(since) || start > Date.parse(until)) throw new Error('invalid source coverage start');
+        retained = iso(start);
+      }
       const rows = Array.isArray(fetched) ? fetched : fetched?.events;
       let cursor;
       if (!Array.isArray(fetched)) {
@@ -370,7 +376,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const prior = state.coverage[source.name];
       const continuous = prior && prior.until === state.sources[source.name] && previous >= Date.parse(since);
       const coverage = {
-        since: continuous ? prior.since : since, until,
+        since: retained !== since ? retained : (continuous ? prior.since : since), until,
         services: [...new Set([...(prior?.services ?? []), source.name, ...events.map(event => event.service)])],
       };
       const start = Math.max(now - 13 * DAY, Number.isFinite(previous) ? Math.min(previous, Date.parse(since)) : Date.parse(since));

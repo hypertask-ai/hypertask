@@ -27,14 +27,42 @@ test('only the private recipient can read production data; altered ciphertext fa
   assert.throws(() => open(JSON.stringify(changed), keys.privateKey));
 });
 
-test('complete hosted windows select new events; gaps, missing, stale and future batches fail closed', () => {
-  assert.deepEqual(selectWindow(snapshot, 'vercel-5xx', since, new Date(now).toISOString()).events, [event]);
+test('complete hosted windows select new events; missing, stale and future batches fail closed', () => {
+  assert.deepEqual(selectWindow(snapshot, 'vercel-5xx', since, new Date(now).toISOString()), { events: [event], cursor: null, until });
   for (const [service, start, end] of [
     ['vercel', since, new Date(now).toISOString()],
-    ['vercel-5xx', '2026-11-09T23:59:59.000Z', new Date(now).toISOString()],
     ['vercel-5xx', until, new Date(now).toISOString()],
     ['vercel-5xx', since, '2026-11-10T23:54:00.000Z'],
   ]) assert.throws(() => selectWindow(snapshot, service, start, end));
+});
+
+test('a retention-truncated window reports its retained start instead of failing', () => {
+  const truncated = { version: 1, sources: { 'vercel-5xx': { since: '2026-11-10T12:00:00.000Z', until, events: [event] } } };
+  assert.deepEqual(selectWindow(truncated, 'vercel-5xx', since, new Date(now).toISOString()), { events: [event], cursor: null, until, since: '2026-11-10T12:00:00.000Z' });
+  assert.throws(() => selectWindow(truncated, 'vercel-5xx', until, new Date(now).toISOString()));
+  assert.throws(() => selectWindow(truncated, 'vercel-5xx', since, until));
+});
+
+test('a stale checkpoint fast-forwards past a retention gap and never claims the dropped interval', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'hosted-gap-'));
+  const env = { HOME: root, PATH: '', ERROR_COLLECTOR_STATE_DIR: root };
+  const truncated = { version: 1, sources: { 'vercel-5xx': { since: '2026-11-10T00:30:00.000Z', until, events: [event] } } };
+  const sources = [{ name: 'vercel-5xx', fetch: async context => selectWindow(truncated, 'vercel-5xx', context.since, context.until) }];
+  try {
+    writeFileSync(join(root, 'state.json'), JSON.stringify({ version: 1, sources: { 'vercel-5xx': '2026-11-09T03:45:00.992Z' }, fingerprints: {}, pending: {}, days: {}, summaries: {}, activities: {}, created: [] }));
+    assert.equal(await collect({ env, now, sources }), 0);
+    const first = JSON.parse(readFileSync(join(root, 'state.json')));
+    assert.equal(first.sources['vercel-5xx'], until);
+    assert.equal(first.coverage['vercel-5xx'].since, '2026-11-10T00:30:00.000Z');
+    assert.equal(first.days['2026-11-10']['vercel-5xx'].complete, false);
+    assert.equal(first.days['2026-11-10']['vercel-5xx'].errors, 1);
+    const later = { version: 1, sources: { 'vercel-5xx': { since: until, until: '2026-11-11T00:10:00.000Z', events: [] } } };
+    const next = [{ name: 'vercel-5xx', fetch: async context => selectWindow(later, 'vercel-5xx', context.since, context.until) }];
+    assert.equal(await collect({ env, now: now + 15 * 60000, sources: next }), 0);
+    const second = JSON.parse(readFileSync(join(root, 'state.json')));
+    assert.equal(second.sources['vercel-5xx'], '2026-11-11T00:10:00.000Z');
+    assert.equal(second.coverage['vercel-5xx'].since, '2026-11-10T00:30:00.000Z');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('collector advances to the hosted end, not wall clock; replay cannot recount or claim full-day coverage', async () => {
@@ -50,6 +78,16 @@ test('collector advances to the hosted end, not wall clock; replay cannot recoun
     assert.equal(await collect({ env, now: now + 60000, sources }), 1);
     assert.deepEqual(JSON.parse(readFileSync(join(root, 'state.json'))), first);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('invalid source coverage start cannot advance a collector checkpoint', async () => {
+  for (const start of ['invalid', '2026-11-09T00:00:00.000Z', '2026-11-11T00:00:00.000Z']) {
+    const root = mkdtempSync(join(tmpdir(), 'hosted-start-'));
+    try {
+      assert.equal(await collect({ env: { HOME: root, PATH: '', ERROR_COLLECTOR_STATE_DIR: root }, now, sources: [{ name: 'vercel', fetch: async () => ({ events: [], cursor: null, until, since: start }) }] }), 1);
+      assert.throws(() => readFileSync(join(root, 'state.json')));
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
 });
 
 test('invalid source end cannot advance a collector checkpoint', async () => {
