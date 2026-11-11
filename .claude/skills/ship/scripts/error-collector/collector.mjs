@@ -165,14 +165,17 @@ function merge(group, event) {
   group.routes = [...new Set([...group.routes, redact(event.route)])];
 }
 
+function titlePhrase(group) {
+  return group.noiseRule ? 'one warning repeated' : 'the same error happened';
+}
+
 function ticketLabels(board) {
   return `${board === PRODUCT_BOARD ? 'Error Log' : 'Infra'},brain-medium`;
 }
 
 function ticketTitle(group) {
   const count = group.noiseRule ? group.hourlyCount : group.count;
-  const line = group.noiseRule ? 'one warning repeated' : 'the same error happened';
-  return `${group.service}: ${line} ${count} time${count === 1 ? '' : 's'}.`;
+  return `${group.service}: ${titlePhrase(group)} ${count} time${count === 1 ? '' : 's'}.`;
 }
 
 function identityHref(group, fp) {
