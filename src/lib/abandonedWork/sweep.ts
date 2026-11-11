@@ -96,7 +96,7 @@ export async function sweepAbandonedWork(options: { dryRun?: boolean } = {}) {
   const boards = [];
   const touched = new Set<number>();
   for (const board of BOARDS) {
-    const raw = await prisma.$queryRaw<Raw[]>(snapshotSql(Prisma.sql`t."projectId" = ${board.projectId} AND t.status = 'Normal' AND t.section = 'In Progress'`));
+    const raw = await prisma.$queryRaw<Raw[]>(snapshotSql(Prisma.sql`t."projectId" = ${board.projectId} AND t.status = 'Normal' AND t.section = ${board.inProgress}`));
     const rows = raw.map(toRow);
     const plan = planBoard(rows, nowMs, board);
     const result = {

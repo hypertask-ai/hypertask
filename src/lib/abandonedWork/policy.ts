@@ -19,7 +19,7 @@ export type AbandonedRow = {
 export type BoardSpec = { projectId: number; inProgress: string; review: string; intakes: readonly string[]; defaultIntake: string };
 export const BOARDS: readonly BoardSpec[] = [
   { projectId: 15, inProgress: "In Progress", review: "Valentin Review", intakes: ["Bugs", "Improvements", "Features"], defaultIntake: "Improvements" },
-  { projectId: 2060, inProgress: "In Progress", review: "Valentin Review", intakes: ["Todo"], defaultIntake: "Todo" },
+  { projectId: 2060, inProgress: "Doing", review: "Valentin Review", intakes: ["Todo"], defaultIntake: "Todo" },
 ];
 export type ReleaseDecision =
   | { action: "keep"; reason: string }
