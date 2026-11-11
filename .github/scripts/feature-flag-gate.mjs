@@ -1892,6 +1892,22 @@ function runtimeFilesFrom(changedFiles) {
     !/\.stories\.[jt]sx?$/.test(path));
 }
 
+function currentProductionSha(baseSha) {
+  let tip = "";
+  try {
+    tip = git(["rev-parse", "--verify", "refs/remotes/origin/production^{commit}"]).trim();
+  } catch {
+    return baseSha;
+  }
+  if (!/^[0-9a-f]{40}$/.test(tip) || tip === baseSha) return baseSha;
+  try {
+    git(["merge-base", "--is-ancestor", baseSha, tip]);
+  } catch {
+    return baseSha;
+  }
+  return tip;
+}
+
 function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles, runtimeFiles = runtimeFilesFrom(changedFiles) }) {
   const mergeBase = git(["merge-base", baseSha, headSha]).trim();
   const baseRegistry = parseFlagRegistry(mergeBase);
@@ -1902,9 +1918,20 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
   for (const key of headDefinitions.keys) {
     if (!baseDefinitions.keys.includes(key)) added.add(key);
   }
-  if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
   const baseFiles = new Set(flagDefinitionPaths(mergeBase));
+  const productionSha = currentProductionSha(baseSha);
+  const productionFiles = new Set(flagDefinitionPaths(productionSha));
+  const copiedFiles = new Set();
   for (const path of flagDefinitionPaths(headSha)) {
+    if (baseFiles.has(path) || !productionFiles.has(path)) continue;
+    const source = git(["show", `${headSha}:${path}`]);
+    if (source !== git(["show", `${productionSha}:${path}`])) continue;
+    copiedFiles.add(path);
+    added.delete(parseFlagFile(source, path).definition.key);
+  }
+  if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
+  for (const path of flagDefinitionPaths(headSha)) {
+    if (copiedFiles.has(path)) continue;
     const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
     if (definition.releaseRisk?.highRisk && !definition.releaseRisk.harmEvidence) {
       const baseDefinition = !added.has(definition.key) && baseFiles.has(path)
@@ -2049,7 +2076,9 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
 
-    const added = headDefinitions.keys.filter((key) => !baseDefinitions.keys.includes(key));
+    const productionDefinitions = parseDefinitions(currentProductionSha(baseSha));
+    const added = headDefinitions.keys.filter((key) =>
+      !baseDefinitions.keys.includes(key) && !productionDefinitions.keys.includes(key));
     const ticketPrefix = `${title.slice(0, 4).toLowerCase()}-${titleMatch[1]}-`;
     if (added.length > 0 && added.some((key) => !key.startsWith(ticketPrefix))) {
       return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
