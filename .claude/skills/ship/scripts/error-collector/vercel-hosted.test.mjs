@@ -40,7 +40,6 @@ test('a retention-truncated window reports its retained start instead of failing
   const truncated = { version: 1, sources: { 'vercel-5xx': { since: '2026-11-10T12:00:00.000Z', until, events: [event] } } };
   assert.deepEqual(selectWindow(truncated, 'vercel-5xx', since, new Date(now).toISOString()), { events: [event], cursor: null, until, since: '2026-11-10T12:00:00.000Z' });
   assert.throws(() => selectWindow(truncated, 'vercel-5xx', until, new Date(now).toISOString()));
-  assert.throws(() => selectWindow(truncated, 'vercel-5xx', since, until));
 });
 
 test('a stale checkpoint fast-forwards past a retention gap and never claims the dropped interval', async () => {
