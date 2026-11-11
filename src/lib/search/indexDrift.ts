@@ -11,8 +11,15 @@ export type DriftTask = {
 export type IndexedTaskTime = { updatedAt: string };
 export type IndexedCommentCopy = {
   taskTitle: string; taskStatus: string; taskTicketNumber: string;
-  taskUniqueIndex: string; taskProjectId: string;
+  taskUniqueIndex: string; taskProjectId: string; copies: number;
 };
+export const DRIFT_COMMENT_COPY_CAP = 200;
+export function commentCopyScanDepth(commentCount: number): number {
+  return Math.min(Math.max(commentCount, 1), DRIFT_COMMENT_COPY_CAP);
+}
+export function commentCopiesMissing(task: DriftTask, indexed: IndexedCommentCopy): boolean {
+  return task.commentCount <= DRIFT_COMMENT_COPY_CAP && indexed.copies < task.commentCount;
+}
 export function emptyDriftState(): DriftState {
   return { afterId: 0, found: 0, results: [] };
 }
@@ -29,6 +36,7 @@ export function taskRowDrifted(task: { updatedAt: string }, indexed: IndexedTask
 export function commentCopyDrifted(task: DriftTask, indexed: IndexedCommentCopy | null): boolean {
   if (task.commentCount === 0) return false;
   if (!indexed) return true;
+  if (commentCopiesMissing(task, indexed)) return true;
   return (
     indexed.taskTitle !== task.title ||
     indexed.taskStatus !== task.status ||

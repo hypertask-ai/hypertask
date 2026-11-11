@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
+  commentCopyScanDepth,
   advanceIndexDrift,
   emptyDriftState,
   recordDriftPass,
@@ -97,13 +98,14 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
   const indexedComments = new Map<number, IndexedCommentCopy | null>();
   for (const task of tasks) {
     if (task.commentCount === 0) continue;
-    const [row] = await queryRows(turbopufferNamespaces.comment.name, {
+    const indexedRows = await queryRows(turbopufferNamespaces.comment.name, {
       filters: ["taskId", "Eq", String(task.id)],
       rank_by: ["taskUpdatedAt", "asc"],
-      top_k: 1,
+      top_k: commentCopyScanDepth(task.commentCount),
       include_attributes: ["taskTitle", "taskStatus", "taskTicketNumber", "taskUniqueIndex", "taskProjectId"],
       consistency: { level: "strong" },
     });
+    const [row] = indexedRows;
     indexedComments.set(task.id, row
       ? {
           taskTitle: textAttr(row, "taskTitle"),
@@ -111,6 +113,7 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
           taskTicketNumber: textAttr(row, "taskTicketNumber"),
           taskUniqueIndex: textAttr(row, "taskUniqueIndex"),
           taskProjectId: textAttr(row, "taskProjectId"),
+          copies: indexedRows.length,
         }
       : null);
   }
