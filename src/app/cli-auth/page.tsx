@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useCallback, useRef, useEffect } from 'react';
+import { Suspense, useState, useCallback, useRef, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { z } from 'zod';
 import { useFlag } from '@/hooks/useFlag';
@@ -12,7 +12,12 @@ import { toast } from 'react-hot-toast';
 import { cn } from '@/utils/undoActions/helperFuncs';
 import logo from '@/assets/hypertaskLogoWhite.png';
 import darkMark from '@/assets/HTC_without_text.png';
-import useDarkMode from '@/hooks/MultiPages/HTC/useDarkMode';
+import { parseCookies } from 'nookies';
+import {
+  normalizeThemePreference,
+  resolveThemePreference,
+  resolvedThemeDomMetadata,
+} from '@/lib/themePreferences';
 import {
   POST_CLI_NEXT_REDIRECT_KEY,
   parseSafePostCliRedirect,
@@ -424,8 +429,26 @@ async function request(action: string, body: object): Promise<unknown> {
   return response.json();
 }
 
+function serverPaintedDarkTheme() {
+  const theme = normalizeThemePreference(parseCookies().theme);
+  if (!theme || theme === 'system' || theme === 'rounded') return false;
+  return resolvedThemeDomMetadata[resolveThemePreference(theme, 'light')].classes.includes('dark');
+}
+
+function usePaintedDarkTheme() {
+  return useSyncExternalStore(
+    (notify) => {
+      const observer = new MutationObserver(notify);
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      return () => observer.disconnect();
+    },
+    () => document.documentElement.classList.contains('dark'),
+    serverPaintedDarkTheme,
+  );
+}
+
 function AgentSignIn() {
-  const { effectiveTheme } = useDarkMode();
+  const paintedDark = usePaintedDarkTheme();
   const [flow, setFlow] = useState<Flow | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -489,7 +512,7 @@ function AgentSignIn() {
     <CliAuthShell>
       <CliAuthCard agentSignIn>
         <div className="flex flex-col items-center text-center">
-          <Image src={effectiveTheme === 'dark' ? '/loginLogoMain.png' : darkMark} alt="Hypertask logo" width={47} height={59} className="object-contain mb-3" />
+          <Image src={paintedDark ? '/loginLogoMain.png' : darkMark} alt="Hypertask logo" width={47} height={59} className="object-contain mb-3" />
           <h1 className="text-heading font-semibold mb-2">Sign in an agent</h1>
           <p className="text-content text-text-light-gray mb-6">Create a free board for your agent.</p>
           {error && <p role="alert" className="text-content text-text-light-gray mb-4">{error}</p>}
