@@ -74,7 +74,7 @@ const tasksGetArchivedTasksByProject = async (
 
     return {
       status: 200,
-      json: await attachWaitingOnUsers(tasks.map(stripForeignTaskRelations)),
+      json: await attachWaitingOnUsers(tasks.map(stripForeignTaskRelations), parsedUserId),
     };
   } catch (error) {
     console.log(error);

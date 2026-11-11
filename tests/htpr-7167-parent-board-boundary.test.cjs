@@ -245,7 +245,7 @@ const readerWiring = [
   ["src/utils/controllers/taskDetail/load.ts", /\.\.\.stripForeignTaskRelations\(task\)/],
   ["src/utils/controllers/projects/getBoardTasks.ts", /tasks: tasksWithAgentStatus\.map\(stripForeignTaskRelations\)/],
   ["src/utils/controllers/tasks/getAll.ts", /json:tasks\.map\(stripForeignTaskRelations\)/],
-  ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\)\)/],
+  ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\), parsedUserId\)/],
   ["src/lib/mcp/tasks/mappers.ts", /mapTaskToMcpGetResponse[\s\S]*task = stripForeignTaskRelations\(task\)/],
   ["src/lib/mcp/operations/tasks/operation.ts", /tasksWithBlockers\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
   ["src/lib/ai/tools/listTasks.ts", /tasksWithBlockers\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
@@ -287,6 +287,7 @@ function readerStubs(prisma) {
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}), getProjectWhere: () => ({}) },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), isAgentVisibleToUser: () => false, accessibleAgentWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/lib/agents/publicAgent": { projectPublicAgent: () => null, redactAgentIdentitiesForPublicShare: (value) => value },
+    "@/lib/tasks/waitingOnActivitySql": { visibleWaitingOnActivity: () => ({}) },
     "@/lib/mcp/agents": { mapVisibleMcpAgent: () => null, mcpVisibleAgentSelect: () => ({}) },
   };
 }

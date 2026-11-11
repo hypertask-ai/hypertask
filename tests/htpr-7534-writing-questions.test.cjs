@@ -31,6 +31,7 @@ function harness(enabled) {
   const questions = ["  Replace 'better' with precise wording  ", "", "Shorten the title", "Flag missing acceptance criteria", "Flag the missing affected screen", "Fifth"];
   const model = { id: "unchanged-model" };
   const stubs = {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/app/api/ai/_lib/allowanceRefusal": { warnIfAllowanceRefused: () => null },
     "@/lib/flags/definitions/htpr-7716-allowance-fallbacks": { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG: "htpr-7716-allowance-fallbacks" },
     "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },

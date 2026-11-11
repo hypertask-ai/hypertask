@@ -179,6 +179,7 @@ async function main() {
       },
     },
     agentByokApiKey: { count: async () => 0 },
+    $executeRawUnsafe: async () => 0,
   } as any;
   assert.deepEqual(
     await setOwnedAgentVisibilityInTransaction(
