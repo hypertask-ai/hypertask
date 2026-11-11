@@ -63,7 +63,7 @@ function ticketFor(finding) {
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
   const entry = escapeHtml((finding.current ?? []).slice(0, 3).join(", ") || "none");
   const decision = decisionFor(finding);
-  const decide = decision.startsWith("Valentin") ? "yes or no before this model ships." : "nothing";
+  const decide = decision.startsWith("Valentin") ? "Should this model ship?" : "nothing";
   const plain = plainBlock({
     wanted: "A watched model differs from our catalog or the gateway list.",
     affects: "people who pick a model in chat.",
@@ -89,12 +89,12 @@ function rollupGate(findings) {
   const gated = findings.filter((finding) => finding.inputPerMillion == null || finding.inputPerMillion > 5);
   const ready = findings.filter((finding) => finding.inputPerMillion != null && finding.inputPerMillion <= 5);
   const needsYes = ready.some((finding) => !["openai", "anthropic"].includes(finding.provider));
-  const waitLine = `${gated.length} of these wait for the price check or HTPR-7746.`;
-  const yes = { decide: "yes or no to these model classes.", decision: "Valentin says yes or no to these classes." };
+  const waitLine = `${gated.length} of these wait for the price check or HTPR-7746; then Valentin says yes or no.`;
+  const yes = { decide: "Should these model classes ship?", decision: "Valentin says yes or no to these classes." };
   if (!gated.length) return needsYes ? yes : { decide: "nothing", decision: "Nothing; a runner ships these classes." };
   if (!ready.length) return { decide: "nothing", decision: `Nothing yet; ${waitLine}` };
   return {
-    decide: needsYes ? yes.decide : "nothing",
+    decide: needsYes ? "Should the ready classes ship?" : "nothing",
     decision: `${needsYes ? "Valentin says yes or no to the ready classes" : "Nothing needed for the ready classes"}; ${waitLine}`,
   };
 }
