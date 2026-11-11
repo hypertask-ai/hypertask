@@ -17,7 +17,7 @@ jobs:
     if: github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
     name: feature-flag-gate
     concurrency:
-      group: feature-flag-gate-${{ github.event.pull_request.number }}
+      group: feature-flag-gate-${{ github.event.pull_request.head.sha }}
       queue: max
       cancel-in-progress: false
     runs-on: ubuntu-latest
@@ -266,7 +266,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      numbers: ${{ steps.pulls.outputs.numbers }}
+      matrix: ${{ steps.pulls.outputs.matrix }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -281,19 +281,27 @@ jobs:
           set -euo pipefail
           source .github/scripts/github-api-retry.sh
           pages=$(gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100")
-          numbers=$(jq -ce '[flatten[].number] | unique | if length <= 256 then . else error("Too many pull requests for reconciliation matrix") end' <<<"$pages")
-          echo "numbers=$numbers" >>"$GITHUB_OUTPUT"
+          matrix=$(jq -ce '
+            [flatten[] | {number, head_sha: (.head.sha // "")}]
+            | unique_by(.number)
+            | if any(.[]; (.head_sha | test("^[0-9a-f]{40}$") | not)) then
+                error("An open production pull request has no head commit")
+              elif length <= 256 then .
+              else error("Too many pull requests for reconciliation matrix")
+              end
+          ' <<<"$pages")
+          echo "matrix=$matrix" >>"$GITHUB_OUTPUT"
 
   reconcile-open-pull-requests:
     needs: reconciliation-pull-requests
-    if: github.event_name == 'schedule' && needs['reconciliation-pull-requests'].outputs.numbers != '[]'
+    if: github.event_name == 'schedule' && needs['reconciliation-pull-requests'].outputs.matrix != '[]'
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
-        number: ${{ fromJSON(needs.reconciliation-pull-requests.outputs.numbers) }}
+        include: ${{ fromJSON(needs.reconciliation-pull-requests.outputs.matrix) }}
     concurrency:
-      group: feature-flag-gate-${{ matrix.number }}
+      group: feature-flag-gate-${{ matrix.head_sha }}
       queue: max
       cancel-in-progress: false
     name: reconcile-feature-flag-gate

@@ -565,7 +565,7 @@ for (const endpoint of ['/commits/', '/pulls?', '/statuses/']) {
   });
 }
 
-test("events and reconciliation serialize per PR, never per workflow run", () => {
+test("events and reconciliation serialize per head commit, never per workflow run", () => {
   const config = yaml.load(workflow);
   assert.equal(config.concurrency, undefined, "a completed-job zombie cannot hold a workflow-wide lock");
   const event = config.jobs["feature-flag-gate"].concurrency;
@@ -575,18 +575,25 @@ test("events and reconciliation serialize per PR, never per workflow run", () =>
     assert.equal(concurrency.queue, "max");
     assert.equal(concurrency["cancel-in-progress"], false);
   }
-  assert.equal(event.group, "feature-flag-gate-${{ github.event.pull_request.number }}");
-  assert.equal(sweep.group, "feature-flag-gate-${{ matrix.number }}");
-  assert.equal(group(event, 42), group(sweep, 42), "sweep POST cannot overlap a newer event verdict");
-  assert.notEqual(group(event, 42), group(sweep, 43), "unrelated PRs cannot hold each other");
+  assert.equal(event.group, "feature-flag-gate-${{ github.event.pull_request.head.sha }}");
+  assert.equal(sweep.group, "feature-flag-gate-${{ matrix.head_sha }}");
+  assert.equal(group(event, "a".repeat(40)), group(sweep, "a".repeat(40)),
+    "every writer for one commit serializes, however many PRs share that head");
+  assert.notEqual(group(event, "a".repeat(40)), group(sweep, "b".repeat(40)),
+    "unrelated commits cannot hold each other");
   assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["fail-fast"], false);
   assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["max-parallel"], 4);
 });
 
+const headAt = (index) => (index + 1).toString(16).padStart(40, "0");
+const discovered = (number) => ({ number, head_sha: headAt(number) });
+const matrixPull = (number) => ({ number, head: { sha: headAt(number) } });
+
 for (const [name, pages, expected] of [
   ["empty", [[]], []],
-  ["paginated", [[{ number: 42 }], [{ number: 43 }, { number: 42 }]], [42, 43]],
-  ["matrix limit", [Array.from({ length: 257 }, (_, number) => ({ number: number + 1 }))], null],
+  ["paginated", [[matrixPull(42)], [matrixPull(43), matrixPull(42)]], [discovered(42), discovered(43)]],
+  ["matrix limit", [Array.from({ length: 257 }, (_, index) => matrixPull(index + 1))], null],
+  ["a pull request without a head commit", [[matrixPull(42), { number: 43 }]], null],
 ]) {
   test(`discovery: ${name} produces a bounded, deduplicated matrix or fails closed`, (t) => {
     const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-discovery-"));
@@ -613,7 +620,7 @@ for (const [name, pages, expected] of [
       assert.equal(contents, "", "never silently omit pull requests beyond the matrix limit");
     } else {
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(contents, `numbers=${JSON.stringify(expected)}\n`);
+      assert.equal(contents, `matrix=${JSON.stringify(expected)}\n`);
     }
   });
 }
@@ -683,7 +690,7 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   const selected = (event_name, action = "synchronize", number = 42) => {
     const github = { event_name, event: { action, pull_request: { number, base: { ref: "production" } } } };
     return Object.entries(config.jobs)
-      .filter(([, job]) => new Function("github", "needs", `return (${job.if})`)(github, { "reconciliation-pull-requests": { outputs: { numbers: "[42]" } } }))
+      .filter(([, job]) => new Function("github", "needs", `return (${job.if})`)(github, { "reconciliation-pull-requests": { outputs: { matrix: '[{"number":42,"head_sha":"' + "a".repeat(40) + '"}]' } } }))
       .map(([name]) => name);
   };
   for (const action of config.on.pull_request_target.types.filter((action) => action !== "closed")) {

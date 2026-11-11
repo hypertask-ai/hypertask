@@ -83,8 +83,9 @@ pr_job_budget:
     - workflow: .github/workflows/feature-flag-gate.yml
       jobs: 3
       published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
-      concurrency_group: feature-flag-gate-<pr-number>
+      concurrency_group: feature-flag-gate-<head-sha>
       concurrency_scope: job
+      concurrency_key: head_sha
       reconciliation_discovery: scheduled_matrix
       reconciliation_max_parallel: 4
       queue: max
@@ -555,13 +556,14 @@ feature_flag_gate:
   # Bugfix flags share ticket naming. /api/cron/feature-flag-removals files cleanup after 7 days on Everyone; money, access and data-deletion stay at 14 days.
   open_pull_request_reconciliation: scheduled_every_15_minutes
   pull_request_event_evaluation: changed_pr_only
-  concurrency_group: feature-flag-gate-<pr-number>
+  concurrency_group: feature-flag-gate-<head-sha>
   concurrency_scope: job
+  concurrency_key: head_sha
   reconciliation_discovery: scheduled_matrix
   reconciliation_max_parallel: 4
   concurrency_queue: max
   cancel_in_progress: false
-  reconciliation_publication: serialize_with_pr_events_and_fail_closed_on_metadata_change_or_drift
+  reconciliation_publication: serialize_all_writers_per_head_sha_and_fail_closed_on_metadata_change_or_drift
 
 policies:
   previews:
@@ -580,7 +582,7 @@ policies:
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
-    non_cancelling_reconciliation: [feature-flag-gate-production, ux-signoff-gate, dependabot-lane, ci-tests]
+    non_cancelling_reconciliation: [feature-flag-gate-<head-sha>, ux-signoff-gate, dependabot-lane, ci-tests]
     prefer_queue_over_oom: true
   review:
     required_check_name: ai-review
