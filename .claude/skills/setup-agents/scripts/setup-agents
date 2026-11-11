@@ -65,9 +65,15 @@ login_ok() {
     || fail 'the login is not authenticated; run hypertask login or pass a management key, then rerun (CLI output withheld to protect tokens)'
   id=$(jq -r '.agentId // ""' <<<"$status")
   [ -n "$id" ] || return 0
-  members=$(hypertask --json "$@" projects members 15 2>/dev/null) || return 0
+  for project in 15 11514; do
+    members=$(hypertask --json "$@" projects members "$project" 2>/dev/null) \
+      || fail "could not confirm access to project $project; check the login, then rerun (CLI output withheld to protect tokens)"
+    jq -e --arg id "$id" 'any(.members[]; .id == $id)' <<<"$members" >/dev/null 2>&1 \
+      || fail "this agent is not a member of project $project; add it to the board or rerun setup"
+  done
+  [ -n "$name" ] || return 0
   if jq -e --arg id "$id" --arg name "$name" 'any(.members[]; .id == $id and .displayName != $name)' <<<"$members" >/dev/null 2>&1; then
-    fail "the board lists this credential under another agent name; rerun with the name it belongs to"
+    fail 'the board lists this credential under another agent name; rerun with the name it belongs to'
   fi
 }
 

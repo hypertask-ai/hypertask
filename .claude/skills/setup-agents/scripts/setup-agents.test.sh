@@ -18,10 +18,13 @@ if args[:2] == ['agents', 'create']:
     if mode == 'race': pathlib.Path.home().joinpath('.config/hypertask-agents/credentials/setup-smoke-agent-token').write_text(secret)
     print(secret if mode == 'invalid-json' else json.dumps({'token': secret}))
 elif 'members' in args:
-    print(json.dumps({'success': True, 'members': [{'id': 'agent-1', 'displayName': os.environ.get('MEMBER_NAME', 'Setup Smoke')}]}))
+    if mode == 'members-fail': sys.exit(5)
+    people = [] if mode == 'no-member' else [{'id': 'agent-1', 'displayName': os.environ.get('MEMBER_NAME', 'Setup Smoke')}]
+    print(json.dumps({'success': True, 'members': people}))
 else:
     if mode == 'read-fail': sys.exit(4)
-    print(json.dumps({'authenticated': mode != 'wrong-ticket', 'verified': True, 'agentId': 'agent-1' if mode == 'agent' else None}))
+    agent = mode in ('agent', 'members-fail', 'no-member')
+    print(json.dumps({'authenticated': mode != 'wrong-ticket', 'verified': True, 'agentId': 'agent-1' if agent else None}))
 ''')
     cli.chmod(0o755)
     base = {k: v for k, v in os.environ.items() if k not in {
@@ -114,7 +117,9 @@ else:
                 assert not (creds(home) / 'setup-smoke-agent-token').exists(), 'a failed creation saved a credential'
         home, env = fixture('server-name')
         assert run(dict(env, FAKE_MODE='agent'), '--name', 'Setup Smoke').returncode == 0
-        must_fail(dict(env, FAKE_MODE='agent', MEMBER_NAME='Other Agent'), 'other agent name', '--name', 'Setup Smoke')
+        must_fail(dict(env, FAKE_MODE='agent', MEMBER_NAME='Other Agent'), 'another agent name', '--name', 'Setup Smoke')
+        must_fail(dict(env, FAKE_MODE='members-fail'), 'could not confirm access to project 15', '--name', 'Setup Smoke')
+        must_fail(dict(env, FAKE_MODE='no-member'), 'not a member of project 15', '--name', 'Setup Smoke')
         home, env = fixture('race')
         must_fail(env, 'appeared while setup was running', '--name', 'Setup Smoke', mode='race')
         assert (creds(home) / 'setup-smoke-agent-token').read_text() == secret, 'a racing writer token was overwritten'
@@ -129,6 +134,7 @@ else:
         assert not (home / '.config').exists(), 'the smoke check wrote files'
         assert calls(home) == [['--json', 'status']], calls(home)
         assert 'the server rejected this login' in run(dict(env, FAKE_MODE='read-fail'), '--check').stderr
+        assert run(dict(env, FAKE_MODE='agent'), '--check').returncode == 0, 'an agent-scoped ambient login failed the unnamed smoke'
         home, env = fixture('check-credential')
         assert 'no readable credential for "Setup Smoke"' in run(env, '--check', '--name', 'Setup Smoke').stderr
         creds(home).mkdir(parents=True)

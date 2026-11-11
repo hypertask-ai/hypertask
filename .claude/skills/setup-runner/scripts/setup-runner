@@ -12,7 +12,7 @@ export PATH
 unset runner_command_dir
 umask 077
 SELF=$(readlink -f "$0")
-CREDS=$HOME/.config/hypertask-agents/credentials
+CREDS=${VCC_CREDENTIALS_DIR:-$HOME/.config/hypertask-agents/credentials}
 fail() { printf 'setup-runner: %s\n' "$1" >&2; exit 1; }
 
 [ "$#" -le 1 ] || fail 'usage: setup-runner [positive runner number]'
@@ -20,7 +20,6 @@ if [ "$#" -eq 1 ]; then
   [[ "$1" =~ ^[1-9][0-9]*$ ]] || fail 'runner number must be a positive integer (no leading zeros)'
 fi
 
-# Match ship-identity: the nearest ancestor session and user-supplied name.
 pid=$$
 own_pid=
 name=${SHIP_SESSION_NAME:-}
@@ -39,7 +38,6 @@ done
 name=${name%% | *}
 
 mkdir -p "$CREDS"
-# Serialize picking and provisioning so simultaneous setups cannot claim one number.
 exec 9>"$CREDS/.setup-runner.lock"
 flock -x 9
 live_numbers=()
