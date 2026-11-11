@@ -287,7 +287,7 @@ export const KanbanBulkSelectionProvider = ({
           setSelectedIds(nextFailedIds);
           setFailedIds(nextFailedIds);
           toast.error(
-            `${failures.length} of ${snapshot.length} tasks could not be archived`,
+            `${failures.length} of ${snapshot.length} tasks could not be archived: ${failures.map((task) => task.title).join(", ")}`,
           );
         })
         .catch((error) => {
