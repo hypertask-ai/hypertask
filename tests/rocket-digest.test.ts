@@ -263,6 +263,14 @@ test("entrySummary drops chat mentions, decision notes and flag prose", () => {
     "Let an agent be the waiting person on a ticket.",
   );
   assert.equal(
+    entrySummary("<p>New dashboard for teams \u2014 Owner + QA when released.</p>"),
+    "New dashboard for teams.",
+  );
+  assert.equal(
+    entrySummary("<p>@HT Product Lead: Turn adaptive thinking off by default.</p>"),
+    "Turn adaptive thinking off by default.",
+  );
+  assert.equal(
     entrySummary("<p>@Tom Fix the sidebar so it stops covering cards.</p>"),
     "Fix the sidebar so it stops covering cards.",
   );

@@ -40,9 +40,11 @@ const POINTER_ONLY =
   /^(?:follow[- ]?up\b|see\b|refs?\b|part of\b|related to\b|blocked by\b|as discussed\b|ready to build\b|now ready to build\b|n\/a\b)/i;
 const TITLE_PREFIX = /^(?:\[[^\]]{1,40}\]\s*|[A-Z][A-Z0-9]*-\d+\s+)/;
 const BARE_URL = /https?:\/\/\S+/gi;
-const FLAG_PROSE = /\s*[—–-]?\s*\b(?:everyone|only me \+ qa|internal|off|qa|owner)\b when released\b\.?/gi;
+const FLAG_PROSE =
+  /\s*[—–-]?\s*\b(?:only me \+ qa|owner \+ qa|owner|everyone|internal|off|qa)\b when released\b\.?/gi;
 const MENTION = /^@[\w.'-]+/;
 const MENTION_WORD = /^\s+([A-Z][\w.'-]*)/;
+const MENTION_TRAILING = /^[\s:;,\u2013\u2014-]+/;
 const MENTION_STOP = new Set([
   "a",
   "add",
@@ -172,31 +174,16 @@ function stripLeadingFields(text: string): string {
   return stripped;
 }
 
-function mentionNameWords(text: string): { words: string[]; tails: string[] } {
-  const words: string[] = [];
-  const tails: string[] = [text];
-  let tail = text;
-  while (words.length < MAX_MENTION_NAME_WORDS) {
-    const word = tail.match(MENTION_WORD);
-    if (!word) break;
-    words.push(word[1]);
-    tail = tail.slice(word[0].length);
-    tails.push(tail);
-  }
-  return { words, tails };
-}
-
 function stripMention(text: string): string {
   const mention = text.match(MENTION);
   if (!mention) return text;
-  const { words, tails } = mentionNameWords(text.slice(mention[0].length));
-  let consumed = 0;
-  for (let index = 0; index < words.length; index += 1) {
-    if (MENTION_STOP.has(words[index].toLowerCase())) break;
-    if (index === words.length - 1) break;
-    consumed = index + 1;
+  let tail = text.slice(mention[0].length);
+  for (let count = 0; count < MAX_MENTION_NAME_WORDS; count += 1) {
+    const word = tail.match(MENTION_WORD);
+    if (!word || MENTION_STOP.has(word[1].toLowerCase())) break;
+    tail = tail.slice(word[0].length);
   }
-  return tails[consumed].trimStart();
+  return tail.replace(MENTION_TRAILING, "");
 }
 
 function cleanSentence(piece: string): string {
