@@ -22,7 +22,7 @@ export async function appendAgentChatTools(
   tools: readonly PortableTool[],
   ctx: McpAuthContext | undefined,
 ): Promise<PortableTool[]> {
-  if (!ctx || ctx.management) return [...tools]
+  if (!ctx?.agentId || ctx.management) return [...tools]
   const enabled = await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, ctx.user.id).catch(() => false)
   if (!enabled) return [...tools]
   return [...tools.filter((tool) => !chatToolNames.has(tool.name)), chatInboxTool, chatReplyTool]
