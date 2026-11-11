@@ -161,28 +161,52 @@ function merge(group, event) {
   group.routes = [...new Set([...group.routes, redact(event.route)])];
 }
 
+function ticketLabels(board) {
+  return `${board === PRODUCT_BOARD ? 'Error Log' : 'Infra'},brain-medium`;
+}
+
+function identityHref(group, fp) {
+  const count = group.noiseRule ? group.hourlyCount : group.count;
+  const params = new URLSearchParams();
+  params.set('routes', group.routes.join(', '));
+  params.set('count', String(count ?? ''));
+  params.set('first', group.firstSeen ?? '');
+  params.set('last', group.lastSeen ?? group.hourLastSeen ?? '');
+  if (group.incident?.root) {
+    params.set('root', group.incident.root);
+    params.set('route', group.incident.route ?? '');
+    params.set('routeKey', group.incident.routeKey ?? '');
+  }
+  const rest = params.toString().replace(/%2F/g, '/').replace(/%3A/g, ':').replace(/%2C/g, ',').replace(/%20/g, ' ').replace(/\+/g, ' ');
+  return `https://app.hypertask.ai/search?searchTerm=error-fingerprint:${fp}&${rest}`;
+}
+
 function description(group, fp) {
   const block = group.noiseRule
     ? renderPlainLanguageTicketDescription({
-        whatWrongOrWanted: `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times; warning on stderr.`,
-        whoItAffects: "internal only",
-        recommendedCourseAndWhy: "Fix the noisy warning at the source. Why: stderr spam hides real incidents.",
+        whatWrongOrWanted: "One warning repeats too often.",
+        whoItAffects: "Internal only.",
+        recommendedCourseAndWhy: "Quiet the warning. Why: it hides real errors.",
         whatValentinMustDecide: "nothing",
-        howToUndo: "revert the change that introduced the warning",
+        howToUndo: "Revert the last change.",
       })
     : renderPlainLanguageTicketDescription({
-        whatWrongOrWanted: `${group.service} failed: ${group.normalized}.`,
-        whoItAffects: "see routes and counts below",
-        recommendedCourseAndWhy: "Trace the stack and fix the root cause. Why: repeated hits in the window.",
-        whatValentinMustDecide: "nothing; a runner will investigate",
-        howToUndo: "revert the breaking deploy or patch the handler",
+        whatWrongOrWanted: "A production error keeps happening.",
+        whoItAffects: "Internal. People using the app.",
+        recommendedCourseAndWhy: "Fix the cause. Why: it keeps happening.",
+        whatValentinMustDecide: "nothing",
+        howToUndo: "Revert the last change.",
       });
-  if (group.noiseRule) {
-    const fields = [ ['Service', group.service], ['Warning', group.normalized], ['Occurrences in one hour', group.hourlyCount], ['Hour ending', group.hourLastSeen], ['Routes', group.routes.join(', ')], ['Redacted sample', group.message] ];
-    return block + `<ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
-  }
-  const fields = [ ['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message] ];
-  return block + `<ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
+  const problem = group.noiseRule ? `${group.normalized}.` : "The same error keeps showing up.";
+  const countLine = group.noiseRule ? `Occurrences in one hour: ${group.hourlyCount}` : `Count in window: ${group.count}`;
+  const shape = [["Problem", problem], ["Fix", "Patch the cause."], ["Done when", "The error stops."], ["Risk", "Low."], ["Decision", "None."]];
+  return block + shape.map(([head, line]) => `<h2>${head}</h2><p>${html(line)}</p>`).join("") + `<p>${html(countLine)}</p><p>Redacted sample follows.</p><p><a href="${html(identityHref(group, fp))}">Same error</a></p>`;
+}
+
+function detailNote(group, fp) {
+  const stack = String(group.stack ?? "").split("\n").slice(0, 40).join("\n");
+  const id = createHash("sha256").update(`detail|${fp}`).digest("hex").slice(0, 24);
+  return { id, text: `Redacted sample: ${group.message}\nStack:\n${stack}\n[error-detail:${id}]` };
 }
 
 function search(fp, board, env, incident) {
@@ -492,14 +516,24 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         const text = description(group, fp);
         let temp;
         const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);
+        let createdNow = false;
         try {
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
-          state.created.push(iso(now));
-          await checkpoint();
-          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
-          if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
-          else found = { ticket: ticketRef(payload(output).task), deleted: false };
+          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', ticketLabels(group.board), '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
+          if (dryRun) {
+            state.created.push(iso(now));
+            console.log(`DRY-RUN description ${JSON.stringify(text)}`);
+            found = { ticket: `DRYRUN-${state.created.length}`, deleted: false };
+          } else {
+            found = { ticket: ticketRef(payload(output).task), deleted: false };
+            state.created.push(iso(now));
+            createdNow = true;
+          }
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };
+          if (createdNow) {
+            const note = detailNote(group, fp);
+            state.occurrences[note.id] ??= { ticket: found.ticket, queuedAt: iso(now), text: note.text };
+          }
         } finally { if (temp) await fs.rm(temp, { force: true }); }
       } else {
         state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: null };

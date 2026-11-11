@@ -105,7 +105,8 @@ async function withHarness(fn) { const h = harness(); try { await fn(h); } final
 const longValue = 'Xy'.repeat(20);
 const event = (overrides = {}) => ({ service: 'web', board: 15, message: 'Checkout failed for user 123', route: '/checkout/123', stack: 'Error: checkout failed\n  at checkout', ts: new Date(NOW - 1000).toISOString(), ...overrides });
 const creates = h => h.calls().filter(c => c.name === 'vcc' && c.args.includes('create'));
-const activities = (h, ticket) => h.calls().filter(c => c.name === 'vcc' && c.args[0] === 'activity' && (!ticket || c.args[2] === ticket));
+const activities = (h, ticket) => h.calls().filter(c => c.name === 'vcc' && c.args[0] === 'activity' && (!ticket || c.args[2] === ticket) && !String(c.args[3] ?? '').includes('[error-detail:'));
+const details = h => h.calls().filter(c => c.name === 'vcc' && String(c.args[3] ?? '').includes('[error-detail:'));
 
 check('sources', 'normalization strips every dynamic value and hash matches independent SHA-256', () => {
   const values = ['123e4567-e89b-12d3-a456-426614174000', 'abcdefabcdef1234567890', 'person@example.invalid', '"quoted value"', "'literal 7'", '`a b`', 'clm123456789abcdefghijklmn'];
@@ -194,7 +195,7 @@ check('tickets', 'groups parked before a fingerprint rule change join the curren
   seedState();
   assert.equal(await h.run(), 0);
   assert.equal(creates(h).length, 1);
-  assert.match(creates(h)[0].description, new RegExp(`error-fingerprint:${current}<`));
+  assert.match(creates(h)[0].description, new RegExp(`error-fingerprint:${current}(?![a-f0-9])`));
 }));
 
 check('tickets', 'a group parked under the current rules keeps its key even when its saved sample is redacted', () => withHarness(async h => {
@@ -272,7 +273,8 @@ check('sources', 'fixture filters boundaries, groups counts/times/routes and rep
   assert.equal(records[0].firstSeen, new Date(NOW - 5000).toISOString());
   assert.equal(records[0].lastSeen, new Date(NOW - 1000).toISOString());
   const body = creates(h)[0].description;
-  assert.match(body, /\/checkout\/123, \/checkout\/456/);
+  assert.match(body, /\/checkout\/123/);
+  assert.match(body, /\/checkout\/456/);
   assert.match(body, /Count in window: 5/);
   h.events([]);
   await h.run({ now: NOW + 1000 });
@@ -321,12 +323,16 @@ check('tickets', 'creation options, redacted escaped HTML, atomic private state 
   h.events([event({ message: `Checkout failed ${unsafe}`, stack: Array.from({ length: 50 }, (_, i) => `${i}: ${unsafe}`).join('\n') })]);
   await h.run();
   const call = creates(h)[0];
-  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log', '--priority', 'high', '--title']);
+  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title']);
   assert.match(call.description, /^<p><strong>/);
-  assert.match(call.description, /error-fingerprint:[a-f0-9]{16}<\/p>$/);
+  assert.match(call.description, /error-fingerprint:[a-f0-9]{16}(?![a-f0-9])/);
+  for (const head of ['Problem', 'Fix', 'Done when', 'Risk', 'Decision']) assert.match(call.description, new RegExp(`<h2>${head}</h2>`));
   assert.ok(!call.description.includes('<script>'));
-  const stack = call.description.match(/<pre>([\s\S]*?)<\/pre>/)[1];
+  assert.ok(!call.description.includes('<pre>'));
+  const note = details(h)[0].args[3];
+  const stack = note.split('Stack:\n')[1].split('\n[error-detail:')[0];
   assert.equal(stack.split('\n').length, 40);
+  assert.match(note, /Redacted sample:/);
   const sensitive = ['fake-password', 'fake-bearer', 'user@example.invalid', 'fake-key', fakeStripe];
   const output = JSON.stringify(h.calls()) + readFileSync(h.statePath, 'utf8');
   for (const value of sensitive) assert.ok(!output.includes(value), 'redaction leaked a fixture value');
@@ -369,6 +375,7 @@ check('tickets', 'routes 11514 to live Backlog, falls back to Todo and refuses a
     const args = creates(h)[0].args;
     assert.equal(args[args.indexOf('--project') + 1], '11514');
     assert.equal(args[args.indexOf('--section') + 1], '2');
+    assert.equal(args[args.indexOf('--labels') + 1], 'Infra,brain-medium');
     assert.ok(h.calls().some(c => c.name === 'ht' && c.args[1] === '/mcp/projects/11514/sections'));
   });
   await withHarness(async h => { h.events([event({ board: 11514 })]); h.config({ sections: [] }); await h.run(); assert.equal(creates(h).length, 0); assert.equal(Object.keys(h.state().pending).length, 1); });
@@ -468,10 +475,26 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
     h.events([event()]); h.config({ [flag]: true }); assert.equal(await h.run(), 0);
     assert.equal(Object.keys(h.state().pending).length, 1);
     if (flag !== 'createFail') assert.equal(creates(h).length, 0);
+    if (flag === 'createFail') assert.deepEqual(h.state().created, []);
     h.config({}); await h.run({ now: NOW + 1000 });
     assert.equal(Object.keys(h.state().pending).length, 0);
   });
 });
+
+check('tickets', 'a refused create does not spend the hourly slot', () => withHarness(async h => {
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
+  h.events([event()]);
+  h.config({ createFail: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 1);
+  h.config({});
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().created.length, 1);
+  assert.equal(Object.keys(h.state().pending).length, 0);
+}));
 
 check('tickets', 'hourly cap files a product Vercel error before an infra group', () => withHarness(async h => {
   h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
@@ -502,7 +525,8 @@ check('reporting', 'default rolling cap, pending counts/routes survive and exact
   const record = Object.values(h.state().fingerprints).find(r => r.total === 5);
   assert.ok(record);
   assert.match(creates(h)[5].description, /Count in window: 5/);
-  assert.match(creates(h)[5].description, /\/checkout\/123, \/checkout\/456/);
+  assert.match(creates(h)[5].description, /\/checkout\/123/);
+  assert.match(creates(h)[5].description, /\/checkout\/456/);
   assert.equal(h.state().days['2026-10-14'].web.newGroups, 7);
 }));
 
@@ -522,8 +546,8 @@ check('reporting', 'noise alert threshold plans exactly one ticket above the lim
     assert.equal((planned.stdout.match(/"create"/g) ?? []).length, count > 50 ? 1 : 0);
     if (count > 50) {
       assert.match(planned.stdout, /SSL configuration warning repeated 51 times in one hour/);
-      assert.match(planned.stdout, /warning on stderr/);
-      assert.match(planned.stdout, /Fix the noisy warning at the source/);
+      assert.match(planned.stdout, /One warning repeats too often/);
+      assert.match(planned.stdout, /Quiet the warning/);
       assert.match(planned.stdout, /\/route\/0, \/route\/1/);
     }
     assert.equal(existsSync(h.statePath), false);
@@ -592,7 +616,7 @@ check('reporting', 'noise alert second run reuses its ticket via activity, and c
   await h.run({ now: NOW + 6 * HOUR });
   assert.equal(creates(h).length, 1);
   assert.equal(activities(h, ticket).length, 2);
-  assert.ok(h.calls().filter(call => call.name === 'ht').every(call => call.args[1].includes(`error-fingerprint%3A${fp}`)));
+  assert.ok(h.calls().filter(call => call.name === 'ht' && call.args[1].includes('/mcp/tasks?')).every(call => call.args[1].includes(`error-fingerprint%3A${fp}`)));
 }));
 
 check('reporting', 'noise alert overrides, pending cap, retry reconciliation and sample redaction', async () => {
@@ -825,9 +849,10 @@ check('reporting', 'SSH daemon identifier fallback ignores client resets but ret
   assert.equal(creates(h).length, 3);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 3);
-  assert.ok(creates(h).some(call => call.description.includes('Address already in use')));
-  assert.ok(creates(h).some(call => call.description.includes('Permission denied')));
-  assert.ok(creates(h).some(call => call.description.includes('database: fatal: ssh_packet_send_debug')));
+  const notes = details(h).map(call => call.args[3]).join('\n');
+  assert.ok(notes.includes('Address already in use'));
+  assert.ok(notes.includes('Permission denied'));
+  assert.ok(notes.includes('database: fatal: ssh_packet_send_debug'));
 }));
 
 check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures still file', () => withHarness(async h => {
@@ -847,7 +872,7 @@ check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe fail
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 4);
   assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
   assert.equal(creates(h).length, 5);
-  assert.ok(creates(h).some(call => call.description.includes('Access denied.')));
+  assert.ok(details(h).some(call => call.args[3].includes('Access denied.')));
 }));
 
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
@@ -1644,7 +1669,7 @@ check('incidents', 'new root ticket groups operations and preserves activities a
   h.config({ ambiguousActivity: true });
   await h.run();
   assert.equal(creates(h).length, 1);
-  assert.equal(Object.keys(h.state().occurrences).length, 2);
+  assert.equal(Object.keys(h.state().occurrences).length, 3);
   h.config({});
   await h.run();
   assert.equal(activities(h, 'HTPR-100').length, 2, 'saved activity markers recover ambiguous writes');
