@@ -1279,10 +1279,7 @@ jobs:
           npx prisma generate
           # A restored node_modules skipped the npm postinstall that writes this file.
           npm run flags:generate
-          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
-          npx playwright install --with-deps chromium
-          sudo apt-get update
-          sudo apt-get install -y strace
+          bash .github/scripts/install-chromium.sh
       # HYCI-62: one saver only. Four shards racing the same key would each pay
       # the download when the cache misses, and three of the saves would fail.
       - name: Save Playwright browser cache
@@ -1538,10 +1535,7 @@ jobs:
           npx prisma generate
           # A restored node_modules skipped the npm postinstall that writes this file.
           npm run flags:generate
-          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
-          npx playwright install --with-deps chromium
-          sudo apt-get update
-          sudo apt-get install -y strace
+          bash .github/scripts/install-chromium.sh
       - name: Prepare disposable local credentials
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash
@@ -1771,10 +1765,7 @@ jobs:
           npx prisma generate
           # A restored node_modules skipped the npm postinstall that writes this file.
           npm run flags:generate
-          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
-          npx playwright install --with-deps chromium
-          sudo apt-get update
-          sudo apt-get install -y strace
+          bash .github/scripts/install-chromium.sh
       - name: Prepare disposable local credentials
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash
@@ -2012,10 +2003,7 @@ jobs:
           npx prisma generate
           # A restored node_modules skipped the npm postinstall that writes this file.
           npm run flags:generate
-          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
-          npx playwright install --with-deps chromium
-          sudo apt-get update
-          sudo apt-get install -y strace
+          bash .github/scripts/install-chromium.sh
       - name: Prepare disposable local credentials
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash

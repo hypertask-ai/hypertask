@@ -1,6 +1,7 @@
 ## PR size check (HYCI-29)
 
-- Trusted production code counts additions and deletions.
+- Trusted production code counts additions and deletions against the current production commit and PR head, not the cached PR file list.
+- The immutable comparison records its production SHA in the artifact. Missing files or the comparison API's 300-file truncation boundary produce measurement errors, never passing counts.
 - One config excludes generated and fixture files, including the ESLint-generated style-guide suppressions baseline.
 - Renames crossing exclusion boundaries still count.
 - Incomplete measurements produce errors, never passing counts.
