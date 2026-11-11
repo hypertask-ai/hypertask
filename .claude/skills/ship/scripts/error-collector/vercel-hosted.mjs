@@ -29,15 +29,22 @@ export function selectWindow(snapshot, service, since, until) {
   return { events: batch.events.filter(event => Date.parse(event.ts) > Date.parse(since) && Date.parse(event.ts) <= Date.parse(batch.until)), cursor: null, until: batch.until };
 }
 
+function githubEnv(env) {
+  const token = command('gh-app-token', [], env).trim();
+  if (!token || /\s/.test(token)) throw new Error('github credential unavailable');
+  return { ...env, GH_TOKEN: token, GITHUB_TOKEN: token };
+}
+
 let cached;
 export async function fetchHosted({ since, until, env }, service) {
   if (!cached) {
     cached = Promise.resolve().then(() => {
-      const runs = JSON.parse(command('gh', ['run', 'list', '--repo', repo, '--workflow', workflow, '--branch', 'production', '--status', 'success', '--limit', '1', '--json', 'databaseId'], env));
+      const github = githubEnv(env);
+      const runs = JSON.parse(command('gh', ['run', 'list', '--repo', repo, '--workflow', workflow, '--branch', 'production', '--status', 'success', '--limit', '1', '--json', 'databaseId'], github));
       if (!Number.isSafeInteger(runs[0]?.databaseId)) throw new Error('no successful hosted Vercel run');
       const dir = mkdtempSync(join(tmpdir(), 'vercel-feed-'));
       try {
-        command('gh', ['run', 'download', String(runs[0].databaseId), '--repo', repo, '--name', artifact, '--dir', dir], env);
+        command('gh', ['run', 'download', String(runs[0].databaseId), '--repo', repo, '--name', artifact, '--dir', dir], github);
         const key = readFileSync(env.ERROR_COLLECTOR_VERCEL_PRIVATE_KEY ?? join(env.HOME ?? homedir(), '.local/state/error-collector/vercel-feed.pem'));
         return open(readFileSync(join(dir, 'feed.enc'), 'utf8'), key);
       } finally { rmSync(dir, { recursive: true, force: true }); }

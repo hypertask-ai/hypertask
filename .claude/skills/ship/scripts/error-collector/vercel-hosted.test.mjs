@@ -68,17 +68,21 @@ test('three source reads share one authenticated artifact download, without Verc
   const sources = Object.fromEntries(['vercel', 'vercel-5xx', 'realtime'].map(service => [service, { since, until, events: [] }]));
   writeFileSync(join(root, 'private.pem'), keys.privateKey.export({ type: 'pkcs8', format: 'pem' }));
   writeFileSync(join(root, 'snapshot.enc'), seal({ version: 1, sources }, keys.publicKey));
+  writeFileSync(join(root, 'gh-app-token'), `#!${process.execPath}
+process.stdout.write('app-token-sentinel\\n');
+`, { mode: 0o700 });
   writeFileSync(join(root, 'gh'), `#!${process.execPath}
 const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
+if (process.env.GH_TOKEN !== 'app-token-sentinel' || process.env.GITHUB_TOKEN !== 'app-token-sentinel') process.exit(1);
 fs.appendFileSync(path.join(process.env.HOME, 'calls'), args[1] + '\\n');
 if (args[0] !== 'run') process.exit(1);
 if (args[1] === 'list') console.log(JSON.stringify([{ databaseId: 123 }]));
 else if (args[1] === 'download') fs.copyFileSync(path.join(process.env.HOME, 'snapshot.enc'), path.join(args[args.indexOf('--dir') + 1], 'feed.enc'));
 else process.exit(1);
 `, { mode: 0o700 });
-  const env = { HOME: root, PATH: root, ERROR_COLLECTOR_VERCEL_HOSTED: '1', ERROR_COLLECTOR_VERCEL_PRIVATE_KEY: join(root, 'private.pem') };
+  const env = { HOME: root, PATH: root, GH_TOKEN: 'human-token', GITHUB_TOKEN: 'human-token', ERROR_COLLECTOR_VERCEL_HOSTED: '1', ERROR_COLLECTOR_VERCEL_PRIVATE_KEY: join(root, 'private.pem') };
   try {
     const { fetchVercel } = await import('./sources/vercel.mjs');
     for (const service of Object.keys(sources)) {
