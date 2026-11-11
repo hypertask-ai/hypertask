@@ -569,17 +569,8 @@ test("events and reconciliation serialize per head commit, never per workflow ru
   assert.equal(config.concurrency, undefined, "a completed-job zombie cannot hold a workflow-wide lock");
   const event = config.jobs["feature-flag-gate"].concurrency;
   const sweep = config.jobs["reconcile-open-pull-requests"].concurrency;
-  const group = (config, number) => config.group.replace(/\$\{\{ .*? \}\}/, number);
-  for (const concurrency of [event, sweep]) {
-    assert.equal(concurrency.queue, "max");
-    assert.equal(concurrency["cancel-in-progress"], false);
-  }
   assert.equal(event.group, "feature-flag-gate-${{ github.event.pull_request.head.sha }}");
   assert.equal(sweep.group, "feature-flag-gate-${{ matrix.head_sha }}");
-  assert.equal(group(event, "a".repeat(40)), group(sweep, "a".repeat(40)),
-    "every writer for one commit serializes, however many PRs share that head");
-  assert.notEqual(group(event, "a".repeat(40)), group(sweep, "b".repeat(40)),
-    "unrelated commits cannot hold each other");
   assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["fail-fast"], false);
   assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["max-parallel"], 4);
 });
@@ -589,8 +580,9 @@ const discovered = (number) => ({ number, head_sha: headAt(number),
   pull: { number, state: null, title: null, base: { ref: null, sha: null }, head: { sha: headAt(number), repo: { full_name: null } }, labels: [] }, head_pr_count: 1 });
 const matrixPull = (number) => ({ number, head: { sha: headAt(number) } });
 
-for (const [name, pages, expected] of [
+for (const [name, pages, expected, rateLimited = false] of [
   ["empty", [[]], []],
+  ["rate limited", [[]], undefined, true],
   ["paginated", [[matrixPull(42)], [matrixPull(43), matrixPull(42)]], [discovered(42), discovered(43)]],
   ["matrix limit", [Array.from({ length: 257 }, (_, index) => matrixPull(index + 1))], null],
   ["a pull request without a head commit", [[matrixPull(42), { number: 43 }]], null],
@@ -598,30 +590,37 @@ for (const [name, pages, expected] of [
   test(`discovery: ${name} produces a bounded, deduplicated matrix or fails closed`, (t) => {
     const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-discovery-"));
     t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
-    const config = yaml.load(workflow);
-    const discovery = config.jobs["reconciliation-pull-requests"];
+    const discovery = yaml.load(workflow).jobs["reconciliation-pull-requests"];
     assert.equal(discovery.permissions.statuses, undefined, "discovery cannot publish statuses");
     const script = discovery.steps.find((step) => step.id === "pulls").run;
     fs.writeFileSync(path.join(fixture, "pages.json"), JSON.stringify(pages));
-    fs.writeFileSync(path.join(fixture, "gh"), '#!/bin/sh\nprintf "%s\\n" "$*" >"$FIXTURE_CALL"\ncat "$FIXTURE_PAGES"\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(fixture, "gh"), `#!/bin/sh
+printf '%s\\n' "$*" >"$FIXTURE_CALL"
+if [ "$FIXTURE_RATE_LIMITED" = "true" ]; then
+  printf 'HTTP/2.0 403 Forbidden\\nX-Ratelimit-Remaining: 0\\nX-Ratelimit-Reset: %s\\n\\n{}\\n' "$(( $(date +%s) + 3600 ))"
+  exit 1
+fi
+printf 'HTTP/2.0 200 OK\\nContent-Type: application/json\\n\\n'
+cat "$FIXTURE_PAGES"
+`, { mode: 0o755 });
     const output = path.join(fixture, "output");
     const call = path.join(fixture, "call");
     fs.writeFileSync(output, "");
     const result = spawnSync("bash", ["-e", "-c", script], {
       cwd: path.join(__dirname, ".."), encoding: "utf8", timeout: 5000,
-      env: { ...process.env, PATH: `${fixture}:${process.env.PATH}`, REPO: "fixture/repository",
-        GITHUB_OUTPUT: output, FIXTURE_CALL: call, FIXTURE_PAGES: path.join(fixture, "pages.json") },
+      env: { ...process.env, PATH: `${fixture}:${process.env.PATH}`, REPO: "fixture/repository", RUNNER_TEMP: fixture,
+        GITHUB_OUTPUT: output, FIXTURE_CALL: call, FIXTURE_PAGES: path.join(fixture, "pages.json"),
+        FIXTURE_RATE_LIMITED: String(rateLimited) },
     });
     assert.ifError(result.error);
     const contents = fs.readFileSync(output, "utf8");
+    assert.ok(fs.existsSync(call), result.stdout + result.stderr);
     assert.match(fs.readFileSync(call, "utf8"), /--paginate --slurp/);
-    if (expected === null) {
-      assert.notEqual(result.status, 0, result.stdout + result.stderr);
-      assert.equal(contents, "", "never silently omit pull requests beyond the matrix limit");
-    } else {
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(contents, `matrix=${JSON.stringify(expected)}\n`);
-    }
+    assert.deepEqual(fs.readdirSync(fixture).filter((name) => name.startsWith("feature-flag-discovery.")), [], "discovery removes its private scratch");
+    if (expected === null) assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    else assert.equal(result.status, 0, result.stdout + result.stderr);
+    if (rateLimited) assert.match(result.stderr, /skipped: GitHub rate limited/);
+    assert.equal(contents, expected == null ? "" : `matrix=${JSON.stringify(expected)}\n`, "never publish a partial matrix");
   });
 }
 
@@ -687,10 +686,10 @@ test('a genuine evaluation error is not hidden by rate limiting its error-status
 
 test("PR events evaluate only their own head; fleet reconciliation runs every fifteen minutes", (t) => {
   const config = yaml.load(workflow);
-  const selected = (event_name, action = "synchronize", number = 42) => {
+  const selected = (event_name, action = "synchronize", number = 42, matrix = JSON.stringify([{ number, head_sha: "a".repeat(40) }])) => {
     const github = { event_name, event: { action, pull_request: { number, base: { ref: "production" } } } };
     return Object.entries(config.jobs)
-      .filter(([, job]) => new Function("github", "needs", `return (${job.if})`)(github, { "reconciliation-pull-requests": { outputs: { matrix: '[{"number":42,"head_sha":"' + "a".repeat(40) + '"}]' } } }))
+      .filter(([, job]) => new Function("github", "needs", `return (${job.if})`)(github, { "reconciliation-pull-requests": { outputs: { matrix } } }))
       .map(([name]) => name);
   };
   for (const action of config.on.pull_request_target.types.filter((action) => action !== "closed")) {
@@ -699,6 +698,9 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   assert.deepEqual(selected("pull_request_target", "closed"), []);
   assert.deepEqual(selected("push"), []);
   assert.deepEqual(selected("schedule"), ["reconciliation-pull-requests", "reconcile-open-pull-requests"]);
+  for (const matrix of ["", "[]"]) {
+    assert.deepEqual(selected("schedule", "synchronize", 42, matrix), ["reconciliation-pull-requests"]);
+  }
   assert.deepEqual(Object.keys(config.on).sort(), ["pull_request_target", "schedule"]);
   assert.deepEqual(config.on.schedule, [{ cron: "*/15 * * * *" }]);
   assert.equal(config.jobs["reconcile-open-pull-requests"].needs, "reconciliation-pull-requests");
@@ -722,33 +724,19 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   ]);
 });
 
-test("reconcile: a discovery snapshot outside the locked head never publishes", (t) => {
-  const { result, output, posts, calls } = runWorkflow(t, {
-    discoveredPull: (pull) => ({ ...pull, head: { ...pull.head, sha: "d".repeat(40) } }),
+for (const scenario of ["invalid snapshot", "head advanced", "parser failure"]) {
+  test(`reconcile: ${scenario} cannot publish outside the locked head`, (t) => {
+    const advance = (pull) => ({ ...pull, head: { ...pull.head, sha: "d".repeat(40) } });
+    const { result, output, calls, pull } = runWorkflow(t, scenario === "invalid snapshot"
+      ? { discoveredPull: advance }
+      : { refreshedPull: advance, parserFailure: scenario === "parser failure" });
+    assert.equal(result.status, scenario === "head advanced" ? 0 : 2, output);
+    const writes = calls.filter((call) => call.args.includes("POST"));
+    assert.deepEqual(writes.map((call) => call.endpoint), scenario === "invalid snapshot"
+      ? [] : [`repos/fixture/repository/statuses/${pull.head.sha}`]);
+    if (scenario === "invalid snapshot") {
+      assert.match(output, /Discovery snapshot does not match the locked head/);
+      assert.deepEqual(calls, []);
+    }
   });
-  assert.equal(result.status, 2, output);
-  assert.match(output, /Discovery snapshot does not match the locked head/);
-  assert.deepEqual(posts, []);
-  assert.deepEqual(calls, []);
-});
-
-test("reconcile: a head advancing after discovery cannot redirect any status publication", (t) => {
-  const { result, output, calls, pull } = runWorkflow(t, {
-    refreshedPull: (pull) => ({ ...pull, head: { ...pull.head, sha: "d".repeat(40) } }),
-  });
-  assert.equal(result.status, 0, output);
-  const writes = calls.filter((call) => call.args.includes("POST"));
-  assert.equal(writes.length, 1);
-  assert.equal(writes[0].endpoint, `repos/fixture/repository/statuses/${pull.head.sha}`);
-});
-
-test("reconcile: parser failure after a head advance writes only to the locked discovery head", (t) => {
-  const { result, output, calls, pull } = runWorkflow(t, {
-    parserFailure: true,
-    refreshedPull: (pull) => ({ ...pull, head: { ...pull.head, sha: "d".repeat(40) } }),
-  });
-  assert.equal(result.status, 2, output);
-  const writes = calls.filter((call) => call.args.includes("POST"));
-  assert.equal(writes.length, 1);
-  assert.equal(writes[0].endpoint, `repos/fixture/repository/statuses/${pull.head.sha}`);
-});
+}

@@ -279,8 +279,11 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          gate_tmp=$(mktemp -d "${RUNNER_TEMP:-/tmp}/feature-flag-discovery.XXXXXX")
+          trap 'rm -rf "$gate_tmp"' EXIT
           source .github/scripts/github-api-retry.sh
-          pages=$(gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100")
+          gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$gate_tmp/pulls.json"
+          pages=$(cat "$gate_tmp/pulls.json")
           matrix=$(jq -ce '
             [flatten[] | {number, head_sha: (.head.sha // ""),
               pull: {number, state, title, base: {ref: .base.ref, sha: .base.sha},
@@ -298,7 +301,7 @@ jobs:
 
   reconcile-open-pull-requests:
     needs: reconciliation-pull-requests
-    if: github.event_name == 'schedule' && needs['reconciliation-pull-requests'].outputs.matrix != '[]'
+    if: github.event_name == 'schedule' && needs['reconciliation-pull-requests'].outputs.matrix != '' && needs['reconciliation-pull-requests'].outputs.matrix != '[]'
     strategy:
       fail-fast: false
       max-parallel: 4

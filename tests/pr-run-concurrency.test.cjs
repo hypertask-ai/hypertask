@@ -24,8 +24,13 @@ test('only the listed gates skip cancellation, and each cites its ticket', () =>
   assert.deepEqual([...EXCEPTIONS.keys()],
     ['feature-flag-gate', 'ux-signoff-gate', 'pr-guards-trusted', 'dependabot-lane', 'ci-tests']);
   for (const [name, reason] of EXCEPTIONS) {
-    assert.equal(workflow(name).concurrency.queue, 'max', `${name} keeps a slot for every pending event`);
-    assert.equal(workflow(name).concurrency['cancel-in-progress'], false);
+    const config = workflow(name);
+    const queues = config.concurrency ? [config.concurrency] : Object.values(config.jobs).map(job => job.concurrency);
+    assert.ok(queues.length > 0, `${name} declares its queues`);
+    for (const concurrency of queues) {
+      assert.equal(concurrency.queue, 'max', `${name} keeps a slot for every pending event`);
+      assert.equal(concurrency['cancel-in-progress'], false);
+    }
     assert.match(reason, /[A-Z][A-Z0-9]*-\d+/);
   }
 });
