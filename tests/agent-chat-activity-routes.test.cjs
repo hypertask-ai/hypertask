@@ -67,7 +67,7 @@ stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaitin
 stub("src/lib/flags.ts", {
   isFeatureEnabled: async (key, userId) => {
     assert.equal(userId, 6);
-    if (key === "htpr-7734-agent-chat-context") return false;
+    if (key === "htpr-7734-agent-chat-context" || key === "htpr-7742-agent-chat-all") return false;
     if (key === "htpr-7518-agent-sidebar-chats") return true;
     assert.fail(`Unexpected flag: ${key}`);
   },
