@@ -240,7 +240,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
         })
       : null;
 
-    const result = await addMemberController(ctx.user.id, projectId, [emailToAdd], ctx.agentId, ctx.teamScope);
+    const result = await addMemberController(ctx.user.id, projectId, [emailToAdd], ctx.agentId);
 
     if (result.status !== 200) {
       return NextResponse.json(
