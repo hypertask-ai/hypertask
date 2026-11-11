@@ -1,3 +1,4 @@
+import { HTPR_9080_SPLIT_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-9080-split-overflow";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import { AI_CHAT_AUTO_OPEN_KEYS, type AiChatAutoOpenKey } from "@/lib/aiChat/autoOpenPreferences";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
           autoDescriptionSuggestions: true,
           dictationLanguage: "en",
           inboxAdvanceOnSend: true,
+          inboxSplitsOverflowHidden: false,
           emojiFrequency: null,
           calendarViews: null,
           aiChatOpenNewTickets: null,
@@ -173,6 +175,7 @@ export async function POST(request: NextRequest) {
       autoDescriptionSuggestions?: boolean;
       dictationLanguage?: string;
       inboxAdvanceOnSend?: boolean;
+      inboxSplitsOverflowHidden?: boolean;
       emojiFrequency?: Prisma.InputJsonValue;
       allTasksDateRange?: string;
       boardSortMode?: BoardSortMode;
@@ -248,6 +251,17 @@ export async function POST(request: NextRequest) {
         );
       }
       data.autoDescriptionSuggestions = body.autoDescriptionSuggestions;
+    }
+    if (Object.hasOwn(body, "inboxSplitsOverflowHidden")) {
+      if (typeof body.inboxSplitsOverflowHidden !== "boolean") {
+        return NextResponse.json(
+          { success: false, error: "Invalid inbox split layout" },
+          { status: 400 },
+        );
+      }
+      if (await isFeatureEnabled(HTPR_9080_SPLIT_OVERFLOW_FLAG, user.id)) {
+        data.inboxSplitsOverflowHidden = body.inboxSplitsOverflowHidden;
+      }
     }
     if (body.inboxAdvanceOnSend !== undefined) {
       data.inboxAdvanceOnSend = body.inboxAdvanceOnSend as boolean;
@@ -549,6 +563,7 @@ export async function POST(request: NextRequest) {
       autoDescriptionSuggestions: true,
       dictationLanguage: true,
       inboxAdvanceOnSend: true,
+      inboxSplitsOverflowHidden: true,
       emojiFrequency: true,
       calendarViews: true,
       allTasksDateRange: true,

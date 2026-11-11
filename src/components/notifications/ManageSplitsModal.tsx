@@ -9,6 +9,13 @@ import {
   ModalFooterComp,
   ModalHeaderComp,
 } from "@/components/Common/CommonModalComponents";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9080_SPLIT_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-9080-split-overflow";
+import {
+  useGetUserPreferences,
+  USER_PREFERENCES_QUERY_KEY,
+  type IUserPreferences,
+} from "@/hooks/General/useGetUserPreferences";
 import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
 import {
   type InboxQueryPayload,
@@ -38,6 +45,33 @@ const ManageSplitsModal = ({
   tabs,
 }: ManageSplitsModalProps) => {
   const queryClient = useQueryClient();
+  const overflowEnabled = useFlag(HTPR_9080_SPLIT_OVERFLOW_FLAG);
+  const { data: preferences } = useGetUserPreferences();
+  const [savingLayout, setSavingLayout] = useState(false);
+  const toggleOverflow = async () => {
+    if (savingLayout) return;
+    const previous = preferences?.inboxSplitsOverflowHidden ?? false;
+    setSavingLayout(true);
+    queryClient.setQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY, (old) =>
+      old ? { ...old, inboxSplitsOverflowHidden: !previous } : old,
+    );
+    try {
+      const response = await fetch("/api/users/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inboxSplitsOverflowHidden: !previous }),
+      });
+      if (!response.ok) throw new Error("Unable to save split layout");
+    } catch {
+      queryClient.setQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY, (old) =>
+        old ? { ...old, inboxSplitsOverflowHidden: previous } : old,
+      );
+      toast.error("Unable to save split layout");
+    } finally {
+      setSavingLayout(false);
+      await queryClient.invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY });
+    }
+  };
   const inboxQueryKey = inboxDataQueryKey(userId);
   const [mutedKeys, setMutedKeys] = useState(splitsNoImportant);
   const [savingKey, setSavingKey] = useState<InboxSplitKey | null>(null);
@@ -132,6 +166,23 @@ const ManageSplitsModal = ({
         headerClassName="!h-auto p-0"
       />
       <ModalBody className="max-h-[360px] overflow-y-auto px-5 pb-4 pt-0">
+        {overflowEnabled && (
+          <>
+            <h3 className="mb-2 text-micro font-normal uppercase text-text-light-gray">Layout</h3>
+            <div className="mb-4 rounded-[4px] bg-cardBackground px-2 py-1">
+              <SettingsToggle
+                square
+                inputId="inbox-splits-overflow-hidden"
+                label="Overflow hidden"
+                description="Splits stay on one line. Scroll sideways to see the rest."
+                checked={preferences?.inboxSplitsOverflowHidden ?? false}
+                disabled={savingLayout}
+                onChange={() => void toggleOverflow()}
+              />
+            </div>
+            <h3 className="mb-2 text-micro font-normal uppercase text-text-light-gray">Splits</h3>
+          </>
+        )}
         <p className="mb-3 text-micro font-normal leading-relaxed text-text-light-gray">
           Eligible: @mentions of you, assignments, reminders, tasks moved to
           your inbox, and comments, description edits, or overdue alerts on
@@ -142,7 +193,7 @@ const ManageSplitsModal = ({
             const splitKey = getInboxSplitKey(tab);
             return (
               <li
-                className="flex min-h-12 items-center justify-between gap-4 rounded-[5px] bg-cardBackground px-3 py-2.5 text-content transition-colors hover:bg-hover-active"
+                className="flex min-h-12 items-center justify-between gap-4 rounded-[4px] bg-cardBackground px-3 py-2.5 text-content transition-colors hover:bg-hover-active"
                 key={splitKey}
               >
                 <span className="min-w-0 truncate text-[13.5px] font-semibold text-white-black">
@@ -150,6 +201,7 @@ const ManageSplitsModal = ({
                 </span>
                 <div className="shrink-0 [&>div]:gap-3 [&>div]:px-0 [&_label]:font-normal">
                   <SettingsToggle
+                    square={overflowEnabled}
                     checked={!mutedKeys.includes(splitKey)}
                     disabled={savingKey !== null}
                     inputId={`also-important-${splitKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`}

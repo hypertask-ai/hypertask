@@ -7,6 +7,8 @@ import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/ht
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
+import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
+import { HTPR_9080_SPLIT_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-9080-split-overflow";
 import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
 
 import {
@@ -20,7 +22,7 @@ import {
   useState,
 } from "react";
 
-import { Search, Settings2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Settings2, X } from "lucide-react";
 import {
   INotification,
   ISavedContent,
@@ -1070,7 +1072,42 @@ const SplitTitlesContainer: FC<IProps> = ({
   trailingAction,
 }) => {
   const stickySplits = useFlag(HTPR_9029_STICKY_SPLITS_FLAG);
+  const overflowEnabled = useFlag(HTPR_9080_SPLIT_OVERFLOW_FLAG);
+  const { data: preferences } = useGetUserPreferences();
+  const overflowHidden = overflowEnabled && preferences?.inboxSplitsOverflowHidden === true;
+  const [globalFocus] = useRecoilState(globalNotificationFocusAtom);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const row = tabsRef.current;
+    if (!overflowHidden || !row) return;
+    const updateArrows = () => {
+      setCanScrollLeft(row.scrollLeft > 1);
+      setCanScrollRight(row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
+    };
+    const revealSelected = () => {
+      const selected = row.children[globalFocus.currSplit];
+      if (selected instanceof HTMLElement) {
+        const bounds = row.getBoundingClientRect();
+        const tabBounds = selected.getBoundingClientRect();
+        if (tabBounds.left < bounds.left) row.scrollLeft += tabBounds.left - bounds.left;
+        else if (tabBounds.right > bounds.right) row.scrollLeft += tabBounds.right - bounds.right;
+      }
+      updateArrows();
+    };
+    revealSelected();
+    const observer = new ResizeObserver(revealSelected);
+    observer.observe(row);
+    for (const child of row.children) observer.observe(child);
+    row.addEventListener("scroll", updateArrows, { passive: true });
+    return () => {
+      observer.disconnect();
+      row.removeEventListener("scroll", updateArrows);
+    };
+  }, [overflowHidden, globalFocus.currSplit, children]);
   const [listScrolled, setListScrolled] = useState(false);
 
   useEffect(() => {
@@ -1102,9 +1139,35 @@ const SplitTitlesContainer: FC<IProps> = ({
         contentGap ? "mx-[12px] w-[calc(100%-24px)] pb-4" : "w-full"
       } responsive-inbox-padding @md:flex @md:gap-[9px] h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
     >
-      <div className="pills-row group relative flex min-h-8 grow flex-wrap items-center gap-[9px]">
+      {overflowHidden && (canScrollLeft || canScrollRight) && (
+        <button
+          type="button"
+          aria-label="Scroll splits left"
+          disabled={!canScrollLeft}
+          className="shrink-0 rounded-[4px] border border-border-light-gray-thin bg-containerBackground p-1 text-text-light-gray disabled:opacity-30"
+          onClick={() => tabsRef.current?.scrollBy({ left: -Math.max(160, tabsRef.current.clientWidth * 0.75), behavior: "smooth" })}
+        >
+          <ChevronLeft size={14} />
+        </button>
+      )}
+      <div
+        ref={tabsRef}
+        data-testid="inbox-split-titles"
+        className={`pills-row group relative flex min-h-8 grow items-center gap-[9px] ${overflowHidden ? "min-w-0 flex-1 flex-nowrap overflow-x-auto scrollbar-none no-scrollbar [&>div]:shrink-0" : "flex-wrap"}`}
+      >
         {children}
       </div>
+      {overflowHidden && (canScrollLeft || canScrollRight) && (
+        <button
+          type="button"
+          aria-label="Scroll splits right"
+          disabled={!canScrollRight}
+          className="shrink-0 rounded-[4px] border border-border-light-gray-thin bg-containerBackground p-1 text-text-light-gray disabled:opacity-30"
+          onClick={() => tabsRef.current?.scrollBy({ left: Math.max(160, tabsRef.current.clientWidth * 0.75), behavior: "smooth" })}
+        >
+          <ChevronRight size={14} />
+        </button>
+      )}
       {trailingAction}
       <ButtonGroup SelectedCount={SelectedCount} />
     </div>

@@ -18,7 +18,7 @@ export async function fetchUserPreferenceController(userId: number) {
     const cacheKey = preferencesCacheKey(userId);
     const cached = await redis.get(cacheKey);
     if (reset !== "reset" && cached && cached !== INVALIDATED) {
-      return { status: 200, res: { aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null, ...JSON.parse(cached) } };
+      return { status: 200, res: { inboxSplitsOverflowHidden: false, aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null, ...JSON.parse(cached) } };
     }
 
     const res = await prisma.userSetting.findUnique({
@@ -39,6 +39,7 @@ export async function fetchUserPreferenceController(userId: number) {
         autoDescriptionSuggestions: true,
         dictationLanguage: true,
         inboxAdvanceOnSend: true,
+        inboxSplitsOverflowHidden: true,
         emojiFrequency: true,
         calendarViews: true,
         allTasksDateRange: true,
@@ -72,6 +73,7 @@ export async function fetchUserPreferenceController(userId: number) {
           autoDescriptionSuggestions: true,
           dictationLanguage: "en",
           inboxAdvanceOnSend: true,
+          inboxSplitsOverflowHidden: false,
           emojiFrequency: null,
           calendarViews: null,
           allTasksDateRange: null,
@@ -102,6 +104,7 @@ export async function fetchUserPreferenceController(userId: number) {
         autoDescriptionSuggestions: true,
         dictationLanguage: "en",
         inboxAdvanceOnSend: true,
+        inboxSplitsOverflowHidden: false,
         emojiFrequency: null,
         calendarViews: null,
         allTasksDateRange: null,
