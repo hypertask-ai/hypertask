@@ -5,10 +5,14 @@ import re
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 APP = "https://app.hypertask.ai"
 DESKTOP_SHA = "13b5fc7d2795fe59b30463001fe8d32c8b3f1802"
+SANDBOX_BOARD_ID = 7049
+SANDBOX_TITLE = "QA Sandbox"
+FORBIDDEN_BOARDS = {15, 4060}
 MARKERS = ("BOARD_READBACK", "TASK_READBACK", "INBOX_READBACK", "LIVE_READBACK_OK")
 CHILD_ENV_KEYS = (
     "PATH",
@@ -88,6 +92,54 @@ def contains_id(value, wanted):
     return False
 
 
+def choose_board(projects):
+    if not isinstance(projects, list):
+        return None
+    for project in projects:
+        if not isinstance(project, dict):
+            continue
+        if project.get("status") != "Normal":
+            continue
+        project_id = project.get("id")
+        if not isinstance(project_id, int) or project_id in FORBIDDEN_BOARDS:
+            continue
+        if project_id == SANDBOX_BOARD_ID and project.get("title") == SANDBOX_TITLE:
+            return str(project_id)
+    return None
+
+
+def self_check():
+    archived = [{"id": 2069, "title": "Old board", "status": "Archive"}]
+    if choose_board(archived) is not None:
+        fail("archived board was selected")
+    foreign = [{"id": 2069, "title": SANDBOX_TITLE, "status": "Normal"}]
+    if choose_board(foreign) is not None:
+        fail("non-sandbox board was selected")
+    production = [{"id": 15, "title": SANDBOX_TITLE, "status": "Normal"}]
+    if choose_board(production) is not None:
+        fail("production board was selected")
+    wrong_title = [{"id": SANDBOX_BOARD_ID, "title": "Other", "status": "Normal"}]
+    if choose_board(wrong_title) is not None:
+        fail("renamed sandbox was selected")
+    sandbox = [{"id": SANDBOX_BOARD_ID, "title": SANDBOX_TITLE, "status": "Normal"}]
+    if choose_board(sandbox) != str(SANDBOX_BOARD_ID):
+        fail("QA sandbox was not selected")
+    env = os.environ.copy()
+    env["QA_LOGIN_EMAIL"] = ""
+    env["QA_LOGIN_PASSWORD"] = ""
+    proc = subprocess.run(
+        [sys.executable, __file__],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    output = (proc.stdout or "") + (proc.stderr or "")
+    if proc.returncode == 0 or "not tested: QA login is missing" not in output:
+        fail("missing login did not fail closed")
+    print("board selection passed")
+
+
 def task_still_present(status, raw, task_id):
     if status == 404:
         return False
@@ -106,7 +158,45 @@ def task_still_present(status, raw, task_id):
     return False
 
 
+def sandbox_board(token):
+    offset = 0
+    while offset <= 300:
+        query = urllib.parse.urlencode({
+            "status": "Normal",
+            "search": SANDBOX_TITLE,
+            "limit": "100",
+            "offset": str(offset),
+        })
+        status, _, raw = request(
+            "GET",
+            APP + "/api/mcp/projects?" + query,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+            },
+        )
+        if status != 200:
+            fail(f"board list failed with status {status}")
+        try:
+            payload = json.loads(raw.decode())
+        except json.JSONDecodeError:
+            fail("board list returned a non-JSON body")
+        projects = payload.get("projects") if isinstance(payload, dict) else None
+        if not isinstance(projects, list):
+            fail("board list returned no projects")
+        chosen = choose_board(projects)
+        if chosen:
+            return chosen
+        if not projects or not payload.get("nextCursor"):
+            break
+        offset += len(projects)
+    fail("QA sandbox board is not available")
+
+
 def main():
+    if "--self-check" in sys.argv[1:]:
+        self_check()
+        return
     email = os.environ.get("QA_LOGIN_EMAIL", "")
     password = os.environ.get("QA_LOGIN_PASSWORD", "")
     if not email or not password:
@@ -128,10 +218,6 @@ def main():
         fail("QA login returned a non-JSON body")
     if not isinstance(payload, dict) or payload.get("success") is not True:
         fail("QA login refused")
-    match = re.fullmatch(r"/project\?id=(\d+)", payload.get("redirectUrl") or "")
-    if not match:
-        fail("QA login has no private board")
-    board = match.group(1)
 
     session = cookie_header(headers)
     if not session:
@@ -158,6 +244,8 @@ def main():
     if not isinstance(token, str) or len(token) < 20:
         fail("MCP token mint returned no token")
     mask(token)
+    board = sandbox_board(token)
+    print(f"API board {board}")
 
     cli = os.path.abspath("desktop/target/release/ht-core-cli")
     script = os.path.abspath("desktop/gates/live-readback.py")

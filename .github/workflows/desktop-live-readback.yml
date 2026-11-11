@@ -1,6 +1,9 @@
 name: Desktop live readback
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - runner-2/hyci-258
 permissions:
   contents: read
 concurrency:
