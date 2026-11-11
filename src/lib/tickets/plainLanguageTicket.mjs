@@ -1,4 +1,5 @@
 import { plainPageName, plainProblem } from "../errors/plainIncident.mjs";
+import { MAX_CHECK_TEXT_LENGTH, dropBlockquotes, stripTags } from "../text/safeHtmlText.mjs";
 
 export const PLAIN_LANGUAGE_TICKET_LABELS = [
   "What's wrong or wanted",
@@ -21,11 +22,9 @@ function openingLabelPattern(label) {
 }
 
 function structuredText(html) {
-  return html
-    .replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, "\n")
+  return stripTags(dropBlockquotes(html)
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<\/p>/gi, "\n"))
     .replace(/&nbsp;/gi, " ")
     .replace(/&#x27;/gi, "'")
     .replace(/&apos;/gi, "'")
@@ -38,20 +37,23 @@ function structuredText(html) {
 }
 
 export class PlainLanguageTicketError extends Error {
-  constructor(missing) {
-    super(plainLanguageTicketRefusalMessage(missing));
+  constructor(missing, message = plainLanguageTicketRefusalMessage(missing)) {
+    super(message);
     this.missing = missing;
   }
 }
 
 export function assertPlainLanguageTicketBlock(html) {
+  if (typeof html === "string" && html.length > MAX_CHECK_TEXT_LENGTH) {
+    throw new PlainLanguageTicketError([], `Ticket description must be within ${MAX_CHECK_TEXT_LENGTH} characters.`);
+  }
   if (!hasPlainLanguageTicketBlock(html ?? "")) {
     throw new PlainLanguageTicketError(missingPlainLanguageTicketLabels(html ?? ""));
   }
 }
 
 export function hasPlainLanguageTicketBlock(html) {
-  if (typeof html !== "string" || !html.trim()) return false;
+  if (typeof html !== "string" || html.length > MAX_CHECK_TEXT_LENGTH || !html.trim()) return false;
   const source = structuredText(html);
   const trimmed = source.trimStart();
   const opener = openingLabelPattern(PLAIN_LANGUAGE_TICKET_LABELS[0]);
@@ -61,7 +63,7 @@ export function hasPlainLanguageTicketBlock(html) {
 }
 
 export function missingPlainLanguageTicketLabels(html) {
-  if (typeof html !== "string" || !html.trim()) return [...PLAIN_LANGUAGE_TICKET_LABELS];
+  if (typeof html !== "string" || html.length > MAX_CHECK_TEXT_LENGTH || !html.trim()) return [...PLAIN_LANGUAGE_TICKET_LABELS];
   const source = structuredText(html);
   return PLAIN_LANGUAGE_TICKET_LABELS.filter((label) => !labelPattern(label).test(source));
 }

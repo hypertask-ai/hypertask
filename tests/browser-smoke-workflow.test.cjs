@@ -637,3 +637,86 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
       workflow.jobs["browser-smoke-desktop"].steps.indexOf(byName(workflow.jobs["browser-smoke-desktop"], "Generate client and install Chromium")),
   );
 });
+
+function runChromiumInstaller({ answering, failures }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-279-"));
+  const mirrorFile = path.join(dir, "apt-mirrors.txt");
+  fs.writeFileSync(
+    path.join(dir, "curl"),
+    `#!/bin/bash
+url="\${@: -1}"
+for hit in ${answering.join(" ")}; do
+  case "$url" in *"$hit"*) exit 0;; esac
+done
+exit 6
+`,
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(
+    path.join(dir, "npx"),
+    `#!/bin/bash
+n=$(( $(cat "${dir}/npx-calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/npx-calls"
+if [ "$n" -le ${failures} ]; then printf '%s\n' "E: Failed to fetch packages  Temporary failure resolving" >&2; exit 1; fi
+echo "chromium installed"
+`,
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(path.join(dir, "apt-get"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, "sudo"), '#!/bin/bash\nexec "$@"\n', { mode: 0o755 });
+  const child = spawnSync("bash", [path.resolve(".github/scripts/install-chromium.sh")], {
+    env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, APT_MIRROR_FILE: mirrorFile, RETRY_SLEEP: "0" },
+    encoding: "utf8",
+  });
+  return {
+    status: child.status,
+    output: child.stdout + child.stderr,
+    mirror: fs.existsSync(mirrorFile) ? fs.readFileSync(mirrorFile, "utf8").trim() : null,
+    npxCalls: Number(fs.readFileSync(path.join(dir, "npx-calls"), "utf8")),
+  };
+}
+
+test("HYCI-279: a browser shard installs Chromium from the first mirror that answers", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+
+  for (const key of SHARDS) {
+    const step = workflow.jobs[key].steps.find((candidate) => candidate.name === "Generate client and install Chromium");
+    assert.ok(step, key);
+    assert.match(step.run, /bash \.github\/scripts\/install-chromium\.sh/, key);
+    assert.doesNotMatch(step.run, /archive\.ubuntu\.com/, `${key} must not bet on one mirror name`);
+  }
+  assert.doesNotMatch(await source(".github/workflows/e2e-ai-pilot.yml"), /archive\.ubuntu\.com/);
+});
+
+test("HYCI-286: production health installs Chromium through the mirror-fallback installer", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/prod-health.yml"));
+  const step = workflow.jobs.smoke.steps.find((candidate) => candidate.id === "setup-pw");
+  assert.ok(step);
+  assert.equal(step.run, "bash .github/scripts/install-chromium.sh");
+  assert.equal(step["continue-on-error"], true);
+  assert.equal(step["timeout-minutes"], 8);
+});
+
+test("HYCI-279: a dead mirror name is skipped, kept working, and retried once", () => {
+  const skipped = runChromiumInstaller({ answering: ["azure.archive.ubuntu.com"], failures: 1 });
+  assert.equal(skipped.status, 0, skipped.output);
+  assert.equal(skipped.mirror, "https://azure.archive.ubuntu.com/ubuntu/");
+  assert.match(skipped.output, /Ubuntu mirror did not answer: https:\/\/archive\.ubuntu\.com\/ubuntu\//);
+  assert.equal(skipped.npxCalls, 2, "one retry after the failed install");
+
+  const noMirror = runChromiumInstaller({ answering: [], failures: 0 });
+  assert.equal(noMirror.status, 0, noMirror.output);
+  assert.equal(noMirror.mirror, null, "the runner's own sources stay when no probe answers");
+  assert.equal(noMirror.npxCalls, 1);
+
+  const never = runChromiumInstaller({ answering: ["azure.archive.ubuntu.com"], failures: 5 });
+  assert.equal(never.status, 1);
+  assert.equal(never.npxCalls, 2, "two attempts and no more");
+  assert.match(never.output, /could not be installed after 2 attempts/);
+
+  const deadNetwork = runChromiumInstaller({ answering: [], failures: 5 });
+  assert.equal(deadNetwork.status, 1);
+  assert.equal(deadNetwork.npxCalls, 1, "a dead network is not retried for another nine minutes");
+  assert.match(deadNetwork.output, /not retrying into a dead network/);
+});
