@@ -45,6 +45,11 @@ function harness() {
     "../../Components/AI_Chat/MentionList": { default: function MentionList() {} },
     axios: { default: { get: async () => ({ data: [] }) } },
     "../../suggestionAnchor": { stableClientRect: () => () => ({}) },
+    "@tiptap/suggestion": {
+      SuggestionPluginKey: {
+        getState: (state) => state?.suggestionState ?? null,
+      },
+    },
     "../../mentionCommand": {
       mentionCommand: (props) => {
         commands.push(props);
@@ -106,4 +111,16 @@ test("escape and exit after a pick do not throw when the picker is gone", () => 
 
   assert.equal(renderer.onKeyDown({ event: { key: "Escape" } }), true);
   renderer.onExit();
+});
+
+test("a suggestion only starts from a document change, never from a restored draft", () => {
+  const { createMentionData } = harness();
+  const suggestion = createMentionData(() => {});
+
+  const idleEditor = { state: { suggestionState: { active: false } } };
+  assert.equal(suggestion.shouldShow({ editor: idleEditor, transaction: { docChanged: false } }), false);
+  assert.equal(suggestion.shouldShow({ editor: idleEditor, transaction: { docChanged: true } }), true);
+
+  const typingEditor = { state: { suggestionState: { active: true } } };
+  assert.equal(suggestion.shouldShow({ editor: typingEditor, transaction: { docChanged: false } }), true);
 });

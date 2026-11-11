@@ -1,4 +1,5 @@
 import { ReactRenderer } from "@tiptap/react";
+import { SuggestionPluginKey } from "@tiptap/suggestion";
 import tippy from "tippy.js";
 import MentionList from "../../Components/AI_Chat/MentionList";
 import axios from "axios";
@@ -13,6 +14,9 @@ const createMentionData = (contextCallback, getProjectId) => {
       closePicker();
       return mentionCommand(commandProps);
     },
+    shouldShow: ({ editor, transaction }) =>
+      Boolean(SuggestionPluginKey.getState(editor.state)?.active) ||
+      Boolean(transaction?.docChanged),
     items: async ({ query }) => {
       try {
         const projectId = getProjectId?.();
