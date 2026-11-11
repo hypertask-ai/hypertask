@@ -1,70 +1,8 @@
 const assert = require('node:assert/strict')
-const path = require('node:path')
 const { test } = require('node:test')
-const root = path.resolve(__dirname, '..')
-const FULL = '<h2>Done when</h2><p>full acceptance criteria stay in the JSON</p>'
+const { loadModule } = require('./helpers/loadModule.cjs')
 
-let state
-function matches(row, where) {
-  if (!where || typeof where !== 'object') return true
-  if (where.projectId?.in && !where.projectId.in.includes(row.projectId)) return false
-  if (where.projectId && typeof where.projectId === 'number' && row.projectId !== where.projectId) return false
-  if (where.id?.in && !where.id.in.includes(row.id)) return false
-  if (where.AND && !where.AND.every((group) => matches(row, group))) return false
-  if (where.OR && !where.OR.some((group) => matches(row, group))) return false
-  if (where.title?.contains && !String(row.title).toLowerCase().includes(String(where.title.contains).toLowerCase())) return false
-  if (where.description?.contains && !String(row.description || '').toLowerCase().includes(String(where.description.contains).toLowerCase())) return false
-  if (where.ticketNumber?.contains && !String(row.ticketNumber || '').toLowerCase().includes(String(where.ticketNumber.contains).toLowerCase())) return false
-  return true
-}
-function projectRow(row, select) {
-  if (!select || typeof select !== 'object') return row
-  const projected = {}
-  for (const [key, value] of Object.entries(select)) {
-    if (!value) continue
-    projected[key] = row[key]
-  }
-  return projected
-}
-const mocks = new Map([
-  ['src/lib/mcp/routeWrapper.ts', {
-    validateMcpRouteAuth: async () => ({ user: { id: 6, email: 'user@example.com' }, agentId: null, teamScope: null }),
-    checkMcpRouteRateLimit: async () => null,
-    wrapMcpRoute: (handler) => handler,
-  }],
-  ['src/lib/mcp/auth.ts', {
-    validateMcpAuth: async () => ({ user: { id: 6, email: 'user@example.com' }, agentId: null }),
-    checkMcpRateLimit: async () => null,
-  }],
-  ['src/lib/flags.ts', {
-    isFeatureEnabled: async (key) => key === 'htpr-9072-search-description' ? state.fullDescription : false,
-  }],
-  ['src/lib/mcp/readListQuery.ts', { readListQuery: () => ({ listQuery: null }) }],
-  ['src/lib/mcp/agents.ts', { mcpVisibleAgentSelect: () => ({ id: true }), mapVisibleMcpAgent: () => null }],
-  ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: () => ({ ownerId: 6 }) }],
-  ['src/utils/controllers/search/document.ts', { turbopufferSearchTaskIds: async () => [] }],
-  ['src/lib/auth/agentScope.ts', { recordAgentBoardScopeMiss: () => {}, agentScopeEnforced: () => false }],
-  ['src/lib/mcp/operationCrashReport.ts', { reportMcpOperationCrash: () => {} }],
-  ['src/lib/prisma.ts', { default: {
-    project: { findMany: async () => [{ id: 7 }] },
-    label: { findMany: async () => [] },
-    section: { findMany: async () => [] },
-    task: {
-      count: async ({ where }) => state.rows.filter((row) => matches(row, where)).length,
-      findMany: async ({ where, select }) => {
-        state.selects.push(select)
-        return state.rows.filter((row) => matches(row, where)).map((row) => projectRow(row, select))
-      },
-    },
-  } }],
-])
-for (const [file, exports] of mocks) {
-  const filename = path.join(root, file)
-  require.cache[filename] = { id: filename, filename, loaded: true, exports }
-}
-const jiti = require(path.join(root, 'node_modules/jiti'))(__filename, { alias: { '@': path.join(root, 'src') }, cache: false, interopDefault: true })
-const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts'))
-const { NextRequest } = require(path.join(root, 'node_modules/next/server'))
+const FULL = '<h2>Done when</h2><p>full acceptance criteria stay in the JSON</p>'
 
 function row() {
   return {
@@ -84,10 +22,70 @@ function row() {
   }
 }
 
+function loadSearch(fullDescription) {
+  const selects = []
+  const prisma = {
+    project: { findMany: async () => [{ id: 7 }] },
+    task: {
+      count: async () => 1,
+      findMany: async ({ select }) => {
+        selects.push(select)
+        return [row()]
+      },
+    },
+  }
+  const route = loadModule('src/lib/mcp/operations/tasks/search/operation.ts', {
+    '@/lib/mcp/routeWrapper': {
+      wrapMcpRoute: (handler) => handler,
+      validateMcpRouteAuth: async () => ({ user: { id: 6, email: 'user@example.com' }, agentId: null, teamScope: null }),
+      checkMcpRouteRateLimit: async () => null,
+    },
+    'next/server': {
+      NextResponse: class NextResponse {
+        static json(body, init = {}) {
+          return { body, status: init.status ?? 200 }
+        }
+      },
+    },
+    '@/lib/flags': {
+      isFeatureEnabled: async (key) => key === 'htpr-9072-search-description' ? fullDescription : false,
+    },
+    '@/lib/prisma': { __esModule: true, default: prisma },
+    '@/lib/auth/agentScope': { recordAgentBoardScopeMiss: () => {}, agentScopeEnforced: () => false },
+    '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
+    '@/lib/mcp/agents': { mcpVisibleAgentSelect: () => ({ id: true }), mapVisibleMcpAgent: () => null },
+    '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({ ownerId: 6 }) },
+    '@/utils/controllers/search/document': { turbopufferSearchTaskIds: async () => [] },
+    '@/utils/controllers/turbopuffer/turbopufferHelper': {
+      searchPreviewText: (text) => text,
+      searchTasks: async () => [],
+      searchComments: async () => [],
+    },
+    '@/lib/search/serverOperators': {
+      parseSearchWithChipNames: async (query) => ({ text: query, filters: {} }),
+    },
+    '@/lib/agents/visibility': { accessibleAgentWhere: () => ({}) },
+    '@/lib/mcp/tasks/mappers': {
+      mapMcpTaskLabel: () => ({}),
+      mapTaskAssignee: () => undefined,
+      mapTaskDescriptionContent: () => '',
+      mapTaskToMcpGetResponse: (task) => task,
+      mcpTaskLabelSelect: {},
+      taskMcpGetInclude: {},
+      mcpTaskUserCommentCount: true,
+    },
+    '@/lib/mcp/pagination/cursor': { decodeCursor: () => null, encodeCursor: () => null },
+    '@/lib/mcp/priorityFilter': { parsePriorityFilter: () => [] },
+  })
+  return { GET: route.GET, selects }
+}
+
 async function search(fullDescription) {
-  state = { fullDescription, rows: [row()], selects: [] }
-  const response = await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=acceptance'))
-  return { status: response.status, body: await response.json(), selects: state.selects }
+  const route = loadSearch(fullDescription)
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ q: 'acceptance' }) },
+  })
+  return { status: response.status, body: response.body, selects: route.selects }
 }
 
 test('search JSON keeps the empty legacy column when the flag is off', async () => {
