@@ -35,14 +35,15 @@ jobs:
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: production
           persist-credentials: false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          repository: hypertask-ai/hypertask-desktop
-          ref: 13b5fc7d2795fe59b30463001fe8d32c8b3f1802
-          path: desktop
-          persist-credentials: false
+      - name: Fetch the reviewed desktop core anonymously
+        run: |
+          set -euo pipefail
+          sha=$(python3 .github/scripts/desktop-live-readback.py --desktop-sha)
+          git init -q desktop
+          git -C desktop remote add origin https://github.com/hypertask-ai/hypertask-desktop
+          git -C desktop fetch --depth 1 origin "$sha"
+          git -C desktop checkout -q FETCH_HEAD
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable

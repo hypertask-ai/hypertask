@@ -90,6 +90,8 @@ def choose_board(projects):
     return None
 
 def self_check():
+    if not re.fullmatch(r"[0-9a-f]{40}", DESKTOP_SHA):
+        fail("desktop commit is not a full sha")
     archived = [{"id": 2069, "title": "Old board", "status": "Archive"}]
     if choose_board(archived) is not None:
         fail("archived board was selected")
@@ -217,6 +219,9 @@ def sandbox_board(token):
 def main():
     if "--self-check" in sys.argv[1:]:
         self_check()
+        return
+    if "--desktop-sha" in sys.argv[1:]:
+        print(DESKTOP_SHA)
         return
     email = os.environ.get("QA_LOGIN_EMAIL", "")
     password = os.environ.get("QA_LOGIN_PASSWORD", "")
