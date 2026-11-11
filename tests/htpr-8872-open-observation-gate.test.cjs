@@ -86,6 +86,7 @@ for (const [name, fixture, extra, agentId, target, mark, expected] of [
   ["an unchecked full-day observation for a person", { description: openChecklist }, {}, null, undefined, "section", [undefined, /Full-day observation: watch production for 24 hours/]],
   ["a written gate that is still open", { description: openProse }, {}, null, undefined, "section", [undefined, /still unfinished/]],
   ["a written gate with the article", { description: "<p>The full-day observation gate is not finished.</p>" }, {}, null, undefined, "section", [undefined, /not finished/]],
+  ["a written gate with inline markup", { description: "<p>Full-day observation gate: still <strong>unfinished</strong>.</p>" }, {}, null, undefined, "section", [undefined, /unfinished/]],
   ["a gate in acceptance criteria", { acceptanceCriteria: "<p>Full-day observation gate: incomplete.</p>" }, {}, null, undefined, "section", [undefined, /incomplete/]],
   ["a gate added in the same move", { description: ordinary }, { description: openChecklist }, null, undefined, "nothing", [undefined, /Full-day observation: watch production for 24 hours/]],
   ["a gate read by column name alone", { description: openChecklist }, {}, null, { section: "Flag: Everyone" }, "section", [undefined, /Full-day observation: watch production for 24 hours/]],
@@ -104,7 +105,9 @@ for (const [name, fixture, extra, agentId, target, mark, expected] of [
 for (const [name, description, acceptanceCriteria] of [
   ["a plain ticket", ordinary, ""],
   ["a checked observation", checkedChecklist, ""],
+  ["a checked observation with a plain bullet beside it", `${checkedChecklist}<ul><li><p>Observation results are attached.</p></li></ul>`, ""],
   ["a passed gate line", "<p>Full-day observation gate: passed.</p>", ""],
+  ["a passed gate line with inline markup", "<p>Full-day observation gate: <em>passed</em>.</p>", ""],
   ["a passed gate beside another topic", "<p>Full-day observation gate: passed; report unfinished</p>", ""],
   ["a gate that is no longer unfinished", "<p>Full-day observation gate: no longer unfinished.</p>", ""],
   ["prose that only mentions a gate", "<ul><li><p>A ticket can state a full-day observation gate that is not finished.</p></li></ul>", ""],

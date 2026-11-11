@@ -300,6 +300,15 @@ esac
         self.assertEqual(self.check(
             'done', 'HTPR-8872', SECTION='Flag: Everyone',
             DESCRIPTION='<p>A ticket can state a full-day observation gate that is not finished.</p>'), 'done ok\n')
+        self.assertIn('still unfinished', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
+            DESCRIPTION='<p>Full-day observation gate: still <strong>unfinished</strong>.</p>'))
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='<p>Full-day observation gate: <em>passed</em>.</p>'), 'done ok\n')
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION=checked + '<ul><li><p>Observation results are attached</p></li></ul>'), 'done ok\n')
 
     def test_killed_local_check_refuses_blocked_handoff_by_title_and_id(self):
         for section in ['Agent Blocked (Infra)', '5']:

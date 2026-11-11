@@ -127,8 +127,16 @@ function uncheckedObservationItem(html: string): string | null {
   return null;
 }
 
+function gateLines(html: string): string[] {
+  return html
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .split("\n");
+}
+
 function openObservationLine(html: string): string | null {
-  for (const line of html.replace(/<[^>]+>/g, "\n").split("\n")) {
+  for (const line of gateLines(html)) {
     const text = line
       .replace(/&nbsp;|&#160;/gi, " ")
       .replace(/\s+/g, " ")

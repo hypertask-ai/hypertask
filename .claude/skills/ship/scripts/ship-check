@@ -859,7 +859,9 @@ def open_item(source):
             return label_text
     return None
 def open_line(source):
-    for line in re.split(r"\n", re.sub(r"<[^>]+>","\n", source)):
+    blocks=re.sub(r"<\s*br\s*/?\s*>", "\n", source, flags=re.I)
+    blocks=re.sub(r"</\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>", "\n", blocks, flags=re.I)
+    for line in re.split(r"\n", re.sub(r"<[^>]+>", " ", blocks)):
         line=re.sub(r"\s+"," ",html.unescape(line)).strip()
         match=re.match(label, line, re.I)
         if not match:
