@@ -26,7 +26,8 @@ const day = time => iso(time).slice(0, 10);
 const html = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const diagnostic = text => console.error(`error-collector: ${text}`);
 const refusedCreate = text => /project not found or access denied|label not found|rate limit exceeded|exactly one brain label/i.test(text)
-  || /^vcc: (?:task create refused[: ]|Ticket description refused[: ]|not filed\. The same problem is already open)/im.test(text);
+  || /^vcc: (?:task create refused[: ]|Ticket description refused[: ]|not filed\. The same problem is already open)/im.test(text)
+  || /"success"\s*:\s*false/.test(text);
 const occurrencePosted = (text, id) => typeof text === 'string' && (text.includes(`[error-occurrence:${id}]`) || text.includes(`[error-detail:${id}]`));
 
 function noiseRule(event) {
@@ -166,6 +167,12 @@ function merge(group, event) {
 
 function ticketLabels(board) {
   return `${board === PRODUCT_BOARD ? 'Error Log' : 'Infra'},brain-medium`;
+}
+
+function ticketTitle(group) {
+  const count = group.noiseRule ? group.hourlyCount : group.count;
+  const line = group.noiseRule ? 'one warning repeated' : 'the same error happened';
+  return `${group.service}: ${line} ${count} time${count === 1 ? '' : 's'}.`;
 }
 
 function identityHref(group, fp) {
@@ -532,7 +539,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);
         try {
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
-          const createArgs = ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', ticketLabels(group.board), '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path];
+          const createArgs = ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', ticketLabels(group.board), '--priority', 'high', '--title', ticketTitle(group), '--description-file', path];
           if (dryRun) {
             write('vcc', createArgs);
             state.created.push(iso(now));
