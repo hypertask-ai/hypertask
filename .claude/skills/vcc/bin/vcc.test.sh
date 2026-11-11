@@ -897,24 +897,6 @@ allowed bash "$vcc" --project 15 --json tasks create --labels brain-extra-hard -
 allowed bash "$vcc" task create --help
 allowed bash "$vcc" task update X-1 --title 'No brain label needed on update'
 printf 'ok task create needs exactly one brain label\n'
-run bash "$vcc" task create --project 12057 --labels 'Infra,Agent Feedback,brain-light' --title T
-[ "$status" = 0 ] || fail "a board label swap did not reach the CLI: $(< "$T/err")"
-[[ $(< "$T/err") == *'offers no brain-light; using brain-medium'* ]] || fail "no board label swap warning: $(< "$T/err")"
-[[ $(< "$T/out") == *'<--labels> <Infra,Agent Feedback,brain-medium>'* ]] || fail "brain-light was not swapped: $(< "$T/out")"
-run bash "$vcc" task create --project 12057 --labels=Infra,brain-hard --title T
-[ "$status" = 0 ] || fail "an equals-form board label swap did not reach the CLI: $(< "$T/err")"
-[[ $(< "$T/out") == *'<--labels=Infra,brain-medium>'* ]] || fail "brain-hard was not swapped: $(< "$T/out")"
-run bash "$vcc" task create --project 2101 --labels 'Bug,brain-medium' --title T
-[ "$status" = 0 ] || fail "a board without brain labels refused a create: $(< "$T/err")"
-[[ $(< "$T/err") == *'has no brain labels; filing without one'* ]] || fail "no drop warning: $(< "$T/err")"
-[[ $(< "$T/out") == *'<--labels> <Bug>'* ]] || fail "brain label not dropped: $(< "$T/out")"
-run bash "$vcc" task create --project 2101 --labels brain-medium --title T
-[ "$status" = 0 ] || fail "a brain label alone was refused on a board without any: $(< "$T/err")"
-[[ $(< "$T/out") != *'--labels'* ]] || fail "an empty label list still reached the CLI: $(< "$T/out")"
-run bash "$vcc" task create --project 12058 --labels 'Infra,brain-light' --title T
-[ "$status" = 0 ] || fail "an unreadable label response blocked the create: $(< "$T/err")"
-[[ $(< "$T/out") == *'<--labels> <Infra,brain-light>'* ]] || fail "an unreadable label response changed the create: $(< "$T/out")"
-printf 'ok brain labels follow the board labels\n'
 filing_refused() {
   local code=$1 message=$2
   shift 2
@@ -935,4 +917,22 @@ allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labe
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task update X-1 --project 4060 --description 'please create this'
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title 'Board 4060 create note'
 printf 'ok Fleet CI and Fleet Infra creates go through filing-gate\n'
-printf 'vcc helper guard tests passed\n' 
+run bash "$vcc" task create --project 12057 --labels 'Infra,Agent Feedback,brain-light' --title T
+[ "$status" = 0 ] || fail "a board label swap did not reach the CLI: $(< "$T/err")"
+[[ $(< "$T/err") == *'offers no brain-light; using brain-medium'* ]] || fail "no board label swap warning: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Infra,Agent Feedback,brain-medium>'* ]] || fail "brain-light was not swapped: $(< "$T/out")"
+run bash "$vcc" task create --project 12057 --labels=Infra,brain-hard --title T
+[ "$status" = 0 ] || fail "an equals-form board label swap did not reach the CLI: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels=Infra,brain-medium>'* ]] || fail "brain-hard was not swapped: $(< "$T/out")"
+run bash "$vcc" task create --project 2101 --labels 'Bug,brain-medium' --title T
+[ "$status" = 0 ] || fail "a board without brain labels refused a create: $(< "$T/err")"
+[[ $(< "$T/err") == *'has no brain labels; filing without one'* ]] || fail "no drop warning: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Bug>'* ]] || fail "brain label not dropped: $(< "$T/out")"
+run bash "$vcc" task create --project 2101 --labels brain-medium --title T
+[ "$status" = 0 ] || fail "a brain label alone was refused on a board without any: $(< "$T/err")"
+[[ $(< "$T/out") != *'--labels'* ]] || fail "an empty label list still reached the CLI: $(< "$T/out")"
+run bash "$vcc" task create --project 12058 --labels 'Infra,brain-light' --title T
+[ "$status" = 0 ] || fail "an unreadable label response blocked the create: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Infra,brain-light>'* ]] || fail "an unreadable label response changed the create: $(< "$T/out")"
+printf 'ok brain labels follow the board labels\n'
+printf 'vcc helper guard tests passed\n'
