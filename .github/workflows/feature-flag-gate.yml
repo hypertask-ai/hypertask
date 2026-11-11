@@ -283,11 +283,8 @@ jobs:
           trap 'rm -rf "$gate_tmp"' EXIT
           source .github/scripts/github-api-retry.sh
           gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$gate_tmp/pulls.json"
-          matrix=$(jq -ce '
-            [flatten[] | {number, head_sha: (.head.sha // ""),
-              pull: {number, state, title, base: {ref: .base.ref, sha: .base.sha},
-                head: {sha: .head.sha, repo: {full_name: .head.repo.full_name}},
-                labels: [.labels[]? | {name}]}}]
+          jq -ce '
+            [flatten[] | {number, head_sha: (.head.sha // ""), pull: .}]
             | unique_by(.number)
             | if any(.[]; (.head_sha | test("^[0-9a-f]{40}$") | not)) then
                 error("An open production pull request has no head commit")
@@ -295,8 +292,15 @@ jobs:
                 group_by(.head_sha) | map(. as $group | .[] + {head_pr_count: ($group | length)}) | sort_by(.number)
               else error("Too many pull requests for reconciliation matrix")
               end
-          ' "$gate_tmp/pulls.json")
-          echo "matrix=$matrix" >>"$GITHUB_OUTPUT"
+          ' "$gate_tmp/pulls.json" >"$RUNNER_TEMP/feature-flag-snapshots.json"
+          echo "matrix=$(jq -c 'map(del(.pull))' "$RUNNER_TEMP/feature-flag-snapshots.json")" >>"$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.pulls.outputs.matrix != ''
+        with:
+          name: feature-flag-snapshots
+          path: ${{ runner.temp }}/feature-flag-snapshots.json
+          if-no-files-found: error
+          retention-days: 1
   reconcile-open-pull-requests:
     needs: reconciliation-pull-requests
     if: github.event_name == 'schedule' && needs['reconciliation-pull-requests'].outputs.matrix != '' && needs['reconciliation-pull-requests'].outputs.matrix != '[]'
@@ -340,11 +344,14 @@ jobs:
           permission-contents: read
           permission-pull-requests: read
           permission-statuses: read
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          name: feature-flag-snapshots
+          path: ${{ runner.temp }}
       - name: Reconcile the selected production pull request
         env:
           RECONCILE_PR_NUMBER: ${{ matrix.number }}
           RECONCILE_HEAD_SHA: ${{ matrix.head_sha }}
-          RECONCILE_PULL_JSON: ${{ toJSON(matrix.pull) }}
           RECONCILE_HEAD_PR_COUNT: ${{ matrix.head_pr_count }}
           GH_TOKEN: ${{ github.token }}
           GH_READ_TOKEN: ${{ steps.ci-token.outputs.token }}
@@ -416,8 +423,8 @@ jobs:
             exit 2
           fi
           if ! jq -ce --argjson number "$RECONCILE_PR_NUMBER" --arg sha "$RECONCILE_HEAD_SHA" '
-            select(.number == $number and .head.sha == $sha)
-          ' <<<"$RECONCILE_PULL_JSON" >"$rows"; then
+            .[] | .pull | select(.number == $number and .head.sha == $sha)
+          ' "$RUNNER_TEMP/feature-flag-snapshots.json" >"$rows"; then
             echo "::error::Discovery snapshot does not match the locked head."
             exit 2
           fi
@@ -535,14 +542,12 @@ jobs:
 
           if [ "$evaluated" -gt 0 ] && ! GH_API_NO_WAIT=1 gh_api graphql --paginate --slurp \
             -f query='query($owner: String!, $name: String!, $sha: GitObjectID!, $endCursor: String) {
-              repository(owner: $owner, name: $name) {
-                object(oid: $sha) { ... on Commit {
-                  associatedPullRequests(first: 100, after: $endCursor) {
-                    pageInfo { hasNextPage endCursor }
-                    nodes { number state baseRefName headRefOid repository { nameWithOwner } }
-                  }
-                } }
-              }
+              repository(owner: $owner, name: $name) { object(oid: $sha) { ... on Commit {
+                associatedPullRequests(first: 100, after: $endCursor) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { number state baseRefName headRefOid repository { nameWithOwner } }
+                }
+              } } }
             }' -f owner="${REPO%/*}" -f name="${REPO#*/}" -f sha="$RECONCILE_HEAD_SHA" >"$fresh_heads_json"; then
             while IFS= read -r decision; do
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")

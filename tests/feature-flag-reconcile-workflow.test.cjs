@@ -180,7 +180,7 @@ function runWorkflow(t, {
     labels: [],
   };
   env.RECONCILE_HEAD_SHA = head;
-  env.RECONCILE_PULL_JSON = JSON.stringify(discoveredPull(pull));
+  fs.writeFileSync(path.join(fixture, "feature-flag-snapshots.json"), JSON.stringify([{ pull: discoveredPull(pull) }]));
   env.RECONCILE_HEAD_PR_COUNT = sharedHead ? "2" : "1";
   fs.writeFileSync(env.FIXTURE_PR, JSON.stringify(pull));
   fs.writeFileSync(env.FIXTURE_STATUSES, JSON.stringify(statuses(pull)));
@@ -416,13 +416,9 @@ for (const [field, change] of [
           state: state === "failure" ? "failure" : "success", updated_at: "2020-01-01T00:00:00Z",
         })] }),
       });
-      assert.equal(result.status, 0, output);
+      assert.deepEqual([result.status, posts.map((post) => post.state)], [0, preserve ? [] : ["error"]], output);
       assert.match(output, preserve ? /Preserving the verdict/ : /changed during reconciliation/);
-      assert.equal(posts.length, preserve ? 0 : 1);
-      if (!preserve) {
-        assert.equal(posts[0].state, "error");
-        assert.match(posts[0].description, /waiting for the updated pull request/);
-      }
+      if (!preserve) assert.match(posts[0].description, /waiting for the updated pull request/);
     });
   }
 }
@@ -432,10 +428,8 @@ test("reconcile: publication refresh failure replaces an old success with an err
     apiFailure: { endpoint: "/pulls/42", status: 500 },
     statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { target_url: null })] }),
   });
-  assert.equal(result.status, 2, output);
+  assert.deepEqual([result.status, posts.map((post) => post.state)], [2, ["error"]], output);
   assert.match(output, /Cannot refresh pull request #42/);
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].state, "error");
   assert.match(posts[0].description, /could not refresh this pull request/);
 });
 
@@ -585,9 +579,8 @@ test("events and reconciliation serialize per head commit, never per workflow ru
   assert.equal(config.jobs["reconcile-open-pull-requests"].strategy["max-parallel"], 4);
 });
 const headAt = (index) => (index + 1).toString(16).padStart(40, "0");
-const discovered = (number) => ({ number, head_sha: headAt(number),
-  pull: { number, state: null, title: null, base: { ref: null, sha: null }, head: { sha: headAt(number), repo: { full_name: null } }, labels: [] }, head_pr_count: 1 });
-const matrixPull = (number) => ({ number, head: { sha: headAt(number) } });
+const discovered = (number) => ({ number, head_sha: headAt(number), head_pr_count: 1 });
+const matrixPull = (number) => ({ number, head: { sha: headAt(number) }, title: "untrusted-secret-marker\n", labels: [{ name: "untrusted-label" }] });
 
 for (const [name, pages, expected, rateLimited = false] of [
   ["empty", [[]], []],
@@ -618,11 +611,13 @@ printf '%s\\n' "$FIXTURE_PAGES"
         GITHUB_OUTPUT: output, FIXTURE_PAGES: JSON.stringify(pages),
         FIXTURE_RATE_LIMITED: String(rateLimited) },
     });
-    assert.ifError(result.error);
     assert.deepEqual(fs.readdirSync(fixture).filter((name) => name.startsWith("feature-flag-discovery.")), [], "discovery removes its private scratch");
-    assert.equal(result.status === 0, expected !== null, result.stdout + result.stderr);
+    assert.ok(Number.isInteger(result.status) && (result.status === 0) === (expected !== null), result.error?.message || result.stdout + result.stderr);
     if (rateLimited) assert.match(result.stderr, /skipped: GitHub rate limited/);
-    assert.equal(fs.readFileSync(output, "utf8"), expected == null ? "" : `matrix=${JSON.stringify(expected)}\n`, "never publish a partial matrix");
+    assert.equal(fs.readFileSync(output, "utf8"), expected == null ? "" : `matrix=${JSON.stringify(expected)}\n`, "only numeric IDs and SHAs enter outputs");
+    if (expected) assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(fixture, "feature-flag-snapshots.json"), "utf8")).map(({ pull }) => pull),
+      expected.map(({ number }) => matrixPull(number)));
   });
 }
 
