@@ -90,6 +90,10 @@ const prisma = {
 };
 
 stubModule("src/lib/prisma.ts", { default: prisma });
+stubModule("src/lib/auth/agentScope.ts", {
+  prepareAgentScope: async () => {},
+  withAgentScopeRequest: (_request, run) => run(),
+});
 stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => null,
   validateMcpAuth: async () => authContext,
@@ -149,6 +153,9 @@ const replyRoute = load(
   "src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts",
   "agent-chat-pending-reply-entry",
 );
+
+const { chatInboxTool } = load("src/lib/mcp-server/tools/chat-inbox.tool.ts", "chat-inbox-dispatch-entry");
+const { chatReplyTool } = load("src/lib/mcp-server/tools/chat-reply.tool.ts", "chat-reply-dispatch-entry");
 
 const request = (unanswered = false) =>
   new Request(`https://app.hypertask.ai/api/mcp/chat/pending${unanswered ? "?unanswered=true" : ""}`, {
@@ -222,6 +229,34 @@ test("pending returns the daemon payload and marks each message delivered", asyn
 
   const second = await fetchPending();
   assert.deepEqual(second.body.messages, []);
+});
+
+test("MCP tools dispatch inbox and reply through the real shared operation registry", async () => {
+  chatAllEnabled = true;
+  const inbox = JSON.parse(await chatInboxTool.execute({}, "agent-token"));
+  assert.equal(inbox.messages[0].id, "message-1");
+  assert.equal(pendingRows[0].isDelivered, false);
+
+  const args = { session_id: inbox.messages[0].sessionId, reply_to_message_id: inbox.messages[0].id, text: "Received through MCP." };
+  const reply = JSON.parse(await chatReplyTool.execute(args, "agent-token"));
+  assert.equal(reply.message.content, args.text);
+  assert.equal(replies[0].authorAgentId, "agent-polling");
+  const retried = JSON.parse(await chatReplyTool.execute(args, "agent-token"));
+  assert.equal(retried.message.id, reply.message.id);
+  assert.equal(replies.length, 1);
+  assert.deepEqual(JSON.parse(await chatInboxTool.execute({}, "agent-token")).messages, []);
+});
+
+test("MCP tool dispatch keeps foreign agents and user tokens refused", async () => {
+  chatAllEnabled = true;
+  const args = { session_id: "session-1", reply_to_message_id: "message-1", text: "Not mine." };
+  authContext = { agentId: "agent-other", user: { id: 6 } };
+  await assert.rejects(chatReplyTool.execute(args, "other-agent-token"), /Session not found/);
+  assert.equal(replies.length, 0);
+  authContext = { agentId: null, user: { id: 6 } };
+  await assert.rejects(chatInboxTool.execute({}, "user-token"), /agent token/i);
+  await assert.rejects(chatReplyTool.execute(args, "user-token"), /agent token/i);
+  assert.equal(replies.length, 0);
 });
 
 test("MCP inbox retries delivered but unanswered messages until a reply exists", async () => {
