@@ -606,8 +606,7 @@ test('legacy and consolidated comment catalogs explain hidden logs and human-fac
     const name = consolidated ? 'hypertask_comments' : 'hypertask_add_comment_to_task'
     let tool = toolNamed(catalog, name)
     if (!consolidated) {
-      assert.match(tool.description, /no kind/)
-      assert.match(tool.description, /kind question\|qa\|done for people/)
+      assert.match(tool.description, /refusal when an agent omits kind/)
       const described = await rpc(selected, 'tools/call', { name: 'hypertask_describe_tool', arguments: { name } })
       tool = JSON.parse(described.result.content[0].text)
     }
