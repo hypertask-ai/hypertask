@@ -1,3 +1,4 @@
+import { withFeatureFlagSnapshot } from '@/lib/flags/modeCache'
 import { boardAccessCatalog } from "./board-access-catalog";
 import { observeFeedbackTools, queueAiFeedback, queueMcpAuthFailure } from '@/lib/aiFeedback/automatic'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
@@ -107,7 +108,11 @@ async function keylessHandshakeFeedbackIsQuiet(): Promise<boolean> {
   }
 }
 
-export async function mcpHandler(request: Request): Promise<Response> {
+export function mcpHandler(request: Request): Promise<Response> {
+  return withFeatureFlagSnapshot(() => handleMcpRequest(request), 'agent')
+}
+
+async function handleMcpRequest(request: Request): Promise<Response> {
   const timestamp = new Date()
   let telemetryUserId: number | undefined
   try {

@@ -1,3 +1,4 @@
+import { withFeatureFlagSnapshot } from '@/lib/flags/modeCache'
 import { boardAccessCatalog } from "./board-access-catalog";
 import { observeFeedbackTools } from '@/lib/aiFeedback/automatic'
 import { rememberFeedbackClient } from '@/lib/aiFeedback/clientInfo'
@@ -172,7 +173,7 @@ export async function handleLegacySseRequest(
     const channel = `mcp:legacy:session:${transport.sessionId}`
     subscriber.on('message', (receivedChannel, message) => {
       if (receivedChannel !== channel || closed) return
-      void (async () => {
+      void withFeatureFlagSnapshot(async () => {
         const incoming = JSON.parse(message) as RelayMessage
         let status = 202
         let result = 'Accepted'
@@ -215,7 +216,7 @@ export async function handleLegacySseRequest(
           }
         }
         await publisher.publish(incoming.replyChannel, JSON.stringify({ status, body: result }))
-      })().catch(() => cleanup())
+      }, 'agent').catch(() => cleanup())
     })
     try {
       await subscriber.subscribe(channel)
