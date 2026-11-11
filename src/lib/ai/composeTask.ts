@@ -202,8 +202,8 @@ export async function createComposedTask({
         ...(Array.isArray(fieldDraft?.customFields) && fieldDraft.customFields.length ? { customFields: fieldDraft.customFields } : {}), ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
         ...(applyWriterProperties ? writerProperties(extractTaskProperties(html)) : {}) }];
     }
-    drafts = drafts.map((draft) => {
-      let body = restoreTaskWriterMedia(draft.description, media.media);
+    drafts = drafts.map((draft, index) => {
+      let body = restoreTaskWriterMedia(draft.description, media.media, drafts.length === 1 || Boolean(existingTaskId && index === 0));
       if (optedOut) body = body.replace(/<img\b[^>]*>/gi, "");
       if (inlineAgentImages && /<img\b/i.test(body)) {
         const doc = new DOMParser().parseFromString(body, "text/html");
@@ -232,12 +232,14 @@ export async function createComposedTask({
     drafts = [];
   }
   if (!drafts.length) drafts = [{ title, description }];
-  if (guaranteeScreenshots) {
-    const attachments = creationScreenshotCandidates(uploads, text);
-    drafts = drafts.map((draft) => ({
-      ...draft,
-      description: guaranteeCreationScreenshots(draft.description, { instructions: text, attachments }),
-    }));
+  if (guaranteeScreenshots && drafts.length === 1) {
+    drafts = [{
+      ...drafts[0],
+      description: guaranteeCreationScreenshots(drafts[0].description, {
+        instructions: text,
+        attachments: creationScreenshotCandidates(uploads, text),
+      }),
+    }];
     description = drafts[0].description;
   }
   if (existingTaskId && drafts.length > 1) {

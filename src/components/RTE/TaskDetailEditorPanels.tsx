@@ -33,10 +33,8 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentation";
 
-function blankCreationDescription(html: string | undefined) {
-  const source = html ?? "";
-  const text = source.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim();
-  return text.length === 0 && !/<img\b/i.test(source);
+function blankCreationDescription(html = "") {
+  return html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim().length === 0 && !/<img\b/i.test(html);
 }
 
 export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {

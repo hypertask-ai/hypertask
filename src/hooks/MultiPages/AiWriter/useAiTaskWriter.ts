@@ -194,20 +194,13 @@ const useAITaskWriter = (
           item.mimeType?.startsWith("image/")
         );
         const sourcePrompt = options?.sourcePrompt ?? prompt;
-        const attachedNames = new Set(
-          (attachments ?? []).map((file) => file?.name || file?.fileName || file?.file?.name).filter(Boolean),
-        );
-        const attachedUrls = new Set(
-          (attachments ?? []).flatMap((file) => [file?.url, file?.source, file?.preview]).filter(Boolean),
-        );
         pendingShots = guaranteeScreenshots
           ? {
               instructions: sourcePrompt,
               attachments: creationScreenshotCandidates(
-                images.filter((item) =>
-                  (item.fileName && attachedNames.has(item.fileName)) || attachedUrls.has(item.url),
-                ),
+                images.filter((item) => /^https?:\/\//i.test(item.url ?? "")),
                 sourcePrompt,
+                media.map((item) => item.html),
               ),
             }
           : null;

@@ -136,6 +136,7 @@ function createTool(writes, guarantee, message = "Create a task from this screen
   const context = {
     inlineAgentImagesEnabled: true,
     bulkPreviewsIssued: new Set(),
+    creationScreenshotsUsed: new Set(),
     user: { id: 985 },
     actingAgentId: null,
     sendStatus() {},
@@ -187,12 +188,14 @@ test("sidebar create embeds an uncited screenshot on one task and not across a b
   assert.equal((await tool.execute({ project_id: 15, title: "Evidence", description: "<p>Evidence</p>" })).success, true);
   assert.equal(count(writes[0]), 1);
   assert.ok(writes[0].includes("screenshot.png"));
+  assert.equal((await tool.execute({ project_id: 15, title: "Second call", description: "<p>Second</p>" })).success, true);
+  assert.equal(count(writes[1]), 0);
   assert.equal((await tool.execute({ tasks: [
     { project_id: 15, title: "First", description: "<p>First</p>" },
     { project_id: 15, title: "Second", description: "<p>Second</p>" },
   ] })).success, true);
-  assert.equal(count(writes[1]), 0);
   assert.equal(count(writes[2]), 0);
+  assert.equal(count(writes[3]), 0);
 });
 
 test("sidebar create leaves the screenshot out when the flag is off, the tool opts out, or the user says link only", async () => {
@@ -205,4 +208,43 @@ test("sidebar create leaves the screenshot out when the flag is off, the tool op
   const opted = [];
   assert.equal((await createTool(opted, true, "attachment only").execute({ project_id: 15, title: "Evidence", description: "<p>Evidence</p>" })).success, true);
   assert.equal(count(opted[0]), 0);
+});
+
+function loadComposer(saved) {
+  return load("src/lib/ai/composeTask.ts", {
+    axios: { default: { get: async () => ({ data: { sectionId: 7, section: "Inbox", ranking: "a" } }) } },
+    "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
+    "@/lib/createTaskAttachmentUploads": {
+      startCreateTaskUpload: () => ({ id: "upload", promise: Promise.resolve({ url: shot }) }),
+      createTaskUploadById() {}, retryCreateTaskUpload() {}, bindCreateTaskUploads() {},
+    },
+    "@/utils/api/global/apiHelpers/createTaskGloballycontroller": { default: async (payload) => {
+      saved.push(payload);
+      return { resposne: { newTask: { id: 90 + saved.length, projectId: 15, uniqueIndex: 90 + saved.length } } };
+    } },
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": {},
+    "@/utils/helperFunctions/Views/NewTaskViewDefaults": {},
+  });
+}
+test("a split note does not stamp one screenshot onto every task", async () => {
+  const dom = new JSDOM(""); const swaps = { fetch: global.fetch, DOMParser: global.DOMParser }; const saved = [];
+  global.DOMParser = dom.window.DOMParser;
+  global.fetch = async () => ({ ok: true, headers: new Headers({ "content-type": "application/json" }),
+    text: async () => JSON.stringify({ tasks: [{ title: "First", description: "<p>First</p>" }, { title: "Second", description: "<p>Second</p>" }] }) });
+  try {
+    const result = await loadComposer(saved).createComposedTask({ text: `Split this. Screenshot ${shot}`, files: [{ name: "Screenshot.png", type: "image/png" }], project: { id: 15, uniqueIdentifier: "HTPR" }, userId: 985, guaranteeScreenshots: true });
+    assert.equal(result.tasks.length, 2);
+    assert.deepEqual(saved.map((payload) => count(payload.description)), [0, 0]);
+  } finally {
+    global.fetch = swaps.fetch; global.DOMParser = swaps.DOMParser; dom.window.close();
+  }
+});
+test("the uploaded image URL is the candidate, not its base64 copy", () => {
+  const rule = load("src/lib/media/inlineAgentImages.ts", {});
+  const uploaded = "https://files.hypertask.app/tasks/attachments/pasted.png?a=1&b=2";
+  const candidates = rule.creationScreenshotCandidates([{ url: "data:image/png;base64,iVBORw0KGgo=", fileName: "pasted.png", mimeType: "image/png" }], "Make a ticket", [`<img src="${uploaded.replaceAll("&", "&amp;")}" alt="pasted">`]);
+  assert.equal(candidates[0].url, uploaded);
+  const guaranteed = rule.guaranteeCreationScreenshots("<p>Make a ticket</p>", { instructions: "Make a ticket", attachments: candidates });
+  assert.equal(count(guaranteed), 1); assert.ok(guaranteed.includes(uploaded.replaceAll("&", "&amp;")));
+  assert.equal(count(rule.guaranteeCreationScreenshots("<p>Make a ticket</p>", { instructions: "Make a ticket", attachments: [{ url: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" }] })), 0);
 });

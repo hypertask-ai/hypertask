@@ -267,13 +267,12 @@ export function createCreateTaskTool(context: ToolContext) {
             }
             if (guaranteeScreenshots && requestedTasks.length === 1 && input.inline_images !== false) {
               const note = [body?.message, "brief" in input ? input.brief : ""].filter(Boolean).join("\n");
-              description = guaranteeCreationScreenshots(description ?? "", {
-                instructions: note,
-                attachments: creationScreenshotCandidates(
-                  [...(body?.images64 ?? []), ...(body?.attachments ?? [])],
-                  note,
-                ),
-              });
+              const shots = creationScreenshotCandidates([...(body?.images64 ?? []), ...(body?.attachments ?? [])], note)
+                .filter((shot) => !context.creationScreenshotsUsed.has(shot.url));
+              if (shots.length) {
+                description = guaranteeCreationScreenshots(description ?? "", { instructions: note, attachments: shots });
+                for (const shot of shots) context.creationScreenshotsUsed.add(shot.url);
+              }
             }
             const saveStartedAt = Date.now();
             let task;

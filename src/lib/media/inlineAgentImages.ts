@@ -59,10 +59,12 @@ export function inlineAgentImages(html: string, options: InlineAgentImageOptions
 }
 
 const CREATION_URL_RE = /https?:\/\/[^\s<>"']+/gi;
+const CREATION_IMG_SRC_RE = /<img\b[^>]*\bsrc\s*=\s*("([^"]*)"|'([^']*)')/gi;
 
 export function creationScreenshotCandidates(
   files: { url?: string | null; fileName?: string | null; mimeType?: string | null }[] | undefined,
   text?: string,
+  mediaHtml?: string[],
 ): AgentImageAttachment[] {
   const candidates: AgentImageAttachment[] = [];
   const seen = new Set<string>();
@@ -72,6 +74,11 @@ export function creationScreenshotCandidates(
     seen.add(url);
     candidates.push({ url, fileName: file.fileName, mimeType: file.mimeType });
   };
+  for (const html of mediaHtml ?? []) {
+    for (const match of html.matchAll(CREATION_IMG_SRC_RE)) {
+      push({ url: (match[2] ?? match[3] ?? "").replaceAll("&amp;", "&") });
+    }
+  }
   for (const file of files ?? []) push(file);
   for (const match of (text ?? "").matchAll(CREATION_URL_RE)) {
     push({ url: match[0].replace(/[.,;!?)\]}]+$/, "") });
