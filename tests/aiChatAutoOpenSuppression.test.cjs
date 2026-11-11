@@ -158,7 +158,7 @@ async function harness(persisted, run, flagEnabled = true, flagReady = true, swi
     const restoreRef = React.useRef(false);
     const effect = effects[relative];
     effect({ useEffect: React.useEffect, aiChatOpenSwitchesEnabled: switchesEnabled, hydrated, slugs: String(id), _parsedTask: { id },
-      openAiChatByDefault, aiChatAutoOpenSuppressed, keepAiChatClosed, keepChatClosed = keepAiChatClosed, chatAutoOpenReady, aiChatPinned, isMblForChat: mobile,
+      openAiChatByDefault, aiChatAutoOpenSuppressed, keepAiChatClosed, keepChatClosed: keepAiChatClosed, chatAutoOpenReady, aiChatPinned, isMblForChat: mobile,
       _mbl: mobile, isGuest: guest, setShowAiChatInterface,
       hasAttemptedChatRestoreRef: restoreRef, hasAttemptedRestoreRef: restoreRef,
       currentUser: hydrated && !guest ? { id: 123 } : null, pathname: "/my-tasks",
