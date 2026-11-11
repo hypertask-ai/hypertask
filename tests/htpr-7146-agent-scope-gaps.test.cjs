@@ -245,7 +245,7 @@ test('Pages comment adapter prepares a body agent and preserves production board
   const res = response();
   await handler({ url: '/api/comments/create', method: 'POST', headers: {}, body: { text: 'Test', creatorId: 6, taskId: 150, ownerId: 6, agentId: f.agent.id } }, res);
   assert.equal(res.body.id, 150);
-  assert.equal(f.state.flagReads, 1);
+  assert.equal(f.state.flagReads, 2);
 });
 
 test('Pages delete-reminder adapter preserves WATCH access for a signed agent outside the target board', async () => {

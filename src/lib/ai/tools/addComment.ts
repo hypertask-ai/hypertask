@@ -10,6 +10,9 @@ import { convertPlainTextMentionsToHtml, resolveTextMentions } from "@/utils/con
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRefs";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9063_COMMENT_AUDIENCE_FLAG } from "@/lib/flags/definitions/htpr-9063-comment-audience";
+import { MISSING_COMMENT_AUDIENCE } from "@/lib/mcp/operations/comments/agentChatterRouting";
 import { buildMcpImageUrls, persistUrlsForComment } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { COMMENT_TASK_LINK_RULE } from "@/lib/ai/chatStream/prompt";
@@ -46,7 +49,7 @@ export function createAddCommentTool(context: ToolContext) {
           unique_index: z.coerce.number().int().positive().optional(),
           project_id: z.coerce.number().int().positive().optional(),
           text: z.string().min(1).max(5000),
-          kind: z.enum(['question', 'qa', 'done']).optional().describe('Required when acting as an agent. Choose question, qa or done for a people comment; put progress in the agent log.'),
+          kind: z.enum(['question', 'qa', 'done']).optional().describe('Required when acting as an agent. An agent comment with no kind is refused and nothing is saved. Choose question, qa or done for people, or use hypertask activity add for the agent log.'),
           ...inlineAgentImageFields(context.inlineAgentImagesEnabled),
           images: z.array(z.string()).optional(),
           mentions: z
@@ -73,6 +76,9 @@ export function createAddCommentTool(context: ToolContext) {
         ),
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_add_comment");
+        if (actingAgentId && !input.kind && await isFeatureEnabled(HTPR_9063_COMMENT_AUDIENCE_FLAG, user.id)) {
+          return { success: false, error: MISSING_COMMENT_AUDIENCE };
+        }
         const targets = resolveBulkTaskTargets(input);
         const resolvedTargets = await Promise.all(
           targets.map(async (identifier) => ({

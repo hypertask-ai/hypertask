@@ -606,7 +606,7 @@ test('legacy and consolidated comment catalogs explain hidden logs and human-fac
     const name = consolidated ? 'hypertask_comments' : 'hypertask_add_comment_to_task'
     let tool = toolNamed(catalog, name)
     if (!consolidated) {
-      assert.match(tool.description, /hidden agent log/)
+      assert.match(tool.description, /no kind/)
       assert.match(tool.description, /kind question\|qa\|done for people/)
       const described = await rpc(selected, 'tools/call', { name: 'hypertask_describe_tool', arguments: { name } })
       tool = JSON.parse(described.result.content[0].text)
@@ -616,7 +616,7 @@ test('legacy and consolidated comment catalogs explain hidden logs and human-fac
       ? tool.inputSchema.oneOf.find((variant) => variant.properties.action.const === 'add').properties.input
       : tool.inputSchema
     for (const text of [tool.description, schema.properties.kind.description]) {
-      assert.match(text, /(?:Without a kind, agent text goes only to the hidden ticket agent log|Untyped agent notes stay hidden)/)
+      assert.match(text, /(?:An agent comment with no kind is refused and nothing is saved|Untyped agent notes stay hidden)/)
       assert.match(text, /(?:even for replies or mentions|including replies and mentions)/)
       assert.match(text, /question for (?:a decision by a person|decisions)/)
       assert.match(text, /qa for (?:a QA verdict|verdicts)/)
