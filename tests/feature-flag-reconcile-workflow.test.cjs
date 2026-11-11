@@ -86,7 +86,7 @@ function featureFlagStatus(pull, overrides = {}) {
 function runWorkflow(t, {
   job = reconciliation, drift = false, missingHead = false, apiFailure,
   gateScript = 'console.log("ok");\n', statuses = () => ({}), sharedHead = false,
-  refreshedPull = (pull) => pull, freshSharedHead = false, forkHead = false,
+  refreshedPull = (pull) => pull, publicationPull = refreshedPull, freshSharedHead = false, forkHead = false,
   extraPulls = null,
 } = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
@@ -118,6 +118,7 @@ function runWorkflow(t, {
     FIXTURE_PR: path.join(fixture, "pull.json"),
     FIXTURE_STATUSES: path.join(fixture, "statuses.json"),
     FIXTURE_CURRENT_PR: path.join(fixture, "current-pull.json"),
+    FIXTURE_PUBLICATION_PR: path.join(fixture, "publication-pull.json"),
     FIXTURE_SHARED_HEAD: String(sharedHead),
     FIXTURE_FRESH_SHARED_HEAD: String(freshSharedHead),
     FIXTURE_POSTS: path.join(fixture, "posts.jsonl"),
@@ -178,6 +179,7 @@ function runWorkflow(t, {
   fs.writeFileSync(env.FIXTURE_PR, JSON.stringify(pull));
   fs.writeFileSync(env.FIXTURE_STATUSES, JSON.stringify(statuses(pull)));
   fs.writeFileSync(env.FIXTURE_CURRENT_PR, JSON.stringify(refreshedPull(pull)));
+  fs.writeFileSync(env.FIXTURE_PUBLICATION_PR, JSON.stringify(publicationPull(pull)));
   if (extraPulls) {
     env.FIXTURE_EXTRA_PULLS = path.join(fixture, "extra-pulls.json");
     fs.writeFileSync(env.FIXTURE_EXTRA_PULLS, JSON.stringify(extraPulls(pull)));
@@ -225,7 +227,7 @@ if (args.includes("POST")) {
   console.log(JSON.stringify([rows]));
 } else if (pullNumber) {
   const number = Number(pullNumber[1]);
-  const current = JSON.parse(fs.readFileSync(process.env.FIXTURE_CURRENT_PR, "utf8"));
+  const current = JSON.parse(fs.readFileSync(process.env.FIXTURE_PUBLICATION_PR, "utf8"));
   const extras = process.env.FIXTURE_EXTRA_PULLS ? JSON.parse(fs.readFileSync(process.env.FIXTURE_EXTRA_PULLS, "utf8")) : [];
   const found = extras.find((item) => item.number === number);
   console.log(JSON.stringify(found || { ...current, number }));
@@ -391,9 +393,29 @@ test("reconcile: evaluated PR still rechecks current metadata before publishing"
   });
   assert.equal(result.status, 0, output);
   assert.match(output, /changed during reconciliation/);
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].state, "error");
-  assert.match(posts[0].description, /waiting for the updated pull request/);
+  assert.deepEqual(posts, [], "a stale sweep must not overwrite the concurrent PR verdict");
+});
+
+for (const [field, change] of [
+  ["title", (pull) => ({ ...pull, title: pull.title + " changed" })],
+  ["labels", (pull) => ({ ...pull, labels: [{ name: "feature-gated-ui" }] })],
+  ["head", (pull) => ({ ...pull, head: { ...pull.head, sha: "d".repeat(40) } })],
+  ["base", (pull) => ({ ...pull, base: { ...pull.base, sha: "e".repeat(40) } })],
+  ["state", (pull) => ({ ...pull, state: "closed" })],
+]) {
+  test(`reconcile: publication refresh skips changed ${field} after the fleet snapshot`, (t) => {
+    const { result, output, posts } = runWorkflow(t, { publicationPull: change });
+    assert.equal(result.status, 0, output);
+    assert.match(output, /changed during reconciliation/);
+    assert.deepEqual(posts, [], "do not overwrite a concurrent PR event with a stale result");
+  });
+}
+
+test("reconcile: publication refresh failure leaves existing status untouched and fails closed", (t) => {
+  const { result, output, posts } = runWorkflow(t, { apiFailure: { endpoint: "/pulls/42", status: 404 } });
+  assert.equal(result.status, 2, output);
+  assert.match(output, /Cannot refresh pull request #42/);
+  assert.deepEqual(posts, []);
 });
 
 test("reconcile: evaluated PR still rechecks fresh shared heads before publishing", (t) => {
@@ -414,12 +436,10 @@ test("per-PR: final verdict posts the current base/title fingerprint and unchang
     "https://example.invalid/actions/runs/1" + new URL(featureFlagStatus(pull).target_url).hash);
 });
 
-test("reconcile drift: production moved mid-run posts pending and exits 0", (t) => {
+test("reconcile drift: production moved mid-run leaves the concurrent PR verdict untouched", (t) => {
   const { result, output, posts } = runWorkflow(t, { drift: true });
   assert.equal(result.status, 0, output);
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].state, "pending");
-  assert.equal(posts[0].description, waitingDescription);
+  assert.deepEqual(posts, []);
   assert.doesNotMatch(output, /infrastructure failure/);
   assert.doesNotMatch(output, /::error::/);
   assert.match(output, /Trusted production checkout drifted; a later event will re-evaluate with current policy\./);
@@ -531,12 +551,21 @@ for (const endpoint of ['graphql', '/pulls?', '/statuses/']) {
   });
 }
 
-test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
-  assert.deepEqual(yaml.load(workflow).concurrency, {
-    group: "feature-flag-gate-production",
+test("PR queues isolate different PRs and reconciliation without cancelling metadata events", () => {
+  const { concurrency } = yaml.load(workflow);
+  assert.deepEqual(concurrency, {
+    group: "feature-flag-gate-${{ github.event.pull_request.number || 'reconcile' }}",
     queue: "max",
     "cancel-in-progress": false,
-  }, "fleet sweeps and PR edits must serialize without replacing pending metadata events");
+  });
+  const group = (number) => concurrency.group.replace(/\$\{\{ (.*?) \}\}/g, (_, expression) => {
+    const github = { event: { pull_request: number ? { number } : undefined } };
+    return new Function("github", `return (${expression.replace("pull_request.number", "pull_request?.number")})`)(github);
+  });
+  assert.equal(group(42), group(42), "edits to one PR stay serialized");
+  assert.notEqual(group(42), group(43), "a stuck PR cannot hold another PR");
+  assert.notEqual(group(42), group(), "a stuck sweep cannot hold a PR");
+  assert.equal(group(), "feature-flag-gate-reconcile");
 });
 
 function openPullFleet(pull) {
@@ -567,7 +596,7 @@ function openPullFleet(pull) {
   return { pulls, statuses };
 }
 
-test("reconcile: 32 skipped and 33 evaluated pull requests list open pulls twice and do not re-read each one", (t) => {
+test("reconcile: 32 skipped and 33 evaluated pull requests refresh only evaluated PRs before publishing", (t) => {
   const { result, output, calls } = runWorkflow(t, {
     extraPulls: (pull) => openPullFleet(pull).pulls,
     statuses: (pull) => openPullFleet(pull).statuses,
@@ -585,7 +614,7 @@ test("reconcile: 32 skipped and 33 evaluated pull requests list open pulls twice
   assert.equal(counts.statuses, 0, JSON.stringify(counts));
   assert.equal(counts.graphql, 1, JSON.stringify(counts));
   assert.equal(counts.list, 2, JSON.stringify(counts));
-  assert.equal(counts.perPull, 0, JSON.stringify(counts));
+  assert.equal(counts.perPull, 33, JSON.stringify(counts));
   assert.equal(counts.posts, 33, JSON.stringify(counts));
 });
 
@@ -615,7 +644,7 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   assert.deepEqual(selected("schedule"), ["reconcile-open-pull-requests"]);
   assert.deepEqual(Object.keys(config.on).sort(), ["pull_request_target", "schedule"]);
   assert.deepEqual(config.on.schedule, [{ cron: "*/15 * * * *" }]);
-  assert.equal(config.concurrency.group, "feature-flag-gate-production");
+  assert.equal(config.concurrency.group, "feature-flag-gate-${{ github.event.pull_request.number || 'reconcile' }}");
   assert.equal(config.concurrency["cancel-in-progress"], false);
 
   const { result, output, posts, calls, pull } = runWorkflow(t, {

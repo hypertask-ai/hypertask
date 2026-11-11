@@ -552,6 +552,10 @@ feature_flag_gate:
   # Bugfix flags share ticket naming. /api/cron/feature-flag-removals files cleanup after 7 days on Everyone; money, access and data-deletion stay at 14 days.
   open_pull_request_reconciliation: scheduled_every_15_minutes
   pull_request_event_evaluation: changed_pr_only
+  concurrency_group: feature-flag-gate-${{ github.event.pull_request.number || 'reconcile' }}
+  concurrency_queue: max
+  cancel_in_progress: false
+  reconciliation_publication: refresh_each_evaluated_pr_and_skip_changed_metadata_or_production_drift
 
 policies:
   previews:

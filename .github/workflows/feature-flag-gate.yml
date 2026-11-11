@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: feature-flag-gate-production
+  group: feature-flag-gate-${{ github.event.pull_request.number || 'reconcile' }}
   queue: max
   cancel-in-progress: false
 
@@ -508,6 +508,10 @@ jobs:
               statuses_file=$(jq -r '.statuses_file' <<<"$decision")
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")
               result=$(jq -r '.result' <<<"$decision")
+              if [ "$result" -eq 3 ]; then
+                echo "Skip #$number: production moved during reconciliation."
+                continue
+              fi
               if ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
                 echo "::error::Cannot re-check whether pull request #$number shares its head commit."
                 publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file" ||
@@ -519,8 +523,10 @@ jobs:
                 echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
                 result=1
               fi
-              if ! jq -ce --argjson number "$number" 'first(flatten[] | select(.number == $number))' "$fresh_heads_json" >"$gate_tmp/current.json"; then
-                printf '%s\n' '{"state":"closed","title":"","base":{"ref":"","sha":""},"head":{"sha":""},"labels":[]}' >"$gate_tmp/current.json"
+              if ! GH_API_NO_WAIT=1 gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json"; then
+                echo "::error::Cannot refresh pull request #$number before reconciliation publication."
+                failures=$((failures + 1))
+                continue
               fi
               current=$(cat "$gate_tmp/current.json")
               if [ "$(jq -r '.state' <<<"$current")" != "open" ] ||
@@ -530,8 +536,6 @@ jobs:
                  [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
                  ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
                 echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
-                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file" ||
-                  echo "::error::Cannot publish the feature-flag-gate error for #$number."
                 continue
               fi
 
