@@ -52,7 +52,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useAiModelPreference, useAiThinkingPreference } from "@/hooks/General/useAiModelPreference";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
-import { taskWriterShowsAuto, withTaskWriterAutoOption } from "@/lib/taskWriterPickerAuto";
+import { taskWriterDefersModel, taskWriterShowsAuto, withTaskWriterAutoOption } from "@/lib/taskWriterPickerAuto";
 import { aiOptions } from "@/lib/constants/constants";
 import { resolveTaskWriterBoardContext } from "@/lib/ai/taskWriterBoardContext";
 import type { IProject } from "@/models/model";
@@ -1005,7 +1005,8 @@ function useTaskWriterPicker(destinationProject: IProject | null | undefined) {
   const stored = getAiModelPreferenceIds(userPreferences.aiModelPreferences, "taskWriter", teamId);
   const storedPick = stored.teamScoped ?? stored.global;
   const autoOverride = override?.teamId === teamId ? override.auto : null;
-  const showAuto = pickerAuto && (autoOverride ?? taskWriterShowsAuto(storedPick, preference.usesPlanDefault));
+  const autoSettled = preference.teamModelPending ? false : taskWriterShowsAuto(storedPick, preference.usesPlanDefault);
+  const showAuto = pickerAuto && (autoOverride ?? autoSettled);
   const currentAiOption = showAuto ? toAutoModelOption(preference.currentAiOption) : preference.currentAiOption;
   const currentOptions = pickerAuto
     ? withTaskWriterAutoOption(aiOptions, preference.currentAiOption)
@@ -1014,11 +1015,14 @@ function useTaskWriterPicker(destinationProject: IProject | null | undefined) {
     if (pickerAuto) setOverride({ teamId, auto: option.id === AUTO_MODEL_OPTION_ID });
     preference.setAiOption(option);
   };
-  return { teamId, billing, currentAiOption, setAiOption, currentOptions };
+  const namedPick = Boolean(storedPick && getAiModelOptionById(storedPick));
+  const deferModel = taskWriterDefersModel(pickerAuto, preference.teamModelPending, autoOverride, namedPick);
+  return { teamId, billing, currentAiOption, setAiOption, currentOptions, deferModel };
 }
 
 export function useTaskWriterModel(destinationProject: IProject | null | undefined) {
-  const { currentAiOption } = useTaskWriterPicker(destinationProject);
+  const { currentAiOption, deferModel } = useTaskWriterPicker(destinationProject);
+  if (deferModel) return undefined;
   return currentAiOption
     ? { id: currentAiOption.id, source: currentAiOption.source }
     : undefined;

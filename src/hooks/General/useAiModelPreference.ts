@@ -202,7 +202,7 @@ export function useAiModelPreference(
     [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, resolveOption, surface, taskWriterAuto, userPreferences],
   );
 
-  return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption };
+  return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption, teamModelPending: teamFeatureModels.isLoading };
 }
 
 let pendingThinkingWrite: Promise<unknown> = Promise.resolve();

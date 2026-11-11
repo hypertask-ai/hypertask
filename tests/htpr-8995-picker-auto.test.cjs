@@ -25,6 +25,14 @@ test("Auto is the New Task default until a real model is saved", () => {
   assert.equal(options.some((option) => option.id === "gpt-6-luna"), true);
 });
 
+test("Auto waits for the team model query and never sends a loading fallback as a pick", () => {
+  assert.equal(picker.taskWriterDefersModel(true, true, null, false), true);
+  assert.equal(picker.taskWriterDefersModel(true, true, null, true), false);
+  assert.equal(picker.taskWriterDefersModel(true, true, true, false), false);
+  assert.equal(picker.taskWriterDefersModel(true, false, null, false), false);
+  assert.equal(picker.taskWriterDefersModel(false, true, null, false), false);
+});
+
 test("a New Task Auto choice is stored only for that surface, and the request names Auto or a real model", () => {
   assert.equal(picker.autoModelPreferenceAllowed("aiChat", "auto", false), true);
   assert.equal(picker.autoModelPreferenceAllowed("taskWriter", "auto", true), true);

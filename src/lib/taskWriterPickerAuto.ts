@@ -32,6 +32,15 @@ export function taskWriterPickerOption(
   return getAiModelOptionById(id, haiku55Enabled) ?? null;
 }
 
+export function taskWriterDefersModel(
+  pickerAuto: boolean,
+  teamModelPending: boolean,
+  pickedAuto: boolean | null,
+  namedPick: boolean,
+): boolean {
+  return pickerAuto && teamModelPending && pickedAuto == null && !namedPick;
+}
+
 export function autoModelPreferenceAllowed(
   surface: string,
   optionId: string,

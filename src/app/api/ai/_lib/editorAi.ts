@@ -851,7 +851,8 @@ export async function selectTaskWriterModel(args: {
     selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
   }
 
-  const pinnedSonnet = taskWriterSonnet && !autoPick && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  const sonnetSelection = taskWriterSonnet && !autoPick && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  const pinnedSonnet = sonnetSelection && !namedPickerOption;
   if (pinnedSonnet && selection.modelOption) {
     selection.modelOption = {
       ...selection.modelOption,
@@ -861,7 +862,7 @@ export async function selectTaskWriterModel(args: {
       },
     };
   }
-  if (!(pinnedSonnet && (storePlanId === "Free" || storePlanId === "BYOK"))) {
+  if (!(sonnetSelection && (storePlanId === "Free" || storePlanId === "BYOK"))) {
     await assertModelAllowedForPlan(
       args.projectId,
       selection.modelOption,
