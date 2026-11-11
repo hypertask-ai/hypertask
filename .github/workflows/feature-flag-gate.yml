@@ -393,7 +393,8 @@ jobs:
               description: $description,
               target_url: $target_url
             }' >"$2"
-            publish_status_if_changed "$1" "$2" "${4:-}"
+            publish_status_if_changed "$1" "$2" "${4:-}" ||
+              echo "::error::Cannot publish the feature-flag-gate error for $1."
           }
 
           parser_dir="$gate_tmp/parser"
@@ -427,7 +428,7 @@ jobs:
             echo "::error::Cannot install the trusted TypeScript parser."
             while IFS= read -r head_sha; do
               publish_reconciliation_error "$head_sha" "$gate_tmp/error-$head_sha.json" \
-                "feature-flag-gate could not install its parser" || true
+                "feature-flag-gate could not install its parser"
             done <"$open_heads"
             exit 2
           fi
@@ -444,7 +445,7 @@ jobs:
               incomplete_head=$(jq -r '.head.sha // empty' <<<"$pull")
               if [[ "$incomplete_head" =~ ^[0-9a-f]{40}$ ]]; then
                 publish_reconciliation_error "$incomplete_head" "$gate_tmp/error-$incomplete_head.json" \
-                  "feature-flag-gate found incomplete pull request metadata" || true
+                  "feature-flag-gate found incomplete pull request metadata"
               fi
               failures=$((failures + 1))
               continue
@@ -525,8 +526,7 @@ jobs:
             while IFS= read -r decision; do
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")
               publish_reconciliation_error "$(jq -r '.head_sha' <<<"$decision")" "$(jq -r '.payload' <<<"$decision")" \
-                "feature-flag-gate could not refresh pull-request heads" "$(jq -r '.statuses_file' <<<"$decision")" ||
-                echo "::error::Cannot publish the feature-flag-gate error for #$(jq -r '.number' <<<"$decision")."
+                "feature-flag-gate could not refresh pull-request heads" "$(jq -r '.statuses_file' <<<"$decision")"
               failures=$((failures + 1))
             done <"$gate_tmp/decisions.jsonl"
           elif [ "$evaluated" -gt 0 ]; then
@@ -545,8 +545,7 @@ jobs:
               result=$(jq -r '.result' <<<"$decision")
               if ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
                 echo "::error::Cannot re-check whether pull request #$number shares its head commit."
-                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file" ||
-                  echo "::error::Cannot publish the feature-flag-gate error for #$number."
+                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file"
                 failures=$((failures + 1))
                 continue
               fi
@@ -556,8 +555,7 @@ jobs:
               fi
               if ! GH_API_NO_WAIT=1 gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json"; then
                 echo "::error::Cannot refresh pull request #$number before reconciliation publication."
-                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh this pull request" "$statuses_file" ||
-                  echo "::error::Cannot publish the feature-flag-gate error for #$number."
+                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh this pull request" "$statuses_file"
                 failures=$((failures + 1))
                 continue
               fi
@@ -569,8 +567,7 @@ jobs:
                  [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
                  ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
                 echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
-                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file" ||
-                  echo "::error::Cannot publish the feature-flag-gate error for #$number."
+                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file"
                 continue
               fi
 
