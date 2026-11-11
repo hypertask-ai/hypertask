@@ -233,3 +233,32 @@ test("digestUntil reads the cursor marker and ignores junk", () => {
   assert.equal(digestUntil(null), null);
 });
 
+test("entrySummary drops chat mentions, decision notes and flag prose", () => {
+  assert.equal(
+    entrySummary("<p>@HT Product Lead Turn adaptive thinking off by default. Chat titles cap at 64 tokens.</p>"),
+    "Turn adaptive thinking off by default.",
+  );
+  assert.equal(
+    entrySummary(
+      '<p>Flag: <a href="https://app.hypertask.ai/admin/flags/htpr-9017">https://app.hypertask.ai/admin/flags/htpr-9017</a> (Everyone) <a href="https://app.hypertask.ai/admin/flags/htpr-9017">Smart page search</a> — Everyone when released.</p><p><strong>What&#x27;s wrong or wanted:</strong> Page search only matches exact words.</p>',
+    ),
+    "Page search only matches exact words.",
+  );
+  assert.equal(
+    entrySummary(
+      "<p>What&#x27;s wrong or wanted: Let an agent be the waiting person on a ticket.</p><p>I think that would really help.</p>",
+    ),
+    "Let an agent be the waiting person on a ticket.",
+  );
+  assert.equal(
+    entrySummary("<p>@Tom Fix the sidebar so it stops covering cards.</p>"),
+    "Fix the sidebar so it stops covering cards.",
+  );
+});
+
+test("entryTitle drops a ticket reference in brackets", () => {
+  assert.equal(
+    entryTitle("[INFRA] Pages: remove the old one-ticket field (migration step 2 of HTPR-7298)"),
+    "Pages: remove the old one-ticket field",
+  );
+});
