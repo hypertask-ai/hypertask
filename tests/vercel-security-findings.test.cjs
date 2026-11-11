@@ -19,6 +19,14 @@ test('secret-bearing reader runs only on the production branch and hosted runner
   assert.equal(step.env.VERCEL_TOKEN, '${{ secrets.VERCEL_TOKEN }}');
   assert.deepEqual(Object.keys(step.env), ['VERCEL_TOKEN']);
   assert.doesNotMatch(source, /upload-artifact|pull_request_target|MCP_TOKEN/);
+  const manifest = readFileSync('.github/actions/action-archive-cache-manifest.txt', 'utf8');
+  const actions = job.steps.map(step => step.uses).filter(Boolean);
+  assert.equal(actions.length, 2);
+  for (const action of actions) {
+    const [name, sha] = action.split('@');
+    assert.match(sha, /^[a-f0-9]{40}$/, `${name} must be pinned to an immutable commit`);
+    assert.ok(manifest.includes(`${name} ${sha}`), `${name}@${sha} must be recorded in the action manifest`);
+  }
 });
 
 const finding = (overrides = {}) => ({
