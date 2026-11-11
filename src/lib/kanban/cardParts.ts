@@ -1,6 +1,7 @@
 import type { ITask } from "@/models/model";
 
 export const CARD_PARTS = [
+  { key: "people", label: "People" },
   { key: "ticketNumber", label: "Ticket number" },
   { key: "inboxIcon", label: "Inbox icon", description: "Blue when unread, grey when read" },
   { key: "comments", label: "Comments" },
@@ -21,13 +22,15 @@ const cardPartsWith = (pick: (part: CardPart) => boolean): CardParts =>
 
 export const ALL_CARD_PARTS = cardPartsWith(() => true);
 export const EMPTY_CARD_PARTS = cardPartsWith(() => false);
-const DEFAULT_ON: readonly CardPart[] = ["ticketNumber", "tags", "inboxIcon"];
+const DEFAULT_ON: readonly CardPart[] = ["people", "ticketNumber", "tags", "inboxIcon"];
 export const DEFAULT_CARD_PARTS = cardPartsWith((part) => DEFAULT_ON.includes(part));
 
 export const parseCardParts = (raw: unknown): CardParts => {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return DEFAULT_CARD_PARTS;
   const saved = raw as Record<string, unknown>;
-  return cardPartsWith((part) => saved[part] === true);
+  return cardPartsWith((part) =>
+    part === "people" ? saved[part] !== false : saved[part] === true,
+  );
 };
 
 type CardTask = ITask & { customFieldValues?: unknown[] };
