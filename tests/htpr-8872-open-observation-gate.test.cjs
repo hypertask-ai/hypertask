@@ -81,7 +81,7 @@ function harness({ description = "", acceptanceCriteria = "", section = "Flag: E
   };
 }
 
-for (const [name, fixture, extra, agentId, target, expected, gate] of [
+for (const [name, fixture, extra, agentId, target, mark, expected] of [
   ["an unchecked full-day observation", { description: openChecklist }, {}, "runner-agent", undefined, "section", ["OPEN_OBSERVATION_GATE", /Full-day observation: watch production for 24 hours/]],
   ["an unchecked full-day observation for a person", { description: openChecklist }, {}, null, undefined, "section", [undefined, /Full-day observation: watch production for 24 hours/]],
   ["a written gate that is still open", { description: openProse }, {}, null, undefined, "section", [undefined, /still unfinished/]],
@@ -97,7 +97,7 @@ for (const [name, fixture, extra, agentId, target, expected, gate] of [
     if (expected[0]) assert.equal(result.json.code, expected[0]);
     assert.match(result.json.message, expected[1]);
     assert.equal(h.saved().sectionId, 10);
-    if (gate === "nothing") assert.ok(!h.calls.includes("saved"));
+    if (mark === "nothing") assert.ok(!h.calls.includes("saved"));
   });
 }
 
