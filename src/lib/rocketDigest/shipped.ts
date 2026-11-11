@@ -2,8 +2,11 @@ import prisma from "@/lib/prisma";
 import type { ShippedTicket } from "./entries";
 import { RELEASE_SECTION_TITLES, toShippedTickets, type ReleaseEventRow } from "./selection";
 
-export async function announcedTicketIds(): Promise<Set<number>> {
-  const rows = await prisma.announcments.findMany({ select: { body: true } });
+export async function announcedTicketIds(exclude: readonly number[] = []): Promise<Set<number>> {
+  const rows = await prisma.announcments.findMany({
+    where: { id: { notIn: [...exclude] } },
+    select: { body: true },
+  });
   const ids = new Set<number>();
   for (const row of rows) {
     const ticketIds = (row.body as { digest?: { ticketIds?: unknown } } | null)?.digest
@@ -35,7 +38,7 @@ function toRows(
     task: {
       uniqueIndex: task.uniqueIndex,
       title: task.title,
-      description: task.description || task.description_?.content || "",
+      description: task.description_?.content || task.description || "",
       section: task.section,
       deletedAt: task.deletedAt,
       taskLabels: task.taskLabels,
@@ -56,7 +59,7 @@ export async function selectShippedTickets(
     where: {
       timestamp: { gte: since, lte: until },
       to: { in: [...releaseSections] },
-      task: { projectId, deletedAt: null, archivedAt: null },
+      task: { projectId, deletedAt: null },
     },
     select: {
       timestamp: true,
@@ -79,7 +82,6 @@ export async function selectShippedTickets(
     where: {
       projectId,
       deletedAt: null,
-      archivedAt: null,
       section: { in: [...releaseSections] },
       sectionChangedAt: { gte: since, lte: until },
     },

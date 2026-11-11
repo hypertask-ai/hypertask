@@ -75,15 +75,20 @@ function digestVersion(body: unknown): number | null {
   return typeof version === "number" ? version : 0;
 }
 
-async function dropOutdatedDigestEntries(): Promise<number> {
-  const rows = await prisma.announcments.findMany({ select: { id: true, body: true } });
-  const outdated = rows
+async function outdatedDigestEntryIds(since: Date): Promise<number[]> {
+  const rows = await prisma.announcments.findMany({
+    where: { createdAt: { gte: since } },
+    select: { id: true, body: true },
+  });
+  return rows
     .filter((row) => {
       const version = digestVersion(row.body);
       return version !== null && version < DIGEST_VERSION;
     })
     .map((row) => row.id);
+}
 
+async function dropOutdatedDigestEntries(outdated: number[]): Promise<number> {
   if (outdated.length) {
     await prisma.$transaction([
       prisma.userAnnouncement.deleteMany({ where: { announcementId: { in: outdated } } }),
@@ -94,6 +99,12 @@ async function dropOutdatedDigestEntries(): Promise<number> {
 }
 
 export async function lastDigestRunAt(): Promise<Date | null> {
+  const redis = await getRedis();
+  const recorded = await redis.get("rocket-digest:last-run");
+  if (recorded) {
+    const date = new Date(recorded);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
   const rows = await prisma.announcments.findMany({
     where: { createdAt: { gte: new Date(Date.now() - BACKFILL_DAYS * DAY_MS) } },
     select: { body: true },
@@ -127,13 +138,17 @@ export async function runRocketDigest({
   now?: Date;
 }): Promise<DigestRun> {
   const since = new Date(now.getTime() - BACKFILL_DAYS * DAY_MS);
-  const cleared = dryRun ? 0 : await dropOutdatedDigestEntries();
-  const announced = await announcedTicketIds();
+  const outdated = await outdatedDigestEntryIds(since);
+  const announced = await announcedTicketIds(outdated);
   const tickets = await selectShippedTickets(DIGEST_PROJECT_ID, since, now, announced);
-  const entries = buildDigestEntries(tickets);
+  const entries = buildDigestEntries(
+    tickets,
+    outdated.length ? { maxTopics: Number.MAX_SAFE_INTEGER } : {},
+  );
+  let cleared = 0;
   let posted = 0;
 
-  if (!dryRun && entries.length) {
+  if (!dryRun && (entries.length || outdated.length)) {
     if (!(await claim("rocket-digest:run", now, RUN_CLAIM_SECONDS))) {
       return {
         skipped: true,
@@ -149,6 +164,11 @@ export async function runRocketDigest({
       await createAnnouncement({ body: announcementBody(entry, now), createdAt: entry.releasedAt });
       posted += 1;
     }
+    cleared = await dropOutdatedDigestEntries(outdated);
+  }
+  if (!dryRun) {
+    const redis = await getRedis();
+    await redis.set("rocket-digest:last-run", now.toISOString(), "EX", 90 * DAY_MS / 1000);
   }
 
   return {
