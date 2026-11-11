@@ -204,7 +204,7 @@ export async function POST(
         mode,
         pollingFallbackEnabled,
         subscriptionActive: Boolean(subscription?.active),
-        subscriptionHasChat: Boolean(subscription?.events.includes("chat.message")),
+        subscriptionHasChat: Boolean(subscription?.events?.includes("chat.message")),
       })) {
         await tx.chatMessage.update({
           where: { id: message.id },
