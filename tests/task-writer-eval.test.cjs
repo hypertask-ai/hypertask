@@ -158,7 +158,7 @@ test('pinned requests use the approved OpenRouter models, reasoning and no provi
   for (const { url, body } of requests) {
     assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
     assert.deepEqual(body.provider, { only: ['anthropic'], allow_fallbacks: false, require_parameters: true });
-    assert.ok(body.messages.some((message) => message.role === 'system' && message.content === 'Write a ticket'));
+    assert.ok(body.messages.some((message) => message.role === 'system' && [message.content].flat().some((part) => (part?.text ?? part) === 'Write a ticket')));
     assert.ok(body.messages.some((message) => message.role === 'user' && message.content === 'Fix typo'));
   }
 });
