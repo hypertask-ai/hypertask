@@ -13,14 +13,11 @@ SESSION_CREDS=${VCC_SESSION_CREDENTIALS_DIR:-$CREDS/sessions}
 fail() { printf 'setup-agents: %s\n' "$1" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-usage: setup-agents [--name "<name>"] [--identity "<session>"] [--check]
-Sets up or reuses one Hypertask agent login here and asks the server to verify it.
-Prints no token and never replaces a credential.
-  --name "<name>"     display name (or the first plain argument)
-  --identity "<name>" session name that owns the login (default: --name)
-  --check             tools and login smoke only; with --name, that credential
-  --preflight         tools only, for callers that need them before parsing
-  --identity-required this session carries the name; a mismatch is fatal
+usage: setup-agents [--name "<name>"] [--identity "<session>"] [--check] [--preflight]
+Sets up or reuses one Hypertask agent login and asks the server to verify it.
+  --name/--identity  display name, and the session name that owns the login
+  --check            smoke test only; with --name, that agent's credential
+  --preflight        tools only, for callers that need them before parsing
 EOF
 }
 
