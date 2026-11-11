@@ -120,6 +120,10 @@ else:
             must_fail(env, needle, '--name', 'Setup Smoke', mode=mode)
             if mode in ['create-fail', 'invalid-json']:
                 assert not (creds(home) / 'setup-smoke-agent-token').exists(), 'a failed creation saved a credential'
+        home, env = fixture('same-slug')
+        assert run(env, '--name', 'Setup Smoke').returncode == 0
+        must_fail(env, 'already belongs to "Setup Smoke"', '--name', 'Setup-Smoke')
+        assert len([c for c in calls(home) if c[:2] == ['agents', 'create']]) == 1, 'a second agent was created for one slug'
         home, env = fixture('race')
         must_fail(env, 'appeared while setup was running', '--name', 'Setup Smoke', mode='race')
         assert (creds(home) / 'setup-smoke-agent-token').read_text() == secret, 'a racing writer token was overwritten'
@@ -135,6 +139,7 @@ else:
         assert calls(home) == [['--json', 'status']], calls(home)
         assert 'the server rejected this login' in run(dict(env, FAKE_MODE='read-fail'), '--check').stderr
         home, env = fixture('check-credential')
+        assert 'no readable credential for "Setup Smoke"' in run(env, '--check', '--name', 'Setup Smoke').stderr
         creds(home).mkdir(parents=True)
         (creds(home) / 'setup-smoke-agent-token').write_text(secret)
         result = run(env, '--check', '--name', 'Setup Smoke')

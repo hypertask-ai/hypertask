@@ -185,11 +185,13 @@ else:
     assert r.returncode != 0 and link.read_text() == 'do not overwrite' and not calls(home)
     link.unlink()
     session(sessions, os.getpid(), 'RUNNER 1')
-    wrong = home / 'wrong-identity-creds'
-    wrong.mkdir()
-    r = run(dict(env, VCC_SESSION_CREDENTIALS_DIR=str(wrong)))
-    assert r.returncode != 0 and 'ship-identity does not match' in r.stderr
-    print('ok session credentials and mismatched ship identities fail closed')
+    # A custom session folder gets an absolute link, so the identity still resolves.
+    custom = home / 'custom-identity-creds'
+    custom.mkdir()
+    r = run(dict(env, VCC_SESSION_CREDENTIALS_DIR=str(custom)))
+    assert r.returncode == 0 and 'RUNNER 1: login ok, identity ok' in r.stdout, r.stderr
+    assert os.readlink(custom / 'runner-1-agent-token') == str(token(creds, 1).resolve())
+    print('ok session credentials fail closed on a plain file and resolve in a custom folder')
 
     home, creds, sessions, env = fixture('parallel')
     jobs = [subprocess.Popen(['bash', script], env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) for _ in range(3)]

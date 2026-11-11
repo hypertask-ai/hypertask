@@ -36,8 +36,8 @@ key; without one the command names that fix and saves nothing. `--check` runs on
 the tool and login smoke: no writes, under five seconds, and with `--name` it checks
 that agent's existing credential.
 
-An empty or unreadable credential, a session link that is not a symlink, a refused
-board call, or an identity that does not match all stop the command with a plain
-reason. Fix the cause and rerun; already-minted credentials are kept. Never replace
+An empty or unreadable credential, a session link that is not a symlink, a name
+that lands on a slug another agent name already owns, a refused board call, or an
+identity that does not match all stop the command with a plain reason. Fix the cause and rerun; already-minted credentials are kept. Never replace
 a credential by hand, never borrow another agent's login, and never run this with
 shell tracing.

@@ -80,8 +80,11 @@ login_ok() {
 
 if [ "$check_only" -eq 1 ]; then
   check_args=()
-  if [ -n "$name" ] && [ -s "$CREDS/$(slug_of "$name")-agent-token" ]; then
-    check_args=(--token "$(cat "$CREDS/$(slug_of "$name")-agent-token")")
+  if [ -n "$name" ]; then
+    check_token=$CREDS/$(slug_of "$name")-agent-token
+    { [ -f "$check_token" ] && [ -s "$check_token" ]; } \
+      || fail "no readable credential for \"$name\"; set it up with --name \"$name\" or run --check without --name for the ambient login"
+    check_args=(--token "$(cat "$check_token")")
   fi
   login_ok "${check_args[@]}"
   printf 'setup-agents: check ok (tools present, login ok)\n'
@@ -108,6 +111,10 @@ mkdir -p "$CREDS"
 exec 8>"$CREDS/.setup-agents.lock"
 flock -x 8
 token=$CREDS/$slug-agent-token
+record=$CREDS/$slug-agent-name
+if [ -f "$record" ] && [ "$(cat "$record")" != "$name" ]; then
+  fail "the credential $token already belongs to \"$(cat "$record")\"; rerun with that name or pick a name with a different slug"
+fi
 tmp=
 trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
 if [ ! -e "$token" ] && [ ! -L "$token" ]; then
@@ -128,8 +135,13 @@ link=$SESSION_CREDS/$slug-agent-token
 if [ -e "$link" ] && [ ! -L "$link" ]; then
   fail "the session credential $link is not a symlink; refusing to overwrite it"
 fi
-ln -sfn "../$slug-agent-token" "$link"
+if [ "$SESSION_CREDS" = "$CREDS/sessions" ]; then
+  ln -sfn "../$slug-agent-token" "$link"
+else
+  ln -sfn "$token" "$link"
+fi
 login_ok --token "$(cat "$token")"
+[ -f "$record" ] || printf '%s\n' "$name" >"$record"
 
 identity=$("${SELF%/*}/../../ship/scripts/ship-identity") || fail 'identity verification failed'
 if [ "$identity" = "$identity_name"$'\t'"$link" ]; then
