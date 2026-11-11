@@ -36,8 +36,9 @@ test("the flag, the prompt, Jev's answer and Auto's step-up signals", () => {
   assert.equal(shadow.parseJevAutoModelGuess("I cannot answer"), null);
   assert.deepEqual(["light", "standard", "high"].map(shadow.tierForJevLevel), [1, 2, 3]);
   assert.deepEqual([shadow.compareAutoModelTiers(3, 1), shadow.compareAutoModelTiers(1, 3), shadow.compareAutoModelTiers(2, 2)], ["jev-higher", "jev-lower", "agree"]);
-  const long = Array.from({ length: 20 }, () => ({ role: "human", content: "hi" }));
-  assert.deepEqual([shadow.autoModelTurnSignals({ message: "hi", history: long, longThreadMessages: 20 }).stepUp, shadow.autoModelTurnSignals({ message: "again", history: [{ role: "human", content: "again" }], longThreadMessages: 20 }).resent, shadow.autoModelTurnSignals({ message: "```js", history: null, longThreadMessages: 20 }).stepUp], [1, true, 1]);
+  const long = Array.from({ length: 20 }, (_, index) => ({ role: "human", content: `earlier question ${index}` }));
+  const resent = shadow.autoModelTurnSignals({ message: "again", history: [{ role: "human", content: "again" }], longThreadMessages: 20 });
+  assert.deepEqual([shadow.autoModelTurnSignals({ message: "next", history: long, longThreadMessages: 20 }).stepUp, resent.resent, resent.stepUp, shadow.autoModelTurnSignals({ message: "same", history: [...long.slice(1), { role: "human", content: "same" }], longThreadMessages: 20 }).stepUp, shadow.autoModelTurnSignals({ message: "```js", history: null, longThreadMessages: 20 }).stepUp], [1, true, 1, 2, 1]);
 });
 
 test("a managed turn logs one row next to Auto's level, and the skips make no call", async () => {

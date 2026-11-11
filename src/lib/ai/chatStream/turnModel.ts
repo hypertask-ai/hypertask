@@ -18,7 +18,6 @@ import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGat
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 import { autoForcedProvider, autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
-import { autoModelShadowEnabled } from "@/app/api/ai/_lib/autoModelShadow";
 
 import { createSseErrorResponse, reportHandledChatError, errorMessage } from "@/lib/ai/chatStream/errors";
 import { ChatRequest } from "@/lib/ai/chatStream/request";
@@ -27,6 +26,8 @@ import { AuthedUser, ProviderId } from "@/lib/ai/chatStream/types";
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { resolveModelSelection, selectionFromModelOption, ModelSelection, defaultModelSelection, selectModel } from "@/lib/ai/chatStream/models";
 import type { AutoModelShadowTurn } from "@/lib/ai/jevAutoModelShadow";
+
+const autoModelShadowAllowed = (userId: number) => import("@/app/api/ai/_lib/autoModelShadow").then(({ autoModelShadowEnabled }) => autoModelShadowEnabled(userId)).catch(() => false);
 
 function startAutoModelShadow(turn: AutoModelShadowTurn) {
   import("@/lib/ai/jevAutoModelShadow")
@@ -214,7 +215,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       });
       if (autoPick) {
         selection = selectionFromModelOption(autoPick);
-        if (await autoModelShadowEnabled(dbUser.id)) startAutoModelShadow({
+        if (await autoModelShadowAllowed(dbUser.id)) startAutoModelShadow({
           userId: dbUser.id,
           teamId: gatewayTags.teamId ?? null,
           projectId: usageProjectId,
