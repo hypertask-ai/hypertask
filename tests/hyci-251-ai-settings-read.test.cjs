@@ -52,7 +52,12 @@ function fixture(options = {}) {
     "@/lib/ai/jevDuplicateHint": { DUPLICATE_DECISION_MODEL_SLUG: JEV_MODEL },
     "@/lib/flags": {
       MODEL_CANARY_STATE_FLAG: "htpr-7748-model-canary-state",
-      isFeatureEnabled: async () => options.stateFlag ?? true,
+      isFeatureEnabled: async (key) => {
+        if (options.jevFlagThrow && key === "htpr-9046-jev-duplicate-hint") {
+          throw new Error("flag read failed");
+        }
+        return options.stateFlag ?? true;
+      },
     },
     "@/lib/aiFeedback/automatic": { queueRestFailure: () => {} },
     "@/lib/errors/reportError": { reportError: async () => {} },
@@ -150,4 +155,12 @@ test("a failed settings read keeps the canary rows and says the settings are unr
   assert.equal(body.settings.teamId, null);
   assert.deepEqual(body.settings.providers, []);
   assert.equal(body.settings.jev.flag, "htpr-9046-jev-duplicate-hint");
+});
+
+test("a failed Jev flag read still names the providers", async () => {
+  const body = await (await fixture({ jevFlagThrow: true }).get()).json();
+  assert.equal(body.settings.jev.enabled, null);
+  assert.equal(body.settings.jev.model, JEV_MODEL);
+  assert.equal(body.settings.teamId, TEAM_ID);
+  assert.ok(body.settings.providers.length > 0);
 });

@@ -167,8 +167,9 @@ repurpose a team key for tooling:
   only its own team, and with no unique team the block reports `teamId: null`
   and still answers the Jev question. The block ships with the same
   `htpr-7748-model-canary-state` flag as the state fields. A failed settings
-  lookup reports `unreadable: true` with an empty provider list instead of
-  failing the whole status read.
+  lookup reports `unreadable: true` with an empty provider list, and a failed
+  flag read reports `jev.enabled: null`, so neither ever fails the whole status
+  read.
 
 Also note: "All Trials Key" is the intentional included-allowance key for Free
 and BYOK-plan (and BYOK-comped) teams. It is not a fallback for Premium,

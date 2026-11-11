@@ -31,16 +31,32 @@ async function resolveTeamId(ctx: AuthContext, requested: string | null) {
   return owned.length === 1 ? owned[0].id : null;
 }
 
+const JEV = {
+  flag: HTPR_9046_JEV_DUPLICATE_HINT_FLAG,
+  model: DUPLICATE_DECISION_MODEL_SLUG,
+};
+
+async function reportSettingsFailure(error: unknown, stage: string) {
+  await reportError({
+    message: error instanceof Error ? error.message : "AI settings read failed",
+    stack: error instanceof Error ? error.stack : undefined,
+    url: "/api/mcp/ai/models/status",
+    source: "handled",
+    extra: { stage },
+  });
+}
+
+async function readJev(userId: number) {
+  try {
+    return { ...JEV, enabled: await isFeatureEnabled(JEV.flag, userId) };
+  } catch (error) {
+    await reportSettingsFailure(error, "jev");
+    return { ...JEV, enabled: null };
+  }
+}
+
 async function readSettings(ctx: AuthContext, request: NextRequest) {
-  const jevEnabled = await isFeatureEnabled(
-    HTPR_9046_JEV_DUPLICATE_HINT_FLAG,
-    ctx.user.id,
-  );
-  const jev = {
-    flag: HTPR_9046_JEV_DUPLICATE_HINT_FLAG,
-    model: DUPLICATE_DECISION_MODEL_SLUG,
-    enabled: jevEnabled,
-  };
+  const jev = await readJev(ctx.user.id);
   try {
     const teamId = await resolveTeamId(
       ctx,
@@ -76,13 +92,7 @@ async function readSettings(ctx: AuthContext, request: NextRequest) {
       jev,
     };
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI settings read failed",
-      stack: error instanceof Error ? error.stack : undefined,
-      url: "/api/mcp/ai/models/status",
-      source: "handled",
-      extra: { stage: "settings" },
-    });
+    await reportSettingsFailure(error, "team");
     return { teamId: null, gateway: null, providers: [], jev, unreadable: true };
   }
 }
