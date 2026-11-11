@@ -407,13 +407,15 @@ const MyTasks = ({
   );
 
   const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
+  let tagHideOn = false;
+  if (tagHideFilterEnabled) tagHideOn = true;
   const runtimeContext = useMemo(() => {
-    if (!Array.isArray(runningTimerEntries)) return { tagHideFilterEnabled };
+    if (!Array.isArray(runningTimerEntries)) return { tagHideFilterEnabled: tagHideOn };
     return {
       runningTaskIds: new Set(runningTimerEntries.map((timer) => timer.taskId)),
-      tagHideFilterEnabled,
+      tagHideFilterEnabled: tagHideOn,
     };
-  }, [runningTimerEntries, tagHideFilterEnabled]);
+  }, [runningTimerEntries, tagHideOn]);
 
   const allTasksForBoardTabs = useMemo(() => {
     if (groupBy !== "time") return [];

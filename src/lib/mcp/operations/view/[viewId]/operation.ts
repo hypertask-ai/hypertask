@@ -232,16 +232,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
         { status: 400 }
       )
     }
-    if (
-      body.label_match !== undefined &&
-      body.label_match !== 'ALL' &&
-      body.label_match !== 'ANY' &&
-      body.label_match !== 'HIDE'
-    ) {
-      return NextResponse.json(
-        { success: false, error: "label_match must be 'ALL', 'ANY', or 'HIDE'" },
-        { status: 400 }
-      )
+    if (body.label_match !== undefined && !['ALL', 'ANY', 'HIDE'].includes(body.label_match)) {
+      return NextResponse.json({ success: false, error: "label_match must be 'ALL', 'ANY', or 'HIDE'" }, { status: 400 })
     }
     if (body.subtask_setting !== undefined && !isSubtaskSetting(body.subtask_setting)) {
       return NextResponse.json(

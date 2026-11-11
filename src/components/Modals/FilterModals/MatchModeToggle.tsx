@@ -29,7 +29,8 @@ const MatchModeToggle = ({ type, noun, view }: Props) => {
     (filter) => filter.type === type
   );
   const activeFilter = view === "MyTasks" ? myTasksActive : kanbanActive;
-  const hideEnabled = type === "Labels" && tagHideEnabled;
+  let hideEnabled = false;
+  if (tagHideEnabled && type === "Labels") hideEnabled = true;
   const storedMatch = activeFilter?.match;
   let match: TFilterMatch = "ANY";
   if (storedMatch === "HIDE" && hideEnabled) match = "HIDE";

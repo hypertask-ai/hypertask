@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import { TFilter, IFilterSettings, TFilterMatch  } from "@/models/Filters/model"
 import { defaultFilterSettings, defaultConditions } from "@/utils/helperFunctions/Views/FilterHelperFunctions"
 import { useRecoilState } from "@/lib/state";
@@ -8,6 +10,7 @@ import useKanbanViews from "../Views/useKanbanViews";
 
 
 const useFilters = ()=>{
+    const tagHideEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
     const [_currentProject, _] = useRecoilState(currentProjectAtom)
     const { saveFilterAPI } = useKanbanViews(_currentProject)
 
@@ -103,7 +106,9 @@ const useFilters = ()=>{
       const filters = getActiveFiltersFromProject(_currentProject);
       const existingFilter = filters.addedFilters.find((filter) => filter.type === type);
       if (!existingFilter?.searchPayload?.length) return;
-      existingFilter.match = next ?? (existingFilter.match === "ALL" ? "ANY" : "ALL");
+      let match = next ?? (existingFilter.match === "ALL" ? "ANY" : "ALL");
+      if (!tagHideEnabled && match === "HIDE") match = "ANY";
+      existingFilter.match = match;
       return await applyFilterAndSetCache(_currentProject, filters);
     }
 

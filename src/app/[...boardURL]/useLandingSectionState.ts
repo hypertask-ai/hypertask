@@ -33,6 +33,8 @@ export function useLandingSectionState(context: Context) {
 
 const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
 const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
+let tagHideOn = false;
+if (tagHideFilterEnabled) tagHideOn = true;
 const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
@@ -82,7 +84,7 @@ const boardSections: ISection[] = useMemo(() => {
 const filterRuntimeContext = useMemo(() => ({
   legacyAgentAssigneeMatch: !assigneeFixEnabled,
   agentCreatorFilterEnabled,
-  tagHideFilterEnabled,
+  tagHideFilterEnabled: tagHideOn,
   legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
   blockedByMeListEnabled,
   runningTaskIds: timerDataReady
@@ -90,7 +92,7 @@ const filterRuntimeContext = useMemo(() => ({
     : new Set(boardSections.flatMap((section) =>
         (section.items ?? []).map((task) => task.id)
       )),
-}), [agentCreatorFilterEnabled, tagHideFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, blockedByMeListEnabled, runningTimers, boardSections, timerDataReady]);
+}), [agentCreatorFilterEnabled, tagHideOn, assigneeFixEnabled, defaultFiltersFixEnabled, blockedByMeListEnabled, runningTimers, boardSections, timerDataReady]);
 
 useEffect(() => {
   const project = _allProjects?.[_projectIndex]
