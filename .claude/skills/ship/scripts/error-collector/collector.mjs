@@ -25,6 +25,8 @@ const iso = time => new Date(time).toISOString();
 const day = time => iso(time).slice(0, 10);
 const html = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const diagnostic = text => console.error(`error-collector: ${text}`);
+const refusedCreate = text => /project not found or access denied|label not found|rate limit exceeded|exactly one brain label/i.test(text);
+const occurrencePosted = (text, id) => typeof text === 'string' && (text.includes(`[error-occurrence:${id}]`) || text.includes(`[error-detail:${id}]`));
 
 function noiseRule(event) {
   const text = `${event.message}\n${event.route}`;
@@ -206,7 +208,7 @@ function description(group, fp) {
 function detailNote(group, fp) {
   const stack = String(group.stack ?? "").split("\n").slice(0, 40).join("\n");
   const id = createHash("sha256").update(`detail|${fp}`).digest("hex").slice(0, 24);
-  return { id, text: `Redacted sample: ${group.message}\nStack:\n${stack}\n[error-detail:${id}]` };
+  return { id, text: `Redacted sample: ${group.message}\nStack:\n${stack}\n[error-detail:${id}]\n[error-occurrence:${id}]` };
 }
 
 function search(fp, board, env, incident) {
@@ -222,7 +224,7 @@ function search(fp, board, env, incident) {
         if (typeof task.description === 'string' && new RegExp(`error-fingerprint:${fp}(?![a-f0-9])`).test(task.description)) {
           const identity = incident && taskIncident(task);
           if (incident && (identity?.routeKey !== incident.routeKey || identity?.root !== incident.root)) continue;
-          const match = { ticket: ticketRef(task), deleted: status === 'Deleted' };
+          const match = { ticket: ticketRef(task), deleted: status === 'Deleted', samplePromised: task.description.includes('Redacted sample follows') };
           if (!found || match.deleted) found = match;
         }
       }
@@ -285,6 +287,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     timeLeft(Infinity);
     if (dryRun) { console.log(`DRY-RUN ${JSON.stringify({ command: name, args, ...(input == null ? {} : { input }) })}`); return ''; }
     return command(name, args, { ...env, ...extraEnv }, input);
+  };
+  const createOutcome = args => {
+    timeLeft(Infinity);
+    const result = spawnSync('vcc', args, { env, encoding: 'utf8', timeout: timeLeft(30000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
+    const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    if (result.error || result.status !== 0) return refusedCreate(text) ? { kind: 'refused' } : { kind: 'ambiguous' };
+    try { return { kind: 'created', ticket: ticketRef(payload(result.stdout).task) }; }
+    catch { return { kind: 'ambiguous' }; }
   };
   state.coverage ??= {};
   state.stale ??= {};
@@ -480,12 +490,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   }
   await checkpoint();
   let held = 0;
+  let stopCreates = false;
   const sections = new Map();
   const filing = Object.entries(state.pending).sort(([, left], [, right]) => Number(right.board === PRODUCT_BOARD) - Number(left.board === PRODUCT_BOARD));
   for (const [fp, group] of filing) {
     if (signal.aborted) break;
     try {
       let found = search(fp, group.board, env);
+      let createdNow = false;
       for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env, group.incident);
       if (!found && group.incident) {
         const allowWrapper = !Object.values(state.pending).some(other => other.incident?.routeKey === group.incident.routeKey && other.incident.root !== group.incident.root && Math.abs(Date.parse(other.firstSeen) - Date.parse(group.firstSeen)) <= 10 * 60_000);
@@ -511,38 +523,45 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           await checkpoint();
           continue;
         }
+        if (stopCreates) continue;
         if (state.created.length >= cap) { held++; continue; }
         const column = group.board === PRODUCT_BOARD ? PRODUCT_INTAKE : (sections.get(group.board) ?? sections.set(group.board, intake(env, group.board)).get(group.board));
         const text = description(group, fp);
         let temp;
         const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);
-        let createdNow = false;
         try {
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
-          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', ticketLabels(group.board), '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
+          const createArgs = ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', ticketLabels(group.board), '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path];
           if (dryRun) {
+            write('vcc', createArgs);
             state.created.push(iso(now));
             console.log(`DRY-RUN description ${JSON.stringify(text)}`);
             found = { ticket: `DRYRUN-${state.created.length}`, deleted: false };
           } else {
-            found = { ticket: ticketRef(payload(output).task), deleted: false };
+            const outcome = createOutcome(createArgs);
+            if (outcome.kind === 'ambiguous') { stopCreates = true; throw new Error('ambiguous create'); }
+            if (outcome.kind !== 'created') throw new Error('refused create');
+            found = { ticket: outcome.ticket, deleted: false };
             state.created.push(iso(now));
             createdNow = true;
           }
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };
-          if (createdNow) {
-            const note = detailNote(group, fp);
-            state.occurrences[note.id] ??= { ticket: found.ticket, queuedAt: iso(now), text: note.text };
-          }
         } finally { if (temp) await fs.rm(temp, { force: true }); }
       } else {
+        const samplePromised = Boolean(found.samplePromised);
+        delete found.samplePromised;
         state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: null };
+        if (!dryRun && samplePromised) createdNow = true;
         if (!found.deleted && !group.incident) {
           const activity = state.activities[found.ticket] ??= { count: 0, since: group.firstSeen, at: null };
           activity.routes = [...new Set([...(activity.routes ?? []), ...group.routes.filter(Boolean)])];
           activity.count += group.count;
           activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
         }
+      }
+      if (!dryRun && createdNow && !found.deleted) {
+        const note = detailNote(group, fp);
+        state.occurrences[note.id] ??= { ticket: found.ticket, queuedAt: iso(now), text: note.text };
       }
       if (group.incident && !found.deleted) {
         for (const [id, occurrence] of Object.entries(group.occurrences)) state.occurrences[id] ??= { ...occurrence, ticket: found.ticket, queuedAt: iso(now) };
@@ -560,7 +579,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     try {
       const page = payload(command('ht', ['GET', `/mcp/tasks/${occurrence.ticket}/agent-activity?limit=100`], env));
       if (!Array.isArray(page.activities)) throw new Error('invalid occurrence activity page');
-      if (!page.activities.some(activity => activity.text?.includes(`[error-occurrence:${id}]`))) {
+      if (!page.activities.some(activity => occurrencePosted(activity.text, id))) {
         if (page.activities.length === 100 && page.activities.every(activity => Date.parse(activity.createdAt) >= Date.parse(occurrence.queuedAt))) throw new Error('occurrence activity history truncated');
         write('vcc', ['activity', 'add', occurrence.ticket, occurrence.text]);
       }

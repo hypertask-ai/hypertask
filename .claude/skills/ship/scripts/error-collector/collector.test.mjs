@@ -63,7 +63,7 @@ if (name === 'ht') {
   const plain = args[0] === '--json' ? args.slice(1) : args;
   if (plain[0] === 'task' && plain[1] === 'create') {
     if (args[0] !== '--json') throw new Error('must request JSON');
-    if (cfg.createFail) exit();
+    if (cfg.createFail) { console.error('Project not found or access denied'); process.exit(1); }
     const board = Number(args[args.indexOf('--project') + 1]);
     const task = { ticketNumber: (board === 15 ? 'HTPR-' : 'YPER4-') + (100 + remote.length), projectId: board, description: row.description, status: 'Normal' };
     remote.push(task);
@@ -480,6 +480,68 @@ check('tickets', 'ambiguous or malformed receipt reconciles without duplicate; f
     assert.equal(Object.keys(h.state().pending).length, 0);
   });
 });
+
+check('tickets', 'HYCI-271 ambiguous create stops the run and the next run files each sample once', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ ambiguousCreate: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+  h.config({});
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 2);
+  assert.equal(Object.keys(h.state().pending).length, 0);
+  assert.equal(details(h).length, 2);
+  assert.equal(details(h).filter(call => call.args[3].includes('[error-occurrence:')).length, 2);
+  await h.run({ now: NOW + 2000 });
+  assert.equal(details(h).length, 2);
+}));
+
+check('tickets', 'HYCI-271 a malformed receipt stops further creates', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ badReceipt: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+}));
+
+check('tickets', 'HYCI-271 a refused create leaves the slot free and still tries the next group', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ createFail: true });
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+}));
+
+check('tickets', 'HYCI-271 an ambiguous detail note is not posted twice', () => withHarness(async h => {
+  h.events([event()]);
+  h.config({ ambiguousActivity: true });
+  await h.run();
+  assert.equal(details(h).length, 1);
+  assert.equal(Object.keys(h.state().occurrences).length, 1);
+  h.config({});
+  await h.run({ now: NOW + 1000 });
+  assert.equal(details(h).length, 1);
+  assert.equal(Object.keys(h.state().occurrences).length, 0);
+}));
+
+check('tickets', 'HYCI-271 a saved error-detail marker blocks a second detail note', () => withHarness(async h => {
+  h.events([event()]);
+  await h.run();
+  const fp = Object.keys(h.state().fingerprints)[0];
+  const ticket = h.state().fingerprints[fp].ticket;
+  const id = createHash('sha256').update(`detail|${fp}`).digest('hex').slice(0, 24);
+  const state = h.state();
+  state.occurrences[id] = { ticket, queuedAt: new Date(NOW).toISOString(), text: `Redacted sample: kept\n[error-detail:${id}]` };
+  h.seed(state);
+  writeFileSync(join(h.home, 'activities.json'), JSON.stringify([{ ticket, text: `already posted\n[error-detail:${id}]`, createdAt: new Date(NOW).toISOString() }]));
+  await h.run({ now: NOW + 1000 });
+  assert.equal(details(h).length, 1);
+  assert.equal(h.state().occurrences[id], undefined);
+}));
 
 check('tickets', 'a refused create does not spend the hourly slot', () => withHarness(async h => {
   h.env.ERROR_COLLECTOR_HOURLY_CAP = '1';
