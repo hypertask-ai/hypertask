@@ -32,11 +32,6 @@ name: Stuck Job Recovery
 # which is under the two-minute target. A forty-five-second rule is safe on this
 # repository: 216 real finished jobs of 30 pull-request runs closed 0-4 s after
 # their last step, median 2 s, so no healthy job is ever quiet that long.
-#
-# HYCI-298. The same tick carries the guard queue: a required guard run that is
-# still pending after thirty minutes is cancelled, because a run GitHub never
-# assigned a runner to holds its concurrency group while a pending run can still
-# be cancelled.
 on:
   schedule:
     - cron: '*/10 * * * *'

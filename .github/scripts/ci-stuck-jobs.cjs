@@ -44,13 +44,6 @@ const { readFileSync } = require('node:fs');
 
 const STUCK_SECONDS = 45;
 const RECENT_MINUTES = 30;
-// HYCI-298: a required guard run can be held by GitHub before any job starts. On
-// 2026-11-11 run 43087008686 took the feature-flag-gate concurrency group at
-// 19:25:07Z, its job was never given a runner, the cancel API answered 409
-// because nothing was running, and every later run of that workflow sat pending
-// with no jobs, so no pull request published its required verdict. A run that is
-// still pending has run nothing, so cancelling it is free, and cancelling the
-// queue is the only lever this repository has over a head run it cannot clear.
 const GUARD_WORKFLOW = 'feature-flag-gate.yml';
 const GUARD_PENDING_MINUTES = 30;
 // A cancel usually settles in one or two polls; a slower one is now carried by a
@@ -221,10 +214,6 @@ function overdueRuns(runs, { now = Date.now(), minutes = GUARD_PENDING_MINUTES }
   });
 }
 
-// Cancelling a pending run posts no status for its head, so a pull request whose
-// event is dropped here keeps waiting for the guard's next event or the fifteen
-// minute sweep, which is a verdict a few minutes later instead of a queue that
-// never moves. A failed cancel is reported and does not stop the sweep.
 async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PENDING_MINUTES, api = json } = {}) {
   let runs;
   try {

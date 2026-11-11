@@ -696,6 +696,33 @@ test('a guard run waiting under thirty minutes keeps its turn and one waiting lo
   assert.deepEqual(calls.slice(1), ['POST /repos/o/r/actions/runs/42/cancel']);
 });
 
+test('guard expiry includes exactly thirty minutes but rejects invalid ages and non-pending runs', () => {
+  const runs = [
+    guardRun(51, 30),
+    guardRun(52, -1),
+    { id: 53, status: 'pending' },
+    { id: 54, status: 'pending', created_at: 'invalid' },
+    { ...guardRun(55, 90), status: 'queued' },
+    { ...guardRun(56, 90), status: 'in_progress' },
+  ];
+  assert.deepEqual(overdueRuns(runs, { now }).map(run => run.id), [51]);
+});
+
+test('a refused guard cancellation does not stop later overdue cancellations', async () => {
+  const cancelled = [];
+  const outcome = await cancelOverdueGuards('o/r', {
+    now,
+    api: async (path, method) => {
+      if (method !== 'POST') return { workflow_runs: [guardRun(61, 31), guardRun(62, 40)] };
+      if (path.endsWith('/61/cancel')) throw new Error('HTTP 409');
+      cancelled.push(path);
+      return {};
+    },
+  });
+  assert.deepEqual(outcome, { checked: 2, cancelled: 1 });
+  assert.deepEqual(cancelled, ['/repos/o/r/actions/runs/62/cancel']);
+});
+
 test('an unreadable guard queue is reported and never stops the sweep', async () => {
   const outcome = await cancelOverdueGuards('o/r', {
     now,

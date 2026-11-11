@@ -12,16 +12,8 @@ on:
 permissions:
   contents: read
 
-# HYCI-298. One group per pull request, and one group for the sweep. A single
-# shared group made every pull request's required check depend on one run: on
-# 2026-11-11 run 43087008686 was given the group at 19:25:07Z, its job was never
-# assigned a runner, the cancel API answered 409 and left the run in_progress, and
-# for the next forty minutes all nineteen later runs sat pending with no jobs. No
-# pull request could publish its verdict. Edits of one pull request still
-# serialize here, which is the ordering that matters; a run that never starts can
-# now only hold up its own pull request while the sweep keeps the rest moving.
 concurrency:
-  group: feature-flag-gate-${{ github.event.pull_request.number || 'sweep' }}
+  group: feature-flag-gate-serialized
   queue: max
   cancel-in-progress: false
 
