@@ -48,10 +48,7 @@ export async function concealedWaitingDisplayNames(comments: readonly { activity
 
 export async function scrubStoredTaskSummary(content: string | null | undefined, taskId: number, userId: number, projectId: number) {
   if (!content) return content;
-  const comments = await prisma.comment.findMany({
-    where: { taskId, activity: { path: ["type"], equals: "TaskWaitingOn" } },
-    select: { activity: true },
-  });
+  const comments = await prisma.comment.findMany({ where: { taskId, activity: { path: ["type"], equals: "TaskWaitingOn" } }, select: { activity: true } });
   const names = await concealedWaitingDisplayNames(comments, userId, projectId);
   return names.length === 0 ? content : replaceConcealedNames(content, names);
 }
@@ -60,10 +57,5 @@ export async function redactSharedPrivateWaitingActivities<T extends { activity?
   const targets = collectWaitingTargets(comments);
   if (targets.ids.length === 0 && targets.names.length === 0) return comments;
   const agents = await loadWaitingAgents(comments, projectId, true);
-  return applyRedaction(
-    comments,
-    new Set(agents.map((agent) => agent.id)),
-    new Set(agents.flatMap((agent) => (agent.displayName ? [agent.displayName] : []))),
-    0,
-  );
+  return applyRedaction(comments, new Set(agents.map((agent) => agent.id)), new Set(agents.flatMap((agent) => (agent.displayName ? [agent.displayName] : []))), 0);
 }
