@@ -11,13 +11,17 @@ import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/
 export const TICKET_NUMBER_CANDIDATE_LIMIT = 8;
 
 export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string): Promise<number[]> => {
-  const rows = await prisma.$queryRaw<{ id: number }[]>`
-    SELECT id FROM "Task"
-    WHERE lower("ticketNumber") = lower(${ticketNumber})
-    ORDER BY "projectId" ASC, id ASC
-    LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
-  `;
-  return rows.map((row) => row.id);
+  try {
+    const rows = await prisma.$queryRaw<{ id: number }[]>`
+      SELECT id FROM "Task"
+      WHERE lower("ticketNumber") = lower(${ticketNumber})
+      ORDER BY "projectId" ASC, id ASC
+      LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
+    `;
+    return rows.map((row) => row.id);
+  } catch {
+    return [];
+  }
 };
 
 export class TaskIdentifierAmbiguityError extends Error {
@@ -100,15 +104,13 @@ export async function findTaskByIdentifier(
   const scope = { status: { not: 'Deleted' as const }, project: projectFilter };
   if (ticket_number && await isFeatureEnabled(HTPR_8977_INDEXED_TICKET_LOOKUP_FLAG, user.id)) {
     const candidates = await caseInsensitiveTicketNumberCandidates(ticket_number);
-    if (candidates.length > TICKET_NUMBER_CANDIDATE_LIMIT) {
-      matches = await findMatches({ ...identityWhere, ...scope });
-    } else if (candidates.length > 0) {
-      matches = await findMatches({
-        id: { in: candidates },
-        ...(project_id ? { projectId: project_id } : {}),
-        ...scope,
-      });
-    }
+    matches = candidates.length > 0 && candidates.length <= TICKET_NUMBER_CANDIDATE_LIMIT
+      ? await findMatches({
+          id: { in: candidates },
+          ...(project_id ? { projectId: project_id } : {}),
+          ...scope,
+        })
+      : await findMatches({ ...identityWhere, ...scope });
   } else {
     matches = await findMatches({ ...identityWhere, ...scope });
   }
