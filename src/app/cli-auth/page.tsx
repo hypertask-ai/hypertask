@@ -10,6 +10,7 @@ import useCurrentUser from '@/hooks/General/useCurrentUserCheckFromCookies';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/utils/undoActions/helperFuncs';
+import logo from '@/assets/hypertaskLogoWhite.png';
 import darkMark from '@/assets/HTC_without_text.png';
 import useDarkMode from '@/hooks/MultiPages/HTC/useDarkMode';
 import {
@@ -18,12 +19,6 @@ import {
   CLI_CALLBACK_WINDOW_NAME,
 } from '@/lib/auth/safeReturnTo';
 import { Copy } from 'lucide-react';
-
-function Mark({ className }: { className?: string }) {
-  const { effectiveTheme } = useDarkMode();
-  const src = effectiveTheme === 'dark' ? '/loginLogoMain.png' : darkMark;
-  return <Image src={src} alt="Hypertask logo" width={47} height={59} className={cn('object-contain', className)} />;
-}
 
 type CliStep = 'consent' | 'loading' | 'error' | 'declined' | 'connected';
 
@@ -48,11 +43,12 @@ function CliAuthShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CliAuthCard({ children }: { children: React.ReactNode }) {
+function CliAuthCard({ children, agentSignIn = false }: { children: React.ReactNode; agentSignIn?: boolean }) {
   return (
     <div
       className={cn(
-        'w-full max-w-md rounded-[4px] px-8 py-8 sm:py-10',
+        'w-full max-w-md px-8 py-8 sm:py-10',
+        agentSignIn ? 'rounded-[4px]' : 'rounded',
         'border border-border-light-gray-thin bg-pageBackground shadow-lg'
       )}
     >
@@ -67,12 +63,14 @@ function CopyableField({
   value,
   copyLabel,
   description,
+  agentSignIn = false,
 }: {
   id: string;
   label: string;
   value: string;
   copyLabel: string;
   description?: string;
+  agentSignIn?: boolean;
 }) {
   const onCopy = async () => {
     try {
@@ -100,7 +98,8 @@ function CopyableField({
           value={value}
           aria-describedby={description ? `${id}-description` : undefined}
           className={cn(
-            'flex-1 min-w-0 rounded-[4px] border border-border-light-gray-thin',
+            'flex-1 min-w-0 border border-border-light-gray-thin',
+            agentSignIn ? 'rounded-[4px]' : 'rounded',
             'bg-comment-description px-3 py-2.5 text-meta sm:text-content text-white-black font-mono',
             'focus:outline-none focus:border-border-light-gray-thin',
             'select-all'
@@ -109,7 +108,10 @@ function CopyableField({
         <button
           type="button"
           onClick={onCopy}
-          className="shrink-0 rounded-[4px] border border-border-light-gray-thin px-3 py-2.5 text-content text-white-black hover:bg-hover-active transition-colors"
+          className={cn(
+            "shrink-0 border border-border-light-gray-thin px-3 py-2.5 text-content text-white-black hover:bg-hover-active transition-colors",
+            agentSignIn ? "rounded-[4px]" : "rounded"
+          )}
         >
           <Copy className="text-white-black" size={16} strokeWidth={1.75} />
         </button>
@@ -122,7 +124,7 @@ function CliAuthContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const currentUser = useCurrentUser();
-  const agentCodeSignIn = useFlag('htpr-7552-agent-code-signin');
+  const agentCodeSignInEnabled = useFlag('htpr-7552-agent-code-signin');
   const [step, setStep] = useState<CliStep>('consent');
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState<ConnectedPayload | null>(null);
@@ -213,14 +215,20 @@ function CliAuthContent() {
     }
   };
 
-  if (agentCodeSignIn && searchParams?.get('agent') === '1') return <AgentSignIn />;
+  if (agentCodeSignInEnabled && searchParams?.get('agent') === '1') return <AgentSignIn />;
 
   if (!currentUser) {
     return (
       <CliAuthShell>
         <CliAuthCard>
           <div className="flex flex-col items-center text-center space-y-6">
-            <Mark />
+            <Image
+              src={logo}
+              alt="Hypertask"
+              className="object-contain"
+              width={200}
+              height={28}
+            />
             <h1 className="text-heading font-bold text-white-black">
               Authenticating HyperTask CLI
             </h1>
@@ -239,7 +247,13 @@ function CliAuthContent() {
     <CliAuthShell>
       <CliAuthCard>
         <div className="flex flex-col items-stretch text-center space-y-6">
-          <Mark className="self-center" />
+          <Image
+            src={logo}
+            alt="Hypertask"
+            className="object-contain self-center"
+            width={200}
+            height={28}
+          />
           <h1 className="text-heading font-bold text-white-black">
             Authenticating HyperTask CLI
           </h1>
@@ -253,7 +267,7 @@ function CliAuthContent() {
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-full px-4 py-2.5 rounded-[4px] border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
+                className="w-full px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
               >
                 Close
               </button>
@@ -261,12 +275,12 @@ function CliAuthContent() {
           )}
 
           {step === 'error' && error && (
-            <div className="rounded-[4px] border border-red-500/40 bg-red-950/30 p-4 text-left">
+            <div className="rounded-lg border border-red-500/40 bg-red-950/30 p-4 text-left">
               <p className="text-red-200 text-content">{error}</p>
               <button
                 type="button"
                 onClick={handleTryAgain}
-                className="mt-4 w-full px-4 py-2.5 rounded-[4px] bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
+                className="mt-4 w-full px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
               >
                 Try again
               </button>
@@ -287,14 +301,14 @@ function CliAuthContent() {
                 <button
                   type="button"
                   onClick={handleAllow}
-                  className="px-4 py-2.5 rounded-[4px] bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
+                  className="px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
                 >
                   Allow and continue
                 </button>
                 <button
                   type="button"
                   onClick={handleDecline}
-                  className="px-4 py-2.5 rounded-[4px] border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
+                  className="px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
                 >
                   Cancel
                 </button>
@@ -350,14 +364,14 @@ function CliAuthContent() {
                 <button
                   type="button"
                   onClick={handleConnectedContinue}
-                  className="w-full px-4 py-2.5 rounded-[4px] bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
+                  className="w-full px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
                 >
                   Continue to Hypertask
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenCallbackInThisTab}
-                  className="w-full px-4 py-2.5 rounded-[4px] border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
+                  className="w-full px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
                 >
                   I&apos;m on the same device
                 </button>
@@ -411,6 +425,7 @@ async function request(action: string, body: object): Promise<unknown> {
 }
 
 function AgentSignIn() {
+  const { effectiveTheme } = useDarkMode();
   const [flow, setFlow] = useState<Flow | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -472,9 +487,9 @@ function AgentSignIn() {
   const expired = flow !== null && ["PENDING", "CLAIMED", "APPROVED", "EXPIRED"].includes(flow.state) && remaining === 0;
   return (
     <CliAuthShell>
-      <CliAuthCard>
+      <CliAuthCard agentSignIn>
         <div className="flex flex-col items-center text-center">
-          <Mark className="mb-3" />
+          <Image src={effectiveTheme === 'dark' ? '/loginLogoMain.png' : darkMark} alt="Hypertask logo" width={47} height={59} className="object-contain mb-3" />
           <h1 className="text-heading font-semibold mb-2">Sign in an agent</h1>
           <p className="text-content text-text-light-gray mb-6">Create a free board for your agent.</p>
           {error && <p role="alert" className="text-content text-text-light-gray mb-4">{error}</p>}
@@ -490,8 +505,8 @@ function AgentSignIn() {
             </>
           ) : (
             <>
-              {code && <div className="w-full mb-4"><CopyableField id="agent-login-command" label="Run this with your agent" value={`hypertask login --code ${code}`} copyLabel="Sign-in command" /></div>}
-              <div className="w-full mb-4"><CopyableField id="agent-mcp-server" label="Or add this MCP server, then approve its new board" value="https://mcp.hypertask.ai/mcp" copyLabel="MCP server" /></div>
+              {code && <div className="w-full mb-4"><CopyableField agentSignIn id="agent-login-command" label="Run this with your agent" value={`hypertask login --code ${code}`} copyLabel="Sign-in command" /></div>}
+              <div className="w-full mb-4"><CopyableField agentSignIn id="agent-mcp-server" label="Or add this MCP server, then approve its new board" value="https://mcp.hypertask.ai/mcp" copyLabel="MCP server" /></div>
               <p className="text-meta text-text-light-gray mb-4" role="status">Expires in {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</p>
               {flow.state === "CLAIMED" ? (
                 <>
