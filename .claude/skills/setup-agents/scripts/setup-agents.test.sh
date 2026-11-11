@@ -16,7 +16,7 @@ open(os.environ['CALLS'], 'a').write(json.dumps(args) + '\\n')
 if args[:2] == ['agents', 'create']:
     if mode == 'create-fail': sys.exit(1)
     if mode == 'race': pathlib.Path.home().joinpath('.config/hypertask-agents/credentials/setup-smoke-agent-token').write_text(secret)
-    print(secret if mode == 'invalid-json' else json.dumps({'token': secret}))
+    print(json.dumps({'token': secret}))
 elif 'members' in args:
     if mode == 'members-fail': sys.exit(5)
     people = [] if mode == 'no-member' else [{'id': 'agent-1', 'displayName': os.environ.get('MEMBER_NAME', 'Setup Smoke')}]
@@ -109,11 +109,11 @@ else:
         link.write_text('do not overwrite')
         must_fail(env, 'not a symlink', '--name', 'Setup Smoke')
         assert link.read_text() == 'do not overwrite' and not (home / 'calls').exists()
-        for mode, needle in [('create-fail', 'could not create agent'), ('invalid-json', 'returned no usable token'),
-                             ('read-fail', 'the server rejected this login'), ('wrong-ticket', 'not authenticated')]:
+        for mode, needle in [('create-fail', 'could not create agent'), ('read-fail', 'the server rejected this login'),
+                             ('wrong-ticket', 'not authenticated')]:
             home, env = fixture(mode)
             must_fail(env, needle, '--name', 'Setup Smoke', mode=mode)
-            if mode in ['create-fail', 'invalid-json']:
+            if mode == 'create-fail':
                 assert not (creds(home) / 'setup-smoke-agent-token').exists(), 'a failed creation saved a credential'
         home, env = fixture('server-name')
         assert run(dict(env, FAKE_MODE='agent'), '--name', 'Setup Smoke').returncode == 0

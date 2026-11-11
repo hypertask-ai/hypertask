@@ -27,6 +27,5 @@ second implementation.
 
 A clean machine also needs agent-create rights (`hypertask login`) or a management
 key; without one the command names that fix and saves nothing. A bad name, an empty
-or unreadable credential, a session link that is not a symlink, a refused board call
-or a mismatched identity all stop it with a plain reason; fix the cause and rerun,
-already-minted credentials are kept.
+credential, a broken session link, a refused board call or a mismatched identity all
+stop it with a plain reason; fix the cause and rerun.
