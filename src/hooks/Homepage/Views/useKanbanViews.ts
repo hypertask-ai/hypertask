@@ -69,7 +69,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
-import type { TableColumnSettings, TableSortLevel } from "@/lib/table-view/tableViewSettings";
+import { sanitizeTableSortStack, type TableColumnSettings, type TableSortLevel } from "@/lib/table-view/tableViewSettings";
 import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 let emptySectionMutationId = 0
@@ -438,7 +438,7 @@ const useKanbanViews = (project: IProject | null) => {
     tableSort: TTableSort,
     stack?: TableSortLevel[] | null,
   ) => tableSortColumnsEnabled && getTableSettingsViewFromProject(project)
-    ? setPersonalTableSettings(project, { table_sort_stack: stack ?? (tableSort ? [tableSort] : []) })
+    ? setPersonalTableSettings(project, { table_sort_stack: stack ?? sanitizeTableSortStack(tableSort ? [tableSort] : []) })
     : apiHandler(
     (queuedProject) => buildUnsavedBody(queuedProject, {
       table_sort_column: tableSort?.column ?? null,

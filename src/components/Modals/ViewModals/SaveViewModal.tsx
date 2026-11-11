@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies"
 import { TCreate_view_body, TUpdate_view_body } from "@/models/Views/model"
 import { buildDefaultTitle, getActiveBoardLayoutPreferenceFromProject, getActiveColumnsViewFromProject, getActiveEmptySectionSettingFromProject, getActiveFiltersFromProject, getActiveSortingModeFromProject, getActiveSortingOrderFromProject, getActiveSortingStackFromProject, getActiveStalenessOverrideFromProject,
-    getActiveShowArchivedOverrideFromProject, getActiveSubtaskSettingFromProject, getActiveTableSortFromProject, getActiveTableSortStackFromProject, getActiveTableColumnsFromProject, savedBoardLayoutFromExplicitSurface, waitForBoardViewMutations, } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
+    getActiveShowArchivedOverrideFromProject, getActiveSubtaskSettingFromProject, getActiveTableSortFromProject, getTableSettingsViewFromProject, savedBoardLayoutFromExplicitSurface, waitForBoardViewMutations, } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
 import { IProject, IProjectsAll } from "@/models/model";
 import { ModalBody } from "reactstrap";
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
@@ -115,6 +115,7 @@ const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
     }
     const buildCreateBody = (sourceProject: IProject): TCreate_view_body => {
         const activeTableSort = getActiveTableSortFromProject(sourceProject)
+        const savedTableView = getTableSettingsViewFromProject(sourceProject)
         return {
         setAsDefault: true,
         view_settings: {
@@ -127,11 +128,11 @@ const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
             board_empty_sections: getActiveEmptySectionSettingFromProject(sourceProject),
             board_staleness: getActiveStalenessOverrideFromProject(sourceProject),
             board_show_archived: getActiveShowArchivedOverrideFromProject(sourceProject),
-            table_sort_column: activeTableSort?.column ?? null,
-            table_sort_direction: activeTableSort?.direction ?? null,
+            table_sort_column: tableSortColumnsEnabled ? savedTableView?.table_sort_column ?? null : activeTableSort?.column ?? null,
+            table_sort_direction: tableSortColumnsEnabled ? savedTableView?.table_sort_direction ?? null : activeTableSort?.direction ?? null,
             ...(tableSortColumnsEnabled ? {
-                table_sort_stack: getActiveTableSortStackFromProject(sourceProject),
-                table_columns: getActiveTableColumnsFromProject(sourceProject),
+                table_sort_stack: savedTableView?.table_sort_stack ?? null,
+                table_columns: savedTableView?.table_columns ?? null,
             } : {}),
             board_layout: getExplicitBoardLayout() ?? getActiveBoardLayoutPreferenceFromProject(sourceProject),
         },

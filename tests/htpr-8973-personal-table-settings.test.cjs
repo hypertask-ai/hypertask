@@ -113,11 +113,72 @@ test('the table write entry points target the saved view, not its draft or the n
   const hook = h.load('src/hooks/Homepage/Views/useKanbanViews.ts').default(project);
   await hook.setTableSortViewAndReturn(project, stack[0], stack);
   await hook.setTableColumnsViewAndReturn(project, columns);
+  await hook.setTableSortViewAndReturn(project, stack[0]);
+  await hook.setTableSortViewAndReturn(project, null);
   assert.deepEqual(requests, [
     { url: '/api/projects/views/update-view', body: body({ table_sort_stack: stack }) },
     { url: '/api/projects/views/update-view', body: body({ table_columns: columns }) },
+    { url: '/api/projects/views/update-view', body: body({ table_sort_stack: [stack[0]] }) },
+    { url: '/api/projects/views/update-view', body: body({ table_sort_stack: [] }) },
   ]);
 });
+
+for (const [name, screen, index] of [
+  ['current view', 'SaveThisView', 0],
+  ['board default', 'SaveThisView', 1],
+  ['new team view', 'SaveForTeam', 0],
+  ['new private view', 'SaveForMe', 0],
+]) {
+  test(`saving ${name} never publishes personal table settings`, async () => {
+    const h = setup();
+    h.mocks['@/utils/helperFunctions/helperFunctions'].deepCopy = value => structuredClone(value);
+    const sharedStack = [{ column: 'title', direction: 'asc' }];
+    const sharedColumns = { keys: ['ticket', 'title', 'due'], widths: { title: 300 } };
+    Object.assign(h.view, { table_sort_stack: sharedStack, table_columns: sharedColumns,
+      table_sort_column: 'title', table_sort_direction: 'asc' });
+    await h.call({ table_sort_stack: stack, table_columns: columns });
+    const project = await h.project();
+    assert.deepEqual(h.helpers.getActiveTableSortStackFromProject(project), stack);
+    assert.deepEqual(h.helpers.getActiveTableColumnsFromProject(project), columns);
+    const requests = [];
+    const overrides = {
+      '@/components/Common/CommonModalComponents': {},
+      '@/hooks/General/useHandleMouse': {},
+      '@/hooks/General/useCurrentUserCheckFromCookies': { default: () => ({ id: 42 }) },
+      '@/utils/helperFunctions/Views/ViewsHelperFunctions': h.helpers,
+      'reactstrap': {},
+      '@/hooks/Homepage/Views/useKanbanViews': { default: () => ({
+        updateView: async body => requests.push(body),
+        saveAsDefaultHandler: async body => requests.push(body),
+      }) },
+      '@/hooks/General/useHandleKeydownBasic': {},
+      'react-hot-toast': {},
+      'axios': {},
+      '@tanstack/react-query': { useQueryClient: () => ({ getQueryData: () => ({ updatedProjects: [project] }) }) },
+      '@/hooks/useFlag': { useFlag: () => true },
+    };
+    const fs = require('node:fs');
+    const ts = require('typescript');
+    const file = require('node:path').join(__dirname, '../src/components/Modals/ViewModals/SaveViewModal.tsx');
+    const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), { fileName: file, compilerOptions: {
+      module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
+    } }).outputText;
+    const exports = {};
+    new Function('require', 'exports', compiled)(specifier =>
+      specifier in overrides ? { __esModule: true, ...overrides[specifier] } : require(specifier), exports);
+    const modal = exports.default({ project, toggle: () => {} });
+    const content = modal.type(modal.props);
+    await content.props.onSelect({ id: screen }, index, 'New view');
+    assert.equal(requests.length, 1);
+    const settings = requests[0].view_settings;
+    assert.deepEqual(settings.table_sort_stack, sharedStack);
+    assert.deepEqual(settings.table_columns, sharedColumns);
+    assert.equal(settings.table_sort_column, 'title');
+    assert.equal(settings.table_sort_direction, 'asc');
+    assert.deepEqual(h.helpers.getActiveTableSortStackFromProject(project), stack);
+    assert.deepEqual(h.helpers.getActiveTableColumnsFromProject(project), columns);
+  });
+}
 
 test('missing view IDs never turn into an unscoped query', async () => {
   const h = setup();
