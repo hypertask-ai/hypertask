@@ -254,6 +254,7 @@ type SearchCommentsParams = {
   limit?: number;
   keywordOnly?: boolean;
   groupByTask?: boolean;
+  preserveRanking?: boolean;
 };
 
 type SearchCustomInstructionFilesParams = {
@@ -903,6 +904,7 @@ export async function searchComments({
   limit = 50,
   keywordOnly = false,
   groupByTask = true,
+  preserveRanking = false,
 }: SearchCommentsParams): Promise<TurbopufferCommentRow[]> {
   const query = searchQuery.trim();
   const projectFilter = buildProjectFilter(projectIds);
@@ -940,7 +942,7 @@ export async function searchComments({
         } as any);
 
       const rows = getMultiQueryRows<TurbopufferCommentRow>(response);
-      return groupByTask ? normalizeAndGroupCommentRows(rows, limit) : rows.map(normalizeCommentRow);
+      return groupByTask ? normalizeAndGroupCommentRows(rows, limit, preserveRanking) : rows.map(normalizeCommentRow);
     } catch (error) {
       console.error(
         "turbopuffer searchComments hybrid error, falling back to BM25:",
@@ -950,7 +952,7 @@ export async function searchComments({
   }
 
   try {
-    return await searchCommentRowsWithBm25(query, topK, filters, limit, groupByTask);
+    return await searchCommentRowsWithBm25(query, topK, filters, limit, groupByTask, preserveRanking);
   } catch (error) {
     console.error("turbopuffer searchComments error:", error);
     return [];
@@ -1289,7 +1291,8 @@ async function searchCommentRowsWithBm25(
   topK: number,
   filters: unknown[] | undefined,
   limit: number,
-  groupByTask: boolean
+  groupByTask: boolean,
+  preserveRanking: boolean
 ): Promise<TurbopufferCommentRow[]> {
   const response = await turbopuffer
     .namespace(turbopufferNamespaces.comment.name)
@@ -1301,7 +1304,7 @@ async function searchCommentRowsWithBm25(
     } as any);
 
   const rows = (response.rows ?? []) as unknown as TurbopufferCommentRow[];
-  return groupByTask ? normalizeAndGroupCommentRows(rows, limit) : rows.map(normalizeCommentRow);
+  return groupByTask ? normalizeAndGroupCommentRows(rows, limit, preserveRanking) : rows.map(normalizeCommentRow);
 }
 
 export function getMultiQueryRows<T>(response: unknown): T[] {
@@ -1316,11 +1319,13 @@ export function getMultiQueryRows<T>(response: unknown): T[] {
 
 function normalizeAndGroupCommentRows(
   commentRows: TurbopufferCommentRow[],
-  limit: number
+  limit: number,
+  preserveRanking: boolean
 ): TurbopufferCommentRow[] {
-  const rows = commentRows
-    .map(normalizeCommentRow)
-    .sort((a, b) => dateValue(b.createdAt) - dateValue(a.createdAt));
+  const rows = commentRows.map(normalizeCommentRow);
+  if (!preserveRanking) {
+    rows.sort((a, b) => dateValue(b.createdAt) - dateValue(a.createdAt));
+  }
 
   const seenTaskIds = new Set<string>();
   const groupedRows: TurbopufferCommentRow[] = [];
