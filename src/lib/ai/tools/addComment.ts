@@ -11,7 +11,7 @@ import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRefs";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_9063_COMMENT_AUDIENCE_FLAG } from "@/lib/flags/definitions/htpr-9063-comment-audience";
+import { HTPR_9063_COMMENT_AUDIENCE_FLAG } from "@/lib/flags/keys";
 import { MISSING_COMMENT_AUDIENCE } from "@/lib/mcp/operations/comments/agentChatterRouting";
 import { buildMcpImageUrls, persistUrlsForComment } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { broadcastTaskComment } from "@/lib/realtime/server";

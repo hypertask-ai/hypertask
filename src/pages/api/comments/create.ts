@@ -1,6 +1,6 @@
 import { MISSING_COMMENT_AUDIENCE, parseCommentKind } from '@/lib/mcp/operations/comments/agentChatterRouting'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_9063_COMMENT_AUDIENCE_FLAG } from '@/lib/flags/definitions/htpr-9063-comment-audience'
+import { HTPR_9063_COMMENT_AUDIENCE_FLAG } from '@/lib/flags/keys'
 import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
