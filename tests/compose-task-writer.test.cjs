@@ -276,6 +276,8 @@ test('shared server writer sends Compose through the same board access check as 
 });
 
 function loadCreateGlobal(stubs) {
+  const writing = require("./helpers/stub-map.cjs").sharedTicketWritingStubs;
+  for (const key of Object.keys(writing)) if (!(key in stubs)) stubs[key] = writing[key];
   stubs['@/lib/media/inlineAgentImages.server'] = { inlineAgentImagesForUser: async (html) => html };
   stubs["@/lib/auth/agentScope"] = require("./helpers/agent-board-scope.cjs").enforcedScope;
   stubs['@/utils/controllers/tasks/parentTaskAccess'] = createJiti(__filename)(path.join(root, 'src/utils/controllers/tasks/parentTaskAccess.ts'));
