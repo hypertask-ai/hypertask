@@ -73,7 +73,7 @@ function readReview(run) {
   if (typeof run.completed_at !== 'string' || Number.isNaN(Date.parse(run.completed_at))) {
     throw new Error('GitHub check read: unexpected schema');
   }
-  return new Date(run.completed_at).toISOString();
+  return { at: new Date(run.completed_at).toISOString(), result: run.conclusion };
 }
 
 async function readCoverage(repository, token, request = fetch) {
@@ -116,9 +116,9 @@ async function readCoverage(repository, token, request = fetch) {
     try { page = await checkResponse.json(); } catch { throw new Error('GitHub check read: invalid JSON'); }
     if (!Array.isArray(page?.check_runs)) throw new Error('GitHub check read: unexpected schema');
     const run = page.check_runs.find(candidate => candidate?.name === REVIEW_CHECK);
-    const reviewedAt = run ? readReview(run) : null;
-    if (reviewedAt) {
-      return { repository, head, reviewedSha: candidate.sha, reviewedAt, checked, horizon: candidate.at };
+    const review = run ? readReview(run) : null;
+    if (review) {
+      return { repository, head, reviewedSha: candidate.sha, reviewedAt: review.at, reviewedResult: review.result, checked, horizon: candidate.at };
     }
   }
   const horizon = checked === 0 ? head.at : tips[checked - 1].at;
@@ -128,7 +128,8 @@ async function readCoverage(repository, token, request = fetch) {
 function formatCoverage(coverage) {
   if (coverage.reviewedSha) {
     const coversHead = coverage.reviewedSha === coverage.head.sha;
-    return `Scan coverage: the newest completed ${REVIEW_CHECK} covered production tip ${coverage.reviewedSha} and finished at ${coverage.reviewedAt}, ${coverage.checked} tip(s) back. Production HEAD is ${coverage.head.sha} at ${coverage.head.at}, ${coversHead ? 'so this review covers it' : 'so this review does not cover it'}.`;
+    const foundDefects = coverage.reviewedResult === 'failure';
+    return `Scan coverage: the newest completed ${REVIEW_CHECK} covered production tip ${coverage.reviewedSha}, finished at ${coverage.reviewedAt} with result ${coverage.reviewedResult}, ${coverage.checked} tip(s) back. Production HEAD is ${coverage.head.sha} at ${coverage.head.at}, ${coversHead ? 'so this review covers it' : 'so this review does not cover it'}${foundDefects ? ', and it reported defects, so its findings still need checking' : ''}.`;
   }
   return `Scan coverage: no completed ${REVIEW_CHECK} on any of the ${coverage.checked} first-parent production tips checked, back to ${coverage.horizon} (HEAD ${coverage.head.sha} at ${coverage.head.at}). A review that is queued or still running covers nothing yet, and Security Reviews are off or not running, so no scan covers production until they report again.`;
 }

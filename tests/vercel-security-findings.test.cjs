@@ -108,7 +108,7 @@ test('names the newest production commit a Vercel review covered and whether it 
   assert.equal(covered.reviewedSha, head.sha);
   assert.equal(covered.reviewedAt, '2026-11-10T00:31:00.000Z');
   assert.equal(covered.checked, 1);
-  assert.match(formatCoverage(covered), /Scan coverage: the newest completed Vercel Security Review covered production tip b{40} and finished at 2026-11-10T00:31:00.000Z, 1 tip\(s\) back\. Production HEAD is b{40} at 2026-11-11T19:40:22Z, so this review covers it\./);
+  assert.match(formatCoverage(covered), /Scan coverage: the newest completed Vercel Security Review covered production tip b{40}, finished at 2026-11-10T00:31:00.000Z with result success, 1 tip\(s\) back\. Production HEAD is b{40} at 2026-11-11T19:40:22Z, so this review covers it\./);
 
   const behind = await readCoverage(repo, 'github-secret', coverageRequest([head, reviewed, unreviewed], { [reviewed.sha]: [review('2026-11-08T18:50:00Z')] }));
   assert.equal(behind.reviewedSha, reviewed.sha);
@@ -154,6 +154,8 @@ test('treats only a finished review as coverage and reports when it finished', a
   }));
   assert.equal(finished.reviewedSha, head.sha);
   assert.equal(finished.reviewedAt, '2026-11-10T00:31:00.000Z');
+  assert.equal(finished.reviewedResult, 'failure');
+  assert.match(formatCoverage(finished), /with result failure, 1 tip\(s\) back.*and it reported defects, so its findings still need checking\./);
   const running = await readCoverage(repo, 'github-secret', coverageRequest([head, reviewed], {
     [head.sha]: [review('2026-11-10T00:31:00Z', { status: 'in_progress' })],
     [reviewed.sha]: [review('2026-11-08T18:50:00Z')],
@@ -234,7 +236,7 @@ test('publishes one complete redacted report with coverage after every read vali
   }, report => reports.push(report));
   assert.equal(reports.length, 1);
   assert.match(reports[0], /All statuses, 2 findings/);
-  assert.match(reports[0], /Scan coverage: the newest completed Vercel Security Review covered production tip b{40} and finished at 2026-11-10T00:31:00.000Z/);
+  assert.match(reports[0], /Scan coverage: the newest completed Vercel Security Review covered production tip b{40}, finished at 2026-11-10T00:31:00.000Z with result success/);
   assert.match(reports[0], /#8 /);
   assert.doesNotMatch(reports[0], /secret-title|secret-description|secret-code|vercel-secret|github-secret/);
   const coverageOk = href => href.includes('/check-runs') ? reviewRuns([review('2026-11-10T00:31:00Z')]) : commitsPage([head]);

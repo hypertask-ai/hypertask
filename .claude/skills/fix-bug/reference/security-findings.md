@@ -60,9 +60,11 @@ yet, so a dispatch that lands mid-scan reads as uncovered instead of claiming
 the fix. Findings are read only after that coverage snapshot is fixed, so a
 review that finishes during a run cannot lend its commit to older states.
 
-- `the newest completed Vercel Security Review covered production tip <sha> and
-finished at <date> ... does not cover it` means the newest finished review is
-older than production HEAD, so no scan covers it.
+- `the newest completed Vercel Security Review covered production tip <sha>,
+finished at <date> with result <success|failure> ... does not cover it` means
+the newest finished review is older than production HEAD, so no scan covers it.
+- `with result failure` means that review reported defects. A fix is only
+verified when a review that covers the fix completed with `success`.
 - `none of the 200 first-parent production tips ... carries a completed Vercel
 Security Review` means no review is running at all, and no scan can be requested
 until an owner turns Security Reviews back on.
