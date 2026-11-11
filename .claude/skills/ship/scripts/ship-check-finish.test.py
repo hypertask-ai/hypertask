@@ -398,7 +398,7 @@ esac
         (folder / 'pr').write_text('42')
         (output / 'result.json').write_text('{"ok":true}')
         (output / 'doctor.png').write_bytes(b'screenshot fixture')
-        page = '.claude/skills/verify-qa/reference/feature-map/fixture.md'
+        page = '.claude/skills/verify-qa/reference/feature-map/' + 'fixture.md'
         (self.repo / page).parent.mkdir(parents=True)
         (self.repo / page).write_text('## Gotchas\n\n- Cursor lost after reload.\n  Check the box.\n\n### Proof\n- Not a gotcha.\n')
         script = 'drive.py'

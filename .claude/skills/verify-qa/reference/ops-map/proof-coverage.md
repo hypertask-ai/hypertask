@@ -7,12 +7,26 @@ production sources. Read the merged PR's GitHub-hosted `ship-scripts-tests`
 logs, including the historical HTPR-7766 fixture and complete-proof control.
 Never run that fixture suite on the VPS.
 
-For live QA, read a real ticket's acceptance bullets and its merged feature
-page. Keep each bullet verbatim in proof.md, with a result and evidence.
-The builder uses `ship-check bind`; another runner inspects the committed
-drive script and runs `ship-check rerun TICKET SCRIPT FRESH-QA-RUN`.
-Read back its agent activity, including agent/run IDs, merge and hashes.
-`ship-check proof TICKET` must then accept only matching complete records.
+For live QA, copy each Done-when or Acceptance bullet and each
+What usually breaks or Gotchas bullet into proof.md. A missing bullet is
+refused by name. PASS and TRIED need a nonempty file in the run folder.
+NOT-APPLICABLE needs a reason. The builder runs `ship-check bind`. A
+different runner inspects the committed drive script, then runs
+`ship-check rerun TICKET SCRIPT FRESH-QA-RUN`. The script's only argument
+is the new output directory. Exit zero records PASS. Then
+`ship-check proof TICKET` must print `proof ok`. Set `SHIP_PROOF_STRICT=0`
+only to keep the older shape checks.
+
+```text
+Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md
+Doctor: sha <merge-sha> deployment success; /my-tasks signed in as user <id>
+Run: <YYYY-MM-DD>-qa-run-<n>
+Drive script: <repository-relative .mjs, .py or .sh committed in the merge>
+Acceptance: PASS: <exact acceptance bullet> -> <nonempty-file>
+Breakage: TRIED: <exact breakage bullet> -> <nonempty-file>
+Breakage: NOT-APPLICABLE: <exact breakage bullet> -> <reason of 10 characters or more>
+Cases: PASS: <case> -> <nonempty-file>
+```
 
 ## What usually breaks
 
