@@ -238,8 +238,10 @@ test("rollup marker and title come from the sorted model set, and the check date
   for (const part of ["Problem", "Fix", "Done when", "Risk", "Decision"]) {
     assert.ok(ticket.description.includes(`<p>${part}</p>`), part);
   }
-  const skill = ticketFor(report().findings[0]).description.split("<p>Follow ")[1];
-  assert.ok(ticket.description.includes(`<p>Follow ${skill}`));
+  const versioned = report().findings.find((finding) => finding.kind === "new-version");
+  const versionedTicket = ticketFor(versioned);
+  assert.ok(versionedTicket.description.includes("<p>Follow the update-ai-models skill."));
+  assert.ok(versionedTicket.description.includes(`<p>${versioned.action.split(";")[0].trim()}.`), versioned.action);
 });
 
 test("watcher creates one rollup for three new classes and one separate new-version ticket", async () => {

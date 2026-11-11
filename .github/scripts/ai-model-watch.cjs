@@ -7,6 +7,13 @@ const APP = "https://app.hypertask.ai";
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 const priceLine = (finding) => `Price per million input tokens: ${finding.inputPerMillion == null ? "unknown; check before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.`;
 
+const actionSentences = (finding) => String(finding.action ?? "")
+  .split(/;\s*/)
+  .map((part) => part.trim().replace(/[.\s]+$/, ""))
+  .filter(Boolean)
+  .map((part) => `${part}.`)
+  .join(" ");
+
 async function refusalDetail(response) {
   if (typeof response.text !== "function") return "";
   const body = await response.text().catch(() => "");
@@ -56,7 +63,7 @@ function ticketFor(finding) {
   });
   const parts = plainParts({
     problem: `<p>Model ${escapeHtml(model)}, class ${escapeHtml(finding.modelClass ?? "unknown")}.</p><p>Reason: ${escapeHtml(finding.reason ?? "not stated")}.</p><p>Catalog now: ${entry}.</p><p>${priceLine(finding)}</p>`,
-    fix: `<p>Follow the update-ai-models skill. Replace the old model in every picker.</p><p>Migrate saved picks and check gateway input and output prices.</p>`,
+    fix: `<p>${escapeHtml(actionSentences(finding))}</p><p>Follow the update-ai-models skill. Replace the old model in every picker.</p><p>Migrate saved picks and check gateway input and output prices.</p>`,
     done: `<p>A live chat answer uses the new model.</p>`,
     risk: `<p>Saved picks can break. Undo by reverting the catalog change.</p>`,
     decision: `<p>None needed. This is our own watch.</p>`,

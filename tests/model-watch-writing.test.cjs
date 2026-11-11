@@ -69,6 +69,17 @@ test("watcher ticket text opens with the plain-language block board 15 requires"
   }
 });
 
+test("watcher keeps each finding's action in the per-model ticket body", () => {
+  const findings = everyFinding().filter((finding) => finding.kind !== "new-class");
+  assert.ok(findings.length > 0);
+  for (const finding of findings) {
+    const body = ticketFor(finding).description;
+    for (const clause of finding.action.split(";").map((part) => part.trim()).filter(Boolean)) {
+      assert.ok(body.includes(clause), `${finding.kind}: ${clause}`);
+    }
+  }
+});
+
 test("watcher reports the board refusal text instead of a bare status code", async () => {
   const { fileFindings } = require("../.github/scripts/ai-model-watch.cjs");
   const finding = everyFinding().find((candidate) => candidate.kind === "new-version");
