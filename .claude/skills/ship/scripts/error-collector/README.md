@@ -17,9 +17,31 @@ Tests have a private HOME and fake `vcc`, `ht`, `systemctl`, and `runner-deliver
 
 `--once` runs one collection pass (also the default). `--sources` selects comma-separated module names; without it the eight production sources above run. `--dry-run` permits only `ht GET` reads, prints planned writes/descriptions, and does not create or change state, locks or temporary files. `--summary` forces the daily summary before 06:00 UTC, without duplicating an already sent daily service line.
 
-## Read production logs by hand (YPER4-400)
+## Read production logs by hand (YPER4-400, HYCI-259)
 
-`vercel logs` (and `vercel-ht logs`) fails from the VPS with 403: the CLI reads from `vercel.com/api/logs/request-logs`, and Vercel's bot protection answers every vercel.com request from this IP with `x-vercel-mitigated: challenge`. `api.vercel.com` is not challenged, so read logs through the same observability API and `stack-key` credentials as the collector:
+**From the VPS, nothing reads Vercel logs.** Vercel's edge answers every `vercel.com`
+request from this IP with its Security Checkpoint page, and since 2026-11-11 it answers
+`api.vercel.com` the same way: HTTP 403, `text/html`, title "Vercel Security Checkpoint".
+The stored Vercel CLI login cannot help, because no token changes an IP-level challenge.
+The local script below is kept for hosts Vercel does not challenge.
+
+Runners read production logs through GitHub-hosted Actions instead, which Vercel does
+not challenge:
+
+```sh
+gh workflow run vercel-runtime-log.yml -R hypertask-ai/hypertask --ref <branch> \
+  -f ticket=<unique index> -f since=2h -f level=error -f path=/api/cron/search-repair
+```
+
+Inputs are `ticket` (required, receives the log in its agent lane), `project` (default
+15), `since` (`30s`, `10m`, `2h`, `1d` or an ISO time), `level` (`error`, `warn`, `info`
+or empty), `path` (one exact route), `search` (message text) and `limit` (1 to 500).
+The log never lands in the Actions output, only a line count does. Build logs use
+`vercel-deploy-log.yml` the same way (HTPR-6163).
+
+On a host Vercel does not challenge, the observability script still works and prints one
+JSON line per log entry (newest first: timestamp, level, method, path, deployment,
+message), production only:
 
 ```sh
 node .claude/skills/ship/scripts/error-collector/vercel-logs.mjs --since 10m -n 5
@@ -27,7 +49,6 @@ node .claude/skills/ship/scripts/error-collector/vercel-logs.mjs --since 2h --le
 ```
 
 It prints one JSON line per log entry (newest first: timestamp, level, method, path, deployment, message), production only. `--since` takes `30s`, `10m`, `2h`, `1d` or an ISO time; `-n` 1 to 500 (default 50); `--level` is `error`, `warn` (Vercel's name; `warning` is accepted) or `info`; `--search` matches message text locally. Messages can contain user data: quote only what a ticket needs.
-
 ## Install (operator action, not done by tests)
 
 ```sh
