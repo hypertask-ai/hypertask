@@ -27,7 +27,8 @@ async function rpc(modules, tools, method, params, deferred = false, query = '')
 
 test('every legacy, consolidated and discovery tool has top-level safety hints when ON', async () => {
   const annotations = load('src/lib/mcp-server/config/tool-annotations.ts').TOOL_ANNOTATIONS
-  assert.equal(Object.keys(annotations).length, legacy.length + 2)
+  const flagAppendedChatTools = new Set(['hypertask_chat_inbox', 'hypertask_chat_reply'])
+  assert.equal(Object.keys(annotations).length, legacy.filter((tool) => !flagAppendedChatTools.has(tool.name)).length + 2)
   for (const consolidated of [false, true]) {
     const tools = selectMcpTools(legacy, consolidated, {})
     const connected = load('src/lib/mcp-server/deferred-tools.ts').toolsForConnect(tools, true)
