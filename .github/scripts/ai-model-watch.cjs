@@ -15,7 +15,7 @@ const actionSentences = (finding) => String(finding.action ?? "")
   .join(" ");
 
 const decisionFor = (finding) => {
-  const needsYes = !["openai", "anthropic"].includes(finding.provider);
+  const needsYes = finding.kind === "new-class" || !["openai", "anthropic"].includes(finding.provider);
   const approval = needsYes ? " Then Valentin says yes or no." : "";
   if (finding.kind === "stale") return "Nothing; a runner removes the stale entry.";
   if (finding.inputPerMillion != null && finding.inputPerMillion > 5) return `Nothing yet; HTPR-7746 must ship first.${approval}`;
@@ -90,7 +90,7 @@ function ticketFor(finding) {
 function rollupGate(findings) {
   const gated = findings.filter((finding) => finding.inputPerMillion == null || finding.inputPerMillion > 5);
   const ready = findings.filter((finding) => finding.inputPerMillion != null && finding.inputPerMillion <= 5);
-  const needsYes = ready.some((finding) => !["openai", "anthropic"].includes(finding.provider));
+  const needsYes = ready.some((finding) => finding.kind === "new-class" || !["openai", "anthropic"].includes(finding.provider));
   const waitLine = `${gated.length} of these wait for the price check or HTPR-7746; then Valentin says yes or no.`;
   const yes = { decide: "Should these model classes ship?", decision: "Valentin says yes or no to these classes." };
   if (!gated.length) return needsYes ? yes : { decide: "nothing", decision: "Nothing; a runner ships these classes." };

@@ -128,8 +128,9 @@ test("watcher rollup names the premium gate instead of authorising every class",
   const open = rollupTicket([cheap], new Date("2026-10-25T12:00:00Z"));
   assert.match(open.description.split("<hr>")[1], /Valentin says yes or no to these classes\./);
   assert.match(open.description.split("<hr>")[0], /What Valentin must decide:<\/strong> Should these model classes ship\?<\/p>/);
-  const automatic = rollupTicket([{ ...cheap, provider: "openai", model: "openai/gpt-6" }], new Date("2026-10-25T12:00:00Z"));
-  assert.match(automatic.description.split("<hr>")[1], /Nothing; a runner ships these classes\./);
+  const openai = rollupTicket([{ ...cheap, provider: "openai", model: "openai/gpt-6" }], new Date("2026-10-25T12:00:00Z"));
+  assert.match(openai.description.split("<hr>")[0], /What Valentin must decide:<\/strong> Should these model classes ship\?<\/p>/);
+  assert.match(openai.description.split("<hr>")[1], /Valentin says yes or no to these classes\./);
 });
 
 test("watcher reports the board refusal text instead of a bare status code", async () => {
