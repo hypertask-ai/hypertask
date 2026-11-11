@@ -9,13 +9,8 @@ const pageRow = (overrides) => ({
 });
 
 function loadPageService({ indexRows = [], projects = [{ id: 15 }], findMany, flagOn = true } = {}) {
-  const calls = { index: [], findMany: [], projects: [], flags: [] };
+  const calls = { index: [], findMany: [], projects: [] };
   const service = loadModule('src/utils/controllers/pages/pageService.ts', {
-    '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
-      calls.flags.push({ key, userId });
-      return flagOn;
-    } },
-    '@/lib/flags/definitions/htpr-9017-smart-page-search': { HTPR_9017_SMART_PAGE_SEARCH_FLAG: 'htpr-9017-smart-page-search' },
     '@/lib/prisma': { default: {
       page: { findMany: async (args) => {
         calls.findMany.push(args);
@@ -30,6 +25,7 @@ function loadPageService({ indexRows = [], projects = [{ id: 15 }], findMany, fl
       getProjectWhere: (userId, agentId) => ({ OR: [{ ownerId: userId }, { members: { some: { userId } } }], agentId }),
     },
     '@/utils/controllers/turbopuffer/pageSearch': {
+      smartPageSearchEnabled: async () => flagOn,
       searchPagesInTurbopuffer: async (args) => {
         calls.index.push(args);
         return indexRows;
@@ -101,7 +97,6 @@ test('the flag off keeps the pages screen on the literal match', async () => {
   const { service, calls } = loadPageService({ flagOn: false, findMany: () => [pageRow({ id: 7 })] });
   const pages = await service.listPages({ ...listArgs, query: 'pricing notes' });
   assert.deepEqual(calls.index, []);
-  assert.deepEqual(calls.flags, [{ key: 'htpr-9017-smart-page-search', userId: 985 }]);
   assert.equal(calls.findMany.length, 1);
   assert.deepEqual(pages.map((page) => page.id), [7]);
 });

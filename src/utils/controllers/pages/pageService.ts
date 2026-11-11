@@ -2,8 +2,6 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { Prisma } from '@prisma/client'
 
 import prisma from '@/lib/prisma'
-import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_9017_SMART_PAGE_SEARCH_FLAG } from '@/lib/flags/definitions/htpr-9017-smart-page-search'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
   convertToPlain,
@@ -406,9 +404,9 @@ export async function listPages({
     select: listSelect,
     orderBy: { updatedAt: 'desc' },
   })
-  const rankedIds = userId === undefined || !await isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, userId)
+  const rankedIds = userId === undefined
     ? []
-    : await indexedPageIds(trimmedQuery, await indexedProjectIds(projectId, userId, agentId, teamScope), userId)
+    : await listedIndexedPageIds(trimmedQuery, projectId, userId, agentId, teamScope)
   if (rankedIds.length === 0) return toListed(literalMatches)
 
   const rankedPages = await prisma.page.findMany({
@@ -438,6 +436,18 @@ async function indexedPageIds(query: string, projectIds: number[], userId: numbe
   return [...new Set(rows
     .map((row) => Number(row.id))
     .filter((id) => Number.isSafeInteger(id) && id > 0))]
+}
+
+async function listedIndexedPageIds(
+  query: string,
+  projectId: number | undefined,
+  userId: number,
+  agentId: string | null | undefined,
+  teamScope: AgentTokenTeamScope | null | undefined
+) {
+  const { smartPageSearchEnabled } = await import('@/utils/controllers/turbopuffer/pageSearch')
+  if (!await smartPageSearchEnabled(userId)) return []
+  return indexedPageIds(query, await indexedProjectIds(projectId, userId, agentId, teamScope), userId)
 }
 
 async function indexedProjectIds(
