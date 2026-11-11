@@ -8,13 +8,17 @@ import { HTPR_8977_INDEXED_TICKET_LOOKUP_FLAG } from '@/lib/flags/definitions/ht
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/projects/getAllIncludes';
 
-export const ticketNumberCaseVariants = (ticketNumber: string): string[] => [
-  ...new Set([ticketNumber, ticketNumber.toUpperCase(), ticketNumber.toLowerCase()]),
-];
+export const TICKET_NUMBER_CANDIDATE_LIMIT = 8;
 
-export const exactTicketNumberWhere = (ticketNumber: string): Prisma.TaskWhereInput => ({
-  ticketNumber: { in: ticketNumberCaseVariants(ticketNumber) },
-});
+export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string): Promise<number[]> => {
+  const rows = await prisma.$queryRaw<{ id: number }[]>`
+    SELECT id FROM "Task"
+    WHERE lower("ticketNumber") = lower(${ticketNumber})
+    ORDER BY "projectId" ASC, id ASC
+    LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
+  `;
+  return rows.map((row) => row.id);
+};
 
 export class TaskIdentifierAmbiguityError extends Error {
   readonly status = 400;
@@ -94,17 +98,16 @@ export async function findTaskByIdentifier(
     });
   let matches: { id: number; projectId: number }[] = [];
   const scope = { status: { not: 'Deleted' as const }, project: projectFilter };
-  const indexedLookup = ticket_number
-    ? await isFeatureEnabled(HTPR_8977_INDEXED_TICKET_LOOKUP_FLAG, user.id).catch(() => false)
-    : false;
-  if (ticket_number && indexedLookup) {
-    matches = await findMatches({
-      ...exactTicketNumberWhere(ticket_number),
-      ...(project_id ? { projectId: project_id } : {}),
-      ...scope,
-    });
-    if (matches.length === 0) {
+  if (ticket_number && await isFeatureEnabled(HTPR_8977_INDEXED_TICKET_LOOKUP_FLAG, user.id)) {
+    const candidates = await caseInsensitiveTicketNumberCandidates(ticket_number);
+    if (candidates.length > TICKET_NUMBER_CANDIDATE_LIMIT) {
       matches = await findMatches({ ...identityWhere, ...scope });
+    } else if (candidates.length > 0) {
+      matches = await findMatches({
+        id: { in: candidates },
+        ...(project_id ? { projectId: project_id } : {}),
+        ...scope,
+      });
     }
   } else {
     matches = await findMatches({ ...identityWhere, ...scope });

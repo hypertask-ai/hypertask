@@ -8,10 +8,10 @@ export default {
   defaultMode: "EVERYONE",
   shippedOn: "2026-11-11",
   description:
-    "Resolves a ticket number with an indexed exact match before the case-insensitive query, so the task lookup stops scanning the whole Task table.",
+    "Finds ticket-number candidates with an indexed lower(ticketNumber) match instead of a case-insensitive scan of the whole Task table.",
   releaseRisk: {
     risk: "small",
     reason:
-      "Same rows and same fallbacks; only the predicate the database plans on changes, so a lookup costs 15 buffers instead of 37103.",
+      "Same rows, same casing behaviour and same fallbacks; only the predicate the database plans on changes, so a lookup stops reading the whole Task table.",
   },
 } as const satisfies FeatureFlagDefinition;
