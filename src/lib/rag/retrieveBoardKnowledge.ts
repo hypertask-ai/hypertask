@@ -2,6 +2,8 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { authorizeIndexedRows } from "./authorizeIndexedRows";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9013_RAG_COMMENTS_FLAG } from "@/lib/flags/definitions/htpr-9013-rag-comments";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   searchComments,
@@ -184,6 +186,10 @@ export async function retrieveBoardKnowledge(
   const projectIds = filterProjectId
     ? [filterProjectId]
     : accessibleProjectIds;
+  const rankedCommentsEnabled = await isFeatureEnabled(
+    HTPR_9013_RAG_COMMENTS_FLAG,
+    principal.userId
+  );
   const [taskRowsRaw, commentRowsRaw] = await Promise.all([
     searchTasks({
       searchQuery: input.query,
@@ -200,6 +206,7 @@ export async function retrieveBoardKnowledge(
       excludeStatuses: ["Deleted", "Archive"],
       topK: Math.max(input.limit * 4, 50),
       limit: Math.max(input.limit, 10),
+      preserveRanking: rankedCommentsEnabled,
     }),
   ]);
 
@@ -215,45 +222,54 @@ export async function retrieveBoardKnowledge(
     "comment"
   );
 
-  const documents: BoardKnowledgeDocument[] = [
-    ...taskRows.map((row) => ({
-      type: "task" as const,
-      taskId: Number(row.id),
-      projectId: row.projectId,
-      ticketNumber: row.ticketNumber,
-      title: row.title,
-      content: [
-        `Task: ${row.title}`,
-        row.ticketNumber ? `Ticket: ${row.ticketNumber}` : "",
-        row.descriptionText ? `Description: ${row.descriptionText}` : "",
-        `Project: ${row.projectTitle}`,
-        `Status: ${row.status}`,
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      updatedAt: row.updatedAt,
-      uniqueIndex: row.uniqueIndex,
-    })),
-    ...commentRows.map((row) => ({
-      type: "comment" as const,
-      commentId: Number(row.id),
-      taskId: Number(row.taskId),
-      projectId: row.projectId,
-      ticketNumber: row.taskTicketNumber,
-      title: row.taskTitle,
-      content: [
-        `Comment on: ${row.taskTitle}`,
-        row.taskTicketNumber ? `Ticket: ${row.taskTicketNumber}` : "",
-        `Comment: ${row.commentText}`,
-        `Project: ${row.taskProjectTitle}`,
-        `Task status: ${row.taskStatus}`,
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      createdAt: row.createdAt,
-      uniqueIndex: row.taskUniqueIndex,
-    })),
-  ].slice(0, input.limit);
+  const taskDocuments: BoardKnowledgeDocument[] = taskRows.map((row) => ({
+    type: "task" as const,
+    taskId: Number(row.id),
+    projectId: row.projectId,
+    ticketNumber: row.ticketNumber,
+    title: row.title,
+    content: [
+      `Task: ${row.title}`,
+      row.ticketNumber ? `Ticket: ${row.ticketNumber}` : "",
+      row.descriptionText ? `Description: ${row.descriptionText}` : "",
+      `Project: ${row.projectTitle}`,
+      `Status: ${row.status}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    updatedAt: row.updatedAt,
+    uniqueIndex: row.uniqueIndex,
+  }));
+  const commentDocuments: BoardKnowledgeDocument[] = commentRows.map((row) => ({
+    type: "comment" as const,
+    commentId: Number(row.id),
+    taskId: Number(row.taskId),
+    projectId: row.projectId,
+    ticketNumber: row.taskTicketNumber,
+    title: row.taskTitle,
+    content: [
+      `Comment on: ${row.taskTitle}`,
+      row.taskTicketNumber ? `Ticket: ${row.taskTicketNumber}` : "",
+      `Comment: ${row.commentText}`,
+      `Project: ${row.taskProjectTitle}`,
+      `Task status: ${row.taskStatus}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    createdAt: row.createdAt,
+    uniqueIndex: row.taskUniqueIndex,
+  }));
+  const rankedDocuments: BoardKnowledgeDocument[] = [];
+  if (rankedCommentsEnabled) {
+    for (let rank = 0; rank < Math.max(taskDocuments.length, commentDocuments.length); rank++) {
+      if (taskDocuments[rank]) rankedDocuments.push(taskDocuments[rank]);
+      if (commentDocuments[rank]) rankedDocuments.push(commentDocuments[rank]);
+      if (rankedDocuments.length >= input.limit) break;
+    }
+  } else {
+    rankedDocuments.push(...taskDocuments, ...commentDocuments);
+  }
+  const documents = rankedDocuments.slice(0, input.limit);
 
   documents.forEach(document => recordAgentBoardScopeMiss(document.projectId, "read"));
   return {
