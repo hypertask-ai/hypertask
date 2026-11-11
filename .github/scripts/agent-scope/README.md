@@ -61,9 +61,11 @@ requires re-review, not automatic hash refresh. Reviewed patterns:
 - Task search (4 calls): agent-scoped project IDs and project relation survive
   subsequent search restrictions and spread hydration.
 
+HTPR-7508 scopes the five invitation reads through projectContentAccessWhere.
+Invitation handlers retain the authenticated session's agent and team identity;
+the downstream invitation controller keeps the same project constraint.
 These are rebound from reviewed handoff patterns, not approvals for other queries
-in the same files. The rejected cancelInvite proposal is debt, not an exception.
-All uncertain findings remain in `agent-scope-baseline.json`, not exceptions.
+in the same files. All uncertain findings remain debt, not exceptions.
 Debt binds path, normalized call and occurrence, so unrelated edits stay green.
 Each entry records follow-up ticket, owner, expiry and approval. Expired debt,
 stale debt/exceptions, overlaps and any unlisted finding fail. Counts of findings,
