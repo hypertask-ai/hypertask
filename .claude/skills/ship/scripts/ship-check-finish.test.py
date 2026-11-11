@@ -429,7 +429,7 @@ case "$1:$2" in
   *) exit 1 ;;
 esac
 ''')
-        description = self.env['DESCRIPTION'] = '<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>'
+        self.env['DESCRIPTION'] = '<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>'
         activity = self.root / 'activity.json'
         builder = dict(id='builder-note', agentId='builder-id', agentName='Runner 1', runId='builder-run', createdAt='2026-11-09T00:00:00Z', text='Proof builder: PR 42')
         activity.write_text(json.dumps([builder]))
@@ -490,90 +490,75 @@ print('recorded')
             proof.write_text(complete.replace(before, after))
             self.assertIn(message, self.check('proof', ticket, success=False))
         proof.write_text(complete)
-        rerun = lambda n, **kw: self.check('rerun', ticket, script, f'2026-11-09-qa-run-{n}', **kw)
+        def rerun(n, **env):
+            return self.check('rerun', ticket, script, f'2026-11-09-qa-run-{n}', **env)
+        def validate(text, n, **env):
+            proof.write_text(text)
+            rerun(n, **env)
+            self.assertIn('proof ok', self.check('proof', ticket, **env))
         self.assertIn('builder cannot', rerun(15, success=False, ACTOR_NAME='Runner 1'))
         rerun(15, ACTOR='builder-id')
         self.assertIn('different authenticated agent', self.check('proof', ticket, success=False))
         rerun(16, success=False, DRIVE_EXIT='1')
         self.assertIn('rerun failed', self.check('proof', ticket, success=False))
-        rerun(17)
-        self.assertIn('proof ok', self.check('proof', ticket))
+        validate(complete, 17)
         proof.write_text(complete + '\nChanged proof.\n')
         self.assertIn('no independent drive rerun', self.check('proof', ticket, success=False))
         proof.write_text(complete)
         (folder / '2026-11-09-qa-run-17/drive-result.log').write_text('altered')
         self.assertIn('evidence changed', self.check('proof', ticket, success=False))
-        proof.write_text(complete.replace('TRIED: Cursor lost after reload. Check the box. -> result.json', 'NOT-APPLICABLE: Cursor lost after reload. Check the box. -> Read-only change; no cursor behavior affected.'))
-        rerun(18)
-        self.assertIn('proof ok', self.check('proof', ticket))
+        validate(complete.replace('TRIED: Cursor lost after reload. Check the box. -> result.json', 'NOT-APPLICABLE: Cursor lost after reload. Check the box. -> Read-only change; no cursor behavior affected.'), 18)
         nested = '<h2>Done when</h2><ul><li><p>Every action works from the keyboard in all three places.</p><ul><li><p>Board keys still work.</p><ul><li>Nested keys work.</li></ul></li></ul></li></ul>'
         self.assertIn('missing Acceptance item: Nested keys work.', self.check('proof', ticket, success=False, DESCRIPTION=nested))
-        proof.write_text(proof.read_text().replace('## What usually breaks', '- PASS: Nested keys work. -> result.json\n\n## What usually breaks'))
-        self.env['DESCRIPTION'] = nested
-        rerun(19)
-        self.assertIn('proof ok', self.check('proof', ticket))
-        self.env['DESCRIPTION'] = description
+        validate(complete.replace('## What usually breaks', '- PASS: Nested keys work. -> result.json\n\n## What usually breaks'), 19, DESCRIPTION=nested)
         for number, name in enumerate(ops, 20):
             with self.subTest(recipe=name):
                 breakage = [line[2:] for line in (recipes / f'{name}.md').read_text().split('## What usually breaks\n')[1].splitlines() if line.startswith('- ')]
                 self.assertTrue(breakage)
                 ops_page = '.claude/skills/verify-qa/reference/ops-map/' + name + '.md'
-                proof.write_text(complete.replace(page, ops_page).split('## What usually breaks')[0]
-                                 + '## What usually breaks\n'
-                                 + ''.join(f'- TRIED: {item} -> result.json\n' for item in breakage))
-                rerun(number)
-                self.assertIn('proof ok', self.check('proof', ticket))
+                validate(complete.replace(page, ops_page).split('## What usually breaks')[0]
+                         + '## What usually breaks\n'
+                         + ''.join(f'- TRIED: {item} -> result.json\n' for item in breakage), number)
         self.check('bind', ticket, '42')
         self.assertIn('no independent drive rerun', self.check('proof', ticket, success=False))
         self.assertIn('builder cannot', rerun(22, success=False))
         rerun(22, ACTOR_NAME='Runner 3')
         self.assertIn('different authenticated agent', self.check('proof', ticket, success=False))
-        rerun(23, ACTOR='third-agent-id', ACTOR_NAME='Runner 3')
-        self.assertIn('proof ok', self.check('proof', ticket))
-        for number, (criteria, expected) in enumerate([
-            ('Structured keys work.', 'Structured keys work.'),
-            ('- Structured keys work.', 'Structured keys work.'),
-            ('1. Structured keys work.', 'Structured keys work.'),
-            ('<ul><li>Structured keys work.</li></ul>', 'Structured keys work.'),
-            ('<p>Structured keys work.</p>', 'Structured keys work.'),
-            ('<p>Keys: Structured keys work.</p>', 'Keys: Structured keys work.'),
-            ('<p>Structured keys work.</p><ul><li>Board keys still work.</li></ul>', 'Structured keys work.'),
-        ], 24):
-            with self.subTest(acceptanceCriteria=criteria):
-                proof.write_text(complete)
-                self.assertIn('missing Acceptance item: ' + expected, self.check('proof', ticket, success=False, ACCEPTANCE=criteria))
-                proof.write_text(complete.replace('## What usually breaks', f'- PASS: {expected} -> result.json\n\n## What usually breaks'))
-                rerun(number, ACTOR='third-agent-id', ACTOR_NAME='Runner 3', ACCEPTANCE=criteria)
-                self.assertIn('proof ok', self.check('proof', ticket, ACCEPTANCE=criteria))
-                self.assertIn('proof ok', self.check('proof', ticket, ACCEPTANCE=criteria, DESCRIPTION=''))
-        for number, heading in enumerate([
-            'Akzeptanzkriterien', "Critères d’acceptation", "Critères d'acceptation",
-            'Criterios de aceptación', 'Acceptatiecriteria',
-        ], 28):
-            for rich in [False, True]:
-                with self.subTest(heading=heading, rich=rich):
-                    localized = (f'<p><strong>{heading}:</strong></p><ul><li>Board keys still work.</li></ul>' if rich
-                                 else f'## {heading}\n- Board keys still work.\n')
-                    proof.write_text(complete.replace('- PASS: Board keys still work. -> result.json', ''))
-                    self.assertIn('missing Acceptance item: Board keys still work.', self.check('proof', ticket, success=False, DESCRIPTION=localized))
-                    proof.write_text(complete)
-                    rerun(number * 2 + int(rich), ACTOR='third-agent-id', ACTOR_NAME='Runner 3', DESCRIPTION=localized)
-                    self.assertIn('proof ok', self.check('proof', ticket, DESCRIPTION=localized))
-        proof.write_text(complete)
+        reviewer = dict(ACTOR='third-agent-id', ACTOR_NAME='Runner 3')
+        validate(proof.read_text(), 23, **reviewer)
+        criteria = ['Structured keys work.', '- Structured keys work.', '1. Structured keys work.',
+                    '<ul><li>Structured keys work.</li></ul>', '<p>Structured keys work.</p>',
+                    '<p>Keys: Structured keys work.</p>',
+                    '<p>Structured keys work.</p><ul><li>Board keys still work.</li></ul>']
+        variants = [(dict(ACCEPTANCE=value), 'Keys: Structured keys work.' if 'Keys:' in value else 'Structured keys work.')
+                    for value in criteria]
+        for heading in ['Akzeptanzkriterien', "Critères d’acceptation", "Critères d'acceptation",
+                        'Criterios de aceptación', 'Acceptatiecriteria']:
+            variants.extend((dict(DESCRIPTION=value), 'Board keys still work.') for value in [
+                f'<p><strong>{heading}:</strong></p><ul><li>Board keys still work.</li></ul>',
+                f'## {heading}\n- Board keys still work.\n'])
+        for number, (env, expected) in enumerate(variants, 24):
+            with self.subTest(**env):
+                proof.write_text(complete.replace(f'- PASS: {expected} -> result.json', ''))
+                self.assertIn('missing Acceptance item: ' + expected, self.check('proof', ticket, success=False, **env))
+                covered = complete if expected == 'Board keys still work.' else complete.replace(
+                    '## What usually breaks', f'- PASS: {expected} -> result.json\n\n## What usually breaks')
+                validate(covered, number, **reviewer, **env)
+                if 'ACCEPTANCE' in env:
+                    self.assertIn('proof ok', self.check('proof', ticket, DESCRIPTION='', **env))
         (self.repo / 'drive-version.txt').write_text('later production')
         (self.repo / script).write_text('throw new Error("must not execute the later drive");\n')
         self.run_git('add', '.')
         self.run_git('commit', '-qm', 'unrelated newer production')
-        rerun(70, ACTOR='third-agent-id', ACTOR_NAME='Runner 3')
-        self.assertIn('proof ok', self.check('proof', ticket))
+        validate(complete, 70, **reviewer)
         self.assertIn('drive reached', (folder / '2026-11-09-qa-run-70/drive-result.log').read_text())
         self.assertEqual(len(self.run_git('worktree', 'list', '--porcelain').stdout.split('worktree ')) - 1, 1)
         (self.repo / 'drive-version.txt').write_text('dirty')
-        self.assertIn('local changes', rerun(71, success=False, ACTOR='third-agent-id', ACTOR_NAME='Runner 3'))
+        self.assertIn('local changes', rerun(71, success=False, **reviewer))
         self.assertFalse((folder / '2026-11-09-qa-run-71').exists())
         (self.repo / 'drive-version.txt').write_text('later production')
         (self.repo / 'untracked.py').write_text('untracked')
-        self.assertIn('local changes', rerun(72, success=False, ACTOR='third-agent-id', ACTOR_NAME='Runner 3'))
+        self.assertIn('local changes', rerun(72, success=False, **reviewer))
 
 
 if __name__ == '__main__':
