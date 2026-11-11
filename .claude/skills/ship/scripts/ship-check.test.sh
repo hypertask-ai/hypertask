@@ -45,6 +45,36 @@ MOCK
   T 1 '[BUG] MARK-173 Type first, which only the duplicate path takes'
 }
 title_tests
+
+fresh_tests() {
+  local PATH=$PATH BEHIND_FIXTURE
+  mkdir -p "$E/fresh-bin"; PATH="$E/fresh-bin:$PATH"
+  cat > "$E/fresh-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+if [[ $1 == api && $2 == repos/hypertask-ai/hypertask/pulls/4242 ]]; then echo 0123456789abcdef0123456789abcdef01234567; exit 0; fi
+if [[ $1 == api && $2 == repos/hypertask-ai/hypertask/compare/production...0123456789abcdef0123456789abcdef01234567 ]]; then echo "$BEHIND_FIXTURE"; exit 0; fi
+exit 1
+MOCK
+  chmod +x "$E/fresh-bin/gh"
+  F() {
+    local want=$1; shift; out=$(BEHIND_FIXTURE="$1" ./ship-check fresh 4242 2>&1); got=$?
+    [ "$got" = "$want" ] && ok "fresh: behind_by $1" || bad "fresh: want $want got $got <- behind_by $1 ($out)"
+  }
+  F 0 0
+  F 1 3
+  F 1 ''
+  out=$(BEHIND_FIXTURE=3 ./ship-check fresh 4242 2>&1)
+  [[ $out == *'update the branch'* && $out == *'3 commit(s) behind production'* ]] \
+    && ok 'fresh: refusal names the update and the distance' || bad "fresh: refusal message <- $out"
+  local pin=$E/fresh-pin
+  SHIP_MERGE_PIN=$pin BEHIND_FIXTURE=0 ./ship-check fresh 4242 >/dev/null 2>&1
+  [ "$(cat "$pin" 2>/dev/null)" = 0123456789abcdef0123456789abcdef01234567 ] \
+    && ok 'fresh: the checked head is recorded for the merge pin' || bad "fresh: pin not recorded <- $(cat "$pin" 2>/dev/null)"
+  : > "$pin"
+  SHIP_MERGE_PIN=$pin BEHIND_FIXTURE=3 ./ship-check fresh 4242 >/dev/null 2>&1
+  [ -s "$pin" ] && bad 'fresh: a behind branch was pinned' || ok 'fresh: a behind branch is never pinned'
+}
+fresh_tests
 if [ "${1:-}" = --title-only ]; then
   [ "$fails" = 0 ] && echo 'title ok' || exit 1
   exit 0
@@ -105,6 +135,8 @@ gh() {
     echo 'Invalid PR title'
   elif [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 838 && "$*" == *'--json headRefOid,baseRefName,state'* ]]; then
     command gh pr view 838 -R hypertask-ai/hypertask --json headRefOid --jq .headRefOid # Pin the skills-only fixture as open.
+  elif [[ ${1:-} == api && ${2:-} == */compare/* ]]; then
+    echo 0
   elif [[ ${1:-} == api && ${2:-} == */check-runs\?* ]]; then
     echo '{"check_runs":[{"id":1,"name":"ci-tests","status":"completed","conclusion":"success"}]}'
   else command gh "$@"; fi
@@ -921,6 +953,8 @@ elif args[:1] == ['api'] and '/statuses/' in args[1]:
         else:
             raise AssertionError('status post must hold publisher lock')
     sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
+elif args[:1] == ['api'] and '/compare/' in args[1]:
+    print('0')
 elif args[:1] == ['api'] and '/check-runs?' in args[1]:
     print(json.dumps({'check_runs': [{'id': 1, 'name': 'ci-tests', 'status': 'completed', 'conclusion': 'success'}]}))
 elif args[:1] == ['api'] and args[1].endswith('/pulls/999') and '--jq' in args:
@@ -1177,7 +1211,7 @@ SHIP_REPO=hypertask-ai/hypertask EL elsewhere YPER4-778 902 >/dev/null && bad "e
 EL bind YPER4-778 902 >/dev/null && [ ! -e "$E/YPER4-778/elsewhere" ] && ok "bind clears elsewhere" || bad "bind did not clear elsewhere"
 
 export CI_FIXTURE_DIR="$PWD/fixtures/yper4-312" CI_CALL_LOG="$E/ci-calls"
-export CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
+export CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG CI_BEHIND
 CI_HEAD=$(jq -r '.check_runs[0].head_sha' "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
 CI_PR_RUNS=$(cat "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
 CI_BASE_RUNS=$(jq '.check_runs[0].conclusion = "success"' "$CI_FIXTURE_DIR/production.check-runs.json")
@@ -1199,6 +1233,7 @@ gh() {
     api:*/actions/jobs/114565456089/logs) cat "$CI_FIXTURE_DIR/production.log" ;;
     api:*/actions/jobs/*/logs) printf '%s\n' "$CI_LOG" ;;
     api:*/pulls/1392/files\?*) echo '[]' ;;
+    api:*/compare/*) printf '%s\n' "${CI_BEHIND:-0}" ;;
     api:*/pulls/1392\?*)
       jq -n --arg sha "$CI_HEAD" '{head:{sha:$sha},base:{sha:$sha},title:"HTPR-6971 [FEATURE] Fixture",changed_files:0}' ;;
     api:*/statuses/*) return 0 ;;
@@ -1236,6 +1271,7 @@ CI 2 'tests/htpr-6971-chat-history-paging.test.cjs:774:1'
 CI 2 'production ci-tests is green, so this PR broke it'
 CI 2 'production ci-tests is also red (Ctrl+J globally opens Compose' CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
 CI 0 '' CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")"
+CI 2 'is 3 commit(s) behind production' CI_BEHIND=3 CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")"
 for conclusion in neutral skipped; do
   CI 2 "ci-tests $conclusion on head" CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0] |= (.id += 1 | .conclusion = $c)' <<<"$CI_PR_RUNS")
 $CI_PR_RUNS"
