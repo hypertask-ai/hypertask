@@ -153,3 +153,41 @@ window; durable markers recover interrupted writes. Ordinary errors retain their
 six-hour activity policy. Tagged product alerts get the same related-incident
 check before `ship-claim` writes. The sanitized historical replay lives in
 `fixtures/project-validation.json`; hosted tests prove writes with fake CLIs.
+
+## GitHub-hosted Vercel feed (HYCI-260)
+
+`error-collector-vercel.yml` runs on GitHub-hosted Ubuntu using the existing
+Vercel secret. An independent chain job dispatches the next production run on a
+fifteen-minute boundary, even after collection fails or times out. Collection and
+hand-off have separate locks, so a waiting link cannot block collection. The cron
+is an hourly backstop, not the cadence source; the shared schedule-chain helper
+stands down while another link is active. Each source reads the preceding 24 hours
+through the existing bounded adapter, so the VPS recovers missed timer runs
+without another state writer or ticket writer.
+
+A failed source is absent, never an empty successful batch, and an all-failed run
+fails and publishes nothing. Vercel retention still applies, so expired outage
+logs cannot be recovered. A truncated snapshot reports its retained start; an
+older checkpoint fast-forwards to the snapshot end and records the dropped
+interval as a coverage gap, so no day claims coverage it never read.
+
+Production messages never appear in Actions output or plaintext artifacts.
+Snapshots use AES-256-GCM with a random key wrapped by the committed RSA public
+key; the private key lives only on the VPS at
+`~/.local/state/error-collector/vercel-feed.pem` (mode 600). Replacing it needs a
+new `vercel-feed.pub.pem` and hosted run. Artifacts expire after two days, and
+neither workflow nor snapshot holds a board write token.
+
+The installed service sets `ERROR_COLLECTOR_VERCEL_HOSTED=1`. Its three sources
+share one download per collector process of the newest production run that
+published an artifact, even when that run's hand-off job failed. Downloads use a
+hypertask-runners app token from `gh-app-token` and ignore a stored human login.
+Failed decryption, missing sources, invalid coverage starts and replayed or future
+ends leave checkpoints unchanged. The collector advances only to the snapshot's
+end, never download time, and filters overlapping events before counting.
+
+Before installing, ensure the private key exists and dispatch the production
+workflow once. Install the merged collector, then check that all three
+`state.sources` timestamps advance and a production error reaches its ticket.
+Undo by setting `ERROR_COLLECTOR_VERCEL_HOSTED=0` in the private service
+environment file and restarting; direct reads stay blocked from the VPS.

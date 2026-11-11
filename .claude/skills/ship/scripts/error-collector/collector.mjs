@@ -289,9 +289,20 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const revived = new Map();
       const previous = Date.parse(state.sources[source.name]);
       const since = iso(Math.max(now - DAY, Math.min(now, Number.isFinite(previous) ? previous : now - DAY)));
-      const until = iso(now);
+      let until = iso(now);
       const fetched = await bounded(source.fetch({ since, until, env, signal, cursor: structuredClone(state.sourceCursors?.[source.name]) }));
       timeLeft(Infinity);
+      if (!Array.isArray(fetched) && fetched?.until != null) {
+        const end = Date.parse(fetched.until);
+        if (!Number.isFinite(end) || end <= Date.parse(since) || end > now) throw new Error('invalid source coverage end');
+        until = iso(end);
+      }
+      let retained = since;
+      if (!Array.isArray(fetched) && fetched?.since != null) {
+        const start = Date.parse(fetched.since);
+        if (!Number.isFinite(start) || start < Date.parse(since) || start > Date.parse(until)) throw new Error('invalid source coverage start');
+        retained = iso(start);
+      }
       const rows = Array.isArray(fetched) ? fetched : fetched?.events;
       let cursor;
       if (!Array.isArray(fetched)) {
@@ -365,14 +376,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const prior = state.coverage[source.name];
       const continuous = prior && prior.until === state.sources[source.name] && previous >= Date.parse(since);
       const coverage = {
-        since: continuous ? prior.since : since, until,
+        since: retained !== since ? retained : (continuous ? prior.since : since), until,
         services: [...new Set([...(prior?.services ?? []), source.name, ...events.map(event => event.service)])],
       };
       const start = Math.max(now - 13 * DAY, Number.isFinite(previous) ? Math.min(previous, Date.parse(since)) : Date.parse(since));
       for (let date = Date.parse(`${day(start)}T00:00:00Z`); date <= now; date += DAY) {
         for (const service of coverage.services) {
           const counts = stats(day(date), service);
-          counts.complete = Date.parse(coverage.since) <= date && now >= date + DAY;
+          counts.complete = Date.parse(coverage.since) <= date && Date.parse(until) >= date + DAY;
         }
       }
       state.coverage[source.name] = coverage;
@@ -564,7 +575,7 @@ async function install(env) {
   await fs.mkdir(units, { recursive: true });
   await fs.mkdir(join(home, '.local/state/error-collector'), { recursive: true, mode: 0o700 });
   if (HERE !== target) {
-    for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
+    for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs', 'vercel-hosted.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
     await fs.copyFile(join(HERE, 'ticketDescription.mjs'), join(target, 'ticketDescription.mjs'));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }
