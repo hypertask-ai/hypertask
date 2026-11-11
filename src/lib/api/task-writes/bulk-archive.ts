@@ -78,6 +78,13 @@ export const POST = taskWriteRoute({
       }, { timeout: 30_000 });
       const archivedIds = result.tasks.map((task) => task.id);
       const archived = new Set(archivedIds);
+      const recurring = result.changed.filter((task) => task.recurrence);
+      for (let offset = 0; offset < recurring.length; offset += 5) {
+        const outcomes = await Promise.allSettled(recurring.slice(offset, offset + 5).map((task) =>
+          spawnNextRecurrence(task.id, task.dueDate, user.id, null),
+        ));
+        for (const outcome of outcomes) if (outcome.status === "rejected") console.error("Bulk archive recurrence failed", outcome.reason);
+      }
       waitUntil((async () => {
         const published = await Promise.allSettled([
           broadcastBoardChange(projectId, { originUserId: user.id }),
@@ -95,7 +102,6 @@ export const POST = taskWriteRoute({
               upsertTaskToTurbopuffer(task.id, { strict: true }),
               upsertAllCommentsToTurbopuffer(task.id, { strict: true }),
               scheduleTaskSummaryGeneration({ taskId: task.id, ownerUserId: task.userId, activityOnlyOwnerId: task.userId }),
-              ...(task.recurrence ? [spawnNextRecurrence(task.id, task.dueDate, user.id, null)] : []),
             ];
             const outcomes = await Promise.allSettled(work);
             for (const outcome of outcomes) if (outcome.status === "rejected") console.error("Bulk archive follow-up failed", task.id, outcome.reason);

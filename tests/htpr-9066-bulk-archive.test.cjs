@@ -2,10 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load } = require('./task-route-loader.cjs');
 
-function fixture({ enabled = true, allowed = true, fail = false, paused = false } = {}) {
-  let tasks = Array.from({ length: 50 }, (_, i) => ({ id: i + 1, projectId: 15, status: 'Normal', title: `Task ${i}`, userId: 985, updatedByUserIds: [] }));
+function fixture({ enabled = true, allowed = true, fail = false, paused = false, recurring = false } = {}) {
+  let tasks = Array.from({ length: 50 }, (_, i) => ({ id: i + 1, projectId: 15, status: 'Normal', title: `Task ${i}`, userId: 985, updatedByUserIds: [], recurrence: recurring && i < 10 ? 'daily' : null }));
   tasks.push({ id: 51, projectId: 16, status: 'Normal' }, { id: 52, projectId: 15, status: 'Deleted' });
-  const writes = [], comments = [], locks = [], background = [], effects = [];
+  const writes = [], comments = [], locks = [], background = [], effects = [], rollovers = [];
   let resume;
   const pause = new Promise(resolve => { resume = resolve; });
   const effect = async id => { effects.push(id); if (paused) await pause; };
@@ -39,7 +39,11 @@ function fixture({ enabled = true, allowed = true, fail = false, paused = false 
     '@/lib/mcp/tasks/agentMutationFence': { lockAgentMutationFence: async (_tx, id) => locks.push(id) },
     '@vercel/functions': { waitUntil: promise => background.push(promise) },
     '@/pages/api/queues/duedateQueue': { cancelDueDateJob: effect },
-    '@/utils/controllers/tasks/spawnRecurrence': { spawnNextRecurrence: effect },
+    '@/utils/controllers/tasks/spawnRecurrence': { spawnNextRecurrence: async id => {
+      await effect(id);
+      tasks.find(task => task.id === id).recurrence = null;
+      rollovers.push(id);
+    } },
     '@/utils/controllers/turbopuffer/turbopufferHelper': { upsertTaskToTurbopuffer: effect, upsertAllCommentsToTurbopuffer: effect },
     '@/pages/api/queues/FAST/generateSummary': { default: effect },
     '@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove': { default: effect },
@@ -50,7 +54,7 @@ function fixture({ enabled = true, allowed = true, fail = false, paused = false 
   }).POST;
   const body = { ids: Array.from({ length: 50 }, (_, i) => i + 1), projectId: 15 };
   const call = (data = body, session = { userId: 985, teamScope: null, source: 'better-auth' }) => route({ headers: new Headers(), json: async () => data }, session);
-  return { call, body, writes, comments, locks, background, effects, resume, get tasks() { return tasks; } };
+  return { call, body, writes, comments, locks, background, effects, rollovers, resume, get tasks() { return tasks; } };
 }
 
 test('50 selected cards commit together before slow indexing or queue work completes', async () => {
@@ -65,6 +69,24 @@ test('50 selected cards commit together before slow indexing or queue work compl
   assert.deepEqual(f.locks, f.body.ids);
   f.resume(); await Promise.all(f.background);
   assert.ok(f.effects.length >= 50);
+});
+
+test('all recurrence batches finish before the response can enable Undo', async () => {
+  const f = fixture({ paused: true, recurring: true });
+  let responded = false;
+  const response = f.call().then(value => { responded = true; return value; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.tasks.filter(t => t.status === 'Archive').length, 50);
+  assert.equal(responded, false);
+  assert.deepEqual(f.rollovers, []);
+  f.resume();
+  assert.equal((await response).status, 200);
+  assert.deepEqual(f.rollovers, Array.from({ length: 10 }, (_, i) => i + 1));
+  assert.equal(f.tasks.filter(t => t.recurrence).length, 0);
+  await Promise.all(f.background);
+  await f.call();
+  await Promise.all(f.background);
+  assert.equal(f.rollovers.length, 10);
 });
 
 test('missing, foreign-board and deleted IDs fail without resurrecting anything; retry is idempotent', async () => {
