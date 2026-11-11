@@ -43,7 +43,7 @@ Short samples are not fleet-wide hourly measurements.
 
 ### Automated evidence
 
-`node --test tests/verify-required-check-settings.test.cjs tests/app-smoke-workflow.test.cjs` exercises the real verifier and workflow wiring.
+`node --test tests/verify-required-check-settings.test.cjs tests/app-smoke-workflow.test.cjs tests/require-fresh-checks.test.cjs` exercises the real verifier, the fresh-check writer, and workflow wiring.
 It covers scheduled verification and rejected settings drift.
 It does not prove production scheduling or quota recovery.
 

@@ -151,20 +151,24 @@ try {
       "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
       "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "premerge-evidence",
     ].sort();
-    const actual = [...new Set(ruleset.rules
-      .filter((rule) => rule.type === "required_status_checks")
+    const statusRules = ruleset.rules.filter((rule) => rule.type === "required_status_checks");
+    const actual = [...new Set(statusRules
       .flatMap((rule) => rule.parameters.required_status_checks.map((check) => check.context)))].sort();
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
       throw new Error("Live required checks do not match docs/ci-policy.yml.");
+    }
+    if (statusRules.length !== 1 || statusRules[0].parameters.strict_required_status_checks_policy !== true) {
+      throw new Error("Required checks do not require an up-to-date branch.");
     }
     recordVerified({
       repository: repo,
       defaultBranch: repository.default_branch,
       rulesetId: matches[0].id,
       contexts: actual,
+      strictRequiredStatusChecks: true,
     });
     publishResult(true);
-    console.log(`Required-check settings verified: default branch, production protection, and exact required contexts. Stored at ${proofPath}.`);
+    console.log(`Required-check settings verified: default branch, production protection, exact required contexts, and up-to-date branches. Stored at ${proofPath}.`);
   }
 } catch (error) {
   if (error.rateLimited) {

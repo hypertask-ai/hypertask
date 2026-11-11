@@ -274,10 +274,17 @@ runs the dependency-free [verifier](../.github/scripts/verify-required-check-set
 on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
 checkout always uses `production`. It verifies the default branch, exactly one
 active `production-required-checks` ruleset, its branch target and production
-include/exclude conditions, and the exact required-context set (including both
-review contexts, without aliasing). Drift and unreadable settings still fail
+include/exclude conditions, the exact required-context set (including both
+review contexts, without aliasing), and an up-to-date branch
+(`strict_required_status_checks_policy`). Drift and unreadable settings still fail
 the monitor; this is not a required PR context. Detection can lag until the next
 hourly run, plus GitHub scheduling and any rate-limit wait.
+
+[Require Fresh Checks](../.github/workflows/require-fresh-checks.yml) runs on the
+production push that changes it, and on a production dispatch. It sets
+`strict_required_status_checks_policy` and leaves every context, integration
+pin, and other rule as it found them. The runner app has no administration
+permission, so the workflow token does this write.
 
 CI Tests no longer reads repository settings on PRs or production pushes.
 Its optional review precheck reads commit statuses once. Read failures warn
