@@ -377,6 +377,7 @@ for (const foreignParent of [false, true]) {
       "@/utils/helperFunctions/Views/SubtaskHelperFunction": {},
       "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": {},
       "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeProjectBoardFilters: (project) => project },
+      "@/lib/flags/definitions/htpr-8171-hide-tags": { HTPR_8171_HIDE_TAGS_FLAG: "htpr-8171-hide-tags" },
       "../projects/getAllIncludes": { getProjectViewBaseInclude: () => ({}) },
     });
     const output = await getProject("share-id");
