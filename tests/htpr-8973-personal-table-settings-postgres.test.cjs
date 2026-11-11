@@ -33,14 +33,16 @@ test('upgrade preserves legacy account/view preferences after deleting drafts', 
         ('default', 99, 'board'), ('saved', 99, 'board'), ('other', 99, 'elsewhere');
       INSERT INTO "View" (id, "userId", project_view_id, table_sort_stack, table_columns)
         SELECT 'draft-' || i, i, 'board', '${JSON.stringify(stack)}', '${JSON.stringify(columns)}'
-        FROM generate_series(1, 8) i;
+        FROM generate_series(1, 10) i;
       UPDATE "View" SET table_sort_stack = NULL, table_sort_column = 'due', table_sort_direction = 'asc' WHERE id = 'draft-4';
       UPDATE "View" SET table_sort_stack = '[]', table_columns = NULL WHERE id = 'draft-5';
       UPDATE "View" SET table_sort_stack = NULL, table_columns = NULL WHERE id = 'draft-6';
       UPDATE "View" SET "userId" = 99 WHERE id = 'draft-8';
+      UPDATE "View" SET table_sort_stack = 'null', table_columns = NULL WHERE id = 'draft-9';
+      UPDATE "View" SET table_sort_stack = NULL WHERE id = 'draft-10';
       INSERT INTO "User_Project_View"
         SELECT i, 'board', CASE WHEN i = 2 THEN NULL WHEN i = 7 THEN 'other' ELSE 'saved' END, 'draft-' || i
-        FROM generate_series(1, 8) i;
+        FROM generate_series(1, 10) i;
       INSERT INTO "View_Last_Used" VALUES ('existing', '2026-10-01', '2026-11-01', 'Hide', 1, 'saved');
       ${migration}
       ${snapshot};
@@ -53,21 +55,18 @@ test('upgrade preserves legacy account/view preferences after deleting drafts', 
   });
   assert.equal(result.status, 0, [result.error?.message, result.stderr, result.stdout].filter(Boolean).join('\n'));
   const [before, after, drafts] = result.stdout.trim().split('\n').map(JSON.parse);
-  assert.deepEqual(before.map(row => [row.userId, row.viewId]), [[1, 'saved'], [2, 'default'], [3, 'saved'], [4, 'saved'], [5, 'saved']]);
+  assert.deepEqual(before.map(row => [row.userId, row.viewId]), [[1, 'saved'], [2, 'default'], [3, 'saved'], [4, 'saved'], [5, 'saved'], [9, 'saved'], [10, 'saved']]);
   for (const row of before.slice(0, 3)) {
-    assert.deepEqual(row.table_sort_stack, stack);
-    assert.deepEqual(row.table_columns, columns);
+    assert.deepEqual([row.table_sort_stack, row.table_columns], [stack, columns]);
   }
-  assert.equal(before[0].id, 'existing');
-  assert.equal(before[0].createdAt, '2026-10-01T00:00:00');
-  assert.equal(before[0].lastUsedAt, '2026-11-01T00:00:00');
-  assert.equal(before[0].board_empty_sections, 'Hide');
-  assert.deepEqual(before[3].table_sort_stack, [{ column: 'due', direction: 'asc' }]);
-  assert.deepEqual(before[3].table_columns, columns);
-  assert.deepEqual(before[4].table_sort_stack, []);
-  assert.equal(before[4].table_columns, null);
-  assert.deepEqual(after[0].table_sort_stack, []);
-  assert.deepEqual(after[0].table_columns, { keys: ['title'], widths: {} });
+  assert.deepEqual(['id', 'createdAt', 'lastUsedAt', 'board_empty_sections'].map(key => before[0][key]), ['existing', '2026-10-01T00:00:00', '2026-11-01T00:00:00', 'Hide']);
+  assert.deepEqual([before[3].table_sort_stack, before[3].table_columns], [[{ column: 'due', direction: 'asc' }], columns]);
+  assert.deepEqual([before[4].table_sort_stack, before[4].table_columns], [[], null]);
+  assert.deepEqual([after[0].table_sort_stack, after[0].table_columns], [[], { keys: ['title'], widths: {} }]);
   assert.deepEqual(after.slice(1), before.slice(1));
+  const { getActiveTableSortStackFromProject } = require('./helpers/htpr-7166-fixture.cjs').fixture().load('src/utils/helperFunctions/Views/ViewsHelperFunctions.ts');
+  const project = row => ({ project_view: { default_view: { table_sort_stack: stack, ViewLastUsed: [row] } } });
+  assert.deepEqual(getActiveTableSortStackFromProject(project(after[5])), []);
+  assert.deepEqual(getActiveTableSortStackFromProject(project(after[6])), stack);
   assert.equal(drafts, 0);
 });

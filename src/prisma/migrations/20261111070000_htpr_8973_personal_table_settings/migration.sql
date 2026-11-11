@@ -8,7 +8,8 @@ SELECT gen_random_uuid()::text, state."userId", target."id",
       THEN draft."table_sort_stack"
     WHEN draft."table_sort_column" IS NOT NULL AND draft."table_sort_direction" IN ('asc', 'desc')
       THEN jsonb_build_array(jsonb_build_object('column', draft."table_sort_column", 'direction', draft."table_sort_direction"))
-    ELSE NULLIF(draft."table_sort_stack", 'null'::jsonb)
+    WHEN draft."table_sort_stack" = 'null'::jsonb THEN '[]'::jsonb
+    ELSE draft."table_sort_stack"
   END,
   NULLIF(draft."table_columns", 'null'::jsonb)
 FROM "User_Project_View" state
