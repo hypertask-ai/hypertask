@@ -88,6 +88,17 @@ test("watcher names the prerequisite before shipping each kind of finding", () =
   assert.match(decision({ ...base, inputPerMillion: 2, action: "ship automatically" }), /Nothing; a runner ships it\./);
   assert.match(decision({ ...base, kind: "stale", inputPerMillion: null, action: "remove stale entry; migrate saved picks to the current model of its class" }), /Nothing; a runner removes the stale entry\./);
   assert.match(decision({ ...base, provider: "meta", inputPerMillion: 1, action: "ask Valentin before shipping" }), /Valentin says yes or no before this ships\./);
+  assert.match(decision({ ...base, provider: "meta", inputPerMillion: 9 }), /Nothing yet; HTPR-7746 must ship first\. Then Valentin says yes or no\./);
+  assert.match(decision({ ...base, provider: "meta", inputPerMillion: null }), /Nothing until the gateway price is checked\. Then Valentin says yes or no\./);
+  assert.doesNotMatch(decision({ ...base, inputPerMillion: 9 }), /Then Valentin says yes or no/);
+});
+
+test("watcher keeps every current catalog entry and says when the audience count is unknown", () => {
+  const finding = { kind: "stale", provider: "meta", model: "meta/llama-4", modelClass: "llama", current: ["llama-4-a", "llama-4-b", "llama-4-c", "llama-4-d"], action: "remove stale entry" };
+  const body = ticketFor(finding).description;
+  for (const key of finding.current) assert.ok(body.includes(key), key);
+  assert.match(body, /Who it affects:<\/strong> people who pick a model in chat; the count is unknown\.<\/p>/);
+  assert.match(rollupTicket([{ ...finding, kind: "new-class", inputPerMillion: 1 }]).description, /the count is unknown/);
 });
 
 test("watcher keeps internal ids and prerequisites below the plain-language divider", () => {

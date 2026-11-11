@@ -15,10 +15,12 @@ const actionSentences = (finding) => String(finding.action ?? "")
   .join(" ");
 
 const decisionFor = (finding) => {
+  const needsYes = !["openai", "anthropic"].includes(finding.provider);
+  const approval = needsYes ? " Then Valentin says yes or no." : "";
   if (finding.kind === "stale") return "Nothing; a runner removes the stale entry.";
-  if (finding.inputPerMillion != null && finding.inputPerMillion > 5) return "Nothing yet; HTPR-7746 must ship first.";
-  if (finding.inputPerMillion == null) return "Nothing until the gateway price is checked.";
-  if (["openai", "anthropic"].includes(finding.provider)) return "Nothing; a runner ships it.";
+  if (finding.inputPerMillion != null && finding.inputPerMillion > 5) return `Nothing yet; HTPR-7746 must ship first.${approval}`;
+  if (finding.inputPerMillion == null) return `Nothing until the gateway price is checked.${approval}`;
+  if (!needsYes) return "Nothing; a runner ships it.";
   return "Valentin says yes or no before this ships.";
 };
 
@@ -61,12 +63,12 @@ const plainParts = ({ problem, fix, done, risk, decision }) => [
 function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
-  const entry = escapeHtml((finding.current ?? []).slice(0, 3).join(", ") || "none");
+  const entry = escapeHtml((finding.current ?? []).join(", ") || "none");
   const decision = decisionFor(finding);
   const decide = decision.startsWith("Valentin") ? "Should this model ship?" : "nothing";
   const plain = plainBlock({
     wanted: "A watched model differs from our catalog or the gateway list.",
-    affects: "people who pick a model in chat.",
+    affects: "people who pick a model in chat; the count is unknown.",
     course: `change the catalog entry. Why: the pickers should offer the models we watch.`,
     decide,
     undo: "revert the catalog change and the saved pick migration.",
@@ -108,7 +110,7 @@ function rollupTicket(findings, now = new Date()) {
   const gate = rollupGate(findings);
   const plain = plainBlock({
     wanted: "New model classes are on the gateway and not in our catalog.",
-    affects: "people who pick a model in chat.",
+    affects: "people who pick a model in chat; the count is unknown.",
     course: "add the classes below to the catalog. Why: people cannot pick a model we do not list.",
     decide: gate.decide,
     undo: "revert the catalog change and the saved pick migration.",
