@@ -108,6 +108,7 @@ interface AITaskWriterProviderProps {
   projectAssignees?: (import("@/models/model").IUser | import("@/models/model").IAgent)[];
   project?: IProject;
   requestKind?: "manual" | "auto-description";
+  guaranteeScreenshots?: boolean;
 }
 
 
@@ -131,6 +132,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
   projectAssignees,
   project,
   requestKind = "manual",
+  guaranteeScreenshots = false,
 }) => {
   const [aiMode] = useState<TAiMode>(defaultMode);
   const [userPrompt, setUserPrompt] = useState<string>("");
@@ -518,6 +520,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     currentTask,
     billing,
     requestKind,
+    guaranteeScreenshots,
   );
 
 
@@ -638,7 +641,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
       finalPrompt,
       loadingTextParam,
       requestKindOverride,
-      { userRetrievalTexts },
+      { userRetrievalTexts, sourcePrompt: prompt },
     );
   }, [originalSendAIRequest, responseHistory, currentResponseIndex, aiResponse, setLoadingText, currentAttachments, isByokBlocked]);
 
