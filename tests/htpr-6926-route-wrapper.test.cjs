@@ -410,7 +410,7 @@ test('local agent limits skip Redis without skipping authentication or revocatio
       const response = await scaffold(h)(h.request())
       assert.equal(response.status, revoked ? 401 : 200)
       if (revoked) assert.equal((await response.json()).reason, 'token_revoked')
-      assert.equal(h.counts().authCalls, 1)
+      assert.equal(h.counts().authCalls, legacy ? 2 : 1)
       assert.deepEqual(h.events.filter(e => ['redis', 'rate', 'agent-limit-flag'].includes(e)), ['agent-limit-flag'])
     }
     const human = harness({ legacy, agentLocalLimit: true, count: 121 })

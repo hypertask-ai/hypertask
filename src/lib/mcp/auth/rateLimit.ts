@@ -92,7 +92,10 @@ export async function checkMcpRateLimit(
       const { HTPR_8978_UPSTASH_TRAFFIC_FLAG } = await import('@/lib/flags/definitions/htpr-8978-upstash-traffic')
       const { withFeatureFlagSnapshot } = await import('@/lib/flags/modeCache')
       const enabled = await withFeatureFlagSnapshot(() => isFeatureEnabled(HTPR_8978_UPSTASH_TRAFFIC_FLAG, 0), 'agent')
-      if (enabled) return localAgentRateLimit(token)
+      if (enabled) {
+        const ctx = await withFeatureFlagSnapshot(() => resolveAuth ? resolveAuth() : validateMcpAuth(request), 'agent')
+        return ctx ? localAgentRateLimit(token) : null
+      }
     }
     const tokenHash = createHash('sha256').update(token).digest('hex')
     const nowSeconds = Math.floor(Date.now() / 1000)

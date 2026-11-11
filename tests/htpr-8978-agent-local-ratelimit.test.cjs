@@ -43,7 +43,7 @@ function harness(t, { enabled = true } = {}) {
     } },
     './session': {
       extractBearerToken: value => value?.replace(/^Bearer /, '') ?? null,
-      validateMcpAuth: async () => { throw new Error('low counts must not authenticate') },
+      validateMcpAuth: async request => request.headers.get('Authorization').includes('invalid_') ? null : { user: { id: 7 }, agentId: 'fixture' },
     },
     '../operationContext': { getMcpOperationContext: () => checked ? { rateLimitChecked: true } : undefined },
   })
@@ -71,9 +71,18 @@ test('htk_ and agent JWTs count in memory and never acquire Redis', async t => {
     assert.equal(refused.headers.get('Retry-After'), '60')
   }
   assert.deepEqual(h.redisCalls, [])
-  assert.equal(h.scopes.length, 6)
+  assert.equal(h.scopes.length, 12)
   t.mock.method(Date, 'now', () => 180_000)
   assert.equal(await h.call('htk_cli'), null, 'a fresh minute restores the allowance')
+  assert.deepEqual(h.redisCalls, [])
+})
+
+test('unverified tokens cannot exhaust the local map for legitimate agents', async t => {
+  const h = harness(t)
+  for (let i = 0; i <= 1_000; i++) assert.equal(await h.call(`htk_invalid_${i}`), null)
+  assert.equal(await h.call('htk_cli'), null)
+  assert.equal(await h.call('htk_cli'), null)
+  assert.equal((await h.call('htk_cli')).status, 429)
   assert.deepEqual(h.redisCalls, [])
 })
 
