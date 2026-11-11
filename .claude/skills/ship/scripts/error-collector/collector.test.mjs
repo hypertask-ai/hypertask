@@ -48,7 +48,7 @@ if (name === 'ht') {
   if (url.pathname.startsWith('/mcp/tasks/') && url.pathname.endsWith('/agent-activity')) {
     console.log(JSON.stringify({ success: true, activities: read('activities.json', []).filter(item => item.ticket === url.pathname.split('/')[3]) }));
   } else if (url.pathname === '/mcp/projects/2060/sections') {
-    console.log(JSON.stringify({ success: true, sections: cfg.sections ?? [{ id: 10414, section_title: 'Backlog', projectId: 2060, deleted: false }] }));
+    console.log(JSON.stringify({ success: true, sections: cfg.sections ?? [{ id: 4351, section_title: 'Todo', projectId: 2060, deleted: false }] }));
   } else {
     if (url.pathname !== '/mcp/tasks') throw new Error('unexpected read');
     const status = url.searchParams.get('status');
@@ -1015,7 +1015,7 @@ check('reporting', 'R11: dry-run fixture remains deterministic in the last UTC m
 check('install', 'units mirror precedent, installer copies modules/noise and fake systemctl enables user timer', () => withHarness(async h => {
   h.env.USER_UNIT_CHECK = '/usr/bin/true';
   assert.ok(readdirSync(join(HERE, 'sources')).includes('fixture.mjs'));
-  assert.match(readFileSync(join(HERE, 'README.md'), 'utf8'), /Backlog, section 10414/);
+  assert.match(readFileSync(join(HERE, 'README.md'), 'utf8'), /Todo, section 4351/);
   const service = readFileSync(join(HERE, '../error-collector.service'), 'utf8');
   const timer = readFileSync(join(HERE, '../error-collector.timer'), 'utf8');
   assert.ok(service.match(/Environment="PATH=([^"]+)"/)[1].split(':').includes('%h/.local/lib/hypertask/runner-pickup'));
