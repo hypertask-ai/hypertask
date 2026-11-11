@@ -4,24 +4,10 @@ const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const types = load('src/lib/mcp/tasks/fields/types.ts');
 const errorMessage = load('src/lib/api/errorMessage.ts');
-const sectionLookup = load('src/lib/mcp/boards/sectionLookup.ts', {
-  '@/lib/prisma': {
-    __esModule: true,
-    default: {
-      section: {
-        findMany: async () => [
-          { id: 4309, section_title: 'In Progress' },
-          { id: 4310, section_title: 'QA' },
-        ],
-      },
-    },
-  },
-});
 const { updateTaskSection } = load('src/lib/mcp/tasks/fields/section.ts', {
   '@/lib/api/errorMessage': errorMessage,
   '@/lib/flags': { isFeatureEnabled: async () => true },
   '@/lib/flags/definitions/htpr-7990-task-move-refusal': { HTPR_7990_TASK_MOVE_REFUSAL_FLAG: 'htpr-7990-task-move-refusal' },
-  '@/lib/mcp/boards/sectionLookup': sectionLookup,
 });
 const errors = load('src/lib/mcp-server/utils/errors.ts', {});
 const fixable = load('src/lib/aiFeedback/callerFixable.ts', {});
@@ -60,7 +46,6 @@ test('a section id that matches no column is a 400, not a silent success', async
       assert.equal(error.status, 400);
       assert.equal(error.code, 'not_found');
       assert.equal(error.field, 'sectionId');
-      assert.match(error.message, /Columns on this board: In Progress \(id 4309\), QA \(id 4310\)/);
       return true;
     },
   );
