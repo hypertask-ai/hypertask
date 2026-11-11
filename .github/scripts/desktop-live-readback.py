@@ -39,6 +39,10 @@ def fail(message):
     raise SystemExit(1)
 
 
+def production_dispatch(ref):
+    return ref == "refs/heads/production"
+
+
 def mask(value):
     if value:
         print(f"::add-mask::{value}")
@@ -136,8 +140,13 @@ def self_check():
     missing = json.dumps({"success": False}).encode()
     if task_still_present(404, missing, "1"):
         fail("missing task counted as present")
+    if production_dispatch("refs/heads/runner-2/hyci-258"):
+        fail("branch dispatch was accepted")
+    if not production_dispatch("refs/heads/production"):
+        fail("production dispatch was refused")
+    print("PRODUCTION_REF_OK")
     print("CLEANUP_STATUS_OK")
-    env = os.environ.copy()
+    env = {key: os.environ[key] for key in CHILD_ENV_KEYS if key in os.environ}
     env["QA_LOGIN_EMAIL"] = ""
     env["QA_LOGIN_PASSWORD"] = ""
     proc = subprocess.run(
@@ -223,8 +232,8 @@ def main():
     password = os.environ.get("QA_LOGIN_PASSWORD", "")
     if not email or not password:
         fail("not tested: QA login is missing")
-    mask(email)
-    mask(password)
+    if not production_dispatch(os.environ.get("GITHUB_REF", "")):
+        fail("desktop readback runs only from production")
 
     status, headers, raw = request(
         "POST",
