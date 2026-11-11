@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import prisma from "@/lib/prisma";
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import hasTeamOwnerOrProjectAdminAccess from "@/utils/controllers/teams/hasTeamOwnerOrProjectAdminAccess";
 import {
   aggregateGatewayByModel,
@@ -129,8 +128,7 @@ const loadAiUsageBreakdown = async (
   teamId: string,
   startDate: string,
   endDate: string,
-  scopeProjectIds: number[] | undefined,
-  userId: number,
+  scopeProjectIds?: number[],
 ): Promise<AiUsageBreakdown | null> => {
   try {
     const where = {
@@ -183,10 +181,7 @@ const loadAiUsageBreakdown = async (
     );
     const [projects, tasks, agents] = await Promise.all([
       prisma.project.findMany({
-        where: {
-          id: { in: usageProjectIds },
-          AND: [projectContentAccessWhere(userId)],
-        },
+        where: { id: { in: usageProjectIds } },
         select: { id: true, title: true, name: true },
       }),
       prisma.task.findMany({
@@ -197,7 +192,6 @@ const loadAiUsageBreakdown = async (
             ...(scopeProjectIds
               ? { id: { in: scopeProjectIds } }
               : {}),
-            AND: [projectContentAccessWhere(userId)],
           },
         },
         select: { id: true, ticketNumber: true, title: true },
@@ -428,7 +422,6 @@ export async function GET(request: Request) {
       startDate,
       endDate,
       breakdownProjectIds,
-      user.id,
     );
     const [dailyReportResponse, modelReportResponse, tagReportResponse] =
       await Promise.all([

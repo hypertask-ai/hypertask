@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        const project = await prisma.project.findFirst({
-            where: { id: projectId, ...projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+        const project = await prisma.project.findUnique({
+            where: { id: projectId },
             select: { id: true, title: true, name: true, ownerId: true, stalenessEnabled: true },
         })
         if (!project) {

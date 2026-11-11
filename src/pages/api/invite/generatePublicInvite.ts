@@ -8,14 +8,12 @@ import { getInviteFromProjectId } from '@/utils/api/invite/generatePublicInviteC
 import { getProjectViewInclude } from '@/utils/controllers/projects/getAll';
 import { getViewFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFunctions';
 import { getSessionUser } from '@/lib/auth/getSessionUser';
-import { withAgentScopeRequest } from '@/lib/auth/agentScope';
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard';
-import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { unverifiedEmailAccount } from '@/lib/auth/unverifiedEmailAccount';
 
 
 
-async function handler(
+export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -29,10 +27,9 @@ async function handler(
         const projectId = parseInt(projectIdFromParam as string)
         if (!projectId) return res.status(400).json({message:"Missing required information"})
         if ((await unverifiedEmailAccount(session.userId)) !== "allowed") return res.status(403).json({ message: "Please confirm your email before inviting people." });
-        const project = await prisma.project.findFirst({
+        const project = await prisma.project.findUnique({
             where:{
-                id:projectId,
-                ...taskWriteAccessWhere(session.userId, session.agentId, session.teamScope),
+                id:projectId
             }
         })
         if (!projectId || !project) return res.status(400).json({message:"Missing required information"})
@@ -49,10 +46,9 @@ async function handler(
         const {projectId} = req.body
         if (!projectId) return res.status(400).json({message:"Missing required information"})
         if ((await unverifiedEmailAccount(session.userId)) !== "allowed") return res.status(403).json({ message: "Please confirm your email before inviting people." });
-        const project = await prisma.project.findFirst({
+        const project = await prisma.project.findUnique({
             where:{
-                id:projectId,
-                ...taskWriteAccessWhere(session.userId, session.agentId, session.teamScope),
+                id:projectId
             },
             include:{
                 project_view:getProjectViewInclude({currentUserId: session.userId}),
@@ -107,5 +103,3 @@ async function handler(
       return res.status(500).json(error)
   }
 }
-
-export default ((req: NextApiRequest, res: NextApiResponse) => withAgentScopeRequest(req, () => handler(req, res)))
