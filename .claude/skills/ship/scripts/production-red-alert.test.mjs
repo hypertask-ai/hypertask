@@ -670,7 +670,7 @@ test('green recovery reconciles saved intent on the active fleet board before cl
       return JSON.stringify({ tasks: [{ title, ticketNumber: 'HYCI-9999' }] });
     }
     assert.deepEqual(args.slice(0, 3), ['tasks', 'get', 'HYCI-9999']);
-    return JSON.stringify({ tasks: [{ description: marker }] });
+    return JSON.stringify({ tasks: [{ description: marker, ticketNumber: 'HYCI-9999' }] });
   });
   api.collect = async () => ({ status: 'success', run: { id: 2, html_url: 'https://example/green' } });
   api.identity = () => ({});
@@ -691,7 +691,7 @@ test('recovery refuses absent or ambiguous marker matches without a new alert', 
     const api = live((bin, args) => {
       assert.equal(bin, 'hypertask');
       if (args[1] === 'list') return JSON.stringify({ tasks: matches.map(ticketNumber => ({ title: 'saved', ticketNumber })) });
-      return JSON.stringify({ tasks: [{ description: matches.length === 1 ? 'wrong marker' : 'marker' }] });
+      return JSON.stringify({ tasks: [{ description: matches.length === 1 ? 'unrelated text' : 'marker', ticketNumber: matches[0] }] });
     });
     assert.throws(() => api.recover('saved', 'marker'), /outcome unknown/);
   }
