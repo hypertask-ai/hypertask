@@ -8,9 +8,14 @@ const pageRow = (overrides) => ({
   updatedAt: new Date('2026-11-10T00:00:00.000Z'), task: null, links: [], ...overrides,
 });
 
-function loadPageService({ indexRows = [], projects = [{ id: 15 }], findMany } = {}) {
-  const calls = { index: [], findMany: [], projects: [] };
+function loadPageService({ indexRows = [], projects = [{ id: 15 }], findMany, flagOn = true } = {}) {
+  const calls = { index: [], findMany: [], projects: [], flags: [] };
   const service = loadModule('src/utils/controllers/pages/pageService.ts', {
+    '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
+      calls.flags.push({ key, userId });
+      return flagOn;
+    } },
+    '@/lib/flags/definitions/htpr-9017-smart-page-search': { HTPR_9017_SMART_PAGE_SEARCH_FLAG: 'htpr-9017-smart-page-search' },
     '@/lib/prisma': { default: {
       page: { findMany: async (args) => {
         calls.findMany.push(args);
@@ -90,6 +95,15 @@ test("no query keeps today's list, one read, no index", async () => {
   assert.equal(calls.findMany[0].where.OR, undefined);
   assert.deepEqual(calls.findMany[0].orderBy, { updatedAt: 'desc' });
   assert.deepEqual(pages.map((page) => page.id), [3]);
+});
+
+test('the flag off keeps the pages screen on the literal match', async () => {
+  const { service, calls } = loadPageService({ flagOn: false, findMany: () => [pageRow({ id: 7 })] });
+  const pages = await service.listPages({ ...listArgs, query: 'pricing notes' });
+  assert.deepEqual(calls.index, []);
+  assert.deepEqual(calls.flags, [{ key: 'htpr-9017-smart-page-search', userId: 985 }]);
+  assert.equal(calls.findMany.length, 1);
+  assert.deepEqual(pages.map((page) => page.id), [7]);
 });
 
 test('an agent without a viewer keeps the literal match on the pages screen', async () => {

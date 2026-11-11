@@ -2,6 +2,8 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { Prisma } from '@prisma/client'
 
 import prisma from '@/lib/prisma'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_9017_SMART_PAGE_SEARCH_FLAG } from '@/lib/flags/definitions/htpr-9017-smart-page-search'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
   convertToPlain,
@@ -404,7 +406,7 @@ export async function listPages({
     select: listSelect,
     orderBy: { updatedAt: 'desc' },
   })
-  const rankedIds = userId === undefined
+  const rankedIds = userId === undefined || !await isFeatureEnabled(HTPR_9017_SMART_PAGE_SEARCH_FLAG, userId)
     ? []
     : await indexedPageIds(trimmedQuery, await indexedProjectIds(projectId, userId, agentId, teamScope), userId)
   if (rankedIds.length === 0) return toListed(literalMatches)
