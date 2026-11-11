@@ -554,6 +554,27 @@ test('Board hygiene leaves Manage Tags unchanged', async ({ page }, testInfo) =>
   expect(await modal.locator('.modal-content').boundingBox()).toEqual(before)
 })
 
+test('agent sign-in keeps one readable mark in each painted theme', async ({ page, baseURL }) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  if (!baseURL) throw new Error('Smoke base URL is required')
+  await page.route('**/api/flags*', async (route) => {
+    const response = await route.fetch()
+    const json = await response.json() as { flags?: Record<string, boolean> }
+    if (json.flags) json.flags['htpr-7552-agent-code-signin'] = true
+    await route.fulfill({ response, json })
+  })
+  for (const theme of ['porcelain', 'amoled', 'graphite-2']) {
+    await page.context().addCookies([{ name: 'theme', value: theme, url: new URL(baseURL).origin }])
+    await page.goto('/cli-auth?agent=1', { waitUntil: 'load' })
+    await expect(page.getByRole('heading', { name: 'Sign in an agent' })).toBeVisible()
+    const mark = page.locator('img[alt="Hypertask logo"]:visible')
+    await expect(mark).toHaveCount(1)
+    await expect(mark).toHaveAttribute('src', theme === 'porcelain' ? /HTC_without_text/ : '/loginLogoMain.png')
+    await expect(mark).toHaveJSProperty('complete', true)
+    expect(await mark.evaluate((image) => image instanceof HTMLImageElement ? image.naturalWidth : 0)).toBeGreaterThan(0)
+  }
+})
+
 test('layout lock: board card hover keeps content and selection usable', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'Mobile', 'hover is a desktop interaction')
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string }

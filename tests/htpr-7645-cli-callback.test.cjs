@@ -18,7 +18,7 @@ const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
 }).outputText;
 const code = 'dummy code+&=?#/%';
 
-async function withPage(query, check, { agentCodeSignIn = false, theme = 'light', paintedDark = false } = {}) {
+async function withPage(query, check, { agentCodeSignIn = false, theme = 'light', paintedDark = false, hydrate = false } = {}) {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', {
     url: 'https://app.hypertask.ai/cli-auth',
   });
@@ -41,7 +41,7 @@ async function withPage(query, check, { agentCodeSignIn = false, theme = 'light'
     })) {
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
     }
-    if (paintedDark) dom.window.document.documentElement.classList.add('dark');
+    let serverRender = false;
     const mocks = {
       react: React,
       'next/navigation': {
@@ -58,9 +58,9 @@ async function withPage(query, check, { agentCodeSignIn = false, theme = 'light'
       'react-hot-toast': { toast: { success() {}, error: (message) => errors.push(message) } },
       '@/utils/undoActions/helperFuncs': { cn: (...values) => values.join(' ') },
       '@/assets/hypertaskLogoWhite.png': { __esModule: true, default: 'fixture.png' },
-      '@/assets/HTC_without_text.png': { __esModule: true, default: 'dark-mark.png' },
+      '@/assets/HTC_without_text.png': { __esModule: true, default: { src: 'dark-mark.png' } },
       '@/hooks/MultiPages/HTC/useDarkMode': {
-        __esModule: true, default: () => ({ effectiveTheme: theme }),
+        __esModule: true, default: () => ({ effectiveTheme: serverRender ? 'light' : theme }),
       },
       '@/lib/auth/safeReturnTo': {
         POST_CLI_NEXT_REDIRECT_KEY: 'fixture-next',
@@ -92,15 +92,29 @@ async function withPage(query, check, { agentCodeSignIn = false, theme = 'light'
         }) };
       },
     );
-    root = require('react-dom/client').createRoot(dom.window.document.getElementById('root'));
-    await React.act(async () => root.render(React.createElement(mod.exports.default)));
     const container = dom.window.document.getElementById('root');
+    let serverMarks;
+    if (hydrate) {
+      serverRender = true;
+      const serverHtml = require('react-dom/server').renderToString(React.createElement(mod.exports.default));
+      serverRender = false;
+      container.innerHTML = serverHtml;
+      serverMarks = [...container.querySelectorAll('img')].map((image) => image.outerHTML);
+    }
+    if (paintedDark) dom.window.document.documentElement.classList.add('dark');
+    await React.act(async () => {
+      if (hydrate) root = require('react-dom/client').hydrateRoot(container, React.createElement(mod.exports.default));
+      else {
+        root = require('react-dom/client').createRoot(container);
+        root.render(React.createElement(mod.exports.default));
+      }
+    });
     const click = async (label) => {
       const button = [...container.querySelectorAll('button')].find((item) => item.textContent === label);
       assert.ok(button, `missing button: ${label}`);
       await React.act(async () => button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
     };
-    await check({ container, click, minted, navigated, errors });
+    await check({ container, click, minted, navigated, errors, serverMarks });
   } finally {
     if (root) await React.act(async () => root.unmount());
     for (const [key, descriptor] of previous) {
@@ -183,18 +197,23 @@ test('agent-page repair leaves legacy and flag-off sign-in unchanged', async () 
   }
 });
 
-test('flagged agent page uses the light mark when the page is already painted dark', async () => {
-  await withPage('agent=1', async ({ container }) => {
-    assert.equal(container.querySelector('img').getAttribute('src'), '/loginLogoMain.png');
-  }, { agentCodeSignIn: true, theme: 'light', paintedDark: true });
+test('agent marks survive light server markup hydrating against a dark browser theme', async () => {
+  await withPage('agent=1', async ({ container, serverMarks }) => {
+    const marks = [...container.querySelectorAll('img')];
+    assert.deepEqual(marks.map((mark) => mark.outerHTML), serverMarks);
+    assert.deepEqual(marks.map((mark) => mark.getAttribute('src')), ['dark-mark.png', '/loginLogoMain.png']);
+    assert.ok(marks[0].classList.contains('dark:hidden'));
+    assert.ok(marks[1].classList.contains('hidden'));
+    assert.ok(marks[1].classList.contains('dark:block'));
+  }, { agentCodeSignIn: true, theme: 'dark', paintedDark: true, hydrate: true });
 });
 
 test('flagged agent page uses theme marks and 4px cards, fields, buttons and links', async () => {
-  for (const [theme, src] of [['light', 'dark-mark.png'], ['dark', '/loginLogoMain.png']]) {
+  for (const theme of ['light', 'dark']) {
     await withPage('agent=1', async ({ container, click, minted }) => {
       assert.match(container.textContent, /Sign in an agent/);
       const mark = container.querySelector('img');
-      assert.equal(mark.getAttribute('src'), src);
+      assert.equal(mark.getAttribute('src'), 'dark-mark.png');
       assert.equal(mark.getAttribute('width'), '47');
       assert.equal(mark.getAttribute('height'), '59');
       assert.ok(mark.parentElement.parentElement.classList.contains('rounded-[4px]'));
