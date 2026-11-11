@@ -11,6 +11,8 @@ import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/utils/undoActions/helperFuncs';
 import logo from '@/assets/hypertaskLogoWhite.png';
+import darkMark from '@/assets/HTC_without_text.png';
+import useDarkMode from '@/hooks/MultiPages/HTC/useDarkMode';
 import {
   POST_CLI_NEXT_REDIRECT_KEY,
   parseSafePostCliRedirect,
@@ -41,11 +43,12 @@ function CliAuthShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CliAuthCard({ children }: { children: React.ReactNode }) {
+function CliAuthCard({ children, agentSignIn = false }: { children: React.ReactNode; agentSignIn?: boolean }) {
   return (
     <div
       className={cn(
-        'w-full max-w-md rounded px-8 py-8 sm:py-10',
+        'w-full max-w-md px-8 py-8 sm:py-10',
+        agentSignIn ? 'rounded-[4px]' : 'rounded',
         'border border-border-light-gray-thin bg-pageBackground shadow-lg'
       )}
     >
@@ -60,12 +63,14 @@ function CopyableField({
   value,
   copyLabel,
   description,
+  agentSignIn = false,
 }: {
   id: string;
   label: string;
   value: string;
   copyLabel: string;
   description?: string;
+  agentSignIn?: boolean;
 }) {
   const onCopy = async () => {
     try {
@@ -93,7 +98,8 @@ function CopyableField({
           value={value}
           aria-describedby={description ? `${id}-description` : undefined}
           className={cn(
-            'flex-1 min-w-0 rounded border border-border-light-gray-thin',
+            'flex-1 min-w-0 border border-border-light-gray-thin',
+            agentSignIn ? 'rounded-[4px]' : 'rounded',
             'bg-comment-description px-3 py-2.5 text-meta sm:text-content text-white-black font-mono',
             'focus:outline-none focus:border-border-light-gray-thin',
             'select-all'
@@ -102,7 +108,10 @@ function CopyableField({
         <button
           type="button"
           onClick={onCopy}
-          className="shrink-0 rounded border border-border-light-gray-thin px-3 py-2.5 text-content text-white-black hover:bg-hover-active transition-colors"
+          className={cn(
+            "shrink-0 border border-border-light-gray-thin px-3 py-2.5 text-content text-white-black hover:bg-hover-active transition-colors",
+            agentSignIn ? "rounded-[4px]" : "rounded"
+          )}
         >
           <Copy className="text-white-black" size={16} strokeWidth={1.75} />
         </button>
@@ -115,7 +124,7 @@ function CliAuthContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const currentUser = useCurrentUser();
-  const agentCodeSignIn = useFlag('htpr-7552-agent-code-signin');
+  const agentCodeSignInEnabled = useFlag('htpr-7552-agent-code-signin');
   const [step, setStep] = useState<CliStep>('consent');
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState<ConnectedPayload | null>(null);
@@ -206,7 +215,7 @@ function CliAuthContent() {
     }
   };
 
-  if (agentCodeSignIn && searchParams?.get('agent') === '1') return <AgentSignIn />;
+  if (agentCodeSignInEnabled && searchParams?.get('agent') === '1') return <AgentSignIn />;
 
   if (!currentUser) {
     return (
@@ -404,8 +413,8 @@ const resultSchema = z.object({
 });
 const startSchema = z.object({ id: z.string().uuid(), code: z.string(), expiresAt: z.string().datetime() });
 type Flow = z.infer<typeof resultSchema>;
-const PRIMARY = "w-full py-3 px-6 mb-3 bg-shadcn-primary text-primary-foreground font-medium rounded transition-colors";
-const SECONDARY = "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded transition-colors";
+const PRIMARY = "w-full py-3 px-6 mb-3 bg-shadcn-primary text-primary-foreground font-medium rounded-[4px] transition-colors";
+const SECONDARY = "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded-[4px] transition-colors";
 
 async function request(action: string, body: object): Promise<unknown> {
   const response = await fetch(`/api/cli/device/${action}`, {
@@ -416,6 +425,7 @@ async function request(action: string, body: object): Promise<unknown> {
 }
 
 function AgentSignIn() {
+  const { effectiveTheme } = useDarkMode();
   const [flow, setFlow] = useState<Flow | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -477,9 +487,9 @@ function AgentSignIn() {
   const expired = flow !== null && ["PENDING", "CLAIMED", "APPROVED", "EXPIRED"].includes(flow.state) && remaining === 0;
   return (
     <CliAuthShell>
-      <CliAuthCard>
+      <CliAuthCard agentSignIn>
         <div className="flex flex-col items-center text-center">
-          <Image src={logo} alt="Hypertask logo" width={48} height={48} className="object-contain mb-3" />
+          <Image src={effectiveTheme === 'dark' ? '/loginLogoMain.png' : darkMark} alt="Hypertask logo" width={47} height={59} className="object-contain mb-3" />
           <h1 className="text-heading font-semibold mb-2">Sign in an agent</h1>
           <p className="text-content text-text-light-gray mb-6">Create a free board for your agent.</p>
           {error && <p role="alert" className="text-content text-text-light-gray mb-4">{error}</p>}
@@ -495,8 +505,8 @@ function AgentSignIn() {
             </>
           ) : (
             <>
-              {code && <div className="w-full mb-4"><CopyableField id="agent-login-command" label="Run this with your agent" value={`hypertask login --code ${code}`} copyLabel="Sign-in command" /></div>}
-              <div className="w-full mb-4"><CopyableField id="agent-mcp-server" label="Or add this MCP server, then approve its new board" value="https://mcp.hypertask.ai/mcp" copyLabel="MCP server" /></div>
+              {code && <div className="w-full mb-4"><CopyableField agentSignIn id="agent-login-command" label="Run this with your agent" value={`hypertask login --code ${code}`} copyLabel="Sign-in command" /></div>}
+              <div className="w-full mb-4"><CopyableField agentSignIn id="agent-mcp-server" label="Or add this MCP server, then approve its new board" value="https://mcp.hypertask.ai/mcp" copyLabel="MCP server" /></div>
               <p className="text-meta text-text-light-gray mb-4" role="status">Expires in {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</p>
               {flow.state === "CLAIMED" ? (
                 <>
