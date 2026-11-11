@@ -5,7 +5,11 @@ const { createJiti } = require('jiti')
 
 const root = path.resolve(__dirname, '..')
 const pings = []
+const connections = []
+const publications = []
+const flagScopes = []
 let flagOn = true
+let flagModeScope
 
 function stub(filename, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
@@ -15,18 +19,21 @@ function source(file, exports) {
 }
 
 class FakeRedis {
-  constructor() { this.handlers = {} }
+  constructor() { this.handlers = {}; connections.push(this) }
   on(event, handler) { this.handlers[event] = handler; return this }
   async connect() {}
-  async subscribe() {}
-  async publish() { return 1 }
+  async subscribe(channel) { this.channel = channel }
+  async publish(channel, message) { publications.push({ channel, message }); return 1 }
   async ping() { pings.push(Date.now()); return 'PONG' }
   disconnect() {}
 }
 stub(require.resolve('ioredis'), { __esModule: true, default: FakeRedis })
 source('src/lib/flags.ts', {
   HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'htpr-7203-mcp-flat-schema',
-  isFeatureEnabled: async (key) => key === 'htpr-7220-legacy-sse-keepalive' && flagOn,
+  isFeatureEnabled: async (key) => {
+    flagScopes.push(flagModeScope.getStore())
+    return key === 'htpr-7220-legacy-sse-keepalive' && flagOn
+  },
 })
 source('src/lib/aiFeedback/automatic.ts', { observeFeedbackTools: (tools) => tools })
 source('src/lib/aiFeedback/clientInfo.ts', { rememberFeedbackClient: () => {} })
@@ -43,6 +50,8 @@ const jiti = createJiti(__filename, {
   alias: { '@': path.join(root, 'src') },
 })
 const { handleLegacySseRequest, LEGACY_SSE_KEEPALIVE_MS } = jiti(path.join(root, 'src/lib/mcp-server/legacy-sse.ts'))
+const { withFeatureFlagSnapshot, flagModeScope: modeScope } = jiti(path.join(root, 'src/lib/flags/modeCache.ts'))
+flagModeScope = modeScope
 
 async function openStream(t) {
   process.env.REDIS_URL = 'redis://fake'
@@ -97,4 +106,34 @@ test('with the flag off the stream stays as before', async (t) => {
   await tick()
   assert.doesNotMatch(stream.read(), /keepalive/)
   assert.equal(pings.length, 0)
+})
+
+test('each legacy relay message has a fresh agent flag snapshot outside the connection scope', async (t) => {
+  flagOn = true
+  let connectionScope
+  await withFeatureFlagSnapshot(async () => {
+    connectionScope = flagModeScope.getStore()
+    await openStream(t)
+  }, 'agent')
+  const subscriber = connections.at(-2)
+  const scopes = []
+  for (let id = 1; id <= 2; id++) {
+    flagScopes.length = 0
+    publications.length = 0
+    subscriber.handlers.message(subscriber.channel, JSON.stringify({
+      replyChannel: `reply-${id}`,
+      body: { jsonrpc: '2.0', id, method: 'tools/list' },
+      authInfo: { clientId: '985', token: 'test', scopes: [] },
+    }))
+    await tick()
+    assert.deepEqual(publications, [{ channel: `reply-${id}`, message: JSON.stringify({ status: 202, body: 'Accepted' }) }])
+    assert.ok(flagScopes.length > 0)
+    const scope = flagScopes[0]
+    assert.equal(scope.audience, 'agent')
+    assert.ok(flagScopes.every(entry => entry === scope))
+    assert.notEqual(scope, connectionScope)
+    scopes.push(scope)
+    assert.equal(flagModeScope.getStore(), undefined)
+  }
+  assert.notEqual(scopes[0], scopes[1])
 })
