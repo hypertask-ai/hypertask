@@ -4,16 +4,17 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext"
 import { useRecoilState, useSetRecoilState, useRecoilValue } from "@/lib/state"
 import { CommandMode } from "@/models/enums"
 import { IProject } from "@/models/model"
-import { boardLayoutAtom, kanbanRunningOnlyAtom, showCommandsAtom } from "@/store"
+import { boardLayoutAtom, kanbanRunningOnlyAtom, showCommandsAtom, tableSortAccountAtom } from "@/store"
 import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking"
 import {
   getActiveFiltersFromProject,
   getActiveSortingModeFromProject,
   getActiveSortingStackFromProject,
+  getActiveTableSortStackFromProject,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
 import { ArrowUpDown, Funnel, Layers, MoreHorizontal, Timer } from "lucide-react"
 import OptionPickerModal from "@/components/Modals/OptionPicker"
-import { useContext, useState } from "react"
+import { useContext, useEffect, useState } from "react"
 import { useKanbanModalStatesContext } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext"
 import { SaveView } from "./SaveViewHeaderKanban"
 import SearchFilter from "./SearchFilter"
@@ -26,6 +27,26 @@ import {
 } from "@/lib/table-view/tableGroupByTag"
 import Tooltip from "@/components/Common/Tooltip"
 import TableTagGroupPicker from "./TableTagGroupPicker"
+import { applyTableSortClick } from "@/lib/table-view/tableViewSettings"
+
+const SORT_OPTIONS = [
+  { key: "ticket", label: "Ticket" },
+  { key: "title", label: "Title" },
+  { key: "board", label: "Board" },
+  { key: "status", label: "Status" },
+  { key: "assignee", label: "Assignee" },
+  { key: "priority", label: "Priority" },
+  { key: "size", label: "Size" },
+  { key: "labels", label: "Labels" },
+  { key: "due", label: "Due" },
+  { key: "inColumn", label: "In column" },
+  { key: "noComment", label: "No comment" },
+  { key: "onBoard", label: "On board" },
+  { key: "time", label: "Time" },
+  { key: "created", label: "Created" },
+  { key: "updated", label: "Updated" },
+] as const
+const DESC_SORT = new Set<string>(["priority", "size", "time", "created", "updated", "inColumn", "noComment", "onBoard"])
 
 const ShellViewControls = ({ project }: { project: IProject }) => {
   const isMbl = useContext(MobileViewContext)
@@ -36,7 +57,11 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const boardLayout = useRecoilValue(boardLayoutAtom)
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes")
   const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled
-  const { setTableGroupByViewAndReturn } = useKanbanViews(project)
+  const { setTableGroupByViewAndReturn, setTableSortViewAndReturn } = useKanbanViews(project)
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns")
+  const sortAccount = useRecoilValue(tableSortAccountAtom)
+  const setSortAccount = useSetRecoilState(tableSortAccountAtom)
+  const [sortOpen, setSortOpen] = useState(false)
   const [groupOpen, setGroupOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const { timers: runningTimers } = useBoardRunningTimers(project.id)
@@ -44,10 +69,29 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const groupByLabel: Record<TableGroupBy, string> = { column: "Column", tag: "Tags", assignee: "Assignee", priority: "Priority", size: "Size" }
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
-  const hasActiveSort = getActiveSortingModeFromProject(project) !== "Manual"
-  const sortLevels = getActiveSortingStackFromProject(project).length + 1
+  const tableViewId =
+    project.project_view?.user_project_views?.[0]?.unsavedView?.id ??
+    project.project_view?.user_project_views?.[0]?.appliedView?.id ??
+    project.project_view?.default_view?.id
+  const tableSortMode = tableSortColumnsEnabled && boardLayout === "table"
+  const projectTableSort = getActiveTableSortStackFromProject(project)
+  const tableSort = tableSortMode && sortAccount && sortAccount.viewId === tableViewId
+    ? sortAccount.sort
+    : projectTableSort
+  const hasActiveSort = tableSortMode
+    ? tableSort.length > 0
+    : getActiveSortingModeFromProject(project) !== "Manual"
+  const sortLevels = tableSortMode
+    ? tableSort.length
+    : getActiveSortingStackFromProject(project).length + 1
+  useEffect(() => {
+    const open = () => setSortOpen(true)
+    window.addEventListener("htpr-8973-open-sort", open)
+    return () => window.removeEventListener("htpr-8973-open-sort", open)
+  }, [])
 
   if (isMbl) return null
+  if (tableSortColumnsEnabled && boardLayout === "table") getActiveTableSortStackFromProject(project)
 
   const openModal = (mode: CommandMode) =>
     setShowCommands({ show: true, mode })
@@ -68,11 +112,14 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
         <Funnel size={18} strokeWidth={1.75} />
       </ViewControlButton>
       <ViewControlButton
-        label="Sort board"
+        label={tableSortMode ? "Sort" : "Sort board"}
+        tooltipText={tableSortMode && tableSort.length
+          ? tableSort.map((level, index) => `${index + 1}. ${level.column} ${level.direction === "asc" ? "▲" : "▼"}`).join(", ")
+          : undefined}
         tooltipLeft={-72}
         active={hasActiveSort}
         keyCombination={["SHIFT", "S"]}
-        onClick={() => openModal(CommandMode.SortKanbanBoard)}
+        onClick={() => (tableSortColumnsEnabled && boardLayout === "table") ? setSortOpen(true) : openModal(CommandMode.SortKanbanBoard)}
       >
         <ArrowUpDown size={18} strokeWidth={1.75} />
         {sortLevels > 1 && (
@@ -81,6 +128,36 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
           </span>
         )}
       </ViewControlButton>
+      {sortOpen && tableViewId && (
+        <OptionPickerModal
+          header="Sort"
+          options={SORT_OPTIONS.filter((column) => column.key !== "time" || project.showTimeTotals).map((column) => {
+            const level = tableSort.findIndex((item) => item.column === column.key)
+            const active = tableSort[level]
+            return {
+              id: column.key,
+              label: column.label,
+              hint: active ? `${active.direction === "asc" ? "Ascending" : "Descending"}${level > 0 ? `, ${level + 1}` : ""}` : "Not sorted",
+              checked: Boolean(active),
+            }
+          })}
+          onSelect={(option) => {
+            if (typeof option.id !== "string") return
+            const column = option.id
+            const next = applyTableSortClick(
+              tableSort,
+              column,
+              false,
+              DESC_SORT.has(column) ? "desc" : "asc",
+              true,
+            )
+            setSortAccount({ viewId: tableViewId, sort: next })
+            void setTableSortViewAndReturn(project, next[0] ?? null, next)
+            setSortOpen(false)
+          }}
+          onClose={() => setSortOpen(false)}
+        />
+      )}
       {tableGroupByTagEnabled && boardLayout === "table" && (
         <>
           <ViewControlButton
@@ -178,6 +255,8 @@ export const ViewControlButton = ({
   expanded?: boolean
   className?: string
 }) => {
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns")
+  if (tableSortColumnsEnabled) label.trim()
   return (
   <button
     type="button"

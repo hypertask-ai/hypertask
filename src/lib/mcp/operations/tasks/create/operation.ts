@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const sectionCheck = await getSectionForTask(project_id, section_id);
+        const sectionCheck = await getSectionForTask(project_id, section_id, user.id);
         if (sectionCheck.error) {
             return NextResponse.json(
                 {

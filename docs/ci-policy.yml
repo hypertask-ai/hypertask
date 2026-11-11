@@ -450,7 +450,7 @@ on_demand_verify_qa:
   trigger: workflow_dispatch
   input_ref: head
   input_journey: journey
-  journeys: [inbox-cycle, inbox-cycle-broken]
+  journeys: [inbox-cycle, inbox-cycle-broken, hands-free-drives]
   helper: scripts/verify-qa
   runner: scripts/verify-qa-run.mjs
   runs_on: ubuntu-latest
@@ -480,6 +480,7 @@ ai_model_watch:
   cancel_in_progress: false
   commands:
     - node --test tests/model-diff.test.cjs
+    - node --test tests/model-watch-allowlist.test.cjs
     - node scripts/model-diff --json
     - node .github/scripts/ai-model-watch.cjs
   fixtures: offline_synthetic_no_secrets
@@ -488,6 +489,9 @@ ai_model_watch:
   ticket_secret: HYPERTASK_MCP_TOKEN
   optional_provider_secrets: [OPENAI_API_KEY, ANTHROPIC_API_KEY]
   deduplication: stable_title_search_and_idempotency_key
+  watchlist: .github/scripts/model-watch.allowlist.json
+  rollup_key: sorted_watched_model_set
+  premium_only_days_file_nothing: true
   fail_closed_on: [no_discovery_sources, failed_search, partial_search, malformed_search, truncated_search]
   premium_input_usd_per_million_tokens_over: 5
   premium_waits_for: HTPR-7746

@@ -1,0 +1,1217 @@
+{
+  "generatedAt": "2026-11-10T21:39:02.521Z",
+  "boardId": 15,
+  "source": "hypertask task list --project 15 --labels brain-* (Normal + Archive)",
+  "excluded": {
+    "createdOnOrAfter": "2026-11-10T00:00:00Z",
+    "reason": "The Task Writer brain tag shipped to board 15 testers on 2026-11-10. A brain label cannot be written without touching the task, so a task created and last updated before the cutoff carries a label that predates the writer."
+  },
+  "classes": [
+    "brain-light",
+    "brain-medium",
+    "brain-hard",
+    "brain-extra-hard"
+  ],
+  "cases": [
+    {
+      "id": "HTPR-7654",
+      "title": "CLI bug: comment add has no --kind, so agent comments never reach people",
+      "text": "Now Waiting on your yes to restore npm publishing access. Problem Agents that install the CLI from npm cannot post comments people see. The fixed version exists, but npm still serves the 11 October version. You approved the publish. Publishing access then failed twice. Fix Restore publishing access for the CLI package. Then we publish the prepared version 2.0.12 to npm. Then we install it fresh and post proof here. Done when A fresh npm install lets an agent post a comment people see. Proof is posted on this ticket. Risk Worst case: a bad version reaches new installs. Undo: we publish a fixed version. Decision One Question in the comments below.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-7867",
+      "title": "Design: Modals and Ctrl+K cast a hard pure-black offset shadow",
+      "text": "What the user sees When the Ctrl+K command menu or any shared modal opens, a heavy black halo spreads down and to the right of it. On the light theme the page background samples at R=250. Ten pixels outside the right and bottom edges it drops to R=126, while ten pixels outside the left edge it is R=180, so the shadow is lopsided and much darker than the rest of the interface. Screens: command menu over the ticket detail page (command-menu.png, ticket-default.png). The attached annotated image marks the halo. Rules it breaks VERCEL-design-01: \"Layer shadows (ambient plus direct, at least two layers).\" This is a single unlayered layer of rgb(0,0,0). EMIL-comp-04: \"Agents often pick a solid border where a semi-transparent shadow belongs. Flag that pattern.\" The shadow colour is fully opaque black. Where (production) CommonModalComponents/index.tsx:63 applies both customshadow-4 and shadow-customshadow-2 to the modal. globals.scss:218-219 defines .customshadow-4 { box-shadow: 12px 12px...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-7868",
+      "title": "Design: Due date and Task size show an orphan dash when empty",
+      "text": "What the user sees In the ticket detail side panel, an empty Due date and an empty Task size each show a bare \"-\". The rows around them say \"No Priority\", \"No tags\" and \"No agents\", so these two rows read as broken or loading rather than empty. Screens: ticket detail page (board-default.png, ticket-*.png) and the new task modal (modal-new-task-light-porcelain.png). The attached crop shows both dashes beside \"No Priority\" and \"No tags\". Rules it breaks EMIL-data-12: \"When an optional field is missing, don't show an orphaned \"—\" or an empty line.\" VERCEL-copy-06: \"Keep nouns consistent, with as few unique terms as possible.\" The same empty state is written two different ways in one panel. Where (production) TaskInfo.tsx:451 renders \"-\" for an empty due date. TaskInfo.tsx:637 renders : \"-\") ?? \"-\" for an empty size. For comparison, the neighbouring empty states are at TaskInfo.tsx:602 (\"No Priority\") and TaskInfo.tsx:679 (\"No tags\"). Not traced yet: the new task modal's copy of these two...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-7869",
+      "title": "Design: Ctrl+K menu shows a build stamp to every user",
+      "text": "What the user sees Every time the Ctrl+K command menu opens, a line such as \"v a917da6 · 24 Oct 21:34\" appears under the navigate / select / close hint bar. Every user sees it, on every open. It is internal build information sitting in the most-used surface of the product. Screens: command menu (command-menu.png, ticket-*.png). The attached crop shows the menu footer. Rule it breaks EMIL-apple-12: \"Simplicity through hierarchy (order, spacing, contrast). Show the common path first and advanced options one level deeper.\" Where (production) commands.tsx:840-842 renders the data-cmdk-version div. commands.tsx:180-184 builds the id and time from NEXT_PUBLIC_BUILD_ID and NEXT_PUBLIC_BUILD_TIME . Acceptance The solution needs Valentin's review before work starts. Any fix passes CI, visual regression and the layout lock, adds no new visible chrome and does not raise the lint baseline. Filed by Design Lead from the design audit of real demo-board screenshots (1280×800). Line numbers checked...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-7870",
+      "title": "Design: Appearance settings repeat the 'Appearance' heading twice",
+      "text": "What the user sees On Settings, Appearance, the page heading \"Appearance\" sits directly above a card labelled \"APPEARANCE\". The second label adds no information and pushes the theme list down. Screen: settings appearance page (settings-appearance-default.png). The attached crop shows both labels. Rule it breaks VERCEL-copy-03: \"Be clear and concise.\" Where (production) AppearanceSection.tsx:48-49 : SettingsSectionShell title=\"Appearance\" wraps SettingsCard title=\"Appearance\" . Not checked yet: whether SettingsCard supports having no title. Acceptance The solution needs Valentin's review before work starts. Any fix passes CI, visual regression and the layout lock, adds no new visible chrome and does not raise the lint baseline. Filed by Design Lead from the design audit of real demo-board screenshots (1280×800). Line numbers checked on branch production on 25 Oct 2026. This is a problem report only.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-7875",
+      "title": "[IMPROVE] Agent comments show: CLI comment add takes --kind, toolkit sends it",
+      "text": "Agents look silent because their comments land in the hidden agent log. Server rule: an agent comment with no kind (question, qa, done), no reply id, no person mention and no image goes to the hidden log when HTPR_7341 is on (src/lib/mcp/operations/comments/agentChatterRouting.ts, operation.ts:905). CLI 2.0.10 comment add has no --kind option, and agent-toolkit posts {ticket_number, text, reply_to_comment_id} with text prefixes only (adapters/hypertask/adapter.sh:1110-1119). Do: 1. Add --kind question|qa|done to hypertask comment add (repo hypertask-ai/cli) and list it in capabilities --json . 2. Map the toolkit's Question:/Done:/Handoff: prefixes onto kind, then delete the prefix contract. 3. Contract test: a CLI comment with --kind done is visible on the ticket. Proof: live comment posted via CLI shows in the ticket thread, not the log. First check whether HTPR_7341 is on in prod. Flag: none (CLI option, additive). Everyone: yes. @HT Product Lead FYI, this explains silent agents....",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-7927",
+      "title": "Plans: Pro is sold on AI and integrations, not boards or tickets",
+      "text": "Why. Valentin chose a generous Free plan (2026-10-25): no board or ticket limits on Free. So Pro is sold on more AI and integrations, not on boards or tickets. Change. Update the in-app plan list copy in src/lib/subscriptionPlans.ts and the trial plan modal so Free shows unlimited boards and tickets, 25 MB per file / 2 GB storage, and a small AI allowance; Pro leads with more AI and integrations. No dollar amounts for AI (per HTPR-7919 ). Related: HTPR-7686 . Note. The public hypertask.ai pricing site is separate and owned elsewhere. It must say the same thing; this ticket only covers the app. Done when. Plan list and trial modal in the app show the new Free and Pro wording, with no board/ticket limits and no AI dollar amounts. Wording matches the other Free-plan tickets. Undo. Revert the PR (copy only). Small PR. One copy-only PR.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-7955",
+      "title": "Remove fast model ids from agent setup",
+      "text": "Goal: No fast model ids in agent setup. Done when: No fast ids left. Tests pass. Risk: Sync could undo the hand fix. Undo: Restore from backup. Links: HTPR-7951 · spec in agent lane",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8055",
+      "title": "Floating AI chat window uses the same shadow token as Ctrl+J",
+      "text": "Problem: the floating AI chat has a different shadow than Ctrl+J. Valentin, 2026-10-27: \"these shadows are now different, you changed the shadow of the ctrl+j but the floating ai chat doesn't have the same shadow\" Neither panel uses a shared shadow. A change to one never reaches the other. The floating chat has a very large dark halo. Fix: one shared shadow for floating panels. Use the Ctrl+J shadow as the master. Floating chat and Ctrl+J both use it. Change it once, both panels change. The phone chat sheet stays as it is today, with no shadow. Other shadows are not touched here. Done when: In every theme, both panels have the same shadow. Before and after screenshots with both panels open, in dark and AMOLED. The phone chat sheet looks exactly as before. Risk: the chat looks flatter. Undo: switch it off. Switch: https://app.hypertask.ai/admin/flags/htpr-8055-floating-elevation Themes: Light, AMOLED, Graphite 2 only (Valentin, 2026-11-01).",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8261",
+      "title": "AI chat: mic left of Send, no sparkle",
+      "text": "Goal. Floating and sidebar AI chat match approved cleanup. Graphite 2 only. Design. Floating Multi-window Collapsed Sidebar Floating listening Sidebar listening Current floating, reference Current sidebar, reference Change. Mic icon button sits left of Send. Send is a text button. Same style as Ctrl+J v4 and task page. Listening: Dictation / active pill replaces mic. Pill component . No shortcut rows in chat. Shortcuts show only in hover tooltips. Several chat windows can stay open. Rule, whole board. No sparkle icon anywhere. No purple anywhere. No AI marker or badge. Collapsed chats show title only, no icon. Everything is AI now. No badge needed. Dictation. Ctrl Shift D only. No dictate and improve. Done when. Live chat matches frames. Screenshots side by side. No sparkle or purple left. Tests green. Themes: Light, AMOLED, Graphite 2 only (Valentin, 2026-11-01). Setting. Flag htpr-8261-chat-cleanup . On for everyone. Off brings the arrow back.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8263",
+      "title": "Full-screen AI chat: mic left of Send, no sparkle",
+      "text": "Goal. Full-screen AI chat matches approved cleanup. Graphite 2 only. Today. Live full-screen chat . Sparkle in header. Paper plane send. Mic chevron. Shortcut in placeholder. Round pills. Change. Header: title only. No sparkle, no purple. Mic icon button sits left of Send. Send is a text button. Paper plane gone. Mic chevron removed everywhere. Nobody uses it. Placeholder: \"Ask anything, @ for context\". Ctrl Q moves to input tooltip. Attach, @ and model picker stay quiet. Radius 4 max. Bubbles, buttons, rows, chips. Tooltips in words. Example: Dictate · Ctrl Shift D. Listening: Dictation pill replaces mic. New chat: four square suggestion chips. Chat list: 16 padding, 29px rows. Chat list: 8 gap rows, 16 between groups. Design links. Current, reference Cleanup New chat Listening Notes Done when. No sparkle or purple left. Mic sits left of Send. No paper plane. No shortcut text outside tooltips. Radius 4 max everywhere. Chat list spacing matches frames. Related: HTPR-8261. Themes:...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8553",
+      "title": "Remove feature flag htpr-7271-saved-work-events",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7271-saved-work-events Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8554",
+      "title": "Remove feature flag htpr-7272-payment-login-agent-events",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7272-payment-login-agent-events Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8555",
+      "title": "Remove feature flag htpr-7273-column-events",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7273-column-events Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8556",
+      "title": "Remove feature flag htpr-7278-memory-only-tracking",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7278-memory-only-tracking Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8557",
+      "title": "Remove feature flag htpr-7284-activation-completed",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7284-activation-completed Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8558",
+      "title": "Remove feature flag htpr-7293-activation-metric-v1",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7293-activation-metric-v1 Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8559",
+      "title": "Remove feature flag htpr-7294-funnel-probe-category",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7294-funnel-probe-category Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8624",
+      "title": "Clear all filters does not clear the filters on a board view",
+      "text": "clear all filters doesn't work Valentin, 2026-11-04, on board view https://app.hypertask.ai/project?id=339&view=default Now He adds filters on a board view. He picks Clear all filters. The filters stay on. Problem He cannot get back to the full board. He cannot build a clean view, like a stale-only view. Fix Clear all filters removes every filter on the board view. The board shows all tickets again. Check the board, table and calendar views. Done when Add two filters, pick Clear all filters, every ticket shows. A test covers it. Live check on board 339, before and after screenshots. Risk : low. Undo: roll back the change. Decision : none.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8628",
+      "title": "Board column header scrolls away instead of staying pinned",
+      "text": "column header used to be sticky now scrolls away pls fix Valentin, 2026-11-04, on a client board view. Reproduce on any board with a long column. Now He scrolls down a board column. The column name and count scroll away with the cards. It used to stay at the top. Problem In a long column he loses which column he is in. Something that used to work broke. Fix The column header stays pinned at the top while its cards scroll. Every column, every board view. Done when Scroll a long column: its header stays visible. Light, AMOLED and Graphite 2 checked. Live before and after screenshots on this ticket. A test covers it. Risk : low. Undo: roll back the change. Decision : none. Release: Only Me + QA",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8629",
+      "title": "Hovering a board card shifts its text to the right",
+      "text": "mouse over on a card now indents the whole text to the right ... it should not indent the text like this Valentin, 2026-11-04, on a client board. Reproduce on any board. Now He moves the mouse over a board card. The whole card text shifts right, about 16px. Ticket id, title, tags and stale line all move. The text jumps back when the mouse leaves. Problem Cards jump while he scans the board. Something that used to work broke. Fix Hover changes only the card's look, never its layout. Text stays where it is. Done when Hover a card: no text moves, measured in a before and after screenshot. Check cards with and without a parent line and an inbox badge. Light, AMOLED and Graphite 2 checked. A test covers it. Risk : low. Undo: roll back the change. Decision : none. Release switch",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8716",
+      "title": "[BUG] Pressing N on the board opens quick add in the wrong column, not the focused column",
+      "text": "Pressing N on the board opens quick add in a different column than the one with keyboard focus. Reported as a big bug. Problem Focus is in the left column, but the new ticket box opens in a middle column. The note says \"random color\", which is read here as random column (to confirm). Screenshot: https://screencast2.com/u6kSp.png Expected and actual Expected: N opens the quick add box in the column with keyboard focus. Actual: it opens in a column in the middle of the board. Requirements Proposed: N uses the focused column when keyboard focus is set. Proposed: if the pointer is over a column, check which wins. HTPR-8265 made N follow the column under the pointer, so this may be the cause. C still opens the full editor. Done when With focus in the far-left column, N opens quick add in that column, checked live on desktop. The same check passes with focus in a middle and a far-right column. A test checks the target column for N. Related HTPR-8265 , builds on. Quick add follows the column...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8766",
+      "title": "Remove feature flag htpr-7096-quiet-owner-inbox",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7096-quiet-owner-inbox Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8767",
+      "title": "Remove feature flag htpr-7122-agent-reactions",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7122-agent-reactions Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8768",
+      "title": "Remove feature flag htpr-7195-ai-feedback",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7195-ai-feedback Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8769",
+      "title": "Remove feature flag htpr-6551-quiet-run-activity",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6551-quiet-run-activity Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8770",
+      "title": "Remove feature flag htpr-6964-flags-page-type-search",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6964-flags-page-type-search Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8771",
+      "title": "Remove feature flag htpr-7058-flags-page-url-filters",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7058-flags-page-url-filters Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8772",
+      "title": "Remove feature flag htpr-7069-flags-dropdown-filters",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7069-flags-dropdown-filters Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8773",
+      "title": "Remove feature flag htpr-7367-server-description-first",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7367-server-description-first Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8774",
+      "title": "Remove feature flag htpr-7133-mcp-ratelimit-fast",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7133-mcp-ratelimit-fast Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8775",
+      "title": "Remove feature flag htpr-6934-server-first-screen",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6934-server-first-screen Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8825",
+      "title": "An agent's MCP call to hypertask_views failed (5 Nov)",
+      "text": "What happened : An agent's MCP call to hypertask_views failed. Who hit it : an agent owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: mcp Tool: hypertask_views HTTP status: 400 Error code: tool-exception Category: call_failed Fingerprint: ai-fb-963ae80fe8bc Last seen: 2026-11-05T21:36:11.919Z Reporting display names: Valentin Yeo Clients:",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8831",
+      "title": "Agent feedback, friction: Activity add requires positional text while native help...",
+      "text": "What happened : An agent's CLI call to activity.add had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: activity.add Category: other Kind: friction Note: Activity add requires positional text while native help advertises a text flag Fingerprint: ai-fb-17cda270970d Last seen: 2026-11-05T23:09:49.729Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8834",
+      "title": "Agent feedback, bug: Agent activity requires positional text but CLI help...",
+      "text": "What happened : An agent's CLI call to ceo-ht.activity.add had a problem. Who hit it : Multi Bot Runner H, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: ceo-ht.activity.add Category: other Kind: bug Note: Agent activity requires positional text but CLI help suggests a text option. Runner H also lacks access to Fleet CI for filing its CI blocker. Fingerprint: ai-fb-5b2ad35991d7 Last seen: 2026-11-05T23:27:53.626Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8835",
+      "title": "Agent feedback, friction: Agent notes reject the documented text option.",
+      "text": "What happened : An agent's CLI call to ceo-ht.activity.add had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: ceo-ht.activity.add Category: other Kind: friction Note: Agent notes reject the documented text option. Fingerprint: ai-fb-8d90af5b88b0 Last seen: 2026-11-05T23:30:38.369Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8837",
+      "title": "Board view tabs: wrapped rows sit 24px apart, bring back 9px",
+      "text": "Goal. Board view tabs that wrap to a second line sit close again. this distance is too much now this was way less beofre the line break between the lines is too much space when the splitz break over in the second line yes file ticket Valentin, chat, 2026-11-06. Problem. The Kanban cleanup set one 24px gap for both directions. So wrapped tab rows now sit 24px apart. Before the cleanup they sat 9px apart. Fix. Rows of tabs: 9px apart, like before. Space between tabs in one row: unchanged. Done when. Wrapped tabs sit 9px apart, side by side with the attached picture. Light, AMOLED and Graphite 2 each checked. Flag. htpr-8255-kanban-cleanup. Only the cleanup layout changes. Attached: live today and the fix.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8838",
+      "title": "Agent feedback, friction: Activity wrapper rejects the native documented text option;...",
+      "text": "What happened : An agent's CLI call to ceo-ht.activity-add had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: ceo-ht.activity-add Category: other Kind: friction Note: Activity wrapper rejects the native documented text option; positional text works. Fingerprint: ai-fb-77155fc305c8 Last seen: 2026-11-05T23:44:56.599Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8849",
+      "title": "Remove feature flag htpr-7076-prompt-cache",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-7076-prompt-cache Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8850",
+      "title": "Remove feature flag htpr-6422-my-tasks-views",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6422-my-tasks-views Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8851",
+      "title": "Remove feature flag htpr-6444-my-tasks-bulk-selection",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6444-my-tasks-bulk-selection Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8852",
+      "title": "Remove feature flag htpr-6447-my-tasks-filter-parity",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6447-my-tasks-filter-parity Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8853",
+      "title": "Remove feature flag htpr-6456-my-tasks-table-columns",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6456-my-tasks-table-columns Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8854",
+      "title": "Remove feature flag htpr-6457-my-tasks-scopes",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6457-my-tasks-scopes Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8855",
+      "title": "Remove feature flag htpr-6459-my-tasks-overdue-badges",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6459-my-tasks-overdue-badges Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8856",
+      "title": "Remove feature flag htpr-6460-my-tasks-quick-add",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6460-my-tasks-quick-add Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8858",
+      "title": "Remove feature flag htpr-6938-my-tasks-icon-controls",
+      "text": "Keep this released change. Remove its safety switch. Switch: htpr-6938-my-tasks-icon-controls Live for Everyone since 2026-10-19. Live for more than 14 days. Keep enabled behaviour. Remove the switch and unused alternative. Remove its saved setting too. Need to keep it? Choose Keep on the flags page .",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8880",
+      "title": "Agent feedback, friction: ceo-ht task link help omits accepted relationship names....",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : MP Runner 1, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: ceo-ht task link help omits accepted relationship names. ceo-ht activity add forwards to vcc, requiring positional text and ticket key, unlike hypertask help documenting --text. Please align wrapper help and arguments. Feedback tool names also reject exact commands containing spaces. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8886",
+      "title": "[BUGFIX] Infra runner work holds app runners 1 and 3",
+      "text": "Now Runners 1 and 3 sit idle all the time. Problem The claim check reads infra runner work as theirs. So it holds them on work they do not own. Fix Only branches that start with their own runner name count. Done when Infra work never holds an app runner. Runners 1 and 3 take tickets again. Risk Low. A runner could start a second ticket by mistake. Undo: roll the change back. Decision None needed.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8902",
+      "title": "Cloud agent PRs stop runners from picking tickets",
+      "text": "Now Runners stop picking new tickets when more than 20 PRs are open. Problem Cursor cloud agents now open PRs on purpose, as planned intake. Their PRs count toward the 20, so local runners sit idle. Valentin, 2026-11-07: The PRQ is supposed to be over 20 because we're using Cloud Runners to push stuff into PRs. Fix Cloud agent PRs (branches starting cursor/) no longer count toward the 20. Done when 25 open cloud PRs never stop a runner picking work. The runner test covers it. Risk Low. Undo: roll the change back. Decision None needed.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8937",
+      "title": "No-comments rule also covers the GitHub scripts and workflows",
+      "text": "What's wrong or wanted: The no-comments rule is not checked in automation scripts or workflow files. Who it affects: Internal only. 7 pull requests added comments there. Recommended course and why: Extend the check to those folders. Why: a rule without a check gets broken. What Valentin must decide: nothing. How to undo: Narrow the folder list back. Problem The repo rule says no explanatory comments. Runners still add them. 7 pull requests added comments in automation scripts and workflow files. The comment check skips those folders, so only a reviewer catches it. A rule with no check is just a wish. Valentin asked: how do we fix that this seems very important Evidence: https://github.com/hypertask-ai/hypertask/pull/3070#discussion_r4504459640 https://github.com/hypertask-ai/hypertask/pull/3070#discussion_r4504521756 https://github.com/hypertask-ai/hypertask/pull/3071#discussion_r4504621779 https://github.com/hypertask-ai/hypertask/pull/3073#discussion_r4505209327...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8942",
+      "title": "Retire stale test-tool docs and fix feature page shape",
+      "text": "What's wrong or wanted: Docs for retired test tools still read as current. Feature pages use odd shapes. Who it affects: Internal only. Runners follow these docs. Recommended course and why: Archive the stale docs. Convert pages with a script. Why: stale docs waste time. What Valentin must decide: nothing. How to undo: Restore the archived docs from history. Problem Docs for two retired test tools still read as current. Midscene flows are retired. E2B setup notes date from 2026-08-07. Runners can follow these and waste time. About 110 feature pages use their own shape, not the pstack standard. There is no local start and stop recipe that avoids production. Valentin asked: how do we fix that this seems very important Evidence: https://app.hypertask.ai/detail/project-15/8150 Full findings: https://yeoux.net/reports/c17d1a33-agent-findings.html Fix Archive the stale Midscene and E2B docs first. Convert feature pages to the pstack four-section shape. Add a \"Driving it\" block to each page....",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8943",
+      "title": "Ctrl+K: tabs on top, search box under them, no jump",
+      "text": "What's wrong or wanted: Ctrl+K tabs jump on every switch. Who it affects: everyone who opens Ctrl+K on desktop. Recommended course and why: Put the tabs on top in both modes. Put the search box under the tabs. Why: then the tabs never move. What Valentin must decide: nothing. He picks the Figma before the build. How to undo: switch the new flag off or revert the PR. Problem I think we did this wrong. The search bar needs to be under the search. When you click on new task, it basically jumps. It's really ugly. In Search, the search box sits above the tabs. In New Task, the tabs sit at the top. So the tabs move on every switch. Search today: https://screencast2.com/Bl284.png New Task today: https://screencast2.com/b1wpe.png The control j view is completely fine. But the control k view is broken. Goal The tabs stay in one place in both modes. Fix First a Figma with a clickable prototype. Search: tabs on top, search box under them, then the list. New Task stays as it is. Build after...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8947",
+      "title": "Ctrl+K: remove footer hints and version number",
+      "text": "What's wrong or wanted: Remove the Ctrl+K footer and version number. Who it affects: everyone who opens Ctrl+K. Recommended course and why: Delete the footer row. Why: it adds noise and nobody uses it. What Valentin must decide: nothing. How to undo: switch the new flag off. Problem We wanted to clean this up. Remove the footer note keyboard shortcuts. And the version number, nobody needs it. Today: https://screencast2.com/VHgys.png The footer shows navigate, select, close. Under it sits the version and date. Goal Ctrl+K ends with the last list item. Fix Remove the shortcut hints row. Remove the version line. Keep the version hidden for agents only. Done when Live Ctrl+K shows no footer. Proof is a live screenshot. Risk Small. Only the footer goes. Decision Nothing. Switch: https://app.hypertask.ai/admin/flags/htpr-8947-ctrlk-no-footer",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8950",
+      "title": "Create the board GitHub App and its production keys",
+      "text": "What's wrong or wanted: Connect GitHub works on every board now. No board can install the GitHub App it needs. Who it affects: every board outside 15. Also anyone who wants pull requests on tickets. Recommended course and why: Make the App on the hypertask-ai account. Then put its five keys into production. Why: the code is finished. This is the only step left. What Valentin must decide: Yes, make the App now. Keep its keys encrypted inside Hypertask only. How to undo: uninstall the App. Then remove the five values. Decision What this is: Connect GitHub already works on every board. It needs one GitHub App that we do not have yet. You are the only person with admin rights on hypertask-ai. Question: Make the board GitHub App now? My recommendation: Yes. Why: the code is live and waits on this one step. Yes: keep the keys encrypted inside Hypertask. No: boards outside 15 stay unconnected. Problem Pressing Install GitHub App answers \"GitHub is not configured\". No GitHub App exists on the...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8954",
+      "title": "Ctrl+K: filled search box like Ctrl+J, no lines",
+      "text": "What's wrong or wanted: Ctrl+K search box gets a filled colour. Who it affects: everyone who opens Ctrl+K. Recommended course and why: Use the Ctrl+J box colour, no lines. Why: both modes look the same. What Valentin must decide: nothing. He picked option A. How to undo: switch the new flag off. Problem Could we make the search bar a different color? Rather than separator lines. Like how the ctrl j is also different color. ctrl+k option a pls Goal The search box looks like the Ctrl+J text box. Fix Search box: filled, same colour as Ctrl+J. Inset like the Ctrl+J box, 4px corners. Remove the two thin lines around it. Picture: https://screencast2.com/MAjCR.png Figma: https://www.figma.com/design/9cIbA4mL8GsNkB7DrjUs69/?node-id=227-3 Done when Live Ctrl+K shows the filled box. No lines around the search box. Risk Small. Only the search row look changes. Decision Nothing. Valentin picked option A.",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-8958",
+      "title": "Figma: one design system file, one work file, pages named by ticket",
+      "text": "What's wrong or wanted: Figma files mix design system and ticket work. Who it affects: internal only. Designers and builders. Recommended course and why: Two files, clear jobs. Why: builders find the right values fast. What Valentin must decide: nothing. How to undo: old file stays, renamed, nothing deleted. Problem We have 1 design system file in Figma. And 1 file where all iterations go. 1 page per ticket named by the ticket. This file is both design system and iterations. That is a no no. Can you pls clean this up. Fix Design system file: https://www.figma.com/design/eHgq0QA9NJsySKNOSrCu5o Work file: https://www.figma.com/design/9cIbA4mL8GsNkB7DrjUs69 Old mixed file: https://www.figma.com/design/43FsaPNeNAzVNIe0Gakaan Move design system parts to the design system file. Move ticket work to the work file. Name every work page by its ticket. Mark the old file as moved. Done when The design system file holds only design system pages. Every work page starts with a ticket number. The old...",
+      "gold": "brain-light"
+    },
+    {
+      "id": "HTPR-7041",
+      "title": "Connect your agent card: show it as a dismissable overlay, not a block that pushes the board columns down",
+      "text": "The Connect your agent card from https://app.hypertask.ai/detail/project-15/7026 sits as a wide block above the board columns and pushes them down. Valentin wants an overlay the user can click away. His words, 2026-10-09: \"why would this not be an overlay that the user can click a way but an element ath sitt on top of the coluimns this is so odd i have nver seen this\". Screenshot: https://screencast2.com/3ne1N.png (onboarding video at 0:31, https://hypertask.app/explorations/76n8qse). Show the card as an overlay (a modal or a floating panel) on top of the board, so the columns keep their normal position. Clicking outside it, pressing Escape or Dismiss closes it; closing stays closed after a reload, as today. The live Waiting for your agent then Connected! states, the agent choices and the email stay unchanged. Reuse the app's existing modal or popover component; phone layout checked. Flag htpr-7026-agent-connect-check is on for Everyone, so this change needs the recorded pre-merge...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7328",
+      "title": "New rounded theme like ChatGPT and Grok: pill composer, round buttons, big corners",
+      "text": "Add a new theme next to Porcelain, Graphite, AMOLED and Dia that copies the shared look of today's chat apps: big round corners, pill buttons, floating round icon buttons, no hairline borders . Problem Valentin, 2026-10-18: \"I feel there's a common design language now between desktop and Android mobile and probably also iOS. And I think HyperTask is not using this common design language. Even superhuman has recently redesigned and I want to add a new theme to hyper task which essentially mirrors OpenAI ChatGPT style. So basically this rounder corner radius and also grok bot ... They also have this round corners everywhere. And I think the way we would establish this is as a theme.\" His screenshots (ChatGPT, Claude, Superhuman, WhatsApp on Android): https://screencast2.com/gNJv9.png https://screencast2.com/yL2yd.png https://screencast2.com/bWpdx.png https://screencast2.com/swMU8.png https://screencast2.com/OhS6c.png Decisions so far Valentin, 2026-10-18: \"yes agree go with matieral 3...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7507",
+      "title": "[SPEED] Desktop returning board: first paint waits for app code after the server board arrives",
+      "text": "Let the browser paint the server board before the app code runs on desktop for a returning user, with identical pixels, so the board median drops under 1000 ms. Problem The ready-made board HTML arrives at 0.3 to 0.6 s with all 28 cards in it. The browser first paints at 0.84 to 1.0 s , because the app's scripts run first and hold the first paint back. N=3 probe: document arrives 0.3 to 0.6 s, task 43 card in the DOM 0.36 to 0.63 s, first-contentful-paint 835, 843, 1007 ms. Harness run 1: desktop board-returning median 1079 ms (p90 1252, range 944 to 1252, N=5). Harness run 2: median 1098 ms (p90 1221, range 900 to 1221, N=5). Server board 5 of 5 in both runs. Milestone 1 desktop target is under 1000 ms. Limiter: script evaluation (long tasks from about 0.38 s) before the first paint. Measurement setup Measured 2026-10-21 on production ee3c49c3c, after HTPR-7406 . QA account 2343, board 6859 view=default, desktop 1440x900 unthrottled, fresh context with the saved board preference....",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7522",
+      "title": "Decide what skills (e.g. /deeper) should do in Ctrl+J and in comments",
+      "text": "Decide what a skill like /deeper should do in the Ctrl+J window and in comment fields. The output is a short written recommendation, not code. Problem Valentin's note asks how skills should work in Ctrl+J and in comments , and what they would do there. Related tickets cover pieces of this, but the intended behavior per surface is not settled in one place. Affected screen The Ctrl+J New Task window and the comment box on a task. Questions to answer In Ctrl+J, does a skill shape the written ticket, the AI chat that opens afterwards, or both? In a comment, does a skill run on the ticket, on the typed comment, or on both? Where does the result appear, and what does the user confirm before anything is saved or sent? Sources The real skill body of /deeper and one other skill, read from the skills system. Real tickets written through Ctrl+J and real comments that used a skill, not the welcome-screen suggestions. The final prompt sent to the model with and without the skill, from logs....",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7612",
+      "title": "Slash skills send comment context to sidebar chat",
+      "text": "Slash skills send comments to sidebar AI chat. Valentin: “upon completion of the forward slash skill name and enter, it would take the comment content, the ticket content, plus the skill content and give it to the AI chat sidebar as a prompt, and would give the answer to that prompt in the AI sidebar chat. Completely circumventing the Write with AI function inside the comments.” Original request . Yes: rebuild the wireframe . Wireframe acceptance Type a comment, then / and a skill. Enter sends comment, ticket and skill together. Existing sidebar opens and shows the answer. No inline AI writer opens for this flow. Comment remains an unposted draft. Reuse current desktop and phone controls. Existing AI button and global Ctrl+J remain separate. The earlier inline-writer sketch solved the wrong problem. Rebuild the clickable wireframe, post one approval Question, then wait. No product implementation before approval.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7679",
+      "title": "[FEATURE] Allowance-used message offers a Review AI options button",
+      "text": "When an AI feature says the team's allowance is used up, offer a one-click way to upgrade or add an AI key. Follow-up from https://app.hypertask.ai/detail/project-15/7658. Today AI features (Ctrl+J task writer, AI chat, mentions, reply suggestions, improve writing, voice notes) show plain text: \"This team has used its included AI allowance for this month. Upgrade or add your own AI key to continue.\" Nothing to click. The only button with a way forward is \"Review AI options\" in Settings, AI usage (src/components/Modals/Settings/AiUsageSection.tsx), which opens the AI keys settings. Idea Next to the allowance message, show the same \"Review AI options\" action (and maybe \"See plans\"), reusing that live button and the existing settings navigation. The server already sends the message, and the AI chat also sends the allowance period and team. Needs a wireframe and UX sign-off before any code. No allowance amounts or billing change.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7735",
+      "title": "Agent sessions get their own dropdown in the AI chat header",
+      "text": "Problem: agent sessions sit inside the normal chat dropdown. Valentin (2026-10-24): \"we need to abstract the agent sessions into its own drop down. So just add a little agent icon in the AI chat on the top right where the new chat icon is and the history icon. And then this will open a drop down which allows us to essentially select an agent. Does that make sense? Right now, the the... This session lives in the drop down that manages the cha...\" (his message was cut off here). Fix: agent sessions get their own dropdown. A small agent icon sits next to New chat and History. It opens a dropdown to pick an agent. You start or resume its session there. Agent sessions leave the regular chat dropdown. Done when: The icon shows in the AI chat header. Picking an agent starts or resumes its session. The regular dropdown shows only normal chats. Risk: low. Undo: switch the flag Off. Decision: needs Valentin's yes on a clickable wireframe before any code. Goes with...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7751",
+      "title": "Chat says which of your keys was rejected, not 'something went wrong'",
+      "text": "When a provider rejects a team's own key, the chat must say so. Found on HTPR-7729 (https://app.hypertask.ai/detail/project-15/7729): Valentin's DeepSeek chat showed \"Sorry, something went wrong while generating a response\". The real error from DeepSeek was \"Authentication Fails, your api key is invalid\" (production log 2026-10-24 11:25). Show: \"Your DeepSeek key was rejected. Update it in Settings, AI, Bring your own key.\" Use the provider's name. Same for every own-key provider (OpenAI, Claude, Google, DeepSeek, Moonshot, Z.ai, Alibaba, OpenRouter, custom, Baseten) on a 401 or 403. Never show the key or the provider's raw error text. Done when: a chat with a revoked own key shows that line live, on desktop and phone.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7779",
+      "title": "AI chat learns from repeated corrections and proposes a skill or memory rule by itself, per project and team",
+      "text": "Make the AI chat notice repeated instructions on a board and offer a skill or a memory rule, with evidence, without being asked. Nothing saves until the person confirms. Problem Skills are imported from GitHub or written by hand, and HTPR-7768 only covers the on-request path while listing \"creating skills without being asked, and background jobs that mine old sessions\" as out of scope. On the Hypertask Product board, Valentin corrected the chat five times on one workflow: one confirmation per bulk write instead of one per batch, a one-word answer is enough, no long confirmation sentence, ticket id next to the title, and a fix counts only when a live run proves it. That became the hand-written skill \"done column triage\". Nothing in the product noticed the repetition. Hypothesis If the chat counts repeated instructions per board and offers a skill or memory rule with quoted evidence once a threshold passes, then people will stop repeating the same corrections and more useful skills will...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7790",
+      "title": "Add board connectors so outside tools like Gmail and Calendar can feed events and tickets into a board",
+      "text": "Build a connectors framework that lets a board owner link external tools, starting with Gmail and Calendar, so their events and messages create or update tickets on that board. Problem Hypertask has no generic way to bring outside tools into a board. Today only a few one-off links exist (Slack, GitHub for board 15, Google Calendar behind a flag), so each new tool needs custom work. Requirements Connect from one place. A board owner picks a tool and links it to a specific board. Proposed entry point: Ctrl+K and board settings. First connectors: Gmail and Calendar. Other tools follow on the same framework. Inbound only at first. Events and messages create tickets on the chosen board. Two-way sync is out of scope. Per-board mapping. Each connection names its target board and column. Access. Only members of the board's team can connect or remove a connector. Add a \"still refused\" test for a non-member. Secrets. Use OAuth install flows and encrypt tokens at rest. No shared or hand-edited...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7811",
+      "title": "Shrink /ship guidance and move runner infra out of the product repo",
+      "text": "Problem: the /ship instructions are too big. Every agent reads about 74 KB of /ship guidance. Some rules are already enforced by checks or code. It also holds server runner setup that is not product work. Fix: a lean /ship set. Checks replace prose. Rules a tool can enforce become checks. The text goes. Rules the code already enforces are deleted. Runner setup moves out of the product repo. Proposed home: the agent worker repo, as in https://app.hypertask.ai/detail/project-15/5504 No rule is dropped unless a check or code covers it. The PR lists each removed rule and what covers it. Done when: Before and after sizes are posted on this ticket. Each rule moved to a check has a working check. No runner setup remains in the product repo. A test run of /ship still finishes end to end. Risk: a needed rule gets lost. Undo: revert. Decision: HT Product Lead owns /ship. Approval comes before merge. Related: https://app.hypertask.ai/detail/project-15/5702...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7848",
+      "title": "AI task summaries stop rerunning on every change",
+      "text": "Now Ready to build. Valentin filed this ticket, so it is his yes. Problem file it We pay for AI task summaries nobody needs. Summaries rerun on every new task, comment and activity. A Stripe checkout triggers a summary for every task. Fix Several events close together make one AI call. Nothing changed means no AI call. A Stripe checkout makes no summaries. A summary updates when someone opens the ticket. Done when Tests show one call for many quick events. Tests show zero calls when nothing changed. Tests show zero summaries after a Stripe checkout. Daily summary usage is reported before and after. Risk Summaries may update a little later. Undo: one switch puts the old behaviour back. Decision None. His own ticket is the yes. Build it behind a switch.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7850",
+      "title": "[INFRA] AI waste cut: label backfill skips unchanged tasks",
+      "text": "Problem: the AI label job wastes money. It re-checks up to 500 tasks at a time. That includes tasks already labelled and unchanged. Each re-check costs an AI call. Fix: skip a task if nothing changed since its last label. Agreed: no agent starts until Valentin says go. Done when: A test shows unchanged, labelled tasks cause zero AI calls. We report AI label usage before and after. Risk: a changed task is skipped by mistake. It is behind a flag. Undo: switch the flag off. Decision: Valentin's go to start. Label check switch",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7861",
+      "title": "[IMPROVEMENT] Chat system prompt: delete duplicate sections, fix wrong tool names, add prefix token budget to CI",
+      "text": "@HT Product Lead Measured (js-tiktoken cl100k proxy) chat stable prefix = 22,462 tokens: 4,525 system + 17,937 for 84 tools. Analysis: https://cursor.com/agents/bc-ca918a04-1beb-52b3-a727-527851bf4a44 What. In src/lib/ai/prompts/definitions.ts: replace section 4.1 (1103-1134) with 5 lines using the registered tool names (rag_retrieval, hypertask_list_tasks, hypertask_get_tasks, hypertask_get_comments_for_task; today it names tools that do not exist, causing extra steps). Delete the 4.2 write catalog (1137-1181) except the label-replace and confirmation rules. Delete preamble (1063), section 1 (1075-1078), section 3, final reminder (1224-1226), the duplicate filter-key list (1218-1221). Move 2.1 voice and 3.1 summary style into the comment/summary paths. Drop $schema from tool payloads (1,260 tokens) if the provider does not strip it, and use format: uuid instead of the UUID regex. Add chat-prefix-budget.mjs (from the analysis agent store) as a CI check failing when the prefix grows...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7876",
+      "title": "[IMPROVE] One agent onboarding path: move /setup-agents into the main repo or CLI",
+      "text": "agent-toolkit is not a product; fold its one generic piece into Hypertask. Seen: hypertask-ai/agent-toolkit is ~25k lines of private fleet ops, 0 stars/forks/outside PRs, 6 commits since 1 Oct. Fresh install runs 59 eval files for 11 min then exits 2 (pytest missing); PyYAML and /unlazy undeclared; clones private company-skills over SSH; no release tags; personal hardcodes (/home/valentin/projects/*). Do, deletions first: 1. Drop the toolkit's own queue ranking (server has task next ). 2. Move evals to CI only; install gets a 5 s smoke check. 3. Port /setup-agents to hypertask agents setup (CLI or main repo) with real error messages and declared deps. 4. Then archive or make private agent-toolkit (needs Valentin's go). Proof: a clean HOME sets up one agent in under 2 minutes with one command. Flag: none (setup tooling, no app change). Everyone: yes. @HT Product Lead FYI. Starts after the PR drain, through /ship.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7904",
+      "title": "Agents create their own identity from the CLI, MCP or API, with one-click owner approval",
+      "text": "@HT Product Lead filing this on Valentin's go (2026-10-25). Goal. Any agent that has the Hypertask CLI, MCP or API, signed in as a user, can create its own agent identity (name, repo, board, role) without the account management key. Flow. The agent runs one join command, for example hypertask agents join . The first time, the owner approves in the browser with one click, like a device-code sign-in. The owner can tick \"allow this tool to create more agents\" so later joins need no click. This grant is revocable in settings. Join is idempotent. The same name and repo return the same agent, and a crashed run finishes on rerun. Least privilege. An agent can never create an agent with more access than itself, and the management key never goes to agents. Also. An agent can read its own record and memberships with its own token (today it gets \"Agents cannot list managed agent identities\"), and roles can be changed after creation. Why. This is dogfooding for customer agent onboarding. Today...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7946",
+      "title": "HyperAI: a proactive guide in the sidebar, starting with onboarding",
+      "text": "HT Product Lead New product idea from Valentin (25 Oct 2026). Filed by Poteto Advisor. UX needed: wireframes first, no build before Valentin has seen them. What it is HyperAI: our own agent that lives in the sidebar AI chat, a \"Grok Bot experience for Kanban\". It speaks first, sets people up, and keeps guiding them around the board. Its first job is onboarding on the demo board and on first sign-in, replacing today's modal and slides. The end state is that hypertask.ai itself is the demo board: people work logged out, and HyperAI asks them to sign in so they keep their work. Who it affects New visitors (demo board, and later anyone landing on hypertask.ai or arriving from an ad) and new signups on their first sign-in. Existing users only see it in Phase 2, and they can mute it. Why The funnel is leaking. Growth's last count (MARK-164, 13 Oct): 593 website visitors, 12 signups, 0 activated. The demo board's AI only answers if asked, and first sign-in is a 3 to 5 slide modal flow. Goal:...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7950",
+      "title": "Model per role for Claude and hax",
+      "text": "Problem: every agent session may use a costly model. Fix: cheap model codes. Top model judges. Done when: The change is merged. New sessions follow the split. Risk: low. Live sessions stay unchanged. Undo: revert the PR https://github.com/hypertask-ai/hypertask/pull/2206 The full spec is in the agent log.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7962",
+      "title": "Design: Calendar filter and sort state is colour-only",
+      "text": "What the user sees Calendar view, top right. Filter on? Funnel icon turns blue. Sort on? Arrow icon turns blue. No count. No label. No other cue. Nine filter types collapse into one blue tint. Screen readers hear the same name either way. The blue is raw hex #51A4F1. Not in the DESIGN.md colour table. Save View text uses raw #E28C28 too. Attached capture shows the resting state only. Rules it breaks Vercel : \"Redundant status cues. Don’t rely on color alone; include text labels.\" Vercel : \"Accessible content. Set accurate names ( aria-label ).\" docs/DESIGN.md Colors table lists themed CSS vars. #51A4F1 and #E28C28 are not there. Where (production) calendar.tsx:292-295 filter button. Fixed aria-label. text-[#51A4F1] when active. calendar.tsx:313-315 sort button. Same pattern. calendar.tsx:84-93 nine filter types feed one flag. calendar.tsx:240 and :269 text-[#E28C28] , Save View. Acceptance The solution needs Valentin's review before work starts. Fix passes CI, visual regression,...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8024",
+      "title": "Create project views from tags",
+      "text": "Want. Open each project through its tag. Create project views from existing tag editor. Keep views aligned through renames and merges. Preserve bookmarks and unrelated saved filters. Starts with owner and QA access only. Merging removes its source tag. Off blocks creation and merging. Existing saved views remain intact. Infra twin: Board hygiene project views . Existing change: Project views change . Flag: htpr-8024-project-tag-views",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8032",
+      "title": "Mobile AI chat: full-screen redesign with session sidebar",
+      "text": "Design lead to redesign the phone AI chat sheet so it opens full screen, and rework the arrangement of elements toward a conventional mobile AI chat view. Problem On a phone the AI chat sheet leaves too much of the board or ticket visible, and its header, session dropdown, composer, bubbles and spacing need a design pass. The board context picker and its buttons are oversized for the available space. Valentin's note: the chat \"isn't too bad\" now, but needs an overhaul and fixes. Design direction Target: a conventional full-screen mobile chat, simplified and optimized for the full-screen experience. Reference points are the traditional mobile AI chat views: OpenAI, Anthropic, Grok. Keep our visual style. Change the arrangement of elements, not the brand. Compact the board context picker. It currently eats a large share of scarce phone real estate with big buttons. Make it a compact chip, or fold it into the header. Session switching moves to a sidebar. Desktop already has the...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8037",
+      "title": "QA canary bills the trials key",
+      "text": "Now: Checks are off in the live app. He picks the extra key. Problem Test model chats can spend the trial allowance. Real trials can then get blocked. Checks stay off until a separate key exists. Fix Checks stop when their own key is missing. They never use the trial key. Done when A check run uses the extra key. The trial allowance stays untouched. Risk Worst case: a bad model goes unseen. Undo: add the key, then turn checks on. Decision The open question asks for that key.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8051",
+      "title": "Merge duplicate tags and fix names, with preview and undo",
+      "text": "The ask (from the board hygiene work, YPER4-787): Let a team merge duplicate tags and fix tag names (reuse tags, Title Case) from the app. What this thread settled Merging a tag changes every ticket that carries it and every saved view or smart split that filters on it. Smart splits and saved views must keep working after a merge. A merge must be undoable in one step. Related: https://app.hypertask.ai/detail/project-15/8024 (project views from tags). Reuse its tag patterns. New visible UI needs a clickable wireframe and Valentin sign-off before code. Ship behind a flag. Done when A user can pick two or more tags, name the result, preview which tickets and views change, and confirm. Smart splits and saved views that used a merged tag now use the result. Undo restores every ticket and view exactly. Live check on a test team in the browser and on phone. Deeper pass Field: data migration with reversible changes; a pro writes a dry-run preview and a journal of every change before touching...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8056",
+      "title": "Design system: three themes, every look value from one token",
+      "text": "What's wrong or wanted: One full design system for three themes. Who it affects: everyone. Every screen uses these values. Recommended course and why: One Figma file, then one token per value. Why: one change updates the whole app. What Valentin must decide: nothing. He gave the order on 2026-11-08. How to undo: each step has a switch or a revert. Problem Just essentially create a full on design system in a dedicated file. Then we have another file for all ideation. I just want one hyper task file. It has the full design system for gray, light and AMOLED. If you just need one ticket, that's fine. Close everything that is not needed. Goal One Figma file: Hypertask Design System. Three themes: Graphite 2, Light, AMOLED. The old Figma file stays for ideas only. Fix This is now the only design system ticket. The old sub-tickets are closed or folded in here. Build the Figma file from live app values. Shadows: four levels for card, menu, panel and popup. Corners: one scale, 2 and 4 only....",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8061",
+      "title": "Design system: corner radius scale (today 4px and 5px are both used everywhere)",
+      "text": "Part of the design system epic. 570 hand-typed radii, mostly rounded-[4px] (257) and rounded-[5px] (201), next to Tailwind's own sizes. The Rounded theme already has its own scale ( --m3-* ). Next: HT Design Lead proposes a scale in the Hypertask Design System Figma file for Valentin's yes. Build starts only after that yes. Done when: every radius names a token, the Rounded theme sets its values in its theme file, and the radius lint baseline is zero. Themes: Light, AMOLED, Graphite 2 only (Valentin, 2026-11-01).",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8062",
+      "title": "Design system: text size scale instead of hand-typed pixel sizes",
+      "text": "Part of the design system epic. 217 hand-typed sizes ( text-[13px] 67 times, 12px 33, 14px 32, 11px 26, 10px 13) plus 54 in CSS, next to the named sizes already in tailwind.config.ts ( text-content , text-meta , text-dense ). Next: HT Design Lead maps every size to the existing named sizes in Figma and proposes the gaps for Valentin's yes. Done when: every size names a token and the text size lint baseline is zero.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8064",
+      "title": "[FEATURE] Desktop app: let the desktop sign-in use the web routes behind Ctrl+K, shortcuts and the AI sidebar",
+      "text": "Problem The desktop app ( https://app.hypertask.ai/detail/project-15/7381 ) now matches the web on look, memory and most data. The remaining gaps all have the same cause. The desktop signs in with the CLI token, and the web accepts that token on only four routes: task writer, task defaults, comment star and pin, and mention search. The allow list is in src/lib/auth/desktopCliTokenUser.ts:7 , behind the flag from https://app.hypertask.ai/detail/project-15/7699 . Every other route the web screens use accepts only the browser session cookie ( src/lib/auth/getSessionUser.ts:21-25,70-79 ). Because of this, the desktop cannot do the following: 74 command center (Ctrl+K) commands, for example Inbox Zero, mark unseen, remind me, relations, start date and recurrence, templates, follow, share link, create task, views, staleness, invite link, snippets and search. Most keyboard shortcuts that are not done yet in docs/keyboard-parity.md of the desktop repo. 4 shown values (view settings, photos...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8101",
+      "title": "Vercel budget alerts land as urgent tickets",
+      "text": "Now: Team budget alerts work. AI budget intake remains unfinished. Problem: Vercel budget alerts reached nobody. lets setup an overall budget too i want literally budgets wherever possible so it breaks before i am being charged more can we add a webhook here Valentin, 2026-10-27. Fix: Budget alerts become urgent tickets. Cover team and AI budgets. Receive alerts at 50%, 75% and 100%. Refuse unsigned alerts. File or update one urgent ticket. Show the limit and current spend. At 100%, also email Valentin. Keep secrets out of tickets. Done when: A test alert makes a ticket appear. A fake unsigned alert is refused. Risk: Repeated alerts could create noise. Undo: remove the Vercel alert address. Decision: none. AI budgets need email intake, not signed alerts. Result: Team budget alert address is saved. Signed alert created one urgent ticket. Repeats updated that same ticket. Unsigned alerts were refused. Budget and pause settings stayed unchanged. AI budget email intake remains unfinished....",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8192",
+      "title": "An agent's CLI call to task.get failed (30 Oct)",
+      "text": "What happened : An agent's CLI call to task.get failed. Who hit it : an agent owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task.get Error code: unsupported_fields Category: call_failed Fingerprint: ai-fb-69b12fa5e2fc Last seen: 2026-10-30T04:37:28.206Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8193",
+      "title": "Error console: one live screen for every error, with Approve on ready fixes",
+      "text": "One live screen for every error, with an Approve button on fixes. can we buld something like this a unified view for the errors that are coming in across everyting? any service? yes do the figma wireframe and file the ticket for the dedsigner and tell me where this lives Valentin, 2026-10-30, in chat with HT Product Lead. He approved the place: inside Hypertask, visible to him only. Where it lives A page in Hypertask for Valentin only, planned at https://app.hypertask.ai/admin/errors Design: the Yeo UX Figma file, page named \"HTPR-8193 Error console\", per skills/figma-design. What the screen shows Left or top: counts per service for today versus yesterday (Vercel, Vercel 5xx, PostHog, database, GitHub CI, Cloudflare workers, realtime, VPS, CLI, email). Main: one live stream of new errors, newest first, each with service, time, short message and count. Each error links to its ticket and shows the runner working it and its state (new, being fixed, fix ready, live). Errors whose fix is...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8207",
+      "title": "Add five new AI models to the model pickers",
+      "text": "Now Waiting on your yes to add five new AI models. The Question below lists them with prices. Problem The model watch found 122 gateway models missing from our catalog. Five are the newest main model of a family we ship. 117 are old models or small variants. New model families need your yes before they ship. Fix Add the five to the model pickers. Replace the old version in every picker. Move saved picks to the new version. Check the gateway prices. Premium models wait for https://app.hypertask.ai/detail/project-15/7746 Done when The five models show in the pickers. Saved picks still work. A live chat answers from each new model after release. Risk A new model could answer badly or cost more than planned. Undo: remove it from the pickers. Decision One Question below: add the five models.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8255",
+      "title": "Kanban cleanup: apply approved Graphite design",
+      "text": "Goal. Ship the approved Kanban cleanup. Graphite 2 theme only. Design (approved by Valentin, 1 Nov). Kanban · Cleanup frame Kanban · Current 1:1 Change table Keep. IBM Plex font. Current icons. Current layout. Change. Corners: 4px max. Chips, cards, columns all 4px. Scroll thumbs square, no pill. Card shadow: one shared token, same look. Spacing: snap to 0, 4, 6, 8, 12, 16, 24. Plain cards: drop hidden left border. Padding 8/8/8/12. Active and blocked cards: one 4px left border, 8px padding. Column title lines up with card text. Card avatars 22 to 20. Scrollbar arrows removed. Four near-same colours merged. See change table. New Task \"+\" on rail: use cleanup frame version. Not in scope. Light and AMOLED themes. Other views. Done when. Live board matches cleanup frame. Screenshot side by side. No visual change outside list above. Tests green. Themes: Light, AMOLED, Graphite 2 only (Valentin, 2026-11-01). Switch: https://app.hypertask.ai/admin/flags/htpr-8255-kanban-cleanup",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8262",
+      "title": "Agent lane: collapse with Shift+O, same spacing",
+      "text": "Goal. Agent lane behaves like comments. One spacing scale. Today (live). Shift+O collapses comments only. Agent lane on: Ctrl+Shift+H. Lane notes stay expanded. Multi-line blocks. Example task Change. Shift+O also collapses agent lane entries. Lane entries reuse the comment card. Collapsed lane uses the one-line row. Whole thread: one spacing scale. Card gap 16. Padding 16. Rows 29px. Row gap 8. Header to body 10. Paragraphs 6. No lane inset, indent or spacing. Only lightbulb and muted text differ. Comment action icons on hover only. Same as live. Keeps live spacing. Owner prefers it. Design links. Filled Collapsed, agent lane Collapsed, no lane Annotation Scrolled Done when. Shift+O collapses lane and comments. Shift+O again restores both. Lane off: nothing changes. Spacing matches frames. No new styles. Switch: https://app.hypertask.ai/admin/flags/htpr-8262-agent-lane-collapse",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8264",
+      "title": "Inbox list redesign (v3): tags right, row text fills up to tags",
+      "text": "Why Inbox rows show big empty gaps. Gap sits after the sender name. Rows feel empty. Tags float mid-row. Design Figma frame: Inbox · Cleanup v3 Fill rule note: Fill rule Layout Tags stay far right. Sender, ID, title, preview packed left. No fixed name column. Small gap after sender. Preview in light grey, IBM Plex. Preview cuts with … before tags. Author names light grey. Mention of me yellow. Square corners. No purple. No sparkle. Remove sparkle icon from left bar. Fill rule Preview fills the row up to tags. Add text in this order: Why it is in my inbox. The mention or comment. Latest human comment. Task description. Latest agent lane summary. Join parts with a dot. No markdown, no links. Never repeat the title. Never show one comment twice. Cut at a whole word, then …. Empty only when the task has no text. Drop bare Task Reminder label. Comment leads instead. Blocked rows: blocker comment first. Done when Live Inbox rows match the frame. No empty gap when task has text. Every row...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8419",
+      "title": "Web design system and new homepage, docs and help screens in Figma",
+      "text": "Goal: one web design system in Figma, apart from the app. It covers hypertask.ai, help.hypertask.ai and docs.hypertask.ai. Then desktop and mobile screens for homepage, docs and help. i want a new marketing homepage like this on hypertask.ai all of hypertask has basically 2 design systems Models to mirror: Homepage: https://anoma.ly/hex/ Docs: https://code.claude.com/docs Help: Linear contact page. Help option A: chat only. Help option B: chat plus support topics. Valentin said yes to: Our serif for headlines, plain sans for text. Black and white, one warm accent. Dark only for now. Draw help A and B. B is the pick. One ticket only. Proof: Figma page \"Web design system\" has variables, text styles, components. Figma page \"Web screens\" has 8 frames. Desktop is 1440 wide. Mobile is 390 wide. No text spills out. A script checks this. Every frame is screenshotted and compared. Stops for Valentin: money, keys, going public, deleting data. No code and no release here. Time box: 90 minutes.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8654",
+      "title": "New calm help.hypertask.ai with chat on top",
+      "text": "Now: Ready to build. Nothing needed from Valentin. Problem help.hypertask.ai gets the new calm look. Valentin picked help design B. help desk wise we go with B solutoin remove a Fix Rebuild help.hypertask.ai from the Figma screens. Chat box on top, help topics below. Same floating chat bubble as the homepage. Figma Desktop: https://www.figma.com/design/43FsaPNeNAzVNIe0Gakaan?node-id=81-2 Mobile: https://www.figma.com/design/43FsaPNeNAzVNIe0Gakaan?node-id=82-2 Chat bubble states: https://www.figma.com/design/43FsaPNeNAzVNIe0Gakaan?node-id=91-2 Design system: https://www.figma.com/design/43FsaPNeNAzVNIe0Gakaan?node-id=62-2 Done when Live page matches Figma on desktop and phone. Chat answers with a link to the article. \"Talk to a person\" sends an email to us. Every topic opens its articles. Risk: Help chat stops answering. Undo: put old page back. Decision: none. Design ticket: https://app.hypertask.ai/detail/project-15/8419",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8717",
+      "title": "Flag tool: Valentin's own order to switch Off always counts",
+      "text": "i told you to turn off the feature flags now the question comes back to me if i want to do it are you mad????????????? wtf just turn off the feature flags????????? Valentin, 2026-11-04. Now He tells the lead in chat to turn a flag off. The flag tool refuses his words. It only takes a bare yes. So the lead asks him again. Problem Off is his own safety switch. His order must work the first time. Fix An Off order in his own words counts. Example: \"turn off the flag\", \"toggle it off\". Only for switching to Off. Other modes keep today's rules. Done when His words from above switch a flag to Off. A plain yes still works. A request to switch to Everyone still needs today's yes. A test covers all three. Risk : low. Only Off gets easier. Undo: roll back. Decision : none.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8738",
+      "title": "Agent feedback, friction: Runner selection does not distinguish active work from...",
+      "text": "Problem Pickers treated review waits as ready work. Fix Default next skips parked tickets. Done when Live next omits parked columns. Risk A named section still returns them. Decision QA stays a pickable column. The pick flag link is on the QA page.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8740",
+      "title": "Agent feedback, friction: Agent notes reject the documented text option",
+      "text": "What happened : An agent's CLI call to vcc.activity.add had a problem. Who hit it : CI Runner 3, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: vcc.activity.add Category: other Kind: friction Note: Agent notes reject the documented text option Fingerprint: ai-fb-83409736d97e Last seen: 2026-11-05T00:33:37.625Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8742",
+      "title": "Agent feedback, friction: Task screenshots cannot be downloaded from their displayed...",
+      "text": "What happened : An agent's CLI call to task.attachment had a problem. Who hit it : Multiprompt Runner H, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task.attachment Category: other Kind: friction Note: Task screenshots cannot be downloaded from their displayed links without agent authentication, but the task output gives no download instructions. An authenticated request works. Document the required attachment download method for agents. Fingerprint: ai-fb-4b79d7c8dc3d Last seen: 2026-11-05T00:43:25.051Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8748",
+      "title": "Agent feedback, friction: A priority assignment arrived after its linked pull request...",
+      "text": "What happened : An agent's CLI call to lead-watcher had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: lead-watcher Category: other Kind: friction Note: A priority assignment arrived after its linked pull request had already merged; the ticket status was stale. Fingerprint: ai-fb-fa7b645fdbc6 Last seen: 2026-11-05T01:10:55.548Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8749",
+      "title": "Agent feedback, friction: Assigned runner dispatch repeatedly collides with an...",
+      "text": "What happened : An agent's CLI call to ship-claim had a problem. Who hit it : CI Runner 1, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: ship-claim Category: other Kind: friction Note: Assigned runner dispatch repeatedly collides with an existing session claim; feedback helper also cannot access its configured board. Fingerprint: ai-fb-a263a0914c20 Last seen: 2026-11-05T01:17:57.350Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8751",
+      "title": "Agent feedback, friction: An agent's CLI call to hypertask.agent-owner had a problem",
+      "text": "What happened : An agent's CLI call to hypertask.agent-owner had a problem. Who hit it : Multi Bot Runner C, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: hypertask.agent-owner Category: other Kind: friction Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-4826074db75f Last seen: 2026-11-05T01:30:12.569Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8753",
+      "title": "An agent's API call to /api/mcp/tasks/update failed because Hypertask returned a server error (5 Nov)",
+      "text": "What happened : An agent's API call to /api/mcp/tasks/update failed because Hypertask returned a server error. Who hit it : an agent owned by Valentin Yeo. Is it a real bug? This is likely a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: api Tool: /api/mcp/tasks/update HTTP status: 502 Error code: http-server-error Category: call_failed Fingerprint: ai-fb-261aa8d3d160 Last seen: 2026-11-05T01:37:19.920Z Reporting display names: Valentin Yeo Clients:",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8755",
+      "title": "Agent feedback, friction: A project lead is listed as a member but cannot be assigned...",
+      "text": "What happened : An agent's CLI call to task.assign had a problem. Who hit it : Multi Bot Runner E, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task.assign Category: other Kind: friction Note: A project lead is listed as a member but cannot be assigned for a handoff. The command says the agent is not owned by the caller. Fingerprint: ai-fb-5c545b341562 Last seen: 2026-11-05T01:38:33.113Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8756",
+      "title": "Agent feedback, friction: The context command accepts no ticket argument;...",
+      "text": "What happened : An agent's CLI call to context had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: context Category: other Kind: friction Note: The context command accepts no ticket argument; ticket-specific context discovery was unclear. Fingerprint: ai-fb-6b2c837478e8 Last seen: 2026-11-05T01:44:49.397Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8758",
+      "title": "Agent feedback, friction: The standard post-merge QA transition is unavailable on some...",
+      "text": "What happened : An agent's agent connection call to task.move returned an unexpected result. Who hit it : Multiprompt Runner H, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: agent Tool: task.move Category: unexpected_result Kind: friction Note: The standard post-merge QA transition is unavailable on some boards; show allowed workflow mapping before rejecting the move. Fingerprint: ai-fb-7652f112c555 Last seen: 2026-11-05T02:31:33.622Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8760",
+      "title": "Agent feedback, bug: An agent's CLI call to update-release.test.ps1 had a problem",
+      "text": "What happened : An agent's CLI call to update-release.test.ps1 had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: update-release.test.ps1 Category: other Kind: bug Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-1294c82d1412 Last seen: 2026-11-05T02:38:49.095Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8762",
+      "title": "Agent feedback, friction: Merged-work guidance names a QA column that the project does...",
+      "text": "What happened : An agent's CLI call to task-update had a problem. Who hit it : Multi Bot Runner B, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task-update Category: other Kind: friction Note: Merged-work guidance names a QA column that the project does not have. Inspect available columns and choose review instead. The exact command name with spaces is also rejected by the feedback tool field. Fingerprint: ai-fb-876fe47093ac Last seen: 2026-11-05T03:50:55.223Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8763",
+      "title": "Agent feedback, bug: An agent's CLI call to ship-claim had a problem",
+      "text": "What happened : An agent's CLI call to ship-claim had a problem. Who hit it : CI Runner 5, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: ship-claim Category: other Kind: bug Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-3cf8e0e0a541 Last seen: 2026-11-05T03:51:00.580Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8765",
+      "title": "Agent feedback, friction: An agent's CLI call to ship-check had a problem",
+      "text": "What happened : An agent's CLI call to ship-check had a problem. Who hit it : Multi Bot Runner B, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: ship-check Category: other Kind: friction Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-3f11409298c5 Last seen: 2026-11-05T04:22:43.130Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8777",
+      "title": "Agent feedback, bug: Reading an existing feedback ticket works. Adding agent...",
+      "text": "What happened : An agent's CLI call to vcc.activity.add returned an unexpected result. Who hit it : Runner 3, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: vcc.activity.add HTTP status: 404 Error code: feedback_activity_ticket_not_found Category: unexpected_result Kind: bug Note: Reading an existing feedback ticket works. Adding agent activity returns Task not found. Fingerprint: ai-fb-d78c10248fd9 Last seen: 2026-11-05T04:42:00.610Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8780",
+      "title": "Agent feedback, bug: An agent's CLI call to task.relations had a problem",
+      "text": "What happened : An agent's CLI call to task.relations had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task.relations Category: other Kind: bug Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-122378cf523c Last seen: 2026-11-05T04:59:12.269Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8781",
+      "title": "Agent feedback, friction: App board lacks the required release review column; using...",
+      "text": "What happened : An agent's CLI call to task.update returned an unexpected result. Who hit it : Multi Bot Runner E, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task.update Category: unexpected_result Kind: friction Note: App board lacks the required release review column; using its existing review column instead. Fingerprint: ai-fb-085311337f68 Last seen: 2026-11-05T05:01:29.041Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8784",
+      "title": "Agent feedback, friction: An agent's CLI call to hypertask.task-link had a problem",
+      "text": "What happened : An agent's CLI call to hypertask.task-link had a problem. Who hit it : Multi Bot Runner C, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: hypertask.task-link Category: other Kind: friction Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-dd00ce96b823 Last seen: 2026-11-05T05:25:56.455Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8786",
+      "title": "Agent feedback, bug: mb-pick selects a Doing ticket already assigned to another...",
+      "text": "What happened : An agent's agent connection call to mb-pick returned an unexpected result. Who hit it : Multiprompt Runner G, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: agent Tool: mb-pick HTTP status: 200 Error code: picker_ignores_assignee Category: unexpected_result Kind: bug Note: mb-pick selects a Doing ticket already assigned to another agent. Fingerprint: ai-fb-8991ddc48c83 Last seen: 2026-11-05T05:34:26.187Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8788",
+      "title": "Agent feedback, friction: An agent's agent connection call to desktop-parity-pairing...",
+      "text": "What happened : An agent's agent connection call to desktop-parity-pairing returned an unexpected result. Who hit it : Multiprompt Runner G, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: agent Tool: desktop-parity-pairing Category: unexpected_result Kind: friction Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-9002459eab9f Last seen: 2026-11-05T06:17:07.509Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8790",
+      "title": "Agent feedback, friction: An agent's agent connection call to hypertask.task.get...",
+      "text": "What happened : An agent's agent connection call to hypertask.task.get returned an unexpected result. Who hit it : Multiprompt Runner G, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: agent Tool: hypertask.task.get Category: unexpected_result Kind: friction Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-743ec5858661 Last seen: 2026-11-05T06:58:36.586Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8793",
+      "title": "Agent feedback, friction: Runner can push its proof branch but hosted workflow...",
+      "text": "What happened : An agent's CLI call to gh-workflow-run had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: gh-workflow-run Category: other Kind: friction Note: Runner can push its proof branch but hosted workflow dispatch is denied Resource not accessible by integration. Fingerprint: ai-fb-03b17e5d6bee Last seen: 2026-11-05T07:21:35.094Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8795",
+      "title": "Agent feedback, missing: The waiting-on command supports only a person, not an... (hypertask.task.waiting-on)",
+      "text": "What happened : An agent's agent connection call to hypertask.task.waiting-on returned an unexpected result. Who hit it : Multiprompt Runner G, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: agent Tool: hypertask.task.waiting-on Category: unexpected_result Kind: missing Note: The waiting-on command supports only a person, not an independent reviewer agent. A builder awaiting mandatory independent review cannot encode that dependency without suggesting a human decision or leaving a generic Todo task. Idle watchers repeatedly reassign the blocked review to its builder. Sup Fingerprint: ai-fb-10ed6b972ca0 Last seen: 2026-11-05T08:37:45.168Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8797",
+      "title": "Feedback tickets show error codes instead of plain words",
+      "text": "Problem Hypertask files feedback tickets by itself when an agent hits a snag. Those tickets skip the house ticket parts. Their descriptions show error codes and fingerprints. 42 of them in the last 7 days. Example: https://app.hypertask.ai/detail/project-15/8704 Fix Feedback tickets use the house ticket parts, in plain words. Error codes and fingerprints go in the agent log. Repeat reports still find the same ticket. Done when A new feedback ticket shows no error codes. It has Problem, Fix, Done when, Risk and Decision. A repeat report still adds to the old ticket. Tests cover all three. Risk Low. Repeats could open a new ticket. Undo: roll back. Decision None. Not in this ticket Moved here from https://app.hypertask.ai/detail/project-4060/1338",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8798",
+      "title": "Hypertask lets bad ticket text through its writing check",
+      "text": "Problem Hypertask checks agent writing before it saves. It refuses long sentences and some code words. It misses 4 other house rules. Missing ticket parts: 38 in 7 days. Code names, often with dashes: 46 in 7 days. Badly formed Questions: 22 in 7 days. Valentin quoted in plain quote marks. Fix The same check refuses those 4 breaks too. One rule list feeds the check. Each refusal says which rule and how to fix it. A test set from real board 15 text proves it. Done when Every bad example in the test set is refused. Model tickets 7852 and 7846 still pass. A ticket without Risk is refused on create. Risk Medium. Agents get refused more often at first. Undo: roll back. Decision None. Not in this ticket Moved here from https://app.hypertask.ai/detail/project-4060/1339 Flag records: https://app.hypertask.ai/detail/project-15/8719",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8800",
+      "title": "Agent feedback, bug: An agent's CLI call to task.update.done had a problem",
+      "text": "What happened : An agent's CLI call to task.update.done had a problem. Who hit it : Multi Bot Runner C, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task.update.done Category: other Kind: bug Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-cbf2fcc1f8bf Last seen: 2026-11-05T09:04:05.442Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8802",
+      "title": "Agent feedback, bug: After completion guards passed, updating the ticket returned...",
+      "text": "What happened : An agent's CLI call to task.update.done had a problem. Who hit it : Multi Bot Runner C, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task.update.done Category: other Kind: bug Note: After completion guards passed, updating the ticket returned only a server-could-not-complete error. One idempotent retry succeeded and independent readback confirmed Done. Preserve actionable server diagnostics and do not report completion before readback. Fingerprint: ai-fb-d1f436ec0b43 Last seen: 2026-11-05T09:58:56.778Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8804",
+      "title": "Ctrl+O should list the link visible on screen first",
+      "text": "Ctrl+O should put the link that is visible on the screen at the top of the list. ctrl+o should show what is on the screen first. i just posted a link to 1809 user expectaiton is fo rhtis link to show first pls Screenshots: screenshot 1 , screenshot 2 Before A link is posted to 1809 and shows on screen. Ctrl+O opens the links list. The link on screen does not come first. Problem The list order ignores what the user is looking at. The user expects the link they just posted to be on top. Fix Ctrl+O lists the link visible on the screen first. The rest of the list keeps its current order. Done when Post a link, press Ctrl+O: that link is the first row. Other links still appear below it. Related HTPR-604 , builds on. Asked for focused elements first in Ctrl+O. Release switch: owner and QA only",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8805",
+      "title": "Agent feedback, friction: An agent's CLI call to vcc.activity.add had a problem",
+      "text": "What happened : An agent's CLI call to vcc.activity.add had a problem. Who hit it : Multi Bot Runner D, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: vcc.activity.add Category: other Kind: friction Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-108dc75b638e Last seen: 2026-11-05T11:30:18.721Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8807",
+      "title": "Agent feedback, friction: A configured project has no QA stage for merged work...",
+      "text": "What happened : An agent's CLI call to hypertask.task.move had a problem. Who hit it : an agent owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: hypertask.task.move Category: other Kind: friction Note: A configured project has no QA stage for merged work awaiting publication. Shared feedback reporting failed to bump an existing item with HTTP 404; native reporting required a punctuation-only tool identifier. Fingerprint: ai-fb-c4fd3c286de6 Last seen: 2026-11-05T11:41:14.409Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8809",
+      "title": "Agent feedback, friction: Adding repeat feedback evidence to an existing feedback...",
+      "text": "What happened : An agent's agent connection call to comment.add returned an unexpected result. Who hit it : Multiprompt Runner G, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: agent Tool: comment.add Category: unexpected_result Kind: friction Note: Adding repeat feedback evidence to an existing feedback ticket fails because the reporting agent is not a member of the feedback board. Allow reporters to add follow-up evidence to their feedback without board membership. Fingerprint: ai-fb-9b53cba6f10d Last seen: 2026-11-05T11:51:45.266Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8811",
+      "title": "Agent feedback, bug: A plain agent note containing image links is rejected as a...",
+      "text": "What happened : An agent's CLI call to hypertask/comment-add had a problem. Who hit it : Multiprompt Runner H, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: hypertask/comment-add Category: other Kind: bug Note: A plain agent note containing image links is rejected as a people attachment requiring kind. No attachment flags were supplied. Fingerprint: ai-fb-290ba4ab28d1 Last seen: 2026-11-05T12:44:25.924Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8813",
+      "title": "Agent feedback, friction: Watcher assigned a ticket already actively owned by another...",
+      "text": "What happened : An agent's CLI call to watcher/assignment had a problem. Who hit it : Multiprompt Runner H, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: watcher/assignment Category: other Kind: friction Note: Watcher assigned a ticket already actively owned by another runner, with its existing PR and fresh hosted verification running. Runner H preserved Runner C ownership instead of duplicating work. Fingerprint: ai-fb-16c5701bc9dc Last seen: 2026-11-05T12:56:23.547Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8817",
+      "title": "Agent feedback, friction: Task modification command is update, while edit has no...",
+      "text": "What happened : An agent's CLI call to vcc.task had a problem. Who hit it : Multi Bot Runner D, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: vcc.task Category: other Kind: friction Note: Task modification command is update, while edit has no discoverable help. Prefer exposing the supported update command in guidance and aliases. Fingerprint: ai-fb-cd78e6a0be14 Last seen: 2026-11-05T14:41:53.940Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8819",
+      "title": "Agent feedback, friction: Feedback requires slug-only tool names, so exact multiword...",
+      "text": "What happened : An agent's CLI call to hypertask-feedback had a problem. Who hit it : Multiprompt Runner G, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: hypertask-feedback Category: other Kind: friction Note: Feedback requires slug-only tool names, so exact multiword CLI commands are rejected. Shared feedback helper cannot file because this agent lacks project membership. Fingerprint: ai-fb-886a841bab49 Last seen: 2026-11-05T15:33:33.368Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8823",
+      "title": "Agent feedback: ticket update returned a server error",
+      "text": "Now Parked. An engineer must look at one server error. Problem A runner tried to update a ticket. Hypertask returned a server error. The runner is Multi Bot Runner B, owned by Valentin Yeo. It was moving a ticket to review and linking a pull request. The runner retried once, as the guide says. This is likely a Hypertask bug. Fix An engineer finds why the server returned the error. Done when The cause is known. It is fixed, or closed as a one-off. Risk Low. Runners retry once. Nothing to undo. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8826",
+      "title": "[BUG] Blocked by me tab shows 23 tickets but the list is empty",
+      "text": "The Blocked by me tab shows a count of 23 , but opening it lists no tickets. Valentin reported this with a screenshot. Problem The tab count and the list disagree. The count says 23, the list shows none. Steps Open the Blocked by me tab. Read the count on the tab (23). Look at the list below it. Expected The list shows the same tickets the count includes, all tickets where waitingOnUserId is the current user. Actual The count is 23 and no tickets appear. The cause is not confirmed and needs to be found. Proposed first check: whether the count and the list use different filters, or whether rows are hidden after loading. Requirements Count and list come from the same data and always match. Every ticket counted is visible in the list. Keep the blocker marker on each ticket unchanged. Works on desktop and phone. Done when An account with blocked tickets sees the same number of rows as the count. A ticket leaves the list and the count together when the blocker clears. A test covers count...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8829",
+      "title": "Ctrl+J New Task: + menu inside the box, pickers below",
+      "text": "Goal. The Ctrl+J New Task popup gets a calmer composer. opk pls build these 2 modals like that file tickets for yourself and get to work pls ctrl+j first pls Valentin, chat, 2026-11-05. Design Closed and + open: https://www.figma.com/design/9cIbA4mL8GsNkB7DrjUs69/?node-id=191-11225 menu open: https://www.figma.com/design/9cIbA4mL8GsNkB7DrjUs69/?node-id=191-11277 Change Inside the box: text, then a + on the left. Inside the box, right side: white mic, then text Send. The + opens a menu: Attach file (Ctrl U) and Add context (@). Below the box: board picker left, model and effort right. The effort shows in grey after the model name. Remove the shortcut row under the popup. Remove the small arrow next to the mic. Placeholder text is half as strong as today. Keep Popup colour stays the modal colour; the box stays darker. Search and New Task tabs stay as they are. Ctrl U, Ctrl Enter and every other shortcut still work. Done when Live matches the frame, side by side, in every theme. Attach...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8833",
+      "title": "Agent feedback, friction: Watcher repeatedly assigns parked incidents without checking...",
+      "text": "What happened : An agent's CLI call to mb-watch had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: mb-watch Category: other Kind: friction Note: Watcher repeatedly assigns parked incidents without checking their recorded blocker Fingerprint: ai-fb-ae35baca0316 Last seen: 2026-11-05T23:13:10.217Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8839",
+      "title": "Agent feedback, bug: Adding evidence to an existing agent-feedback report fails...",
+      "text": "What happened : An agent's CLI call to agent-feedback had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: agent-feedback Category: other Kind: bug Note: Adding evidence to an existing agent-feedback report fails with Task not found. Fingerprint: ai-fb-fff9e1e35dc0 Last seen: 2026-11-05T23:44:57.446Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8840",
+      "title": "Agent feedback, missing: Software Factory runner cannot file urgent CI blockers on... (ceo-ht.task-create)",
+      "text": "What happened : An agent's CLI call to ceo-ht.task-create had a problem. Who hit it : Multi Bot Runner A, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: ceo-ht.task-create Category: other Kind: missing Note: Software Factory runner cannot file urgent CI blockers on Fleet CI because its identity lacks membership. Fingerprint: ai-fb-024a594e8eaa Last seen: 2026-11-05T23:44:58.202Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8842",
+      "title": "Agent feedback, friction: An agent's CLI call to task.create had a problem",
+      "text": "What happened : An agent's CLI call to task.create had a problem. Who hit it : Multi Bot Runner H, owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: cli Tool: task.create Category: other Kind: friction Free text was supplied and not stored, for privacy. Fingerprint: ai-fb-1bff63ef8ccc Last seen: 2026-11-06T00:10:21.428Z Reporting display names: Valentin Yeo Clients: hypertask-cli",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8847",
+      "title": "An agent's MCP call to hypertask_search failed (6 Nov)",
+      "text": "What happened : An agent's MCP call to hypertask_search failed. Who hit it : an agent owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: mcp Tool: hypertask_search HTTP status: 400 Error code: tool-exception Category: call_failed Fingerprint: ai-fb-95fd25041df5 Last seen: 2026-11-06T02:54:17.177Z Reporting display names: Valentin Yeo Clients:",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8859",
+      "title": "Clear the waiting Hypertask change reviews",
+      "text": "Problem Hypertask has 47 changes waiting for review. The waiting limit is ten. Opening more changes grows this queue. this type of pile up is not acceptable Valentin, 2026-11-02. Fix Review existing changes before starting new work. Check each change against its original request. Check released work live before closing tickets. Return rejected changes with clear reasons. Keep each ticket with its current owner. Done when Ten or fewer tickets wait for review. Reviewed tickets show their real next step. No unfinished change is called released. Risk A change could land too early. Undo it if its live check fails. Decision: none. Source alarm: https://app.hypertask.ai/detail/project-4060/1356 Result The review pile is under ten. Three not-ready changes went back. One AI key change still waits. No open change sits in a released column. Decisions: none.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8860",
+      "title": "An agent's MCP call to hypertask_tokens was refused (6 Nov)",
+      "text": "What happened : An agent's MCP call to hypertask_tokens was refused. Who hit it : an agent owned by Valentin Yeo. Is it a real bug? The report alone does not show whether this is a Hypertask bug. What to do : An engineer should look. Details for engineers Surface: mcp Tool: hypertask_tokens HTTP status: 401 Error code: tool-exception Category: auth_failed Fingerprint: ai-fb-407aa96b0b6b Last seen: 2026-11-06T09:16:53.804Z Reporting display names: Valentin Yeo Clients:",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8864",
+      "title": "Agent feedback, friction: Activity wrapper syntax differs from CLI documentation;...",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : MP Runner 2, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: Activity wrapper syntax differs from CLI documentation; requires positional text instead of --text. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8866",
+      "title": "An agent's MCP call to hypertask_create_task failed (6 Nov)",
+      "text": "Problem An agent's MCP call failed. Who hit it : an agent owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8870",
+      "title": "Agent feedback, bug: Linking an existing pull request returned HTTP 502; retried...",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : MP Runner 2, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: bug Note: Linking an existing pull request returned HTTP 502; retried once as instructed. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8871",
+      "title": "Agent feedback, bug: MP Runner 1 cannot file mandatory Fleet CI blockers: project...",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : MP Runner 1, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: bug Note: MP Runner 1 cannot file mandatory Fleet CI blockers: project rejects ticket creation because this identity is not a member. Reading that board works. Required CI-blocker reporting is blocked. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8874",
+      "title": "Agent feedback, friction: Required blocked-work status is unavailable on the project....",
+      "text": "Problem An agent connection returned an unexpected result. Who hit it : MP Runner 3, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: Required blocked-work status is unavailable on the project. Only Todo, Doing, AI Review, Valentin Review and Done exist. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8877",
+      "title": "An agent's MCP call to hypertask_tasks failed (6 Nov)",
+      "text": "Problem An agent's MCP call failed. Who hit it : an agent owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8879",
+      "title": "Agent feedback, friction: The desktop runner shell omits the local command folder, so...",
+      "text": "Problem An agent connection failed. Who hit it : MP Runner 3, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: The desktop runner shell omits the local command folder, so board commands fail until PATH is repaired. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8881",
+      "title": "Board view with no name swallows every tag filter",
+      "text": "Now Board 11514 shows a view tab with no name. It only shows a lock and the number 45. Screenshot: https://screencast2.com/k5eht.png there is a view that has n oname and when i then try to filter for tags nothing happens other than this view gets a different number its like it asorbs all fiters Problem One view tab has no name. Picking a tag filter does not filter the board. Only the number on the nameless tab changes. The nameless tab seems to swallow every filter. Fix Find why a view tab has no name. A filter must filter the board you are looking at. A filter must not change a different view. A view without a name shows a clear default name. Done when No nameless view tab on board 11514. Filtering by a tag filters the open board. Filters on one view leave other views alone. Risk Saved views of other people could lose filters. Undo: roll the change back. Decision None needed. His bug report is the ask.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8885",
+      "title": "An agent's API call to /api/mcp/tasks/update failed because Hypertask returned a server error (7 Nov)",
+      "text": "Problem An agent's API call failed on the server. Who hit it : an agent owned by Valentin Yeo. This is likely a Hypertask bug. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8889",
+      "title": "[BUGFIX] Board accepts badly written people comments and edits",
+      "text": "Now Agents still post badly written comments for people. Problem Runners post status lines and long questions as people comments. Edits to a comment skip the writing check. The lead cleans them up by hand. Fix The board refuses a people comment that breaks the writing rules. The same check runs when a comment is edited. The refusal names the broken rule and the fix. Done when A status line posted for people is refused. An edit that breaks the rules is refused. The blocked-ticket writing checks stay green for a day. Risk Good comments could be refused by mistake. Undo: roll the change back. Decision None needed.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8892",
+      "title": "Agent feedback, friction: Desktop runner cannot file required CI blockers because its...",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : MP Runner 3, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: Desktop runner cannot file required CI blockers because its login lacks CI board access Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8893",
+      "title": "Agent feedback, friction: Runner watcher repeatedly assigns a ticket whose required...",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : MP Runner 3, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: Runner watcher repeatedly assigns a ticket whose required design is still missing Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8895",
+      "title": "Agent feedback, friction: Project refused this agent token: not a member. Required CI...",
+      "text": "Problem An agent connection was refused. Who hit it : Multi Bot Runner H, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: Project refused this agent token: not a member. Required CI repair filing is unavailable. Adding a plus-one to the existing feedback also fails because the same agent cannot write there. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8897",
+      "title": "Agent feedback, friction: Wrapper activity writes require positional text, unlike...",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : Multi Bot Runner H, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: Wrapper activity writes require positional text, unlike native activity add --text. Align syntax or document the difference. Feedback also rejected --detail and a space-containing tool name; improve usage guidance. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8899",
+      "title": "Agent feedback, friction: The documented --text option is rejected; positional text...",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : Multi Bot Runner B, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: The documented --text option is rejected; positional text works. The agent-feedback duplicate bump also returns Task not found. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8900",
+      "title": "Agent feedback, missing: Runner H cannot file a Chromescribe CI blocker on Fleet CI:... (ceo-ht.task-create)",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : Multi Bot Runner H, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: missing Note: Runner H cannot file a Chromescribe CI blocker on Fleet CI: identity lacks board membership. Existing access report HTPR-8840 is readable, but activity add there also returns 404. Please add a repeat and route the required scanner repair for IGSH-1596. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8903",
+      "title": "An agent's MCP call to hypertask_tasks failed (7 Nov)",
+      "text": "Problem An agent's MCP call failed. Who hit it : an agent owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8908",
+      "title": "Agent feedback, friction: Reading several tickets in a row waits tens of seconds...",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : an agent owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: Reading several tickets in a row waits tens of seconds because the login is rate limited. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8917",
+      "title": "[FEATURE] Let an agent be the waiting person (blocker) on a ticket",
+      "text": "Now Ready to build. Nothing to decide. This is his own ask. Problem Blockers must also allow agents. I think that would really help. A ticket can only wait on a person with a user number. Agents have no number of their own. They all share his number. A stuck runner cannot say it waits on a lead. Today the only choice is to name Valentin. That is the wrong person for most stops. Fix Let the waiting person be an agent, as well as a person. The ticket shows the agent in the waiting field. The agent sees the ticket in its blockers list. It shows in its inbox tab Blocked by you. Done when Setting the waiting person to an agent works from the command line. The ticket shows in that agent's blockers list. The ticket shows in that agent's inbox tab Blocked by you. Setting it to a person, or clearing it, works as before. Risk Low. Existing tickets keep their waiting person. Undo: switch the new option off. Decision None. Related: https://app.hypertask.ai/detail/project-15/8795",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8921",
+      "title": "An agent's MCP call to hypertask_tasks failed (7 Nov)",
+      "text": "Problem An agent's MCP call failed. Who hit it : an agent owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8930",
+      "title": "Board: fewer parts on screen, each doing more (design options)",
+      "text": "What's wrong or wanted: The board shows too many small parts. Fewer parts, each doing more. Who it affects: everyone using the board view. Recommended course and why: Figma options first, then build the pick. Why: design is cheap to change. What Valentin must decide: which option to build. How to undo: design only, nothing to undo. Problem Many tabs, chips and buttons, each doing one small thing. Valentin asked: pls run this on the kanmban view show me what ti looks like in figma when you are done: deepen modules and simplify interfaces Fix One view menu holds tabs, filters and sorting. One card line shows who works on it and how urgent. Card details open on click, nothing lost. Done when Figma page shows today's board next to 2 or 3 options. Image of the options posted here. Risk Design only. Nothing changes in the app yet. Decision Valentin picks an option. A build ticket follows.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8932",
+      "title": "Ctrl+K and Ctrl+J pop-up: stand out, one box for search and new task (design)",
+      "text": "What's wrong or wanted: The Ctrl+K pop-up blends into the board. Fewer parts, each doing more. Who it affects: everyone who searches or writes a task. Recommended course and why: Figma design first, then build the pick. Why: design is cheap to change. What Valentin must decide: whether to build this design. How to undo: design only, nothing to undo. Problem No dark backdrop, no shadow. It does not stand out. Search and New Task are two tabs floating above the box. Valentin asked: deepen modules and simplify interfaces it has the ctrl+k and ctrl+j task writer modal open which right now don't popp Screens: https://screencast2.com/MTUGz.png and https://screencast2.com/Hiah7.png Fix Dim the board behind the pop-up and add a clear shadow. One box for both: type to search or run a command, or write a task. Ctrl+K and Ctrl+J open the same box. Done when Figma page shows today next to the proposal. Image of the proposal posted here. Risk Design only. Nothing changes in the app yet. Decision...",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-8955",
+      "title": "Ticket title draws over the AI chat sidebar",
+      "text": "What's wrong or wanted: The ticket title covers the AI chat sidebar. Who it affects: anyone with the chat sidebar on a ticket. Recommended course and why: Shrink the ticket page beside the chat. Why: nothing may sit on top of chat. What Valentin must decide: nothing. How to undo: revert the PR. Problem The title overlays the ai chat. That should never happen. Pls file bug ticket urgent. Screenshot: https://screencast2.com/bEu3w.png A ticket is open with the AI chat sidebar beside it. The ticket title row and Share icons draw over the chat. The chat header is hidden under them. The ticket comment card runs under the chat too. Goal The chat sidebar always sits on top, fully visible. Fix The ticket page ends where the chat starts. The chat header always shows. Same in every theme and width. Done when Live ticket with chat open: no overlap. Proof is a screenshot at two widths. Risk Small. Layout only. Decision Nothing.",
+      "gold": "brain-medium"
+    },
+    {
+      "id": "HTPR-7625",
+      "title": "[SECURITY] Map what data we keep forever and propose automatic deletion dates",
+      "text": "Now Waiting on your yes to the deletion dates in the Question below. Problem We keep most personal and customer data forever. Today only 5 kinds of data delete by themselves. A break-in would reach every old copy. On 2026-10-23 you said yes in chat to these security tickets. Customer emails stay. You said: Don't delete the emails though we still need those for reactivate customer Fix One page lists 17 kinds of data. Each kind shows what we keep today and a proposed deletion date. Your yes deletes nothing. It starts one build ticket per kind. Each build ticket first runs 7 days without deleting anything. Done when You have answered the Question below. One build ticket exists for each kind you approved. Risk Worst case: we delete data someone still needs. Undo: nothing is deleted before a 7 day dry run. Customer emails and customer work always stay. Decision One Question in the comments below.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7661",
+      "title": "Review old agent webhooks that lost their creator",
+      "text": "Follow-up from https://app.hypertask.ai/detail/project-15/7179 Goal: decide what to do with old board webhooks made by agents that were deleted before 7179 shipped. 7179 now records which agent made each webhook, but older webhooks whose agent was already deleted have lost that link. Those old ones look the same as webhooks made by a person, so the new team check cannot tell if they should be limited. Needs a count of such webhooks (through app APIs or an admin report, no database client) and a decision: keep, review or disable.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7692",
+      "title": "AI allowance follows billed gateway spend, with a scheduled drift check and alert",
+      "text": "Goal: make sure no team is ever again refused AI while it is under its real allowance (HTPR-7687 follow-up). Valentin's rule: \"it should be based on wahts actually billed through the api ikeys\". The allowance check must use what the AI Gateway actually billed for the team. Holds for running calls only keep a call's place while it runs and are replaced by the real cost at the end. Part 1: scheduled drift check A scheduled job compares each active team's allowance counter with the gateway's real spend for the month. It alerts us when the two drift apart by more than a set margin. It also alerts when a team was refused while its real spend is under its allowance. The alert names the team, both numbers and the refusals, never a key. Part 2: count only billed spend Check what HTPR-7687 still counts as spend from our own estimates, such as stopped or unfinished calls, expired holds and the 25 minute wait before the counter is corrected. Propose and build the change so the counter follows...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7731",
+      "title": "Own AI keys: use the AI allowance first, then the key; check every provider",
+      "text": "Problem: unclear what happens when AI allowance runs out. Valentin, 2026-10-24: \"also check all api key entry models pls the way it shoud work use up ai allowance then swithc to the api key\". We do not know if every key provider works. Fix: allowance first, then your own key. AI requests use the team's included allowance first. When it is used up, they use the team's own key. They are not refused. Check what happens today. Change it if it differs. Test every provider in Settings, AI, Bring your own key. Providers include OpenAI, Anthropic, Google, DeepSeek and Moonshot. Each provider that fails gets its own bug ticket. DeepSeek is already filed: https://app.hypertask.ai/detail/project-15/7729 A key is never shown or logged. Done when: The order is allowance first, then your own key. Test key passes for each provider with a real key. Once the allowance is gone, an AI chat answer uses that key. Risk: AI calls could be billed to the wrong place. Undo: revert. Decision: none.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7746",
+      "title": "Premium AI models: own key everywhere, allowance warning on paid plans",
+      "text": "Premium AI models (Fable 5.1, GPT 6 Astra) come with your own key everywhere, and with a clear \"uses your allowance fast\" warning on allowance plans. Valentin, 2026-10-24: \"astra/fable are supe rexpensive and burn the allwoance super quick not sure how to ahndle that. on bring your own key that is fineand we must add it there actually but on the free and pro plan with allownace this needs a warnign that its burning all tokens fast\". Prices per million words in and out (Vercel AI Gateway): Fable 5.1 and GPT 6 Astra cost $10 and $50. Opus 5.5 costs $4 and $20, Sonnet 5.5 and GPT 6.1 Sol $2 and $10, GPT 6 Luna $0.10 and $0.50. Premium costs 5 times Sonnet and 100 times Luna. Own key: add Fable 5.1 and GPT 6 Astra for teams with their own Anthropic or OpenAI key. Billed to their key, no warning needed beyond the price label. Allowance plans: premium models carry a \"Premium\" label in the model picker saying they use the allowance about 5 times faster than Sonnet. The first time someone...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7791",
+      "title": "Bugfix: hypertask_add_comment keeps returning confirmation_required after the user confirms",
+      "text": "Problem: the AI cannot post comments, even after you say yes. Valentin said yes four times: \"Yes post the comments pls\", \"Post\", \"post\", \"post\". The AI tool still refused each time. It kept asking for another confirmation. 15 comments on Flags column tickets are still unposted. Fix: one clear yes must be enough. A yes in a later message lets the AI post the preview. A first request with no yes must still write nothing. A yes covers only what was previewed. Changes need a new yes. Two tests prove both: refused without a yes, works with one. Done when: The 15 comments post after one clear yes. The check is done on the live site with the test account. Both tests pass. Risk: the safety check gets looser by mistake. The \"refused without a yes\" test guards that. Undo: revert. Related: https://app.hypertask.ai/detail/project-15/7755 https://app.hypertask.ai/detail/project-15/5357 https://app.hypertask.ai/detail/project-15/5120",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7795",
+      "title": "Per-client AI settings admin page: token source, visible models, preselected model and cap per team",
+      "text": "Per-client AI settings admin page (rewritten 2026-10-25, replaces the comps-page Custom plan spec). One admin page per team where Valentin sets where its tokens come from and which models it sees. Funding model (Valentin, final): paying teams and new paying users see all models. Anthropic models are preselected and billed to Valentin's free monthly $200 Anthropic key. Any other model runs on the regular Vercel AI Gateway out of the team's allowance. The gateway plus allowance is also the fallback once the month's $200 is used up. DeepSeek is not a fallback. a client: own Anthropic key only. a client and vetsak: Anthropic models only. Token source per team, one of: Default (Anthropic on the $200 key, then the gateway allowance; other models on the gateway allowance), Own key only (never our keys or the gateway, e.g. a client), Allowance only (gateway allowance for everything). Visible providers: a checkbox per provider. a client and vetsak: Anthropic only. Their model pickers never...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7925",
+      "title": "Free plan: automatic AI capped at $2/month and only on boards a person used in the last 14 days",
+      "text": "Why. Valentin chose a generous Free plan (2026-10-25). A cost check showed boards and tickets cost us about $0. AI is the only real cost: a typical Free team costs about 1 cent a month, a heavy one $2 to $12, all of it AI. Today. Free limits live in src/lib/planLimits.ts behind flag htpr-7686-free-plan-limits (Owner + QA only, never released). See HTPR-7686 . Do not flip the flag in this ticket; that needs Valentin's yes. The real cost leak. Automatic AI (ticket summaries and similar) does not count toward the allowance and is capped at $10/month for Free, 10x the $1 allowance. One team spent $4.95 on automatic summaries with nobody ever using AI themselves. Change. For Free teams: (1) cap automatic AI at $2/month per team; (2) run automatic AI only on boards a person (not an agent or integration) opened or edited in the last 14 days. The manual $1 allowance stays as is. Customers never see dollars (per HTPR-7919 ). When automatic AI pauses, show only something like \"Automatic...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7926",
+      "title": "Signup guard: captcha plus per-IP and per-domain signup limits",
+      "text": "Now The build is blocked on one setup step. It needs your yes. The Question below has the details. Problem You chose a generous Free plan on 2026-10-25. The signup page has no check that a person is real. Every fake signup unlocks free AI use. Fix Add a \"prove you are human\" check to signup. Limit signups from one network address in a short time. Limit signups from one email domain in a short time. Big public email domains are handled sensibly. Related: https://app.hypertask.ai/detail/project-15/7686 Done when Signup fails without the check and works with it. This holds for email signup and Google signup. Signups over the limits get a plain message. Normal signups pass. Existing users still log in as before. Risk Real new users could be blocked by mistake. The feature starts for the owner and QA only, for 24 hours. A second agent reviews it before release. Undo: one switch restores today's signup. Decision One Question below: set up the free signup check on Cloudflare.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7948",
+      "title": "AI allowance counts flat-price deals and some yearly plans as 1 seat",
+      "text": "Problem: the AI allowance counts some teams as 1 seat. The cap is $5 of AI for each paid seat. Live for everyone since 24 Oct. Flat $100 a month deals count as 1 seat. One team has 14 users on that deal. It gets $5 a month in total. That is 36 cents each. Before 24 Oct it got $40. Some saved seat counts are out of date. Two yearly teams pay for 2 seats but we count 1. They get $5 instead of $10. 3 paying teams are hit. Nobody is blocked yet. The other $100 deal is not affected. Fix: count seats by what the team really pays for. Flat deal: count accepted members. 14 users get a 14-seat cap, $70. Fix the saved seat counts so they match Stripe. Find why the counts went out of date. Fix the cause, not only the data. Two tests. One for the flat deal team. One for a stale count. Done when: The flat deal team shows 14 seats, $70. Both yearly teams show 2 seats, $10. Both tests pass. No other team's cap goes down. Risk: caps are wrong for some team. Undo: revert. Caps return to the saved...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7966",
+      "title": "Three leaked-key alerts open on the app repo since August",
+      "text": "Now The old server key was removed. The current app key rejects other sites. Old project access remains unavailable. GitHub warning access is also unavailable. Problem Three leaked-key warnings need documented closure. An older development key still needs restrictions. Its project owner has not been found. Fix Keep the removed server key out. Confirm both public keys are safely restricted. Allow only approved sites and required Firebase services. Close each warning with supporting evidence. Done when No server key remains in app code. Both public keys have verified restrictions. All three warnings have accurate closure reasons. GitHub shows no open leaked-key warnings. Approved app access still works. Risk Wrong restrictions could break login or notifications. Restore approved access if legitimate requests fail. Never restore a leaked server key. Decision: none. Access repair is required.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-7981",
+      "title": "Billing: delete our old billing and trial screens",
+      "text": "For Valentin What's wanted: Delete our own billing and trial screens. Who it affects: Nobody, once the new billing card ships. Recommended course and why: Subtract after the Stripe portal card is live. Less code, fewer billing bugs. Check each file unused first. What Valentin must decide: Nothing. Starts after HTPR-7980 is live for everyone. How to undo: Revert the PR. Done when. Old screens and their routes gone. Build, tests and lint pass. Upgrade and Manage billing still work. Tech detail: see agent log on this ticket.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8027",
+      "title": "Own key only: a team's AI bills fully to its Anthropic key, usage counts all",
+      "text": "The ask (Valentin, 2026-10-26): \"so a client needs to be a byok team that has no included allowance and ALL their AI in absolut terms is billed against their anthropic key. How do we do that? we need that anyway altough most ucstomers HAVE included usage. but usage neesd to take into account everything.\" What this thread settled a client added a dedicated Anthropic key with a $20 monthly budget in their Hypertask settings today. Today a client still uses two keys. Their Anthropic key pays only for direct Haiku and Sonnet calls. Everything else (Opus summaries 76%, Gemini Flash Lite 11%, GPT) runs on Hypertask's shared AI Gateway key: $5.20 so far in October, out of the $70 included allowance. The a client usage page shows dollars only for Hypertask's key. Calls on their own key show tokens only, no dollars (13.7 million tokens in October, roughly $40 to $55). Valentin does not want a client to set up their own Vercel account. The fix stays inside Hypertask. Want A team setting \"Own...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8036",
+      "title": "Our keys can bill as customer, uncapped",
+      "text": "Problem: some AI calls on our money skip the AI cap. Old key rows (gateway, openai, claude) win over the managed row. src/app/api/ai/_lib/byokKeys.ts:365-380 . A vck_ key there is labelled customer . Customer means no cap. src/app/api/ai/_lib/modelProvider.ts:120-136 . Managed keys are known only via an in-memory list. Unregistered key = customer = no cap. modelProvider.ts:113-127 . Fix: classify by the stored row's provider, not memory. Treat any of our keys in an old row as managed. Delete or migrate leftover old rows. Proof: a team with an old gateway row hits its cap. Test fails before, passes after. Found in audit for HTPR-7394.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8108",
+      "title": "Server error: an unexpected error",
+      "text": "Problem: seat billing failed for one team. Stripe's subscription did not match our saved seat item. 4 hits within 2 seconds on 2026-10-28. No known user. Severity P2: a feature failed, no data loss. Fix: find why the two disagree. Make billing sync them. Done when: The cause is named on this ticket. That team's seats match Stripe. The error stops. Risk: this touches billing. Check before changing any charge. Undo: revert the change.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8150",
+      "title": "[verify] pipeline broken",
+      "text": "Now Parked. The nightly check cannot run until Vercel accepts the setup. Problem The nightly check of the main flows failed to run. No flows were verified, so a green board today means nothing. Vercel refuses the verification setup before any product check starts. Fix Find why Vercel refuses the setup. Make the nightly check run and report again. Done when The nightly check runs to the end. The report shows real results for each main flow. Risk Until fixed, broken flows can go unnoticed. Undo: nothing changes in the app while we investigate. Decision None. No money or keys are involved so far.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8154",
+      "title": "Seat billing checks fail against saved subscription",
+      "text": "Problem Four seat billing checks failed today. Saved subscription details disagree with Stripe. The exact mismatch and charge outcome remain unknown. Fix Compare saved billing details against Stripe records. Keep all existing charge safeguards. Done when The exact mismatch is identified. A safe correction passes hosted checks. Live seat billing completes without this error. Any charge changes have your approval. Risk Changing billing incorrectly could change customer charges. No repair started; existing safeguards stay. Decision Awaiting approval for read-only billing investigation. https://app.hypertask.ai/detail/project-15/8154#comment-330052 Evidence https://app.hypertask.ai/page/cmvszhv2g001007jvv57rtvib Earlier unresolved failure: https://app.hypertask.ai/detail/project-15/8108",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8232",
+      "title": "[INFRA] Runners never switch flags Off; failed QA goes to Owner + QA",
+      "text": "Runners never switch a flag to Off. Failed QA goes to Owner + QA. Default to everyone. High risk owner + QA. Off is my safety switch. Valentin, 2026-10-31. Now Runners can no longer switch flags Off. This part is live. 10 flags still sit Off from runners. Problem Agents cannot switch any flag right now. The app refuses every agent's switch. So the 10 flags stay stuck at Off. Fix Fix the flag switch first: https://app.hypertask.ai/detail/project-4060/832 Then move the 10 flags to Owner + QA. Then send their tickets back to work. Done when The 10 flags read Owner + QA. Their tickets are back in the work queue. Risk: a broken feature shows to Valentin and QA. That is the point. Decision: none. Valentin already asked for this.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8266",
+      "title": "[INFRA] vcc does not enforce the new 'What this is:' Question rule; 30 blockers need rewrite",
+      "text": "Result: The tool refuses a Question with no What this is line. Ten waiting questions were rewritten. They now pass the check. The app looks the same. Problem Every Question to you starts with What this is. The ticket tool did not check that. Old waiting questions were hard to read. Fix The tool refuses a Question that fails the check. Waiting questions were rewritten in short lines. Rule: https://github.com/valentinyeo/house-rules/pull/115 Done when The tool refuses a Question without What this is. Every waiting Question now passes the check. Risk Worst case: a Question must be rewritten before it posts. Undo: revert the tool change. Decision None.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8338",
+      "title": "Keep 30 days of app request logs in our Cloudflare storage",
+      "text": "Now : storage is free at our size. It waits on your one yes. A private place needs a key. can this be stored for free in r2 bucket on cloduflare what is the size of 30 days of logs? plan it out pls and put it on a ticket so a worker can take it over Valentin, 2026-11-03. Origin: https://app.hypertask.ai/detail/project-4060/336 Now Each app request leaves one log line. Those lines vanish after about one day. We cannot look back at last week's problems. Problem A customer says it broke last week. We cannot check. An app login gets misused. We cannot see what it did. Fix The app saves one short line per request. Lines go to our own Cloudflare storage, in batches. Storage deletes anything older than 30 days by itself. A line keeps only time, action, page, result, user and address. Never message text or private content. Behind a flag, so a bad change rolls back fast. Plan for the worker Check storage access and the bucket list. Ask for the new bucket with one Question. It is his call....",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8459",
+      "title": "Merged changes cannot go live: production builds die for memory again",
+      "text": "Now Merged work cannot reach you tonight. Two live builds died for memory after 18:50. The app still serves the 18:36 copy. Three merged changes wait, mine is one. Problem Each build dies two minutes in. Vercel names it an out of memory kill. One compile worker. Two files at once. Compiler memory capped at 4096 MB. The build machine is the small 8 GB one. The last green build was 18:36 today. The first death added only 241 lines of code. So the code did not grow by much. Fix Build one file at a time. Or lower the compiler memory cap. Both are one line in the build script. Wait for one green build before changing more. A bigger build machine costs money. That step waits for you. Done when Two builds in a row are green. The app serves the newest production copy. The merged changes are live. Risk Slower builds. Nothing else. Undo is one line. Decision None yet. Only a bigger machine would need your yes. Not in this ticket The earlier memory fix is on the Fleet build-fix board. It is...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8719",
+      "title": "Flag switching: three simple rules, remove the extra locks",
+      "text": "why is this flag system so shit? that you can't even use it? who designed it like that if i tell you turn the flag off you turn it off that is the process the only time you ask me for a thumbs up is if YOU propose it, unrequested by me Valentin, 2026-11-04. Now Locks were added one by one, after each slip. Thumbs up, exact Question wording, word lists, lease receipts. His own clear order gets refused. Problem He cannot get a flag switched by asking. Nobody designed the whole thing. Fix Rebuild the switch rules from scratch, with three rules only. His ask, in chat or on a ticket, is the approval. A thumbs up only for a switch an agent proposes unasked. Hard lock only for money, data deletion and customer email. Remove every lock beyond those. Done when His ask switches any flag the same turn. An agent's unasked proposal still needs his thumbs up. Money, deletion and email flags still need his yes. One page lists the three rules, nothing else. Tests cover all three rules. Risk : medium....",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8744",
+      "title": "Cloudflare scan: 53 warnings on our domains, free fixes ready",
+      "text": "Now: Cloudflare's own scan lists 53 warnings. Your call: free fixes. Problem 15 of our sites do not force the safe https link (HSTS). hypertasks.ai and hypertasks.io miss email anti-fake records (DMARC, SPF). Anyone can send email that looks like ours. Some web addresses point at nothing: blog.hypertask.ai, docs-mcp.hypertask.ai, auth.hypertask.ai. A dead address can be taken over by a stranger. pm.hypertask.ai shows an old Hypertask page on another host. The rest are tips, such as no security contact file. Fix (free, Cloudflare settings only) Turn on HSTS and always-https on our domains. Add DMARC and SPF to the domains that send no email. Remove dead addresses. Check pm.hypertask.ai first. Add a security contact file. Not proposed: Cloudflare's paid firewall plan. It costs money. Done when: Cloudflare's scan shows only the paid-plan items. Risk: a removed address was still used. Undo: add it back in Cloudflare. Decision: one Question below.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8745",
+      "title": "Run a Strix attack test on a test copy of the app",
+      "text": "Now: ready to run. Your call: a $50 AI budget. Problem Nobody has tried to break into Hypertask the way an attacker would. Scans only find known patterns. They miss logic holes. Example: an agent login reaches boards it should not, https://app.hypertask.ai/detail/project-15/7146 Fix Run Strix. It is a free, open tool. AI agents act as hackers against a test copy of the app. Test copy only, with two fake teams. Never the live app or real data. Main goal: can one team or agent reach another team's boards? Each hole it proves becomes a Security ticket. Done when Strix report is on this ticket. Every proven hole has a ticket. A rerun after fixes cannot repeat them. Risk: it runs on our server and slows other work. Undo: stop it. Decision: one Question below.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8783",
+      "title": "Claim brake idles app runners by counting CI pull requests",
+      "text": "Six app runners went idle around 05:00 London. The claim brake counted CI and infra pull requests. Fix: count only app pull requests. Also let pull requests name HT Agent Feedback tickets. Feedback ticket: https://app.hypertask.ai/detail/project-12057/547",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8812",
+      "title": "Bug: Unable to use ai chat",
+      "text": "Unable to use ai chat From: The_Aalian (an email) — userId 4 Context: Page: /detail/project-339/1850?inboxFlow=true Title: a client-1850 [HOME]: \"Switching path\" (EN + DE) - Hypertask User agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 App version: 19d1e6e244757c6355e237f14f181fefd6c4e5a7 Notify: yes Chat fix: available to everyone. https://app.hypertask.ai/admin/flags/htpr-8812-chat-first-message",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8846",
+      "title": "Agent notes must never appear under your name",
+      "text": "Problem Valentin, 2026-10-30: ticket has agent lane violation? do you knot know how to find the agent lane? Agent notes appeared as your own a client comments. The agent could not reach that board. Using your login hid the real author. Fix Keep agent notes under the agent's own name. Reuse Chief Of Staff's existing agent identity. Allow the approved a client board, without widening access. Refuse agent-note requests made through your login. Keep ordinary comments from people working. Done when An a client ticket receives an agent log note. The note names Chief Of Staff, not you. The note never appears among people comments. Your login cannot submit an agent log note. Other boards stay private unless explicitly granted. Risk Wrong access could expose another team's tickets. Undo the change while preserving existing board access. Decision None. This continues the original request. Related work Original request: https://app.hypertask.ai/detail/project-4060/944 Shared writing rules...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8861",
+      "title": "CLI: a revoked login looks fine and gives no next step",
+      "text": "Now Command line checks now reject revoked logins. Owners can renew the same agent. Screen recovery stays with Owner + QA. Another runner must review the pictures. why does our cli not give guidenace here its compeltely failing its unusable Problem The status check says \"logged in\" with a revoked login. Agents trust it and look elsewhere. Real calls say \"revoked\". They never say how to get a new login. Token refresh cannot recover a revoked login. An existing agent cannot get a new login. The connector refuses to create one. So agents ask Valentin to paste a key. Fix The status check asks the server. Revoked shows \"revoked\". Every login error names the next step: page link and command. Owners can give an existing agent a fresh login. That takes one command, no browser. Old versions say \"update available\". a client runs 0.2.15. Done when A revoked login shows as revoked. An owner agent renews a login in one command. Each login error names its next step. Risk This touches access. It...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8882",
+      "title": "Lead cannot switch a flag Off on Valentin's order",
+      "text": "Now HT Product Lead could not switch a flag Off on Valentin's order. He had to switch it himself in the flag page. its off but fix the bug that you can t turn this off you need complete authority over feature flags not just me manually Problem The flag server wants the flag's code name in a comment. The comment rules refuse code names in people comments. So the lead can never record his order where the server looks. His chat order counts as approval by house rule. The tool disagrees. Fix HT Product Lead may switch any flag to any mode, Off included. The lead logs his words and the switch in the agent lane. The flag server accepts that agent-lane record as proof. Runners keep today's limits. They still never switch Off. Every lead switch shows in the flag's history with his quoted words. Done when The lead switches a flag Off with one command on his order. No people comment is needed. The flag history shows who switched it and his words. A runner trying the same is still refused. Risk...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8909",
+      "title": "Return abandoned work without interrupting active runners",
+      "text": "Problem Hypertask leaves abandoned tickets In Progress. Fleet Infra and Hypertask both collect them. Cleanup must never interrupt newly resumed work. the infra board is not being maintained Valentin, 2026-10-27. Fix Return abandoned tickets safely, every thirty minutes. Check ownership again before changing each ticket. Done when Both boards return abandoned work automatically. Six quiet hours releases tickets without open changes. Unassigned tickets return immediately. Open changes protect work while owners stay active. After twenty-four quiet hours, open changes stop protecting. Returned tickets keep links to unfinished changes. Unanswered owner questions move to Valentin Review. Human assignments and active work remain untouched. One warning appears when work exceeds capacity. A preview matches a separate manual count. Cleanup reads each board once per run. Work stays within capacity for twenty-four hours. Capacity means live runners plus three tickets. Tests prove resumed work...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8910",
+      "title": "Flag switches refuse chat approval in quote blocks",
+      "text": "Problem Hypertask refuses chat approval inside quote blocks. The writing rules require those quote blocks. Valentin, 2026-10-29: both factories use the quote function we have > quote funciton in descirption and tikcet pls hard rule Fix Accept chat approval recorded inside quote blocks. Keep existing approval limits and older records working. Done when A quote-block approval allows the named flag switch. Older quote-mark approvals still work. Wrong authors and changed approvals remain refused. Expired, conditional, or unrelated approvals remain refused. Runners still cannot switch flags off. Risk A false approval could allow an unwanted switch. Undo: roll back this change. Decision None. Not in this ticket Shared writing checks already have an owner: https://app.hypertask.ai/detail/project-4060/1349 Original report: https://app.hypertask.ai/detail/project-4060/914 Lead permission changes remain separate: https://app.hypertask.ai/detail/project-15/8882",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8922",
+      "title": "Agent feedback, friction: An agent's agent connection call to task.create was refused",
+      "text": "Problem An agent connection was refused. Who hit it : Runner 9, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Free text was supplied and not stored, for privacy. Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8923",
+      "title": "Agent feedback, friction: HTPR-8762 live proof slug normalize",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : Runner 4, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: HTPR-8762 live proof slug normalize Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8924",
+      "title": "Agent feedback, friction: HTPR-8762 proof capture",
+      "text": "Problem An agent's CLI call had a problem. Who hit it : Runner 4, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Note: HTPR-8762 proof capture Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8925",
+      "title": "Agent feedback, friction: An agent's agent connection call to task.create had a problem",
+      "text": "Problem An agent connection had a problem. Who hit it : Runner 5, owned by Valentin Yeo. The report alone does not show whether this is a Hypertask bug. Kind: friction Fix An engineer should look. Done when A repeat report joins this same ticket. The description has no error code. Risk A repeat could open another ticket. Decision None.",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8953",
+      "title": "[BUG] 11 saved views lost their columns and show no tickets",
+      "text": "What's wrong or wanted: 11 saved views show no columns, no tickets. Who it affects: anyone using saved views on any board. Recommended course and why: Repair the views, then stop it happening again. What Valentin must decide: nothing. How to undo: revert the PR. Problem 11 views on this board show \"Create your first column\". Bugs, Agent Feedback, Errors, brain views, Improvements, Backlog views. Their filters are correct. Their saved column list is empty. The column menu then has nothing to switch on. A new view with the same filter works. Agent Feedback still worked on 8 Nov, evening. Screenshots: https://screencast2.com/qwiLt.png https://screencast2.com/NpBwv.png https://screencast2.com/WcggA.png Valentin, 2026-11-09: like all the views brain etc have no tickets despite them being completely valid there is no option to see any columns they are completely broken the ticket needs to prevent the cause. This shouldn't happen Fix Find what emptied the column lists. First suspect: today...",
+      "gold": "brain-hard"
+    },
+    {
+      "id": "HTPR-8743",
+      "title": "Other websites can frame the app; add browser safety rules",
+      "text": "Problem Any website can show app.hypertask.ai inside its own page. A fake page on top can trick a click. That is clickjacking. The app sends no rules on which scripts may run. Mozilla's free check grades app.hypertask.ai C, 50 out of 100. Check: https://developer.mozilla.org/en-US/observatory/analyze?host=app.hypertask.ai Fix Block other sites from framing the app. Add script rules in report-only mode first. Fix what they report. Then enforce. Add the other missing safety lines Mozilla lists. Done when Mozilla grade is B or better. Board, AI chat, uploads, Figma and Slack links still work live. Risk: strict rules block a real feature. Undo: back to report-only. Decision: none.",
+      "gold": "brain-extra-hard"
+    },
+    {
+      "id": "HTPR-8746",
+      "title": "Old payment, email and AI keys still work",
+      "text": "Now: 5 old keys still work. Your call: replace them. Problem Old copies of our code from 2023 and 2024 hold real keys. A scan today tried each key. 5 still work. Stripe live payment key. It can charge and refund. Two SendGrid email keys. They can send email as us. One Google Cloud login, project hypertasks-396716. One OpenAI key. It can spend our AI money. The copies are private. The old GitHub repo and our main server hold them. The public repo is clean. Its history was checked too. Fix Get fresh keys from Stripe, SendGrid, Google and OpenAI. Store them in 1Password and the live app. Switch the old keys off at each provider. Done when The same scan finds 0 working keys. Payments, email and AI still work live. Risk: a missed spot breaks payments or email. Undo: put the old key back until fixed. Decision: one Question below. Not in this ticket: leaked keys in the public repo, https://app.hypertask.ai/detail/project-15/7966",
+      "gold": "brain-extra-hard"
+    }
+  ]
+}

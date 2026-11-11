@@ -22,7 +22,6 @@ import {
   type TAiModelPreferences,
   type TAiModelPreferencesBySurface,
 } from "@/lib/aiModelPreferences";
-import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import {
   aiImageModelDefinitions,
   AUTO_MODEL_OPTION_ID,
@@ -330,10 +329,6 @@ export async function POST(request: NextRequest) {
       }
 
       const preferenceUpdates = Object.entries(body.aiModelPreferences);
-      let taskWriterAuto = false;
-      if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id)) {
-        taskWriterAuto = true;
-      }
       let savedModelAutoEnabled = false;
       if (await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, user.id)) {
         savedModelAutoEnabled = true;
@@ -346,7 +341,6 @@ export async function POST(request: NextRequest) {
         if (getAiModelOptionById(optionId)) return false;
         if (optionId !== AUTO_MODEL_OPTION_ID) return true;
         if (surface === "aiChat") return false;
-        if (surface === "taskWriter") return !taskWriterAuto;
         return !savedModelAutoEnabled;
       });
 
@@ -369,7 +363,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (preferenceUpdates.length > 0 && (modelReset === "failed")) {
+      if (preferenceUpdates.length > 0 && modelReset === "failed") {
         return NextResponse.json(
           { success: false, error: "Model preferences are temporarily unavailable. Please retry." },
           { status: 503 },

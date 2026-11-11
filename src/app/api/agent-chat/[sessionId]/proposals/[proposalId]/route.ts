@@ -175,7 +175,8 @@ async function confirmProposal(
     }
     const sectionCheck = await getSectionForTask(
       proposal.targetProjectId,
-      proposal.targetSectionId
+      proposal.targetSectionId,
+      userId
     );
     if (sectionCheck.error) {
       return fail(sectionCheck.error.message, sectionCheck.error.status);

@@ -23,7 +23,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Agent run lifecycle | [agent-runs.md](agent-runs.md) | read-only QA 985 lifecycle discovery, run reads and authentication refusals |
 | Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
 | Agents and board access | [agents-board-access.md](agents-board-access.md) | QA 985 throwaway agents on sandbox 7049; self-access 403 text, /mcp safe reason, 24/24 invite picker opens; delete fixtures |
-| AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |
+| AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey); `ai-chat-drive.mjs` hands-free drive |
 | Automatic AI feedback tickets | [ai-feedback-reports.md](ai-feedback-reports.md) | live MCP call with an invented field, board count before and after, no ticket |
 | Team AI usage | [ai-usage.md](ai-usage.md) | read-only customer key error and successful report checks |
 | Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | no smoke id; no-login 401 checks on the three admin routes |
@@ -37,7 +37,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
 | CI tests and parallel checks | [ci-tests.md](ci-tests.md) | hosted job overlap, fail-closed summary, shard execution proof |
 | CLI install commands and login | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots, real install and read-only token-login guided start |
-| Command palette | [command-palette.md](command-palette.md) | no smoke id; read-only shots of the palette rows, the help list and a Share Task tooltip |
+| Command palette | [command-palette.md](command-palette.md) | no smoke id; `ctrl-j-drive.mjs` hands-free drive, palette rows and Share Task tooltip shots |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
 | Create task attachments | [create-task-attachments.md](create-task-attachments.md) | `create-task` covers save only; attachments verify by hand |
 | Board custom instructions | [custom-instructions.md](custom-instructions.md) | QA 985 saved multiline text, reload/reopen, failed and empty saves |

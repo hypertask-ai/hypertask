@@ -15,6 +15,7 @@ export const ensureHtpr9019ModelChoiceAuto = cache(async (userId: number): Promi
     if (!(await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, userId))) return "done";
 
     const switched = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(7038, ${userId})`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(9019, ${userId})`;
       const marker = await tx.htpr9019ModelChoiceAutoDone.createMany({ data: { userId }, skipDuplicates: true });
       if (!marker.count) return false;
@@ -48,10 +49,10 @@ export const ensureHtpr9019ModelChoiceAuto = cache(async (userId: number): Promi
         UPDATE "UserSetting" SET "aiModelPreferences" = switched.preferences FROM switched
         WHERE "userId" = ${userId} AND switched.n = (SELECT count(*) FROM changes) AND switched.n > 0
       `;
+      await tx.$executeRaw`
+        INSERT INTO htpr_7038_model_choice_reset_done (user_id) VALUES (${userId}) ON CONFLICT (user_id) DO NOTHING
+      `;
       if (updated > 0) {
-        await tx.$executeRaw`
-          INSERT INTO htpr_7038_model_choice_reset_done (user_id) VALUES (${userId}) ON CONFLICT (user_id) DO NOTHING
-        `;
         const redis = await getRedis();
         await redis.setex(`user:${userId}:user-preferences`, 10, "__invalidated__");
       }

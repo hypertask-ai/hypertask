@@ -72,7 +72,7 @@ const resetSavedHaikuChoicesOnce = cache(async (userId: number): Promise<Htpr703
 });
 
 export const ensureHtpr7038ModelReset = cache(async (userId: number): Promise<Htpr7038ModelResetResult> => {
-  const result = await resetSavedHaikuChoicesOnce(userId);
-  const switched = await ensureHtpr9019ModelChoiceAuto(userId).catch(() => "failed" as const);
-  return switched === "failed" ? "failed" : result;
+  const switched = await ensureHtpr9019ModelChoiceAuto(userId);
+  if (switched === "failed") return "failed";
+  return resetSavedHaikuChoicesOnce(userId);
 });

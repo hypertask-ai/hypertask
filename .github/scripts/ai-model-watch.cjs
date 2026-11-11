@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const { createHash } = require("node:crypto");
 const { identity } = require("../../scripts/model-diff");
+const { selectWatched, worthFiling } = require("./model-watch-allowlist.cjs");
 
 const APP = "https://app.hypertask.ai";
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -17,13 +18,28 @@ function ticketFor(finding) {
 }
 
 function rollupTicket(findings, now = new Date()) {
-  const marker = `modelwatchrollup-${now.toISOString().slice(0, 10)}`;
+  const models = findings.map((finding) => `${finding.provider}/${identity(finding.model).name}`).sort();
+  const families = [...new Set(models.map((model) => identity(model).family))].sort();
+  const fingerprint = createHash("sha256").update(models.join("\n")).digest().readBigUInt64BE(0).toString().slice(0, 9);
+  const marker = `modelwatchrollup-${families.slice(0, 3).join("-")}-${models.length}-${fingerprint}`;
   const items = findings.map((finding) => `<li><code>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}</code>. Gateway input price per million tokens: ${finding.inputPerMillion == null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}. ${escapeHtml(finding.action)}.</li>`).join("");
   return {
     marker,
     title: `AI model watch new classes [${marker}]`,
-    description: `<p><strong>${findings.length} new model classes are not in our catalog.</strong></p><ul>${items}</ul>${GUIDANCE}`,
+    description: `<p><strong>${findings.length} new model classes are not in our catalog.</strong></p><p>Gateway check ${now.toISOString().slice(0, 10)}. The same list does not file again.</p><ul>${items}</ul>${GUIDANCE}`,
   };
+}
+
+function fileReport(report, options = {}) {
+  if (!report.sourcesUsed?.length || !Array.isArray(report.findings)) throw new Error("No usable model discovery report");
+  const { kept, skipped } = selectWatched(report.findings);
+  console.log(`model-watch: ${report.findings.length} finding(s), ${kept.length} watched, ${skipped.length} outside the watch list`);
+  for (const finding of skipped) console.log(`model-watch not watched: ${finding.kind}: ${finding.model}`);
+  if (!worthFiling(kept)) {
+    console.log("model-watch: nothing watched is ready to file; no ticket filed");
+    return Promise.resolve([]);
+  }
+  return fileFindings({ ...report, findings: kept }, options);
 }
 
 async function fileFindings(report, { fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, now = new Date() } = {}) {
@@ -85,9 +101,9 @@ async function fileFindings(report, { fetchImpl = fetch, token = process.env.HYP
   return results;
 }
 
-module.exports = { ticketFor, rollupTicket, fileFindings };
+module.exports = { ticketFor, rollupTicket, fileFindings, fileReport };
 if (require.main === module) {
-  fileFindings(JSON.parse(fs.readFileSync(process.argv[2], "utf8")))
+  fileReport(JSON.parse(fs.readFileSync(process.argv[2], "utf8")))
     .then((results) => console.log(JSON.stringify(results, null, 2)))
     .catch((error) => { console.error(`AI model ticket filing failed: ${error.message}`); process.exitCode = 1; });
 }

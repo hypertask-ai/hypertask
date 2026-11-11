@@ -706,7 +706,6 @@ model Htpr7038ModelChoiceResetDone {
   @@map("htpr_7038_model_choice_reset_done")
 }
 
-// One row per user once HTPR-9019 switched their saved choices to Auto.
 model Htpr9019ModelChoiceAutoDone {
   userId Int      @id @map("user_id")
   doneAt DateTime @default(now()) @map("done_at") @db.Timestamptz(6)
@@ -714,7 +713,6 @@ model Htpr9019ModelChoiceAutoDone {
   @@map("htpr_9019_model_choice_auto_done")
 }
 
-// Keep the HTPR-9019 pre-Auto saved choices for a manual restore.
 model Htpr9019ModelChoiceBackup {
   userId        Int      @map("user_id")
   location      String

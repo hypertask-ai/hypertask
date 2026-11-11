@@ -315,6 +315,7 @@ export const getBulkTaskCommands = (
         {
           key: "bulkSelectAllInColumn",
           name: "Select all in this column",
+          ...(commandOptions.columnSelectAllHintEnabled ? { keyboard: ["SHIFT", "A"] } : {}),
           commandMode: CommandMode.SelectAllInColumn,
           keywords: "select all column section focused selected tasks",
         },
