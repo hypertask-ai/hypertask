@@ -10,7 +10,14 @@ Agents owned by the flag owner switch flags through `PATCH /api/mcp/flags` (scri
 
 ## Driving it with agent-browser
 
-With the runner's own agent identity, `ht-flag get` must list the flags. For the refusal path, `ht-flag set <key> <its current mode> --reason <ticket URL>#comment-<id>` pointing at a comment that is not an approved flag question must answer 403 with the approval error text, and a fresh `ht-flag get` must show the flag mode unchanged. Never switch a production flag merely for QA. Failure-hold validation can safely use an unknown key (400), an empty failure reason (400), or an unrestricted mode (Everyone, Owner, Off) with failure evidence (403). Read the same known flag before and after to prove it stayed unchanged. Actual successful hold, retry and audit/rollback behavior is covered against disposable local data. Record live successful switches UNREACHABLE when no approved disposable flag exists.
+**Hands-free drive:**
+`node .claude/skills/verify-qa/scripts/flags-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+Reads states, refuses an unauthenticated switch, proves no change.
+Prints PASS/FAIL per step and `flags ok`. Loopback only.
+`--break refusal` must print `negative control ok`.
+Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+The runner check
+on a real agent token is still `ht-flag get` and a refused `ht-flag set <key> <its current mode> --reason <ticket URL>#comment-<id>` that is not an approved flag question: 403, then the mode unchanged. Failure-hold validation can safely use an unknown key (400), an empty failure reason (400), or an unrestricted mode (Everyone, Owner, Off) with failure evidence (403). Read the same known flag before and after to prove it stayed unchanged. Actual successful hold, retry and audit/rollback behavior is covered against disposable local data. Record live successful switches UNREACHABLE when no approved disposable flag exists.
 
 ## Gotchas
 

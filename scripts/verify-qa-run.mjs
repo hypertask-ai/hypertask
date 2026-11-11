@@ -28,6 +28,14 @@ export const HANDS_FREE_DRIVES = [
   { script: 'ai-chat-drive.mjs', label: 'AI chat drive, broken chat shortcut', args: ['--break', 'shortcut'], expect: 'negative control ok' },
   { script: 'ctrl-j-drive.mjs', label: 'Ctrl+J drive', args: [], expect: 'ctrl-j drive ok' },
   { script: 'ctrl-j-drive.mjs', label: 'Ctrl+J drive, broken Ctrl+J shortcut', args: ['--break', 'shortcut'], expect: 'negative control ok' },
+  { script: 'board-drive-live.mjs', label: 'Board drive', args: [], expect: 'board ok' },
+  { script: 'board-drive-live.mjs', label: 'Board drive, hidden columns', args: ['--break', 'columns'], expect: 'negative control ok' },
+  { script: 'task-drive-live.mjs', label: 'Task drive', args: [], expect: 'task ok' },
+  { script: 'task-drive-live.mjs', label: 'Task drive, hidden title', args: ['--break', 'title'], expect: 'negative control ok' },
+  { script: 'comments-drive-live.mjs', label: 'Comments drive', args: [], expect: 'comments ok' },
+  { script: 'comments-drive-live.mjs', label: 'Comments drive, blocked post', args: ['--break', 'post'], expect: 'negative control ok' },
+  { script: 'flags-drive-live.mjs', label: 'Flags drive', args: [], expect: 'flags ok' },
+  { script: 'flags-drive-live.mjs', label: 'Flags drive, accepted switch', args: ['--break', 'refusal'], expect: 'negative control ok' },
 ]
 
 async function runHandsFreeDrives(base, out) {

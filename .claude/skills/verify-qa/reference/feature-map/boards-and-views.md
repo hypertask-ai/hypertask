@@ -56,6 +56,13 @@ Capture desktop and phone in Light, AMOLED and Graphite 2, plus the action menu.
 Flag-off users retain the existing grouping with no actions or visibility restriction.
 CI behavior coverage: `tests/htpr-8974-table-groups.test.ts`.
 
+**Hands-free drive:**
+`node .claude/skills/verify-qa/scripts/board-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+Checks columns, cards, saved drag and all four themes.
+Prints PASS/FAIL per step and `board ok`. Loopback only.
+`--break columns` must print `negative control ok`.
+Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+
 ### Bulk move between boards
 
 With HTPR-8737 enabled for Owner + QA, use two writable boards. On the
