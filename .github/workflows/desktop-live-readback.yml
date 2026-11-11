@@ -1,0 +1,43 @@
+name: Desktop live readback
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-live-readback
+  cancel-in-progress: false
+jobs:
+  readback:
+    name: desktop-live-readback
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Require the private QA login
+        env:
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+        run: |
+          if [ -z "$QA_LOGIN_EMAIL" ] || [ -z "$QA_LOGIN_PASSWORD" ]; then
+            echo "::error::not tested: QA login is missing"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: hypertask-ai/hypertask-desktop
+          ref: 13b5fc7d2795fe59b30463001fe8d32c8b3f1802
+          path: desktop
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: stable
+      - name: Build the desktop core
+        working-directory: desktop
+        run: cargo build --release -p ht-core
+      - name: Read desktop writes back from the live app
+        env:
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+        run: python3 .github/scripts/desktop-live-readback.py
