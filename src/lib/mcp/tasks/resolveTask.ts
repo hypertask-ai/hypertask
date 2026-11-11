@@ -14,6 +14,7 @@ const LIKE_WILDCARD = /[\\%_]/;
 export const needsIlikeSemantics = (ticketNumber: string) => LIKE_WILDCARD.test(ticketNumber);
 
 export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string): Promise<number[] | null> => {
+  if (needsIlikeSemantics(ticketNumber)) return null;
   try {
     const rows = await prisma.$queryRaw<{ id: number }[]>`
       SELECT id FROM "Task"
@@ -107,9 +108,7 @@ export async function findTaskByIdentifier(
   let indexedMiss = false;
   const scope = { status: { not: 'Deleted' as const }, project: projectFilter };
   if (ticket_number && await isFeatureEnabled("htpr-8977-indexed-ticket-lookup", user.id)) {
-    const candidates = needsIlikeSemantics(ticket_number)
-      ? null
-      : await caseInsensitiveTicketNumberCandidates(ticket_number);
+    const candidates = await caseInsensitiveTicketNumberCandidates(ticket_number);
     indexedMiss = candidates != null && candidates.length === 0;
     matches = indexedMiss
       ? []
