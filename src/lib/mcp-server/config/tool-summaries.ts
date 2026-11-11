@@ -47,7 +47,7 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   SET_CUSTOM_FIELD_VALUE: 'Returns the field value.',
   SECTION_CRUD: 'Returns the column.',
   GET_COMMENTS: 'Returns task comments.',
-  ADD_COMMENT: 'Returns comment or hidden agent log; use kind question|qa|done for people; describe for routing.',
+  ADD_COMMENT: 'Returns the saved comment, or a refusal when an agent omits kind.',
   UPDATE_COMMENT: 'Returns the updated comment.',
   DELETE_COMMENT: 'Returns comment deletion.',
   CREATE_PAGE: 'Returns the created page.',

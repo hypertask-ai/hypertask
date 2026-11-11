@@ -177,7 +177,7 @@ function loadCommentsRoute({
   }
   const routeModule = { exports: {} }
   const modules = {
-    '@/utils/controllers/projects/getAllIncludes': {},
+    '@/utils/controllers/projects/getAllIncludes': require('./helpers/agent-board-scope.cjs').access,
     '@/lib/media/inlineAgentImages.server': { inlineAgentImagesForUser: async (html) => html },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     'next/server': { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },

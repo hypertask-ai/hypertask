@@ -98,7 +98,7 @@ A test that throws an error on purpose in production puts `[ht-forced-test]` in 
 
 - CLI: POST `/api/mcp/cli-error` (YPER4-356) writes `[cli-error] <command>: <error> (HTTP <status>) v<version> <os>` to Vercel runtime error logs; HTTP status is optional. The Vercel source reads these as service `cli`, board 15, with version and OS in stack rather than the grouping message. Authenticated reports contain only command, Zig error name, optional HTTP status, version and OS; 30 reports per user per hour. Opt-out is client-side, with no server feature flag.
 
-- Vercel: Messages starting with `[email-event]` (Resend bounces and failed sends, YPER4-359) use service `email` and board 4060. Read-only POST `/v1/observability/events`, production runtime errors and proxy 5xx, board 15 except runtime timeouts, the /sse runtime route and dead outgoing webhooks (`[board-webhook]`/`[agent-webhook] delivery failed ...`, one log line per delivery that used up its retries, YPER4-358) on board 4060. Limit 500, cursor paging, exact record dedupe; 30 pages/window and 120 requests/source. HTTP 413 bisects the window; retention HTTP 400 advances the start ten minutes with an explicit coverage warning (counts are lower bounds). HTTP 429 stops the source. Truncated/excluded-interval responses fail closed. Structured message/error details survive; timestamp/correlation envelopes and Prisma input dumps do not become the cause.
+- Vercel: Messages starting with `[email-event]` (Resend bounces and failed sends, YPER4-359) use service `email` and board 4060. Read-only POST `/v1/observability/events`, production runtime errors and proxy 5xx, board 15 except runtime timeouts, the /sse runtime route and dead outgoing webhooks (`[board-webhook]`/`[agent-webhook] delivery failed ...`, one log line per delivery that used up its retries, YPER4-358) on board 4060. Limit 500, cursor paging, exact record dedupe; 30 pages/window and 120 requests/source. HTTP 413 bisects the window; retention HTTP 400 advances the start ten minutes with an explicit coverage warning (counts are lower bounds). HTTP 429 stops the source. A window still paging after thirty pages is halved and re-read, so a busy source keeps its full coverage. Truncated/excluded-interval responses fail closed. Structured message/error details survive; timestamp/correlation envelopes and Prisma input dumps do not become the cause.
 - Realtime: hosted Pusher trigger failures already logged by the app as `[realtime] broadcast failed`. Reuses the bounded Vercel runtime reader with `(level:warn OR level:error) AND environment:production`, then selects that exact prefix locally because Vercel does not allow querying the message dimension. Board 4060, service `realtime`; the normal `vercel` source excludes these records to avoid duplicate tickets/counts. Same paging, dedupe, retention and failure semantics as Vercel. Server-to-Pusher auth/not-found responses and aborted publishes are real failures, so the generic expected-client HTTP/abort noise rules exclude `realtime`; forced-test noise still applies. No new credentials, logging toggle, drain or app deployment required.
 - GitHub: `gh run list --json` on production plus scheduled runs, failure and timed_out; finished timestamps select the collection window. A 35-day creation lookback covers GitHub's maximum workflow lifetime, bounded at 10,000 runs/list and 20 `gh run view --json jobs` lookups. Newest runs get job lookups; the remainder use workflow names so the whole window advances. Board 4060.
 - VPS: priority err user and readable system journals, grouped per UTC day, unit and normalized message; journal cursors dedupe overlapping user/system records. Own `error-collector.service` records excluded. Unreadable system journal is an explicit partial-coverage warning. Board 4060. Failed units without priority-err log entries are not measured.
@@ -153,3 +153,41 @@ window; durable markers recover interrupted writes. Ordinary errors retain their
 six-hour activity policy. Tagged product alerts get the same related-incident
 check before `ship-claim` writes. The sanitized historical replay lives in
 `fixtures/project-validation.json`; hosted tests prove writes with fake CLIs.
+
+## GitHub-hosted Vercel feed (HYCI-260)
+
+`error-collector-vercel.yml` runs on GitHub-hosted Ubuntu using the existing
+Vercel secret. An independent chain job dispatches the next production run on a
+fifteen-minute boundary, even after collection fails or times out. Collection and
+hand-off have separate locks, so a waiting link cannot block collection. The cron
+is an hourly backstop, not the cadence source; the shared schedule-chain helper
+stands down while another link is active. Each source reads the preceding 24 hours
+through the existing bounded adapter, so the VPS recovers missed timer runs
+without another state writer or ticket writer.
+
+A failed source is absent, never an empty successful batch, and an all-failed run
+fails and publishes nothing. Vercel retention still applies, so expired outage
+logs cannot be recovered. A truncated snapshot reports its retained start; an
+older checkpoint fast-forwards to the snapshot end and records the dropped
+interval as a coverage gap, so no day claims coverage it never read.
+
+Production messages never appear in Actions output or plaintext artifacts.
+Snapshots use AES-256-GCM with a random key wrapped by the committed RSA public
+key; the private key lives only on the VPS at
+`~/.local/state/error-collector/vercel-feed.pem` (mode 600). Replacing it needs a
+new `vercel-feed.pub.pem` and hosted run. Artifacts expire after two days, and
+neither workflow nor snapshot holds a board write token.
+
+The installed service sets `ERROR_COLLECTOR_VERCEL_HOSTED=1`. Its three sources
+share one download per collector process of the newest production run that
+published an artifact, even when that run's hand-off job failed. Downloads use a
+hypertask-runners app token from `gh-app-token` and ignore a stored human login.
+Failed decryption, missing sources, invalid coverage starts and replayed or future
+ends leave checkpoints unchanged. The collector advances only to the snapshot's
+end, never download time, and filters overlapping events before counting.
+
+Before installing, ensure the private key exists and dispatch the production
+workflow once. Install the merged collector, then check that all three
+`state.sources` timestamps advance and a production error reaches its ticket.
+Undo by setting `ERROR_COLLECTOR_VERCEL_HOSTED=0` in the private service
+environment file and restarting; direct reads stay blocked from the VPS.

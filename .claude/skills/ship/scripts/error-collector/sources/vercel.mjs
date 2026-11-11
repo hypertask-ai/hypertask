@@ -1,4 +1,5 @@
 import { key, query } from '../io.mjs';
+import { fetchHosted } from '../vercel-hosted.mjs';
 
 export const name = 'vercel';
 const realtimeFailure = row => /^\[[\w/-]+\] (?:[\w-]+ )*broadcast failed(?:\s|$)/.test(messageParts(row.message).message);
@@ -50,10 +51,11 @@ export function parseEvents(rows, service = name) {
   });
 }
 
-export async function fetchVercel({ since, until, env }, service = name) {
-  const token = key('vercel', 'VERCEL_TOKEN', env);
-  const team = key('vercel', 'VERCEL_TEAM_ID', env);
-  const project = key('vercel', 'VERCEL_PROJECT_ID', env);
+export async function fetchVercel({ since, until, env, coverage = false }, service = name) {
+  if (env.ERROR_COLLECTOR_VERCEL_HOSTED === '1') return fetchHosted({ since, until, env }, service);
+  const token = env.VERCEL_TOKEN || key('vercel', 'VERCEL_TOKEN', env);
+  const team = env.VERCEL_TEAM_ID || key('vercel', 'VERCEL_TEAM_ID', env);
+  const project = env.VERCEL_PROJECT_ID || key('vercel', 'VERCEL_PROJECT_ID', env);
   const proxy = service === 'vercel-5xx';
   const base = {
     event: proxy ? 'vercel.proxy_response' : 'vercel.log',
@@ -63,6 +65,7 @@ export async function fetchVercel({ since, until, env }, service = name) {
     filter: proxy ? 'httpStatus >= 500 AND environment:production AND NOT pathType:"background_func"' : service === 'realtime' ? '(level:warn OR level:error) AND environment:production' : 'level:error AND environment:production',
   };
   let calls = 0;
+  let retainedStart = Date.parse(since);
   const unique = new Map();
   async function window(start, end, depth = 0) {
     let cursor;
@@ -81,6 +84,7 @@ export async function fetchVercel({ since, until, env }, service = name) {
       }
       if (status === 400 && /retain.*runtime logs|retention/i.test(JSON.stringify(data)) && end - start > 600000 && depth < 12) {
         console.error(`error-collector: source ${service} retention gap; moving start forward 10 minutes`);
+        retainedStart = Math.max(retainedStart, start + 600000);
         await window(start + 600000, end, depth + 1);
         return;
       }
@@ -92,10 +96,18 @@ export async function fetchVercel({ since, until, env }, service = name) {
       if (!cursor || cursors.has(cursor)) throw new Error('invalid Vercel cursor');
       cursors.add(cursor);
     }
+    if (depth < 12 && end - start > 60000) {
+      const middle = Math.floor((start + end) / 2);
+      console.error(`error-collector: source ${service} page budget; halving the window`);
+      await window(start, middle, depth + 1);
+      await window(middle, end, depth + 1);
+      return;
+    }
     throw new Error('Vercel page budget exceeded');
   }
   await window(Date.parse(since), Date.parse(until));
-  return parseEvents([...unique.values()], service);
+  const events = parseEvents([...unique.values()], service);
+  return coverage ? { since: new Date(retainedStart).toISOString(), until, events: events.filter(event => Date.parse(event.ts) > retainedStart) } : events;
 }
 
 export async function fetch(context) { return fetchVercel(context); }

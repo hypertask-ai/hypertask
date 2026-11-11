@@ -29,8 +29,12 @@ function exportedMethods(file) {
 }
 new Function('module', 'exports', 'require', code)(loadedModule, loadedModule.exports, (name) => {
   if (name === '@/lib/mcp-server/utils/errors') return { ApiError }
-  assert.ok(name.startsWith('./') && name.endsWith('/operation'), `Unexpected operation import ${name}`)
-  const file = 'src/lib/mcp/operations/' + name.slice(2) + '.ts'
+  const chatRoute = [
+    '@/app/api/mcp/chat/pending/route',
+    '@/app/api/mcp/chat/sessions/[sessionId]/messages/route',
+  ].includes(name)
+  assert.ok(chatRoute || (name.startsWith('./') && name.endsWith('/operation')), `Unexpected operation import ${name}`)
+  const file = chatRoute ? 'src/' + name.slice(2) + '.ts' : 'src/lib/mcp/operations/' + name.slice(2) + '.ts'
   return Object.fromEntries(exportedMethods(file).map((method) => [method, async (request, context) => {
     call = { file, method, params: await context.params, request }
     return Response.json({ success: true })
@@ -54,6 +58,18 @@ for (const operation of operationModules) {
     }
   })
 }
+test('chat inbox and transcript routes use the same handlers as REST', async () => {
+  const inbox = new NextRequest('http://mcp.internal/mcp/chat/pending?unanswered=true')
+  assert.equal((await executeMcpOperation(inbox)).status, 200)
+  assert.deepEqual(call, { file: 'src/app/api/mcp/chat/pending/route.ts', method: 'GET', params: {}, request: inbox })
+  for (const method of ['GET', 'POST']) {
+    const request = new NextRequest('http://mcp.internal/mcp/chat/sessions/session%20fixture/messages', { method })
+    assert.equal((await executeMcpOperation(request)).status, 200)
+    assert.deepEqual(call, { file: 'src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts', method, params: { sessionId: 'session fixture' }, request })
+  }
+  await assert.rejects(executeMcpOperation(new NextRequest('http://mcp.internal/mcp/chat/pending', { method: 'POST' })), /Method Not Allowed/)
+})
+
 test('the operation registry rejects unknown routes and methods without loading a handler', async () => {
   await assert.rejects(executeMcpOperation(new NextRequest('http://mcp.internal/mcp/no-such-operation')), /MCP operation not found/)
   await assert.rejects(executeMcpOperation(new NextRequest('http://mcp.internal/mcp/tasks', { method: 'DELETE' })), /Method Not Allowed/)

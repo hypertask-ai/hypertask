@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 import prisma from '@/lib/prisma';
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
 import {
   CommentReactionResult,
@@ -125,7 +126,7 @@ export const POST = wrapMcpRoute(createCommentReactionHandler({
   actorUserId: (ctx) => ctx.user.id,
   findTarget: async (ctx, commentId) => {
     const comment = await prisma.comment.findUnique({
-      where: { id: commentId },
+      where: { id: commentId, task: { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } },
       select: {
         id: true,
         taskId: true,

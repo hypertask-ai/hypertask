@@ -14,6 +14,7 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { hasVisibleContent } from '@/lib/mcp/comments/contentPresence'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import prisma from '@/lib/prisma'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG } from '@/lib/flags/keys'
@@ -158,7 +159,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     }
 
     const comment = await prisma.comment.findUnique({
-      where: { id: commentId },
+      where: { id: commentId, task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } },
       include: {
         task: {
           select: {
@@ -369,7 +370,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     )
 
     const commentWithAgent = await prisma.comment.findUnique({
-      where: { id: commentId },
+      where: { id: commentId, task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } },
       select: {
         agentDisplayName: true,
         agent: {
@@ -466,7 +467,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
     }
 
     const comment = await prisma.comment.findUnique({
-      where: { id: commentId },
+      where: { id: commentId, task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } },
       include: {
         task: {
           select: {
