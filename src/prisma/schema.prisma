@@ -707,20 +707,10 @@ model Htpr7038ModelChoiceResetDone {
 }
 
 model Htpr9019ModelChoiceAutoDone {
-  userId Int      @id @map("user_id")
-  doneAt DateTime @default(now()) @map("done_at") @db.Timestamptz(6)
+  userId              Int      @id @map("user_id")
+  previousPreferences Json? @map("previous_preferences")
 
   @@map("htpr_9019_model_choice_auto_done")
-}
-
-model Htpr9019ModelChoiceBackup {
-  userId        Int      @map("user_id")
-  location      String
-  previousValue String   @map("previous_value")
-  backedUpAt    DateTime @default(now()) @map("backed_up_at") @db.Timestamptz(6)
-
-  @@id([userId, location], map: "htpr_9019_model_choice_backup_pkey")
-  @@map("htpr_9019_model_choice_backup")
 }
 
 model Favorites {

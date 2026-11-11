@@ -231,29 +231,16 @@ for (const surface of ["aiChat", "taskWriter", "writeWithAi", "improveWriting", 
   test(`migrated ${surface} replaces the browser's old choice once and later manual picks stick`, async () => {
     await withPicker(async ({ writes, update, client, getPreference, container }) => {
       assert.equal(getPreference().currentAiOption.id, "claude-haiku-5-5");
-      await act(async () => {
-        client.setQueryData(["preferences"], { aiModelPreferences: { [surface]: "auto" } });
-      });
+      await act(async () => client.setQueryData(["preferences"], { aiModelPreferences: { [surface]: "auto" } }));
       await update({ "htpr-7915-auto-model": true, "htpr-9019-saved-model-auto": true });
       assert.equal(getPreference().currentAiOption.id, "auto");
       assert.match(container.textContent, /Auto/);
       assert.deepEqual(writes, [], "rendering saved Auto must not persist a concrete fallback");
-      await act(async () => {
-        getPreference().setAiOption(getAiModelOptionById("claude-haiku-5-5", true));
-      });
-      assert.equal(writes.length, 1);
-      assert.deepEqual(writes[0], {
-        aiModelPreferences: { [surface]: "claude-haiku-5-5" },
-        aiModelPreferencesTeamId: "fixture-team",
-      });
+      await act(async () => getPreference().setAiOption(getAiModelOptionById("claude-haiku-5-5", true)));
       await update();
       assert.equal(getPreference().currentAiOption.id, "claude-haiku-5-5");
       assert.equal(client.getQueryData(["preferences"]).aiModelPreferences.teams["fixture-team"][surface], "claude-haiku-5-5");
-      assert.equal(writes.length, 1, "the reset must not repeat after a manual pick");
-    }, {
-      preferenceHook: true,
-      surface,
-      initialFlags: { "htpr-7915-auto-model": true, "htpr-9019-saved-model-auto": true },
-    });
+      assert.deepEqual(writes, [{ aiModelPreferences: { [surface]: "claude-haiku-5-5" }, aiModelPreferencesTeamId: "fixture-team" }]);
+    }, { preferenceHook: true, surface, initialFlags: { "htpr-7915-auto-model": true, "htpr-9019-saved-model-auto": true } });
   });
 }

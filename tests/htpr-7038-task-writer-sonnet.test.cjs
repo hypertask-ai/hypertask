@@ -233,20 +233,17 @@ function harness({ savedAuto = false, plan = "Free", saved = null, teamByok = fa
 
 async function main() {
   for (const feature of ["taskWriter", "writeWithAi", "improveWriting"]) {
-    for (const [saved, modelOptionId, expected] of [
-      ["auto", undefined, /gpt-6-luna$/],
-      ["claude-opus-5-5-thinking", "auto", /gpt-6-luna$/],
-      ["auto", "claude-opus-5-5-thinking", /claude-opus-5[.-]5$/],
-      ["claude-opus-5-5-thinking", undefined, /claude-opus-5[.-]5$/],
+    for (const [saved, modelOptionId, teamModel, expected] of [
+      ["auto", undefined, false, /gpt-6-luna$/],
+      ["claude-opus-5-5-thinking", "auto", false, /gpt-6-luna$/],
+      ["auto", "claude-opus-5-5-thinking", false, /claude-opus-5[.-]5$/],
+      ["claude-opus-5-5-thinking", undefined, false, /claude-opus-5[.-]5$/],
+      ["auto", "auto", true, /claude-haiku-5[.-]5$/],
+      ["auto", "claude-opus-5-5-thinking", true, /claude-haiku-5[.-]5$/],
     ]) {
-      const h = harness({ plan: "Pro", savedAuto: true, saved });
-      const result = await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, modelOptionId });
-      assert.match(result.modelId, expected);
-    }
-    for (const modelOptionId of ["auto", "claude-opus-5-5-thinking"]) {
-      const h = harness({ plan: "Pro", savedAuto: true, saved: "auto", settings: { featureModels: { [feature]: "claude-haiku-5-5" } } });
-      const result = await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, modelOptionId });
-      assert.match(result.modelId, /claude-haiku-5[.-]5$/);
+      const settings = teamModel ? { featureModels: { [feature]: "claude-haiku-5-5" } } : {};
+      const h = harness({ plan: "Pro", savedAuto: true, saved, settings });
+      assert.match((await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, modelOptionId })).modelId, expected);
     }
   }
   assert.equal(catalog.isPremiumAiModelDefinition(catalog.getAiModelDefinition("claude-sonnet-5-5")), true);

@@ -1,68 +1,34 @@
 const assert = require("node:assert/strict");
-const { spawnSync } = require("node:child_process");
+const { spawnSync, execFileSync } = require("node:child_process");
 const { Client } = require("pg");
+const { NextRequest } = require("next/server");
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
 const fs = require("node:fs");
 const test = require("node:test");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
-function run(args) {
-  const result = spawnSync("docker", args, { encoding: "utf8", timeout: 60000 });
-  assert.equal(result.status, 0, result.stderr);
-  return result.stdout.trim();
-}
+const run = (args) => execFileSync("docker", args, { encoding: "utf8", timeout: 60000 }).trim();
 
-async function connect(container) {
-  const port = Number(run(["port", container, "5432/tcp"]).split(":").at(-1));
-  const client = new Client({ host: "127.0.0.1", port, user: "postgres", database: "postgres", query_timeout: 30000 });
-  await client.connect();
-  return {
-    async query(sql) {
-      let result = await client.query(sql);
-      if (Array.isArray(result)) result = result.at(-1);
-      return result.command === "SELECT"
-        ? result.rows.map((row) => Object.values(row).map((value) => value !== null && typeof value === "object" ? JSON.stringify(value) : value).join("|")).join("\n")
-        : `${result.command} ${result.rowCount}`;
-    },
-    close: () => client.end(),
-  };
-}
-
-const sql = (strings, values) => strings.reduce((text, part, index) => {
-  if (index < values.length) assert.ok(Number.isInteger(values[index]));
-  return text + part + (index < values.length ? values[index] : "");
-}, "");
-
-test("real saved-choice switch backs up exact JSON paths, rolls back failures and preserves later choices", { timeout: 120000 }, async () => {
+test("real Prisma reset backs up exact JSON, retries failures, sweeps dormant accounts and preserves later picks", { timeout: 120000 }, async () => {
   const container = `htpr-9019-${process.pid}-${Date.now()}`;
-  let db;
+  let db, prisma;
   try {
     run(["run", "-d", "--rm", "--name", container, "-p", "127.0.0.1::5432", "--user", "postgres", "--tmpfs", "/tmp:rw,mode=1777",
       process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea", "tail", "-f", "/dev/null"]);
     run(["exec", container, "sh", "-c", "initdb -D /tmp/db -A trust >/dev/null && echo 'host all all 0.0.0.0/0 trust' >> /tmp/db/pg_hba.conf && pg_ctl -D /tmp/db -l /tmp/log -o \"-c listen_addresses='*' -k /tmp\" -w start >/dev/null"]);
-    db = await connect(container);
+    const connectionString = `postgresql://postgres@127.0.0.1:${run(["port", container, "5432/tcp"]).split(":").at(-1)}/postgres`;
+    db = new Client({ connectionString, query_timeout: 30000 });
+    await db.connect();
+    prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+    const scalar = async (sql, values = []) => Object.values((await db.query(sql, values)).rows[0])[0];
+    const preferences = (id = 1) => scalar('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=$1', [id]);
+    const backup = (id = 1) => scalar('SELECT previous_preferences FROM htpr_9019_model_choice_auto_done WHERE user_id=$1', [id]);
     await db.query('CREATE TABLE "UserSetting" ("userId" int PRIMARY KEY, "aiModelPreferences" jsonb); CREATE TABLE htpr_7038_model_choice_reset_done(user_id int PRIMARY KEY)');
     await db.query(fs.readFileSync("src/prisma/migrations/20261110140000_htpr_9019_saved_model_choice_auto/migration.sql", "utf8"));
     const original = { aiChat: "old-chat", taskWriter: "old-writer", writeWithAi: "old-write", improveWriting: "old-improve", askAi: "old-ask", imageGeneration: "keep-image", thinking: { mode: "high" }, teams: { 'odd.team,{"': { aiChat: "team-pick", imageGeneration: "team-image" }, broken: null } };
-    await db.query(`INSERT INTO "UserSetting" VALUES (1, '${JSON.stringify(original)}'::jsonb), (2, '${JSON.stringify(original)}'::jsonb), (3, '{}'::jsonb)`);
+    await db.query('INSERT INTO "UserSetting" VALUES (1, $1), (2, $1), (3, \'{}\')', [original]);
     let enabled = false, baseEnabled = true, failCache = false, everyone = false;
-    const prisma = {
-      $queryRaw: async (parts, ...values) => (await db.query(sql(parts, values))).split("\n").filter(Boolean).map((value) =>
-        parts.join("").includes("count(*)") ? { remaining: BigInt(value) } : { userId: Number(value) }),
-      htpr7038ModelChoiceResetDone: { findUnique: async ({ where }) => (await db.query(`SELECT user_id FROM htpr_7038_model_choice_reset_done WHERE user_id=${where.userId}`)) ? { userId: where.userId } : null },
-      htpr9019ModelChoiceAutoDone: { findUnique: async ({ where }) => (await db.query(`SELECT user_id FROM htpr_9019_model_choice_auto_done WHERE user_id=${where.userId}`)) ? { userId: where.userId } : null },
-      $transaction: async (callback) => {
-        await db.query("BEGIN");
-        try {
-          const result = await callback({
-            $queryRaw: (parts, ...values) => db.query(sql(parts, values)),
-            $executeRaw: async (parts, ...values) => Number(/UPDATE (\d+)/.exec(await db.query(sql(parts, values)))?.[1] ?? 0),
-            htpr9019ModelChoiceAutoDone: { createMany: async ({ data }) => ({ count: Number(/INSERT (\d+)/.exec(await db.query(`INSERT INTO htpr_9019_model_choice_auto_done(user_id) VALUES (${data.userId}) ON CONFLICT DO NOTHING`))?.[1] ?? 0) }) },
-          });
-          await db.query("COMMIT");
-          return result;
-        } catch (error) { await db.query("ROLLBACK"); throw error; }
-      },
-    };
     const { ensureHtpr9019ModelChoiceAuto: switchChoices, sweepHtpr9019ModelChoices: sweep } = loadModule("src/lib/ai/htpr9019ModelChoiceAuto.ts", {
       react: { cache: (fn) => fn }, "@/lib/prisma": { default: prisma },
       "@/lib/flags": {
@@ -71,18 +37,12 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
       },
       "@/lib/redis": { getRedis: async () => ({ setex: async () => { if (failCache) throw new Error("cache unavailable"); } }) },
     });
-    const preferences = async () => JSON.parse(await db.query('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=1'));
-    assert.equal(await switchChoices(1), "done");
-    assert.deepEqual(await preferences(), original);
-    enabled = true;
-    baseEnabled = false;
-    assert.equal(await switchChoices(1), "done");
-    assert.deepEqual(await preferences(), original);
-    baseEnabled = true;
-    failCache = true;
-    assert.equal(await switchChoices(1), "failed");
-    assert.deepEqual(await preferences(), original);
-    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_backup"), "0");
+    for (const [flag, base, cacheFailure, result] of [[false, true, false, "done"], [true, false, false, "done"], [true, true, true, "failed"]]) {
+      enabled = flag; baseEnabled = base; failCache = cacheFailure;
+      assert.equal(await switchChoices(1), result);
+      assert.deepEqual(await preferences(), original);
+      assert.equal(await scalar("SELECT count(*) FROM htpr_9019_model_choice_auto_done"), "0");
+    }
     failCache = false;
     const { ensureHtpr7038ModelReset: reset } = loadModule("src/lib/ai/htpr7038ModelReset.ts", {
       react: { cache: (fn) => fn }, "@/lib/prisma": { default: prisma },
@@ -91,43 +51,63 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
     assert.equal(await reset(1), "done");
     const expected = { ...original, aiChat: "auto", taskWriter: "auto", writeWithAi: "auto", improveWriting: "auto", askAi: "auto", teams: { ...original.teams, 'odd.team,{"': { aiChat: "auto", imageGeneration: "team-image" } } };
     assert.deepEqual(await preferences(), expected);
-    const backups = JSON.parse(await db.query("SELECT jsonb_agg(jsonb_build_object('path', location::jsonb, 'value', previous_value)) FROM htpr_9019_model_choice_backup"));
-    assert.equal(backups.length, 6);
-    for (const backup of backups) assert.equal(backup.path.reduce((value, key) => value[key], original), backup.value);
-    await db.query(`UPDATE "UserSetting" SET "aiModelPreferences" = jsonb_set("aiModelPreferences", '{aiChat}', '"later-choice"') WHERE "userId"=1`);
-    assert.equal(await switchChoices(1), "done");
-    assert.equal((await preferences()).aiChat, "later-choice");
-    await db.query(`UPDATE "UserSetting" SET "aiModelPreferences" = jsonb_set("aiModelPreferences", '{aiChat}', '"auto"') WHERE "userId"=1`);
+    assert.deepEqual(await backup(), original);
+    for (const choice of ["later-choice", "auto"]) {
+      await db.query('UPDATE "UserSetting" SET "aiModelPreferences" = jsonb_set("aiModelPreferences", \'{aiChat}\', $1) WHERE "userId"=1', [JSON.stringify(choice)]);
+      assert.equal(await switchChoices(1), "done");
+      assert.equal((await preferences()).aiChat, choice);
+    }
     assert.equal(await switchChoices(2), "switched");
     assert.equal(await switchChoices(3), "done");
-    assert.equal(await db.query("SELECT count(*) FROM htpr_7038_model_choice_reset_done"), "3");
-    await db.query(`INSERT INTO "UserSetting" VALUES (4, '${JSON.stringify(original)}'::jsonb), (5, '${JSON.stringify(original)}'::jsonb)`);
+    assert.equal(await scalar("SELECT count(*) FROM htpr_7038_model_choice_reset_done"), "3");
+    await db.query('INSERT INTO "UserSetting" VALUES (4, $1), (5, $1)', [original]);
     assert.deepEqual(await sweep(), { skipped: "waiting for Everyone" });
-    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_auto_done"), "3");
-    everyone = true;
-    baseEnabled = false;
+    assert.equal(await scalar("SELECT count(*) FROM htpr_9019_model_choice_auto_done"), "3");
+    everyone = true; baseEnabled = false;
     assert.deepEqual(await sweep(), { skipped: "waiting for Everyone" });
-    baseEnabled = true;
-    failCache = true;
+    baseEnabled = true; failCache = true;
     assert.deepEqual(await sweep(), { scanned: 2, switched: 0, failed: [4, 5], remaining: 2 });
-    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_backup"), "12");
+    assert.equal(await scalar("SELECT count(*) FROM htpr_9019_model_choice_auto_done"), "3");
     failCache = false;
     assert.deepEqual(await sweep(), { scanned: 2, switched: 2, failed: [], remaining: 0 });
-    assert.deepEqual(JSON.parse(await db.query('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=4')), expected);
-    assert.equal(await db.query("SELECT previous_value FROM htpr_9019_model_choice_backup WHERE user_id=4 AND location='[\"aiChat\"]'"), "old-chat");
-    await db.query(`UPDATE "UserSetting" SET "aiModelPreferences" = jsonb_set("aiModelPreferences", '{aiChat}', '"dormant-later-choice"') WHERE "userId"=4`);
+    assert.deepEqual(await preferences(4), expected);
+    assert.deepEqual(await backup(4), original);
+    await db.query('UPDATE "UserSetting" SET "aiModelPreferences" = jsonb_set("aiModelPreferences", \'{aiChat}\', \'"dormant-later-choice"\') WHERE "userId"=4');
     assert.deepEqual(await sweep(), { scanned: 0, switched: 0, failed: [], remaining: 0 });
-    assert.equal(await db.query('SELECT "aiModelPreferences"->>\'aiChat\' FROM "UserSetting" WHERE "userId"=4'), "dormant-later-choice");
-    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_backup WHERE user_id=4"), "6");
-    await db.query(`INSERT INTO "UserSetting" SELECT id, '{}'::jsonb FROM generate_series(6, 106) id`);
+    assert.equal((await preferences(4)).aiChat, "dormant-later-choice");
+    assert.deepEqual(await backup(4), original);
+    await db.query('INSERT INTO "UserSetting" SELECT id, \'{}\'::jsonb FROM generate_series(6, 106) id');
     assert.deepEqual(await sweep(), { scanned: 100, switched: 0, failed: [], remaining: 1 });
     assert.deepEqual(await sweep(), { scanned: 1, switched: 0, failed: [], remaining: 0 });
-    assert.equal(await db.query("SELECT count(*) FROM htpr_9019_model_choice_auto_done"), "106");
+    assert.equal(await scalar("SELECT count(*) FROM htpr_9019_model_choice_auto_done"), "106");
     await db.query(fs.readFileSync("scripts/htpr-9019-undo-model-choice-auto.sql", "utf8"));
     assert.deepEqual(await preferences(), expected, "later explicit Auto is not migration-owned");
-    assert.deepEqual(JSON.parse(await db.query('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=2')), original, "untouched migration-owned choices are restored");
+    assert.deepEqual(await preferences(2), original, "untouched migration-owned choices are restored");
+    assert.equal((await preferences(4)).aiChat, "dormant-later-choice");
   } finally {
-    await db?.close();
+    await Promise.all([prisma?.$disconnect(), db?.end()]);
     spawnSync("docker", ["rm", "-f", container], { stdio: "ignore", timeout: 10000 });
+  }
+});
+
+test("saved-model cron rejects missing, wrong and unconfigured credentials but allows the scheduler", async () => {
+  const before = process.env.CRON_SECRET;
+  let calls = 0;
+  const result = { scanned: 100, switched: 12, failed: [], remaining: 1141 };
+  const { GET } = loadModule("src/app/api/cron/saved-model-auto/route.ts", {
+    "@/lib/ai/htpr9019ModelChoiceAuto": { sweepHtpr9019ModelChoices: async () => { calls++; return result; } },
+  });
+  try {
+    for (const [secret, token, status, expectedCalls] of [["secret", undefined, 401, 0], ["secret", "wrong", 401, 0], ["secret", "secret", 200, 1], [undefined, "undefined", 401, 1]]) {
+      if (secret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = secret;
+      const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/saved-model-auto", { headers: token ? { authorization: `Bearer ${token}` } : {} }));
+      assert.equal(response.status, status);
+      assert.deepEqual(await response.json(), status === 200 ? result : { error: "unauthorized" });
+      assert.equal(calls, expectedCalls);
+    }
+  } finally {
+    if (before === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = before;
   }
 });
