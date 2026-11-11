@@ -4,7 +4,6 @@ import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
-import { HTPR_8977_INDEXED_TICKET_LOOKUP_FLAG } from '@/lib/flags/definitions/htpr-8977-indexed-ticket-lookup';
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/projects/getAllIncludes';
 
@@ -102,7 +101,7 @@ export async function findTaskByIdentifier(
     });
   let matches: { id: number; projectId: number }[] = [];
   const scope = { status: { not: 'Deleted' as const }, project: projectFilter };
-  if (ticket_number && await isFeatureEnabled(HTPR_8977_INDEXED_TICKET_LOOKUP_FLAG, user.id)) {
+  if (ticket_number && await isFeatureEnabled("htpr-8977-indexed-ticket-lookup", user.id)) {
     const candidates = await caseInsensitiveTicketNumberCandidates(ticket_number);
     matches = candidates.length > 0 && candidates.length <= TICKET_NUMBER_CANDIDATE_LIMIT
       ? await findMatches({
