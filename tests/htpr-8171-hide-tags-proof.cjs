@@ -30,12 +30,17 @@ const mixed = [{
     { id: "mine", taskLabels: [{ label: { id: "feature" } }], assignees: [{ userId: 7, agentId: null }] },
   ],
 }];
+const mixedFilters = [
+  { type: "Labels", searchPayload: [{ id: "bug" }], match: "HIDE" },
+  { type: "Assignees", searchPayload: [{ id: 7, uid: "user-7" }] },
+];
 assert.deepEqual(
-  applyFilters(mixed, [
-    { type: "Labels", searchPayload: [{ id: "bug" }], match: "HIDE" },
-    { type: "Assignees", searchPayload: [{ id: 7, uid: "user-7" }] },
-  ], "ANY")[0].items.map(({ id }) => id),
+  applyFilters(mixed, mixedFilters, "ANY")[0].items.map(({ id }) => id),
   ["bug-mine", "mine"],
+);
+assert.deepEqual(
+  applyFilters(mixed, mixedFilters, "ANY", undefined, { tagHideFilterEnabled: true })[0].items.map(({ id }) => id),
+  ["mine"],
 );
 
 console.log("HIDE-TAG-OK");

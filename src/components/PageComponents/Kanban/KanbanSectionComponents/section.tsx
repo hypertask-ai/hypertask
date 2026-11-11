@@ -155,6 +155,8 @@ export const Section = ({
   const isMbl = useContext(MobileViewContext);
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
   const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
+  let tagHideOn = false;
+  if (tagHideFilterEnabled) tagHideOn = true;
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
   const revealAheadInColumn = useFlag(HTPR_7695_COLUMN_REVEAL_AHEAD_FLAG);
@@ -379,10 +381,10 @@ export const Section = ({
             archivedTasks,
             section.sectionId,
             currentProject,
-            { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, tagHideFilterEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled },
+            { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, tagHideFilterEnabled: tagHideOn, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled },
           )
         : [],
-    [archivedTasks, agentCreatorFilterEnabled, tagHideFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, currentProject, section.sectionId, showArchivedOnBoard]
+    [archivedTasks, agentCreatorFilterEnabled, tagHideOn, assigneeFixEnabled, defaultFiltersFixEnabled, currentProject, section.sectionId, showArchivedOnBoard]
   );
   const archivedTasksPlayList = useMemo(
     () =>

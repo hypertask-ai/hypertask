@@ -27,6 +27,8 @@ const useRenderedViews = (project: IProject | null) => {
   const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
   const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG)
+  let tagHideOn = false
+  if (tagHideFilterEnabled) tagHideOn = true
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const orderedViews = useOrderedViews(project)
   const hiddenViewTabIds = useRecoilValue(hiddenViewTabIdsAtom)
@@ -37,9 +39,9 @@ const useRenderedViews = (project: IProject | null) => {
   const filterRuntimeContext = useMemo(() => ({
     legacyAgentAssigneeMatch: !assigneeFixEnabled,
     agentCreatorFilterEnabled,
-    tagHideFilterEnabled,
+    tagHideFilterEnabled: tagHideOn,
     runningTaskIds: new Set(runningTimers.keys()),
-  }), [agentCreatorFilterEnabled, tagHideFilterEnabled, assigneeFixEnabled, runningTimers])
+  }), [agentCreatorFilterEnabled, tagHideOn, assigneeFixEnabled, runningTimers])
   const defaultViewId = project?.project_view?.default_view_id
   const activeViewId = getActiveBoardViewId(project, activeBuiltinViews)
 

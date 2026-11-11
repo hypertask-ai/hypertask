@@ -217,6 +217,8 @@ const matchesFilterSettings = (
   if (!settings?.addedFilters?.length) return true;
   const addedFilters = filtersRespectingTagHide(settings.addedFilters, runtimeContext);
   if (!addedFilters.length) return true;
+  const hideFilters = addedFilters.filter((filter) => filter.type === "Labels" && filter.match === "HIDE");
+  const matchFilters = hideFilters.length === 0 ? addedFilters : addedFilters.filter((filter) => !hideFilters.includes(filter));
   const overall: TMatchFilters =
     settings.matchFilters === "ALL" ? "ALL" : "ANY";
   const project = projectForTask(task);
@@ -230,12 +232,14 @@ const matchesFilterSettings = (
       condition?.(task, searchPayload, project, match, runtimeContext) ?? false
     );
   };
+  if (hideFilters.some((filter) => !run(filter.type, filter.searchPayload, filter.match))) return false;
+  if (matchFilters.length === 0) return true;
   if (overall === "ALL") {
-    return addedFilters.every((filter) =>
+    return matchFilters.every((filter) =>
       run(filter.type, filter.searchPayload, filter.match),
     );
   }
-  return addedFilters.some((filter) =>
+  return matchFilters.some((filter) =>
     run(filter.type, filter.searchPayload, filter.match),
   );
 };

@@ -117,6 +117,9 @@ export const ToggleFilterType = ({
   handleFilterChange: (filter: TFilterMatch) => void;
   noun?: string;
 }) => {
+  const tagHideEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
+  let label = `Match ${selectedOption === "ALL" ? "ALL" : "ANY"} ${noun}`;
+  if (tagHideEnabled && selectedOption === "HIDE") label = `Hide ${noun}`;
   return (
     <div
       className="text-meta cursor-pointer items-center text-white-black text-nowrap"
@@ -124,9 +127,7 @@ export const ToggleFilterType = ({
         handleFilterChange(selectedOption === "ALL" ? "ANY" : "ALL")
       }
     >
-      <span>
-        {selectedOption === "HIDE" ? `Hide ${noun}` : `Match ${selectedOption === "ALL" ? "ALL" : "ANY"} ${noun}`}
-      </span>
+      <span>{label}</span>
     </div>
   );
 };
@@ -215,9 +216,9 @@ const RenderActiveFilters: FC<RenderActiveFiltersProps> = ({
   return (
     <span className="text-micro font-medium">
       {displayText}
-      {currentlyActive.type === "Labels" && currentlyActive.match === "HIDE" && tagHideEnabled && (
+      {tagHideEnabled && currentlyActive.type === "Labels" && currentlyActive.match === "HIDE" ? (
         <span className="ml-1 text-text-light-gray">· Hide</span>
-      )}
+      ) : null}
       {supportsMatchMode(currentlyActive.type) && currentlyActive.match === "ALL" && (
         <span className="ml-1 text-text-light-gray">· ALL</span>
       )}

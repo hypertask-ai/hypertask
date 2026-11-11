@@ -92,6 +92,8 @@ const setRouteCurrentProject = useSetRecoilState(currentProjectAtom)
 const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
 const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
 const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG)
+let tagHideOn = false
+if (tagHideFilterEnabled) tagHideOn = true
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
 const router = useRouter()
@@ -187,7 +189,7 @@ const markLocalBoardPublished = useCallback(
           )
         : undefined
     if (!localProject) return
-    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, tagHideFilterEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections))
+    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, tagHideFilterEnabled: tagHideOn, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections))
     setBoardAccess((current) =>
       current.key === boardAccessKey &&
       (current.status === "authorized" || current.status === "denied")
@@ -198,7 +200,7 @@ const markLocalBoardPublished = useCallback(
   [
     assigneeFixEnabled,
     agentCreatorFilterEnabled,
-    tagHideFilterEnabled,
+    tagHideOn,
     defaultFiltersFixEnabled,
     restoreUrlViewSections,
     boardAccessKey,
@@ -594,6 +596,8 @@ export function useLandingBoardSurface(context: useLandingBoardSurfaceContext) {
   const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
 const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG)
+let tagHideOn = false
+if (tagHideFilterEnabled) tagHideOn = true
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
   const {
@@ -723,10 +727,10 @@ const projectsForSection = useMemo(() => {
   if (!data?.updatedProjects) return []
   const projects = [...data.updatedProjects]
   if (projectIndex >= 0 && projects[projectIndex]) {
-    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, tagHideFilterEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections)
+    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, tagHideFilterEnabled: tagHideOn, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections)
   }
   return projects
-}, [assigneeFixEnabled, agentCreatorFilterEnabled, tagHideFilterEnabled, defaultFiltersFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
+}, [assigneeFixEnabled, agentCreatorFilterEnabled, tagHideOn, defaultFiltersFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
 
 const pinnedProject = projectsForSection[projectIndex]
 const boardLayoutForRender =

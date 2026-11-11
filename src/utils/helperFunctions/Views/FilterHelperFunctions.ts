@@ -439,11 +439,19 @@ export function applyFilters(
   if (activeFilters.length === 0) {
     return sections;
   }
+  const hideFilters = activeFilters.filter((filter) => filter.type === "Labels" && filter.match === "HIDE");
+  const matchFilters = hideFilters.length === 0 ? activeFilters : activeFilters.filter((filter) => !hideFilters.includes(filter));
 
   return sections.map((section, sectionIdx) => {
     const filteredItems = (section.items ?? []).filter((item, itemIdx) => {
+      const hidden = hideFilters.some((filter) => {
+        const condition = filter.condition ?? defaultConditions[filter.type];
+        return condition?.(item, filter.searchPayload, project, filter.match, runtimeContext) === false;
+      });
+      if (hidden) return false;
+      if (matchFilters.length === 0) return true;
       if (overallType === "ALL") {
-        const result = activeFilters.every((filter, filterIdx) => {
+        const result = matchFilters.every((filter, filterIdx) => {
           if (!filter.condition) {
             const defaultCondition = defaultConditions[filter.type];
             const res = defaultCondition?.(item, filter.searchPayload, project, filter.match, runtimeContext) ?? false;
@@ -454,7 +462,7 @@ export function applyFilters(
         });
         return result;
       } else {
-        const result = activeFilters.some((filter, filterIdx) => {
+        const result = matchFilters.some((filter, filterIdx) => {
           if (!filter.condition) {
             const defaultCondition = defaultConditions[filter.type];
             const res = defaultCondition?.(item, filter.searchPayload, project, filter.match, runtimeContext);
