@@ -211,7 +211,10 @@ const InboxSplit = ({
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
   const inboxVisibleOrder = useFlag(HTPR_7801_INBOX_VISIBLE_ORDER_FLAG);
   const needsYouEnabled = useFlag(HTPR_9055_NEEDS_YOU_FLAG);
-  const rankedSplit = needsYouEnabled ? selectedSplit === NEEDS_YOU_SPLIT : false;
+  let rankedSplit = false;
+  if (needsYouEnabled) {
+    rankedSplit = selectedSplit === NEEDS_YOU_SPLIT;
+  }
   let decisionCommentLinks = false;
   if (decisionCommentLinkEnabled) {
     decisionCommentLinks = selectedSplit === decisionsSplitName;
