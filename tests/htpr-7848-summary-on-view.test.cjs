@@ -73,12 +73,12 @@ function harness({ enabledFor = [], extraFlags = [], owners = {} } = {}) {
 
 test("a burst of changes marks one record and starts no AI run", async () => {
   const h = harness({ enabledFor: [6], owners: { 42: 6 } });
-  for (let i = 0; i < 10; i += 1) await h.scheduler({ taskId: 42, ownerUserId: 6 });
+  for (let i = 0; i < 10; i += 1) await h.scheduler({ taskId: 42 });
   assert.equal(h.jobs.length, 0);
   assert.equal(h.redis.values.get("ai-summary:stale:42"), "10");
   assert.equal(h.redis.ttls.size, 0, "the mark must survive until a refresh");
   const started = await h.freshness.readTaskSummaryStaleMarker(42);
-  await h.scheduler({ taskId: 42, ownerUserId: 6 });
+  await h.scheduler({ taskId: 42 });
   await h.freshness.clearTaskSummaryStaleMarker(42, started);
   assert.equal(h.redis.values.get("ai-summary:stale:42"), "11");
 });
@@ -119,6 +119,13 @@ test("switching the flag off stops the on-view run for an existing mark", async 
   await h.freshness.markTaskSummaryStale(48);
   assert.equal(await h.freshness.requestTaskSummaryRefreshOnView({ taskId: 48, ownerUserId: 6 }), "off");
   assert.equal(h.jobs.length, 0);
+});
+
+test("an unreadable owner keeps the scheduled run and writes no mark", async () => {
+  const h = harness({ enabledFor: [6] });
+  await h.scheduler({ taskId: 49, ownerUserId: 6 });
+  assert.deepEqual(h.jobs.map((job) => job.body), [{ taskId: 49 }]);
+  assert.equal(h.redis.values.size, 0);
 });
 
 test("the switch off keeps the scheduled run and marks nothing", async () => {

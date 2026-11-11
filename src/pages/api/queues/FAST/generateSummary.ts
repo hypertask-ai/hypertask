@@ -24,26 +24,20 @@ function buildJobId(taskId: number) {
   return "ai-summary-for-taskId:" + taskId;
 }
 
-function passedOwnerUserId(req: IReq): number | null {
-  if (typeof req.ownerUserId === "number") return req.ownerUserId;
-  if (typeof req.activityOnlyOwnerId === "number") return req.activityOnlyOwnerId;
-  return null;
-}
-
-async function summaryOwnerUserId(req: IReq): Promise<number | null> {
+async function summaryOwnerUserId(taskId: number): Promise<number | null> {
   try {
     const { default: prisma } = await import("@/lib/prisma");
-    const task = await prisma.task.findUnique({ where: { id: req.taskId }, select: { userId: true } });
-    if (typeof task?.userId === "number") return task.userId;
+    const task = await prisma.task.findUnique({ where: { id: taskId }, select: { userId: true } });
+    return task?.userId ?? null;
   } catch (error) {
-    console.warn("[taskSummaries] Could not read the ticket owner", req.taskId, error);
+    console.warn("[taskSummaries] Could not read the ticket owner", taskId, error);
+    return null;
   }
-  return passedOwnerUserId(req);
 }
 
 export default async function scheduleTaskSummaryGeneration(req: IReq) {
   const { taskId, agentId } = req;
-  if (await taskSummaryOnViewEnabled(await summaryOwnerUserId(req))) {
+  if (await taskSummaryOnViewEnabled(await summaryOwnerUserId(taskId))) {
     if (await markTaskSummaryStale(taskId)) return;
   }
   if (!(typeof agentId === "string" && agentId.length > 0) || !(await isFeatureEnabled("htpr-8904-agent-automatic-ai", req.ownerUserId ?? 0))) {
