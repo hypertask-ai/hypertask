@@ -148,7 +148,7 @@ test("fake Lua cache fill honors the writer fence and generation even after fenc
 });
 function flagHarness() {
   const rows = new Map([[flag, { key: flag, mode: "EVERYONE" }], [target, { key: target, mode: "EVERYONE" }]]);
-  const h = { tables: 0, single: 0, users: 0, failRedis: false, rows };
+  const h = { tables: 0, single: 0, users: 0, redisAcquisitions: 0, failRedis: false, rows };
   const db = {
     featureFlagChange: {
       findMany: async () => [],
@@ -167,18 +167,132 @@ function flagHarness() {
   const modules = new Map();
   const mocks = {
     "@/lib/prisma": { default: db }, "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
-    "@/lib/redis": { getRedis: async () => { if (h.failRedis) throw new Error("Redis unavailable"); if (h.redisDelay) await h.redisDelay(); return h.redis ?? redis; } },
+    "@/lib/redis": { getRedis: async () => { h.redisAcquisitions++; if (h.failRedis) throw new Error("Redis unavailable"); if (h.redisDelay) await h.redisDelay(); return h.redis ?? redis; } },
   };
   h.modeCache = load("src/lib/flags/modeCache.ts", mocks, modules);
   h.flags = load("src/lib/flags.ts", mocks, modules);
   h.db = db;
+  h.snapshot = (key = target, userId = 7) => h.flags.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(key, userId));
+  h.agentScope = load("src/lib/auth/agentScope.ts", {
+    ...mocks,
+    "@/lib/telemetry/signupAnalytics": { recordServerCapture: () => {} },
+  }, modules);
+  h.agentRead = (key = target, userId = 7) => h.agentScope.withAgentScopeRequest({ url: "/api/mcp/tasks" }, () => h.snapshot(key, userId));
   h.read = (key = target, userId = 7) => {
     h.modeCache.clearProcessFlagCache();
     return h.flags.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(key, userId));
   };
   return h;
 }
-test("one process keeps flag answers in memory for fifteen seconds and a flag write drops them", async () => {
+test("HTPR-8978 concurrent human requests share one snapshot per minute", async (t) => {
+  t.mock.method(Date, "now", () => now);
+  const h = flagHarness();
+  assert.deepEqual(await Promise.all(Array.from({ length: 50 }, () => h.snapshot())), Array(50).fill(true));
+  assert.equal(h.tables, 1);
+  assert.equal(h.redisAcquisitions, 1);
+  h.rows.get(target).mode = "OFF";
+  now = 59_999;
+  assert.equal(await h.snapshot(), true);
+  assert.equal(h.redisAcquisitions, 1);
+  now = 60_000;
+  assert.deepEqual(await Promise.all(Array.from({ length: 50 }, () => h.snapshot())), Array(50).fill(false));
+  assert.equal(h.tables, 2);
+  assert.equal(h.redisAcquisitions, 2);
+});
+test("HTPR-8978 a second server cannot extend an old shared snapshot beyond one minute", async (t) => {
+  t.mock.method(Date, "now", () => now);
+  const writer = flagHarness(), reader = flagHarness();
+  assert.equal(await writer.snapshot(), true);
+  now = 20_000;
+  assert.equal(await reader.snapshot(), true);
+  assert.equal(reader.tables, 0);
+  await writer.flags.setFeatureFlagMode(target, "OFF");
+  reader.rows.get(target).mode = "OFF";
+  now = 59_999;
+  assert.equal(await reader.snapshot(), true);
+  now = 60_000;
+  assert.equal(await reader.snapshot(), false);
+});
+test("HTPR-8978 an in-flight DB read cannot restore local stale modes after a write", async () => {
+  const h = flagHarness();
+  let release, started;
+  const waiting = new Promise(resolve => { started = resolve; });
+  h.readDelay = () => { started(); return new Promise(resolve => { release = resolve; }); };
+  const stale = h.snapshot();
+  await waiting;
+  await h.flags.setFeatureFlagMode(target, "OFF");
+  h.readDelay = null;
+  release();
+  assert.equal(await stale, false);
+  assert.equal(await h.snapshot(), false);
+});
+test("HTPR-8978 reads racing Redis invalidation cannot poison the completed write", async () => {
+  const h = flagHarness();
+  assert.equal(await h.snapshot(), true);
+  let release, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  h.redis = {
+    mget: (...args) => redis.mget(...args),
+    eval: async (...args) => {
+      entered();
+      await new Promise(resolve => { release = resolve; });
+      return redis.eval(...args);
+    },
+  };
+  const write = h.flags.setFeatureFlagMode(target, "OFF");
+  await waiting;
+  assert.equal(await h.snapshot(), true);
+  release();
+  await write;
+  assert.equal(await h.snapshot(), false);
+});
+test("HTPR-8978 agent flag requests stay off Redis on cold, warm and expired reads", async (t) => {
+  t.mock.method(Date, "now", () => now);
+  const h = flagHarness();
+  h.failRedis = true;
+  assert.deepEqual(await Promise.all(Array.from({ length: 20 }, () => h.agentRead())), Array(20).fill(true));
+  assert.equal(h.tables, 1);
+  now = 59_999;
+  assert.equal(await h.agentRead(), true);
+  now = 60_000;
+  h.rows.get(target).mode = "OWNER_AND_QA";
+  assert.equal(await h.agentRead(), false);
+  assert.equal(await h.agentRead(target, 6), true);
+  assert.equal(await h.agentRead(target, 985), true);
+  h.modeCache.clearProcessFlagCache();
+  h.rows.get(flag).mode = "OFF";
+  assert.equal(await h.agentRead(target, 6), true);
+  assert.equal(await h.agentRead(target, 7), false);
+  assert.equal(h.redisAcquisitions, 0);
+});
+test("HTPR-8978 an agent flag write skips Redis and reaches other servers within one minute", async (t) => {
+  t.mock.method(Date, "now", () => now);
+  const agent = flagHarness(), human = flagHarness();
+  assert.equal(await human.snapshot(), true);
+  await agent.agentScope.withAgentScopeRequest({ url: "/api/mcp/flags", method: "PATCH" }, async () => {
+    await agent.flags.setFeatureFlagMode(target, "OFF");
+    assert.equal(await agent.flags.isFeatureEnabled(target, 7), false);
+  });
+  assert.equal(agent.redisAcquisitions, 0);
+  human.rows.get(target).mode = "OFF";
+  now = 59_999;
+  assert.equal(await human.snapshot(), true);
+  now = 60_000;
+  assert.equal(await human.snapshot(), false);
+});
+test("HTPR-8978 an agent cannot join a human lookup that is using Redis", async () => {
+  const h = flagHarness();
+  let release, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  h.redisDelay = () => { entered(); return new Promise(resolve => { release = resolve; }); };
+  const human = h.snapshot();
+  await waiting;
+  assert.equal(await h.agentRead(), true);
+  assert.equal(h.redisAcquisitions, 1);
+  release();
+  assert.equal(await human, true);
+});
+test("one process keeps flag answers in memory and a flag write drops them", async () => {
   const h = flagHarness();
   const read = () => h.flags.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(target, 7));
   assert.equal(await read(), true);
