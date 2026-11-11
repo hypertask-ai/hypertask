@@ -16,6 +16,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/ai/improve',
   '/api/mcp/ai/models/status',
   '/api/mcp/ai/sessions',
+  '/api/mcp/ai/settings',
   '/api/mcp/ai/task-writer',
   '/api/mcp/ai/usage',
   '/api/mcp/assignees/assign',

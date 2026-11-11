@@ -1,61 +1,26 @@
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
-  AI_PROVIDERS,
   enabledProvidersForTeam,
   getAiProviderInfo,
   getActiveGdprProviderTestLease,
   isAiProviderKey,
   isGdprSafeModeEnabled,
-  resolveTeamProviderEnabled,
   type TAiProviderKey,
 } from "@/lib/aiProviders";
 import { assertUserCanManageTeamByok } from "@/utils/controllers/teams/assertTeamByokAccess";
 import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiSettingsForViewer";
 import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
+import {
+  currentProviderOverrides,
+  currentSettings,
+  providerRows,
+} from "@/utils/controllers/teams/aiProviderSettingsView";
 import prisma from "@/lib/prisma";
 import { getOpenAiOnlyDefaultContext } from "@/app/api/ai/_lib/byokKeys";
 import { isOwnKeyOnlySettings } from "@/lib/ai/forcedTeamKey";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 class ProviderSettingsError extends Error {}
-
-function providerRows(settings: unknown) {
-  return AI_PROVIDERS.filter(
-    (provider) => !isGdprSafeModeEnabled(settings) || !provider.chinaHosted,
-  ).map((provider) => ({
-    key: provider.key,
-    label: provider.label,
-    chinaHosted: provider.chinaHosted,
-    gdprNote: provider.gdprNote,
-    enabled: resolveTeamProviderEnabled(settings, provider.key),
-  }));
-}
-
-function currentProviderOverrides(settings: unknown) {
-  if (!settings || Array.isArray(settings) || typeof settings !== "object") {
-    return {} as Partial<Record<TAiProviderKey, boolean>>;
-  }
-
-  const providers = (settings as { providers?: unknown }).providers;
-  const source =
-    providers && !Array.isArray(providers) && typeof providers === "object"
-      ? (providers as Record<string, unknown>)
-      : (settings as Record<string, unknown>);
-
-  return Object.fromEntries(
-    Object.entries(source).filter(
-      ([key, value]) => isAiProviderKey(key) && typeof value === "boolean",
-    ),
-  ) as Partial<Record<TAiProviderKey, boolean>>;
-}
-
-function currentSettings(settings: unknown): Record<string, unknown> {
-  if (!settings || Array.isArray(settings) || typeof settings !== "object") {
-    return {};
-  }
-
-  return settings as Record<string, unknown>;
-}
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,

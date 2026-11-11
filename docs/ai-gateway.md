@@ -157,6 +157,14 @@ repurpose a team key for tooling:
   Check the `model-canary` gateway tag and key identity after a run;
   org-wide `/v1/credits` totals do not prove isolation.
 
+- **Runner-readable AI settings** - `GET /api/mcp/ai/settings` returns the live
+  setting names a runner needs without a browser session: every provider key and
+  label with its enabled state, the GDPR safe mode, own-key-only, whether the
+  team's gateway key is configured and from which source, and the Jev flag next
+  to its decision model slug. It never returns a key value: `gateway` carries
+  `configured` and `source` only. A team-scoped agent token reads its own team
+  and is refused any other `team_id`.
+
 Also note: "All Trials Key" is the intentional included-allowance key for Free
 and BYOK-plan (and BYOK-comped) teams. It is not a fallback for Premium,
 legacy AI, or Pro-comped teams. Per-team allowance enforcement is tracked in HTPR-5205; until that ships,
