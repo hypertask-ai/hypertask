@@ -27,3 +27,8 @@
 - Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live. Non-app-only merges use the ignored build step below.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
 
+### Hax release-session identity (HYCI-294)
+
+`ship-check` and `ship-gates` share `ship-session-id.py`. Explicit session IDs retain their precedence: Claude, Codex session, Codex thread, then Cursor conversation. Without one, Linux runners resolve the nearest same-user ancestor whose executable is `hax`. The session UUID combines the boot ID, PID and process start ticks: nested command shells resolve the same session, but another hax process cannot inherit its cleanup ownership. A runner name or `AI_AGENT=hax` alone is not identity. Missing identity still refuses branch recording and gate generation. Install the resolver beside both scripts.
+
+HYCI tickets now use the same generated release ledger as the other supported ticket prefixes. Hosted `ship-check-finish.test.py` and `ship-gates.test.sh` fixtures cover the actual process boundary, same-session recording and discovery, cross-session refusal, existing ID precedence, missing identity and prefix collisions. No builds or tests run on the VPS.
