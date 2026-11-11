@@ -36,5 +36,15 @@
     "ticket": "https://app.hypertask.ai/detail/project-15/8991",
     "reason": "Valentin picked option B on the ticket (\"B pls ... urgent i want this fast its very good\"): the right column shows only filled fields with Status and Project first and one quiet Add field link, and the ticket ID moves beside the title. The quiet ID takes width in the title row, so the title box narrows and can wrap one line on narrow widths, which moves the description, thread, composer and properties panel down by that line. Flag off keeps the production layout.",
     "approvedIn": "https://app.hypertask.ai/detail/project-15/8991"
+  },
+  {
+    "flag": "htpr-9076-narrow-inbox-tabs",
+    "page": "inbox",
+    "anchors": [
+      "list"
+    ],
+    "ticket": "https://app.hypertask.ai/detail/project-15/9076",
+    "reason": "Valentin's ticket says the inbox breaks beside the AI chat because the split tabs drop to a bottom bar and rows squeeze their tags. The ticket asks for the tabs to stay at the top and narrow rows to drop their tags first. With this flag on, the tab bar takes its 56px at the top of the inbox when the column is narrow (AI chat open at 768-1100px), so the list starts 56px lower and grows into the space the bottom bar used to take. Every other anchor and every width without the AI chat stays where it was. Flag off keeps today's layout.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/9076"
   }
 ]
