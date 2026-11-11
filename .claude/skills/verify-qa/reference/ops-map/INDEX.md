@@ -10,6 +10,7 @@ production QA of an app change.
 | Visual Regression check | [visual-regression.md](visual-regression.md) | dispatch on production one run at a time, 3 green on one commit, per-screen capture times, no app writes |
 | Production build and deploy | [production-build.md](production-build.md) | Vercel build log of the merge sha, no app writes |
 | Premerge evidence status | [premerge-evidence.md](premerge-evidence.md) | read-only status sweep of open PRs, no app writes |
+| Acceptance proof | [proof-coverage.md](proof-coverage.md) | hosted regression fixtures, installed hashes, independent drive rerun |
 | PR queue picker | [pr-drain-picker.md](pr-drain-picker.md) | installed dry-run queue selection; no PR claims or board writes |
 | Runner pickup | [runner-pickup.md](runner-pickup.md) | installed preview; hosted queue and concurrency fixtures |
 | Runner dispatch | [runner-dispatch.md](runner-dispatch.md) | read-only plan from the live copy, no --go, no app writes |

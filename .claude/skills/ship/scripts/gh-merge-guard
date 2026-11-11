@@ -12,7 +12,7 @@ HOME = Path.home()
 DEST = HOME / '.local/lib/hypertask/merge-guard'
 WRAPPER = HOME / '.local/bin/gh'
 LINE = 'exec $REAL "$@"'
-FILES = ('gh-merge-guard', 'ship-check', 'ci-test-failures.py')
+FILES = ('gh-merge-guard', 'ship-check', 'ci-test-failures.py', 'proof-coverage.py')
 BUILTINS = set('agent-task alias api attestation auth browse cache codespace completion config copilot extension gist gpg-key issue label licenses org preview pr project release repo ruleset run search secret ssh-key status variable version workflow help'.split())
 INSERT = '"$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$@" || exit $?\n'
 

@@ -390,6 +390,115 @@ esac
         self.run_git('branch', 'own/two')
         self.check('cleaned', 'YPER4-697', success=False)
 
+    def test_proof_acceptance_and_authenticated_drive_rerun(self):
+        ticket, run = 'HTPR-7766', '2026-11-09-qa-run-14'
+        folder = self.root / 'evidence' / ticket
+        output = folder / run
+        output.mkdir(parents=True)
+        (folder / 'pr').write_text('42')
+        (output / 'result.json').write_text('{"ok":true}')
+        (output / 'doctor.png').write_bytes(b'screenshot fixture')
+        page = '.claude/skills/verify-qa/reference/feature-map/fixture.md'
+        (self.repo / page).parent.mkdir(parents=True)
+        (self.repo / page).write_text('## Gotchas\n\n- Cursor lost after reload.\n  Check the box.\n\n### Proof\n- Not a gotcha.\n')
+        script = 'drive.py'
+        (self.repo / script).write_text('import os, sys\nprint("drive reached", sys.argv[1])\nsys.exit(int(os.environ.get("DRIVE_EXIT", "0")))\n')
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'proof fixture')
+        sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+        self.write('gh', f'''#!/bin/sh
+case "$1:$2" in
+  pr:view) if [ "$7" = title ]; then echo 'HTPR-7766 [BUGFIX] Fixture'; else echo '{{"number":42,"title":"HTPR-7766 [BUGFIX] Fixture","state":"MERGED","mergeCommit":{{"oid":"{sha}"}},"baseRefName":"production"}}'; fi ;;
+  api:*/status) echo 'Ignored Build Step' ;;
+  *) exit 1 ;;
+esac
+''')
+        self.write('hypertask', '''#!/usr/bin/env python3
+import json, sys
+print(json.dumps({'success':True,'tasks':[{'ticketNumber':'HTPR-7766','boardId':15,'description':'<p><strong>Done when:</strong></p><ul><li><p>Every action works from the keyboard in all three places.</p></li><li><p>Board keys still work.</p></li></ul><p><strong>Risk:</strong> none</p><ul><li>Not acceptance.</li></ul>'}]}))
+''')
+        activity = self.root / 'activity.json'
+        builder = dict(id='builder-note', agentId='builder-id', agentName='Runner 1', runId='builder-run', createdAt='2026-11-09T00:00:00Z', text='Proof builder: PR 42')
+        activity.write_text(json.dumps([builder]))
+        self.write('ht', '''#!/usr/bin/env python3
+import json, os
+from pathlib import Path
+print(json.dumps({'success':True,'activities':json.loads((Path(os.environ['FIXTURE_ROOT'])/'activity.json').read_text())}))
+''')
+        self.write('vcc', '''#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+p = Path(os.environ['FIXTURE_ROOT'])/'activity.json'
+rows = json.loads(p.read_text())
+rows.append(dict(id=str(len(rows)),agentId=os.environ.get('ACTOR','reviewer-id'),agentName='Runner 2',runId='reviewer-run',createdAt=f'2026-11-09T01:00:{len(rows):02d}Z',text=sys.argv[-1]))
+p.write_text(json.dumps(rows))
+print('recorded')
+''')
+        home = self.root / 'home'
+        identity = home / '.agents/skills/ship/scripts/ship-identity'
+        identity.parent.mkdir(parents=True)
+        identity.write_text('#!/bin/sh\nprintf "%s\\tfixture\\n" "${ACTOR_NAME:-Runner 2}"\n')
+        identity.chmod(0o755)
+        self.env['HOME'] = str(home)
+        historical = (SCRIPT.parent / 'fixtures/htpr-7766-proof.md').read_text()
+        historical = historical.replace('c164a28dfcf6f06f5ef05b6fb9f414f880b3b49d', sha)
+        for line in historical.splitlines():
+            if line.startswith('- PASS:'):
+                file = output / line.split(' -> ')[1]
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text('historical fixture evidence')
+        proof = folder / 'proof.md'
+        proof.write_text(historical.replace('feature-map/ai-chat.md', 'feature-map/fixture.md'))
+        self.assertIn('missing Acceptance item: Every action works', self.check('proof', ticket, success=False))
+        self.assertIn('missing Acceptance item: Every action works', self.check('move', ticket, 'Done', success=False))
+        self.assertIn('proof ok', self.check('proof', ticket, SHIP_PROOF_STRICT='0'))
+        complete = f'''Feature map: {page}
+Doctor: sha {sha} deployment success
+Run: {run}
+Drive script: {script}
+
+## Cases
+- PASS: doctor -> doctor.png
+## Acceptance
+- PASS: Every action works from the keyboard in all three places. -> result.json
+- PASS: Board keys still work. -> result.json
+## What usually breaks
+- TRIED: Cursor lost after reload. Check the box. -> result.json
+'''
+        proof.write_text(complete)
+        activity.write_text('[]')
+        self.assertIn('builder must bind', self.check('proof', ticket, success=False))
+        activity.write_text(json.dumps([builder]))
+        self.check('bind', ticket, '42')
+        (output / 'result.json').write_text('')
+        self.check('proof', ticket, success=False)
+        (output / 'result.json').write_text('{"ok":true}')
+        self.assertIn('no independent drive rerun', self.check('proof', ticket, success=False))
+        for before, after, message in [
+            ('- PASS: Board keys still work. -> result.json', '', 'missing Acceptance item: Board keys still work.'),
+            ('Board keys still work. -> result.json', 'Board keys still work. -> absent.json', 'evidence'),
+            ('- TRIED: Cursor lost after reload. Check the box. -> result.json', '', 'missing What usually breaks item: Cursor lost'),
+            ('TRIED: Cursor lost after reload. Check the box. -> result.json', 'NOT-APPLICABLE: Cursor lost after reload. Check the box. -> no', 'needs a reason')]:
+            proof.write_text(complete.replace(before, after))
+            self.assertIn(message, self.check('proof', ticket, success=False))
+        proof.write_text(complete)
+        rerun = lambda n, **kw: self.check('rerun', ticket, script, f'2026-11-09-qa-run-{n}', **kw)
+        self.assertIn('builder cannot', rerun(15, success=False, ACTOR_NAME='Runner 1'))
+        rerun(15, ACTOR='builder-id')
+        self.assertIn('different authenticated agent', self.check('proof', ticket, success=False))
+        rerun(16, success=False, DRIVE_EXIT='1')
+        self.assertIn('rerun failed', self.check('proof', ticket, success=False))
+        rerun(17)
+        self.assertIn('proof ok', self.check('proof', ticket))
+        proof.write_text(complete + '\nChanged proof.\n')
+        self.assertIn('no independent drive rerun', self.check('proof', ticket, success=False))
+        proof.write_text(complete)
+        (folder / '2026-11-09-qa-run-17/drive-result.log').write_text('altered')
+        self.assertIn('evidence changed', self.check('proof', ticket, success=False))
+        proof.write_text(complete.replace('TRIED: Cursor lost after reload. Check the box. -> result.json', 'NOT-APPLICABLE: Cursor lost after reload. Check the box. -> Read-only change; no cursor behavior affected.'))
+        rerun(18)
+        self.assertIn('proof ok', self.check('proof', ticket))
+
 
 if __name__ == '__main__':
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(FinishChecks)

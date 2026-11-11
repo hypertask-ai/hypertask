@@ -42,6 +42,7 @@ class MergeGuardTest(unittest.TestCase):
     def test_install_idempotent_and_original_preserved(self):
         self.assertEqual(self.install().returncode, 0)
         installed = self.wrapper.read_text()
+        self.assertEqual((self.installed / 'proof-coverage.py').read_bytes(), (HERE / 'proof-coverage.py').read_bytes())
         self.assertEqual(self.install().returncode, 0)
         self.assertEqual(self.wrapper.read_text(), installed)
         line = '"$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$@" || exit $?\n'

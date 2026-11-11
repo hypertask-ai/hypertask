@@ -22,7 +22,8 @@
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
-#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
+#   ship-check proof <T>         evidence, complete acceptance coverage and authenticated independent drive rerun
+#   ship-check rerun <T> <script> <run>  explicitly execute the inspected merged drive script and record its result
 #   ship-check done <T>          ticket is in the done column its own board names
 #   ship-check cleaned <T>       only this session's recorded branches and worktrees are gone
 #   ship-check move <T> <section> [project] [destination]  enforce completion before a board section write
@@ -229,6 +230,9 @@ check_branch() {
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
+  if [[ $1 == HTPR-* ]]; then
+    vcc activity add "$1" --text "Proof builder: PR $2" >/dev/null || fail "cannot record authenticated proof builder"
+  fi
   mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && echo "$REPO" > "$EVID/$1/repo" && echo "$BASE" > "$EVID/$1/base" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" "$EVID/$1/elsewhere" && echo "bound $1 to PR $2"
 }
 
@@ -754,13 +758,13 @@ newest_successful_production_sha() {
 }
 
 check_proof() {
-  local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0
+  local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0 mode=${2:-proof}
   dropped_ok proof "$1" && return 0
   elsewhere_ok proof "$1" && return 0
   nochange_ok proof "$1" && return 0
   [ -s "$p" ] || fail "missing $p (verify-qa evidence contract)"
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
-  grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-qa/reference/feature-map/[a-z0-9-]+\.md' "$p" \
+  grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-qa/reference/(feature|ops)-map/[a-z0-9-]+\.md' "$p" \
     || fail "proof.md has no 'Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md' line"
   grep -qE "^[[:space:]]*Doctor:.*${sha:0:9}.*success" "$p" \
     || fail "proof.md 'Doctor:' line must name the latest merge sha ${sha:0:9} and 'success' (stale proof?)"
@@ -777,6 +781,9 @@ check_proof() {
   done < <(grep -E '^[[:space:]]*- PASS:' "$p")
   [ "$n" -gt 0 ] || fail "proof.md has no '- PASS: <case> -> <evidence file>' line"
   [ -n "$(find "$d/$run" -name '*.png' -size +0 -print -quit)" ] || fail "no screenshot (*.png) in $d/$run"
+  if [ "${SHIP_PROOF_STRICT:-1}" != 0 ] || [ "$mode" = rerun ]; then
+    python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/proof-coverage.py" "$1" "$sha" "$(bound_pr "$1")" "$mode" "${@:3}" || return 1
+  fi
   echo "proof ok"
 }
 
@@ -1147,7 +1154,7 @@ PY
 }
 
 case "${1:-}" in
-  pr|merged|deployed|docs|proof|done|cleaned|elsewhere)
+  pr|merged|deployed|docs|proof|rerun|done|cleaned|elsewhere)
     if [ "${SHIP_REPO+x}" != x ] && [ -s "$EVID/${2:-}/repo" ]; then
       REPO=$(cat "$EVID/$2/repo") || fail "could not read bound repo for $2"
     fi
@@ -1174,6 +1181,7 @@ case "${1:-}" in
   deployed) check_deployed "$2" ;;
   docs) check_docs "$2" ;;
   proof) check_proof "$2" ;;
+  rerun) check_proof "$2" rerun "${@:3}" ;;
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;
   move) check_move "${2:-}" "${3:-}" "${4:-}" "${5:-}" ;;

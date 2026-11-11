@@ -43,7 +43,7 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 | Open PR | One existing-ticket PR targeting the proper base; bind with `ship-check bind` | `ship-check pr` passes; no auto-merge |
 | Merge | vcc merge routine and `ship-check guard` | Current-head required checks and production health green |
 | Deploy | vcc deployment routine | `ship-check deployed` passes for the merge SHA |
-| Verify live | [verify-qa](../verify-qa/SKILL.md), matching feature-map page | Real entry-point behavior and side effects; `ship-check proof` for app tickets |
+| Verify live | [verify-qa](../verify-qa/SKILL.md), matching feature-map page | Every acceptance and breakage bullet covered with evidence; a different authenticated runner re-runs the committed drive script before `ship-check proof` and Done |
 | Close | Plain-language outcome, QA report, then Done | `ship-check docs` and `ship-check done` pass |
 | Clean | [clean-up](../clean-up/SKILL.md) | `ship-check cleaned` passes |
 | Reflect | [reflect](../reflect/SKILL.md), once after the last ticket | Accepted proposals handled, or skip reason in activity |

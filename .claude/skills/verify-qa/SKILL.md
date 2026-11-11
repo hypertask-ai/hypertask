@@ -30,11 +30,21 @@ Push, then run `scripts/verify-qa <branch> inbox-cycle`. It uses GitHub-hosted f
    Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md
    Doctor: sha <latest-merge-sha> deployment success; /my-tasks signed in as user <id>
    Run: <YYYY-MM-DD>-qa-run-<n>
+   Drive script: <repository-relative .mjs, .py or .sh committed in the merge>
+
+   ## Acceptance
+   - PASS: <exact ticket acceptance bullet> -> <nonempty-file-in-run-folder>
+
+   ## What usually breaks
+   - TRIED: <exact feature-page bullet, including wrapped lines> -> <nonempty-file>
+   - NOT-APPLICABLE: <exact feature-page bullet> -> <specific reason>
 
    ## Cases
    - PASS: <case> -> <nonempty-file-in-run-folder>
    - UNREACHABLE: <case> -> <reason; closest real check>
    ```
 
-7. Run `.claude/skills/ship/scripts/ship-check proof <TICKET>`. Require `proof ok`; it checks merge SHA, format, run files and screenshots. A FAIL case cannot pass. This validates records, not behavior.
+7. List every bullet under the ticket's Done when / Acceptance criteria and the merged feature page's What usually breaks / Gotchas. Missing items are refused by name. Feature map may also name an ops-map page. Keep the existing Cases, doctor and screenshot evidence.
+   `ship-check bind` records the authenticated builder on the ticket. After building, wait in QA for a different runner; never self-pass when nobody is free. That runner inspects the committed drive script, then explicitly runs `.claude/skills/ship/scripts/ship-check rerun <TICKET> <drive-script> <fresh-YYYY-MM-DD-qa-run-n>`. The script receives the new output directory as its only argument; use it for live driving, never VPS tests/builds. Exit zero records PASS; nonzero/timeout records FAIL in agent activity, with authenticated agent/run IDs and hashes binding the merge, script, proof and output. Do not run uninspected scripts.
+   Run `.claude/skills/ship/scripts/ship-check proof <TICKET>`. Require `proof ok`; Done moves also require the matching independent rerun. Changed proof/evidence or the latest failed rerun invalidates it. Records alone cannot prove behavior; the independent runner must inspect the actual outputs. Emergency rollback: set `SHIP_PROOF_STRICT=0` in the owning runner environment; legacy SHA, Cases, evidence and screenshot checks remain.
 8. Publish the self-contained HTML QA report as a ticket page through `vcc pages create`. Post one `--kind qa` verdict with report link, proof and attachments. Read back. PASS: explain what changed, then Done. FAIL: keep In Progress; follow [ship](../ship/SKILL.md) for flagged failures. Repair and repeat. After two failed repairs, use its ticket-only handoff; do not message a lead. Never invent a pass.
