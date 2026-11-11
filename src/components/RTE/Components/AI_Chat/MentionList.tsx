@@ -98,6 +98,7 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
         if (props.contextCallback && mentionData) {
           props.contextCallback(item);
         }
+        setShowMentionList(false);
       }
     };
 

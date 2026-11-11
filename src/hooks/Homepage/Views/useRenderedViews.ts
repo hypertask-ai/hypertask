@@ -1,4 +1,5 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import { useMemo } from 'react'
 import { useRecoilValue } from '@/lib/state'
 import { IProject, ISection, IView } from '@/models/model'
@@ -25,6 +26,9 @@ const useRenderedViews = (project: IProject | null) => {
   const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG)
   const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
+  const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG)
+  let tagHideOn = false
+  if (tagHideFilterEnabled) tagHideOn = true
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const orderedViews = useOrderedViews(project)
   const hiddenViewTabIds = useRecoilValue(hiddenViewTabIdsAtom)
@@ -35,8 +39,9 @@ const useRenderedViews = (project: IProject | null) => {
   const filterRuntimeContext = useMemo(() => ({
     legacyAgentAssigneeMatch: !assigneeFixEnabled,
     agentCreatorFilterEnabled,
+    tagHideFilterEnabled: tagHideOn,
     runningTaskIds: new Set(runningTimers.keys()),
-  }), [agentCreatorFilterEnabled, assigneeFixEnabled, runningTimers])
+  }), [agentCreatorFilterEnabled, tagHideOn, assigneeFixEnabled, runningTimers])
   const defaultViewId = project?.project_view?.default_view_id
   const activeViewId = getActiveBoardViewId(project, activeBuiltinViews)
 

@@ -260,6 +260,7 @@ function loadCommentsRoute({
       readListQuery: () => ({ listQuery: null }),
     },
   }
+  Object.assign(modules, require('./helpers/stub-map.cjs').waitingActivityStubs)
   modules['@/lib/agents/writing'] = jiti(path.join(root, 'src/lib/agents/writing.ts'))
   modules['@/lib/agents/writingEnforcement'] = require('./helpers/stub-map.cjs').enforcementFor(modules['@/lib/agents/writing'])
   const mockRequire = (request) => {

@@ -72,6 +72,7 @@ function harness({ enabled = true, comments = [comment(1)] } = {}) {
     $transaction: async (operations) => Promise.all(operations),
   };
   const stubs = {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);

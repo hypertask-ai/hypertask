@@ -188,11 +188,19 @@ const githubMetadata = {
 
 async function withMockFetch(mock, callback) {
   const originalFetch = global.fetch;
+  const appId = process.env.GITHUB_PR_LINK_APP_ID;
+  const appKey = process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+  delete process.env.GITHUB_PR_LINK_APP_ID;
+  delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
   global.fetch = mock;
   try {
     await callback();
   } finally {
     global.fetch = originalFetch;
+    if (appId === undefined) delete process.env.GITHUB_PR_LINK_APP_ID;
+    else process.env.GITHUB_PR_LINK_APP_ID = appId;
+    if (appKey === undefined) delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+    else process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = appKey;
   }
 }
 

@@ -234,7 +234,7 @@ for (const surface of ["aiChat", "taskWriter", "writeWithAi", "improveWriting", 
       await act(async () => {
         client.setQueryData(["preferences"], { aiModelPreferences: { [surface]: "auto" } });
       });
-      await update();
+      await update({ "htpr-7915-auto-model": true, "htpr-9019-saved-model-auto": true });
       assert.equal(getPreference().currentAiOption.id, "auto");
       assert.match(container.textContent, /Auto/);
       assert.deepEqual(writes, [], "rendering saved Auto must not persist a concrete fallback");

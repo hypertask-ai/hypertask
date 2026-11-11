@@ -245,7 +245,7 @@ const readerWiring = [
   ["src/utils/controllers/taskDetail/load.ts", /\.\.\.stripForeignTaskRelations\(task\)/],
   ["src/utils/controllers/projects/getBoardTasks.ts", /tasks: tasksWithAgentStatus\.map\(stripForeignTaskRelations\)/],
   ["src/utils/controllers/tasks/getAll.ts", /json:tasks\.map\(stripForeignTaskRelations\)/],
-  ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\)\)/],
+  ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\), parsedUserId\)/],
   ["src/lib/mcp/tasks/mappers.ts", /mapTaskToMcpGetResponse[\s\S]*task = stripForeignTaskRelations\(task\)/],
   ["src/lib/mcp/operations/tasks/operation.ts", /tasksWithBlockers\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
   ["src/lib/ai/tools/listTasks.ts", /tasksWithBlockers\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
@@ -283,10 +283,11 @@ function readerStubs(prisma) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@prisma/client": client,
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags": { isFeatureEnabled: async () => false, featureFlagsForUser: async () => ({}) },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}), getProjectWhere: () => ({}) },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), isAgentVisibleToUser: () => false, accessibleAgentWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/lib/agents/publicAgent": { projectPublicAgent: () => null, redactAgentIdentitiesForPublicShare: (value) => value },
+    "@/lib/tasks/waitingOnActivitySql": { visibleWaitingOnActivity: () => ({}) },
     "@/lib/mcp/agents": { mapVisibleMcpAgent: () => null, mcpVisibleAgentSelect: () => ({}) },
   };
 }
@@ -377,6 +378,7 @@ for (const foreignParent of [false, true]) {
       "@/utils/helperFunctions/Views/SubtaskHelperFunction": {},
       "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": {},
       "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeProjectBoardFilters: (project) => project },
+      "@/lib/flags/definitions/htpr-8171-hide-tags": { HTPR_8171_HIDE_TAGS_FLAG: "htpr-8171-hide-tags" },
       "../projects/getAllIncludes": { getProjectViewBaseInclude: () => ({}) },
     });
     const output = await getProject("share-id");

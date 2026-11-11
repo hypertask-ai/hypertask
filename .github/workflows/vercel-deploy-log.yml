@@ -87,4 +87,7 @@ jobs:
           code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/comments" \
             -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" -d "$BODY")
           echo "comment post: HTTP $code"
-          [ "$code" = 200 ] || [ "$code" = 201 ] || { head -c 300 /tmp/post.out; echo; exit 1; }
+          case "$code" in
+            200|201|202) echo "posted to ticket $TICKET" ;;
+            *) head -c 300 /tmp/post.out; echo; exit 1 ;;
+          esac

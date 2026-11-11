@@ -1,38 +1,28 @@
-import { generateText } from "ai";
-
-import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
-import { gatewayProviderOptionsForModel, resolveGatewayModel, type AiGatewayTags } from "@/app/api/ai/_lib/modelProvider";
+import { getTeamGatewayFunding, isOurGatewayKey, resolveTeamByokApiKey } from "@/app/api/ai/_lib/byokKeys";
+import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { isOwnKeyOnlySettings } from "@/lib/ai/forcedTeamKey";
+import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import prisma from "@/lib/prisma";
 import {
-  JEV_TRIAGE_CALL_TIMEOUT_MS, JEV_TRIAGE_CONCURRENCY, JEV_TRIAGE_MAX_ITEMS, JEV_TRIAGE_MODEL_SLUG,
-  buildJevTriagePrompt, jevTriageBatches, parseJevTriageBatch, selectJevNoiseIds, type JevTriageItem,
+  JEV_TRIAGE_CALL_TIMEOUT_MS, JEV_TRIAGE_CONCURRENCY, JEV_TRIAGE_MAX_ITEMS,
+  buildJevTriageRequest, jevTriageBatches, parseJevTriageBatch, selectJevNoiseIds, type JevTriageItem,
 } from "@/lib/ai/jevInboxTriage";
-
-export const JEV_TRIAGE_FALLBACK_MODEL_SLUG = "anthropic/claude-haiku-5.5";
-export const JEV_TRIAGE_FALLBACK_TIMEOUT_MS = 2500;
 
 export type JevTriageSkipped = "no_team" | "customer_funding" | "no_funding" | null;
 export type JevTriageResult = { noiseIds: string[]; checked: number; skipped: JevTriageSkipped };
 
-const ask = async (slug: string, timeout: number, prompt: string, apiKey: string, tags: AiGatewayTags) => {
-  const model = resolveGatewayModel(slug, apiKey);
-  const reply = generateText({
-    model, prompt, maxOutputTokens: 300, temperature: 0, maxRetries: 0,
-    abortSignal: AbortSignal.timeout(timeout),
-    providerOptions: gatewayProviderOptionsForModel(model, "jev-inbox", tags),
-  }).then((result) => result.text, () => null);
-  const deadline = new Promise<null>((resolve) => {
-    const timer = setTimeout(() => resolve(null), timeout);
-    timer.unref?.();
-  });
-  return Promise.race([reply, deadline]);
-};
-
-const triage = async (batch: JevTriageItem[], apiKey: string, tags: AiGatewayTags) => {
-  const prompt = buildJevTriagePrompt(batch);
-  const jev = parseJevTriageBatch(await ask(JEV_TRIAGE_MODEL_SLUG, JEV_TRIAGE_CALL_TIMEOUT_MS, prompt, apiKey, tags), batch);
-  if (jev.some((verdict) => verdict.confidence !== null)) return jev;
-  return parseJevTriageBatch(await ask(JEV_TRIAGE_FALLBACK_MODEL_SLUG, JEV_TRIAGE_FALLBACK_TIMEOUT_MS, prompt, apiKey, tags), batch);
+const triage = async (batch: JevTriageItem[], apiKey: string) => {
+  try {
+    const response = await fetch("https://openrouter.ai/api/alpha/decisions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(buildJevTriageRequest(batch)),
+      signal: AbortSignal.timeout(JEV_TRIAGE_CALL_TIMEOUT_MS),
+    });
+    return parseJevTriageBatch(response.ok ? await response.json() : null, batch);
+  } catch {
+    return parseJevTriageBatch(null, batch);
+  }
 };
 
 const eachBatch = async <T,>(batches: T[], work: (batch: T) => Promise<void>) => {
@@ -64,24 +54,40 @@ const teamsFor = async (items: JevTriageItem[], userId: number) => {
 };
 
 export async function jevInboxTriage(args: { items: JevTriageItem[]; userId: number }): Promise<JevTriageResult> {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) return { noiseIds: [], checked: 0, skipped: "no_funding" };
   const grouped = await teamsFor(args.items, args.userId);
   if (grouped.size === 0) return { noiseIds: [], checked: 0, skipped: "no_team" };
   const noiseIds = new Set<string>();
   let checked = 0;
+  let submitted = 0;
   let skipped: JevTriageSkipped = "no_team";
   for (const [teamId, items] of grouped) {
-    if (checked >= JEV_TRIAGE_MAX_ITEMS) break;
+    if (submitted >= JEV_TRIAGE_MAX_ITEMS) break;
     const funding = await getTeamGatewayFunding({ trustedTeamId: teamId }).catch(() => undefined);
     if (!funding?.apiKey || funding.source === "customer") {
       skipped = funding?.apiKey ? "customer_funding" : "no_funding";
       continue;
     }
-    const tags: AiGatewayTags = { teamId, userId: args.userId };
-    const batch = items.slice(0, JEV_TRIAGE_MAX_ITEMS - checked);
-    checked += batch.length;
+    const eligibility = await Promise.all([
+      storePlanIdForProject(null, teamId),
+      prisma.team.findUnique({ where: { id: teamId }, select: { aiProviderSettings: true, byokApiKeys: { where: { enabled: true }, select: { provider: true } } } }),
+      resolveTeamByokApiKey("openai", { trustedTeamId: teamId }),
+      resolveTeamByokApiKey("claude", { trustedTeamId: teamId }),
+    ]).catch(() => null);
+    if (!eligibility || !eligibility[1]) { skipped = "no_funding"; continue; }
+    const [plan, team, openai, claude] = eligibility;
+    if (plan === "BYOK" || isOwnKeyOnlySettings(team.aiProviderSettings) || !resolveTeamProviderEnabled(team.aiProviderSettings, "openrouter") ||
+      team.byokApiKeys.some(({ provider }) => !["gateway", "openai", "claude", "managed_gateway"].includes(provider)) ||
+      [openai, claude].some((key) => key && !isOurGatewayKey(key))) { skipped = "customer_funding"; continue; }
+    skipped = null;
+    const batch = items.slice(0, JEV_TRIAGE_MAX_ITEMS - submitted);
+    submitted += batch.length;
     await eachBatch(jevTriageBatches(batch), async (batch) => {
-      for (const id of selectJevNoiseIds(await triage(batch, funding.apiKey, tags))) noiseIds.add(id);
+      const verdicts = await triage(batch, apiKey);
+      checked += verdicts.filter((verdict) => verdict.confidence !== null).length;
+      for (const id of selectJevNoiseIds(verdicts)) noiseIds.add(id);
     });
   }
-  return { noiseIds: Array.from(noiseIds), checked, skipped: checked > 0 ? null : skipped };
+  return { noiseIds: Array.from(noiseIds), checked, skipped };
 }

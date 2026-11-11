@@ -272,8 +272,8 @@ test("invalid requests cannot reach the realtime signer", async () => {
   assert.deepEqual(unconfigured.calls.authorize, []);
 });
 
-function loadRealtimeServer({ configured = true, triggerError = null } = {}) {
-  const calls = { constructed: [], trigger: [], waitUntil: [] };
+function loadRealtimeServer({ configured = true, triggerError = null, scored = 0 } = {}) {
+  const calls = { constructed: [], trigger: [], waitUntil: [], scored: [] };
   class FakePusher {
     constructor(options) {
       calls.constructed.push(options);
@@ -312,6 +312,7 @@ function loadRealtimeServer({ configured = true, triggerError = null } = {}) {
   try {
     const realtime = loadTypeScript("src/lib/realtime/server.ts", {
       pusher: FakePusher,
+      "@/utils/controllers/notifications/scoreNeedsYou": { scoreNeedsYouInbox: async (id) => { calls.scored.push(id); return scored; } },
       "@vercel/functions": {
         waitUntil: (promise) => calls.waitUntil.push(promise),
       },
@@ -339,8 +340,8 @@ function loadRealtimeServer({ configured = true, triggerError = null } = {}) {
   }
 }
 
-test("notification broadcasts target one user's channel and exclude only the acting socket", async () => {
-  const { calls, realtime } = loadRealtimeServer();
+test("notification broadcasts and scoring refreshes target only the recipient", async () => {
+  const { calls, realtime } = loadRealtimeServer({ scored: 1 });
 
   await realtime.broadcastInboxChange(
     6,
@@ -348,6 +349,7 @@ test("notification broadcasts target one user's channel and exclude only the act
     "123.456",
   );
 
+  await Promise.all(calls.waitUntil);
   assert.deepEqual(calls.trigger, [
     [
       "private-user-6",
@@ -355,8 +357,9 @@ test("notification broadcasts target one user's channel and exclude only the act
       { originUserId: 9 },
       { socket_id: "123.456" },
     ],
+    ["private-user-6", "inbox:changed", {}, undefined],
   ]);
-  assert.equal(calls.waitUntil.length, 1);
+  assert.deepEqual(calls.scored, [6]);
 });
 
 test("feature flag broadcasts carry no privileged payload", async () => {
@@ -377,7 +380,9 @@ test("missing recipients and disabled realtime have no broadcast side effects", 
   await disabled.realtime.broadcastInboxChange(6, { originUserId: 6 });
   assert.deepEqual(disabled.calls.constructed, []);
   assert.deepEqual(disabled.calls.trigger, []);
-  assert.deepEqual(disabled.calls.waitUntil, []);
+  assert.equal(disabled.calls.waitUntil.length, 1);
+  await Promise.all(disabled.calls.waitUntil);
+  assert.deepEqual(disabled.calls.scored, [6]);
 });
 
 test("failed realtime deliveries are absorbed after waitUntil captures them", async () => {
@@ -391,8 +396,8 @@ test("failed realtime deliveries are absorbed after waitUntil captures them", as
     await assert.doesNotReject(() =>
       realtime.broadcastInboxChange(6, { originUserId: 9 }),
     );
-    assert.equal(calls.waitUntil.length, 1);
-    await assert.doesNotReject(calls.waitUntil[0]);
+    assert.equal(calls.waitUntil.length, 2);
+    await assert.doesNotReject(Promise.all(calls.waitUntil));
   } finally {
     console.warn = originalWarn;
   }

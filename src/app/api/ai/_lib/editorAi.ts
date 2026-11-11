@@ -18,9 +18,11 @@ import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFall
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
 import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, isGrokGemini4ModelKey, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
+import { taskWriterPickerOption } from "@/lib/taskWriterPickerAuto";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 import { getAiFeatureModelOverride, resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
@@ -711,12 +713,19 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
+  let pickerSelection = null;
+  if (args.aiFeature === "taskWriter" && typeof args.userId === "number") {
+    if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, args.userId)) {
+      pickerSelection = taskWriterPickerOption(args.modelOptionId, args.modelSelected, haiku55Enabled);
+    }
+  }
+  const namedPickerOption = pickerSelection && pickerSelection !== "auto" ? pickerSelection : null;
   const savedAutoChoiceEnabled = savedModelAutoEnabled && (personalModelOptionId === "auto");
-  const requestAuto = args.modelOptionId === "auto" && savedModelAutoEnabled;
-  const explicitOption = savedModelAutoEnabled && args.aiFeature && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
+  const requestAuto = pickerSelection === "auto" || (args.modelOptionId === "auto" && savedModelAutoEnabled);
+  const explicitOption = savedModelAutoEnabled && args.aiFeature && !namedPickerOption && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
     ? getAiModelOptionById(args.modelOptionId, haiku55Enabled)
     : undefined;
-  const autoPick = args.aiFeature && args.userId && !explicitOption && (requestAuto || !personalModelOptionId || savedAutoChoiceEnabled) && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
+  const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !explicitOption && (!personalModelOptionId || savedAutoChoiceEnabled) && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))
     ? pickAutoModelOption({
         feature: args.aiFeature,
         settings: teamContext.settings,
@@ -727,7 +736,9 @@ export async function selectTaskWriterModel(args: {
         forcedProvider: await autoForcedProvider(keyLookup),
       })
     : null;
-  let selection = autoPick
+  let selection = namedPickerOption
+    ? selectionFromModelOption(namedPickerOption)
+    : autoPick
     ? selectionFromModelOption(autoPick)
     : explicitOption
     ? selectionFromModelOption(explicitOption)
@@ -849,7 +860,8 @@ export async function selectTaskWriterModel(args: {
     selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
   }
 
-  const pinnedSonnet = taskWriterSonnet && !autoPick && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  const sonnetSelection = taskWriterSonnet && !autoPick && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  const pinnedSonnet = sonnetSelection && !namedPickerOption;
   if (pinnedSonnet && selection.modelOption) {
     selection.modelOption = {
       ...selection.modelOption,
@@ -859,7 +871,7 @@ export async function selectTaskWriterModel(args: {
       },
     };
   }
-  if (!(pinnedSonnet && (storePlanId === "Free" || storePlanId === "BYOK"))) {
+  if (!(sonnetSelection && (storePlanId === "Free" || storePlanId === "BYOK"))) {
     await assertModelAllowedForPlan(
       args.projectId,
       selection.modelOption,

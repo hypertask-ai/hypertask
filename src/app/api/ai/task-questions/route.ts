@@ -28,6 +28,7 @@ import {
 } from "@/app/api/ai/_lib/taskContent";
 import { resolveSystemModel } from "@/app/api/ai/_lib/systemModelLadder";
 import prisma from "@/lib/prisma";
+import { withPublicWaitingActivities } from "@/lib/tasks/redactWaitingActivities";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export const runtime = "nodejs";
@@ -161,7 +162,8 @@ async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
       });
     }
 
-    const comments = task.comments
+    const visibleTaskComments = await withPublicWaitingActivities(task.comments, viewer.id, task.projectId);
+    const comments = visibleTaskComments
       .map((comment): TaskComment | null => {
         const text = convertHtmlToText(
           comment.text || (comment.activity ? JSON.stringify(comment.activity) : "")
@@ -204,7 +206,7 @@ async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
           creator: { select: { displayName: true, email: true } },
         },
       });
-      viewerLastComment = olderViewerComments
+      viewerLastComment = (await withPublicWaitingActivities(olderViewerComments, viewer.id, task.projectId))
         .map((comment): TaskComment | null => {
           const text = convertHtmlToText(
             comment.text ||

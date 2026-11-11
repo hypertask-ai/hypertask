@@ -4,6 +4,8 @@ import { HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { HTPR_9010_TASK_WRITER_MEMORY_FLAG } from "@/lib/flags/definitions/htpr-9010-task-writer-memory";
 import { HTPR_8028_MOBILE_WRITER_SAVE_FLAG } from "@/lib/flags/definitions/htpr-8028-mobile-writer-save";
 import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
+import { creationScreenshotAttachments, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
+import { hostedScreenshotFiles } from "@/lib/media/hostedScreenshotFiles";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -368,6 +370,7 @@ const TiptapCreateTaskModal = () => {
           instruction,
           chip,
           currentTitle: getCurrentTitle(),
+          guaranteeScreenshots,
         });
         if (latestProjectIdRef.current !== projectForContext.id) {
           throw new Error("The board changed while writing. Please write again.");
@@ -405,6 +408,7 @@ const TiptapCreateTaskModal = () => {
     [
       applyTaskWriterTitle,
       getCurrentTitle,
+      guaranteeScreenshots,
       handleChange,
       projectAssignees,
       projectForContext,
@@ -661,6 +665,17 @@ const TiptapCreateTaskModal = () => {
       toast.error("Add a title to save.");
       releaseSubmission();
       return;
+    }
+    if (guaranteeScreenshots) {
+      const hostedFiles = await hostedScreenshotFiles(attachmentsAtSave.map((attachment) => attachment.file));
+      if (saveEpochRef.current !== epochAtSave) {
+        releaseSubmission();
+        return;
+      }
+      descriptionAtSave = guaranteeCreationScreenshots(descriptionAtSave, {
+        instructions: `${titleAtSave} ${descriptionAtSave}`,
+        attachments: creationScreenshotAttachments(hostedFiles),
+      });
     }
     if (param === "Save") {
       setUploadInProgress(true);

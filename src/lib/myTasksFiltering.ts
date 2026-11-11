@@ -22,10 +22,12 @@ import {
 import { isMyTasksSnoozed } from "@/lib/myTasksSnooze";
 import {
   defaultConditions,
+  filtersRespectingTagHide,
   priorityFilterCondition,
 } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import type {
   IFilterRuntimeContext,
+  TFilterMatch,
   TMatchFilters,
 } from "@/models/Filters/model";
 
@@ -213,25 +215,31 @@ const matchesFilterSettings = (
 ): boolean => {
   const settings = config.filterSettings;
   if (!settings?.addedFilters?.length) return true;
+  const addedFilters = filtersRespectingTagHide(settings.addedFilters, runtimeContext);
+  if (!addedFilters.length) return true;
+  const hideFilters = addedFilters.filter((filter) => filter.type === "Labels" && filter.match === "HIDE");
+  const matchFilters = hideFilters.length === 0 ? addedFilters : addedFilters.filter((filter) => !hideFilters.includes(filter));
   const overall: TMatchFilters =
     settings.matchFilters === "ALL" ? "ALL" : "ANY";
   const project = projectForTask(task);
   const run = (
     type: (typeof settings.addedFilters)[number]["type"],
     searchPayload: unknown[],
-    match?: TMatchFilters,
+    match?: TFilterMatch,
   ) => {
     const condition = defaultConditions[type];
     return (
       condition?.(task, searchPayload, project, match, runtimeContext) ?? false
     );
   };
+  if (hideFilters.some((filter) => !run(filter.type, filter.searchPayload, filter.match))) return false;
+  if (matchFilters.length === 0) return true;
   if (overall === "ALL") {
-    return settings.addedFilters.every((filter) =>
+    return matchFilters.every((filter) =>
       run(filter.type, filter.searchPayload, filter.match),
     );
   }
-  return settings.addedFilters.some((filter) =>
+  return matchFilters.some((filter) =>
     run(filter.type, filter.searchPayload, filter.match),
   );
 };

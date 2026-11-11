@@ -1,4 +1,5 @@
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9055_NEEDS_YOU_FLAG } from "@/lib/flags/definitions/htpr-9055-needs-you";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8090-assignee-inbox";
 import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
@@ -157,12 +158,14 @@ export async function getInboxNotifications(
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
   }
-  const selectedRows = await client.$queryRaw<{ id: number }[]>(Prisma.sql`
-    SELECT selected.id
+  const selectedRows = await client.$queryRaw<{ id: number; needsYouScore: number | null }[]>(Prisma.sql`
+    SELECT selected.id, selected."needsYouScore"
     FROM (
       SELECT DISTINCT ON (n."taskId", n."notification_inviteId")
         n.id,
-        n."createdAt"
+        n."createdAt",
+        MAX(CASE WHEN n."needsYouSource" IN ('jev', 'rules') THEN n."needsYouScore" END)
+          OVER (PARTITION BY n."taskId") AS "needsYouScore"
       FROM "Notification" AS n
       INNER JOIN "Task" AS t ON t.id = n."taskId"
       WHERE ${visibleInboxSql(userId)}
@@ -176,8 +179,8 @@ export async function getInboxNotifications(
   `);
 
   if (!selectedRows.length) return [];
-
-  return client.notification.findMany({
+  const scores = new Map(selectedRows.map((row) => [row.id, row.needsYouScore]));
+  const notifications = await client.notification.findMany({
     include: notificationInboxInclude(userId, withCachedDescription),
     where: {
       AND: [
@@ -188,6 +191,7 @@ export async function getInboxNotifications(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     relationLoadStrategy: "join",
   });
+  return notifications.map((notice) => scores.get(notice.id) == null ? notice : { ...notice, needsYouScore: scores.get(notice.id) });
 }
 
 const getRecentInboxActorActivity = (userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) => {
@@ -238,6 +242,7 @@ const notificationGetAll = async (
       hyperAiInvites,
       waitingTasks,
       userSetting,
+      needsYouEnabled,
     ] = await Promise.all([
       getInboxNotifications(parsedUserId, prisma, options, agentId, teamScope),
       getRecentInboxActorActivity(parsedUserId, agentId, teamScope),
@@ -298,6 +303,7 @@ const notificationGetAll = async (
         where: { userId: parsedUserId },
         select: { notificationMatrix: true },
       }),
+      !agentId && isFeatureEnabled(HTPR_9055_NEEDS_YOU_FLAG, parsedUserId),
     ]);
     const waitingTaskCommentCounts = await userCommentCountsByTaskId(waitingTasks.map((task) => task.id));
     const blockedTasks = waitingTasks.map((task) => ({
@@ -737,7 +743,7 @@ const notificationGetAll = async (
       };
     });
     const quietRows = await markQuietAgentMentions(prisma, parsedUserId, displayedNotifications);
-    const inboxRows = [...quietRows, ...blockedByYouRows];
+    const inboxRows = [...quietRows, ...blockedByYouRows].map((notice) => needsYouEnabled ? { ...notice, needsYouEnabled: true } : notice);
 
     const structuredData = getInboxTabs(
       inboxRows as any,

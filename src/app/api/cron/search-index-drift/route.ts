@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import { getRedis } from "@/lib/redis";
-import { emptyDriftState, type DriftState } from "@/lib/search/indexDrift";
+import { emptyDriftState, driftPassRecorded, type DriftState } from "@/lib/search/indexDrift";
 import { DRIFT_STATE_KEY, runIndexDriftRepair } from "@/lib/search/runIndexDriftRepair";
 
 export const runtime = "nodejs";
@@ -28,11 +28,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "unauthorized" }, { status: 401 });
   }
   const redis = await getRedis();
-  const result = await runIndexDriftRepair(readState(await redis.get(DRIFT_STATE_KEY)));
+  const state = readState(await redis.get(DRIFT_STATE_KEY));
+  const today = new Date().toISOString().slice(0, 10);
+  if (driftPassRecorded(state.results, today)) {
+    const recorded = state.results.find((pass) => pass.date === today)?.found ?? 0;
+    console.log(`[search-index-drift] pass complete drift ${recorded} already recorded for ${today}`);
+    return NextResponse.json({ skipped: "pass recorded today", today, drift: recorded, results: state.results });
+  }
+  const result = await runIndexDriftRepair(state);
   await redis.set(DRIFT_STATE_KEY, JSON.stringify(result.state));
-  console.log(`[search-index-drift] scanned ${result.scanned} reindexed ${result.reindexed} pass ${result.passComplete ? result.passFound : "open"}`);
+  const progress = `scanned ${result.scanned} reindexed ${result.reindexed} cursor ${result.state.afterId} found ${result.state.found} failed ${result.failed.length}`;
+  console.log(result.passComplete
+    ? `[search-index-drift] pass complete drift ${result.passFound} ${progress}`
+    : `[search-index-drift] pass open ${progress}`);
+  for (const failure of result.failed.slice(0, 5)) {
+    console.log(`[search-index-drift] write failed task ${failure.id} ${failure.stage} ${failure.message}`);
+  }
   return NextResponse.json({
     scanned: result.scanned, reindexed: result.reindexed, passComplete: result.passComplete,
     passFound: result.passFound, afterId: result.state.afterId, found: result.state.found, results: result.state.results,
+    failed: result.failed,
   });
 }

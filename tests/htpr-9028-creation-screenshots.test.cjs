@@ -131,7 +131,41 @@ test("without the guarantee, a writer that omits a prose URL leaves no img", asy
   }
 });
 
-function createTool(writes, guarantee, message = "Create a task from this screenshot.") {
+test("the new task inline writer restores pasted screenshots without relying on model output", async () => {
+  const previousFetch = global.fetch;
+  const { requestNewTaskWrite } = load("src/lib/ai/newTaskWrite.ts", {
+    "@/lib/constants/constants": { EstimateConstants: [], PriorityConstants: [] },
+    "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
+  });
+  try {
+    const omitted = "<h1 id=\"ai-generated-task-title\">Fix</h1><p>Fix the layout.</p>";
+    const write = async (html, instruction, guaranteeScreenshots) => {
+      global.fetch = async () => new Response(html);
+      return requestNewTaskWrite({
+        project: { id: 15 }, instruction, chip: null, currentTitle: "Fix", guaranteeScreenshots,
+      });
+    };
+    const instruction = `Fix this screenshot ${shot}`;
+    const restored = await write(omitted, instruction, true);
+    assert.equal(count(restored), 1);
+    assert.ok(restored.includes(shot));
+    assert.equal(count(await write(restored, instruction, true)), 1);
+    assert.equal(await write(omitted, instruction, false), omitted);
+    assert.equal(await write(omitted, `${instruction}. Link only.`, true), omitted);
+    assert.equal(await write("", instruction, true), "");
+    assert.equal(await write(omitted, "Fix https://example.com/spec.pdf", true), omitted);
+    global.fetch = async () => new Response("Unavailable", { status: 503 });
+    await assert.rejects(requestNewTaskWrite({
+      project: { id: 15 }, instruction, chip: null, currentTitle: "Fix", guaranteeScreenshots: true,
+    }));
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+const base64Png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==";
+
+function createTool(writes, guarantee, message = "Create a task from this screenshot.", images = [png]) {
   const task = { id: 91, projectId: 15, userId: 985, uniqueIndex: 91, title: "Evidence", sectionId: 7 };
   const context = {
     inlineAgentImagesEnabled: true,
@@ -142,14 +176,17 @@ function createTool(writes, guarantee, message = "Create a task from this screen
     sendStatus() {},
     body: {
       message,
-      images64: [png],
+      images64: images,
       attachments: [],
     },
   };
   const { createCreateTaskTool } = load("src/lib/ai/tools/createTask.ts", {
     "@/lib/errors/reportError": { reportError: async () => {} },
     ai: { tool: (definition) => definition },
-    "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
+    "@/lib/media/inlineAgentImages.server": {
+      inlineAgentImagesForUser: async (html) => html,
+      hostInlineScreenshots: async (files) => files.map((file) => (file.url.startsWith("data:") ? { ...file, url: shot, fileName: "screenshot.png", mimeType: "image/png" } : file)),
+    },
     "@/lib/prisma": { default: {
       task: { findUnique: async () => task },
       user: { findUnique: async () => ({ id: 985 }) },
@@ -247,4 +284,69 @@ test("the uploaded image URL is the candidate, not its base64 copy", () => {
   const guaranteed = rule.guaranteeCreationScreenshots("<p>Make a ticket</p>", { instructions: "Make a ticket", attachments: candidates });
   assert.equal(count(guaranteed), 1); assert.ok(guaranteed.includes(uploaded.replaceAll("&", "&amp;")));
   assert.equal(count(rule.guaranteeCreationScreenshots("<p>Make a ticket</p>", { instructions: "Make a ticket", attachments: [{ url: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" }] })), 0);
+});
+
+test("a screenshot the sidebar chat sends as base64 still lands inline", async () => {
+  const writes = [];
+  const base64Images = [{ url: base64Png, fileName: "screenshot.png", mimeType: "image/png" }];
+  const tool = createTool(writes, true, "Create a task from the screenshot.", base64Images);
+  assert.equal((await tool.execute({ project_id: 15, title: "Evidence", description: "<p>Evidence</p>" })).success, true);
+  assert.equal(count(writes[0]), 1);
+  assert.ok(writes[0].includes("screenshot.png"));
+  const off = [];
+  const flagOff = createTool(off, false, "Create a task from the screenshot.", base64Images);
+  assert.equal((await flagOff.execute({ project_id: 15, title: "Off", description: "<p>Off</p>" })).success, true);
+  assert.equal(count(off[0]), 0);
+});
+
+test("task attachments keep their uploaded URL and non-images are ignored on save", () => {
+  const rule = load("src/lib/media/inlineAgentImages.ts", {});
+  const attachments = rule.creationScreenshotAttachments([
+    { name: "shot.png", type: "image/png", source: shot },
+    { name: "notes.pdf", type: "application/pdf", source: "https://files.hypertask.app/tasks/attachments/notes.pdf" },
+    { name: "pending.png", type: "image/png" },
+  ]);
+  assert.deepEqual(attachments, [{ url: shot, fileName: "shot.png", mimeType: "image/png" }]);
+  const saved = rule.guaranteeCreationScreenshots("<p>Fix the login error</p>", { instructions: "Fix the login error", attachments });
+  assert.equal(count(saved), 1);
+  assert.equal(count(rule.guaranteeCreationScreenshots("<p>Link only please</p>", { instructions: "Link only please", attachments })), 0);
+});
+
+test("base64 screenshots are hosted before embedding", async () => {
+  const hosted = "https://files.hypertask.app/tasks/attachments/hosted.png";
+  const uploads = [];
+  const { hostInlineScreenshots } = load("src/lib/media/hostInlineScreenshots.server.ts", {
+    "@/lib/storage/uploadTaskAttachmentToS3": { uploadTaskAttachmentToS3: async (buffer, fileName, contentType) => { uploads.push({ bytes: buffer.length, fileName, contentType }); return hosted; } },
+  });
+  const result = await hostInlineScreenshots([{ url: base64Png, fileName: "screenshot.png", mimeType: "image/png" }, { url: shot, fileName: "already.png", mimeType: "image/png" }, { url: "https://example.com/page", fileName: "page.html", mimeType: "text/html" }]);
+  assert.deepEqual(result.map((file) => file.url), [hosted, shot, "https://example.com/page"]);
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].contentType, "image/png");
+  assert.ok(uploads[0].bytes > 0);
+});
+
+test("a base64 writer preview is hosted before the modal description is guaranteed", async () => {
+  const uploads = [];
+  const { hostedScreenshotFiles } = load("src/lib/media/hostedScreenshotFiles.ts", {
+    "@/lib/storage/uploadViaApi": { uploadSingleFileViaApi: async (file) => { uploads.push(file.name); return shot; } },
+  });
+  const attachable = new File([new Uint8Array([137, 80, 78, 71])], "attached.png", { type: "image/png" });
+  const result = await hostedScreenshotFiles([
+    attachable,
+    { name: "ready.png", type: "image/png", source: shot },
+    { name: "notes.pdf", type: "application/pdf", source: "https://files.hypertask.app/tasks/attachments/notes.pdf" },
+  ]);
+  assert.deepEqual(result.map((file) => file.url), [shot, shot, "https://files.hypertask.app/tasks/attachments/notes.pdf"]);
+  assert.deepEqual(uploads, ["attached.png"]);
+});
+
+test("a data URL attachment is uploaded once and reused", async () => {
+  const uploads = [];
+  const { hostedScreenshotFiles } = load("src/lib/media/hostedScreenshotFiles.ts", {
+    "@/lib/storage/uploadViaApi": { uploadSingleFileViaApi: async () => { uploads.push(1); return shot; } },
+  });
+  const pending = { name: "pasted.png", type: "image/png", source: base64Png };
+  const saved = await hostedScreenshotFiles([pending, { ...pending }]);
+  assert.deepEqual(saved.map((file) => file.url), [shot, shot]);
+  assert.equal(uploads.length, 1);
 });

@@ -16,6 +16,7 @@ function load(file, mocks = {}) {
       }
       return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
     }
+    if (specifier in require("./helpers/stub-map.cjs").waitingActivityStubs) return require("./helpers/stub-map.cjs").waitingActivityStubs[specifier];
     if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks" && !(specifier in mocks)) {
       return blockingStubs.attachOpenBlockingTasksStub;
     }

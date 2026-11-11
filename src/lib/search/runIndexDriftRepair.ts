@@ -6,6 +6,7 @@ import {
   advanceIndexDrift,
   emptyDriftState,
   recordDriftPass,
+  type DriftFailure,
   type DriftState,
   type DriftTask,
   type IndexedCommentCopy,
@@ -17,8 +18,10 @@ import {
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 
 export const DRIFT_SCAN_BATCH = 50;
-export const DRIFT_MAX_BATCHES = 8;
+export const DRIFT_PAGE_CAP = 400;
 export const DRIFT_MAX_REINDEX = 100;
+export const DRIFT_MAX_FAILURES = 20;
+export const DRIFT_TIME_BUDGET_MS = 250_000;
 export const DRIFT_STATE_KEY = "search-index-drift:htpr-9016";
 
 type Page = {
@@ -33,6 +36,7 @@ type DriftDeps = {
   reindexTask: (taskId: number) => Promise<unknown>;
   reindexComments: (taskId: number) => Promise<unknown>;
   today: () => string;
+  now?: () => number;
 };
 
 function textAttr(row: { [key: string]: unknown } | undefined, key: string) {
@@ -107,12 +111,16 @@ export async function runIndexDriftRepair(
     reindexTask: (taskId) => upsertTaskToTurbopuffer(taskId, { strict: true }),
     reindexComments: (taskId) => upsertAllCommentsToTurbopuffer(taskId, { strict: true }),
     today: () => new Date().toISOString().slice(0, 10),
+    now: () => Date.now(),
   },
 ) {
+  const clock = deps.now ?? (() => Date.now());
+  const deadline = clock() + DRIFT_TIME_BUDGET_MS;
   let current = { afterId: state.afterId, found: state.found, results: state.results ?? [] };
   let scanned = 0;
   let reindexed = 0;
-  for (let batch = 0; batch < DRIFT_MAX_BATCHES && reindexed < DRIFT_MAX_REINDEX; batch += 1) {
+  const failed: DriftFailure[] = [];
+  for (let batch = 0; batch < DRIFT_PAGE_CAP && clock() < deadline && reindexed < DRIFT_MAX_REINDEX; batch += 1) {
     const page = await deps.loadPage(current.afterId, DRIFT_SCAN_BATCH);
     scanned += page.tasks.length;
     const outcome = await advanceIndexDrift({
@@ -121,12 +129,15 @@ export async function runIndexDriftRepair(
       indexedComments: page.indexedComments,
       batchFull: page.batchFull,
       maxReindex: DRIFT_MAX_REINDEX - reindexed,
+      maxFailures: DRIFT_MAX_FAILURES - failed.length,
       state: current,
       reindexTask: deps.reindexTask,
       reindexComments: deps.reindexComments,
     });
     current = outcome.state;
     reindexed += outcome.reindexed;
+    failed.push(...outcome.failed);
+    if (failed.length >= DRIFT_MAX_FAILURES) break;
     if (outcome.passComplete && outcome.passFound != null) {
       return {
         state: {
@@ -138,9 +149,10 @@ export async function runIndexDriftRepair(
         reindexed,
         passComplete: true,
         passFound: outcome.passFound,
+        failed,
       };
     }
     if (outcome.stopped || page.tasks.length === 0) break;
   }
-  return { state: current, scanned, reindexed, passComplete: false, passFound: null };
+  return { state: current, scanned, reindexed, passComplete: false, passFound: null, failed };
 }

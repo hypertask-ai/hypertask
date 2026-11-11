@@ -53,6 +53,12 @@ const agentPulseDotStubs = {
   },
 };
 
+const waitingActivityStubs = {
+  "@/lib/tasks/redactWaitingActivities": { withPublicWaitingActivities: async (rows) => rows, redactSharedPrivateWaitingActivities: async (rows) => rows, concealedWaitingDisplayNames: async () => [], scrubStoredTaskSummary: async (content) => content },
+  "@/lib/tasks/waitingOnActivitySql": { visibleWaitingOnActivity: () => ({}) },
+  "@/lib/tasks/waitingAgentPrivacy": { presentWaitingAgent: (task) => task, collectWaitingTargets: () => ({ ids: [], names: [] }), hiddenWaitingAgents: () => ({ hiddenIds: new Set(), hiddenNames: new Set() }), redactWaitingOnActivity: (activity) => activity },
+};
+
 const straightBoardGuardStubs = {
   "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed", accountNotificationsBlocked: async () => false },
 };
@@ -82,7 +88,7 @@ function withStubs(base = {}, extra = {}) {
     defaults[USER_COMMENT_COUNTS] = { userCommentCountsByTaskId: async () => new Map() }
   }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs,
+    has: (_target, request) => request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,
     get: (_target, request) =>
       request in extra ? extra[request]
       : request in base ? base[request]
@@ -90,8 +96,9 @@ function withStubs(base = {}, extra = {}) {
       : request in sharedTicketWritingStubs ? sharedTicketWritingStubs[request]
       : request in agentPulseDotStubs ? agentPulseDotStubs[request]
       : request in emailStraightBoardStubs ? emailStraightBoardStubs[request]
+      : request in waitingActivityStubs ? waitingActivityStubs[request]
       : plainLanguageTicketStubs[request],
   });
 }
 
-module.exports = { withStubs, enforcementFor, quietPersonalLogStub, emailStraightBoardStubs, straightBoardRouteStubs, straightBoardGuardStubs, sharedTicketWritingStubs };
+module.exports = { withStubs, enforcementFor, quietPersonalLogStub, emailStraightBoardStubs, straightBoardRouteStubs, straightBoardGuardStubs, sharedTicketWritingStubs, waitingActivityStubs };

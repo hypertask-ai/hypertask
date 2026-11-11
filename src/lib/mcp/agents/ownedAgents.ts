@@ -22,13 +22,15 @@ type AgentRowForDelete = {
   id: string
   displayName: string
   runtimeGeneration: number
+  visibility: 'PRIVATE' | 'TEAM'
 }
 
 type AgentManagementTransaction = {
+  $executeRawUnsafe?(query: string, ...values: unknown[]): Promise<unknown>
   agent: {
     findFirst(args: {
       where: Prisma.AgentWhereInput
-      select: { id: true; displayName: true; runtimeGeneration: true }
+      select: { id: true; displayName: true; runtimeGeneration: true; visibility: true }
     }): Promise<AgentRowForDelete | null>
     updateMany(args: {
       where: Prisma.AgentWhereInput
@@ -307,7 +309,7 @@ export async function deleteOwnedAgent(
         async (transaction) => {
           const agent = await transaction.agent.findFirst({
             where: { id: agentId, userId },
-            select: { id: true, displayName: true, runtimeGeneration: true },
+            select: { id: true, displayName: true, runtimeGeneration: true, visibility: true },
           })
           if (!agent) return null
 
@@ -401,6 +403,9 @@ export async function deleteOwnedAgent(
             where: { agentId: agent.id },
             data: { agentId: null },
           })
+          if (agent.visibility === "PRIVATE") {
+            await transaction.$executeRawUnsafe?.(`UPDATE "Comment" SET activity = jsonb_set(jsonb_set(activity, '{data,waitingOnPrivate}', 'true'::jsonb, true), '{data,waitingOnAgentOwnerId}', to_jsonb($2::int), true) WHERE activity->>'type' = 'TaskWaitingOn' AND activity #>> '{data,waitingOnAgentId}' = $1`, agent.id, userId)
+            await transaction.$executeRawUnsafe?.(`DELETE FROM "Task_Summary" WHERE "taskId" IN (SELECT "taskId" FROM "Comment" WHERE activity->>'type' = 'TaskWaitingOn' AND activity #>> '{data,waitingOnAgentId}' = $1)`, agent.id) }
           await transaction.agent.delete({ where: { id: agent.id } })
 
           return {

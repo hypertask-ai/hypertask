@@ -24,7 +24,7 @@ function fixture(enabled) {
   h.prisma.task.findUnique = async () => h.state.tasks.find((t) => t.id === 11);
   const mocks = {
     '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
-      if (key === 'htpr-8435-page-export-tables') return false;
+      if (key === 'htpr-8435-page-export-tables' || key === 'htpr-9017-smart-page-search') return false;
       assert.equal(key, flag);
       assert.equal(userId, 3, 'evaluate the human credential owner, not agent id');
       flagCalls.push([key, userId]);

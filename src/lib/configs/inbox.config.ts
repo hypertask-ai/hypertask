@@ -1,6 +1,6 @@
 import { NotificationType } from "@prisma/client";
 
-export const systemDefinedSplits = ["Important", "Decisions", "Updates", "Reactions", "@Mentions", "Agents", "Stale"]
+export const systemDefinedSplits = ["Needs you", "Important", "Decisions", "Updates", "Reactions", "@Mentions", "Agents", "Stale"]
 
 export const decisionsSplitName = "Decisions"
 

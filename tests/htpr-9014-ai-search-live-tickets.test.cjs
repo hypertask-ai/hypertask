@@ -55,6 +55,7 @@ test("AI chat search asks the index for live tickets only and drops a Deleted st
     "@/lib/prisma": {
       default: { project: { findMany: async () => [{ id: 15 }] } },
     },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/lib/auth/agentScope": { recordAgentBoardScopeMiss: () => {} },
     "./authorizeIndexedRows": {

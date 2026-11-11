@@ -6,6 +6,7 @@ import type { IBlockingTask } from "@/models/model";
 import prisma from "@/lib/prisma";
 import { blockedByRelationsInclude, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { attachOpenBlockingTasks, type TaskWithBlockingRelations } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
+import { scrubStoredTaskSummary, withPublicWaitingActivities } from "@/lib/tasks/redactWaitingActivities";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 
 export async function loadCurrentTaskContext(
@@ -42,6 +43,7 @@ export async function loadCurrentTaskContext(
     },
     select: {
       id: true,
+      projectId: true,
       title: true,
       ticketNumber: true,
       description_: { select: { content: true } },
@@ -71,9 +73,11 @@ export async function loadCurrentTaskContext(
       )
     : tasks;
 
-  return tasksWithBlockers
-    .map((task) => formatTaskContext(task, options?.role ?? "primary", compact, blockersEnabled))
-    .join("\n\n");
+  return (await Promise.all(tasksWithBlockers.map(async (task) => {
+    const summary = task.Task_Summary?.[0];
+    const content = summary?.content ? await scrubStoredTaskSummary(summary.content, task.id, userId, task.projectId) : summary?.content;
+    return { ...task, comments: await withPublicWaitingActivities(task.comments, userId, task.projectId), ...(summary ? { Task_Summary: [{ ...summary, content: content ?? null }] } : {}) };
+  }))).map((task) => formatTaskContext(task, options?.role ?? "primary", compact, blockersEnabled)).join("\n\n");
 }
 
 export async function resolveAiUsageTaskId(args: {

@@ -269,11 +269,11 @@ export const jevNoiseEligible = (item: VisibleInboxItem, userId: number, keep: I
   if (isProtected(item, keep)) return false;
   if (item.notifications.some((notification) => {
     const text = jevText(notification);
-    return notification.fromUserId !== null || JEV_KEEP_TYPES.has(notification.type) || JEV_ASK.test(text) || JEV_SENSITIVE.test(text);
+    return notification.fromUserId !== null || JEV_KEEP_TYPES.has(notification.type) || text.includes(`name-${userId}`) || JEV_ASK.test(text) || JEV_SENSITIVE.test(text);
   })) return false;
   const task = item.representative.task as JevTask | null;
-  const description = task?.description ?? "";
-  return !task || (task.blockerCommentId == null && task.waitingOnUserId !== userId && (task._count?.assignees ?? 0) === 0 && (task._count?.decisionRequests ?? 0) === 0 && (task._count?.comments ?? 0) === 0 && !JEV_ASK.test(description) && !JEV_SENSITIVE.test(description));
+  const text = [task?.title, task?.description].filter(Boolean).join(" ");
+  return !task || (task.blockerCommentId == null && task.waitingOnUserId !== userId && (task._count?.assignees ?? 0) === 0 && (task._count?.decisionRequests ?? 0) === 0 && (task._count?.comments ?? 0) === 0 && !text.includes(`name-${userId}`) && !JEV_ASK.test(text) && !JEV_SENSITIVE.test(text));
 };
 
 export const jevTriageCandidates = (notifications: InboxZeroNotification[], userId: number, keep: InboxZeroKeep): JevTriageCandidate[] =>

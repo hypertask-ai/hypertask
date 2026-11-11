@@ -35,7 +35,7 @@ jobs:
         env:
           AI_EVAL_LIVE: "0"
           AI_EVAL_WRONG_TOOL_THRESHOLD: "0"
-      - run: node --test tests/rag-search-eval.test.cjs
+      - run: node --test tests/rag-search-eval.test.cjs tests/htpr-9017-page-eval.test.cjs
       - run: node scripts/rag-eval.cjs --check-set
       - name: Report search scores (no score threshold)
         run: |

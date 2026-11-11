@@ -15,6 +15,8 @@
 - The guard re-runs on `labeled` and `unlabeled`, so the label clears the block.
 - Post the `size-ok: <reason>` comment first, then add the label last.
 - The block publishes through the existing required `pr-title` context.
+- Runners also get the same rule before they push: `open-pr.sh` runs `.github/scripts/pr-preflight.cjs`, which refuses a bad title or an over-cap diff before anything opens. A hand-made pull request runs the same command by hand.
+- The trusted guard checks outside, size and title before it installs the workflow parser, so a badly titled or oversized PR fails the required context in seconds instead of after a full round of checks.
 - Artifacts preserve each head, count and verdict.
 - Artifact name: `pr-size-<PR>-<run>-<attempt>`; retention: 14 days.
 - `pr-size-observation.yml` runs twice a day and posts one comment to HYCI-29.

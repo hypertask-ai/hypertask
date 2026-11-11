@@ -1,4 +1,5 @@
 import { INotification } from "@/models/model";
+import { NEEDS_YOU_SPLIT, needsYouIndices } from "@/lib/inbox/needsYou";
 import { NotificationType } from "@prisma/client";
 import { agentSplitName, decisionsSplitName, inboxConfig, staleSplitName } from "@/lib/configs/inbox.config";
 import { isDoneColumn } from "@/lib/doneColumns";
@@ -426,6 +427,9 @@ export const getInboxTabs = (
       }
     );
   }
+
+  const rankedNeedsYou = needsYouIndices(notifications);
+  if (rankedNeedsYou.length > 0) autoSplitsWithBlocked.unshift({ splitName: NEEDS_YOU_SPLIT, notificationIndices: rankedNeedsYou, projectId: null });
 
   const splits: NotificationSplit[] = [
     ...autoSplitsWithBlocked,

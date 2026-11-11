@@ -7,6 +7,8 @@ import { getFilteredSections } from "@/utils/helperFunctions/Views/FilterHelperF
 import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getProjectViewBaseInclude } from "../projects/getAllIncludes";
+import { featureFlagsForUser } from "@/lib/flags";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 
 export default async function getProject(shareId: string) {
     try {
@@ -158,7 +160,9 @@ export default async function getProject(shareId: string) {
             projectAsIProject.sections = _sections;
             projectAsIProject.firstTask = firstTask;
 
-            projectAsIProject.filteredSections = getFilteredSections(_sections, projectAsIProject);
+            const flags: Record<string, boolean> = inviteObj.userId ? await featureFlagsForUser(inviteObj.userId) : {};
+            const runtimeContext = { tagHideFilterEnabled: flags[HTPR_8171_HIDE_TAGS_FLAG] === true };
+            projectAsIProject.filteredSections = getFilteredSections(_sections, projectAsIProject, undefined, {}, runtimeContext);
             projectAsIProject.filteredSections = getAppliedSubtaskSections(projectAsIProject.filteredSections, projectAsIProject);
             projectAsIProject.filteredSections = getFilteredEmptySections(projectAsIProject.filteredSections, projectAsIProject);
         }

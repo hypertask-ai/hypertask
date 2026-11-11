@@ -423,6 +423,7 @@ test("agent waiting flag on stores the agent, clears the person, and names the a
   assert.equal(f.writes[0].data.waitingOnAgentId, runner9);
   assert.equal(f.writes[0].data.waitingOnUserId, null);
   assert.equal(f.activities[0].activityBody.data.waitingOnDisplayName, "Runner 9");
+  assert.equal(f.activities[0].activityBody.data.waitingOnAgentId, runner9);
   assert.deepEqual(f.inboxes.map((row) => row[0]).sort(), [6, 8]);
 });
 

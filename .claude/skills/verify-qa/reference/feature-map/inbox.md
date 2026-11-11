@@ -2,6 +2,8 @@
 
 ## Sub-features
 
+- `needs-you` With `htpr-9055-needs-you` at Owner + QA, open `/inbox?split=Needs%20you`: one row per ticket, descending stored scores across dates. Click, Enter, next-ticket, reload, archive and undo preserve ranking; ordinary tabs and flag-off order stay unchanged.
+  Own-AI teams send nothing; outages use rules; reads never call models. Record daily cost and before/after inbox-read timings. Another runner compares Light, AMOLED and Graphite 2.
 - `quiet-agent-moves-and-description-edits` Quiet agent moves and description edits.
 - `blocked-by-you-bulk-archive` Blocked by you bulk archive.
 - `boundary-keyboard-jumps` Boundary keyboard jumps.

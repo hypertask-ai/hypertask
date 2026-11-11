@@ -38,7 +38,7 @@ test("real saved-choice switch backs up exact JSON paths, rolls back failures an
   try {
     run(["run", "-d", "--rm", "--name", container, "-p", "127.0.0.1::5432", "--user", "postgres", "--tmpfs", "/tmp:rw,mode=1777",
       process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea", "tail", "-f", "/dev/null"]);
-    run(["exec", container, "sh", "-c", "initdb -D /tmp/db -A trust >/dev/null && pg_ctl -D /tmp/db -l /tmp/log -o \"-c listen_addresses='*' -k /tmp\" -w start >/dev/null"]);
+    run(["exec", container, "sh", "-c", "initdb -D /tmp/db -A trust >/dev/null && echo 'host all all 0.0.0.0/0 trust' >> /tmp/db/pg_hba.conf && pg_ctl -D /tmp/db -l /tmp/log -o \"-c listen_addresses='*' -k /tmp\" -w start >/dev/null"]);
     db = await connect(container);
     await db.query('CREATE TABLE "UserSetting" ("userId" int PRIMARY KEY, "aiModelPreferences" jsonb); CREATE TABLE htpr_7038_model_choice_reset_done(user_id int PRIMARY KEY)');
     await db.query(fs.readFileSync("src/prisma/migrations/20261110140000_htpr_9019_saved_model_choice_auto/migration.sql", "utf8"));

@@ -1,5 +1,5 @@
 import { ITask, ISection, ILabel, IUser, IProject } from "@/models/model";
-import { IFilterSettings, TFilter, TCondition, IFilter, TMatchFilters, IValuePropUpdatedAt, IGetBoardAppliedViewReturnBody, IFilterRuntimeContext } from "@/models/Filters/model";
+import { IFilterSettings, TFilter, TCondition, IFilter, TMatchFilters, TFilterMatch, IValuePropUpdatedAt, IGetBoardAppliedViewReturnBody, IFilterRuntimeContext } from "@/models/Filters/model";
 import { getFromLocalStorage, setInLocalStorage, returnSortedItems } from "@/utils/helperFunctions/helperFunctions";
 import { IPrioritiesConstants, IEstimateConstants } from "@/lib/constants/constants";
 import { buildViewId, getActiveFiltersFromProject } from "./ViewsHelperFunctions";
@@ -314,10 +314,39 @@ export const starredFilterCondition = (item: ITask, value: any[]) =>
   (value.length === 0 || (item.savedContent && item?.savedContent?.length > 0)) ?? false;
 
 
-export const labelFilterCondition = (item: ITask, value: ILabel[], _project?: IProject, match?: TMatchFilters) =>
-  (value.length === 0 || (match === "ALL"
-    ? value.every(v => item.taskLabels?.some(tl => tl.label?.id === v.id))
-    : item.taskLabels?.some(tl => value.flatMap(x => x.id).includes(tl.label?.id!)))) ?? false;
+const labelIds = (value: ILabel[]) => value.flatMap((label) => label.id);
+
+const taskHasAnyLabel = (item: ITask, value: ILabel[]) => {
+  const selected = labelIds(value);
+  return item.taskLabels?.some((taskLabel) => selected.includes(taskLabel.label?.id!)) ?? false;
+};
+
+export const labelFilterCondition = (
+  item: ITask,
+  value: ILabel[],
+  _project?: IProject,
+  match?: TFilterMatch,
+  runtimeContext?: IFilterRuntimeContext,
+) => {
+  if (value.length === 0) return true;
+  if (match === "HIDE") {
+    if (runtimeContext?.tagHideFilterEnabled !== true) return true;
+    return !taskHasAnyLabel(item, value);
+  }
+  if (match === "ALL") {
+    return value.every((label) => item.taskLabels?.some((taskLabel) => taskLabel.label?.id === label.id));
+  }
+  return taskHasAnyLabel(item, value);
+};
+
+export function filtersRespectingTagHide<T extends { type?: string; match?: string }>(
+  filters: T[],
+  runtimeContext?: IFilterRuntimeContext,
+): T[] {
+  if (runtimeContext?.tagHideFilterEnabled === true) return filters;
+  const next = filters.filter((filter) => !(filter.type === "Labels" && filter.match === "HIDE"));
+  return next.length === filters.length ? filters : next;
+}
 
 export const inInboxFilterCondition = (item: ITask, value: any[]) =>
   (item.notifications && item.notifications.length > 0) ? true : false
@@ -406,14 +435,23 @@ export function applyFilters(
 ): ISection[] {
 
  
-  if (filters.length === 0) {
+  const activeFilters = filtersRespectingTagHide(filters, runtimeContext);
+  if (activeFilters.length === 0) {
     return sections;
   }
+  const hideFilters = activeFilters.filter((filter) => filter.type === "Labels" && filter.match === "HIDE");
+  const matchFilters = hideFilters.length === 0 ? activeFilters : activeFilters.filter((filter) => !hideFilters.includes(filter));
 
   return sections.map((section, sectionIdx) => {
     const filteredItems = (section.items ?? []).filter((item, itemIdx) => {
+      const hidden = hideFilters.some((filter) => {
+        const condition = filter.condition ?? defaultConditions[filter.type];
+        return condition?.(item, filter.searchPayload, project, filter.match, runtimeContext) === false;
+      });
+      if (hidden) return false;
+      if (matchFilters.length === 0) return true;
       if (overallType === "ALL") {
-        const result = filters.every((filter, filterIdx) => {
+        const result = matchFilters.every((filter, filterIdx) => {
           if (!filter.condition) {
             const defaultCondition = defaultConditions[filter.type];
             const res = defaultCondition?.(item, filter.searchPayload, project, filter.match, runtimeContext) ?? false;
@@ -424,7 +462,7 @@ export function applyFilters(
         });
         return result;
       } else {
-        const result = filters.some((filter, filterIdx) => {
+        const result = matchFilters.some((filter, filterIdx) => {
           if (!filter.condition) {
             const defaultCondition = defaultConditions[filter.type];
             const res = defaultCondition?.(item, filter.searchPayload, project, filter.match, runtimeContext);

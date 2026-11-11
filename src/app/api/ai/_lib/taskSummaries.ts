@@ -19,6 +19,10 @@ import {
   isSessionNoise,
 } from "@/app/api/ai/_lib/taskContent";
 import {
+  redactSharedPrivateWaitingActivities,
+  scrubStoredTaskSummary,
+} from "@/lib/tasks/redactWaitingActivities";
+import {
   providerOptionsForAiModel,
   aiUsageProviderForCredential,
   type AiGatewayTags,
@@ -208,7 +212,8 @@ async function generateAndStoreTaskSummaryWithLease(
     teamId: task.project.teamId,
     projectId: task.projectId,
   };
-  const sources = task.comments
+  const comments = await redactSharedPrivateWaitingActivities(task.comments, task.projectId);
+  const sources = comments
     .map((comment): Omit<SummarySource, "index"> | null => {
       const text = convertHtmlToText(
         comment.text || (comment.activity ? JSON.stringify(comment.activity) : "")
@@ -247,7 +252,7 @@ async function generateAndStoreTaskSummaryWithLease(
       storedSummary &&
       extractSummaryFingerprint(storedSummary) === fingerprint
     ) {
-      return stripSummaryFingerprint(storedSummary);
+      return (await scrubStoredTaskSummary(stripSummaryFingerprint(storedSummary), task.id, 0, task.projectId)) ?? stripSummaryFingerprint(storedSummary);
     }
   }
 

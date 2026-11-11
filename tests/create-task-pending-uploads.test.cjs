@@ -47,6 +47,8 @@ function mount() {
     setEditMode: () => {}, setCurrentFocusedElement: () => {},
     createTaskUploadCount: () => 0, reserveCreateTaskUploads: () => {}, releaseCreateTaskUploadReservations: () => {},
     handleChange: (key, value) => { context.formValues[key] = value; },
+    guaranteeScreenshots: false, guaranteeCreationScreenshots: (html) => html,
+    creationScreenshotAttachments: () => [], hostedScreenshotFiles: async (files) => files,
     setNewCommentAttachments: (value) => { state.attachments = value; },
     setTrigger: (update) => { state.trigger = update(state.trigger); }, setFilesDropped: () => {},
     resetFormValues: () => { state.reset = true; context.formValues.attachments = []; },

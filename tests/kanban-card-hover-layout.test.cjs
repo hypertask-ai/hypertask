@@ -75,7 +75,11 @@ const TaskTopRow = loadComponent(
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/definitions/htpr-8970-calm-cards": { HTPR_8970_CALM_CARDS_FLAG: "htpr-8970-calm-cards" },
+    "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" },
     "@/lib/agentStatus/cardStatus": { useCardAgentStatus: () => null, stackFaces: (users, agents) => ({ users, agents }) },
+    "@/lib/agentStatus/AgentStatusDot": empty,
+    "@/lib/agentStatus/dot": { agentStatusDotMode: () => null },
+    "@/lib/agentStatus/minuteClock": { useMinuteClock: () => Date.now() },
     "@/utils/undoActions/helperFuncs": { cn: (...args) => twMerge(clsx(args)) },
   },
 );

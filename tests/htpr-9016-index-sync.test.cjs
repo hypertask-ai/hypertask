@@ -33,7 +33,7 @@ test("a title edit waits for the task index before comment copies update", async
   assert.equal(drift().commentsFollowTaskEdit({ titleChanged: false, status: "Archive" }), true);
 });
 
-test("a stale comment title is repaired and a failed reindex stays put", async () => {
+test("a stale comment title is repaired", async () => {
   const lib = drift();
   const at = "2026-11-10T12:00:00.000Z";
   const comments = [];
@@ -55,18 +55,51 @@ test("a stale comment title is repaired and a failed reindex stays put", async (
   });
   assert.deepEqual(comments, [7]);
   assert.equal(outcome.passFound, 1);
-  const failed = await lib.advanceIndexDrift({
-    tasks: [{ id: 3, title: "A", updatedAt: at, commentCount: 0 }],
-    indexedTasks: new Map([[3, null]]),
+});
+
+test("a failed write names the task and the scan keeps moving", async () => {
+  const lib = drift();
+  const at = "2026-11-10T12:00:00.000Z";
+  const outcome = await lib.advanceIndexDrift({
+    tasks: [
+      { id: 3, title: "A", updatedAt: at, commentCount: 0 },
+      { id: 4, title: "B", updatedAt: at, commentCount: 0 },
+    ],
+    indexedTasks: new Map([[3, null], [4, null]]),
     indexedComments: new Map(),
-    batchFull: true,
+    batchFull: false,
     maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async (id) => { if (id === 3) throw new Error("index down"); },
+    reindexComments: async () => {},
+  });
+  assert.equal(outcome.stopped, false);
+  assert.equal(outcome.state.afterId, 4);
+  assert.equal(outcome.state.found, 2);
+  assert.equal(outcome.failed.length, 1);
+  assert.equal(outcome.failed[0].id, 3);
+  assert.equal(outcome.failed[0].stage, "task");
+  assert.equal(outcome.failed[0].message, "index down");
+  assert.equal(outcome.passFound, 2);
+});
+
+test("a run stops once writes keep failing", async () => {
+  const lib = drift();
+  const at = "2026-11-10T12:00:00.000Z";
+  const outcome = await lib.advanceIndexDrift({
+    tasks: [3, 4, 5].map((id) => ({ id, title: `T${id}`, updatedAt: at, commentCount: 0 })),
+    indexedTasks: new Map([[3, null], [4, null], [5, null]]),
+    indexedComments: new Map(),
+    batchFull: false,
+    maxReindex: 10,
+    maxFailures: 2,
     state: lib.emptyDriftState(),
     reindexTask: async () => { throw new Error("index down"); },
     reindexComments: async () => {},
   });
-  assert.equal(failed.stopped, true);
-  assert.equal(failed.state.afterId, 0);
+  assert.equal(outcome.stopped, true);
+  assert.equal(outcome.failed.length, 2);
+  assert.equal(outcome.state.afterId, 4);
 });
 
 test("a deleted task stays in the drift scan", async () => {
@@ -97,4 +130,200 @@ test("a finished pass records one drift count for that date", async () => {
   );
   assert.deepEqual(result.state.results, [{ date: "2026-11-09", found: 4 }, { date: "2026-11-10", found: 2 }]);
   assert.equal(result.state.afterId, 0);
+});
+
+function totalTasks(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: index + 1,
+    title: `T${index + 1}`,
+    updatedAt: "2026-11-10T12:00:00.000Z",
+    commentCount: 0,
+  }));
+}
+
+test("one run scans past the old 400-row budget until the pass finishes", async () => {
+  const repair = load("src/lib/search/runIndexDriftRepair.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/lib/turbopuffer": { default: {}, turbopufferNamespaces: {} },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+  });
+  const tasks = totalTasks(900);
+  const result = await repair.runIndexDriftRepair(
+    { afterId: 0, found: 0, results: [] },
+    {
+      loadPage: async (afterId, take) => {
+        const next = tasks.filter((task) => task.id > afterId).slice(0, take);
+        return {
+          tasks: next,
+          indexedTasks: new Map(next.map((task) => [task.id, { updatedAt: task.updatedAt }])),
+          indexedComments: new Map(),
+          batchFull: next.length === take,
+        };
+      },
+      reindexTask: async () => {},
+      reindexComments: async () => {},
+      today: () => "2026-11-11",
+      now: () => 0,
+    },
+  );
+  assert.equal(result.scanned, 900);
+  assert.equal(result.passComplete, true);
+  assert.equal(result.passFound, 0);
+  assert.deepEqual(result.state.results, [{ date: "2026-11-11", found: 0 }]);
+});
+
+test("a run that runs out of time keeps its cursor for the next run", async () => {
+  const repair = load("src/lib/search/runIndexDriftRepair.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/lib/turbopuffer": { default: {}, turbopufferNamespaces: {} },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+  });
+  const tasks = totalTasks(900);
+  let clock = 0;
+  const result = await repair.runIndexDriftRepair(
+    { afterId: 0, found: 0, results: [] },
+    {
+      loadPage: async (afterId, take) => {
+        clock += 60_000;
+        const next = tasks.filter((task) => task.id > afterId).slice(0, take);
+        return {
+          tasks: next,
+          indexedTasks: new Map(next.map((task) => [task.id, { updatedAt: task.updatedAt }])),
+          indexedComments: new Map(),
+          batchFull: next.length === take,
+        };
+      },
+      reindexTask: async () => {},
+      reindexComments: async () => {},
+      today: () => "2026-11-11",
+      now: () => clock,
+    },
+  );
+  assert.equal(result.passComplete, false);
+  assert.ok(result.scanned > 0 && result.scanned < 900);
+  assert.equal(result.state.afterId, result.scanned);
+  assert.deepEqual(result.state.results, []);
+});
+
+test("a pass already recorded for today is not scanned again", async () => {
+  const lib = drift();
+  assert.equal(lib.driftPassRecorded([{ date: "2026-11-11", found: 0 }], "2026-11-11"), true);
+  assert.equal(lib.driftPassRecorded([{ date: "2026-11-10", found: 0 }], "2026-11-11"), false);
+  assert.equal(lib.driftPassRecorded([], "2026-11-11"), false);
+});
+
+test("the failure cap counts across pages, not per page", async () => {
+  const repair = load("src/lib/search/runIndexDriftRepair.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/lib/turbopuffer": { default: {}, turbopufferNamespaces: {} },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+  });
+  const tasks = totalTasks(400);
+  let writes = 0;
+  const result = await repair.runIndexDriftRepair(
+    { afterId: 0, found: 0, results: [] },
+    {
+      loadPage: async (afterId, take) => {
+        const next = tasks.filter((task) => task.id > afterId).slice(0, take);
+        return {
+          tasks: next,
+          indexedTasks: new Map(next.map((task) => [task.id, null])),
+          indexedComments: new Map(),
+          batchFull: next.length === take,
+        };
+      },
+      reindexTask: async () => { writes += 1; throw new Error("index down"); },
+      reindexComments: async () => {},
+      today: () => "2026-11-11",
+      now: () => 0,
+    },
+  );
+  assert.equal(result.failed.length, repair.DRIFT_MAX_FAILURES);
+  assert.equal(writes, repair.DRIFT_MAX_FAILURES);
+  assert.equal(result.passComplete, false);
+});
+
+function commentRow(id, projectId) {
+  return {
+    id: String(id),
+    taskId: "1",
+    commentText: "hello",
+    creatorName: "Runner",
+    projectId,
+    createdAt: "2026-11-10T00:00:00.000Z",
+    searchText: "hello",
+    taskProjectId: projectId,
+    taskProjectTitle: "Board",
+    taskTicketNumber: "HTPR-1",
+    taskTitle: "Ticket",
+    taskStatus: "Normal",
+    taskUpdatedAt: "2026-11-10T00:00:00.000Z",
+    taskUniqueIndex: 1,
+  };
+}
+
+function turbopufferHelper({ route, fetchImpl }) {
+  const writes = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  process.once("beforeExit", () => { globalThis.fetch = realFetch; });
+  const helper = load("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
+    "@/app/api/ai/_lib/boardMemoryContract": { buildCustomInstructionSearchFilters: () => [] },
+    "@/utils/controllers/search/rankHits": {
+      buildSearchStatusFilter: () => null,
+      parseTicketSearchQuery: () => null,
+      TRASHED_STATUSES: [],
+    },
+    "@/lib/ai/spend/embeddingRoute": {
+      embeddingSpendMode: async () => route,
+      withSpendCharge: async (_route, _teamId, _texts, run) => run(),
+    },
+    "@/lib/turbopuffer": {
+      default: {
+        namespace: () => ({
+          write: async (body) => { writes.push(body); return {}; },
+          query: async () => ({ rows: [] }),
+        }),
+      },
+      turbopufferNamespaces: {
+        task: { name: "tasks" },
+        comment: { name: "comments" },
+        page: { name: "pages-v2" },
+        customInstructionFile: { name: "custom-instruction-files" },
+      },
+    },
+  });
+  return { helper, writes };
+}
+
+function assertKeywordVectors(writes, dimension) {
+  assert.equal(writes.length, 1, "one comment write reaches the index");
+  const rows = writes[0].upsert_rows;
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.vector.length, dimension);
+    assert.equal(row.vector[0], 1);
+    assert.equal(row.vector[1], 0);
+    assert.equal(row.commentText, "hello");
+  }
+}
+
+test("a keyword-only board writes comment rows that the index accepts", async () => {
+  const { helper, writes } = turbopufferHelper({
+    route: { mode: "keyword" },
+    fetchImpl: async () => { throw new Error("keyword teams must not embed"); },
+  });
+  await helper.upsertCommentRowsToTurbopuffer([commentRow(1, 15), commentRow(2, 15)]);
+  assertKeywordVectors(writes, helper.EMBEDDING_DIM);
+});
+
+test("a failed embedding still writes a row the index accepts", async () => {
+  const { helper, writes } = turbopufferHelper({
+    route: { mode: "customer-key", httpKey: "not-a-real-key" },
+    fetchImpl: async () => ({ ok: false, status: 400, text: async () => "bad request" }),
+  });
+  await helper.upsertCommentRowsToTurbopuffer([commentRow(1, 15), commentRow(2, 15)]);
+  assertKeywordVectors(writes, helper.EMBEDDING_DIM);
 });

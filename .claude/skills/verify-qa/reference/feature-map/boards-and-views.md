@@ -56,6 +56,13 @@ Capture desktop and phone in Light, AMOLED and Graphite 2, plus the action menu.
 Flag-off users retain the existing grouping with no actions or visibility restriction.
 CI behavior coverage: `tests/htpr-8974-table-groups.test.ts`.
 
+**Hands-free drive:**
+`node .claude/skills/verify-qa/scripts/board-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+Checks columns, cards, saved drag and all four themes.
+Prints PASS/FAIL per step and `board ok`. Loopback only.
+`--break columns` must print `negative control ok`.
+Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+
 ### Bulk move between boards
 
 With HTPR-8737 enabled for Owner + QA, use two writable boards. On the
@@ -293,3 +300,16 @@ and controller tests as the closest checks.
 ### Card hover layout
 
 https://app.hypertask.ai/detail/project-15/8629 uses `htpr-8629-kanban-hover-layout` (bugfix, Everyone). In porcelain, AMOLED and graphite-2, compare card ID, title, parent row and notification positions before and during hover; none should move. Check plain, active and blocked cards, including column edges: the hover checkbox must not cover content or clip. Click it, use X on a focused card, and check selected and selection-mode cards retain their inset checkbox. With the flag off, confirm the former hover inset returns. Capture each theme and both flag states on an isolated fixture.
+
+### Card People visibility (HTPR-9026)
+
+With `htpr-8971-card-settings` and `htpr-9026-card-people` enabled, open
+Board menu > Card settings. People is enabled by default, including for
+preferences saved before the People switch existed. Name has no switch.
+Switch People off, return to a board containing human and agent assignees,
+and confirm both disappear while task names and other selected parts stay.
+Reload the board and settings; People remains off. Switch it on and confirm
+both kinds of assignee return without changing assignments. Check Light,
+AMOLED and Graphite 2 on desktop and phone. Switches use 4px corners.
+Without either flag, cards keep showing their assignees even if a saved
+People choice is false. Restore the QA account's preferences afterward.

@@ -1,5 +1,8 @@
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { visibleWaitingOnActivity } from "@/lib/tasks/waitingOnActivitySql";
+import { scrubStoredTaskSummary } from "@/lib/tasks/redactWaitingActivities";
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import {
   PRIVATE_AGENT_DISPLAY_NAME,
   redactAgentIdentitiesForPublicShare,
@@ -44,6 +47,11 @@ export const getSharedComments = async (
   taskId: string | string[] | undefined
 ) => {
   try {
+    const sharedActivity = visibleWaitingOnActivity(
+      0,
+      Prisma.sql`(SELECT "projectId" FROM "Task" share_task WHERE share_task.id = c."taskId")`,
+      Prisma.sql`c.activity`,
+    );
     const comments: any[] = await prisma.$queryRaw`
           SELECT
               c.id,
@@ -51,7 +59,7 @@ export const getSharedComments = async (
               c."taskId",
               c."creatorId",
               c."createdAt",
-              c.activity,
+              ${sharedActivity} AS activity,
               c."agentId",
               c."agentDisplayName",
   
@@ -175,7 +183,11 @@ export const getSharedTaskInfo = async (shareId: string) => {
     },
   });
 
-  if (shared?.task) shared.task = stripForeignTaskRelations(shared.task);
+  if (shared?.task) {
+    shared.task = stripForeignTaskRelations(shared.task);
+    const summaryRow = shared.task.Task_Summary?.[0];
+    if (summaryRow?.content) summaryRow.content = await scrubStoredTaskSummary(summaryRow.content, shared.task.id, 0, shared.task.projectId) ?? summaryRow.content;
+  }
   return redactAgentIdentitiesForPublicShare(shared);
 };
 

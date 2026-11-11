@@ -75,7 +75,7 @@ test("entrySummary keeps the first field and stops before the next one", () => {
   );
 });
 
-test("buildDigestEntries caps topic entries and defers the rest to the next run", () => {
+test("buildDigestEntries keeps the newest topics when it caps a run", () => {
   const tickets = Array.from({ length: 13 }, (_, index) =>
     ticket({
       uniqueIndex: index + 1,
@@ -87,7 +87,8 @@ test("buildDigestEntries caps topic entries and defers the rest to the next run"
 
   const first = buildDigestEntries(tickets, { maxTopics: 10 });
   assert.equal(first.length, 10);
-  assert.equal(first.at(-1)?.title, "Change 10");
+  assert.equal(first[0].title, "Change 4");
+  assert.equal(first.at(-1)?.title, "Change 13");
   assert.equal(MAX_TOPIC_ENTRIES, 12);
 });
 
@@ -121,6 +122,22 @@ test("entrySummary drops the internal flag link and the ticket template fields",
     "Creating a task from AI chat takes too long.",
   );
   assert.equal(entrySummary("<p>Why.</p>"), "");
+});
+
+test("entrySummary drops a bare link, including an admin flag link with no label", () => {
+  assert.equal(
+    entrySummary(
+      '<p><a href="https://app.hypertask.ai/admin/flags/htpr-8997-id-row">https://app.hypertask.ai/admin/flags/htpr-8997-id-row</a></p><p>What&#x27;s wrong or wanted: The ticket ID left the properties column.</p>',
+    ),
+    "The ticket ID left the properties column.",
+  );
+  assert.equal(
+    entrySummary(
+      "<p>https://screencast2.com/gdans.png Instead it currently saves the ticket and opens the ticket with ai chat open.</p>",
+    ),
+    "Instead it currently saves the ticket and opens the ticket with ai chat open.",
+  );
+  assert.equal(entrySummary("<p>https://example.invalid/only-a-link</p>"), "");
 });
 
 test("entrySummary skips pointer-only and placeholder sentences", () => {

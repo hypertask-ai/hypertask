@@ -1,0 +1,251 @@
+{
+ "boardId": 15,
+ "capturedAt": "2026-11-11",
+ "note": "Natural-language page questions written from the page text with different words, so today's whole-string match misses them. Every expected page is a real project 15 page. The two access probes name invented pages on another project and must never come back.",
+ "pairs": [
+  {
+   "id": "pq01",
+   "kind": "paraphrase",
+   "query": "where do I check the stripe checkout and the billing portal still work for the card",
+   "expected": [
+    2607
+   ]
+  },
+  {
+   "id": "pq02",
+   "kind": "paraphrase",
+   "query": "floating chat panes cover each other near the bottom of the screen",
+   "expected": [
+    2670
+   ]
+  },
+  {
+   "id": "pq03",
+   "kind": "paraphrase",
+   "query": "opt a team out of ai before the skill suggestion reads the last messages",
+   "expected": [
+    2638
+   ]
+  },
+  {
+   "id": "pq04",
+   "kind": "paraphrase",
+   "query": "tab counter includes cards that the view hides",
+   "expected": [
+    2652
+   ]
+  },
+  {
+   "id": "pq05",
+   "kind": "paraphrase",
+   "query": "sort priority first then updated second, reload and due stays hidden",
+   "expected": [
+    2665
+   ]
+  },
+  {
+   "id": "pq06",
+   "kind": "paraphrase",
+   "query": "filtering tickets by tag hides them on the board",
+   "expected": [
+    2684
+   ]
+  },
+  {
+   "id": "pq07",
+   "kind": "paraphrase",
+   "query": "drafting a ticket that repeats existing work gets a warning",
+   "expected": [
+    2672
+   ]
+  },
+  {
+   "id": "pq08",
+   "kind": "paraphrase",
+   "query": "guessing the effort level for auto mode without changing what people see",
+   "expected": [
+    2681
+   ]
+  },
+  {
+   "id": "pq09",
+   "kind": "paraphrase",
+   "query": "walkthrough from signup to three tasks and a teammate invite then cleanup",
+   "expected": [
+    2632
+   ]
+  },
+  {
+   "id": "pq10",
+   "kind": "paraphrase",
+   "query": "command line search using a query flag works in version 0.2.63",
+   "expected": [
+    2639
+   ]
+  },
+  {
+   "id": "pq11",
+   "kind": "paraphrase",
+   "query": "watching new model releases and creating tickets when one appears",
+   "expected": [
+    2661
+   ]
+  },
+  {
+   "id": "pq12",
+   "kind": "paraphrase",
+   "query": "the login command shown to an agent keeps failing and the logo stays purple",
+   "expected": [
+    2657
+   ]
+  },
+  {
+   "id": "pq13",
+   "kind": "paraphrase",
+   "query": "changelog page misses changes and internal notes",
+   "expected": [
+    2663
+   ]
+  },
+  {
+   "id": "pq14",
+   "kind": "paraphrase",
+   "query": "the search evaluation numbers need corrections",
+   "expected": [
+    2655
+   ]
+  },
+  {
+   "id": "pq15",
+   "kind": "paraphrase",
+   "query": "how many flag column tickets carry exactly one state label",
+   "expected": [
+    2678
+   ]
+  },
+  {
+   "id": "pq16",
+   "kind": "paraphrase",
+   "query": "the seventy one earlier features and their recorded outcome",
+   "expected": [
+    2563
+   ]
+  },
+  {
+   "id": "pq17",
+   "kind": "paraphrase",
+   "query": "board api and flag metadata disagree about release state",
+   "expected": [
+    2640
+   ]
+  },
+  {
+   "id": "pq18",
+   "kind": "paraphrase",
+   "query": "thirty five board reads still not reviewed across twenty four files",
+   "expected": [
+    2641
+   ]
+  },
+  {
+   "id": "pq19",
+   "kind": "paraphrase",
+   "query": "design acceptance is incomplete and two fixes block a passing rerun",
+   "expected": [
+    2673
+   ]
+  },
+  {
+   "id": "pq20",
+   "kind": "paraphrase",
+   "query": "one hundred outcomes recorded with zero missing and zero wrong modes",
+   "expected": [
+    2677
+   ]
+  },
+  {
+   "id": "pq21",
+   "kind": "paraphrase",
+   "query": "usage breakdown for every owned team in settings",
+   "expected": [
+    2627
+   ]
+  },
+  {
+   "id": "pq22",
+   "kind": "paraphrase",
+   "query": "one shared flag stub replaces hand made mocks in tests",
+   "expected": [
+    2647
+   ]
+  },
+  {
+   "id": "pq23",
+   "kind": "paraphrase",
+   "query": "agent chat remains unavailable on the current serving release",
+   "expected": [
+    2660
+   ]
+  },
+  {
+   "id": "pq24",
+   "kind": "paraphrase",
+   "query": "group header menu still missing in the table",
+   "expected": [
+    2666
+   ]
+  },
+  {
+   "id": "pq25",
+   "kind": "paraphrase",
+   "query": "release record needs updating and five stale restrictions remain",
+   "expected": [
+    2592
+   ]
+  },
+  {
+   "id": "pq26",
+   "kind": "paraphrase",
+   "query": "billing design proof missing so the release stays restricted",
+   "expected": [
+    2607
+   ]
+  },
+  {
+   "id": "pq27",
+   "kind": "paraphrase",
+   "query": "sidebar chats stay inside the sidebar while minimized chats overlap",
+   "expected": [
+    2670
+   ]
+  },
+  {
+   "id": "pq28",
+   "kind": "paraphrase",
+   "query": "repeated failed reviews leave the full design scope unfinished",
+   "expected": [
+    2673
+   ]
+  },
+  {
+   "id": "pq29",
+   "kind": "access_probe",
+   "query": "acme renewal timeline and fremont contract renewal call",
+   "expected": [],
+   "notExpected": [
+    9001,
+    9002
+   ]
+  },
+  {
+   "id": "pq30",
+   "kind": "access_probe",
+   "query": "orchid pricing pilot notes and agen",
+   "expected": [],
+   "notExpected": [
+    9001,
+    9002
+   ]
+  }
+ ]
+}
