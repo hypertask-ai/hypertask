@@ -2,16 +2,10 @@
 # Temp HOME and a fake CLI only. Never provisions a real agent.
 # usage: setup-agents.test.sh [--case missing-deps|clean-home|safety|check-mode]
 set -euo pipefail
-wanted=
-if [ "$#" -gt 0 ]; then
-  [ "$#" -eq 2 ] && [ "$1" = "--case" ] || { echo "usage: setup-agents.test.sh [--case <name>]" >&2; exit 1; }
-  wanted=$2
-fi
-python3 - "$(dirname "$0")/setup-agents" "$wanted" <<'PY'
+{ [ "$#" -eq 0 ] || { [ "$#" -eq 2 ] && [ "$1" = --case ]; }; } || { echo "usage: setup-agents.test.sh [--case <name>]" >&2; exit 1; }
+python3 - "$(dirname "$0")/setup-agents" "${2:-}" <<'PY'
 import json, os, pathlib, shutil, subprocess, sys, tempfile, time
-
-script = str(pathlib.Path(sys.argv[1]).resolve())
-secret = 'fixture-only-bearer-value'
+script, secret = str(pathlib.Path(sys.argv[1]).resolve()), 'fixture-only-bearer-value'
 with tempfile.TemporaryDirectory(prefix='setup-agents-') as tmp:
     root = pathlib.Path(tmp)
     bin_dir = root / 'bin'
@@ -20,21 +14,21 @@ with tempfile.TemporaryDirectory(prefix='setup-agents-') as tmp:
     cli.write_text('''#!/usr/bin/env python3
 import json, os, pathlib, sys
 args, secret, mode = sys.argv[1:], 'fixture-only-bearer-value', os.environ.get('FAKE_MODE', '')
-with open(os.environ['CALLS'], 'a') as f:
-    f.write(json.dumps(args) + '\\n')
+open(os.environ['CALLS'], 'a').write(json.dumps(args) + '\\n')
 if args[:2] == ['agents', 'create']:
     if mode == 'create-fail': sys.exit(1)
     if mode == 'race': pathlib.Path.home().joinpath('.config/hypertask-agents/credentials/setup-smoke-agent-token').write_text(secret)
     print(secret if mode == 'invalid-json' else json.dumps({'token': secret}))
+elif 'members' in args:
+    print(json.dumps({'success': True, 'members': [{'id': 'agent-1', 'displayName': os.environ.get('MEMBER_NAME', 'Setup Smoke')}]}))
 else:
     if mode == 'read-fail': sys.exit(4)
-    print(json.dumps({'authenticated': mode != 'wrong-ticket', 'verified': True}))
+    print(json.dumps({'authenticated': mode != 'wrong-ticket', 'verified': True, 'agentId': 'agent-1' if mode == 'agent' else None}))
 ''')
     cli.chmod(0o755)
-    base = {k: v for k, v in os.environ.items()
-            if k not in {'SHIP_SESSION_NAME', 'VCC_CREDENTIALS_DIR', 'VCC_SESSION_CREDENTIALS_DIR', 'SHELLOPTS', 'BASH_ENV', 'ENV'}}
+    base = {k: v for k, v in os.environ.items() if k not in {
+        'SHIP_SESSION_NAME', 'VCC_CREDENTIALS_DIR', 'VCC_SESSION_CREDENTIALS_DIR', 'SHELLOPTS', 'BASH_ENV', 'ENV'}}
     base['PATH'] = str(bin_dir) + os.pathsep + base['PATH']
-
     def fixture(label, path=None):
         home = root / label
         home.mkdir()
@@ -49,7 +43,7 @@ else:
     def creds(home):
         return home / '.config/hypertask-agents/credentials'
     def must_fail(env, needle, *args, mode=''):
-        result = run(dict(env, FAKE_MODE=mode), *args)
+        result = run(dict(env, FAKE_MODE=mode) if mode else env, *args)
         assert result.returncode != 0 and needle in result.stderr, (args, result.returncode, result.stderr)
         assert not list(creds(pathlib.Path(env['HOME'])).glob('.setup-smoke-token.*')), 'a temporary token was left behind'
         return pathlib.Path(env['HOME'])
@@ -120,10 +114,9 @@ else:
             must_fail(env, needle, '--name', 'Setup Smoke', mode=mode)
             if mode in ['create-fail', 'invalid-json']:
                 assert not (creds(home) / 'setup-smoke-agent-token').exists(), 'a failed creation saved a credential'
-        home, env = fixture('same-slug')
-        assert run(env, '--name', 'Setup Smoke').returncode == 0
-        must_fail(env, 'already belongs to "Setup Smoke"', '--name', 'Setup-Smoke')
-        assert len([c for c in calls(home) if c[:2] == ['agents', 'create']]) == 1, 'a second agent was created for one slug'
+        home, env = fixture('server-name')
+        assert run(dict(env, FAKE_MODE='agent'), '--name', 'Setup Smoke').returncode == 0
+        must_fail(dict(env, FAKE_MODE='agent', MEMBER_NAME='Other Agent'), 'other agent name', '--name', 'Setup Smoke')
         home, env = fixture('race')
         must_fail(env, 'appeared while setup was running', '--name', 'Setup Smoke', mode='race')
         assert (creds(home) / 'setup-smoke-agent-token').read_text() == secret, 'a racing writer token was overwritten'

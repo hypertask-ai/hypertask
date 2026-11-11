@@ -19,16 +19,12 @@ fail() { printf 'setup-agents: %s\n' "$1" >&2; exit 1; }
 usage() {
   cat <<'EOF'
 usage: setup-agents [--name "<name>"] [--identity "<session>"] [--check]
-
-Sets up or reuses one Hypertask agent login here, then asks the server to verify
-it. Prints no token and never replaces an existing credential.
+Sets up or reuses one Hypertask agent login here and asks the server to verify it.
+Prints no token and never replaces a credential.
   --name "<name>"     display name (or the first plain argument)
   --identity "<name>" session name that owns the login (default: --name)
-  --check             tools and login smoke only, no writes; with --name, that
-                      agent's existing credential
+  --check             tools and login smoke only; with --name, that credential
   --identity-required this session carries the name; a mismatch is fatal
-  -h, --help          show this text
-Needs: hypertask jq flock mktemp ln cat readlink sed tr.
 EOF
 }
 
@@ -51,17 +47,13 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+declare -A fix=([hypertask]='install it from https://github.com/hypertask-ai/cli'
+  [jq]='install it with: sudo apt-get install jq' [flock]='install it with: sudo apt-get install util-linux')
 missing=0
 for tool in hypertask jq flock mktemp ln cat readlink sed tr; do
   command -v "$tool" >/dev/null 2>&1 && continue
   missing=1
-  case $tool in
-    hypertask) fix='install it from https://github.com/hypertask-ai/cli' ;;
-    jq) fix='install it with: sudo apt-get install jq' ;;
-    flock) fix='install it with: sudo apt-get install util-linux' ;;
-    *) fix='install it with your package manager' ;;
-  esac
-  printf 'setup-agents: missing %s; %s\n' "$tool" "$fix" >&2
+  printf 'setup-agents: missing %s; %s\n' "$tool" "${fix[$tool]:-install it with your package manager}" >&2
 done
 if [ "$missing" -eq 1 ]; then
   printf 'setup-agents: nothing was created; install the tools above and rerun\n' >&2
@@ -71,22 +63,28 @@ fi
 slug_of() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'; }
 
 login_ok() {
-  local status
+  local status id members
   status=$(hypertask --json "$@" status 2>/dev/null) \
     || fail 'the server rejected this login; run hypertask login or pass a management key, then rerun (CLI output withheld to protect tokens)'
   jq -e '.authenticated == true and .verified == true' <<<"$status" >/dev/null 2>&1 \
     || fail 'the login is not authenticated; run hypertask login or pass a management key, then rerun (CLI output withheld to protect tokens)'
+  id=$(jq -r '.agentId // ""' <<<"$status")
+  [ -n "$id" ] || return 0
+  members=$(hypertask --json "$@" projects members 15 2>/dev/null) || return 0
+  if jq -e --arg id "$id" --arg name "$name" 'any(.members[]; .id == $id and .displayName != $name)' <<<"$members" >/dev/null 2>&1; then
+    fail "the board lists this credential under another agent name; rerun with the name it belongs to"
+  fi
 }
 
 if [ "$check_only" -eq 1 ]; then
-  check_args=()
   if [ -n "$name" ]; then
     check_token=$CREDS/$(slug_of "$name")-agent-token
     { [ -f "$check_token" ] && [ -s "$check_token" ]; } \
       || fail "no readable credential for \"$name\"; set it up with --name \"$name\" or run --check without --name for the ambient login"
-    check_args=(--token "$(cat "$check_token")")
+    login_ok --token "$(cat "$check_token")"
+  else
+    login_ok
   fi
-  login_ok "${check_args[@]}"
   printf 'setup-agents: check ok (tools present, login ok)\n'
   exit 0
 fi
@@ -111,10 +109,6 @@ mkdir -p "$CREDS"
 exec 8>"$CREDS/.setup-agents.lock"
 flock -x 8
 token=$CREDS/$slug-agent-token
-record=$CREDS/$slug-agent-name
-if [ -f "$record" ] && [ "$(cat "$record")" != "$name" ]; then
-  fail "the credential $token already belongs to \"$(cat "$record")\"; rerun with that name or pick a name with a different slug"
-fi
 tmp=
 trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
 if [ ! -e "$token" ] && [ ! -L "$token" ]; then
@@ -141,14 +135,13 @@ else
   ln -sfn "$token" "$link"
 fi
 login_ok --token "$(cat "$token")"
-[ -f "$record" ] || printf '%s\n' "$name" >"$record"
 
 identity=$("${SELF%/*}/../../ship/scripts/ship-identity") || fail 'identity verification failed'
 if [ "$identity" = "$identity_name"$'\t'"$link" ]; then
   printf '%s: login ok, identity ok\n' "$identity_name"
-elif [ "$identity_required" -eq 1 ] || [ "${identity%%$'\t'*}" = "$identity_name" ]; then
-  fail "ship-identity does not match the agent credential: expected $identity_name, got ${identity%%$'\t'*}"
-else
-  printf '%s: login ok; type /rename %s then rerun\n' "$identity_name" "$identity_name"
-  printf '/rename %s\n' "$identity_name"
+  exit 0
 fi
+if [ "$identity_required" -eq 1 ] || [ "${identity%%$'\t'*}" = "$identity_name" ]; then
+  fail "ship-identity does not match the agent credential: expected $identity_name, got ${identity%%$'\t'*}"
+fi
+printf '%s: login ok; type /rename %s then rerun\n/rename %s\n' "$identity_name" "$identity_name" "$identity_name"
