@@ -4,6 +4,7 @@ import { renderPlainLanguageTicketDescription } from "../../src/lib/tickets/plai
 
 const APP = "https://app.hypertask.ai";
 const FACTORY_BOARD = 2060;
+const BOARD_TOKEN_ENV = "HYPERTASK_FLEET_BOARD_MCP_TOKEN";
 export const FAILURE_TITLE = "[INFRA] PostHog error-to-ticket monitoring failed";
 
 function sectionTitle(item) {
@@ -29,7 +30,7 @@ async function api(fetchImpl, token, path, body, key) {
   return result;
 }
 
-export async function reportFailure({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, runUrl, workflow, runId }) {
+export async function reportFailure({ fetchImpl = fetch, token = process.env[BOARD_TOKEN_ENV], runUrl, workflow, runId }) {
   if (!token || !/^https:\/\/github.com\/hypertask-ai\/hypertask\/actions\/runs\/\d+$/.test(runUrl) || !/^\d+$/.test(String(runId))) {
     throw new Error("Failure reporter credentials or run identity are invalid");
   }
@@ -94,7 +95,7 @@ export async function findCanaryIssue({ fetchImpl = fetch, apiKey, marker, deadl
   return [...matches][0];
 }
 
-export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, testToken = process.env.POSTHOG_ERROR_TEST_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, runId = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT || "1", now = Date.now, wait = setTimeout, timeoutMs = 15 * 60 * 1000 } = {}) {
+export async function runCanary({ fetchImpl = fetch, token = process.env[BOARD_TOKEN_ENV], testToken = process.env.POSTHOG_ERROR_TEST_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, runId = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT || "1", now = Date.now, wait = setTimeout, timeoutMs = 15 * 60 * 1000 } = {}) {
   if (!token || !testToken || !apiKey || !/^\d{1,20}$/.test(String(runId)) || !/^\d{1,3}$/.test(String(attempt))) {
     throw new Error("Nightly canary credentials or run identity are missing");
   }

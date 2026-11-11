@@ -146,7 +146,7 @@ test("nightly and independent workflow_run watchdog use trusted production code 
   for (const job of [nightly.jobs.canary, watcher.jobs.report]) {
     assert.equal(job["runs-on"], "ubuntu-latest");
     assert.equal(job.steps[0].with.ref, "production");
-    assert.equal(job.steps[1].env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}");
+    assert.equal(job.steps[1].env.HYPERTASK_FLEET_BOARD_MCP_TOKEN, "${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}");
   }
 });
 
