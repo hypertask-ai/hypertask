@@ -1143,12 +1143,6 @@ jobs:
     # a summary job over the four shards, so a red shard still blocks a merge and
     # every existing ruleset, merge guard and policy entry keeps working
     # unchanged.
-    #
-    # HYCI-279: the system packages Chromium needs come from one Ubuntu mirror
-    # name, and when that name stopped resolving all four shards failed on a
-    # download we do not control. `install-chromium.sh` now writes the first
-    # mirror that answers and retries the install once, so one dead name costs a
-    # retry instead of every open pull request.
     needs: browser-build
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest

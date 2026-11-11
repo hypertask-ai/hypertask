@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# HYCI-279: the browser check needs Chromium's system packages, and those packages
-# come from one Ubuntu mirror name. When that one name stopped resolving, all four
-# browser shards failed on a download we do not control. This writes the first
-# mirror that answers, then retries the install once before giving up.
 set -uo pipefail
 
 SUITE="${UBUNTU_SUITE:-noble}"
@@ -11,8 +7,6 @@ RETRY_SLEEP="${RETRY_SLEEP:-20}"
 ATTEMPTS=2
 MIRROR_ANSWERED=0
 
-# archive.ubuntu.com comes first so the common case keeps the mirror the runner
-# image already used; the other two are full Ubuntu mirrors.
 MIRRORS=(
   "https://archive.ubuntu.com/ubuntu/"
   "https://azure.archive.ubuntu.com/ubuntu/"

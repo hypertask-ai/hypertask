@@ -662,7 +662,7 @@ echo "chromium installed"
     { mode: 0o755 },
   );
   fs.writeFileSync(path.join(dir, "apt-get"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
-  fs.writeFileSync(path.join(dir, "sudo"), '#!/bin/bash\nshift\nexec "$@"\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, "sudo"), '#!/bin/bash\nexec "$@"\n', { mode: 0o755 });
   const child = spawnSync("bash", [path.resolve(".github/scripts/install-chromium.sh")], {
     env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, APT_MIRROR_FILE: mirrorFile, RETRY_SLEEP: "0" },
     encoding: "utf8",
