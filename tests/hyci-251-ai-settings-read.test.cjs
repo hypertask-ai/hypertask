@@ -17,7 +17,6 @@ function fixture(options = {}) {
     ...options.ctx,
   };
   const viewerCalls = [];
-  const reports = [];
   const mocks = {
     "@/lib/mcp/auth": {
       checkMcpRateLimit: async () => null,
@@ -28,10 +27,13 @@ function fixture(options = {}) {
       withAgentScopeRequest: (_request, run) => run(),
       prepareAgentScope: async () => {},
     },
+    "@/lib/ai/modelCanary": {
+      readModelCanaryStatus: async () => ({ checkedAt: null, state: "disabled", models: [] }),
+    },
     "@/lib/prisma": {
       default: {
         user: { findUnique: async ({ where }) => (where.id === 7 ? { accountId: null } : null) },
-        team: { findMany: async () => [{ id: TEAM_ID }] },
+        team: { findMany: async () => (options.ownedTeams ?? [{ id: TEAM_ID }]) },
       },
     },
     "@/utils/controllers/teams/getTeamAiSettingsForViewer": {
@@ -47,16 +49,19 @@ function fixture(options = {}) {
       getTeamGatewayFunding: async () => ({ apiKey: "vck_fixture_never_printed", source: "shared" }),
     },
     "@/lib/ai/jevDuplicateHint": { DUPLICATE_DECISION_MODEL_SLUG: JEV_MODEL },
-    "@/lib/flags": { isFeatureEnabled: async () => true },
+    "@/lib/flags": {
+      MODEL_CANARY_STATE_FLAG: "htpr-7748-model-canary-state",
+      isFeatureEnabled: async () => options.stateFlag ?? true,
+    },
     "@/lib/aiFeedback/automatic": { queueRestFailure: () => {} },
-    "@/lib/errors/reportError": { reportError: async (payload) => reports.push(payload) },
+    "@/lib/errors/reportError": { reportError: async () => {} },
   };
   mocks["@/lib/mcp/routeWrapper"] = loadRouteWrapper(mocks);
-  const { GET } = load("src/app/api/mcp/ai/settings/route.ts", mocks);
+  const { GET } = load("src/app/api/mcp/ai/models/status/route.ts", mocks);
   return {
-    reports,
     viewerCalls,
-    get: (query = "") => GET(new NextRequest(`http://mcp.test/api/mcp/ai/settings${query}`)),
+    get: (query = "") =>
+      GET(new NextRequest(`http://mcp.test/api/mcp/ai/models/status${query}`)),
   };
 }
 
@@ -71,53 +76,64 @@ function collectKeys(value, keys = []) {
   return keys;
 }
 
-test("an unauthenticated call is refused", async () => {
+test("an unauthenticated read is refused", async () => {
   const f = fixture({ noAuth: true });
-  const response = await f.get();
-  assert.equal(response.status, 401);
-  assert.equal((await response.json()).success, false);
+  assert.equal((await f.get()).status, 401);
   assert.deepEqual(f.viewerCalls, []);
 });
 
-test("a runner token reads live setting names for its team", async () => {
+test("a runner reads live setting names next to the canary rows", async () => {
   const f = fixture();
   const response = await f.get();
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.success, true);
-  assert.equal(body.teamId, TEAM_ID);
   assert.deepEqual(f.viewerCalls, [{ userId: 7, accountId: undefined, teamId: TEAM_ID }]);
-  assert.equal(body.gdprSafeMode, false);
-  assert.equal(body.ownKeyOnly, false);
-  const openai = body.providers.find((provider) => provider.key === "openai");
-  const anthropic = body.providers.find((provider) => provider.key === "anthropic");
+  const settings = body.settings;
+  assert.equal(settings.teamId, TEAM_ID);
+  assert.equal(settings.gdprSafeMode, false);
+  assert.equal(settings.ownKeyOnly, false);
+  const openai = settings.providers.find((provider) => provider.key === "openai");
+  const anthropic = settings.providers.find((provider) => provider.key === "anthropic");
   assert.ok(openai.label.length > 0);
   assert.equal(openai.enabled, true);
   assert.equal(anthropic.enabled, false);
-  assert.deepEqual(body.gateway, { configured: true, source: "shared" });
-  assert.deepEqual(body.jev, { flag: "htpr-9046-jev-duplicate-hint", model: JEV_MODEL, enabled: true });
-  assert.equal(typeof body.checkedAt, "string");
+  assert.deepEqual(settings.gateway, { configured: true, source: "shared" });
+  assert.deepEqual(settings.jev, {
+    flag: "htpr-9046-jev-duplicate-hint",
+    model: JEV_MODEL,
+    enabled: true,
+  });
 });
 
 test("no key material reaches the response", async () => {
-  const raw = await (await fixture().get()).text();
-  const body = JSON.parse(raw);
+  const response = await fixture().get();
+  const raw = await response.clone().text();
   assert.equal(/vck_|sk-|ciphertext|apiKey/i.test(raw), false);
-  assert.deepEqual(collectKeys(body).filter((key) => /apikey|ciphertext|secret|token/i.test(key)), []);
+  assert.deepEqual(
+    collectKeys(await response.json()).filter((key) => /apikey|ciphertext|secret|token/i.test(key)),
+    [],
+  );
+});
+
+test("the Jev state is readable without a resolved team", async () => {
+  const f = fixture({ ownedTeams: [{ id: TEAM_ID }, { id: OTHER_TEAM_ID }] });
+  const body = await (await f.get()).json();
+  assert.equal(body.settings.teamId, null);
+  assert.equal(body.settings.jev.enabled, true);
+  assert.deepEqual(f.viewerCalls, []);
 });
 
 test("a team-scoped token cannot read another team", async () => {
   const f = fixture({ teamScope: { teamId: TEAM_ID, accessBinding: "member:one" } });
-  const response = await f.get(`?team_id=${OTHER_TEAM_ID}`);
-  assert.equal(response.status, 403);
-  assert.equal((await response.json()).success, false);
+  const body = await (await f.get(`?team_id=${OTHER_TEAM_ID}`)).json();
+  assert.equal(body.settings.teamId, null);
   assert.deepEqual(f.viewerCalls, []);
-  assert.equal((await f.get(`?team_id=${TEAM_ID}`)).status, 200);
+  const own = await (await f.get(`?team_id=${TEAM_ID}`)).json();
+  assert.equal(own.settings.teamId, TEAM_ID);
 });
 
-test("the viewer refusal keeps its status", async () => {
-  const f = fixture({ viewerRefusal: { ok: false, status: 403, message: "Forbidden" } });
-  const response = await f.get(`?team_id=${TEAM_ID}`);
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), { success: false, error: "Forbidden" });
+test("the legacy shape stays when the state flag is off", async () => {
+  const body = await (await fixture({ stateFlag: false }).get()).json();
+  assert.deepEqual(Object.keys(body).sort(), ["checkedAt", "models", "success"]);
 });
