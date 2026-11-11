@@ -151,7 +151,7 @@ export async function runCanary({ fetchImpl = fetch, token = process.env[BOARD_T
     }
     await wait(Math.min(30_000, Math.max(0, deadline - now())));
   }
-  throw new Error(`No matching board 15 PostHog ticket within 15 minutes: ${marker}`);
+  throw new Error(`No matching PostHog ticket on board 15 or ${FACTORY_BOARD} within 15 minutes: ${marker}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

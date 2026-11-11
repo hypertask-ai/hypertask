@@ -67,7 +67,7 @@ test("missing ticket reaches exactly the fifteen-minute deadline and fails loudl
   const { runCanary } = await import(script);
   const state = canaryFetch(Infinity);
   let clock = 0;
-  await assert.rejects(runCanary({ ...state, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", now: () => clock, wait: async (ms) => { clock += ms; } }), /No matching board 15 PostHog ticket within 15 minutes/);
+  await assert.rejects(runCanary({ ...state, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", now: () => clock, wait: async (ms) => { clock += ms; } }), /No matching PostHog ticket on board 15 or 2060 within 15 minutes/);
   assert.equal(clock, 15 * 60_000);
   assert.equal(state.calls.filter((call) => call.url.includes("/tasks?")).length, 30);
   assert.equal(state.calls.filter((call) => call.url.endsWith("/tasks/update")).length, 0);
