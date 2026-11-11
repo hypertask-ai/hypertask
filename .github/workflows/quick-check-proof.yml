@@ -29,9 +29,10 @@ jobs:
           from pathlib import Path
           p = Path('tests/htpr-8988-chat-window-layout.test.cjs')
           s = p.read_text()
+          s = s.replace("assert.equal(view.container.querySelector('[role=\"dialog\"]'), null);", "assert.equal(view.container.querySelector('[role=\"dialog\"]')?.outerHTML ?? null, null);")
           s = s.replace('const view = stackView(', 'console.error("PROBE stackView", new Error().stack); const view = stackView(')
-          s = s.replace('React.act(() =>', 'console.error("PROBE act", new Error().stack); React.act(() =>')
-          s = s.replace('view.render(React.createElement(Harness));', 'console.error("PROBE render"); view.render(React.createElement(Harness)); console.error("PROBE rendered");')
+          s = s.replace('React.act(() => { assert.equal(view.controller.open("chat-a"), false); });', 'React.act(() => { assert.equal(view.controller.open("chat-a"), false); }); console.error("PROBE open refused; dialogs", view.container.querySelectorAll(\'[role="dialog"]\').length);')
+          s = s.replace('} finally { view.close(); }', '} finally { console.error("PROBE close"); view.close(); console.error("PROBE closed"); }')
           p.write_text(s)
           PY
           timeout --signal=TERM --kill-after=10s 120s /usr/bin/time -v node --max-old-space-size=1024 --require ./tests/helpers/register-server-only.cjs tests/htpr-8988-chat-window-layout.test.cjs
