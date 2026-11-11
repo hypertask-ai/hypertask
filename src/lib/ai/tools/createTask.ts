@@ -1,5 +1,6 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { hostInlineScreenshots } from "@/lib/media/hostInlineScreenshots.server";
 import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
 import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
@@ -267,10 +268,12 @@ export function createCreateTaskTool(context: ToolContext) {
             }
             if (guaranteeScreenshots && requestedTasks.length === 1 && input.inline_images !== false) {
               const note = [body?.message, "brief" in input ? input.brief : ""].filter(Boolean).join("\n");
-              const shots = creationScreenshotCandidates([...(body?.images64 ?? []), ...(body?.attachments ?? [])], note)
+              const requested = creationScreenshotCandidates([...(body?.images64 ?? []), ...(body?.attachments ?? [])], note)
                 .filter((shot) => !context.creationScreenshotsUsed.has(shot.url));
+              const shots = await hostInlineScreenshots(requested);
               if (shots.length) {
                 description = guaranteeCreationScreenshots(description ?? "", { instructions: note, attachments: shots });
+                for (const shot of requested) context.creationScreenshotsUsed.add(shot.url);
                 for (const shot of shots) context.creationScreenshotsUsed.add(shot.url);
               }
             }
