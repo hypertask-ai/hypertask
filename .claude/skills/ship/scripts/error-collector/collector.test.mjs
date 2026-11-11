@@ -65,6 +65,7 @@ if (name === 'ht') {
     if (args[0] !== '--json') throw new Error('must request JSON');
     if (cfg.createFail) { console.error('Project not found or access denied'); process.exit(1); }
     if (cfg.titleRefused) { console.log(JSON.stringify({ success: false, error: 'title: Keep each sentence within twelve words ("Failed to start manager-lease-renew.service - Keep the Hype..."). Use short plain sentences for people; put technical details and status in the agent log.', code: 'invalid_field', field: 'title' })); process.exit(2); }
+    if (cfg.createServerError) { console.log(JSON.stringify({ success: false, error: 'Internal server error', code: 'internal_error' })); process.exit(2); }
     if (cfg.firstCreateRefusal && readFileSync(calls, 'utf8').trim().split('\\n').map(line => JSON.parse(line)).filter(call => call.name === 'vcc' && call.args.includes('create')).length === 1) {
       console.error(cfg.firstCreateRefusal); process.exit(5);
     }
@@ -617,6 +618,15 @@ check('tickets', 'HYCI-271 a title the board rejects is a refusal, so the next g
   h.config({ titleRefused: true });
   await h.run();
   assert.equal(creates(h).length, 2);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+}));
+
+check('tickets', 'HYCI-271 an unknown server failure stays unclear and stops further creates', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ createServerError: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
   assert.deepEqual(h.state().created, []);
   assert.equal(Object.keys(h.state().pending).length, 2);
 }));
