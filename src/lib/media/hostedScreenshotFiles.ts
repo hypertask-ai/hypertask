@@ -45,7 +45,7 @@ export async function hostedScreenshotFiles(files: ScreenshotInput[]): Promise<S
 
 function fileFromSource(source: string | undefined, name: string): File | null {
   if (!source || typeof File === "undefined") return null;
-  const match = /^data:([^;,]*)(;base64)?,(.*)$/is.exec(source);
+  const match = /^data:([^;,]*)(;base64)?,([\s\S]*)$/i.exec(source);
   if (!match) return null;
   try {
     const bytes = match[2]
