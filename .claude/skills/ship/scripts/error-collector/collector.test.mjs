@@ -806,7 +806,7 @@ check('reporting', 'noise alert fixture dry run prints the planned ticket for 12
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run');
   assert.equal(result.status, 0, result.stderr);
   assert.equal((result.stdout.match(/"create"/g) ?? []).length, 1);
-  assert.match(result.stdout, /SSL configuration warning repeated 120 times in one hour/);
+  assert.match(result.stdout, /vercel: one warning repeated 120 times\./);
   assert.match(result.stdout, /Occurrences in one hour: 120/);
   assert.match(result.stdout, /"errors":0,"noise":120,"newGroups":0/);
   assert.equal(existsSync(dirname(h.statePath)), false);
