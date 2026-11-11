@@ -1,13 +1,24 @@
 name: Desktop live readback
 on:
   workflow_dispatch:
+  pull_request:
+    paths: [.github/scripts/desktop-live-readback.py, .github/workflows/desktop-live-readback.yml]
 permissions:
   contents: read
 concurrency:
-  group: desktop-live-readback
+  group: desktop-live-readback-${{ github.event.pull_request.number || 'production' }}
   cancel-in-progress: false
 jobs:
+  self-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 .github/scripts/desktop-live-readback.py --self-check
   readback:
+    needs: self-check
     name: desktop-live-readback
     if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
@@ -26,8 +37,6 @@ jobs:
         with:
           ref: production
           persist-credentials: false
-      - name: Check trash and a missing login
-        run: python3 .github/scripts/desktop-live-readback.py --self-check
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: hypertask-ai/hypertask-desktop

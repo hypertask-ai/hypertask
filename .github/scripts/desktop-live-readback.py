@@ -130,6 +130,9 @@ def self_check():
     missing = json.dumps({"success": False}).encode()
     if task_still_present(404, missing, "1"):
         fail("missing task counted as present")
+    for status, body in ((500, deleted), (401, missing), (200, missing), (200, b"[]"), (200, b'{"success":true}'), (200, b"bad"), (200, b"\xff")):
+        if not task_still_present(status, body, "1"):
+            fail("unverified task cleanup counted as cleaned")
     if production_dispatch("refs/heads/runner-2/hyci-258"):
         fail("branch dispatch was accepted")
     if not production_dispatch("refs/heads/production"):
@@ -165,15 +168,17 @@ def matching_task(payload, task_id):
 def task_still_present(status, raw, task_id):
     if status == 404:
         return False
+    if status != 200:
+        return True
     try:
         payload = json.loads(raw.decode())
-    except json.JSONDecodeError:
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return True
-    if not isinstance(payload, dict) or payload.get("success") is False:
-        return False
+    if not isinstance(payload, dict) or payload.get("success") is not True:
+        return True
     task = matching_task(payload, task_id)
     if task is None:
-        return False
+        return True
     return task.get("status") != "Deleted"
 
 def sandbox_board(token):
