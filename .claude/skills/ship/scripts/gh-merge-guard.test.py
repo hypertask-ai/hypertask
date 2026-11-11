@@ -169,6 +169,8 @@ elif args[0] == 'api':
                'started_at': '2026-01-02T00:00:00Z' if production else os.environ.get('HEAD_TIME', '2026-01-01T00:00:00Z'),
                'html_url': 'https://example.invalid/run'}
         print(json.dumps({'check_runs': [] if missing else [run]}))
+    elif '/compare/' in endpoint:
+        print('0')
     elif '/statuses/' in endpoint:
         print('{}')
     elif '/actions/jobs/' in endpoint:
