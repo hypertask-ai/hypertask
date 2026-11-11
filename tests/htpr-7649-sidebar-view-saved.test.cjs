@@ -332,6 +332,7 @@ function preferencesApi(enabled = true, stored = null) {
     "@/lib/configs/allTasks.config": load("src/lib/configs/allTasks.config.ts"),
     "@/lib/configs/boardSortMode.config": config,
     "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": flag,
+    "@/lib/flags/definitions/htpr-9019-saved-model-auto": { HTPR_9019_SAVED_MODEL_AUTO_FLAG: "htpr-9019-saved-model-auto" },
     "@/lib/flags/definitions/htpr-8971-card-settings": { HTPR_8971_CARD_SETTINGS_FLAG: "htpr-8971-card-settings" },
     "@/lib/flags/definitions/htpr-8995-picker-auto": { HTPR_8995_PICKER_AUTO_FLAG: "htpr-8995-picker-auto" },
     "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": {},

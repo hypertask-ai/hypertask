@@ -38,6 +38,7 @@ import { HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG } from "@/lib/flags/definitions/htpr-
 import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
 import { isAiThinkingEffort } from "@/lib/aiThinkingPreference";
 import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
+import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { isAllTasksDateRange } from "@/lib/configs/allTasks.config";
 import type { ISnippet } from "@/lib/snippets";
 import type { Prisma } from "@prisma/client";
@@ -329,6 +330,7 @@ export async function POST(request: NextRequest) {
       }
 
       const preferenceUpdates = Object.entries(body.aiModelPreferences);
+      const savedModelAutoEnabled = await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, user.id);
       let taskWriterAuto = false;
       if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id)) {
         taskWriterAuto = true;
@@ -339,9 +341,9 @@ export async function POST(request: NextRequest) {
           return !aiImageModelDefinitions.some((model) => model.key === optionId);
         }
         if (getAiModelOptionById(optionId)) return false;
-        if (surface === "aiChat" && optionId === AUTO_MODEL_OPTION_ID) return false;
-        if (surface === "taskWriter" && optionId === AUTO_MODEL_OPTION_ID && taskWriterAuto) return false;
-        return true;
+        if (optionId !== AUTO_MODEL_OPTION_ID) return true;
+        if (surface === "aiChat" || (surface === "taskWriter" && taskWriterAuto)) return false;
+        return !savedModelAutoEnabled;
       });
 
       if (invalidPreference) {

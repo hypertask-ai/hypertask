@@ -22,7 +22,7 @@ const agentKey = "fixture-agent-anthropic";
 const output = "<p>Draft</p>";
 
 function moduleWithStubs(file, stubs) {
-  stubs = { "@/app/api/ai/_lib/skillAccess": { AccountSkillAccessError: class extends Error {} }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-7915-auto-model": { HTPR_7915_AUTO_MODEL_FLAG: "htpr-7915-auto-model" }, "@/app/api/ai/_lib/autoModel": { autoModelEnabled: async () => false, isAutoRequest: () => false, chatStepUp: () => 0, pickAutoModelOption: () => null }, "@/lib/flags/definitions/htpr-8100-no-paid-fallback": { HTPR_8100_NO_PAID_FALLBACK_FLAG: "htpr-8100-no-paid-fallback" }, "@/lib/ai/modelFundingGuard": { fallbackRunsOnOurOwnGatewayKey: () => false }, ...stubs };
+  stubs = { "@/app/api/ai/_lib/skillAccess": { AccountSkillAccessError: class extends Error {} }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-7915-auto-model": { HTPR_7915_AUTO_MODEL_FLAG: "htpr-7915-auto-model" }, "@/lib/flags/definitions/htpr-9019-saved-model-auto": { HTPR_9019_SAVED_MODEL_AUTO_FLAG: "htpr-9019-saved-model-auto" }, "@/app/api/ai/_lib/autoModel": { autoModelEnabled: async () => false, isAutoRequest: () => false, chatStepUp: () => 0, pickAutoModelOption: () => null }, "@/lib/flags/definitions/htpr-8100-no-paid-fallback": { HTPR_8100_NO_PAID_FALLBACK_FLAG: "htpr-8100-no-paid-fallback" }, "@/lib/ai/modelFundingGuard": { fallbackRunsOnOurOwnGatewayKey: () => false }, ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -38,12 +38,13 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
-function harness({ plan = "Free", saved = null, teamByok = false, agentByok = false, agentId = null, unavailable = false, settings = {}, haiku = false, background = false, failFirst = false } = {}) {
+function harness({ savedAuto = false, plan = "Free", saved = null, teamByok = false, agentByok = false, agentId = null, unavailable = false, settings = {}, haiku = false, background = false, failFirst = false } = {}) {
   const checks = [], calls = [], reservations = [], agentLookups = [], usage = [], observations = [];
   let preferenceReads = 0;
   const flags = { isFeatureEnabled: async (key, id) => {
     checks.push([key, id]);
     assert.notEqual(key, "htpr-7038-task-writer-sonnet");
+    if (["htpr-9019-saved-model-auto", "htpr-7915-auto-model"].includes(key)) return savedAuto;
     if (key === keys.HTPR_7075_BACKGROUND_CLAUDE_FLAG) return background;
     return false;
   } };
@@ -145,6 +146,7 @@ function harness({ plan = "Free", saved = null, teamByok = false, agentByok = fa
   });
   const editor = moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {
     ...providerStubs,
+    "@/app/api/ai/_lib/autoModel": { autoForcedProvider: async () => null, pickAutoModelOption: () => savedAuto ? catalog.getAiModelOptionById("gpt-6-luna") : null },
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
     "@/lib/prisma": prisma, "@/lib/flags": flags, "@/lib/flags/keys": keys,
     "@/lib/aiModelOptions": catalog, "@/lib/aiProviders": providers, "@/lib/systemModelLadder": ladder,
@@ -230,6 +232,20 @@ function harness({ plan = "Free", saved = null, teamByok = false, agentByok = fa
 }
 
 async function main() {
+  for (const feature of ["taskWriter", "writeWithAi", "improveWriting"]) {
+    for (const [saved, modelOptionId, teamModel, expected] of [
+      ["auto", undefined, false, /gpt-6-luna$/],
+      ["claude-opus-5-5-thinking", "auto", false, /gpt-6-luna$/],
+      ["auto", "claude-opus-5-5-thinking", false, /claude-opus-5[.-]5$/],
+      ["claude-opus-5-5-thinking", undefined, false, /claude-opus-5[.-]5$/],
+      ["auto", "auto", true, /claude-haiku-5[.-]5$/],
+      ["auto", "claude-opus-5-5-thinking", true, /claude-haiku-5[.-]5$/],
+    ]) {
+      const settings = teamModel ? { featureModels: { [feature]: "claude-haiku-5-5" } } : {};
+      const h = harness({ plan: "Pro", savedAuto: true, saved, settings });
+      assert.match((await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, modelOptionId })).modelId, expected);
+    }
+  }
   assert.equal(catalog.isPremiumAiModelDefinition(catalog.getAiModelDefinition("claude-sonnet-5-5")), true);
   for (const kind of ["app", "mcp"]) {
     for (const plan of ["Free", "BYOK", "Pro", "AI"]) {
