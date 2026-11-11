@@ -638,7 +638,7 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
   );
 });
 
-function runChromiumInstaller({ answering, failures }) {
+function runChromiumInstaller({ answering, failures, cached, depsMissing }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-279-"));
   const mirrorFile = path.join(dir, "apt-mirrors.txt");
   fs.writeFileSync(
@@ -655,6 +655,12 @@ exit 6
   fs.writeFileSync(
     path.join(dir, "npx"),
     `#!/bin/bash
+case "$*" in
+  *install-deps*)
+    d=$(( $(cat "${dir}/deps-calls" 2>/dev/null || echo 0) + 1 )); echo $d > "${dir}/deps-calls"
+    if [ "${depsMissing ? 1 : 0}" = "1" ]; then printf '%s\n' "Missing system dependencies (2): fonts-liberation libnss3" >&2; exit 1; fi
+    echo "All system dependencies are installed."; exit 0;;
+esac
 n=$(( $(cat "${dir}/npx-calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/npx-calls"
 if [ "$n" -le ${failures} ]; then printf '%s\n' "E: Failed to fetch packages  Temporary failure resolving" >&2; exit 1; fi
 echo "chromium installed"
@@ -663,15 +669,33 @@ echo "chromium installed"
   );
   fs.writeFileSync(path.join(dir, "apt-get"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
   fs.writeFileSync(path.join(dir, "sudo"), '#!/bin/bash\nexec "$@"\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, "strace"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
+  const browsers = path.join(dir, "browsers");
+  fs.mkdirSync(browsers, { recursive: true });
+  if (cached) {
+    const cachedDir = path.join(browsers, "chromium-1200");
+    fs.mkdirSync(cachedDir, { recursive: true });
+    fs.writeFileSync(path.join(cachedDir, "chrome"), '#!/bin/bash\necho "Chromium 120.0.0.0"\n', { mode: 0o755 });
+  }
+  const aptConf = path.join(dir, "99-ci-timeouts");
   const child = spawnSync("bash", [path.resolve(".github/scripts/install-chromium.sh")], {
-    env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, APT_MIRROR_FILE: mirrorFile, RETRY_SLEEP: "0" },
+    env: {
+      ...process.env,
+      PATH: `${dir}:${process.env.PATH}`,
+      APT_MIRROR_FILE: mirrorFile,
+      APT_CONF_FILE: aptConf,
+      PLAYWRIGHT_BROWSERS_PATH: browsers,
+      RETRY_SLEEP: "0",
+    },
     encoding: "utf8",
   });
   return {
     status: child.status,
     output: child.stdout + child.stderr,
     mirror: fs.existsSync(mirrorFile) ? fs.readFileSync(mirrorFile, "utf8").trim() : null,
-    npxCalls: Number(fs.readFileSync(path.join(dir, "npx-calls"), "utf8")),
+    npxCalls: fs.existsSync(path.join(dir, "npx-calls")) ? Number(fs.readFileSync(path.join(dir, "npx-calls"), "utf8")) : 0,
+    depsCalls: fs.existsSync(path.join(dir, "deps-calls")) ? Number(fs.readFileSync(path.join(dir, "deps-calls"), "utf8")) : 0,
+    aptConf: fs.existsSync(aptConf) ? fs.readFileSync(aptConf, "utf8") : "",
   };
 }
 
@@ -702,7 +726,7 @@ test("HYCI-279: a dead mirror name is skipped, kept working, and retried once", 
   const skipped = runChromiumInstaller({ answering: ["azure.archive.ubuntu.com"], failures: 1 });
   assert.equal(skipped.status, 0, skipped.output);
   assert.equal(skipped.mirror, "https://azure.archive.ubuntu.com/ubuntu/");
-  assert.match(skipped.output, /Ubuntu mirror did not answer: https:\/\/archive\.ubuntu\.com\/ubuntu\//);
+  assert.match(skipped.output, /Ubuntu mirror did not answer within 6s: https:\/\/archive\.ubuntu\.com\/ubuntu\//);
   assert.equal(skipped.npxCalls, 2, "one retry after the failed install");
 
   const noMirror = runChromiumInstaller({ answering: [], failures: 0 });
@@ -718,5 +742,27 @@ test("HYCI-279: a dead mirror name is skipped, kept working, and retried once", 
   const deadNetwork = runChromiumInstaller({ answering: [], failures: 5 });
   assert.equal(deadNetwork.status, 1);
   assert.equal(deadNetwork.npxCalls, 1, "a dead network is not retried for another nine minutes");
-  assert.match(deadNetwork.output, /not retrying into a dead network/);
+  assert.match(deadNetwork.output, /so this machine has no outside network/);
+});
+
+test("HYCI-285: a cached browser with its system packages skips apt entirely", () => {
+  const cached = runChromiumInstaller({ answering: [], failures: 0, cached: true });
+  assert.equal(cached.status, 0, cached.output);
+  assert.equal(cached.npxCalls, 0, "a cached browser needs no playwright install");
+  assert.equal(cached.depsCalls, 1, "one dry-run proves the system packages before skipping");
+  assert.match(cached.output, /with its system packages installed; skipping apt/);
+});
+
+test("HYCI-285: a cached browser without its system packages still installs them", () => {
+  const cached = runChromiumInstaller({ answering: [], failures: 0, cached: true, depsMissing: true });
+  assert.equal(cached.status, 0, cached.output);
+  assert.doesNotMatch(cached.output, /skipping apt/, "a cache hit never hides missing fonts or libraries");
+  assert.equal(cached.npxCalls, 1, "the full install runs when the dry-run reports missing packages");
+});
+
+test("HYCI-285: short apt timeouts are written before the first install command", () => {
+  const run = runChromiumInstaller({ answering: ["azure.archive.ubuntu.com"], failures: 0 });
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.aptConf, /Acquire::http::Timeout "5"/);
+  assert.match(run.aptConf, /Acquire::Retries "0"/);
 });
