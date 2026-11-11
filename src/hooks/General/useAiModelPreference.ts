@@ -5,6 +5,7 @@ import { useRecoilValue } from "@/lib/state";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
+import { autoDefaultForSurface, preferredPickerOption } from "@/lib/taskWriterPickerAuto";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import {
   AUTO_MODEL_OPTION_ID,
@@ -109,6 +110,9 @@ export function useAiModelPreference(
     includeBoardFallback ? boardDefaultId : undefined,
   ];
   const usesPlanDefault = !chosenOptionIds.some((id) => getAiModelOptionById(id, haiku55Enabled));
+  const autoDefault = usesPlanDefault &&
+    !teamFeatureModels.isLoading &&
+    autoDefaultForSurface(surface, taskWriterAuto, autoModelEnabled);
   const openAiOnlyDefaultApplies = usesPlanDefault &&
     isOpenAiOnlyPaidTeam({ ...defaultContext, plan: scopedBilling?.storePlanId });
   const agentSessionAiOption = openAiOnlyDefaultApplies
@@ -116,17 +120,21 @@ export function useAiModelPreference(
     : null;
   const resolveOption = useCallback(
     () =>
-      resolveAiModelOption(
-        [
-          storedOptionIds.teamScoped,
-          storedOptionIds.global,
-          teamFeatureModels.data?.[surface]?.model,
-          includeBoardFallback ? boardDefaultId : undefined,
-        ],
-        planDefault,
-        haiku55Enabled,
+      preferredPickerOption(
+        resolveAiModelOption(
+          [
+            storedOptionIds.teamScoped,
+            storedOptionIds.global,
+            teamFeatureModels.data?.[surface]?.model,
+            includeBoardFallback ? boardDefaultId : undefined,
+          ],
+          planDefault,
+          haiku55Enabled,
+        ),
+        autoDefault,
       ),
     [
+      autoDefault,
       haiku55Enabled,
       boardDefaultId,
       includeBoardFallback,
