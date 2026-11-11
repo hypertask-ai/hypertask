@@ -1,12 +1,15 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8988-chat-window-layout";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 import { useRecoilState } from "@/lib/state";
 import { aiChatWindowsAtom, currentUserAtom, isAiChatSidebarModeAtom } from "@/store";
 import { MOBILE_VIEWPORT_MAX_PX } from "./aiChatShared";
 import {
   CHAT_WINDOW_MAX,
+  arrangeChatWindowsForUser,
+  tileChatWindowRect,
   CHAT_WINDOW_MIN_WIDTH,
   chatWindowForSession,
   closeChatWindow,
@@ -32,6 +35,7 @@ const newWindowId = () =>
 
 export function useChatWindows(verifiedUserId?: number | null) {
   const enabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
+  const sideBySide = useFlag(HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG);
   const [currentUser] = useRecoilState(currentUserAtom);
   const [stored, setStored] = useRecoilState(aiChatWindowsAtom);
   const [sidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
@@ -52,8 +56,15 @@ export function useChatWindows(verifiedUserId?: number | null) {
   const floating = multiChatWindowsAvailable({ enabled, desktop, sidebarMode });
   const windows = useMemo(() => {
     if (!floating || viewport.width < CHAT_WINDOW_MIN_WIDTH || userId <= 0) return [];
-    return readChatWindows(stored, viewport, userId);
-  }, [floating, stored, userId, viewport]);
+    const minimum = sideBySide ? tileChatWindowRect(0, CHAT_WINDOW_MAX + 1, viewport) : undefined;
+    return readChatWindows(stored, viewport, userId, minimum);
+  }, [floating, stored, userId, viewport, sideBySide]);
+
+  const windowCount = windows.length;
+  useEffect(sideBySide ? () => {
+    if (!floating || userId <= 0 || viewport.width <= 0) return;
+    setStored((previous) => arrangeChatWindowsForUser(previous, userId, viewport));
+  } : () => {}, [sideBySide, floating, userId, viewport, windowCount, setStored]);
 
   const focus = useCallback(
     (id: string) => setStored((previous) => moveChatWindowToFront(previous, id)),
@@ -83,11 +94,11 @@ export function useChatWindows(verifiedUserId?: number | null) {
       if (sessionId && focusOpenSession(sessionId)) return true;
       if (windows.length >= CHAT_WINDOW_MAX) return false;
       setStored((previous) =>
-        openChatWindowForUser(previous, { id: newWindowId(), sessionId, title: null, userId }, readViewport()),
+        openChatWindowForUser(previous, { id: newWindowId(), sessionId, title: null, userId }, readViewport(), sideBySide),
       );
       return true;
     },
-    [floating, focusOpenSession, setStored, userId, windows],
+    [floating, focusOpenSession, setStored, sideBySide, userId, windows],
   );
 
   const close = useCallback(
@@ -102,8 +113,12 @@ export function useChatWindows(verifiedUserId?: number | null) {
 
   const resize = useCallback(
     (id: string, rect: Partial<ChatWindowRect>) =>
-      setStored((previous) => updateChatWindow(previous, id, rect, readViewport())),
-    [setStored],
+      setStored((previous) => {
+        const screen = readViewport();
+        const minimum = sideBySide ? tileChatWindowRect(0, windowCount + 1, screen) : undefined;
+        return updateChatWindow(previous, id, rect, screen, minimum);
+      }),
+    [setStored, sideBySide, windowCount],
   );
 
   const attachSession = useCallback(

@@ -17,6 +17,7 @@
 - `malformed-chat-requests` Malformed chat requests.
 - `clickable-ticket-answers` Clickable ticket answers.
 - `independent-parallel-chats` Independent parallel chats.
+- `floating-window-layout` Floating windows and minimized chat placement.
 - `opening-while-chat-starts` Opening while chat starts.
 - `fullscreen-return-with-automatic-opening-disabled` Fullscreen return with automatic opening disabled.
 - `remembered-sidebar-width` Remembered sidebar width.
@@ -573,3 +574,24 @@ board navigation must not replace the selected conversation; team and account
 switches must not restore another account or team selection. Flag off retains
 existing navigation defaults. Reuse existing draft storage; do not send a
 message merely to verify navigation.
+
+### Floating window layout
+
+With `htpr-8334-multi-chat-windows` and `htpr-8988-chat-window-layout`
+reaching QA, open chat on Sandbox 7049. In sidebar mode, New chat
+replaces the sidebar conversation; Ctrl+Shift+O must not open a floating
+window. Choose Floating window, then open two more conversations.
+Count three top-level frames and compare their bounding rectangles: no
+pair may intersect at 1920x1032. At narrower desktop sizes, additional
+rows keep every frame inside the screen without intersection.
+
+Drag and resize each window independently. The primary window retains
+its Sidebar menu action; choosing it removes extra windows without
+deleting their conversations. Minimize all three windows: their restore
+buttons share one flex row at the screen bottom, outside the frames.
+Restore and close each separately; untouched conversations remain. Reload
+and check the saved secondary conversations still open without overlap.
+Capture both modes, minimized/restore and phone at 390x844 in Light,
+AMOLED and Graphite 2. Compare with the ticket's failure captures, not an
+invented Figma frame. Layout-flag Off retains the old single primary panel
+and legacy secondary positions. No model reply is needed for this check.

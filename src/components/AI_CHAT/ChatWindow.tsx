@@ -16,7 +16,7 @@ import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-c
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 
-export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
+export const ChatWindow = ({ framed = false, primary = false }: { framed?: boolean; primary?: boolean } = {}) => {
   const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const isMbl = useContext(MobileViewContext);
   const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover, runningSessionIds, chatWindows } =
@@ -90,7 +90,7 @@ export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
       }}
     >
       {shortcuts.modal}
-      <ChatHeader windowDrag={windowFramed} />
+      <ChatHeader windowDrag={windowFramed} allowDocking={primary || !windowFramed} />
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
       </div>

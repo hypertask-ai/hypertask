@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
+import { HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8988-chat-window-layout";
 import { CHAT_WINDOW_MIN_HEIGHT, CHAT_WINDOW_MIN_WIDTH, clampChatWindowValue, type ChatWindowRect, type ChatWindowState, type ChatWindowViewport } from "@/lib/aiChat/chatWindows";
 
 export function ChatWindowFrame({
@@ -20,6 +21,7 @@ export function ChatWindowFrame({
   onResize: (rect: ChatWindowRect) => void;
   children: React.ReactNode;
 }) {
+  const sideBySide = useFlag(HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG);
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const dragStart = useRef<{ pointerX: number; pointerY: number; rect: ChatWindowRect } | null>(null);
@@ -50,8 +52,8 @@ export function ChatWindowFrame({
       }
       const sizing = resizeStart.current;
       if (sizing) {
-        const width = clampChatWindowValue(sizing.rect.width - (event.clientX - sizing.pointerX), CHAT_WINDOW_MIN_WIDTH, sizing.rect.x + sizing.rect.width);
-        const height = clampChatWindowValue(sizing.rect.height - (event.clientY - sizing.pointerY), CHAT_WINDOW_MIN_HEIGHT, sizing.rect.y + sizing.rect.height);
+        const width = clampChatWindowValue(sizing.rect.width - (event.clientX - sizing.pointerX), (sideBySide ? Math.min(CHAT_WINDOW_MIN_WIDTH, sizing.rect.width) : CHAT_WINDOW_MIN_WIDTH), sizing.rect.x + sizing.rect.width);
+        const height = clampChatWindowValue(sizing.rect.height - (event.clientY - sizing.pointerY), (sideBySide ? Math.min(CHAT_WINDOW_MIN_HEIGHT, sizing.rect.height) : CHAT_WINDOW_MIN_HEIGHT), sizing.rect.y + sizing.rect.height);
         resize.current({
           x: sizing.rect.x + (sizing.rect.width - width),
           y: sizing.rect.y + (sizing.rect.height - height),
@@ -69,7 +71,7 @@ export function ChatWindowFrame({
       window.removeEventListener("pointerup", handleUp);
       window.removeEventListener("pointercancel", handleUp);
     };
-  }, [stop, viewport.height, viewport.width]);
+  }, [sideBySide, stop, viewport.height, viewport.width]);
 
   const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
