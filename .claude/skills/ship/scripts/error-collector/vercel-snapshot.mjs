@@ -12,7 +12,10 @@ await withDeadline(12 * 60 * 1000, async () => {
       const batch = await fetchVercel({ since, until, env: process.env, coverage: true }, service);
       sources[service] = batch;
       console.log(`${service}: ${batch.events.length} events`);
-    } catch { console.error(`${service}: fetch failed; no coverage published`); }
+    } catch (error) {
+      const reason = /^[A-Za-z][\w .'-]{0,79}$/.test(error?.message ?? '') ? error.message : 'unknown error';
+      console.error(`${service}: fetch failed (${reason}); no coverage published`);
+    }
   }
   if (!Object.keys(sources).length) throw new Error('all Vercel sources failed');
   const publicKey = readFileSync(new URL('./vercel-feed.pub.pem', import.meta.url));

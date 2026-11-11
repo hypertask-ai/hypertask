@@ -96,6 +96,13 @@ export async function fetchVercel({ since, until, env, coverage = false }, servi
       if (!cursor || cursors.has(cursor)) throw new Error('invalid Vercel cursor');
       cursors.add(cursor);
     }
+    if (depth < 12 && end - start > 60000) {
+      const middle = Math.floor((start + end) / 2);
+      console.error(`error-collector: source ${service} page budget; halving the window`);
+      await window(start, middle, depth + 1);
+      await window(middle, end, depth + 1);
+      return;
+    }
     throw new Error('Vercel page budget exceeded');
   }
   await window(Date.parse(since), Date.parse(until));
