@@ -943,6 +943,15 @@ if args[:2] == ['pr', 'view']:
         print('YPER4-999 [INFRA] Fixture')
     else:
         print(json.dumps({'number': 999, 'title': 'YPER4-999 [INFRA] Fixture', 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': None, 'baseRefName': 'production'}))
+elif args[:1] == ['api'] and args[1].endswith('/status'):
+    import subprocess
+    assert args[1] == 'repos/hypertask-ai/hypertask/commits/' + 'a' * 40 + '/status', args
+    assert '--paginate' in args, args
+    if os.environ.get('FLAG_STATUS_READ_ERROR'):
+        sys.exit(1)
+    statuses = json.loads(os.environ.get('FLAG_EXISTING_STATUSES', '[]'))
+    sys.exit(subprocess.run(['jq', '-r', args[args.index('--jq') + 1]],
+                           input=json.dumps({'statuses': statuses}), text=True).returncode)
 elif args[:1] == ['api'] and '/statuses/' in args[1]:
     import fcntl
     with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
@@ -984,8 +993,14 @@ S() {
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
 posts = [c for c in calls if c[0] == 'api' and '/statuses/' in c[1]]
-if sys.argv[2] == 'none':
+if sys.argv[2] in ('none', 'reused'):
     assert not posts, posts
+    if sys.argv[2] == 'reused':
+        assert sys.argv[4] == 'premerge-evidence: success (' + sys.argv[3] + ')', sys.argv[4]
+        reads = [c for c in calls if c[:2] == ['pr', 'view']]
+        assert len(reads) == 2, reads
+        status_read = next(i for i, c in enumerate(calls) if c[0] == 'api' and c[1].endswith('/status'))
+        assert calls[status_read + 1] == reads[1], calls
 else:
     assert len(posts) == 1, posts
     call = posts[0]
@@ -1016,6 +1031,15 @@ S head_read_error_gets_no_success 1 none '' FLAG_HEAD_ERROR=1
 S base_moved_between_read_and_post_fails 1 failure 'cannot confirm unchanged PR head; retry' FLAG_BASE_RACE=1
 S head_reread_error_gets_no_success 1 failure 'cannot confirm unchanged PR head; retry' FLAG_REREAD_ERROR=1
 S failed_status_post_returns_nonzero 1 success "$removed" FLAG_POST_ERROR=1
+matching_status='[{"context":"premerge-evidence","state":"success","description":"test click removed (Valentin 2026-10-21)"}]'
+S matching_status_survives_exhausted_post_limit 0 reused "$removed" FLAG_EXISTING_STATUSES="$matching_status" FLAG_POST_ERROR=1
+S matching_status_does_not_hide_head_race 1 failure 'cannot confirm unchanged PR head; retry' FLAG_EXISTING_STATUSES="$matching_status" FLAG_HEAD_RACE=1
+S matching_status_does_not_hide_closed_base_race 1 failure 'cannot confirm unchanged PR head; retry' FLAG_EXISTING_STATUSES="$matching_status" FLAG_BASE_RACE=1
+S other_context_does_not_skip_post 0 success "$removed" FLAG_EXISTING_STATUSES='[{"context":"other","state":"success","description":"test click removed (Valentin 2026-10-21)"}]'
+S outdated_description_is_replaced 0 success "$removed" FLAG_EXISTING_STATUSES='[{"context":"premerge-evidence","state":"success","description":"old rules"}]'
+S failing_status_is_replaced 0 success "$removed" FLAG_EXISTING_STATUSES='[{"context":"premerge-evidence","state":"failure","description":"test click removed (Valentin 2026-10-21)"}]'
+S unreadable_status_still_posts 0 success "$removed" FLAG_STATUS_READ_ERROR=1
+S unreadable_status_and_failed_post_fails_closed 1 success "$removed" FLAG_STATUS_READ_ERROR=1 FLAG_POST_ERROR=1
 printf 'not a directory\n' > "$E/lock-blocked"
 S publisher_lock_error_gets_no_success 1 none '' PREMERGE_STATUS_STATE="$E/lock-blocked"
 
