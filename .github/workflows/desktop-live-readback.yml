@@ -1,6 +1,8 @@
 name: Desktop live readback
 on:
   workflow_dispatch:
+  push:
+    branches: [runner-2/hyci-258]
 permissions:
   contents: read
 concurrency:
@@ -24,6 +26,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Check trash and a missing login
+        run: python3 .github/scripts/desktop-live-readback.py --self-check
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: hypertask-ai/hypertask-desktop

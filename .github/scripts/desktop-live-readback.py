@@ -124,6 +124,19 @@ def self_check():
     sandbox = [{"id": SANDBOX_BOARD_ID, "title": SANDBOX_TITLE, "status": "Normal"}]
     if choose_board(sandbox) != str(SANDBOX_BOARD_ID):
         fail("QA sandbox was not selected")
+    deleted = json.dumps({"success": True, "tasks": [{"id": 1, "status": "Deleted"}]}).encode()
+    if task_still_present(200, deleted, "1"):
+        fail("deleted task counted as present")
+    live = json.dumps({"success": True, "tasks": [{"id": 1, "status": "Normal"}]}).encode()
+    if not task_still_present(200, live, "1"):
+        fail("live task counted as cleaned")
+    archived = json.dumps({"success": True, "task": {"id": 9, "status": "Archive"}}).encode()
+    if not task_still_present(200, archived, "9"):
+        fail("archived task counted as cleaned")
+    missing = json.dumps({"success": False}).encode()
+    if task_still_present(404, missing, "1"):
+        fail("missing task counted as present")
+    print("CLEANUP_STATUS_OK")
     env = os.environ.copy()
     env["QA_LOGIN_EMAIL"] = ""
     env["QA_LOGIN_PASSWORD"] = ""
@@ -140,6 +153,18 @@ def self_check():
     print("board selection passed")
 
 
+def matching_task(payload, task_id):
+    task = payload.get("task")
+    if isinstance(task, dict) and str(task.get("id")) == task_id:
+        return task
+    tasks = payload.get("tasks")
+    if isinstance(tasks, list):
+        for item in tasks:
+            if isinstance(item, dict) and str(item.get("id")) == task_id:
+                return item
+    return None
+
+
 def task_still_present(status, raw, task_id):
     if status == 404:
         return False
@@ -149,13 +174,10 @@ def task_still_present(status, raw, task_id):
         return True
     if not isinstance(payload, dict) or payload.get("success") is False:
         return False
-    task = payload.get("task")
-    if isinstance(task, dict) and str(task.get("id")) == task_id:
-        return True
-    tasks = payload.get("tasks")
-    if isinstance(tasks, list):
-        return any(isinstance(item, dict) and str(item.get("id")) == task_id for item in tasks)
-    return False
+    task = matching_task(payload, task_id)
+    if task is None:
+        return False
+    return task.get("status") != "Deleted"
 
 
 def sandbox_board(token):
@@ -300,7 +322,14 @@ def main():
 
     status, _, raw = api("GET", f"/tasks?task_id={task_id}")
     if task_still_present(status, raw, task_id):
-        fail("temporary task still exists")
+        seen = ""
+        try:
+            match = matching_task(json.loads(raw.decode()), task_id)
+            if isinstance(match, dict) and isinstance(match.get("status"), str):
+                seen = match["status"]
+        except json.JSONDecodeError:
+            seen = ""
+        fail("temporary task still exists" + (f" status {seen}" if seen else ""))
     status, _, raw = api("GET", "/inbox/list")
     if status != 200:
         fail(f"inbox cleanup check status {status}")
