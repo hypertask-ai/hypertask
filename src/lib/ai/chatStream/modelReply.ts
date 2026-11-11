@@ -65,7 +65,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     const ownKeyProvider = state.selected.usageProvider === "byok:deepseek" ? undefined : state.selected.usageProvider;
     const nameOwnKey = Boolean(ownKeyProvider) && await isFeatureEnabled("htpr-7751-own-key-rejected", dbUser.id);
     state.send("error", {
-      content: userFacingErrorMessage(error, "model-stream", nameOwnKey ? ownKeyProvider : undefined),
+      content: userFacingErrorMessage(error, "model-stream", nameOwnKey ? ownKeyProvider : undefined, state.requestLogEnabled),
       toolsExecuted: toolExecutions.length > 0,
       ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
     });
@@ -73,7 +73,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     if (heartbeatExecutionId) {
       await failHeartbeatExecution(
         heartbeatExecutionId,
-        errorMessage(error)
+        errorMessage(error, state.requestLogEnabled)
       );
       state.heartbeatExecutionTerminal = true;
     }
