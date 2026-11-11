@@ -43,8 +43,8 @@ if call[0] == 'create':
     else:
         print(json.dumps({'token': '' if mode == 'empty-token' else secret}))
 elif call[0] == 'members':
-    token = next((pathlib.Path.home() / '.config/hypertask-agents/credentials').glob('runner-*-agent-token'))
-    print(json.dumps({'success': True, 'members': [{'id': 'agent-1', 'displayName': 'Runner ' + token.name.split('-')[1]}]}))
+    created = [json.loads(l)[1] for l in pathlib.Path(os.environ['CALLS']).read_text().splitlines() if json.loads(l)[0] == 'create']
+    print(json.dumps({'success': True, 'members': [{'id': 'agent-1', 'displayName': created[-1] if created else 'Runner ' + next((pathlib.Path.home() / '.config/hypertask-agents/credentials').glob('runner-*-agent-token')).name.split('-')[1]}]}))
 else:
     print(json.dumps({'authenticated': mode != 'wrong-ticket', 'verified': True, 'agentId': 'agent-1'}))
 ''')
@@ -120,7 +120,7 @@ else:
     child.wait()
     session(sessions, child.pid, 'RUNNER 3')
     r = run(env)
-    assert r.returncode == 0 and 'RUNNER 3:' in r.stdout
+    assert r.returncode == 0 and 'RUNNER 3:' in r.stdout, r.stderr
     assert calls(home)[0] == ['create', 'Runner 3']
     print('ok smallest free number ignores dead sessions and avoids tokens and live names')
 
