@@ -177,7 +177,7 @@ export const InboxZeroSheetContent = ({
 
   return (
     <ModalContainerCustom
-      contentClassName="overflow-hidden rounded-[5px]"
+      contentClassName="overflow-hidden rounded-[4px]"
       fade={false}
       id="inbox-zero-sheet"
       isOpen
@@ -244,6 +244,7 @@ export const InboxZeroSheetContent = ({
                     <div className="[&>div]:min-h-0 [&>div]:p-0">
                       <SettingsToggle
                         checked={keep[row.key]}
+                        square
                         hideLabel
                         inputId={`inbox-zero-keep-${row.key}`}
                         label={row.label}

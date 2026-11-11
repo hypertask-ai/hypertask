@@ -1,0 +1,33 @@
+name: Jev inbox pilot evaluation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: jev-inbox-eval
+  cancel-in-progress: false
+jobs:
+  evaluate:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx prisma generate
+      - name: Measure real Jev decisions using the capped test account
+        run: node scripts/jev-inbox-eval.cjs
+        env:
+          OPENROUTER_EVAL_KEY: ${{ secrets.OPENROUTER_EVAL_KEY }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: jev-inbox-eval
+          path: jev-inbox-eval/report.json
+          if-no-files-found: error
+          retention-days: 14

@@ -29,27 +29,25 @@ const row = (entry, index, extra = {}) => ({
 const rows = corpus.map(row);
 const entryById = new Map(corpus.map((entry, index) => [index + 1, entry]));
 const candidatesOf = (input = rows) => controller.jevTriageCandidates(input, userId, keep);
-const noiseLines = (size) => Array.from({ length: size }, (_, index) => `${index + 1} noise 0.95`).join("\n");
+const noiseAnswers = (size) => ({ answers: Object.fromEntries(Array.from({ length: size }, (_, index) => [`item_${index}`, { type: "choice", choice: "noise", confidence: 0.95 }])) });
 const items = (count) => Array.from({ length: count }, (_, index) => ({ id: `task:${index + 1}`, projectId: 1, kind: "Comment", title: `HTPR-${index + 1}`, text: "Merged and deployed. All checks are green." }));
-const runtime = ({ fundingSource = "managed", delayMs = 0, jevAnswer = noiseLines } = {}) => {
+const runtime = (t, { fundingSource = "managed", answer = noiseAnswers, status = 200, throws = false, plan = "Pro", settings = { providers: { openrouter: true } }, providers = [], providerKey } = {}) => {
   const calls = [];
-  let inFlight = 0;
-  let peak = 0;
-  const run = loadModule("src/lib/ai/jevInboxTriageRun.ts", {
-    "@/lib/prisma": { default: { project: { findMany: async () => [{ id: 1, teamId: "team-1" }] }, team: { findFirst: async () => ({ id: "team-1" }) } } },
-    "@/app/api/ai/_lib/byokKeys": { getTeamGatewayFunding: async () => (fundingSource === "none" ? undefined : { apiKey: "vck_fixture", source: fundingSource }) },
-    "@/app/api/ai/_lib/modelProvider": { resolveGatewayModel: (slug) => ({ provider: "gateway", slug }), gatewayProviderOptionsForModel: () => undefined },
-    ai: {
-      generateText: async ({ model, prompt }) => {
-        inFlight += 1; peak = Math.max(peak, inFlight); calls.push(model.slug);
-        if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
-        inFlight -= 1;
-        const size = (prompt.match(/^\d+\. /gm) || []).length;
-        return { text: model.slug === pure.JEV_TRIAGE_MODEL_SLUG ? jevAnswer(size) : noiseLines(size) };
-      },
-    },
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "fixture-openrouter";
+  t.after(() => { if (previous === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = previous; });
+  t.mock.method(global, "fetch", async (url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push({ url, body, authorization: options.headers.Authorization, signal: options.signal });
+    if (throws) throw new Error("provider unavailable");
+    return Response.json(answer(Object.keys(body.questions).length), { status });
   });
-  return { calls, run, peak: () => peak };
+  const run = loadModule("src/lib/ai/jevInboxTriageRun.ts", {
+    "@/lib/prisma": { default: { project: { findMany: async () => [{ id: 1, teamId: "team-1" }] }, team: { findFirst: async () => ({ id: "team-1" }), findUnique: async () => ({ aiProviderSettings: settings, byokApiKeys: providers.map(provider => ({ provider })) }) } } },
+    "@/app/api/ai/_lib/byokKeys": { getTeamGatewayFunding: async () => (fundingSource === "none" ? undefined : { apiKey: "vck_fixture", source: fundingSource }), isOurGatewayKey: key => key === "vck_fixture", resolveTeamByokApiKey: async () => providerKey },
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan },
+  });
+  return { calls, run };
 };
 
 test("300 labelled notifications: a hostile Jev that calls everything noise still proposes zero needs-you items", () => {
@@ -70,36 +68,65 @@ test("agent asks, money, access and agent-message bodies never reach Jev", () =>
   assert.equal(candidatesOf([message("Merge deployed. All production checks are green.", 901)]).length, 1);
 });
 
-test("only noise at 0.9 or higher is suggested, and a garbled answer keeps", () => {
-  const batch = [{ id: "task:1", projectId: 1, kind: "Comment", title: "HTPR-1", text: "" }];
-  const select = (text) => pure.selectJevNoiseIds(pure.parseJevTriageBatch(text, batch));
-  assert.deepEqual([select("1 noise 0.89"), select("1 needs_you 0.99"), select("1 maybe later"), select("")], [[], [], [], []]);
-  assert.deepEqual([select("1 noise 0.9"), select("1) noise 95%")], [["task:1"], ["task:1"]]);
-  const missing = pure.parseJevTriageBatch("1 noise 0.95", [...batch, { ...batch[0], id: "task:2" }]);
-  assert.deepEqual([missing[1].needsYou, missing[1].confidence], [true, null]);
+test("structured decisions require confident noise; malformed and missing answers keep", () => {
+  const batch = items(2);
+  const select = (answer) => pure.selectJevNoiseIds(pure.parseJevTriageBatch({ answers: { item_0: answer } }, batch));
+  for (const answer of [null, { type: "choice", choice: "noise" }, { type: "choice", choice: "noise", confidence: 1.1 }, { type: "choice", choice: "needs_you", confidence: 0.99 }, { type: "choice", choice: "noise", confidence: 0.89 }]) assert.deepEqual(select(answer), []);
+  assert.deepEqual(select({ type: "choice", choice: "noise", confidence: 0.9 }), ["task:1"]);
+  assert.deepEqual(pure.parseJevTriageBatch("1 noise 0.99", batch).map((v) => [v.needsYou, v.confidence]), [[true, null], [true, null]]);
+  assert.deepEqual(pure.parseJevTriageBatch(noiseAnswers(1), batch)[1], { id: "task:2", needsYou: true, confidence: null });
 });
 
-test("500 notifications clear in about a second", async () => {
-  assert.deepEqual([pure.JEV_TRIAGE_BATCH_SIZE, pure.JEV_TRIAGE_CONCURRENCY, pure.JEV_TRIAGE_CALL_TIMEOUT_MS], [10, 8, 900]);
-  assert.equal(pure.jevTriageBatches(items(500)).length, 50);
-  const fake = runtime({ delayMs: 100 });
-  const started = Date.now();
-  const result = await fake.run.jevInboxTriage({ items: items(500), userId });
-  const elapsed = Date.now() - started;
-  assert.deepEqual([fake.calls.length, result.checked, result.noiseIds.length, fake.peak() <= 8, elapsed < 2000], [50, 500, 500, true, true], `500 notifications took ${elapsed} ms`);
+test("500-item cap counts completed decisions, not merely attempted requests", async (t) => {
+  const fake = runtime(t);
+  const result = await fake.run.jevInboxTriage({ items: items(600), userId });
+  assert.deepEqual([fake.calls.length, result.checked, result.noiseIds.length], [50, 500, 500]);
+  for (const call of fake.calls) {
+    assert.equal(call.url, "https://openrouter.ai/api/alpha/decisions");
+    assert.equal(call.authorization, "Bearer fixture-openrouter");
+    assert.equal(call.body.model, "typesafe/jev-1.14");
+    assert.deepEqual(call.body.provider, { zdr: true, only: ["typesafe"], data_collection: "deny", allow_fallbacks: false });
+    assert.equal(Object.keys(call.body.questions).length, 10);
+    assert.equal(Object.keys(call.body.state).length, 10);
+  }
 });
 
-test("Jev silent means the proven gateway model answers; a customer key means no call at all", async () => {
-  const silent = runtime({ jevAnswer: () => "" });
-  const result = await silent.run.jevInboxTriage({ items: items(2), userId });
-  assert.deepEqual([...silent.calls, result.noiseIds.length], [pure.JEV_TRIAGE_MODEL_SLUG, "anthropic/claude-haiku-5.5", 2]);
-  const customer = runtime({ fundingSource: "customer" });
-  const none = runtime({ fundingSource: "none" });
-  assert.deepEqual([
-    (await customer.run.jevInboxTriage({ items: items(1), userId })).skipped,
-    (await none.run.jevInboxTriage({ items: items(1), userId })).skipped,
-    customer.calls.length + none.calls.length,
-  ], ["customer_funding", "no_funding", 0]);
+for (const failure of [{ answer: () => ({}) }, { status: 503 }, { throws: true }]) {
+  test(`Jev failure keeps everything without another model: ${JSON.stringify(failure)}`, async (t) => {
+    const fake = runtime(t, failure);
+    const result = await fake.run.jevInboxTriage({ items: items(2), userId });
+    assert.deepEqual([fake.calls.length, result.checked, result.noiseIds], [1, 0, []]);
+  });
+}
+
+for (const fundingSource of ["customer", "none", "missing_openrouter"]) {
+  test(`${fundingSource} makes no provider call`, async (t) => {
+    const fake = runtime(t, { fundingSource });
+    if (fundingSource === "missing_openrouter") delete process.env.OPENROUTER_API_KEY;
+    const result = await fake.run.jevInboxTriage({ items: items(1), userId });
+    assert.equal(result.skipped, fundingSource === "customer" ? "customer_funding" : "no_funding");
+    assert.equal(fake.calls.length, 0);
+  });
+}
+
+for (const options of [{ plan: "BYOK" }, { settings: {} }, { settings: { providers: { openrouter: false } } }, { settings: { ownKeyOnly: true } }, { providers: ["anthropic"] }, { providerKey: "customer-key" }]) {
+  test(`own AI accounts stay local: ${JSON.stringify(options)}`, async (t) => {
+    const fake = runtime(t, options);
+    assert.deepEqual(await fake.run.jevInboxTriage({ items: items(1), userId }), { noiseIds: [], checked: 0, skipped: "customer_funding" });
+    assert.equal(fake.calls.length, 0);
+  });
+}
+
+test("title-only questions, money and access stay even when a caller submits noise IDs", () => {
+  const entry = { type: "TaskMoved", author: "agent", text: "", title: "Moved to Todo" };
+  for (const title of ["Can you check this?", "Approve the invoice", "Restore admin access", `A note for name-${userId}`]) {
+    const notice = row({ ...entry, title }, 700);
+    assert.deepEqual(candidatesOf([notice]), [], title);
+    assert.deepEqual(controller.evaluateInboxZero([notice], userId, rules({ jevNotificationIds: [notice.id] }), now).notificationIds, [], title);
+  }
+  const notice = row(entry, 701);
+  assert.equal(candidatesOf([notice]).length, 1);
+  assert.deepEqual(controller.evaluateInboxZero([notice], userId, rules({ jevNotificationIds: [notice.id] }), now).notificationIds, [notice.id]);
 });
 
 test("the preview hash repeats, the engine re-guards, and the flag ships at Owner and QA", () => {
