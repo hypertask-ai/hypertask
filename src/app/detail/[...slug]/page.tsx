@@ -10,7 +10,7 @@ import {
 import { Metadata } from "next";
 import { getServerCookieUser, requireServerCookieUser } from "@/lib/auth/serverUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, HTPR_7848_SUMMARY_ON_VIEW_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
 import { redirect } from "next/navigation";
@@ -26,7 +26,6 @@ import { getTaskReadStateLastReadAt } from "@/utils/controllers/tasks/markRead";
 import { filterCommentReadReceipts } from "@/utils/controllers/comments/readReceipts";
 import { listTaskAgentRunActivities } from "@/lib/agentRuns/service";
 import { requestTaskSummaryRefreshOnView } from "@/app/api/ai/_lib/taskSummaryFreshness";
-import { HTPR_7848_SUMMARY_ON_VIEW_FLAG } from "@/lib/flags/definitions/htpr-7848-summary-on-view";
 import { waitUntil } from "@vercel/functions";
 import Unauthorized from "../../unauthorized/page";
 
