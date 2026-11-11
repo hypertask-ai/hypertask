@@ -293,3 +293,16 @@ and controller tests as the closest checks.
 ### Card hover layout
 
 https://app.hypertask.ai/detail/project-15/8629 uses `htpr-8629-kanban-hover-layout` (bugfix, Everyone). In porcelain, AMOLED and graphite-2, compare card ID, title, parent row and notification positions before and during hover; none should move. Check plain, active and blocked cards, including column edges: the hover checkbox must not cover content or clip. Click it, use X on a focused card, and check selected and selection-mode cards retain their inset checkbox. With the flag off, confirm the former hover inset returns. Capture each theme and both flag states on an isolated fixture.
+
+### Card People visibility (HTPR-9026)
+
+With `htpr-8971-card-settings` and `htpr-9026-card-people` enabled, open
+Board menu > Card settings. People is enabled by default, including for
+preferences saved before the People switch existed. Name has no switch.
+Switch People off, return to a board containing human and agent assignees,
+and confirm both disappear while task names and other selected parts stay.
+Reload the board and settings; People remains off. Switch it on and confirm
+both kinds of assignee return without changing assignments. Check Light,
+AMOLED and Graphite 2 on desktop and phone. Switches use 4px corners.
+Without either flag, cards keep showing their assignees even if a saved
+People choice is false. Restore the QA account's preferences afterward.
