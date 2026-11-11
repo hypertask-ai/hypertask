@@ -54,11 +54,14 @@ function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
   const entry = escapeHtml((finding.current ?? []).slice(0, 3).join(", ") || "none");
+  const needsValentin = /valentin|htpr/i.test(String(finding.action ?? ""));
+  const decide = needsValentin ? "yes or no before this model ships." : "nothing.";
+  const decision = needsValentin ? "Valentin says yes or no before this ships." : "Nothing needed. A runner ships it.";
   const plain = plainBlock({
     wanted: "A watched model differs from our catalog or the gateway list.",
     affects: "people who pick a model in chat.",
     course: `change the catalog entry. Why: the pickers should offer the models we watch.`,
-    decide: "nothing.",
+    decide,
     undo: "revert the catalog change and the saved pick migration.",
   });
   const parts = plainParts({
@@ -66,7 +69,7 @@ function ticketFor(finding) {
     fix: `<p>${escapeHtml(actionSentences(finding))}</p><p>Follow the update-ai-models skill. Replace the old model in every picker.</p><p>Migrate saved picks and check gateway input and output prices.</p>`,
     done: `<p>A live chat answer uses the new model.</p>`,
     risk: `<p>Saved picks can break. Undo by reverting the catalog change.</p>`,
-    decision: `<p>None needed. This is our own watch.</p>`,
+    decision: `<p>${decision}</p>`,
   });
   return {
     marker,

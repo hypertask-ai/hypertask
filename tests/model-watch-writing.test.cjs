@@ -80,6 +80,12 @@ test("watcher keeps each finding's action in the per-model ticket body", () => {
   }
 });
 
+test("watcher asks Valentin only when the finding needs his yes", () => {
+  const base = { kind: "new-version", provider: "openai", model: "openai/gpt-5.5", inputPerMillion: 2, modelClass: "gpt-5", current: [] };
+  assert.ok(ticketFor({ ...base, action: "waits for HTPR-7746" }).description.includes("Valentin says yes or no before this ships."));
+  assert.ok(ticketFor({ ...base, action: "ship automatically" }).description.includes("Nothing needed. A runner ships it."));
+});
+
 test("watcher reports the board refusal text instead of a bare status code", async () => {
   const { fileFindings } = require("../.github/scripts/ai-model-watch.cjs");
   const finding = everyFinding().find((candidate) => candidate.kind === "new-version");
