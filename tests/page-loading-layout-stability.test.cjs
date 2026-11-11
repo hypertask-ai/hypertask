@@ -85,6 +85,12 @@ test("empty inbox split titles reserve the loaded 32px row and remain hidden on 
     useRef: React.useRef,
     useState: React.useState,
     useEffect: React.useEffect,
+    useLayoutEffect: React.useLayoutEffect,
+    useRecoilState: () => [{ currSplit: 0 }],
+    globalNotificationFocusAtom: {},
+    ChevronLeft: noop,
+    ChevronRight: noop,
+    useGetUserPreferences: () => ({ data: { inboxSplitsOverflowHidden: false } }),
     HTPR_9029_STICKY_SPLITS_FLAG: "htpr-9029-sticky-splits",
   }, "SplitTitlesContainer");
   const SplitTitle = load("src/components/notifications/inboxSplit/SplitTitle.tsx", {
@@ -104,6 +110,34 @@ test("empty inbox split titles reserve the loaded 32px row and remain hidden on 
     assert.equal(ready.querySelector(".pills-row").textContent, "Important");
     assert.match(ready.querySelector(".footer_tags_main").className, /@md:h-8/);
   }
+});
+
+test("Overflow hidden keeps the split titles on one line only when the person turned it on", () => {
+  const render = (saved) => {
+    const SplitTitles = load("src/app/inbox/Inbox.tsx", {
+      ButtonGroup: noop,
+      useFlag: () => true,
+      useRef: React.useRef,
+      useState: React.useState,
+      useEffect: React.useEffect,
+      useLayoutEffect: React.useLayoutEffect,
+      useRecoilState: () => [{ currSplit: 0 }],
+      globalNotificationFocusAtom: {},
+      ChevronLeft: noop,
+      ChevronRight: noop,
+      useGetUserPreferences: () => ({ data: { inboxSplitsOverflowHidden: saved } }),
+      HTPR_9029_STICKY_SPLITS_FLAG: "htpr-9029-sticky-splits",
+    }, "SplitTitlesContainer");
+    return new JSDOM(renderToString(React.createElement(SplitTitles, {
+      contentGap: false,
+    }, React.createElement("div", null, "First"), React.createElement("div", null, "Last")))).window.document;
+  };
+  const oneLine = render(true).querySelector(".pills-row");
+  assert.match(oneLine.className, /(?:^|\s)flex-nowrap(?:\s|$)/);
+  assert.doesNotMatch(oneLine.className, /(?:^|\s)flex-wrap(?:\s|$)/);
+  const wrapped = render(false).querySelector(".pills-row");
+  assert.match(wrapped.className, /(?:^|\s)flex-wrap(?:\s|$)/);
+  assert.doesNotMatch(wrapped.className, /(?:^|\s)flex-nowrap(?:\s|$)/);
 });
 
 const globalProvider = "src/components/ProviderGlobal/GloablProviders.tsx";
