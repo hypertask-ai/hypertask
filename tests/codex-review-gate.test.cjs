@@ -14,6 +14,14 @@ const stateComment = (code_review, extra) => ({
   body: `<!-- codex-review-state:v1 ${JSON.stringify({ code_review })} -->`,
 });
 const stateOf = extra => evaluate(pr(extra)).state;
+const receipt = sha => ({
+  author: bot,
+  url: 'https://example.test/c/receipt',
+  body: `Codex Review: Didn't find any major issues. Hooray!\n\n**Reviewed commit:** \`${sha}\`\n`,
+});
+const unresolvedHead = {
+  status: 'completed', commit_sha: head, has_any_findings: true, has_unresolved_findings: true,
+};
 
 test('P1 finding on the head fails and P0 is named as worst', () => {
   assert.equal(stateOf({ reviews: [review([badge(1)])] }), 'failure');
@@ -36,6 +44,57 @@ test('reviews of an older commit or by someone else are ignored', () => {
 
 test('a P1 inline comment on the head fails even when its review is on an older commit', () => {
   assert.equal(stateOf({ reviews: [review([inline(badge(1), head)], { commit: older })] }), 'failure');
+});
+
+test('HYCI-269 a stale P1 with no head review still fails', () => {
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), head)], { commit: older })] }), 'failure');
+});
+
+test('HYCI-269 an unresolved summary alone does not clear a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  assert.equal(stateOf({ reviews: [stale], comments: [stateComment(unresolvedHead)] }), 'failure');
+});
+
+test('HYCI-269 a clean receipt for another commit does not clear a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  assert.equal(stateOf({
+    reviews: [stale],
+    comments: [stateComment(unresolvedHead), receipt(older.slice(0, 10))],
+  }), 'failure');
+});
+
+test('HYCI-269 clean receipt clears a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  const result = evaluate(pr({
+    reviews: [stale],
+    comments: [stateComment(unresolvedHead), receipt(head.slice(0, 10))],
+  }));
+  assert.equal(result.state, 'success');
+  assert.match(result.description, /no P0 or P1/);
+  const curly = receipt(head.slice(0, 10));
+  curly.body = curly.body.replace("Didn't", 'Didn’t');
+  assert.equal(stateOf({ reviews: [stale], comments: [stateComment(unresolvedHead), curly] }), 'success');
+});
+
+test('HYCI-269 a completed summary with no findings clears a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  const clean = { status: 'completed', commit_sha: head, has_any_findings: false, has_unresolved_findings: false };
+  assert.equal(stateOf({ reviews: [stale], comments: [stateComment(clean)] }), 'success');
+});
+
+test('HYCI-269 an empty review of the head clears a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  assert.equal(stateOf({ reviews: [stale, review([])] }), 'success');
+});
+
+test('HYCI-269 a P1 on the head review still fails', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  const fresh = review([badge(1)]);
+  const clean = { status: 'completed', commit_sha: head, has_any_findings: false, has_unresolved_findings: false };
+  assert.equal(stateOf({
+    reviews: [stale, fresh],
+    comments: [stateComment(clean), receipt(head.slice(0, 10))],
+  }), 'failure');
 });
 
 test('a P2-only inline comment from an older review on the head passes', () => {

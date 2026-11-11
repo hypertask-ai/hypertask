@@ -68,19 +68,35 @@ function codeReviewStateFor(comments, headOid) {
   return null;
 }
 
+const CLEAN_RECEIPT = /Didn['’]t find any major issues[\s\S]{0,500}?Reviewed commit:\**\s*`([0-9a-f]{10,40})`/i;
+
+function cleanHeadReceipt(comments, headOid) {
+  for (const comment of comments ?? []) {
+    if (!isCodex(comment.author)) continue;
+    const match = CLEAN_RECEIPT.exec(String(comment.body ?? ''));
+    if (match && headOid.startsWith(match[1])) return comment.url ?? '';
+  }
+  return '';
+}
+
 function evaluate(pr) {
   const short = pr.headOid.slice(0, 7);
   const codexReviews = pr.reviews.filter(review => isCodex(review.author));
   const headReviews = codexReviews.filter(review => review.commit === pr.headOid);
   const staleReviews = codexReviews.filter(review => review.commit !== pr.headOid);
-  const headCommentBodies = staleReviews.flatMap(review => review.comments.filter(
+  const remappedBodies = staleReviews.flatMap(review => review.comments.filter(
     comment => commentCommit(comment, review) === pr.headOid)).map(commentBody);
-  const unreadStale = !headReviews.length && staleReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
+  const summary = codeReviewStateFor(pr.comments, pr.headOid);
+  const receiptUrl = cleanHeadReceipt(pr.comments, pr.headOid);
+  const summaryClean = summary?.status === 'completed' && (
+    summary.has_any_findings === false || summary.has_unresolved_findings === false);
+  const headReviewed = headReviews.length > 0 || summaryClean || (summary?.status === 'completed' && Boolean(receiptUrl));
+  const unreadStale = !headReviewed && staleReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
 
   const rawBlocking = headReviews.flatMap(review => review.comments.length
     ? review.comments.map(commentBody).filter(blocks)
     : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : [])
-    .concat(headCommentBodies.filter(blocks), unreadStale ? [UNREAD] : []);
+    .concat(headReviewed ? [] : remappedBodies.filter(blocks), unreadStale ? [UNREAD] : []);
   const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   if (blocking.length) {
     const levels = blocking.map(priorityOf);
@@ -98,15 +114,21 @@ function evaluate(pr) {
       evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
-  if (headReviews.length || headCommentBodies.length) {
+  if (headReviews.length || (!headReviewed && remappedBodies.length)) {
     return {
       state: 'success',
       description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
       evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
+  if (summary?.status === 'completed' && receiptUrl) {
+    return {
+      state: 'success',
+      description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
+      evidence: receiptUrl,
+    };
+  }
 
-  const summary = codeReviewStateFor(pr.comments, pr.headOid);
   if (summary?.status === 'completed') {
     if (summary.has_unresolved_findings === false || summary.has_any_findings === false
         || summary.has_unresolved_findings === true) {
