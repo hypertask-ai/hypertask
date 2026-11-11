@@ -120,12 +120,38 @@ incident_ok() {
     and ((.section // "") | IN("Done", "Archive", "Archived") | not))' <<<"$got" >/dev/null 2>&1
 }
 
+open_prs() {
+  local result
+  if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft); then
+    printf '%s\n' "$result"
+    return
+  fi
+  result=$(${SHIP_CLAIM_GH:-gh} api --paginate --slurp 'repos/hypertask-ai/hypertask/pulls?state=open&per_page=100') || return 1
+  jq -e 'if type == "array" and length > 0 and all(.[]; type == "array")
+    then [ .[][] | {number, title, headRefName: .head.ref, isDraft: .draft} ]
+      | if (map(.number) | unique | length) == length then . else error("repeated PR page") end
+    else error("invalid PR pages") end' <<<"$result"
+}
+
+merged_prs() {
+  local result
+  if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state merged --base production --search "$1 in:title" --limit 100 --json number,title); then
+    printf '%s\n' "$result"
+    return
+  fi
+  result=$(${SHIP_CLAIM_GH:-gh} api --method GET search/issues -f "q=repo:hypertask-ai/hypertask is:pr is:merged base:production $1 in:title" -f per_page=100) || return 1
+  jq -e 'if .incomplete_results == false and (.total_count | type == "number" and . >= 0 and . < 100)
+    and (.items | type == "array") and (.items | length) == .total_count
+    and all(.items[]; .pull_request != null)
+    then [.items[] | {number, title}] else error("incomplete merged PR search") end' <<<"$result"
+}
+
 hold_check() {
   local t=$1 rn open n free board page total offset count expected_total candidates ticket project number merged matches seen unfinished='' known='' mine=''
   [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
   rn=${BASH_REMATCH[1]}
   if incident_ok "$t"; then echo "ship-claim: INCIDENT lane. Holds, queue brake and infra first skipped for $t."; return 0; fi
-  open=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft) \
+  open=$(open_prs) \
     || { echo "ship-claim: HOLD. Cannot read open PRs, so no new claim for RUNNER $rn. Retry later." >&2; return 4; }
   jq -e 'type == "array" and length < 300 and all(.[];
     (.number | type == "number") and (.headRefName | type == "string") and (.title | type == "string")
@@ -169,7 +195,7 @@ hold_check() {
         [ -n "$ticket" ] || continue
         [[ $ticket =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ && $project =~ ^[1-9][0-9]*$ && $number =~ ^[1-9][0-9]*$ ]] \
           || { echo "ship-claim: HOLD. Invalid assigned ticket on board $board." >&2; return 4; }
-        merged=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state merged --base production --search "$ticket in:title" --limit 100 --json number,title) \
+        merged=$(merged_prs "$ticket") \
           || { echo "ship-claim: HOLD. Cannot read merged PRs for $ticket." >&2; return 4; }
         jq -e 'type == "array" and length < 100 and all(.[]; (.number | type == "number") and (.title | type == "string"))' <<<"$merged" >/dev/null \
           || { echo "ship-claim: HOLD. Merged PR read is malformed or incomplete for $ticket." >&2; return 4; }
