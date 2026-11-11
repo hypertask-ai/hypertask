@@ -245,7 +245,7 @@ test("agent snapshots preserve real flag dataflow and reject unused or fake read
   ];
   for (const [name, prelude, body, expected, ticket = 1] of cases) {
     const { dir, git } = makeRepo(t);
-    writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
+    perFlagLayout(dir);
     const base = commit(git, "base");
     writeFile(dir, "src/lib/mcp/auth/rateLimit.ts", `${prelude}export async function execute() { ${body} }\n`);
     const result = await evaluate(`HTPR-${ticket} [COST] snapshot behavior`, base, commit(git, name), dir);
