@@ -190,6 +190,8 @@ check_ci_tests() {
 # A green check on an old base may not cover what landed on the base since (HYCI-262).
 check_fresh() {
   local head behind
+  # Only the app repo ships production, so only it carries this base-move risk.
+  [ "$REPO" = hypertask-ai/hypertask ] || return 0
   head=$(gh api "repos/$REPO/pulls/$1" --jq .head.sha 2>/dev/null) || fail "cannot read the head of PR $1; retry"
   [[ $head =~ ^[0-9a-f]{40}$ ]] || fail "cannot read the head of PR $1; retry"
   behind=$(gh api "repos/$REPO/compare/$BASE...$head" --jq .behind_by 2>/dev/null) || fail "cannot compare PR $1 with $BASE; retry"
@@ -1126,8 +1128,8 @@ PY
       [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number.$unresolved" >&2; exit 2; }
       out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist).$unresolved" >&2; exit 2; }
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
-      out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
       out=$(check_fresh "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
+      out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
     fi
     # Move to the board's done column, by task move or task update --section: needs merge, deploy and
     # docs (FEATURE/IMPROVE); app tickets also need proof.md.
