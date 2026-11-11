@@ -237,7 +237,7 @@ test('YPER4-881: reads use GH_READ_TOKEN, fall back once to GH_TOKEN; writes nev
   const env = { GH_READ_TOKEN: 'ci-app' };
   assert.equal(await ghApi(['repos/fixture/repo/pulls'], { env, log: () => {}, exec: exec([http(200, '', '[1]')]) }), '[1]');
   assert.deepEqual(tokens.splice(0), ['ci-app']);
-  assert.equal(await ghApi(['repos/fixture/repo/pulls'], { env, log: () => {}, exec: exec([http(401), http(200, '', '[2]')]) }), '[2]');
+  assert.equal(await ghApi(['repos/fixture/repo/commits/sha/pulls?per_page=100', '--paginate', '--slurp'], { env, log: () => {}, exec: exec([http(401), http(200, '', '[2]')]) }), '[2]');
   assert.deepEqual(tokens.splice(0), ['ci-app', 'base']);
   await ghApi(['repos/fixture/repo/statuses/sha', '-X', 'POST', '-f', 'state=success'], { env, exec: exec([http(201)]) });
   assert.deepEqual(tokens.splice(0), ['base']);
