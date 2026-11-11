@@ -822,6 +822,31 @@ test("flags added to production after a PR branches are not treated as PR remova
   assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir)).pass, true);
 });
 
+test("flag ownership uses current production without treating stale heads as removals", async (t) => {
+  for (const shipped of [true, false]) {
+    const { dir, git } = makeRepo(t);
+    const common = commit(git, "common base");
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const WRONG_FLAG = "htpr-9-wrong";\n');
+    if (shipped) writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"']));
+    const base = commit(git, "production advances independently");
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"']));
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "feature with independently copied flag");
+    const result = await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir);
+    assert.equal(result.pass, shipped, result.reason);
+    if (!shipped) assert.match(result.reason, /New feature flag keys must start with htpr-1-/);
+
+    if (shipped) {
+      writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"', '"htpr-9-new"']));
+      const wrongHead = commit(git, "also add an unshipped wrong-ticket flag");
+      const wrong = await evaluate("HTPR-1 [FEATURE] update widget", base, wrongHead, dir);
+      assert.equal(wrong.pass, false);
+      assert.match(wrong.reason, /New feature flag keys must start with htpr-1-/);
+    }
+  }
+});
+
 test("a ticket-specific definition without runtime use fails", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");

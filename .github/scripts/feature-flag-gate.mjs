@@ -2049,7 +2049,9 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
 
-    const added = headDefinitions.keys.filter((key) => !baseDefinitions.keys.includes(key));
+    const productionDefinitions = parseDefinitions(baseSha);
+    const added = headDefinitions.keys.filter((key) =>
+      !baseDefinitions.keys.includes(key) && !productionDefinitions.keys.includes(key));
     const ticketPrefix = `${title.slice(0, 4).toLowerCase()}-${titleMatch[1]}-`;
     if (added.length > 0 && added.some((key) => !key.startsWith(ticketPrefix))) {
       return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
