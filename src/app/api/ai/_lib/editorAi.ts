@@ -709,7 +709,11 @@ export async function selectTaskWriterModel(args: {
     }
   }
   const personalModelOptionId = args.aiFeature && (!taskWriterSonnet || savedModelAutoEnabled)
-    ? await getPersonalModelOptionId(args.userId, teamContext.teamId, args.aiFeature)
+    ? await getPersonalModelOptionId(
+        args.userId,
+        teamContext.teamId,
+        args.aiFeature
+      )
     : null;
   const savedAutoChoiceEnabled = savedModelAutoEnabled && isAutoModelChoice(personalModelOptionId);
   const requestAuto = args.modelOptionId === "auto" && savedModelAutoEnabled;

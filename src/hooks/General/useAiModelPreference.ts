@@ -123,11 +123,20 @@ export function useAiModelPreference(
     ? planDefaultFor({ ...defaultContext, openaiOnlyDefaultEnabled: false })
     : null;
   const resolveOption = useCallback(
-    () =>
-      savedModelAutoEnabled && autoModelRequested
-        ? toAutoModelOption(planDefault)
-        : resolveAiModelOption(
-            [
+    () => {
+      if (savedModelAutoEnabled && autoModelRequested) return toAutoModelOption(planDefault);
+      return resolveAiModelOption(
+        [
+          storedOptionIds.teamScoped,
+          storedOptionIds.global,
+          teamFeatureModels.data?.[surface]?.model,
+          includeBoardFallback ? boardDefaultId : undefined,
+        ],
+        planDefault,
+        haiku55Enabled,
+      );
+    },
+    [
               storedOptionIds.teamScoped,
               storedOptionIds.global,
               teamFeatureModels.data?.[surface]?.model,

@@ -333,16 +333,15 @@ export async function POST(request: NextRequest) {
       if (await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, user.id)) {
         savedModelAutoEnabled = true;
       }
-      const invalidPreference = preferenceUpdates.find(([surface, optionId]) => {
-        if (!isAiModelPreferenceSurface(surface) || typeof optionId !== "string") return true;
-        if (surface === "imageGeneration") {
-          return !aiImageModelDefinitions.some((model) => model.key === optionId);
-        }
-        if (getAiModelOptionById(optionId)) return false;
-        if (optionId !== AUTO_MODEL_OPTION_ID) return true;
-        if (surface === "aiChat") return false;
-        return !savedModelAutoEnabled;
-      });
+      const invalidPreference = preferenceUpdates.find(
+        ([surface, optionId]) =>
+          !isAiModelPreferenceSurface(surface) ||
+          typeof optionId !== "string" ||
+          (surface === "imageGeneration"
+            ? !aiImageModelDefinitions.some((model) => model.key === optionId)
+            : !getAiModelOptionById(optionId) &&
+              !(optionId === AUTO_MODEL_OPTION_ID && (surface === "aiChat" || savedModelAutoEnabled))),
+      );
 
       if (invalidPreference) {
         return NextResponse.json(

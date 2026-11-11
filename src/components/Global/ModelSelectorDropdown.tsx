@@ -19,7 +19,6 @@ import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib
 import {
   aiModelDefinitions,
   AUTO_MODEL_OPTION_ID,
-  AUTO_MODEL_TITLE,
   aiModelOptions,
   isAiModelOptionVisible,
   isGrokGemini4ModelKey,
@@ -247,7 +246,7 @@ const AIModelDropDownList = ({
   const savedAutoOption = savedModelAuto && autoFlag ? toAutoModelOption(selectedOption) : undefined;
   const autoSelected = Boolean(autoOption ?? savedAutoOption) && aiSelected?.id === AUTO_MODEL_OPTION_ID;
   const selectedModelLabel = autoSelected
-    ? AUTO_MODEL_TITLE
+    ? "Auto"
     : selectedOption.source === "custom"
       ? (customEndpoint.modelId ?? selectedModel?.label)
       : selectedModel?.label;

@@ -1,7 +1,3 @@
--- HTPR-9019 manual, reviewed rollback only. Not auto-run.
--- Restore each backed-up saved model choice where the user has not picked
--- anything since. Later picks, removed paths, unrelated JSON keys, the backup
--- rows and the HTPR-7038 markers stay as they are.
 DO $$
 DECLARE
     target_user INTEGER;
