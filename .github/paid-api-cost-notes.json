@@ -21,12 +21,12 @@
   },
   "src/components/Modals/Settings/GitHubSection.tsx:aea21b21a5fc71a8aec8029bd4b0da5f2c32aaf3f9e3ba497671ca232d1bca00": {
     "maxUsdPerDay": 0,
-    "reason": "Saves board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "reason": "Saves board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
   },
   "src/components/Modals/Settings/GitHubSection.tsx:c401886c70ab215a16bc73fde68f0d908d363e08777c43b6fabb1536f8c51f12": {
     "maxUsdPerDay": 0,
-    "reason": "Reads board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "reason": "Reads board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
   },
   "src/hooks/General/useFollowerKanban.ts:1f078df2800a6871f1d34ba832e8cce99475af075913f2e9ba33e1fd9491d003": {
@@ -198,5 +198,6 @@
     "maxUsdPerDay": 2,
     "reason": "HTPR-9046 asks Jev, a fast decision model on the team gateway, one yes or no question per similar ticket, at most eight per draft, 16 output tokens each and a 900 ms deadline. The ticket prices a call at about 0.0001 USD, so a draft is under 0.001 USD and 500 drafts a day stay under 0.40 USD. Flag off makes no call, and teams funding AI with their own gateway key are skipped.",
     "source": "https://app.hypertask.ai/detail/project-15/9046"
-  }
+  },
+  "src/lib/ai/jevInboxTriageRun.ts:15c87bcbc17da11e27e92dd33778f786de2f744ebf795474ba5e60d1fd7be854": {"maxUsdPerDay": 1, "reason": "HTPR-9045 asks a decision model whether each leftover Inbox notification needs you, at most ten per call and eight calls in flight, capped at 500 notifications per preview. Jev answers in about 0.1 seconds and the ticket prices a notification at about 0.000013 USD, so a full 500-notification preview is under 0.01 USD; when Jev does not answer a batch falls back once to Haiku 5.5, which keeps a full preview under 0.10 USD. A few previews a day stay under 1 USD. Flag off makes no call, and teams funding AI with their own key are skipped.", "source": "https://app.hypertask.ai/detail/project-15/9045"}
 }

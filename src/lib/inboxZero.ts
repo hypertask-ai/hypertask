@@ -26,12 +26,15 @@ export type InboxZeroRules = {
   categories: InboxZeroCategories;
   keep: InboxZeroKeep;
   safeUpdates?: { taskIds: number[]; agentOnly: boolean };
+  jevNotificationIds?: number[];
 };
 
 export type InboxZeroCounts = Record<keyof InboxZeroCategories, number>;
 
 export type InboxZeroPreview = {
   categoryCounts: InboxZeroCounts;
+  jevNoiseCount?: number;
+  jevNotificationIds?: number[];
   totalActive: number;
   totalToArchive: number;
   totalLeft: number;

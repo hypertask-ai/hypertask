@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { NotificationType, Prisma } from "@prisma/client";
 
+import type { JevTriageItem } from "@/lib/ai/jevInboxTriage";
 import type {
   InboxZeroCategories,
   InboxZeroCounts,
@@ -43,6 +44,8 @@ const safeUpdatesSchema = z.object({
   agentOnly: z.boolean(),
 });
 
+const jevNotificationIdsSchema = z.array(z.number().int().positive()).max(500);
+
 const inboxZeroNotificationSelect = (userId: number, safeUpdates = false) => ({
   id: true,
   notification_inviteId: true,
@@ -53,7 +56,9 @@ const inboxZeroNotificationSelect = (userId: number, safeUpdates = false) => ({
   fromAgentId: true,
   directReply: true,
   taskId: true,
-  ...(safeUpdates ? { comment: { select: { activity: true } } } : {}),
+  ...(safeUpdates
+    ? { message: true, comment: { select: { activity: true, text: true, commentText: true, kind: true } } }
+    : {}),
   task: {
     select: {
       status: true,
@@ -61,6 +66,7 @@ const inboxZeroNotificationSelect = (userId: number, safeUpdates = false) => ({
       projectId: true,
       dueDate: true,
       ...(safeUpdates ? {
+        title: true,
         blockerCommentId: true,
         waitingOnUserId: true,
         description: true,
@@ -117,9 +123,14 @@ export const parseInboxZeroRules = (value: unknown): InboxZeroRules | null => {
     ? undefined
     : safeUpdatesSchema.safeParse(input.safeUpdates);
   if (safeUpdates && !safeUpdates.success) return null;
+  const jevNotificationIds = input.jevNotificationIds === undefined
+    ? undefined
+    : jevNotificationIdsSchema.safeParse(input.jevNotificationIds);
+  if (jevNotificationIds && !jevNotificationIds.success) return null;
 
   return {
     ...(safeUpdates?.success ? { safeUpdates: safeUpdates.data } : {}),
+    ...(jevNotificationIds?.success ? { jevNotificationIds: jevNotificationIds.data } : {}),
     threshold: input.threshold as InboxZeroThresholdDays,
     categories: Object.fromEntries(
       CATEGORY_KEYS.map((key) => [key, categories[key]])
@@ -240,6 +251,46 @@ const isProtected = (item: VisibleInboxItem, keep: InboxZeroKeep) => {
     (keep.assignments && activeTypes.has(NotificationType.Assigned))
   );
 };
+
+export const withoutJevTriage = ({ jevNotificationIds: _ids, ...rest }: InboxZeroRules): InboxZeroRules => rest;
+
+type JevTask = { title?: string | null; description?: string | null; blockerCommentId?: number | null; waitingOnUserId?: number | null; _count?: { assignees: number; decisionRequests: number; comments: number } };
+export type JevTriageCandidate = { key: string; item: JevTriageItem; notificationIds: number[] };
+
+const JEV_KEEP_TYPES: ReadonlySet<NotificationType> = new Set([NotificationType.Assigned, NotificationType.Mentioned, NotificationType.Invited, NotificationType.TaskReminder, NotificationType.TaskDueDate, NotificationType.TaskOverdue, NotificationType.TaskMovedToInbox, NotificationType.AgentBoardAccessRequest]);
+const JEV_ASK = /\?|\b(question|asks?|decide|decision|confirm|approve|sign[- ]?off|review|choose|option|blocked|blocking|waiting on you|your call|can you|could you|would you|should we|shall we|do you|are you|need your|let me know|reply|respond)\b/i;
+const JEV_SENSITIVE = /\b(money|price|pricing|invoice|billing|charge|refund|payment|paid|bank|budget|cost|quota|subscription|renew|cancel|key|keys|token|credential|password|access|permission|admin|security|breach|outage|incident|delete|deletion)\b/i;
+const jevText = (notification: InboxZeroNotification) => {
+  const extra = notification as { message?: string | null; comment?: { text?: string; commentText?: string; kind?: string | null } | null };
+  return [extra.message, extra.comment?.commentText, extra.comment?.text, extra.comment?.kind].filter(Boolean).join(" ");
+};
+
+export const jevNoiseEligible = (item: VisibleInboxItem, userId: number, keep: InboxZeroKeep): boolean => {
+  if (isProtected(item, keep)) return false;
+  if (item.notifications.some((notification) => {
+    const text = jevText(notification);
+    return notification.fromUserId !== null || JEV_KEEP_TYPES.has(notification.type) || JEV_ASK.test(text) || JEV_SENSITIVE.test(text);
+  })) return false;
+  const task = item.representative.task as JevTask | null;
+  const description = task?.description ?? "";
+  return !task || (task.blockerCommentId == null && task.waitingOnUserId !== userId && (task._count?.assignees ?? 0) === 0 && (task._count?.decisionRequests ?? 0) === 0 && (task._count?.comments ?? 0) === 0 && !JEV_ASK.test(description) && !JEV_SENSITIVE.test(description));
+};
+
+export const jevTriageCandidates = (notifications: InboxZeroNotification[], userId: number, keep: InboxZeroKeep): JevTriageCandidate[] =>
+  groupVisibleInboxItems(notifications).flatMap((item) => {
+    if (!jevNoiseEligible(item, userId, keep)) return [];
+    return [{
+      key: item.key,
+      notificationIds: item.notifications.map((notification) => notification.id),
+      item: {
+        id: item.key,
+        projectId: item.representative.task?.projectId ?? null,
+        kind: Array.from(new Set(item.notifications.map((notification) => notification.type))).join(", "),
+        title: (item.representative.task as JevTask | null)?.title?.trim() || "Inbox",
+        text: item.notifications.map(jevText).filter(Boolean).join(" "),
+      },
+    }];
+  });
 
 const previewVersionFor = (
   items: VisibleInboxItem[],
@@ -403,15 +454,22 @@ export const evaluateInboxZero = (
     }
   }
 
+  const jevRequestedIds = new Set(rules.jevNotificationIds ?? []);
+  const jevItems = jevRequestedIds.size === 0 ? [] : items.filter(
+    (item) =>
+      item.notifications.every((notification) => jevRequestedIds.has(notification.id)) &&
+      jevNoiseEligible(item, userId, rules.keep)
+  );
   const categoryCounts = Object.fromEntries(
     CATEGORY_KEYS.map((key) => [key, matchesByCategory[key].size])
   ) as InboxZeroCounts;
-  const selectedItemKeys = new Set(
-    CATEGORY_KEYS.flatMap((key) =>
+  const selectedItemKeys = new Set([
+    ...CATEGORY_KEYS.flatMap((key) =>
       (rules.safeUpdates ? key === "read" : rules.categories[key])
         ? Array.from(matchesByCategory[key]) : []
-    )
-  );
+    ),
+    ...jevItems.map((item) => item.key),
+  ]);
   const notificationIds = items.flatMap((item) =>
     selectedItemKeys.has(item.key)
       ? item.notifications.map((notification) => notification.id)
@@ -420,6 +478,7 @@ export const evaluateInboxZero = (
 
   return {
     categoryCounts,
+    ...(jevRequestedIds.size > 0 ? { jevNoiseCount: jevItems.length, jevNotificationIds: jevItems.flatMap((item) => item.notifications.map((notification) => notification.id)) } : {}),
     notificationIds,
     totalActive: items.length,
     totalToArchive: selectedItemKeys.size,
