@@ -454,7 +454,8 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.match(settingsScript, /ruleset\.target !== "branch"/);
   assert.match(settingsScript, /!ruleset\.conditions\.ref_name\.include\.includes\("refs\/heads\/production"\)/);
   assert.match(settingsScript, /ruleset\.conditions\.ref_name\.exclude\.includes\("refs\/heads\/production"\)/);
-  assert.match(settingsScript, /new Set\(ruleset\.rules/);
+  assert.match(settingsScript, /const statusRules = ruleset\.rules\.filter/);
+  assert.match(settingsScript, /new Set\(statusRules/);
   assert.match(settingsScript, /Live required checks do not match docs\/ci-policy\.yml/);
   const contexts = settingsScript.match(/const expected = \[([\s\S]*?)\]\.sort\(\)/)[1];
   assert.deepEqual(
