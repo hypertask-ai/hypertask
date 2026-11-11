@@ -157,7 +157,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       where: {
         projectId,
         section: section.section_title,
-        status: 'Normal'
+        status: 'Normal',
+        project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
       }
     })
 
@@ -290,7 +291,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
           where: {
             projectId: projectId,
             section: section.section_title,
-            status: 'Normal'
+            status: 'Normal',
+            project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
           }
         })
 

@@ -14,7 +14,10 @@ import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFun
 import { sendEmailNotification } from "@/utils/controllers/notifications/sendNotification";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { unverifiedEmailAccount } from "@/lib/auth/unverifiedEmailAccount";
 
 const handler: NextApiHandler = async (
@@ -40,22 +43,29 @@ const handler: NextApiHandler = async (
     const access = await sessionCanManageProjectInvites(
       session.userId,
       parsedProjectId,
+      session.agentId,
+      session.teamScope,
     );
     if (access === "missing") {
       return res.status(404).json({ message: "Project not found" });
     }
     if (access !== "ok") return res.status(403).json({ message: "Forbidden" });
 
-    const result = await addMemberController(session.userId, parsedProjectId, emails);
+    const result = await addMemberController(session.userId, parsedProjectId, emails, session.agentId, session.teamScope);
     res.status(result?.status).json(result?.json)
   } else {
     res.status(405).json({ message: "Method not allowed" });
   }
 };
 
-async function sessionCanManageProjectInvites(userId: number, projectId: number) {
+async function sessionCanManageProjectInvites(
+  userId: number,
+  projectId: number,
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+) {
   const project = await prisma.project.findFirst({
-    where: { id: projectId, status: "Normal" },
+    where: { id: projectId, status: "Normal", ...taskWriteAccessWhere(userId, agentId, teamScope) },
     select: { id: true },
   });
   if (!project) return "missing";
@@ -68,6 +78,7 @@ export const addMemberController = async (
   projectId: number,
   emails: string[],
   actingAgentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) => {
   if ((await unverifiedEmailAccount(userId)) !== "allowed") return { status: 403, json: { message: "Please confirm your email before inviting people." } };
   try {
@@ -75,6 +86,7 @@ export const addMemberController = async (
       where: {
         id: projectId,
         status: "Normal",
+        ...taskWriteAccessWhere(userId, actingAgentId, teamScope),
       },
       include: {
         members: {
@@ -405,4 +417,4 @@ const invitedAndExistingEmails = async ({
     emailsToInvite,
   };
 };
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

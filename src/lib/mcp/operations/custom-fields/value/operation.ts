@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 
 import prisma from "@/lib/prisma";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import {
   CustomFieldValidationError,
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     const task = await prisma.task.findUnique({
-      where: { id: task_id },
+      where: { id: task_id, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true, projectId: true, status: true },
     });
     if (!task || task.status === "Deleted") {
