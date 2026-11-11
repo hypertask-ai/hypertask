@@ -158,6 +158,9 @@ function loadCheckoutSuccess(prisma, stripe, onSubscriptionUpdated) {
       __esModule: true,
       default: async () => {},
     },
+    "@/app/api/ai/_lib/taskSummaryFreshness": {
+      shouldPregenerateTeamSummariesOnCheckout: async () => true,
+    },
     "./onSubscriptionUpdated": {
       __esModule: true,
       applySubscriptionUpdatedWithTeamLockHeld: onSubscriptionUpdated,

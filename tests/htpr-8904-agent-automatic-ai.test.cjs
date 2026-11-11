@@ -43,7 +43,7 @@ test("agent ticket and comment summaries are not scheduled, and a person's chang
     { taskId: 11, agentId: "agent-1" },
     { taskId: 12 },
   ]);
-  assert.deepEqual(tasks.readChecks(), [
+  assert.deepEqual(tasks.readChecks().filter((check) => check.key === flagKey), [
     { key: flagKey, userId: 6 },
     { key: flagKey, userId: 42 },
   ]);

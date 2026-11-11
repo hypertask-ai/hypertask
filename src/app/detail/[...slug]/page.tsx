@@ -25,6 +25,8 @@ import { ScrollSetting } from "@prisma/client";
 import { getTaskReadStateLastReadAt } from "@/utils/controllers/tasks/markRead";
 import { filterCommentReadReceipts } from "@/utils/controllers/comments/readReceipts";
 import { listTaskAgentRunActivities } from "@/lib/agentRuns/service";
+import { requestTaskSummaryRefreshOnView } from "@/app/api/ai/_lib/taskSummaryFreshness";
+import { waitUntil } from "@vercel/functions";
 import Unauthorized from "../../unauthorized/page";
 
 
@@ -106,6 +108,12 @@ export default async function Page(
     }
     return <Unauthorized />;
   }
+
+  waitUntil(
+    requestTaskSummaryRefreshOnView({ taskId: task.id, ownerUserId: task.userId }).catch(
+      (error) => console.warn("[task-summary] Refresh on view failed", task.id, error),
+    ),
+  );
 
   [lastReadAt, agentRunActivities] = await Promise.all([
     getTaskReadStateLastReadAt(task.id, userObj.id),

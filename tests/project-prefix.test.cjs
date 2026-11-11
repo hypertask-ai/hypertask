@@ -592,6 +592,8 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
     "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
     "@/utils/controllers/tasks/markRead": {}, "@/utils/controllers/comments/readReceipts": {}, "@/lib/agentRuns/service": {},
+    "@vercel/functions": { waitUntil: () => {} },
+    "@/app/api/ai/_lib/taskSummaryFreshness": { requestTaskSummaryRefreshOnView: async () => "off" },
     "../../unauthorized/page": { __esModule: true, default: "Unauthorized" },
   });
   const props = identifier => ({ params: Promise.resolve({ slug: [`project-${projectId}`, identifier] }), searchParams: Promise.resolve({}) });

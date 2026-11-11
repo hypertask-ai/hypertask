@@ -175,6 +175,10 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     "@/utils/controllers/tasks/markRead": {},
     "@/utils/controllers/comments/readReceipts": {},
     "@/lib/agentRuns/service": {},
+    "@vercel/functions": { waitUntil: () => {} },
+    "@/app/api/ai/_lib/taskSummaryFreshness": {
+      requestTaskSummaryRefreshOnView: async () => "off",
+    },
     "../../unauthorized/page": { __esModule: true, default: "Unauthorized" },
   }).default;
   return {

@@ -1,6 +1,10 @@
 import { scheduleJobById } from "@/lib/qstash";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7689_PROMPT_CACHING_FLAG } from "@/lib/flags/definitions/htpr-7689-prompt-caching";
+import {
+  markTaskSummaryStale,
+  taskSummaryOnViewEnabled,
+} from "@/app/api/ai/_lib/taskSummaryFreshness";
 
 export interface IReq {
   taskId: number;
@@ -25,6 +29,9 @@ export default async function scheduleTaskSummaryGeneration(req: IReq) {
   if (!(typeof agentId === "string" && agentId.length > 0) || !(await isFeatureEnabled("htpr-8904-agent-automatic-ai", req.ownerUserId ?? 0))) {
     if (req.activityOnlyOwnerId) {
       if (await isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, req.activityOnlyOwnerId)) return;
+    }
+    if (await taskSummaryOnViewEnabled(req.ownerUserId)) {
+      if (await markTaskSummaryStale(taskId)) return;
     }
     const runAt = new Date(new Date().getTime() + 5 * 60000);
 

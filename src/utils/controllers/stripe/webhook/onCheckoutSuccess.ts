@@ -9,6 +9,7 @@ import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
 import type { ISubscriptionPlan } from "@/models/model";
 import generateSummaryAfterUpsertionReminder from "@/pages/api/queues/AiSummary/generateSummaryAfterUpsertionReminder";
+import { shouldPregenerateTeamSummariesOnCheckout } from "@/app/api/ai/_lib/taskSummaryFreshness";
 import { convertTimestampToDate } from "@/utils/helperFunctions/helperFunctions";
 
 import { applySubscriptionUpdatedWithTeamLockHeld } from "./onSubscriptionUpdated";
@@ -160,7 +161,9 @@ const sessionOnSuccess = async (
       return createdPlan;
     });
 
-    generateSummaryAfterUpsertionReminder(team.id);
+    if (await shouldPregenerateTeamSummariesOnCheckout(team.googleAccount.userId)) {
+      generateSummaryAfterUpsertionReminder(team.id);
+    }
     assertHeld();
     await completePendingStripeCancellation(storedPlan, assertHeld);
   });
