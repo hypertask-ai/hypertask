@@ -27,6 +27,9 @@ for (const smoke of [false, true]) {
         if (["@next/bundle-analyzer", "next-pwa"].includes(specifier)) {
           return () => (config) => config;
         }
+        if (specifier === "./scripts/build-memory-plugin.cjs") {
+          return require("../scripts/build-memory-plugin.cjs");
+        }
         assert.equal(specifier, "@posthog/nextjs-config");
         return {
           withPostHogConfig(config, options) {
@@ -57,8 +60,11 @@ for (const smoke of [false, true]) {
       assert.equal(config.experimental.parallelServerBuildTraces, smoke);
       assert.equal(config.experimental.parallelServerCompiles, undefined);
       assert.equal(config.productionBrowserSourceMaps, true);
-      assert.equal(config.outputFileTracingExcludes, undefined);
-      assert.deepEqual(config.serverExternalPackages, ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk"]);
+      assert.deepEqual(config.outputFileTracingExcludes, posthog ? { "*": [".next/server/**/*.map"] } : undefined);
+      assert.deepEqual(config.serverExternalPackages, [
+        "isomorphic-dompurify", "jsdom", "pusher", "aws-sdk",
+        "stripe", "posthog-node", "@modelcontextprotocol/sdk", "mcp-handler",
+      ]);
       const productionCache = {
         cache: { type: "filesystem", maxMemoryGenerations: Infinity },
         resolve: { alias: {} },
@@ -66,12 +72,14 @@ for (const smoke of [false, true]) {
       config.webpack(productionCache, { dev: false });
       assert.equal(productionCache.cache.type, "filesystem");
       assert.equal(productionCache.cache.maxMemoryGenerations, 0);
+      assert.ok(productionCache.plugins.some(plugin => plugin.constructor.name === "BuildMemoryPlugin"));
       const developmentCache = {
         cache: { type: "filesystem", maxMemoryGenerations: Infinity },
         resolve: { alias: {} },
       };
       config.webpack(developmentCache, { dev: true });
       assert.equal(developmentCache.cache.maxMemoryGenerations, Infinity);
+      assert.equal(developmentCache.plugins?.some(plugin => plugin.constructor.name === "BuildMemoryPlugin") ?? false, false);
     });
   }
 }
