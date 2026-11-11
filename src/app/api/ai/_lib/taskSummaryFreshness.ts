@@ -12,7 +12,6 @@ const viewRefreshLockKey = (taskId: number) => `ai-summary:view-refresh:${taskId
 const viewRefreshJobId = (taskId: number) => `ai-summary-view-for-taskId:${taskId}`;
 
 export type SummaryOnViewDecision =
-  | "off"
   | "fresh"
   | "coalesced"
   | "scheduled"
@@ -26,10 +25,7 @@ export async function taskSummaryOnViewEnabled(
     if (await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, userId)) return true;
     return false;
   } catch (error) {
-    console.error(
-      "[taskSummaries] Summary-on-view switch lookup failed; keeping scheduled runs",
-      error,
-    );
+    console.error("[taskSummaries] Summary-on-view switch lookup failed; keeping scheduled runs", error);
     return false;
   }
 }
@@ -40,11 +36,7 @@ export async function markTaskSummaryStale(taskId: number): Promise<boolean> {
     const version = await redis.incr(staleMarkerKey(taskId));
     return Number.isFinite(version);
   } catch (error) {
-    console.error(
-      "[taskSummaries] Could not mark summary out of date for task",
-      taskId,
-      error,
-    );
+    console.error("[taskSummaries] Could not mark summary out of date for task", taskId, error);
     return false;
   }
 }
@@ -58,11 +50,7 @@ export async function markTaskSummariesStale(taskIds: number[]): Promise<number>
     const results = await pipeline.exec();
     return results?.length ?? 0;
   } catch (error) {
-    console.error(
-      "[taskSummaries] Could not mark summaries out of date for tasks",
-      taskIds.length,
-      error,
-    );
+    console.error("[taskSummaries] Could not mark summaries out of date for tasks", taskIds.length, error);
     return 0;
   }
 }
@@ -74,11 +62,7 @@ export async function readTaskSummaryStaleMarker(
     const redis = await getRedis();
     return await redis.get(staleMarkerKey(taskId));
   } catch (error) {
-    console.error(
-      "[taskSummaries] Could not read the out-of-date mark for task",
-      taskId,
-      error,
-    );
+    console.error("[taskSummaries] Could not read the out-of-date mark for task", taskId, error);
     return null;
   }
 }
@@ -100,27 +84,17 @@ export async function clearTaskSummaryStaleMarker(
       marker,
     );
   } catch (error) {
-    console.error(
-      "[taskSummaries] Could not clear the out-of-date mark for task",
-      taskId,
-      error,
-    );
+    console.error("[taskSummaries] Could not clear the out-of-date mark for task", taskId, error);
   }
 }
 
 export async function requestTaskSummaryRefreshOnView(args: {
   taskId: number;
-  ownerUserId?: number | null;
 }): Promise<SummaryOnViewDecision> {
-  if (!(await taskSummaryOnViewEnabled(args.ownerUserId))) return "off";
   if (!(await readTaskSummaryStaleMarker(args.taskId))) return "fresh";
 
   const redis = await getRedis().catch((error) => {
-    console.error(
-      "[taskSummaries] Could not refresh summary on view for task",
-      args.taskId,
-      error,
-    );
+    console.error("[taskSummaries] Could not refresh summary on view for task", args.taskId, error);
     return null;
   });
   if (!redis) return "unavailable";
@@ -148,11 +122,7 @@ export async function requestTaskSummaryRefreshOnView(args: {
     return "scheduled";
   } catch (error) {
     await redis.del(viewRefreshLockKey(args.taskId)).catch(() => undefined);
-    console.error(
-      "[taskSummaries] Could not refresh summary on view for task",
-      args.taskId,
-      error,
-    );
+    console.error("[taskSummaries] Could not refresh summary on view for task", args.taskId, error);
     return "unavailable";
   }
 }
