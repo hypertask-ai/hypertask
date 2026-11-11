@@ -1464,7 +1464,7 @@ N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote bra
 DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/repo/.unlazy/s-abcd1234/gates"
 printf '#!/usr/bin/env bash\n[[ $1 == GET && $2 == /mcp/tasks/YPER4-902/agent-activity* ]] && cat "$DP/acts" || exit 1\n' > "$DP/bin/ht"
 chmod +x "$DP/bin/ht"; export DP
-DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
+DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID -u PI_SESSION_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
 act() { jq -nc --arg t "$1" '{success:true,activities:[{type:"thought",text:"Claimed.",createdAt:"2026-10-17T10:00:00Z"},{type:"thought",text:$t,createdAt:"2026-10-17T11:00:00Z"}]}' > "$DP/acts"; }
 full='Deeper: field: release engineering | raw source: ship-check source | method: stub tests | outside proof: CI run | breaks if: another suite turns red | proof gate: YPER4-902.deeper-ci'
 gate=$'- [ ] YPER4-902.deeper-ci: CI is green\n  CHECK: gh run list --limit 1\n  EXPECT: success\n'
