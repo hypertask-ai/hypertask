@@ -18,6 +18,7 @@ import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGat
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 import { autoForcedProvider, autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { autoModelShadowEnabled } from "@/app/api/ai/_lib/autoModelShadow";
 
 import { createSseErrorResponse, reportHandledChatError, errorMessage } from "@/lib/ai/chatStream/errors";
 import { ChatRequest } from "@/lib/ai/chatStream/request";
@@ -25,6 +26,13 @@ import { AuthedUser, ProviderId } from "@/lib/ai/chatStream/types";
 
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { resolveModelSelection, selectionFromModelOption, ModelSelection, defaultModelSelection, selectModel } from "@/lib/ai/chatStream/models";
+import type { AutoModelShadowTurn } from "@/lib/ai/jevAutoModelShadow";
+
+function startAutoModelShadow(turn: AutoModelShadowTurn) {
+  import("@/lib/ai/jevAutoModelShadow")
+    .then(({ shadowAutoModelTurnInBackground }) => shadowAutoModelTurnInBackground(turn))
+    .catch(() => undefined);
+}
 
 function isBrowserLunaDefaultUnqualifiedHere(body: ChatRequest, serverContext: AiDefaultModelContext, plan: StorePlanKind | null | undefined) {
   if (body.modelFromDefault !== true) return false;
@@ -193,6 +201,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       selection = selectionFromModelOption(getAiModelOptionById("gpt-6-luna", true)!);
     }
     if (autoRequested && !usesTeamOpenAiDefault && !actingAgent?.modelOptionId && await autoModelEnabled(dbUser.id)) {
+      const stepUp = chatStepUp({ message: body.message, history: body.chat_history });
       const autoPick = pickAutoModelOption({
         feature: body.aiFeature,
         settings: teamProviderSettings,
@@ -201,9 +210,21 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         grokGemini4Enabled,
         planDefault: requestDefaultModelOption,
         forcedProvider: await autoForcedProvider(selectionLookupContext),
-        stepUp: chatStepUp({ message: body.message, history: body.chat_history }),
+        stepUp,
       });
-      if (autoPick) selection = selectionFromModelOption(autoPick);
+      if (autoPick) {
+        selection = selectionFromModelOption(autoPick);
+        if (await autoModelShadowEnabled(dbUser.id)) startAutoModelShadow({
+          userId: dbUser.id,
+          teamId: gatewayTags.teamId ?? null,
+          projectId: usageProjectId,
+          chatSessionId: trustedChatSessionId,
+          feature: body.aiFeature,
+          message: body.message,
+          history: body.chat_history,
+          autoModelKey: autoPick.modelKey,
+        });
+      }
     }
     if (body.modelFromDefault !== true && (requestedModel.modelOptionId || requestedModel.model)) {
       let provider = selection.modelOption
