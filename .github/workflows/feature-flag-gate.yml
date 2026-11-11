@@ -282,11 +282,15 @@ jobs:
           source .github/scripts/github-api-retry.sh
           pages=$(gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100")
           matrix=$(jq -ce '
-            [flatten[] | {number, head_sha: (.head.sha // "")}]
+            [flatten[] | {number, head_sha: (.head.sha // ""),
+              pull: {number, state, title, base: {ref: .base.ref, sha: .base.sha},
+                head: {sha: .head.sha, repo: {full_name: .head.repo.full_name}},
+                labels: [.labels[]? | {name}]}}]
             | unique_by(.number)
             | if any(.[]; (.head_sha | test("^[0-9a-f]{40}$") | not)) then
                 error("An open production pull request has no head commit")
-              elif length <= 256 then .
+              elif length <= 256 then
+                group_by(.head_sha) | map(. as $group | .[] + {head_pr_count: ($group | length)}) | sort_by(.number)
               else error("Too many pull requests for reconciliation matrix")
               end
           ' <<<"$pages")
@@ -338,6 +342,9 @@ jobs:
       - name: Reconcile the selected production pull request
         env:
           RECONCILE_PR_NUMBER: ${{ matrix.number }}
+          RECONCILE_HEAD_SHA: ${{ matrix.head_sha }}
+          RECONCILE_PULL_JSON: ${{ toJSON(matrix.pull) }}
+          RECONCILE_HEAD_PR_COUNT: ${{ matrix.head_pr_count }}
           GH_TOKEN: ${{ github.token }}
           GH_READ_TOKEN: ${{ steps.ci-token.outputs.token }}
           REPO: ${{ github.repository }}
@@ -402,12 +409,15 @@ jobs:
           cp .github/scripts/feature-flag-parser/package.json \
             .github/scripts/feature-flag-parser/package-lock.json "$parser_dir/"
 
-          if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$pages"; then
-            echo "::error::Cannot list open production pull requests."
+          if ! [[ "$RECONCILE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] ||
+             ! [[ "$RECONCILE_HEAD_PR_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid reconciliation publication target."
             exit 2
           fi
-          if ! jq -c --argjson number "$RECONCILE_PR_NUMBER" 'flatten[] | select(.number == $number)' "$pages" >"$rows"; then
-            echo "::error::Cannot parse the open production pull-request list."
+          if ! jq -ce --argjson number "$RECONCILE_PR_NUMBER" --arg sha "$RECONCILE_HEAD_SHA" '
+            select(.number == $number and .head.sha == $sha)
+          ' <<<"$RECONCILE_PULL_JSON" >"$rows"; then
+            echo "::error::Discovery snapshot does not match the locked head."
             exit 2
           fi
 
@@ -458,7 +468,7 @@ jobs:
             head_repo=$(jq -r '.head.repo.full_name' <<<"$pull")
             export FEATURE_FLAG_PR_LABELS
             FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' <<<"$pull")
-            head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$pages")
+            head_pr_count="$RECONCILE_HEAD_PR_COUNT"
             reason_file="$gate_tmp/reason-$number.txt"
             error_file="$gate_tmp/error-$number.txt"
             payload="$gate_tmp/status-$number.json"
@@ -522,7 +532,17 @@ jobs:
             fi
           done <"$rows"
 
-          if [ "$evaluated" -gt 0 ] && ! GH_API_NO_WAIT=1 gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json"; then
+          if [ "$evaluated" -gt 0 ] && ! GH_TOKEN="${GH_READ_TOKEN:-$GH_TOKEN}" GH_API_NO_WAIT=1 gh_api graphql --paginate --slurp \
+            -f query='query($owner: String!, $name: String!, $sha: GitObjectID!, $endCursor: String) {
+              repository(owner: $owner, name: $name) {
+                object(oid: $sha) { ... on Commit {
+                  associatedPullRequests(first: 100, after: $endCursor) {
+                    pageInfo { hasNextPage endCursor }
+                    nodes { number state baseRefName headRefOid repository { nameWithOwner } }
+                  }
+                } }
+              }
+            }' -f owner="${REPO%/*}" -f name="${REPO#*/}" -f sha="$RECONCILE_HEAD_SHA" >"$fresh_heads_json"; then
             while IFS= read -r decision; do
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")
               publish_reconciliation_error "$(jq -r '.head_sha' <<<"$decision")" "$(jq -r '.payload' <<<"$decision")" \
@@ -543,7 +563,15 @@ jobs:
               statuses_file=$(jq -r '.statuses_file' <<<"$decision")
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")
               result=$(jq -r '.result' <<<"$decision")
-              if ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
+              if ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" --arg repo "$REPO" '
+                if any(.[]; (.errors != null) or (.data.repository.object.associatedPullRequests.nodes | type != "array")) then
+                  error("Cannot read associated pull requests")
+                else
+                  [.[] | .data.repository.object.associatedPullRequests.nodes[] |
+                    select(.state == "OPEN" and .baseRefName == "production" and
+                      .headRefOid == $sha and .repository.nameWithOwner == $repo)] | unique_by(.number) | length
+                end
+              ' "$fresh_heads_json"); then
                 echo "::error::Cannot re-check whether pull request #$number shares its head commit."
                 publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file"
                 failures=$((failures + 1))

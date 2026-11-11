@@ -563,6 +563,8 @@ feature_flag_gate:
   reconciliation_max_parallel: 4
   concurrency_queue: max
   cancel_in_progress: false
+  reconciliation_snapshot: discovery_metadata_bound_to_locked_head_sha
+  reconciliation_shared_head_refresh: paginated_commit_associated_pull_requests
   reconciliation_publication: serialize_all_writers_per_head_sha_and_fail_closed_on_metadata_change_or_drift
 
 policies:
