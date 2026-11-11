@@ -84,7 +84,12 @@ const COLUMN_CONTAINER_PREFIX = "droppable-section-container-";
 const sectionIdFromElement = (
   element: Element | null | undefined,
 ): number | null => {
-  const columnId = element?.closest?.(`[id^="${COLUMN_CONTAINER_PREFIX}"]`)?.id;
+  if (!element) return null;
+  const column = element.closest(`[id^="${COLUMN_CONTAINER_PREFIX}"]`)
+    ?? element
+      .closest(".section-container")
+      ?.querySelector(`[id^="${COLUMN_CONTAINER_PREFIX}"]`);
+  const columnId = column?.id;
   if (!columnId?.startsWith(COLUMN_CONTAINER_PREFIX)) return null;
   const sectionId = Number(columnId.slice(COLUMN_CONTAINER_PREFIX.length));
   return Number.isInteger(sectionId) ? sectionId : null;

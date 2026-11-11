@@ -40,6 +40,18 @@ function fixture(columnEnabled) {
   render();
   const input = document.createElement("input");
   document.body.append(input);
+  const addColumn = (sectionId) => {
+    const column = document.createElement("div");
+    column.className = "section-container";
+    column.tabIndex = -1;
+    const scroller = document.createElement("div");
+    scroller.id = `droppable-section-container-${sectionId}`;
+    const card = document.createElement("div");
+    scroller.append(card);
+    column.append(scroller);
+    document.body.append(column);
+    return { column, card };
+  };
   return { ...ui, input, load, render, get selection() { return selection; },
     focusTask(id) { focusedTaskId = id; render(); },
     setItems(next) { items = next; render(); },
@@ -49,14 +61,12 @@ function fixture(columnEnabled) {
       return event;
     },
     hover(sectionId) {
-      const column = document.createElement("div");
-      column.className = "section-container";
-      column.id = `droppable-section-container-${sectionId}`;
-      const card = document.createElement("div");
-      column.append(card);
-      document.body.append(column);
+      const { card } = addColumn(sectionId);
       React.act(() => card.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true })));
-      return column;
+    },
+    focusColumn(sectionId) {
+      const { column } = addColumn(sectionId);
+      React.act(() => column.focus());
     },
   };
 }
@@ -97,6 +107,15 @@ test("Shift+A follows the column under the pointer after a card was selected by 
     fx.hover(10);
     assert.equal(fx.key(65, { shiftKey: true }).defaultPrevented, true);
     assert.deepEqual(columnIds(fx), [1, 2]);
+  } finally { fx.close(); }
+});
+
+test("Shift+A selects the focused empty column whose id sits on an inner scroller", () => {
+  const fx = fixture(true);
+  try {
+    fx.focusColumn(20);
+    assert.equal(fx.key(65, { shiftKey: true }).defaultPrevented, true);
+    assert.deepEqual(columnIds(fx), [3]);
   } finally { fx.close(); }
 });
 
