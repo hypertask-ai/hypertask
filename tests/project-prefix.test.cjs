@@ -983,7 +983,7 @@ test("round 4: a wildcard identifier keeps the old case-insensitive match", asyn
   const legacy = lookups({ enabled: false, prefixAliases: [] });
   for (const number of ["NEW_123", "TEAM%A-1", "OLD\\-123"]) {
     const resolved = await indexed.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number });
-    assert.match(indexed.rawQueries.at(-1).text, /lower\("ticketNumber"\) LIKE lower\(\?\)/, `${number} must keep the wildcard predicate`);
+    assert.match(indexed.rawQueries.at(-1).text, /"ticketNumber" ILIKE \?/, `${number} must keep the wildcard predicate`);
     assert.deepEqual(
       resolved,
       await legacy.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number }),

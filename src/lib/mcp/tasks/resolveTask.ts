@@ -18,7 +18,7 @@ export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string
     const rows = needsIlikeSemantics(ticketNumber)
       ? await prisma.$queryRaw<{ id: number }[]>`
           SELECT id FROM "Task"
-          WHERE lower("ticketNumber") LIKE lower(${ticketNumber})
+          WHERE "ticketNumber" ILIKE ${ticketNumber}
           ORDER BY "projectId" ASC, id ASC
           LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
         `
