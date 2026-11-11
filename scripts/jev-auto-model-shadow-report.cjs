@@ -34,23 +34,21 @@ function markRetries(rows) {
   });
 }
 
+const tally = (subset) => Object.fromEntries(COMPARISONS.map((name) => [name, subset.filter((row) => comparisonOf(row) === name).length]));
+
 function analyze(inputRows) {
   const rows = markRetries(inputRows);
   const answered = rows.filter((row) => comparisonOf(row) !== null);
-  const tally = (subset) => Object.fromEntries(COMPARISONS.map((name) => [name, subset.filter((row) => comparisonOf(row) === name).length]));
   const counts = tally(answered);
-  const confident = answered.filter((row) => typeof row.jevConfidence === "number" && row.jevConfidence >= CONFIDENT);
+  const sure = answered.filter((row) => typeof row.jevConfidence === "number" && row.jevConfidence >= CONFIDENT);
   const retried = answered.filter((row) => row.retried);
   const retriedCounts = tally(retried);
   const latencies = answered.map((row) => row.jevLatencyMs).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  const changed = share(answered.length - counts.agree, answered.length);
   const bars = [
     { name: "1000 Auto turns logged", pass: rows.length >= MIN_ROWS, detail: `${rows.length} of ${MIN_ROWS} turns` },
     { name: "Jev answers almost every turn", pass: (share(answered.length, rows.length) ?? 0) >= MIN_PARSED, detail: `${pct(share(answered.length, rows.length))} parsed` },
-    {
-      name: "Jev would change Auto's level often enough to matter",
-      pass: (share(answered.length - counts.agree, answered.length) ?? 0) >= MIN_DISAGREEMENT,
-      detail: `${pct(share(answered.length - counts.agree, answered.length))} disagree (${counts["jev-higher"]} higher, ${counts["jev-lower"]} lower)`,
-    },
+    { name: "Jev would change Auto's level often enough to matter", pass: (changed ?? 0) >= MIN_DISAGREEMENT, detail: `${pct(changed)} disagree (${counts["jev-higher"]} higher, ${counts["jev-lower"]} lower)` },
     {
       name: "On retried turns Jev mostly wanted more",
       pass: retried.length >= 20 && (share(retriedCounts["jev-higher"], retried.length) ?? 0) >= RETRY_SHARE && retriedCounts["jev-higher"] > retriedCounts["jev-lower"],
@@ -60,9 +58,8 @@ function analyze(inputRows) {
   return {
     rows: rows.length,
     answered: answered.length,
-    parsed: share(answered.length, rows.length),
     counts,
-    confident: `${pct(share(confident.filter((row) => comparisonOf(row) === "agree").length, confident.length))} over ${confident.length} turns`,
+    sure: `${pct(share(tally(sure).agree, sure.length))} over ${sure.length} turns`,
     retried: { count: retried.length, counts: retriedCounts },
     latencyMs: { p50: latencies[Math.ceil(latencies.length / 2) - 1] ?? null, p90: latencies[Math.ceil(latencies.length * 0.9) - 1] ?? null },
     errors: rows.filter((row) => row.error).length,
@@ -78,8 +75,7 @@ function renderReport(result) {
     `${result.rows} Auto chat turns logged, ${result.answered} with a Jev level. Jev guessed the level only; Auto's own pick answered every turn.`,
     "",
     `- Jev agrees with Auto: ${pct(share(result.counts.agree, result.answered))}`,
-    `- Jev wanted higher: ${result.counts["jev-higher"]}, lower: ${result.counts["jev-lower"]}`,
-    `- agreement when sure (>= ${CONFIDENT}): ${result.confident}`,
+    `- Jev wanted higher: ${result.counts["jev-higher"]}, lower: ${result.counts["jev-lower"]}, agreement when sure (>= ${CONFIDENT}): ${result.sure}`,
     `- retried turns: ${result.retried.count} (${result.retried.counts["jev-higher"]} higher, ${result.retried.counts["jev-lower"]} lower, ${result.retried.counts.agree} agree)`,
     `- Jev latency p50 / p90: ${result.latencyMs.p50 ?? "n/a"} / ${result.latencyMs.p90 ?? "n/a"} ms, no answer on ${result.errors} turns`,
     "",
@@ -97,11 +93,9 @@ async function rowsFromDatabase(since, limit) {
   assert.ok(connectionString, "Set DATABASE_URL or pass --rows=<file>");
   const pool = new Pool({ connectionString, max: 1 });
   try {
-    const { rows } = await pool.query(
-      `SELECT "createdAt", "chatSessionId", "autoTier", "jevLevel", "jevTier", "jevConfidence", "jevLatencyMs", "resent", "error" FROM "AutoModelShadow" ${since ? `WHERE "createdAt" >= $1` : ""} ORDER BY "createdAt" ASC LIMIT ${Number(limit) || MIN_ROWS}`,
-      since ? [since] : [],
-    );
-    return rows.map((row) => ({ ...row, createdAt: stamp(row.createdAt) }));
+    const columns = `"createdAt", "chatSessionId", "autoTier", "jevLevel", "jevTier", "jevConfidence", "jevLatencyMs", "resent", "error"`;
+    const { rows } = await pool.query(`SELECT ${columns} FROM "AutoModelShadow" ${since ? `WHERE "createdAt" >= $1` : ""} ORDER BY "createdAt" ASC LIMIT ${Number(limit) || MIN_ROWS}`, since ? [since] : []);
+    return rows.map((entry) => ({ ...entry, createdAt: stamp(entry.createdAt) }));
   } finally {
     await pool.end();
   }
