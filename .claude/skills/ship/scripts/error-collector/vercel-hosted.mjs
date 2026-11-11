@@ -41,14 +41,19 @@ export async function fetchHosted({ since, until, env }, service) {
   if (!cached) {
     cached = Promise.resolve().then(() => {
       const github = githubEnv(env);
-      const runs = JSON.parse(command('gh', ['run', 'list', '--repo', repo, '--workflow', workflow, '--branch', 'production', '--status', 'success', '--limit', '1', '--json', 'databaseId'], github));
-      if (!Number.isSafeInteger(runs[0]?.databaseId)) throw new Error('no successful hosted Vercel run');
-      const dir = mkdtempSync(join(tmpdir(), 'vercel-feed-'));
-      try {
-        command('gh', ['run', 'download', String(runs[0].databaseId), '--repo', repo, '--name', artifact, '--dir', dir], github);
-        const key = readFileSync(env.ERROR_COLLECTOR_VERCEL_PRIVATE_KEY ?? join(env.HOME ?? homedir(), '.local/state/error-collector/vercel-feed.pem'));
-        return open(readFileSync(join(dir, 'feed.enc'), 'utf8'), key);
-      } finally { rmSync(dir, { recursive: true, force: true }); }
+      const key = readFileSync(env.ERROR_COLLECTOR_VERCEL_PRIVATE_KEY ?? join(env.HOME ?? homedir(), '.local/state/error-collector/vercel-feed.pem'));
+      const runs = JSON.parse(command('gh', ['run', 'list', '--repo', repo, '--workflow', workflow, '--branch', 'production', '--limit', '5', '--json', 'databaseId'], github));
+      if (!Array.isArray(runs) || !runs.length || !runs.every(run => Number.isSafeInteger(run?.databaseId))) throw new Error('no hosted Vercel run');
+      for (const run of runs) {
+        const dir = mkdtempSync(join(tmpdir(), 'vercel-feed-'));
+        let text = null;
+        try {
+          command('gh', ['run', 'download', String(run.databaseId), '--repo', repo, '--name', artifact, '--dir', dir], github);
+          text = readFileSync(join(dir, 'feed.enc'), 'utf8');
+        } catch { text = null; } finally { rmSync(dir, { recursive: true, force: true }); }
+        if (text) return open(text, key);
+      }
+      throw new Error('no hosted Vercel feed artifact');
     });
   }
   return selectWindow(await cached, service, since, until);
