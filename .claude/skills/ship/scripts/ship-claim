@@ -134,9 +134,13 @@ shared_open_prs() {
 }
 
 open_prs() {
-  local result
-  if result=$(shared_open_prs); then
-    printf '%s\n' "$result"
+  local result live
+  if result=$(shared_open_prs) && live=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --search 'head:runner' --limit 300 --json number,headRefName,title,isDraft) \
+    && jq -e 'type == "array" and length < 300 and all(.[];
+      (.number | type == "number") and (.headRefName | type == "string")
+      and (.title | type == "string") and (.isDraft | type == "boolean"))
+      and ((map(.number) | unique | length) == length)' <<<"$live" >/dev/null; then
+    jq --argjson live "$live" 'map(select(.headRefName | test("^runner"; "i") | not)) + $live | unique_by(.number)' <<<"$result"
     return
   fi
   if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft); then

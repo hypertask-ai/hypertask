@@ -376,6 +376,7 @@ printf '%s\n' "$*" >> "$HOLD_READS"
 case " $* " in
   *' api '*'/pulls?'*) [ -n "${HOLD_REST_OPEN:-}" ] || exit 1; cat "$HOLD_REST_OPEN" ;;
   *' api '*'search/issues'*) [ -n "${HOLD_REST_MERGED:-}" ] || exit 1; cat "$HOLD_REST_MERGED" ;;
+  *' --search head:runner '*) [ -z "${HOLD_RUNNER_FAIL:-}" ] || exit 1; cat "${HOLD_RUNNER_OPEN:-$HOLD_OPEN}" ;;
   *' --state open '*) [ -z "${HOLD_OPEN_FAIL:-}" ] || exit 1; cat "$HOLD_OPEN" ;;
   *' --state merged '*) [ -z "${HOLD_MERGED_FAIL:-}" ] || exit 1; cat "$HOLD_MERGED" ;;
   *) exit 1 ;;
@@ -425,14 +426,28 @@ EOF
 chmod +x "$D/hold-snapshot"
 export HOLD_SNAPSHOT_BODY=$D/snapshot.json
 printf '%s' '{"prs":[{"number":77,"title":"YPER4-997 [BUGFIX] Copy work","headRefName":"runner-9/yper4-997","isDraft":false}]}' > "$HOLD_SNAPSHOT_BODY"
-printf '[]' > "$HOLD_OPEN"
+jq '.prs' "$HOLD_SNAPSHOT_BODY" > "$HOLD_OPEN"
 : > "$HOLD_READS"
 SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
 eq "an open PR in the shared copy holds RUNNER 9" "$?" 4
 SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
 eq "the same copy does not hold RUNNER 9 for its own PR" "$?" 0
-eq "a usable copy avoids the live open PR read" "$(grep -c -- '--state open' "$HOLD_READS")" 0
+eq "a usable copy only refreshes runner ownership" "$(grep -c -- '--search head:runner' "$HOLD_READS")" 2
+eq "a usable copy avoids unfiltered live reads" "$(grep -- '--state open' "$HOLD_READS" | grep -vc -- '--search head:runner')" 0
 printf '[{"number":78,"headRefName":"runner-1/yper4-997","title":"YPER4-997 [BUGFIX] Live work","isDraft":false}]' > "$HOLD_OPEN"
+SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "a newly opened PR absent from the copy still holds its runner" "$?" 4
+SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+eq "a newly opened PR absent from the copy remains resumable" "$?" 0
+SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "a closed PR remaining in the copy no longer holds its runner" "$?" 0
+SHIP_SESSION_NAME='RUNNER 1' HOLD_RUNNER_FAIL=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "failed ownership refresh falls back to the full live hold" "$?" 4
+printf '[{}]' > "$D/bad-runner.json"
+SHIP_SESSION_NAME='RUNNER 1' HOLD_RUNNER_OPEN=$D/bad-runner.json SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "malformed ownership refresh falls back to the full live hold" "$?" 4
+SHIP_SESSION_NAME='RUNNER 1' HOLD_RUNNER_FAIL=1 HOLD_OPEN_FAIL=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "unavailable live ownership never authorizes from the copy" "$?" 4
 : > "$HOLD_READS"
 SHIP_SESSION_NAME='RUNNER 1' HOLD_SNAPSHOT_BAD=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
 eq "an unusable copy preserves the live ownership hold" "$?" 4
