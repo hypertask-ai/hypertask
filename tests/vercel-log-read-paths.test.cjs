@@ -49,7 +49,9 @@ test("runtime log workflow contract", () => {
   assert.match(script, /x-vercel-observability-query-reason: cli\/logs-runtime/, "sends the same query reason as the collector script");
   assert.match(script, /page=\$\(\[ -n "\$SEARCH" \] && echo 500 \|\| echo "\$LIMIT"\)/, "a local search reads the widest page");
   assert.match(script, /case "\$code" in\n\s+200\|201\|202\)/, "an agent-lane 202 counts as posted");
-  assert.match(script, /https:\/\/app\.hypertask\.ai\/api\/mcp\/comments/, "delivers the log to a ticket, not the public Actions output");
+  assert.match(script, /https:\/\/app\.hypertask\.ai\/api\/mcp\/agents\/runs/, "opens a ticket run, not a people comment");
+  assert.match(script, /api\/mcp\/agents\/runs\/\$RUN_ID\/activities/, "delivers the log to the ticket agent lane only");
+  assert.doesNotMatch(script, /api\/mcp\/comments/, "a people comment needs an audience and refuses raw log text");
   assert.doesNotMatch(script, /cat \/tmp\/lines\.txt/, "raw log lines never reach the Actions output");
   assert.doesNotMatch(script, /\$\{\{ secrets\./, "secrets arrive through env, never interpolated into the shell");
   assert.match(script, /sed -E -e 's#\[a-z\]\+:\/\/\[\^\[:space:\]\]\*@/, "credentials in URLs are redacted");
