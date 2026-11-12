@@ -4,6 +4,7 @@ import { renderPlainLanguageTicketDescription } from "../../src/lib/tickets/plai
 
 const APP = "https://app.hypertask.ai";
 export const FAILURE_TITLE = "[INFRA] PostHog error-to-ticket monitoring failed";
+export const MONITORING_BOARD = 11514;
 
 // Independent of the PostHog receiver, credentials, queries and incident parser.
 async function api(fetchImpl, token, path, body, key) {
@@ -24,7 +25,7 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env.HYP
   }
   let existing;
   for (const status of ["Normal", "Archive", "Deleted"]) {
-    const page = await api(fetchImpl, token, `/tasks?project_id=4060&status=${status}&search=${encodeURIComponent(FAILURE_TITLE)}&limit=100`);
+    const page = await api(fetchImpl, token, `/tasks?project_id=${MONITORING_BOARD}&status=${status}&search=${encodeURIComponent(FAILURE_TITLE)}&limit=100`);
     if (!Array.isArray(page.tasks)) throw new Error("Failure ticket lookup returned no tasks");
     existing = page.tasks.find((task) => task.title === FAILURE_TITLE);
     if (existing) break;
@@ -41,16 +42,16 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env.HYP
     `<p><a href="${runUrl}">Failed workflow run ${runId}</a></p>`;
   if (existing) {
     const projects = await api(fetchImpl, token, "/projects?limit=100");
-    const sections = projects.projects?.find((item) => Number(item.id) === 4060)?.sections;
+    const sections = projects.projects?.find((item) => Number(item.id) === MONITORING_BOARD)?.sections;
     const done = sections?.find((item) => (item.section_title ?? item.title) === "Done");
     if (existing.status === "Archive" || existing.status === "Deleted" || Number(existing.sectionId ?? existing.section_id) === Number(done?.id)) {
       const active = sections?.find((item) => (item.section_title ?? item.title) === "Backlog") || sections?.find((item) => (item.section_title ?? item.title) !== "Done");
-      if (!active?.id) throw new Error("Board 4060 active section is unavailable");
+      if (!active?.id) throw new Error(`Board ${MONITORING_BOARD} active section is unavailable`);
       await api(fetchImpl, token, "/tasks/update", { task_id: existing.id, status: "Normal", sectionId: Number(active.id) });
     }
     await api(fetchImpl, token, "/comments", { task_id: existing.id, text, content_type: "html" }, `posthog-monitor-failure-${runId}`);
   } else {
-    await api(fetchImpl, token, "/tasks/create", { project_id: 4060, title: FAILURE_TITLE, description: text, content_type: "html" }, "posthog-monitor-failure-ticket");
+    await api(fetchImpl, token, "/tasks/create", { project_id: MONITORING_BOARD, title: FAILURE_TITLE, description: text, content_type: "html" }, "posthog-monitor-failure-ticket");
   }
   console.log(`PostHog failure recorded for run ${runId}`);
   return { action: existing ? "updated" : "created", workflow };
@@ -107,11 +108,11 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
         fallbackIssueId = await findCanaryIssue({ fetchImpl, apiKey, marker, deadline, now });
       }
       if (fallbackIssueId) {
-        const fallback = await api(fetchImpl, token, `/tasks?project_id=4060&status=Normal&search=${fallbackIssueId}&limit=100`);
+        const fallback = await api(fetchImpl, token, `/tasks?project_id=${MONITORING_BOARD}&status=Normal&search=${fallbackIssueId}&limit=100`);
         if (!Array.isArray(fallback.tasks)) throw new Error("Canary fallback lookup returned no tasks");
         const receipt = new RegExp(`<p>posthog-dispatch-fallback:issue:${fallbackIssueId}:[0-9a-f-]{36}<\\/p>`);
         ticket = fallback.tasks.find((task) => receipt.test(task.description ?? ""));
-        boardId = 4060;
+        boardId = MONITORING_BOARD;
         delivery = "fallback";
       }
     }
