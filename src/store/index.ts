@@ -424,7 +424,7 @@ export const aiChatPinnedSessionIdsAtom = atom<string[]>({
 
 export const aiChatCollapsedRailSectionsAtom = atom<string[]>({
     key: "aiChatCollapsedRailSections",
-    default: [],
+    default: ["Older"],
     effects_UNSTABLE: [persistAtom],
 });
 

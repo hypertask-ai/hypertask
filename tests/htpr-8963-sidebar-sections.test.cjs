@@ -23,6 +23,25 @@ test("a shut rail section stays shut, search opens it, and the flag off path sta
   );
 });
 
+test("HTPR-9079 Older starts shut while Today and Previous 7 days stay open", () => {
+  const store = read("src/store/index.ts");
+  const collapsedAtom = store.match(
+    /export const aiChatCollapsedRailSectionsAtom = atom<string\[\]>\(\{([\s\S]*?)\}\);/,
+  );
+  assert.ok(collapsedAtom, "the collapsed rail sections atom is missing");
+  const defaultMatch = collapsedAtom[1].match(/default: \[([^\]]*)\]/);
+  assert.ok(defaultMatch, "the collapsed rail sections atom has no list default");
+  const defaults = defaultMatch[1]
+    .split(",")
+    .map((entry) => entry.trim().replace(/^["']|["']$/g, ""))
+    .filter((entry) => entry.length > 0);
+  assert.deepEqual(defaults, ["Older"]);
+  assert.equal(railSectionShut(true, "Older", defaults, false), true);
+  assert.equal(railSectionShut(true, "Today", defaults, false), false);
+  assert.equal(railSectionShut(true, "Previous 7 days", defaults, false), false);
+  assert.match(collapsedAtom[1], /effects_UNSTABLE: \[persistAtom\]/);
+});
+
 test("HTPR-8963 sidebar sections ship to Owner + QA", () => {
   const { default: flag } = loadModule("src/lib/flags/definitions/htpr-8963-sidebar-sections.ts");
   assert.equal(flag.key, "htpr-8963-sidebar-sections");
