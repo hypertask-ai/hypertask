@@ -6,27 +6,26 @@ import {
   useGetUserPreferences,
   type IUserPreferences,
 } from "@/hooks/General/useGetUserPreferences";
-import { parseCardParts, resolveCardParts, type CardPart, type CardParts } from "@/lib/kanban/cardParts";
+import { DEFAULT_CARD_PARTS, settleCardParts, type CardPart, type CardParts } from "@/lib/kanban/cardParts";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 
 export const useCardParts = (): CardParts | null => {
-  const { data } = useGetUserPreferences();
+  const { data, isFetched } = useGetUserPreferences();
   const surface = useFirstScreenSurface();
   const saved = data?.cardParts;
   const boot = surface?.display.cardParts;
-  return useMemo(() => resolveCardParts(saved, boot), [saved, boot]);
+  return useMemo(() => settleCardParts(saved, boot, isFetched), [saved, boot, isFetched]);
 };
 
 export const useSetCardPart = () => {
   const queryClient = useQueryClient();
-  const writeParts = (parts: CardParts) =>
+  const parts = useCardParts();
+  const writeParts = (next: CardParts) =>
     queryClient.setQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY, (previous) =>
-      previous ? { ...previous, cardParts: parts } : previous,
+      previous ? { ...previous, cardParts: next } : previous,
     );
   return async (part: CardPart, shown: boolean) => {
-    const current = parseCardParts(
-      queryClient.getQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY)?.cardParts,
-    );
+    const current = parts ?? DEFAULT_CARD_PARTS;
     const next: CardParts = { ...current, [part]: shown };
     writeParts(next);
     try {

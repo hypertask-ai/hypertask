@@ -50,16 +50,16 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
         return;
       }
       const theme = document.documentElement.dataset.theme;
-      const value = JSON.stringify({ version: 1, accountId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      const display = { version: 1, accountId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         locale: navigator.language, boardLayout, theme, railCollapsed, quickTips, draftsFirst: false,
-        ...(cardParts ? { cardParts: shownCardParts(cardParts) } : {}),
         isMobile: window.innerWidth < 768,
         inbox: { nudgeDismissed,
           pushPermission: fcm.permissionStatus, pushEnabled: fcm.statusToggleFromDB === "true" },
-        board: { railOn, showEmptyViewTabs, hiddenViewTabIds, viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode } });
-      const encoded = encodeURIComponent(value);
-      const valid = encoded.length <= 3800 && parseBoardDisplay(value, accountId, { desktopChat });
-      document.cookie = `${BOARD_DISPLAY_COOKIE}=${valid ? encoded : ""}; Path=/; Max-Age=${valid ? 604800 : 0}; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
+        board: { railOn, showEmptyViewTabs, hiddenViewTabIds, viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode } };
+      const stored = [cardParts ? { ...display, cardParts: shownCardParts(cardParts) } : display, display]
+        .map((candidate) => ({ candidate, encoded: encodeURIComponent(JSON.stringify(candidate)) }))
+        .find(({ candidate, encoded }) => encoded.length <= 3800 && parseBoardDisplay(JSON.stringify(candidate), accountId, { desktopChat }));
+      document.cookie = `${BOARD_DISPLAY_COOKIE}=${stored?.encoded ?? ""}; Path=/; Max-Age=${stored ? 604800 : 0}; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
     };
     mirror();
     window.addEventListener("resize", mirror);

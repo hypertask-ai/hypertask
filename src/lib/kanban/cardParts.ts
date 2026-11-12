@@ -44,6 +44,9 @@ export const shownCardParts = (parts: CardParts): CardPart[] =>
 export const resolveCardParts = (saved: unknown, boot: unknown): CardParts | null =>
   readCardParts(saved) ?? readCardParts(boot) ?? null;
 
+export const settleCardParts = (saved: unknown, boot: unknown, loaded: boolean): CardParts | null =>
+  resolveCardParts(saved, boot) ?? (loaded ? DEFAULT_CARD_PARTS : null);
+
 type CardTask = ITask & { customFieldValues?: unknown[] };
 
 export function cardPartsView<Blocker>(task: CardTask, blockingUser: Blocker | undefined, parts: CardParts) {

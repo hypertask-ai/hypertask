@@ -6,7 +6,7 @@ const { loadModule, root } = require("./helpers/loadModule.cjs");
 
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
-const { CARD_PARTS, DEFAULT_CARD_PARTS, EMPTY_CARD_PARTS, parseCardParts, readCardParts, resolveCardParts, shownCardParts } =
+const { CARD_PARTS, DEFAULT_CARD_PARTS, EMPTY_CARD_PARTS, parseCardParts, readCardParts, resolveCardParts, settleCardParts, shownCardParts } =
   loadModule("src/lib/kanban/cardParts.ts");
 const { hasFirstScreenDisplayPreferences } = loadModule("src/lib/firstScreen/contract.ts");
 
@@ -37,6 +37,12 @@ test("no saved record yet is unknown, not the default parts", () => {
   assert.equal(DEFAULT_CARD_PARTS.priority, false);
 });
 
+test("a person who never saved card settings keeps the default parts once preferences load", () => {
+  assert.deepEqual(settleCardParts(null, undefined, false), null);
+  assert.deepEqual(settleCardParts(null, undefined, true), DEFAULT_CARD_PARTS);
+  assert.deepEqual(settleCardParts(undefined, undefined, true), DEFAULT_CARD_PARTS);
+});
+
 test("the display cookie's card parts answer the first paint while the preferences query is still the default", () => {
   const firstPaint = resolveCardParts(undefined, []);
   assert.ok(everyPart(firstPaint));
@@ -61,14 +67,26 @@ test("the hook asks the first screen surface before it settles on anything", () 
   const hook = read("src/hooks/General/useCardParts.ts");
   assert.match(hook, /const surface = useFirstScreenSurface\(\);/);
   assert.match(hook, /const boot = surface\?\.display\.cardParts;/);
-  assert.match(hook, /resolveCardParts\(saved, boot\)/);
+  assert.match(hook, /settleCardParts\(saved, boot, isFetched\)/);
+});
+
+test("switching a part before preferences load keeps the parts the board is already showing", () => {
+  const hook = read("src/hooks/General/useCardParts.ts");
+  assert.match(hook, /const parts = useCardParts\(\);/);
+  assert.match(hook, /const current = parts \?\? DEFAULT_CARD_PARTS;/);
 });
 
 test("the display cookie written from the board carries the person's card parts, so the next reload draws them at once", () => {
   const mirror = read("src/lib/firstScreen/BoardDisplayMirror.tsx");
   assert.match(mirror, /const cardParts = useCardParts\(\);/);
-  assert.match(mirror, /\.\.\.\(cardParts \? \{ cardParts: shownCardParts\(cardParts\) \} : \{\}\)/);
+  assert.match(mirror, /\[cardParts \? \{ \.\.\.display, cardParts: shownCardParts\(cardParts\) \} : display, display\]/);
   assert.match(mirror, /chatSidebarMode, cardParts\]\);/);
+});
+
+test("a display cookie that would overflow the size limit still writes without the card parts", () => {
+  const mirror = read("src/lib/firstScreen/BoardDisplayMirror.tsx");
+  assert.match(mirror, /encoded\.length <= 3800 && parseBoardDisplay\(JSON\.stringify\(candidate\), accountId, \{ desktopChat \}\)/);
+  assert.match(mirror, /stored\?\.encoded \?\? ""/);
 });
 
 test("a first screen display accepts real card parts and rejects junk", () => {
