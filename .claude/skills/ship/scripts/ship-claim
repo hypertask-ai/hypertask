@@ -149,16 +149,16 @@ runner_open_prs() {
 open_prs() {
   local rn=$1 result live
   if result=$(shared_open_prs) && live=$(runner_open_prs "$rn"); then
-    jq --argjson live "$live" '$live + . | unique_by(.number)' <<<"$result"
+    jq --argjson live "$live" '($live | map(. + {live: true})) + . | unique_by(.number)' <<<"$result"
     return
   fi
   if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft); then
-    printf '%s\n' "$result"
+    jq 'map(. + {live: true})' <<<"$result"
     return
   fi
   result=$(${SHIP_CLAIM_GH:-gh} api --paginate --slurp 'repos/hypertask-ai/hypertask/pulls?state=open&per_page=100') || return 1
   jq -e 'if type == "array" and length > 0 and all(.[]; type == "array")
-    then [ .[][] | {number, title, headRefName: .head.ref, isDraft: .draft} ]
+    then [ .[][] | {number, title, headRefName: .head.ref, isDraft: .draft, live: true} ]
       | if (map(.number) | unique | length) == length then . else error("repeated PR page") end
     else error("invalid PR pages") end' <<<"$result"
 }
@@ -189,7 +189,7 @@ hold_check() {
     || { echo "ship-claim: HOLD. Open PR read is malformed or incomplete for RUNNER $rn." >&2; return 4; }
   HELD=$(jq -r --arg n "$rn" --arg t "$t" '
     [.[] | select(.headRefName | test("^runner-?" + $n + "($|[/_-])"; "i"))] as $m
-    | if any($m[]; (.title | ascii_upcase | startswith($t + " ")) or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])")))
+    | if any($m[]; (.live == true) and ((.title | ascii_upcase | startswith($t + " ")) or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])"))))
       then "RESUME" else ($m | map("https://github.com/hypertask-ai/hypertask/pull/\(.number)") | join(" ")) end' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
   [ "$HELD" != RESUME ] || return 0

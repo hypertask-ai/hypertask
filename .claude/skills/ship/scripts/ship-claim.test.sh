@@ -445,6 +445,8 @@ eq "a newly opened PR absent from the copy remains resumable" "$?" 0
 SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
 eq "a copy row whose live refresh misses it still holds its runner" "$?" 4
 printf '[]' > "$D/no-live.json"
+SHIP_SESSION_NAME='RUNNER 9' HOLD_OPEN=$D/no-live.json SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+eq "an unmatched cached row never authorizes a resume" "$?" 4
 printf '[{"number":81,"headRefName":"runner9/yper4-996","title":"YPER4-996 [BUGFIX] Compact work","isDraft":false}]' > "$D/compact-live.json"
 SHIP_SESSION_NAME='RUNNER 9' HOLD_OPEN=$D/no-live.json HOLD_COMPACT_OPEN=$D/compact-live.json SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
 eq "a compact runner branch opened after the copy holds its runner" "$?" 4
