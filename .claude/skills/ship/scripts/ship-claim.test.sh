@@ -376,6 +376,8 @@ printf '%s\n' "$*" >> "$HOLD_READS"
 case " $* " in
   *' api '*'/pulls?'*) [ -n "${HOLD_REST_OPEN:-}" ] || exit 1; cat "$HOLD_REST_OPEN" ;;
   *' api '*'search/issues'*) [ -n "${HOLD_REST_MERGED:-}" ] || exit 1; cat "$HOLD_REST_MERGED" ;;
+  *' --search head:runner-'*) [ -z "${HOLD_RUNNER_FAIL:-}" ] || exit 1; cat "${HOLD_RUNNER_OPEN:-$HOLD_OPEN}" ;;
+  *' --search head:runner'*) [ -z "${HOLD_COMPACT_FAIL:-}" ] || exit 1; cat "${HOLD_COMPACT_OPEN:-$HOLD_OPEN}" ;;
   *' --state open '*) [ -z "${HOLD_OPEN_FAIL:-}" ] || exit 1; cat "$HOLD_OPEN" ;;
   *' --state merged '*) [ -z "${HOLD_MERGED_FAIL:-}" ] || exit 1; cat "$HOLD_MERGED" ;;
   *) exit 1 ;;
@@ -416,6 +418,60 @@ eq "open PR on runner10/yper4-998 does not hold RUNNER 1" "$(pool_hold 1 runner1
 eq "open PR on runner10/yper4-998 holds RUNNER 10" "$(pool_hold 10 runner10/yper4-998)" 4
 for branch in infra-runner-1/yper4-998 ci-runner-1/yper4-998 ceo-runner-1/yper4-998 hax-runner-1/yper4-998 cursor/runner-1/yper4-998 lead/runner1-yper4-998; do
   eq "open PR on $branch never holds RUNNER 1" "$(pool_hold 1 "$branch")" 0
+done
+cat > "$D/hold-snapshot" <<'EOF'
+#!/usr/bin/env bash
+[ -z "${HOLD_SNAPSHOT_BAD:-}" ] || exit 2
+cat "$HOLD_SNAPSHOT_BODY"
+EOF
+chmod +x "$D/hold-snapshot"
+export HOLD_SNAPSHOT_BODY=$D/snapshot.json
+printf '%s' '{"prs":[{"number":77,"title":"YPER4-997 [BUGFIX] Copy work","headRefName":"runner-9/yper4-997","isDraft":false}]}' > "$HOLD_SNAPSHOT_BODY"
+jq '.prs' "$HOLD_SNAPSHOT_BODY" > "$HOLD_OPEN"
+: > "$HOLD_READS"
+SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "an open PR in the shared copy holds RUNNER 9" "$?" 4
+SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+eq "the same copy does not hold RUNNER 9 for its own PR" "$?" 0
+eq "a usable copy only refreshes runner ownership" "$(grep -c -- '--search head:runner' "$HOLD_READS")" 4
+eq "a usable copy refreshes the hyphenated runner form" "$(grep -c -- '--search head:runner-9 ' "$HOLD_READS")" 2
+eq "a usable copy refreshes the compact runner form" "$(grep -c -- '--search head:runner9 ' "$HOLD_READS")" 2
+eq "a usable copy avoids unfiltered live reads" "$(grep -- '--state open' "$HOLD_READS" | grep -vc -- '--search head:runner')" 0
+printf '[{"number":78,"headRefName":"runner-1/yper4-997","title":"YPER4-997 [BUGFIX] Live work","isDraft":false}]' > "$HOLD_OPEN"
+SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "a newly opened PR absent from the copy still holds its runner" "$?" 4
+SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+eq "a newly opened PR absent from the copy remains resumable" "$?" 0
+SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "a closed PR remaining in the copy no longer holds its runner" "$?" 0
+printf '[]' > "$D/no-live.json"
+printf '[{"number":81,"headRefName":"runner9/yper4-996","title":"YPER4-996 [BUGFIX] Compact work","isDraft":false}]' > "$D/compact-live.json"
+SHIP_SESSION_NAME='RUNNER 9' HOLD_OPEN=$D/no-live.json HOLD_COMPACT_OPEN=$D/compact-live.json SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "a compact runner branch opened after the copy holds its runner" "$?" 4
+printf '[{"number":82,"headRefName":"runner-9/yper4-995","title":"YPER4-995 [BUGFIX] Live work","isDraft":false}]' > "$D/live-hold.json"
+: > "$HOLD_READS"
+SHIP_SESSION_NAME='RUNNER 9' HOLD_OPEN=$D/live-hold.json HOLD_RUNNER_OPEN=$D/no-live.json HOLD_COMPACT_FAIL=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "a failed compact refresh falls back to the full live hold" "$?" 4
+eq "a failed compact refresh reads GitHub unfiltered" "$(grep -- '--state open' "$HOLD_READS" | grep -vc -- '--search head:runner')" 1
+SHIP_SESSION_NAME='RUNNER 1' HOLD_RUNNER_FAIL=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "failed ownership refresh falls back to the full live hold" "$?" 4
+printf '[{}]' > "$D/bad-runner.json"
+SHIP_SESSION_NAME='RUNNER 1' HOLD_RUNNER_OPEN=$D/bad-runner.json SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "malformed ownership refresh falls back to the full live hold" "$?" 4
+SHIP_SESSION_NAME='RUNNER 1' HOLD_RUNNER_FAIL=1 HOLD_OPEN_FAIL=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "unavailable live ownership never authorizes from the copy" "$?" 4
+: > "$HOLD_READS"
+SHIP_SESSION_NAME='RUNNER 1' HOLD_SNAPSHOT_BAD=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "an unusable copy preserves the live ownership hold" "$?" 4
+eq "an unusable copy reads GitHub" "$(grep -c -- '--state open' "$HOLD_READS")" 1
+for invalid in 'del(.prs[0].title)' '.prs[0].title = 1' 'del(.prs[0].isDraft)' '.prs[0].isDraft = "false"' 'del(.prs[0].number)' '.prs[0].headRefName = null' '.prs += .prs' '.prs = {}' 'del(.prs)' '.prs = [range(300) | {number:.,title:"Other",headRefName:"other",isDraft:false}]'; do
+  jq "$invalid" <<< '{"prs":[{"number":77,"title":"YPER4-997 [BUGFIX] Copy work","headRefName":"runner-9/yper4-997","isDraft":false}]}' > "$HOLD_SNAPSHOT_BODY"
+  : > "$HOLD_READS"
+  SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+  eq "bad copy ($invalid) permits resuming the live PR" "$?" 0
+  eq "bad copy ($invalid) reads GitHub" "$(grep -c -- '--state open' "$HOLD_READS")" 1
+  SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+  eq "bad copy ($invalid) preserves the live ownership hold" "$?" 4
 done
 mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 printf '[{"number":7,"headRefName":"runner-3/yper4-999","title":"YPER4-999 [BUGFIX] Own work","isDraft":false}]' > "$HOLD_OPEN"

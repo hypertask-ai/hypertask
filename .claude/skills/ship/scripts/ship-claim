@@ -120,8 +120,38 @@ incident_ok() {
     and ((.section // "") | IN("Done", "Archive", "Archived") | not))' <<<"$got" >/dev/null 2>&1
 }
 
+shared_open_prs() {
+  local snapshot=${SHIP_CLAIM_SNAPSHOT:-$HOME/.local/share/house-rules/fleet/pr-snapshot} body
+  [ -x "$snapshot" ] || return 1
+  body=$("$snapshot" read --repo hypertask-ai/hypertask --max-age 900 2>/dev/null) || return 1
+  jq -e 'if (.prs | type == "array" and length < 300)
+    and all(.prs[]; (.number | type == "number") and (.headRefName | type == "string")
+      and (.title | type == "string") and (.isDraft | type == "boolean"))
+    and ((.prs | map(.number) | unique | length) == (.prs | length))
+    then [ .prs[] | {number, title, headRefName, isDraft} ]
+    else error("unusable copy") end' <<<"$body" 2>/dev/null && return 0
+  return 1
+}
+
+runner_open_prs() {
+  local n=$1 form out batch='[]'
+  for form in "head:runner-$n" "head:runner$n"; do
+    out=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --search "$form" --limit 300 --json number,headRefName,title,isDraft) || return 1
+    jq -e 'type == "array" and length < 300 and all(.[];
+      (.number | type == "number") and (.headRefName | type == "string")
+      and (.title | type == "string") and (.isDraft | type == "boolean"))
+      and ((map(.number) | unique | length) == length)' <<<"$out" >/dev/null || return 1
+    batch=$(jq --argjson add "$out" '. + $add | unique_by(.number)' <<<"$batch") || return 1
+  done
+  printf '%s\n' "$batch"
+}
+
 open_prs() {
-  local result
+  local rn=$1 result live
+  if result=$(shared_open_prs) && live=$(runner_open_prs "$rn"); then
+    jq --arg n "$rn" --argjson live "$live" 'map(select((.headRefName | test("^runner-?" + $n + "($|[/_-])"; "i")) | not)) + $live | unique_by(.number)' <<<"$result"
+    return
+  fi
   if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft); then
     printf '%s\n' "$result"
     return
@@ -151,7 +181,7 @@ hold_check() {
   [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
   rn=${BASH_REMATCH[1]}
   if incident_ok "$t"; then echo "ship-claim: INCIDENT lane. Holds, queue brake and infra first skipped for $t."; return 0; fi
-  open=$(open_prs) \
+  open=$(open_prs "$rn") \
     || { echo "ship-claim: HOLD. Cannot read open PRs, so no new claim for RUNNER $rn. Retry later." >&2; return 4; }
   jq -e 'type == "array" and length < 300 and all(.[];
     (.number | type == "number") and (.headRefName | type == "string") and (.title | type == "string")
