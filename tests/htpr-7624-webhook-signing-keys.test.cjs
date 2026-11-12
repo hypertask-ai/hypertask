@@ -135,7 +135,7 @@ for (const model of ['board', 'agent']) {
         boardWebhookDelivery: delegate, agentWebhookDelivery: delegate,
         boardWebhookAttempt: { create: async ({ data }) => { attempts.push(data); return {}; } },
         webhookSubscription: { update: async ({ data }) => { health.push(data); return {}; } },
-        agentWebhookSubscription: { update: async ({ data }) => { health.push(data); return {}; } },
+        agentWebhookSubscription: { updateMany: async ({ data }) => { health.push(data); return { count: 1 }; } },
       };
       db.$transaction = operation => Array.isArray(operation) ? Promise.all(operation) : operation(db);
       const h = transport(db);

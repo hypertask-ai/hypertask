@@ -288,9 +288,9 @@ test("queued run payloads deliver without a flag row", async () => {
   };
   const prisma = {
     $transaction: async (operations) => Promise.all(operations),
-    agentWebhookSubscription: { update: async () => ({}) },
+    agentWebhookSubscription: { updateMany: async () => ({ count: 1 }) },
     agentWebhookDelivery: {
-      updateMany: async () => ({ count: 1 }),
+      updateMany: async ({ data }) => { Object.assign(row, data); return { count: 1 }; },
       findUnique: async () => row,
       update: async ({ data }) => Object.assign(row, data),
     },

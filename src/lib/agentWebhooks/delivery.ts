@@ -67,7 +67,7 @@ export async function deliverAgentWebhook(
     delivery.subscription.agent.revokedAt != null ||
     !await webhookCredentialAllows(delivery.subscription.agentId, delivery.payload, delivery.subscription)
   ) {
-    await prisma.agentWebhookDelivery.update({
+    await prisma.agentWebhookDelivery.updateMany({
       where: { id: delivery.id },
       data: { status: "cancelled", processingAt: null },
     });
@@ -108,7 +108,7 @@ export async function deliverAgentWebhook(
       }
     }
     if (!authorized) {
-      await prisma.agentWebhookDelivery.update({
+      await prisma.agentWebhookDelivery.updateMany({
         where: { id: delivery.id },
         data: { status: "cancelled", processingAt: null },
       });
@@ -135,8 +135,8 @@ export async function deliverAgentWebhook(
 
   if (result.ok) {
     const deliveredAt = new Date();
-    await prisma.$transaction([
-      prisma.agentWebhookDelivery.update({
+    const [updated] = await prisma.$transaction([
+      prisma.agentWebhookDelivery.updateMany({
         where: { id: delivery.id },
         data: {
           status: "delivered",
@@ -148,19 +148,20 @@ export async function deliverAgentWebhook(
           deliveredAt,
         },
       }),
-      prisma.agentWebhookSubscription.update({
+      prisma.agentWebhookSubscription.updateMany({
         where: { id: delivery.subscriptionId },
         data: { lastDeliveryAt: deliveredAt, lastDeliveryOk: true },
       }),
     ]);
+    if (updated.count === 0) return { status: "skipped" };
     return { status: "delivered", statusCode: result.statusCode! };
   }
 
   const nextDelay = agentWebhookRetryDelaySeconds(attemptCount);
   const failedPermanently = nextDelay == null;
   const nextAttemptAt = new Date(Date.now() + (nextDelay ?? 0) * 1000);
-  await prisma.$transaction([
-    prisma.agentWebhookDelivery.update({
+  const [updated] = await prisma.$transaction([
+    prisma.agentWebhookDelivery.updateMany({
       where: { id: delivery.id },
       data: {
         status: failedPermanently ? "failed" : "retrying",
@@ -172,11 +173,13 @@ export async function deliverAgentWebhook(
         error: result.error,
       },
     }),
-    prisma.agentWebhookSubscription.update({
+    prisma.agentWebhookSubscription.updateMany({
       where: { id: delivery.subscriptionId },
       data: { lastDeliveryAt: new Date(), lastDeliveryOk: false },
     }),
   ]);
+
+  if (updated.count === 0) return { status: "skipped" };
 
   if (failedPermanently) {
     console.error(
