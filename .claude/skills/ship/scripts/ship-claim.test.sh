@@ -420,18 +420,32 @@ done
 cat > "$D/hold-snapshot" <<'EOF'
 #!/usr/bin/env bash
 [ -z "${HOLD_SNAPSHOT_BAD:-}" ] || exit 2
-printf '%s' '{"prs":[{"number":77,"title":"YPER4-997 [BUGFIX] Copy work","headRefName":"runner-9/yper4-997","isDraft":false}]}'
+cat "$HOLD_SNAPSHOT_BODY"
 EOF
 chmod +x "$D/hold-snapshot"
+export HOLD_SNAPSHOT_BODY=$D/snapshot.json
+printf '%s' '{"prs":[{"number":77,"title":"YPER4-997 [BUGFIX] Copy work","headRefName":"runner-9/yper4-997","isDraft":false}]}' > "$HOLD_SNAPSHOT_BODY"
 printf '[]' > "$HOLD_OPEN"
-SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
-snap_rc=$?
-eq "an open PR in the shared copy holds RUNNER 9" "$snap_rc" 4
+: > "$HOLD_READS"
+SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "an open PR in the shared copy holds RUNNER 9" "$?" 4
 SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
 eq "the same copy does not hold RUNNER 9 for its own PR" "$?" 0
-echo "$(jq -c '.[0].headRefName = "runner-1/yper4-997"' "$HOLD_OPEN")" > "$HOLD_OPEN"
-SHIP_SESSION_NAME='RUNNER 1' HOLD_SNAPSHOT_BAD=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
-eq "an unusable copy falls back to GitHub" "$?" 4
+eq "a usable copy avoids the live open PR read" "$(grep -c -- '--state open' "$HOLD_READS")" 0
+printf '[{"number":78,"headRefName":"runner-1/yper4-997","title":"YPER4-997 [BUGFIX] Live work","isDraft":false}]' > "$HOLD_OPEN"
+: > "$HOLD_READS"
+SHIP_SESSION_NAME='RUNNER 1' HOLD_SNAPSHOT_BAD=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "an unusable copy preserves the live ownership hold" "$?" 4
+eq "an unusable copy reads GitHub" "$(grep -c -- '--state open' "$HOLD_READS")" 1
+for invalid in 'del(.prs[0].title)' '.prs[0].title = 1' 'del(.prs[0].isDraft)' '.prs[0].isDraft = "false"' 'del(.prs[0].number)' '.prs[0].headRefName = null' '.prs += .prs' '.prs = {}' 'del(.prs)' '.prs = [range(300) | {number:.,title:"Other",headRefName:"other",isDraft:false}]'; do
+  jq "$invalid" <<< '{"prs":[{"number":77,"title":"YPER4-997 [BUGFIX] Copy work","headRefName":"runner-9/yper4-997","isDraft":false}]}' > "$HOLD_SNAPSHOT_BODY"
+  : > "$HOLD_READS"
+  SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
+  eq "bad copy ($invalid) permits resuming the live PR" "$?" 0
+  eq "bad copy ($invalid) reads GitHub" "$(grep -c -- '--state open' "$HOLD_READS")" 1
+  SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+  eq "bad copy ($invalid) preserves the live ownership hold" "$?" 4
+done
 mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 printf '[{"number":7,"headRefName":"runner-3/yper4-999","title":"YPER4-999 [BUGFIX] Own work","isDraft":false}]' > "$HOLD_OPEN"
 jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"
