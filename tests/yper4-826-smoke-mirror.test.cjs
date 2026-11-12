@@ -7,13 +7,18 @@ const { spawnSync } = require('node:child_process');
 
 const INSTALLER = path.resolve('.github/scripts/install-chromium.sh');
 
-function runInstaller(failPlaywright) {
+function runInstaller(failPlaywright, { missingFont, fontCacheStatus = 0 } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hyci-282-mirror-'));
   const source = path.join(dir, 'fonts', 'truetype', 'liberation2');
   fs.mkdirSync(source, { recursive: true });
-  fs.writeFileSync(path.join(source, 'LiberationSans.ttf'), 'font-bytes');
+  for (const font of ['LiberationSans.ttf', 'NotoSans-Regular.ttf', 'NotoColorEmoji.ttf']) {
+    if (font !== missingFont) fs.writeFileSync(path.join(source, font), 'font-bytes');
+  }
   const bin = path.join(dir, 'bin');
   fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'fc-cache'), fontCacheStatus === 'missing'
+    ? '#!/nonexistent-fontconfig-interpreter\n'
+    : `#!/bin/sh\nexit ${fontCacheStatus}\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'strace'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'apt-get'), '#!/bin/sh\necho apt-get >> "$HYCI_CALLS"\nexit 42\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'sudo'), '#!/bin/sh\necho sudo >> "$HYCI_CALLS"\nexit 42\n', { mode: 0o755 });
@@ -77,3 +82,29 @@ test('a failed browser download does not fall back to apt', () => {
     fs.rmSync(failed.dir, { recursive: true, force: true });
   }
 });
+
+for (const missingFont of ['LiberationSans.ttf', 'NotoSans-Regular.ttf', 'NotoColorEmoji.ttf']) {
+  test(`browser font cache rejects missing ${missingFont}`, () => {
+    const result = runInstaller(false, { missingFont });
+    try {
+      assert.equal(result.status, 1, result.output);
+      assert.match(result.output, /browser font cache missing/);
+      assert.doesNotMatch(result.output, /browser font cache ready/);
+    } finally {
+      fs.rmSync(result.dir, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const fontCacheStatus of [7, 'missing']) {
+  test(`browser font cache rejects font registration failure ${fontCacheStatus}`, () => {
+    const result = runInstaller(false, { fontCacheStatus });
+    try {
+      assert.equal(result.status, 1, result.output);
+      assert.match(result.output, /browser font registration failed:/);
+      assert.doesNotMatch(result.output, /browser font cache ready/);
+    } finally {
+      fs.rmSync(result.dir, { recursive: true, force: true });
+    }
+  });
+}

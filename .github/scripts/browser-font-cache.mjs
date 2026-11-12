@@ -43,12 +43,18 @@ export function fillBrowserFontCache(env = process.env) {
       cpSync(source, path.join(cache, rel), { recursive: true });
     }
   }
-  if (empty(cache)) {
-    throw new Error("browser font cache empty");
+  const files = readdirSync(cache, { recursive: true });
+  for (const family of ["LiberationSans", "NotoSans", "NotoColorEmoji"]) {
+    if (!files.some((file) => new RegExp(`(^|[/\\\\])${family}(?:-Regular)?\\.ttf$`, "i").test(file))) {
+      throw new Error(`browser font cache missing ${family}`);
+    }
   }
   mkdirSync(userFonts, { recursive: true });
   cpSync(cache, userFonts, { recursive: true });
-  spawnSync("fc-cache", ["-f", userFonts], { stdio: "ignore" });
+  const result = spawnSync("fc-cache", ["-f", userFonts], { stdio: "inherit" });
+  if (result.error || result.status !== 0) {
+    throw new Error(`browser font registration failed: ${result.error?.message || result.status}`);
+  }
 }
 
 const isMain = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;

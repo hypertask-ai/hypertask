@@ -642,7 +642,10 @@ function runChromiumInstaller({ fail }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-282-"));
   const source = path.join(dir, "fonts", "truetype", "liberation2");
   fs.mkdirSync(source, { recursive: true });
-  fs.writeFileSync(path.join(source, "LiberationSans.ttf"), "font-bytes");
+  for (const font of ["LiberationSans.ttf", "NotoSans-Regular.ttf", "NotoColorEmoji.ttf"]) {
+    fs.writeFileSync(path.join(source, font), "font-bytes");
+  }
+  fs.writeFileSync(path.join(dir, "fc-cache"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
   fs.writeFileSync(path.join(dir, "strace"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
   fs.writeFileSync(
     path.join(dir, "npx"),
