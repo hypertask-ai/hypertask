@@ -668,7 +668,7 @@ check('reporting', 'noise alert rolling windows reject spread matches and combin
 
 check('reporting', 'noise alert opt-ins are explicit, never alert expected responses or forced tests, and respect service scope', () => withHarness(async h => {
   const rules = JSON.parse(readFileSync(join(HERE, 'noise.json')));
-  assert.deepEqual(rules.filter(rule => rule.alert).map(rule => rule.id), ['stripe-webhook-bad-signature', 'ssl-mode-warning', 'ai-sdk-warning', 'pg-query-deprecation', 'url-parse-deprecation', 'aws-sdk-v2-note', 'console-time-warning', 'qstash-cancel-404']);
+  assert.deepEqual(rules.filter(rule => rule.alert).map(rule => rule.id), ['stripe-webhook-bad-signature', 'email-delivery-notice', 'ssl-mode-warning', 'ai-sdk-warning', 'pg-query-deprecation', 'url-parse-deprecation', 'aws-sdk-v2-note', 'console-time-warning', 'qstash-cancel-404']);
   const messages = ['HTTP 404', 'Authenticated agents cannot archive or delete tasks in Done', 'Warning: SECURITY WARNING: The SSL modes [ht-forced-test]', 'AbortError'];
   h.events(messages.map(message => event({ service: 'vercel', message, count: 500 })));
   await h.run();
@@ -699,6 +699,34 @@ check('reporting', 'noise alert second run reuses its ticket via activity, and c
   assert.equal(activities(h, ticket).length, 2);
   assert.ok(h.calls().filter(call => call.name === 'ht' && call.args[1].includes('/mcp/tasks?')).every(call => call.args[1].includes(`error-fingerprint%3A${fp}`)));
 }));
+
+check('reporting', 'a bounced or refused email from Resend is expected per recipient: counted as noise, no ticket, one source ticket above the hourly limit', async () => {
+  await withHarness(async h => {
+    const route = '/api/webhooks/resend-events';
+    h.events([
+      event({ service: 'email', board: 11514, route, message: '[email-event] email.bounced (Permanent, General)' }),
+      event({ service: 'email', board: 11514, route, message: '[email-event] email.failed: Mailbox for <email> rejected', ts: new Date(NOW).toISOString() }),
+    ]);
+    await h.run();
+    assert.equal(creates(h).length, 0);
+    assert.equal(activities(h).length, 0);
+    assert.equal(h.state().days['2026-10-14'].email.noise, 2);
+    assert.equal(h.state().days['2026-10-14'].email.errors, 0);
+  });
+  await withHarness(async h => {
+    h.events(Array.from({ length: 51 }, (_, i) => event({ service: 'email', board: 11514, route: '/api/webhooks/resend-events', message: `[email-event] email.bounced (Permanent, ${i === 0 ? 'General' : `detail ${i}`})`, ts: new Date(NOW - 30 * 60000 + i * 1000).toISOString() })));
+    await h.run();
+    assert.equal(creates(h).length, 1);
+    assert.match(creates(h)[0].description, /Email bounce or refused send/);
+    assert.equal(h.state().days['2026-10-14'].email.errors, 0);
+  });
+  await withHarness(async h => {
+    h.events([event({ service: 'email', board: 11514, route: '/api/webhooks/resend-events', message: '[email-event] webhook signing key is not configured' })]);
+    await h.run();
+    assert.equal(creates(h).length, 1);
+    assert.equal(h.state().days['2026-10-14'].email.errors, 1);
+  });
+});
 
 check('reporting', 'noise alert overrides, pending cap, retry reconciliation and sample redaction', async () => {
   await withHarness(async h => {
