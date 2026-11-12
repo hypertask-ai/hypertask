@@ -82,6 +82,6 @@ test("a browser-captured issue is read as browser, titled Browser error and rate
   );
   assert.match(
     plainSummary({ url: issue.url, message: issue.message, source: issue.source }),
-    /Something failed in the browser while someone was using a ticket page/,
+    /Something failed in the browser \(an unexpected error\). Someone was using a ticket page/,
   );
 });
