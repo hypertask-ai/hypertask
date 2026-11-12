@@ -86,8 +86,10 @@ export async function requestTaskSummaryRefreshOnView(args: {
   taskId: number;
   ownerUserId?: number | null;
 }): Promise<SummaryOnViewDecision> {
-  if (!(await taskSummaryOnViewEnabled(args.ownerUserId))) return "off";
-  if (!(await readTaskSummaryStaleMarker(args.taskId))) return "fresh";
+  const enabled = await taskSummaryOnViewEnabled(args.ownerUserId);
+  if (!enabled) return "off";
+  const marked = await readTaskSummaryStaleMarker(args.taskId);
+  if (!marked) return "fresh";
 
   const redis = await getRedis().catch((error) => {
     console.error("[taskSummaries] Could not refresh summary on view for task", args.taskId, error);
