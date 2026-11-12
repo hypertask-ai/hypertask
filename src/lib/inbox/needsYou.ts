@@ -1,5 +1,5 @@
-import type { Assignees, Comment, Notification, Priority, Task } from "@prisma/client";
-import { isDoneColumn } from "@/lib/doneColumns";
+import type { Assignees, Comment, Notification, Priority, Project, Section, Task } from "@prisma/client";
+import { doneColumnTitles, isDoneColumn } from "@/lib/doneColumns";
 import { isQuestionComment } from "@/lib/inboxDecisions";
 
 export const NEEDS_YOU_SPLIT = "Needs you";
@@ -7,13 +7,15 @@ export type NeedsYouNotice = Pick<Notification, "type" | "userId"> &
   Partial<Pick<Notification, "taskId" | "fromAgentId" | "message" | "needsYouScore" | "needsYouSource" | "directReply">> & {
     comment?: Partial<Pick<Comment, "text" | "kind">> | null;
     task?: Partial<Pick<Task, "title" | "waitingOnUserId" | "waitingOnAgentId" | "status" | "section">> & { priority?: Partial<Pick<Priority, "priority_index">> | null; assignees?: Partial<Pick<Assignees, "userId" | "agentId">>[] } | null;
+    project?: Partial<Pick<Project, "id" | "teamId">> & { section?: Pick<Section, "section_title" | "isDone">[] } | null;
     needsYouEnabled?: boolean;
     isDecision?: boolean;
     quietImportant?: boolean;
   };
 
 function actionPriority(notice: NeedsYouNotice) {
-  if (notice.task?.status === "Archive" || isDoneColumn(notice.task?.section)) return 0;
+  const doneTitles = notice.project?.section ? doneColumnTitles(notice.project.section) : undefined;
+  if (notice.task?.status === "Archive" || isDoneColumn(notice.task?.section, doneTitles)) return 0;
   if (notice.task?.waitingOnUserId === notice.userId && !notice.task?.waitingOnAgentId) return 3;
   if (notice.isDecision) return 2;
   if (notice.quietImportant) return 0;
