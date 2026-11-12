@@ -73,6 +73,71 @@ test("missing ticket reaches exactly the fifteen-minute deadline and fails loudl
   assert.equal(state.calls.filter((call) => call.url.endsWith("/tasks/update")).length, 0);
 });
 
+function refused(reason = "Project not found or access denied") {
+  return { ok: false, status: 403, json: async () => ({ success: false, error: reason }), text: async () => JSON.stringify({ success: false, error: reason }) };
+}
+
+function nativeTicket(description) {
+  return { id: 100, description: `PostHog issue ID: <code>${ISSUE_ID}</code> yper4-331-123-1 ${description}` };
+}
+
+test("a refused fallback board read never aborts the canary before the native ticket lands", async () => {
+  const { runCanary } = await import(script);
+  let clock = 0;
+  let boardFifteenPolls = 0;
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push(url);
+    if (url.endsWith("/error-test")) return response({}, 500);
+    if (url.includes("/error_tracking/issues/?")) return response({ results: [{ id: ISSUE_ID, description: "yper4-331-123-1" }], next: null });
+    if (url.includes("project_id=4060")) return refused();
+    if (url.includes("project_id=15")) return response({ tasks: ++boardFifteenPolls < 2 ? [] : [nativeTicket("posthog-alert:issue_created:alert-id")] });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }] });
+    if (url.endsWith("/tasks/update")) return response({ success: true });
+    if (url.includes("posthog.com/api/projects/236160/error_tracking/issues/")) return response({ id: ISSUE_ID, description: "yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
+    assert.fail(url);
+  };
+  const result = await runCanary({ fetchImpl, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; } });
+  assert.equal(result.action, "verified");
+  assert.equal(result.delivery, "github");
+  assert.equal(result.ticketId, 100);
+  assert.equal(boardFifteenPolls, 2);
+  assert.ok(calls.some((url) => url.includes("project_id=4060")), "the fallback board was read once before the native ticket arrived");
+});
+
+test("a refused first board lookup is retried inside the fifteen minutes", async () => {
+  const { runCanary } = await import(script);
+  let clock = 0;
+  let refusals = 1;
+  const fetchImpl = async (url, options) => {
+    if (url.endsWith("/error-test")) return response({}, 500);
+    if (url.includes("/error_tracking/issues/?")) return response({ results: [], next: null });
+    if (url.includes("project_id=15")) {
+      if (refusals-- > 0) return refused();
+      return response({ tasks: [nativeTicket("posthog-alert:issue_reopened:alert-id")] });
+    }
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }] });
+    if (url.endsWith("/tasks/update")) return response({ success: true });
+    if (url.includes("posthog.com/api/projects/236160/error_tracking/issues/")) return response({ id: ISSUE_ID, description: "yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
+    assert.fail(url);
+  };
+  const result = await runCanary({ fetchImpl, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; } });
+  assert.equal(result.delivery, "github");
+  assert.equal(clock, 30_000);
+});
+
+test("a refusal that outlasts the window fails with the served reason", async () => {
+  const { runCanary } = await import(script);
+  let clock = 0;
+  await assert.rejects(runCanary({ token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; }, fetchImpl: async (url) => {
+    if (url.endsWith("/error-test")) return response({}, 500);
+    if (url.includes("/error_tracking/issues/?")) return response({ results: [], next: null });
+    if (url.includes("project_id=15")) return refused();
+    assert.fail(url);
+  } }), /HTTP 403: Project not found or access denied/);
+  assert.equal(clock, 15 * 60_000);
+});
+
 test("authentication, API and close failures cannot look like a passed canary", async () => {
   const { runCanary } = await import(script);
   await assert.rejects(runCanary({ token: "", testToken: "fixture", apiKey: "ph-fixture", runId: "123" }), /credentials/);

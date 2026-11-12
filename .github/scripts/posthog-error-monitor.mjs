@@ -5,6 +5,22 @@ import { renderPlainLanguageTicketDescription } from "../../src/lib/tickets/plai
 const APP = "https://app.hypertask.ai";
 export const FAILURE_TITLE = "[INFRA] PostHog error-to-ticket monitoring failed";
 
+async function refusalReason(response) {
+  if (typeof response.text !== "function") return "";
+  try {
+    const body = await response.text();
+    let message = body;
+    try {
+      const parsed = JSON.parse(body);
+      message = parsed.error || parsed.message || body;
+    } catch {}
+    const text = String(message ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+    return text ? `: ${text}` : "";
+  } catch {
+    return "";
+  }
+}
+
 // Independent of the PostHog receiver, credentials, queries and incident parser.
 async function api(fetchImpl, token, path, body, key) {
   const response = await fetchImpl(`${APP}/api/mcp${path}`, {
@@ -12,10 +28,23 @@ async function api(fetchImpl, token, path, body, key) {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  if (!response.ok) throw new Error(`Hypertask monitoring API returned HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`Hypertask monitoring API returned HTTP ${response.status}${await refusalReason(response)}`);
   const result = await response.json();
   if (result.success === false) throw new Error("Hypertask monitoring API rejected the operation");
   return result;
+}
+
+// One refused read is not a failed canary: the alert ticket may still be on its way,
+// so the poll keeps asking until the deadline and only then reports the refusal.
+async function readBoardTasks(fetchImpl, token, path, { now, deadline, onRefusal }) {
+  try {
+    return await api(fetchImpl, token, path);
+  } catch (error) {
+    onRefusal(error);
+    if (now() >= deadline) throw error;
+    console.log(`::warning::Canary board read deferred: ${error.message}`);
+    return null;
+  }
 }
 
 export async function reportFailure({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, runUrl, workflow, runId }) {
@@ -95,11 +124,12 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
   });
   if (triggered.status !== 500) throw new Error(`Production error-test returned HTTP ${triggered.status}, expected 500`);
   let fallbackIssueId;
+  let refusal;
   while (now() < deadline) {
-    const page = await api(fetchImpl, token, `/tasks?project_id=15&status=Normal&search=${marker}&limit=100`);
-    if (!Array.isArray(page.tasks)) throw new Error("Nightly canary lookup returned no tasks");
+    const page = await readBoardTasks(fetchImpl, token, `/tasks?project_id=15&status=Normal&search=${marker}&limit=100`, { now, deadline, onRefusal: (error) => { refusal = error; } });
+    if (page && !Array.isArray(page.tasks)) throw new Error("Nightly canary lookup returned no tasks");
     // A legacy error reporter's ticket is not proof of PostHog issue ingestion.
-    let ticket = page.tasks.find((task) => task.description?.includes(marker) && task.description.includes("PostHog issue ID: <code>") && /posthog-alert:issue_(?:created|reopened):/.test(task.description));
+    let ticket = page?.tasks.find((task) => task.description?.includes(marker) && task.description.includes("PostHog issue ID: <code>") && /posthog-alert:issue_(?:created|reopened):/.test(task.description));
     let boardId = 15;
     let delivery = "github";
     if (!ticket) {
@@ -107,12 +137,14 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
         fallbackIssueId = await findCanaryIssue({ fetchImpl, apiKey, marker, deadline, now });
       }
       if (fallbackIssueId) {
-        const fallback = await api(fetchImpl, token, `/tasks?project_id=4060&status=Normal&search=${fallbackIssueId}&limit=100`);
-        if (!Array.isArray(fallback.tasks)) throw new Error("Canary fallback lookup returned no tasks");
+        const fallback = await readBoardTasks(fetchImpl, token, `/tasks?project_id=4060&status=Normal&search=${fallbackIssueId}&limit=100`, { now, deadline, onRefusal: (error) => { refusal = error; } });
+        if (fallback && !Array.isArray(fallback.tasks)) throw new Error("Canary fallback lookup returned no tasks");
         const receipt = new RegExp(`<p>posthog-dispatch-fallback:issue:${fallbackIssueId}:[0-9a-f-]{36}<\\/p>`);
-        ticket = fallback.tasks.find((task) => receipt.test(task.description ?? ""));
-        boardId = 4060;
-        delivery = "fallback";
+        ticket = fallback?.tasks.find((task) => receipt.test(task.description ?? ""));
+        if (ticket) {
+          boardId = 4060;
+          delivery = "fallback";
+        }
       }
     }
     if (ticket) {
@@ -139,7 +171,7 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
     }
     await wait(Math.min(30_000, Math.max(0, deadline - now())));
   }
-  throw new Error(`No matching board 15 PostHog ticket within 15 minutes: ${marker}`);
+  throw refusal ?? new Error(`No matching board 15 PostHog ticket within 15 minutes: ${marker}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
