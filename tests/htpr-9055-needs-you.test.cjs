@@ -105,11 +105,14 @@ test("arrival scoring reads current recipient, assignees and explicit completion
   }
 });
 
-test("Needs you honors explicit active and completed columns instead of their names", () => {
-  const project = { section: [{ section_title: "Live", isDone: false }, { section_title: "Review", isDone: true }] };
+test("Needs you honors explicit completion metadata and falls back when omitted", () => {
+  const project = { section: [{ section_title: "Live", isDone: false }, { section_title: "Review", isDone: true },
+    { section_title: "Done" }, { section_title: "In Progress" }] };
   const rows = [notice({ project, task: { waitingOnUserId: 985, section: "Live" } }),
-    notice({ taskId: 2, project, task: { waitingOnUserId: 985, section: "Review" } })];
-  assert.deepEqual(rules.needsYouIndices(rows), [0]);
+    notice({ taskId: 2, project, task: { waitingOnUserId: 985, section: "Review" } }),
+    notice({ taskId: 3, project, task: { waitingOnUserId: 985, section: "Done" } }),
+    notice({ taskId: 4, project, task: { waitingOnUserId: 985, section: "In Progress" } })];
+  assert.deepEqual(rules.needsYouIndices(rows), [0, 3]);
 });
 
 test("catch-up route rejects unsigned calls and scores without a daily scan", async () => {

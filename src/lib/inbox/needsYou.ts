@@ -1,5 +1,5 @@
-import type { Assignees, Comment, Notification, Priority, Project, Section, Task } from "@prisma/client";
-import { doneColumnTitles, isDoneColumn } from "@/lib/doneColumns";
+import type { Assignees, Comment, Notification, Priority, Project, Task } from "@prisma/client";
+import { doneColumnTitles, isDoneColumn, type DoneColumnInput } from "@/lib/doneColumns";
 import { isQuestionComment } from "@/lib/inboxDecisions";
 
 export const NEEDS_YOU_SPLIT = "Needs you";
@@ -7,7 +7,7 @@ export type NeedsYouNotice = Pick<Notification, "type" | "userId"> &
   Partial<Pick<Notification, "taskId" | "fromAgentId" | "message" | "needsYouScore" | "needsYouSource" | "directReply">> & {
     comment?: Partial<Pick<Comment, "text" | "kind">> | null;
     task?: Partial<Pick<Task, "title" | "waitingOnUserId" | "waitingOnAgentId" | "status" | "section">> & { priority?: Partial<Pick<Priority, "priority_index">> | null; assignees?: Partial<Pick<Assignees, "userId" | "agentId">>[] } | null;
-    project?: Partial<Pick<Project, "id" | "teamId">> & { section?: Pick<Section, "section_title" | "isDone">[] } | null;
+    project?: Partial<Pick<Project, "id" | "teamId">> & { section?: DoneColumnInput[] } | null;
     needsYouEnabled?: boolean;
     isDecision?: boolean;
     quietImportant?: boolean;
