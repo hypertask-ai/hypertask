@@ -283,17 +283,19 @@ jobs:
           trap 'rm -rf "$gate_tmp"' EXIT
           source .github/scripts/github-api-retry.sh
           gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$gate_tmp/pulls.json"
-          jq -ce '
-            [flatten[] | {number, head_sha: (.head.sha // ""), pull: .}]
+          node .github/scripts/feature-flag-status-batch.mjs "$REPO" >"$gate_tmp/statuses.json" || {
+            [ "$?" -eq 78 ] && exit 0
+            exit 2
+          }
+          jq -ce --slurpfile statuses "$gate_tmp/statuses.json" '
+            [flatten[] | {number, head_sha: (.head.sha // ""), pull: ., statuses: ($statuses[0][.head.sha] // [])}]
             | unique_by(.number)
-            | if any(.[]; (.head_sha | test("^[0-9a-f]{40}$") | not)) then
-                error("An open production pull request has no head commit")
-              elif length <= 256 then
+            | if length <= 256 and all(.[]; .head_sha | test("^[0-9a-f]{40}$")) then
                 group_by(.head_sha) | map(. as $group | .[] + {head_pr_count: ($group | length)}) | sort_by(.number)
-              else error("Too many pull requests for reconciliation matrix")
+              else error("Invalid reconciliation matrix: missing head commit or more than 256 pull requests")
               end
           ' "$gate_tmp/pulls.json" >"$RUNNER_TEMP/feature-flag-snapshots.json"
-          echo "matrix=$(jq -c 'map(del(.pull))' "$RUNNER_TEMP/feature-flag-snapshots.json")" >>"$GITHUB_OUTPUT"
+          echo "matrix=$(jq -c 'map(del(.pull, .statuses))' "$RUNNER_TEMP/feature-flag-snapshots.json")" >>"$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: steps.pulls.outputs.matrix != ''
         with:
@@ -408,8 +410,7 @@ jobs:
               description: $description,
               target_url: $target_url
             }' >"$2"
-            publish_status_if_changed "$1" "$2" "${4:-}" ||
-              echo "::error::Cannot publish the feature-flag-gate error for $1."
+            publish_status_if_changed "$1" "$2" "${4:-}"
           }
 
           parser_dir="$gate_tmp/parser"
@@ -446,7 +447,7 @@ jobs:
             echo "::error::Cannot install the trusted TypeScript parser."
             while IFS= read -r head_sha; do
               publish_reconciliation_error "$head_sha" "$gate_tmp/error-$head_sha.json" \
-                "feature-flag-gate could not install its parser"
+                "feature-flag-gate could not install its parser" || true
             done <"$open_heads"
             exit 2
           fi
@@ -463,7 +464,7 @@ jobs:
               incomplete_head=$(jq -r '.head.sha // empty' <<<"$pull")
               if [[ "$incomplete_head" =~ ^[0-9a-f]{40}$ ]]; then
                 publish_reconciliation_error "$incomplete_head" "$gate_tmp/error-$incomplete_head.json" \
-                  "feature-flag-gate found incomplete pull request metadata"
+                  "feature-flag-gate found incomplete pull request metadata" || true
               fi
               failures=$((failures + 1))
               continue
@@ -483,10 +484,7 @@ jobs:
             result=2
             fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
             statuses_file="$gate_tmp/latest-statuses-$number.json"
-            if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
-              echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; evaluating without deduplication."
-              printf '[]\n' >"$statuses_file"
-            fi
+            jq -c --argjson number "$number" '.[] | select(.pull.number == $number) | .statuses // []' "$RUNNER_TEMP/feature-flag-snapshots.json" >"$statuses_file"
             if [ "$head_pr_count" -eq 1 ] && [ "$head_repo" = "$REPO" ] && jq -e --arg fingerprint "$fingerprint" --argjson rejudge_minutes 30 '
               map(select(.context == "feature-flag-gate"))[0] as $current |
               ($current.state == "success" or $current.state == "failure") and
@@ -499,6 +497,10 @@ jobs:
               continue
             fi
             evaluated=$((evaluated + 1))
+            if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
+              echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; evaluating without deduplication."
+              printf '[]\n' >"$statuses_file"
+            fi
 
             if [ "$head_pr_count" -ne 1 ]; then
               echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
@@ -545,7 +547,8 @@ jobs:
             while IFS= read -r decision; do
               fingerprint=$(jq -r '.fingerprint' <<<"$decision")
               publish_reconciliation_error "$(jq -r '.head_sha' <<<"$decision")" "$(jq -r '.payload' <<<"$decision")" \
-                "feature-flag-gate could not refresh pull-request heads" "$(jq -r '.statuses_file' <<<"$decision")"
+                "feature-flag-gate could not refresh pull-request heads" "$(jq -r '.statuses_file' <<<"$decision")" ||
+                echo "::error::Cannot publish the feature-flag-gate error for #$(jq -r '.number' <<<"$decision")."
               failures=$((failures + 1))
             done <"$gate_tmp/decisions.jsonl"
           elif [ "$evaluated" -gt 0 ]; then
@@ -571,7 +574,8 @@ jobs:
                 end
               ' "$fresh_heads_json"); then
                 echo "::error::Cannot re-check whether pull request #$number shares its head commit."
-                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file"
+                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file" ||
+                  echo "::error::Cannot publish the feature-flag-gate error for #$number."
                 failures=$((failures + 1))
                 continue
               fi
@@ -602,7 +606,8 @@ jobs:
                   continue
                 fi
                 echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
-                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file"
+                publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file" ||
+                  echo "::error::Cannot publish the feature-flag-gate error for #$number."
                 continue
               fi
 

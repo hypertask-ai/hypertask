@@ -87,7 +87,7 @@ function runWorkflow(t, {
   job = reconciliation, drift = false, missingHead = false, apiFailure,
   gateScript = 'console.log("ok");\n', statuses = () => ({}), sharedHead = false,
   refreshedPull = (pull) => pull, publicationPull = refreshedPull, freshSharedHead = false, forkHead = false,
-  extraPulls = null, discoveredPull = (pull) => pull, parserFailure = false,
+  extraPulls = null, discoveredPull = (pull) => pull, parserFailure = false, discoveryStatuses = statuses,
 } = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -180,7 +180,7 @@ function runWorkflow(t, {
     labels: [],
   };
   env.RECONCILE_HEAD_SHA = head;
-  fs.writeFileSync(path.join(fixture, "feature-flag-snapshots.json"), JSON.stringify([{ pull: discoveredPull(pull) }]));
+  fs.writeFileSync(path.join(fixture, "feature-flag-snapshots.json"), JSON.stringify([{ pull: discoveredPull(pull), statuses: discoveryStatuses(pull)[head] || [] }]));
   env.RECONCILE_HEAD_PR_COUNT = sharedHead ? "2" : "1";
   fs.writeFileSync(env.FIXTURE_PR, JSON.stringify(pull));
   fs.writeFileSync(env.FIXTURE_STATUSES, JSON.stringify(statuses(pull)));
@@ -280,8 +280,8 @@ exit 1
 }
 
 for (const state of ["success", "failure"]) {
-  test(`reconcile: unchanged ${state} fingerprint skips with one selected-head status read and no POST`, (t) => {
-    const { result, output, posts, calls, pull } = runWorkflow(t, {
+  test(`reconcile: unchanged ${state} snapshot skips without per-head reads or POST`, (t) => {
+    const { result, output, posts, calls } = runWorkflow(t, {
       statuses: (pull) => ({ [pull.head.sha]: [
         { context: "another-gate", state: "pending" },
         featureFlagStatus(pull, { state }),
@@ -292,9 +292,7 @@ for (const state of ["success", "failure"]) {
     assert.match(output, /skip #42: unchanged since its last status under 30 minutes ago/);
     assert.match(output, /evaluated 0, skipped 1/);
     assert.deepEqual(posts, []);
-    assert.deepEqual(calls.map((call) => call.endpoint), [
-      `repos/fixture/repository/commits/${pull.head.sha}/statuses?per_page=100`,
-    ]);
+    assert.deepEqual(calls, []);
   });
 }
 
@@ -405,7 +403,7 @@ for (const [field, change] of [
     test(`reconcile: changed ${field} with ${state} preserves only a current unique-head verdict`, (t) => {
       const preserve = ["title", "labels"].includes(field) && ["success", "failure"].includes(state);
       const { result, output, posts } = runWorkflow(t, {
-        publicationPull: change, freshSharedHead: state === "shared success",
+        publicationPull: change, freshSharedHead: state === "shared success", discoveryStatuses: () => ({}),
         statuses: (pull) => ({ [pull.head.sha]: state === "absent" ? [] : [featureFlagStatus(state === "stale success" ? pull : change(pull), {
           state: state === "failure" ? "failure" : "success", updated_at: "2020-01-01T00:00:00Z",
         })] }),
@@ -580,6 +578,7 @@ for (const [name, pages, expected, rateLimited = false] of [
   ["empty", [[]], []],
   ["rate limited", [[]], undefined, true],
   ["paginated", [[matrixPull(42)], [matrixPull(43), matrixPull(42)]], [discovered(42), discovered(43)]],
+  ["256 heads with batched statuses", [Array.from({ length: 256 }, (_, index) => matrixPull(index + 1))], Array.from({ length: 256 }, (_, index) => discovered(index + 1))],
   ["matrix limit", [Array.from({ length: 257 }, (_, index) => matrixPull(index + 1))], null],
   ["a pull request without a head commit", [[matrixPull(42), { number: 43 }]], null],
 ]) {
@@ -589,13 +588,18 @@ for (const [name, pages, expected, rateLimited = false] of [
     const discovery = yaml.load(workflow).jobs["reconciliation-pull-requests"];
     assert.equal(discovery.permissions.statuses, undefined, "discovery cannot publish statuses");
     fs.writeFileSync(path.join(fixture, "gh"), `#!/bin/sh
+case "$*" in *graphql*)
+  echo graphql >>"$RUNNER_TEMP/batch-calls"
+  cursor=0; for arg in "$@"; do case "$arg" in cursor=*) cursor=\${arg#cursor=} ;; esac; done
+  printf '%s' "$FIXTURE_PAGES" | jq --argjson cursor "$cursor" '
+    flatten | .[$cursor:($cursor+100)] | {data:{repository:{pullRequests:{pageInfo:{hasNextPage:(length == 100),endCursor:(($cursor+100)|tostring)},
+      nodes:map({headRefOid:.head.sha,commits:{nodes:[{commit:{oid:.head.sha,status:{contexts:[{context:"untrusted-secret-marker"}]}}}]}})}}}}'
+  exit 0 ;; esac
 case "$*" in *"--paginate --slurp"*) ;; *) exit 1 ;; esac
 if [ "$FIXTURE_RATE_LIMITED" = "true" ]; then
   printf 'HTTP/2.0 403 Forbidden\\nX-Ratelimit-Remaining: 0\\nX-Ratelimit-Reset: %s\\n\\n{}\\n' "$(( $(date +%s) + 3600 ))"
-  exit 1
-fi
-printf 'HTTP/2.0 200 OK\\nContent-Type: application/json\\n\\n'
-printf '%s\\n' "$FIXTURE_PAGES"
+  exit 1; fi
+printf 'HTTP/2.0 200 OK\\nContent-Type: application/json\\n\\n%s\\n' "$FIXTURE_PAGES"
 `, { mode: 0o755 });
     const output = path.join(fixture, "output");
     fs.writeFileSync(output, "");
@@ -609,9 +613,12 @@ printf '%s\\n' "$FIXTURE_PAGES"
     assert.ok(Number.isInteger(result.status) && (result.status === 0) === (expected !== null), result.error?.message || result.stdout + result.stderr);
     if (rateLimited) assert.match(result.stderr, /skipped: GitHub rate limited/);
     assert.equal(fs.readFileSync(output, "utf8"), expected == null ? "" : `matrix=${JSON.stringify(expected)}\n`, "only numeric IDs and SHAs enter outputs");
-    if (expected) assert.deepEqual(
-      JSON.parse(fs.readFileSync(path.join(fixture, "feature-flag-snapshots.json"), "utf8")).map(({ pull }) => pull),
-      expected.map(({ number }) => matrixPull(number)));
+    if (expected) {
+      const snapshots = JSON.parse(fs.readFileSync(path.join(fixture, "feature-flag-snapshots.json"), "utf8"));
+      assert.deepEqual(snapshots.map(({ pull }) => pull), expected.map(({ number }) => matrixPull(number)));
+      assert.ok(snapshots.every(({ statuses }) => statuses[0]?.context === "untrusted-secret-marker"));
+      assert.equal(fs.readFileSync(path.join(fixture, "batch-calls"), "utf8").trim().split("\n").length, Math.floor(pages.flat().length / 100) + 1);
+    }
   });
 }
 
