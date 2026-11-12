@@ -212,7 +212,8 @@ function webhookHarness(messageId) {
   };
   const db = {
     agentWebhookDelivery: {
-      updateMany: async () => {
+      updateMany: async ({ data }) => {
+        if (data.status !== "processing") { Object.assign(row, data); return { count: 1 }; }
         if (!["pending", "retrying", "processing"].includes(row.status)) return { count: 0 };
         row.status = "processing";
         return { count: 1 };
@@ -220,7 +221,7 @@ function webhookHarness(messageId) {
       findUnique: async () => row,
       update: async ({ data }) => Object.assign(row, data),
     },
-    agentWebhookSubscription: { update: async () => ({}) },
+    agentWebhookSubscription: { updateMany: async () => ({ count: 1 }) },
     $transaction: async (operations) => Promise.all(operations),
   };
   const webhook = load("src/lib/agentWebhooks/delivery.ts", {
