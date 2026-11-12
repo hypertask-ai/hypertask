@@ -376,7 +376,8 @@ printf '%s\n' "$*" >> "$HOLD_READS"
 case " $* " in
   *' api '*'/pulls?'*) [ -n "${HOLD_REST_OPEN:-}" ] || exit 1; cat "$HOLD_REST_OPEN" ;;
   *' api '*'search/issues'*) [ -n "${HOLD_REST_MERGED:-}" ] || exit 1; cat "$HOLD_REST_MERGED" ;;
-  *' --search head:runner '*) [ -z "${HOLD_RUNNER_FAIL:-}" ] || exit 1; cat "${HOLD_RUNNER_OPEN:-$HOLD_OPEN}" ;;
+  *' --search head:runner-'*) [ -z "${HOLD_RUNNER_FAIL:-}" ] || exit 1; cat "${HOLD_RUNNER_OPEN:-$HOLD_OPEN}" ;;
+  *' --search head:runner'*) [ -z "${HOLD_COMPACT_FAIL:-}" ] || exit 1; cat "${HOLD_COMPACT_OPEN:-$HOLD_OPEN}" ;;
   *' --state open '*) [ -z "${HOLD_OPEN_FAIL:-}" ] || exit 1; cat "$HOLD_OPEN" ;;
   *' --state merged '*) [ -z "${HOLD_MERGED_FAIL:-}" ] || exit 1; cat "$HOLD_MERGED" ;;
   *) exit 1 ;;
@@ -432,7 +433,9 @@ SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim h
 eq "an open PR in the shared copy holds RUNNER 9" "$?" 4
 SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
 eq "the same copy does not hold RUNNER 9 for its own PR" "$?" 0
-eq "a usable copy only refreshes runner ownership" "$(grep -c -- '--search head:runner' "$HOLD_READS")" 2
+eq "a usable copy only refreshes runner ownership" "$(grep -c -- '--search head:runner' "$HOLD_READS")" 4
+eq "a usable copy refreshes the hyphenated runner form" "$(grep -c -- '--search head:runner-9 ' "$HOLD_READS")" 2
+eq "a usable copy refreshes the compact runner form" "$(grep -c -- '--search head:runner9 ' "$HOLD_READS")" 2
 eq "a usable copy avoids unfiltered live reads" "$(grep -- '--state open' "$HOLD_READS" | grep -vc -- '--search head:runner')" 0
 printf '[{"number":78,"headRefName":"runner-1/yper4-997","title":"YPER4-997 [BUGFIX] Live work","isDraft":false}]' > "$HOLD_OPEN"
 SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
@@ -441,6 +444,15 @@ SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim h
 eq "a newly opened PR absent from the copy remains resumable" "$?" 0
 SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
 eq "a closed PR remaining in the copy no longer holds its runner" "$?" 0
+printf '[]' > "$D/no-live.json"
+printf '[{"number":81,"headRefName":"runner9/yper4-996","title":"YPER4-996 [BUGFIX] Compact work","isDraft":false}]' > "$D/compact-live.json"
+SHIP_SESSION_NAME='RUNNER 9' HOLD_OPEN=$D/no-live.json HOLD_COMPACT_OPEN=$D/compact-live.json SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "a compact runner branch opened after the copy holds its runner" "$?" 4
+printf '[{"number":82,"headRefName":"runner-9/yper4-995","title":"YPER4-995 [BUGFIX] Live work","isDraft":false}]' > "$D/live-hold.json"
+: > "$HOLD_READS"
+SHIP_SESSION_NAME='RUNNER 9' HOLD_OPEN=$D/live-hold.json HOLD_RUNNER_OPEN=$D/no-live.json HOLD_COMPACT_FAIL=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
+eq "a failed compact refresh falls back to the full live hold" "$?" 4
+eq "a failed compact refresh reads GitHub unfiltered" "$(grep -- '--state open' "$HOLD_READS" | grep -vc -- '--search head:runner')" 1
 SHIP_SESSION_NAME='RUNNER 1' HOLD_RUNNER_FAIL=1 SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
 eq "failed ownership refresh falls back to the full live hold" "$?" 4
 printf '[{}]' > "$D/bad-runner.json"
