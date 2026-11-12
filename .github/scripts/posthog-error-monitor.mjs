@@ -1,8 +1,10 @@
 import { setTimeout } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { renderPlainLanguageTicketDescription } from "../../src/lib/tickets/plainLanguageTicket.mjs";
 
 const APP = "https://app.hypertask.ai";
+export const INFRA_BOARD = 11514;
+export const APP_FALLBACK_BOARD = 2060;
+export const BOARD_TOKEN_ENV = "HYPERTASK_FLEET_BOARD_MCP_TOKEN";
 export const FAILURE_TITLE = "[INFRA] PostHog error-to-ticket monitoring failed";
 
 // Independent of the PostHog receiver, credentials, queries and incident parser.
@@ -18,39 +20,36 @@ async function api(fetchImpl, token, path, body, key) {
   return result;
 }
 
-export async function reportFailure({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, runUrl, workflow, runId }) {
+export async function reportFailure({ fetchImpl = fetch, token = process.env[BOARD_TOKEN_ENV], runUrl, workflow, runId }) {
   if (!token || !/^https:\/\/github.com\/hypertask-ai\/hypertask\/actions\/runs\/\d+$/.test(runUrl) || !/^\d+$/.test(String(runId))) {
     throw new Error("Failure reporter credentials or run identity are invalid");
   }
   let existing;
   for (const status of ["Normal", "Archive", "Deleted"]) {
-    const page = await api(fetchImpl, token, `/tasks?project_id=4060&status=${status}&search=${encodeURIComponent(FAILURE_TITLE)}&limit=100`);
+    const page = await api(fetchImpl, token, `/tasks?project_id=${INFRA_BOARD}&status=${status}&search=${encodeURIComponent(FAILURE_TITLE)}&limit=100`);
     if (!Array.isArray(page.tasks)) throw new Error("Failure ticket lookup returned no tasks");
     existing = page.tasks.find((task) => task.title === FAILURE_TITLE);
     if (existing) break;
   }
-  const text =
-    renderPlainLanguageTicketDescription({
-      whatWrongOrWanted: "The PostHog error-to-ticket safety net failed.",
-      whoItAffects: "internal only; production errors may not reach the Bugs board until this is fixed",
-      recommendedCourseAndWhy:
-        "Read the workflow log, restore credentials or the receiver, and rerun the monitor. Why: without it, new server errors stay invisible on the board.",
-      whatValentinMustDecide: "nothing",
-      howToUndo: "close this ticket when the monitor is green again",
-    }) +
-    `<p><a href="${runUrl}">Failed workflow run ${runId}</a></p>`;
+  const text = [
+    "<p><strong>Problem:</strong> The PostHog error-to-ticket safety net failed.</p>",
+    "<p><strong>Fix:</strong> Read the run log and restore the credentials or receiver. Then rerun the monitor.</p>",
+    "<p><strong>Done when:</strong> The nightly canary passes with no new failure.</p>",
+    "<p><strong>Risk:</strong> Low. New production errors may stay invisible. Revert the last change to undo.</p>",
+    "<p><strong>Decision:</strong> None.</p>",
+  ].join("") + `<p><a href="${runUrl}">Failed workflow run ${runId}</a></p>`;
   if (existing) {
     const projects = await api(fetchImpl, token, "/projects?limit=100");
-    const sections = projects.projects?.find((item) => Number(item.id) === 4060)?.sections;
+    const sections = projects.projects?.find((item) => Number(item.id) === INFRA_BOARD)?.sections;
     const done = sections?.find((item) => (item.section_title ?? item.title) === "Done");
     if (existing.status === "Archive" || existing.status === "Deleted" || Number(existing.sectionId ?? existing.section_id) === Number(done?.id)) {
       const active = sections?.find((item) => (item.section_title ?? item.title) === "Backlog") || sections?.find((item) => (item.section_title ?? item.title) !== "Done");
-      if (!active?.id) throw new Error("Board 4060 active section is unavailable");
+      if (!active?.id) throw new Error(`Board ${INFRA_BOARD} active section is unavailable`);
       await api(fetchImpl, token, "/tasks/update", { task_id: existing.id, status: "Normal", sectionId: Number(active.id) });
     }
     await api(fetchImpl, token, "/comments", { task_id: existing.id, text, content_type: "html" }, `posthog-monitor-failure-${runId}`);
   } else {
-    await api(fetchImpl, token, "/tasks/create", { project_id: 4060, title: FAILURE_TITLE, description: text, content_type: "html" }, "posthog-monitor-failure-ticket");
+    await api(fetchImpl, token, "/tasks/create", { project_id: INFRA_BOARD, title: FAILURE_TITLE, description: text, content_type: "html" }, "posthog-monitor-failure-ticket");
   }
   console.log(`PostHog failure recorded for run ${runId}`);
   return { action: existing ? "updated" : "created", workflow };
@@ -83,7 +82,7 @@ export async function findCanaryIssue({ fetchImpl = fetch, apiKey, marker, deadl
   return [...matches][0];
 }
 
-export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, testToken = process.env.POSTHOG_ERROR_TEST_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, runId = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT || "1", now = Date.now, wait = setTimeout, timeoutMs = 15 * 60 * 1000 } = {}) {
+export async function runCanary({ fetchImpl = fetch, token = process.env[BOARD_TOKEN_ENV], testToken = process.env.POSTHOG_ERROR_TEST_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, runId = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT || "1", now = Date.now, wait = setTimeout, timeoutMs = 15 * 60 * 1000 } = {}) {
   if (!token || !testToken || !apiKey || !/^\d{1,20}$/.test(String(runId)) || !/^\d{1,3}$/.test(String(attempt))) {
     throw new Error("Nightly canary credentials or run identity are missing");
   }
@@ -107,11 +106,11 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
         fallbackIssueId = await findCanaryIssue({ fetchImpl, apiKey, marker, deadline, now });
       }
       if (fallbackIssueId) {
-        const fallback = await api(fetchImpl, token, `/tasks?project_id=4060&status=Normal&search=${fallbackIssueId}&limit=100`);
+        const fallback = await api(fetchImpl, token, `/tasks?project_id=${APP_FALLBACK_BOARD}&status=Normal&search=${fallbackIssueId}&limit=100`);
         if (!Array.isArray(fallback.tasks)) throw new Error("Canary fallback lookup returned no tasks");
         const receipt = new RegExp(`<p>posthog-dispatch-fallback:issue:${fallbackIssueId}:[0-9a-f-]{36}<\\/p>`);
         ticket = fallback.tasks.find((task) => receipt.test(task.description ?? ""));
-        boardId = 4060;
+        boardId = APP_FALLBACK_BOARD;
         delivery = "fallback";
       }
     }

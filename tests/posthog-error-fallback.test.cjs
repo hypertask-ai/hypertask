@@ -9,9 +9,10 @@ function fixture() {
   const tasks = [];
   let available = true;
   let failWrite = false;
+  const projectQueries = [];
   const tx = {
     task: { findFirst: async ({ where }) => { const task = tasks.find(task => task.description.includes(where.description_.is.content.contains)); return task ? { id: task.id } : null; } },
-    project: { findFirst: async () => available ? { uniqueIdentifier: 'YPER4', section: [{ id: 10414, section_title: 'Backlog' }], labels: [{ id: 'existing-infra' }] } : null },
+    project: { findFirst: async (args) => { projectQueries.push(args); return available ? { uniqueIdentifier: 'IGSH', section: [{ id: 4351, section_title: 'Todo' }], labels: [{ id: '2060-infra' }] } : null; } },
   };
   const { recordPostHogDispatchFallback } = load('src/utils/controllers/errors/recordPostHogDispatchFallback.ts', {
     '@/lib/prisma': { default: tx },
@@ -22,7 +23,7 @@ function fixture() {
       return { task };
     } },
   });
-  return { tasks, record: recordPostHogDispatchFallback, available: value => { available = value; }, failWrite: value => { failWrite = value; } };
+  return { tasks, projectQueries, record: recordPostHogDispatchFallback, available: value => { available = value; }, failWrite: value => { failWrite = value; } };
 }
 
 test('fallback persists one machine-authored board incident per alert event, without a GitHub or MCP token', async () => {
@@ -31,9 +32,15 @@ test('fallback persists one machine-authored board incident per alert event, wit
   assert.deepEqual(await state.record(alert, 429), first);
   assert.equal(state.tasks.length, 1);
   const task = state.tasks[0];
-  assert.equal(task.projectId, 4060);
+  assert.equal(task.projectId, 2060);
   assert.equal(task.userId, 332);
-  assert.deepEqual(task.labelIds, ['existing-infra']);
+  assert.deepEqual(task.labelIds, ['2060-infra']);
+  assert.equal(task.sectionId, 4351);
+  assert.equal(task.sectionTitle, 'Todo');
+  const query = state.projectQueries[0];
+  assert.deepEqual(query.where, { id: 2060, status: 'Normal' });
+  assert.deepEqual(query.select.section, { where: { deleted: false, visibility: true, section_title: 'Todo' }, select: { id: true, section_title: true }, take: 1 });
+  assert.deepEqual(query.select.labels, { where: { value: { equals: 'Infra', mode: 'insensitive' } }, select: { id: true }, take: 1 });
   assert.match(task.description, new RegExp(`posthog-dispatch-fallback:issue:${ISSUE}:${alert.event_id}`));
   assert.match(task.description, /HTTP 403/);
   await state.record({ ...alert, event_id: '0199aa11-bb22-7c33-8d44-000000000002' }, 429);

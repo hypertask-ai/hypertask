@@ -96,7 +96,7 @@ test("canary refuses mismatched issues, failed resolution and late alert deliver
 });
 
 test("watchdog directly creates one infra ticket and comments on it for subsequent failing runs", async () => {
-  const { reportFailure, FAILURE_TITLE } = await import(script);
+  const { reportFailure, FAILURE_TITLE, INFRA_BOARD } = await import(script);
   const tasks = [];
   const calls = [];
   const fetchImpl = async (url, options) => {
@@ -104,13 +104,13 @@ test("watchdog directly creates one infra ticket and comments on it for subseque
     const body = options.body ? JSON.parse(options.body) : undefined;
     if (url.includes("/tasks?")) return response({ tasks });
     if (url.endsWith("/tasks/create")) { tasks.push({ ...body, id: 100, status: "Normal" }); return response({ task: { id: 100, ticketNumber: "YPER4-999" } }); }
-    if (url.includes("/projects?")) return response({ projects: [{ id: 4060, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
+    if (url.includes("/projects?")) return response({ projects: [{ id: INFRA_BOARD, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
     if (url.endsWith("/comments")) return response({ success: true });
     assert.fail(url);
   };
   for (const runId of ["10001", "10002", "10003"]) await reportFailure({ fetchImpl, token: "fixture", runId, runUrl: `https://github.com/hypertask-ai/hypertask/actions/runs/${runId}`, workflow: "PostHog Error Alert" });
   assert.equal(tasks.length, 1);
-  assert.equal(tasks[0].project_id, 4060);
+  assert.equal(tasks[0].project_id, 11514);
   assert.equal(tasks[0].title, FAILURE_TITLE);
   assert.equal(calls.filter((call) => call.url.endsWith("/comments")).length, 2);
   assert.equal(JSON.parse(calls.at(-1).options.body).task_id, 100);
@@ -123,7 +123,7 @@ test("watchdog reuses archived incidents and rejects untrusted run links", async
   const fetchImpl = async (url, options) => {
     if (url.includes("status=Normal")) return response({ tasks: [] });
     if (url.includes("status=Archive")) return response({ tasks: [{ title: FAILURE_TITLE, id: 100, status: "Archive" }] });
-    if (url.includes("/projects?")) return response({ projects: [{ id: 4060, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 11514, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
     writes.push(JSON.parse(options.body)); return response({ success: true });
   };
   await reportFailure({ fetchImpl, token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001" });
@@ -146,12 +146,12 @@ test("nightly and independent workflow_run watchdog use trusted production code 
   for (const job of [nightly.jobs.canary, watcher.jobs.report]) {
     assert.equal(job["runs-on"], "ubuntu-latest");
     assert.equal(job.steps[0].with.ref, "production");
-    assert.equal(job.steps[1].env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_MCP_TOKEN }}");
+    assert.equal(job.steps[1].env.HYPERTASK_FLEET_BOARD_MCP_TOKEN, "${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}");
   }
 });
 
 
-test("review watchdog reopen returns Normal Done tickets to board 4060 active sections", async () => {
+test("review watchdog reopen returns Normal Done tickets to the infra board active sections", async () => {
   const { reportFailure, FAILURE_TITLE } = await import(script);
   for (const sections of [
     [{ id: 11, section_title: "In Progress" }, { id: 20, section_title: "Done" }, { id: 10, section_title: "Backlog" }],
@@ -160,7 +160,7 @@ test("review watchdog reopen returns Normal Done tickets to board 4060 active se
     const writes = [];
     const fetchImpl = async (url, options) => {
       if (url.includes("/tasks?")) return response({ tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] });
-      if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 99, title: "Backlog" }] }, { id: 4060, sections }] });
+      if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 99, title: "Backlog" }] }, { id: 11514, sections }] });
       writes.push({ url, body: JSON.parse(options.body) });
       return response({ success: true });
     };
@@ -169,7 +169,7 @@ test("review watchdog reopen returns Normal Done tickets to board 4060 active se
     assert.match(writes[0].url, /tasks\/update$/);
     assert.match(writes[1].url, /comments$/);
   }
-  await assert.rejects(reportFailure({ token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001", fetchImpl: async (url) => response(url.includes("/tasks?") ? { tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] } : { projects: [{ id: 4060, sections: [{ id: 20, title: "Done" }] }] }) }), /active section is unavailable/);
+  await assert.rejects(reportFailure({ token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001", fetchImpl: async (url) => response(url.includes("/tasks?") ? { tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] } : { projects: [{ id: 11514, sections: [{ id: 20, title: "Done" }] }] }) }), /active section is unavailable/);
 });
 
 
@@ -180,16 +180,16 @@ test("canary verifies and closes an independent fallback only after matching the
   const fetchImpl = async (url, options) => {
     if (url.endsWith("/error-test")) return response({}, 500);
     if (url.includes("/error_tracking/issues/?")) { assert.equal(options.method, "GET"); return response({ results: [{ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1" }], next: null }); }
-    if (url.includes("/tasks?")) return response({ tasks: new URL(url).searchParams.get("project_id") === "4060" ? [{ id: 101, description: receipt }] : [] });
+    if (url.includes("/tasks?")) return response({ tasks: new URL(url).searchParams.get("project_id") === "2060" ? [{ id: 101, description: receipt }] : [] });
     if (url.includes("/issues/")) return response({ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
-    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }, { id: 4060, sections: [{ id: 888, section_title: "Done" }] }] });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }, { id: 2060, sections: [{ id: 888, section_title: "Done" }] }] });
     if (url.endsWith("/tasks/update")) { writes.push(JSON.parse(options.body)); return response({ success: true }); }
     assert.fail(url);
   };
   const options = { fetchImpl, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1" };
   const result = await runCanary(options);
   assert.equal(result.delivery, "fallback");
-  assert.equal(result.boardId, 4060);
+  assert.equal(result.boardId, 2060);
   assert.deepEqual(writes, [{ task_id: 101, sectionId: 888 }]);
   writes.length = 0;
   await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes(`/issues/${ISSUE_ID}/`) ? response({ id: ISSUE_ID, description: "another customer's error" }) : fetchImpl(url, opts) }), /does not match the nightly canary/);
@@ -220,4 +220,27 @@ test("canary issue discovery uses only bounded same-origin REST reads", async ()
   assert.equal(refusedCalls, 3);
   await assert.rejects(findCanaryIssue({ ...options, fetchImpl: async () => response({}, 403) }), /HTTP 403/);
   await assert.rejects(findCanaryIssue({ ...options, deadline: 0, fetchImpl: async () => assert.fail("expired lookup fetched") }), /exceeded fifteen minutes/);
+});
+
+test("monitor files its failure on live board 11514 with a description the board accepts", async () => {
+  const { reportFailure, INFRA_BOARD, APP_FALLBACK_BOARD } = await import(script);
+  assert.equal(INFRA_BOARD, 11514);
+  assert.equal(APP_FALLBACK_BOARD, 2060);
+  let created;
+  const searched = [];
+  await reportFailure({
+    token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001",
+    fetchImpl: async (url, options) => {
+      if (url.includes("/tasks?")) { searched.push(new URL(url).searchParams.get("project_id")); return response({ tasks: [] }); }
+      if (url.endsWith("/tasks/create")) { created = JSON.parse(options.body); return response({ task: { id: 100 } }); }
+      assert.fail(url);
+    },
+  });
+  assert.deepEqual([...new Set(searched)], ["11514"]);
+  assert.equal(created.project_id, 11514);
+  const text = created.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  for (const sentence of text.split(/(?<=[.!?:;])\s+/)) {
+    const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu) ?? [];
+    assert.ok(words.length <= 12, `too long: ${sentence}`);
+  }
 });
