@@ -42,7 +42,7 @@ TITLE_RE="^($PREFIXES)-[0-9]+ \\[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FE
 fail() { echo "FAIL: $*"; exit 1; }
 
 ship_session_id() {
-  printf '%s' "${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-${CURSOR_CONVERSATION_ID:-}}}}"
+  printf '%s' "${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-${CURSOR_CONVERSATION_ID:-${PI_SESSION_ID:-}}}}}"
 }
 
 check_ticket() {
@@ -81,7 +81,7 @@ check_deeper() {
   deeper_gate_runnable "$id"
   case $? in
     0) ;;
-    1) fail "deeper needs this session's id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID, CODEX_THREAD_ID or CURSOR_CONVERSATION_ID) to find its scope" ;;
+    1) fail "deeper needs this session's id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID, CODEX_THREAD_ID, CURSOR_CONVERSATION_ID or PI_SESSION_ID) to find its scope" ;;
     *) fail "$id has no gate with CHECK: and EXPECT: in this session's $PWD/.unlazy/s-<id>/gates/*.md; a manual note does not count" ;;
   esac
   echo "deeper ok"

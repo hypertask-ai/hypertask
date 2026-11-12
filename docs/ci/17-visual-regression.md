@@ -31,8 +31,11 @@ HYCI-106 replaces the runner image version with a fingerprint of the fonts that 
 the screens: `scripts/visual-font-fingerprint.mjs` asks fontconfig which file backs each
 family the render can reach (`IBM Plex Sans`, `ui-sans-serif`, `system-ui`, `sans-serif`,
 `serif`, `monospace`, `emoji`), hashes those files and every file under `/etc/fonts`, and
-prints sixteen hex characters. It runs after the pinned Chromium and the three pinned
-font packages are installed, so that step now runs before the baseline is restored.
+prints sixteen hex characters. It runs after pinned Chromium and the cached browser
+fonts are registered, before the baseline is restored. HYCI-282 removes Ubuntu package
+downloads: the helper seeds its cache from the hosted image's Liberation and Noto Color Emoji
+fonts, requires both families, and fails if fontconfig cannot
+register them. The v2 cache key excludes earlier, potentially incomplete font caches.
 GitHub rolled `ubuntu-latest` twice inside one hour on 2026-11-03 and each image missed
 the other's saved screens: `visual-compare` rebuilt the base app for 316-325 s of build
 and 94-97 s of capture, against 90-107 s of head work alone when the screens are reused.
