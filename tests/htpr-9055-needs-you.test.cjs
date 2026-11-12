@@ -38,6 +38,10 @@ test("Jev converts a five-point score to 0-100 and stores cost; all failures ret
   assert.deepEqual(await needsYouScore(notice()), { needsYouScore: 95, needsYouReason: "Needs your decision; Update", needsYouSource: "jev", needsYouCostUsd: 0.00003 });
   assert.deepEqual(sent.provider, { zdr: true, only: ["typesafe"], data_collection: "deny" });
   assert.equal(sent.model, "typesafe/jev-1.14");
+  await needsYouScore(notice({ task: { waitingOnUserId: 985, waitingOnAgentId: "runner" } }));
+  assert.equal(sent.state.waiting_on_you, false);
+  await needsYouScore(notice({ task: { waitingOnUserId: 985, waitingOnAgentId: null } }));
+  assert.equal(sent.state.waiting_on_you, true);
   for (const response of [{ ok: false }, { ok: true, json: async () => ({ answers: { urgency: { type: "score", score: 999 } } }) }]) {
     global.fetch = async () => response;
     assert.equal((await needsYouScore(notice({ type: "Mentioned" }))).needsYouScore, 5);
@@ -49,11 +53,14 @@ test("Jev converts a five-point score to 0-100 and stores cost; all failures ret
   try { assert.equal((await needsYouScore(notice())).needsYouSource, "rules"); } finally { clearTimeout(keepAlive); }
 });
 
-function worker({ enabled = true, source = "managed", plan = "Pro", settings = { providers: { openrouter: true } }, providers = [], access = true, ownKey } = {}) {
-  const row = notice({ needsYouScoredAt: null, project: { teamId: "team", team: { aiProviderSettings: settings, byokApiKeys: providers.map((provider) => ({ provider })) } } });
+function worker({ enabled = true, source = "managed", plan = "Pro", settings = { providers: { openrouter: true } }, providers = [], access = true, ownKey, task, section, type = "Mentioned" } = {}) {
+  const row = notice({ needsYouScoredAt: null, ...(task ? { task, type, comment: { text: "Access?", kind: "question" } } : {}), project: { teamId: "team", section, team: { aiProviderSettings: settings, byokApiKeys: providers.map((provider) => ({ provider })) } } });
   let paid = 0;
   const database = { notification: {
-    findMany: async () => row.needsYouScoredAt ? [] : [row],
+    findMany: async ({ include }) => row.needsYouScoredAt ? [] : [{ ...row,
+      task: Object.fromEntries(Object.keys(include.task.select).map((key) => [key, row.task[key]])),
+      project: Object.fromEntries(Object.keys(include.project.select).map((key) => [key, row.project[key]])),
+    }],
     updateMany: async ({ data }) => { if (row.needsYouScoredAt) return { count: 0 }; Object.assign(row, data); return { count: 1 }; },
     update: async ({ data }) => Object.assign(row, data),
   } };
@@ -81,6 +88,28 @@ test("arrival retries and concurrent delivery score once; own-AI teams and revok
     assert.equal(await run(985), 0);
     if (options.enabled === false) assert.equal(row.needsYouScoredAt, null);
   }
+});
+
+test("arrival scoring reads current recipient, assignees and explicit completion metadata", async () => {
+  for (const [task, section, type, score] of [
+    [{ waitingOnUserId: 985, waitingOnAgentId: "runner" }, [], "Mentioned", 13],
+    [{ section: "Live" }, [{ section_title: "Live", isDone: false }], "Mentioned", 13],
+    [{ section: "Review" }, [{ section_title: "Review", isDone: true }], "Mentioned", 8],
+    [{ status: "Archive" }, [], "Mentioned", 8],
+    [{ assignees: [{ userId: 985, agentId: null }] }, [], "Comment", 8],
+  ]) {
+    const { run, row } = worker({ task, section, type, settings: {} });
+    assert.equal(await run(985), 1);
+    assert.equal(row.needsYouScore, score);
+    assert.doesNotMatch(row.needsYouReason, /Waiting on you/);
+  }
+});
+
+test("Needs you honors explicit active and completed columns instead of their names", () => {
+  const project = { section: [{ section_title: "Live", isDone: false }, { section_title: "Review", isDone: true }] };
+  const rows = [notice({ project, task: { waitingOnUserId: 985, section: "Live" } }),
+    notice({ taskId: 2, project, task: { waitingOnUserId: 985, section: "Review" } })];
+  assert.deepEqual(rules.needsYouIndices(rows), [0]);
 });
 
 test("catch-up route rejects unsigned calls and scores without a daily scan", async () => {
@@ -158,13 +187,17 @@ test("addressed agent questions earn a place, but answered questions and bot sta
 
 test("thirty dismissed current blockers stay in Needs you, not ordinary inbox tabs, ahead of sixteen noise rows", async () => {
   const date = new Date("2026-11-12T03:00:00Z");
-  const project = { id: 7049, title: "QA", teamId: "team" };
+  const project = { id: 7049, title: "QA", teamId: "team", section: [
+    { section_title: "Live", isDone: false }, { section_title: "Review", isDone: true },
+  ] };
   const waiting = Array.from({ length: 30 }, (_, i) => ({ id: 100 + i, uniqueIndex: 100 + i, projectId: 7049, project,
     title: `Decision ${i}`, status: "Normal", section: "Valentin Review", createdAt: date, sectionChangedAt: date,
     waitingOnUserId: 985, waitingOnAgentId: null, waitingOnSetAt: date, waitingOnSetById: null,
     user: { id: 99, displayName: "Requester" }, notifications: [{ archivedAt: date }],
   }));
+  waiting[0].section = "Live";
   waiting.push({ ...waiting[0], id: 500, notifications: [{ archivedAt: date, needsYouSource: "skipped" }] });
+  waiting.push({ ...waiting[0], id: 501, section: "Review" });
   const noise = Array.from({ length: 16 }, (_, i) => notice({ id: i + 1, taskId: i + 1, project, fromAgentId: "runner",
     createdAt: date, needsYouSource: "rules", needsYouScore: i % 2 ? 3 : 0,
     task: { title: "Access key status", section: "Backlog", status: "Normal", priority: { priority_index: 1 },
@@ -173,7 +206,9 @@ test("thirty dismissed current blockers stay in Needs you, not ordinary inbox ta
   let enabled = true;
   const database = { $queryRaw: async (query) => query.sql.includes("AS selected") ? noise.map(({ id }) => ({ id })) : [],
     notification: { findMany: async ({ where }) => where.AND?.some((clause) => clause.id) ? noise : [], groupBy: async () => [] },
-    task: { findMany: async () => waiting }, userSetting: { findUnique: async () => null },
+    task: { findMany: async ({ select }) => waiting.map((task) => ({ ...task,
+      project: Object.fromEntries(Object.keys(select.project.select).map((key) => [key, project[key]])),
+    })) }, userSetting: { findUnique: async () => null },
     agent: { findMany: async () => [{ id: "runner", permissions: { postsToImportant: false } }] },
     user: { findMany: async () => [] },
     taskReadState: { findMany: async () => [] }, comment: { groupBy: async () => [] } };

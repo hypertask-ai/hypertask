@@ -85,7 +85,7 @@ export function notificationInboxInclude(
     reaction: { select: { emoji: true } },
     notification_invite: { select: { inviteURL: true } },
     project: {
-      select: { id: true, title: true, name: true, teamId: true, stalenessEnabled: true },
+      select: { id: true, title: true, name: true, teamId: true, stalenessEnabled: true, section: { where: { deleted: false }, select: { section_title: true, isDone: true } } },
     },
     task: {
       select: inboxTaskSelect(userId, includeCachedDescription),
@@ -285,6 +285,7 @@ const notificationGetAll = async (
               name: true,
               teamId: true,
               stalenessEnabled: true,
+              section: { where: { deleted: false }, select: { section_title: true, isDone: true } },
             },
           },
           user: {
