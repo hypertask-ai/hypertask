@@ -760,6 +760,37 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   return null;
 }
 
+function importedBinding(symbol) {
+  const declaration = symbol?.declarations?.[0];
+  if (declaration && typescript.isImportSpecifier(declaration)) {
+    const statement = declaration.parent.parent.parent;
+    if (declaration.isTypeOnly || statement.importClause?.isTypeOnly) return null;
+    return { imported: (declaration.propertyName ?? declaration.name).text, module: statement.moduleSpecifier.text };
+  }
+  if (!declaration || !typescript.isBindingElement(declaration) || declaration.initializer ||
+      declaration.dotDotDotToken || !typescript.isObjectBindingPattern(declaration.parent)) return null;
+  const variable = declaration.parent.parent;
+  if (!typescript.isVariableDeclaration(variable) || !variable.initializer ||
+      !(variable.parent.flags & typescript.NodeFlags.Const)) return null;
+  let initializer = unwrapArgumentExpression(variable.initializer);
+  if (!typescript.isAwaitExpression(initializer)) return null;
+  initializer = unwrapArgumentExpression(initializer.expression);
+  if (!typescript.isCallExpression(initializer) || initializer.expression.kind !== typescript.SyntaxKind.ImportKeyword ||
+      initializer.arguments.length !== 1 || !typescript.isStringLiteral(initializer.arguments[0])) return null;
+  const name = declaration.propertyName ?? declaration.name;
+  if (!typescript.isIdentifier(name) && !typescript.isStringLiteral(name)) return null;
+  return { imported: name.text, module: initializer.arguments[0].text };
+}
+
+function snapshotCallForCallback(fn, checker) {
+  if (!fn || fn.asteriskToken || (!typescript.isArrowFunction(fn) && !typescript.isFunctionExpression(fn))) return null;
+  const call = fn.parent;
+  if (!typescript.isCallExpression(call) || call.arguments[0] !== fn ||
+      call.arguments.length > 2 || !typescript.isIdentifier(call.expression)) return null;
+  const binding = importedBinding(checker.getSymbolAtLocation(call.expression));
+  return binding?.module === "@/lib/flags/modeCache" && binding.imported === "withFeatureFlagSnapshot" ? call : null;
+}
+
 function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = false) {
   const functions = [];
   function collect(node) {
@@ -836,6 +867,14 @@ function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = 
       if (renderOnly || live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live, !entries)) continue;
       live.add(fn);
       changed = true;
+    }
+    for (const fn of renderOnly ? [] : functions) {
+      const call = snapshotCallForCallback(fn, checker);
+      if (call && !live.has(fn) && isLiveCallSite(call, live, !entries) &&
+          !writtenSymbols.has(checker.getSymbolAtLocation(call.expression))) {
+        live.add(fn);
+        changed = true;
+      }
     }
     for (const fn of functions) {
       if (live.has(fn) || fn.asteriskToken || !typescript.isCallExpression(fn.parent) ||
@@ -1064,10 +1103,10 @@ function resolveLocalModule(ref, sourcePath, moduleName) {
   return null;
 }
 
-function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), parameterBoolean = () => undefined, checker = null, live = null } = {}) {
+function controlsReturnedValue(node, { earlyOnly = false, allowAsync = false, after = null, independentParameters = new Set(), parameterBoolean = () => undefined, checker = null, live = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
   const fn = enclosingFunctionLike(node);
-  if (fn?.asteriskToken || (!earlyOnly && (fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
+  if (fn?.asteriskToken || (!earlyOnly && ((!allowAsync && fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword)) ||
       fn?.parameters.some((parameter) => parameter.initializer && staticBoolean(parameter.initializer, true) === null)))) return false;
   for (let child = node, parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
     if (typescript.isTryStatement(parent) ||
@@ -1372,6 +1411,22 @@ function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = contro
     directGates = controlsRuntimeBranch) {
   const live = liveFunctions ?? collectLiveFunctions(sourceFile, checker);
   if (!callEnclosingFunctionIsLive(call, sourceFile, checker, live)) return false;
+  const callback = enclosingFunctionLike(call);
+  const snapshot = snapshotCallForCallback(callback, checker);
+  if (snapshot) {
+    const returnsResult = (value) => controlsReturnedValue(value, { allowAsync: true });
+    if (!gatesRuntimeBehavior(snapshot, checker, sourceFile,
+      (reference) => returnsResult(reference) || referenceGates(reference), live,
+      (value) => returnsResult(value) || directGates(value))) return false;
+    let result = callback.body;
+    if (typescript.isBlock(result)) {
+      result = result.statements.length === 1 && typescript.isReturnStatement(result.statements[0])
+        ? result.statements[0].expression : null;
+    }
+    result = unwrapArgumentExpression(result);
+    if (result && typescript.isAwaitExpression(result)) result = unwrapArgumentExpression(result.expression);
+    if (result === call) return true;
+  }
   if (directGates(call)) return true;
   const assigned = assignedGateSymbol(call, checker);
   if (!assigned?.symbol) return false;
@@ -1584,31 +1639,35 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, c
   const liveFunctions = collectLiveFunctions(sourceFile, checker);
   const renderFunctions = collectLiveFunctions(sourceFile, checker, null, true);
 
-  for (const statement of sourceFile.statements) {
-    if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
-    const moduleName = statement.moduleSpecifier.text;
-    const bindings = statement.importClause?.namedBindings;
-    if (!bindings || !typescript.isNamedImports(bindings)) continue;
-    for (const specifier of bindings.elements) {
-      const imported = specifier.propertyName?.text ?? specifier.name.text;
-      const symbol = checker.getSymbolAtLocation(specifier.name);
-      if (!symbol) continue;
-      importedFunctions.set(symbol, { imported, module: moduleName });
-      if ((moduleName === "@/hooks/useFlag" && imported === "useFlag" && !isServerFile(path)) ||
-          (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
-      const key = registry.byIdentifier.get(imported);
-      if (!key) continue;
-      if (!FLAG_KEY_MODULES.has(moduleName)) {
-        const definitionPath = moduleName.startsWith("@/lib/flags/definitions/")
-          ? `src/${moduleName.slice(2)}${moduleName.endsWith(".ts") ? "" : ".ts"}`
-          : resolveLocalModule(ref, path, moduleName);
-        if (!definitionPath || !flagDefinitionPaths(ref).includes(definitionPath)) continue;
-        const { identifier, definition } = parseFlagFile(git(["show", `${ref}:${definitionPath}`]), definitionPath);
-        if (identifier !== imported || definition.key !== key) continue;
+  const writtenSymbols = writtenBindingSymbols(sourceFile, checker);
+  function registerImport(node) {
+    if ((typescript.isImportSpecifier(node) || typescript.isBindingElement(node)) && typescript.isIdentifier(node.name)) {
+      const symbol = checker.getSymbolAtLocation(node.name);
+      const binding = importedBinding(symbol);
+      if (binding && !writtenSymbols.has(symbol)) {
+        const { imported, module: moduleName } = binding;
+        importedFunctions.set(symbol, binding);
+        if ((moduleName === "@/hooks/useFlag" && imported === "useFlag" && !isServerFile(path)) ||
+            (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
+        const key = registry.byIdentifier.get(imported);
+        if (key) {
+          let valid = FLAG_KEY_MODULES.has(moduleName);
+          if (!valid) {
+            const definitionPath = moduleName.startsWith("@/lib/flags/definitions/")
+              ? `src/${moduleName.slice(2)}${moduleName.endsWith(".ts") ? "" : ".ts"}`
+              : resolveLocalModule(ref, path, moduleName);
+            if (definitionPath && flagDefinitionPaths(ref).includes(definitionPath)) {
+              const { identifier, definition } = parseFlagFile(git(["show", `${ref}:${definitionPath}`]), definitionPath);
+              valid = identifier === imported && definition.key === key;
+            }
+          }
+          if (valid) flagSymbols.set(symbol, key);
+        }
       }
-      flagSymbols.set(symbol, key);
     }
+    typescript.forEachChild(node, registerImport);
   }
+  registerImport(sourceFile);
 
   if (isUiFile(path) && hasUngatedExportedJsxEntry(
     sourceFile,
@@ -1892,23 +1951,57 @@ function runtimeFilesFrom(changedFiles) {
     !/\.stories\.[jt]sx?$/.test(path));
 }
 
-function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles, runtimeFiles = runtimeFilesFrom(changedFiles) }) {
-  const mergeBase = git(["merge-base", baseSha, headSha]).trim();
-  const baseRegistry = parseFlagRegistry(mergeBase);
+function currentProductionSha(baseSha) {
+  let tip = "";
+  try {
+    tip = git(["rev-parse", "--verify", "refs/remotes/origin/production^{commit}"]).trim();
+  } catch {
+    return baseSha;
+  }
+  if (!/^[0-9a-f]{40}$/.test(tip) || tip === baseSha) return baseSha;
+  try {
+    git(["merge-base", "--is-ancestor", baseSha, tip]);
+  } catch {
+    return baseSha;
+  }
+  return tip;
+}
+
+function diffBaseSha(baseSha, headSha) {
+  try {
+    return git(["merge-base", currentProductionSha(baseSha), headSha]).trim();
+  } catch {
+    return git(["merge-base", baseSha, headSha]).trim();
+  }
+}
+
+function validateFlagDefinitionChanges({ baseSha, headSha, diffBase = git(["merge-base", baseSha, headSha]).trim(), changedFiles, uiFiles, runtimeFiles = runtimeFilesFrom(changedFiles) }) {
+  const baseRegistry = parseFlagRegistry(diffBase);
   const headRegistry = parseFlagRegistry(headSha);
   const added = new Set([...headRegistry.byValue.keys()].filter((key) => !baseRegistry.byValue.has(key)));
-  const baseDefinitions = parseDefinitions(mergeBase);
+  const baseDefinitions = parseDefinitions(diffBase);
   const headDefinitions = parseDefinitions(headSha);
   for (const key of headDefinitions.keys) {
     if (!baseDefinitions.keys.includes(key)) added.add(key);
   }
-  if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
-  const baseFiles = new Set(flagDefinitionPaths(mergeBase));
+  const baseFiles = new Set(flagDefinitionPaths(diffBase));
+  const productionSha = currentProductionSha(baseSha);
+  const productionFiles = new Set(flagDefinitionPaths(productionSha));
+  const copiedFiles = new Set();
   for (const path of flagDefinitionPaths(headSha)) {
+    if (baseFiles.has(path) || !productionFiles.has(path)) continue;
+    const source = git(["show", `${headSha}:${path}`]);
+    if (source !== git(["show", `${productionSha}:${path}`])) continue;
+    copiedFiles.add(path);
+    added.delete(parseFlagFile(source, path).definition.key);
+  }
+  if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
+  for (const path of flagDefinitionPaths(headSha)) {
+    if (copiedFiles.has(path)) continue;
     const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
     if (definition.releaseRisk?.highRisk && !definition.releaseRisk.harmEvidence) {
       const baseDefinition = !added.has(definition.key) && baseFiles.has(path)
-        ? parseFlagFile(git(["show", `${mergeBase}:${path}`]), path).definition : null;
+        ? parseFlagFile(git(["show", `${diffBase}:${path}`]), path).definition : null;
       if (added.has(definition.key) || JSON.stringify(definition.releaseRisk) !== JSON.stringify(baseDefinition?.releaseRisk)) {
         throw new Error(`new or changed highRisk metadata for ${definition.key} needs releaseRisk.harmEvidence with a matching lasting harm and scenario`);
       }
@@ -1928,7 +2021,7 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
         gatesUi = coveredUi.length > 0 && runtimeFiles.some((runtimePath) => {
           try { git(["cat-file", "-e", `${headSha}:${runtimePath}`]); } catch { return false; }
           return referencesFlagAtRuntime(headSha, runtimePath, headRegistry, new Set([definition.key]),
-            addedLinesFor(mergeBase, headSha, runtimePath), addedLinesFor(mergeBase, headSha, runtimePath, true), mergeBase) &&
+            addedLinesFor(diffBase, headSha, runtimePath), addedLinesFor(diffBase, headSha, runtimePath, true), diffBase) &&
             runtimeGateCoveredUiFiles(headSha, runtimePath, coveredUi).size > 0;
         });
       }
@@ -1937,13 +2030,15 @@ function validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles
   }
 }
 
-export function evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`]).split("\n").filter(Boolean) }) {
-  if (!touchesFlagDefinitions(changedFiles)) {
+export function evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles }) {
+  const diffBase = diffBaseSha(baseSha, headSha);
+  const files = changedFiles ?? git(["diff", "--name-only", `${diffBase}...${headSha}`]).split("\n").filter(Boolean);
+  if (!touchesFlagDefinitions(files)) {
     return { pass: true, reason: "No changed feature-flag definition files." };
   }
-  const uiFiles = changedFiles.filter(isUiFile);
+  const uiFiles = files.filter(isUiFile);
   try {
-    validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles });
+    validateFlagDefinitionChanges({ baseSha, headSha, diffBase, changedFiles: files, uiFiles });
     return { pass: true, reason: "Feature flag definitions satisfy rollout rules." };
   } catch (error) {
     return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
@@ -1951,13 +2046,14 @@ export function evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles =
 }
 
 export function evaluate({ title, baseSha, headSha, labels = [] }) {
-  const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
+  const diffBase = diffBaseSha(baseSha, headSha);
+  const changedFiles = git(["diff", "--name-only", `${diffBase}...${headSha}`])
     .split("\n").filter(Boolean);
   const uiFiles = changedFiles.filter(isUiFile);
   const runtimeFiles = runtimeFilesFrom(changedFiles);
   if (touchesFlagDefinitions(changedFiles)) {
     try {
-      validateFlagDefinitionChanges({ baseSha, headSha, changedFiles, uiFiles, runtimeFiles });
+      validateFlagDefinitionChanges({ baseSha, headSha, diffBase, changedFiles, uiFiles, runtimeFiles });
     } catch (error) {
       return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
     }
@@ -1985,7 +2081,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const autoRevert = isVerifiedAutoRevert(title, baseSha, headSha);
   const tag = titleMatch?.[2] ?? null;
   if (tag === "REFACTOR") {
-    const { uiAdded, moved, newLines, riskyNew } = refactorUiLineCounts(baseSha, headSha);
+    const { uiAdded, moved, newLines, riskyNew } = refactorUiLineCounts(diffBase, headSha);
     if (riskyNew > CROSS_CHECK_LINE_BUDGET) {
       return failure(
         `This [REFACTOR] pull request adds ${riskyNew} new UI lines that are not moved code ` +
@@ -2003,7 +2099,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const exempt = autoRevert || titleExempt || aiChatLabel;
   let widened = null;
   if (exempt) {
-    const uiAdded = git(["diff", "--numstat", "--no-renames", `${baseSha}...${headSha}`])
+    const uiAdded = git(["diff", "--numstat", "--no-renames", `${diffBase}...${headSha}`])
       .split("\n").filter(Boolean)
       .map((line) => {
         const [added, , ...pathParts] = line.split("\t");
@@ -2024,7 +2120,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     }
     if (titleExempt && ["BUGFIX", "INFRA"].includes(normalizePolicyToken(tag)) && !autoRevert && !aiChatLabel) {
       try {
-        widened = widenedUiExposure(git(["merge-base", baseSha, headSha]).trim(), headSha, uiFiles);
+        widened = widenedUiExposure(diffBase, headSha, uiFiles);
       } catch (error) {
         return failure(`UI exposure could not be parsed safely: ${error.message}`);
       }
@@ -2041,15 +2137,16 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   }
 
   try {
-    const mergeBase = git(["merge-base", baseSha, headSha]).trim();
-    parseFlagRegistry(mergeBase);
+    parseFlagRegistry(diffBase);
     const headRegistry = parseFlagRegistry(headSha);
-    const baseDefinitions = parseDefinitions(mergeBase);
+    const baseDefinitions = parseDefinitions(diffBase);
     const headDefinitions = parseDefinitions(headSha);
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
 
-    const added = headDefinitions.keys.filter((key) => !baseDefinitions.keys.includes(key));
+    const productionDefinitions = parseDefinitions(currentProductionSha(baseSha));
+    const added = headDefinitions.keys.filter((key) =>
+      !baseDefinitions.keys.includes(key) && !productionDefinitions.keys.includes(key));
     const ticketPrefix = `${title.slice(0, 4).toLowerCase()}-${titleMatch[1]}-`;
     if (added.length > 0 && added.some((key) => !key.startsWith(ticketPrefix))) {
       return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
@@ -2078,9 +2175,9 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         path,
         headRegistry,
         ticketKeys,
-        addedLinesFor(mergeBase, headSha, path),
-        addedLinesFor(mergeBase, headSha, path, true),
-        mergeBase,
+        addedLinesFor(diffBase, headSha, path),
+        addedLinesFor(diffBase, headSha, path, true),
+        diffBase,
       );
       console.error('DEBUG path', path, 'key', key);
       if (key) {

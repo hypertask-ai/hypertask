@@ -695,6 +695,16 @@ test("HYCI-282: browser shards install Chromium without Ubuntu packages", async 
   assert.doesNotMatch(await source(".github/workflows/ci-tests.yml"), /apt-get|--with-deps|archive\.ubuntu\.com/);
 });
 
+test("HYCI-286: production health installs Chromium through the shared installer", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/prod-health.yml"));
+  const step = workflow.jobs.smoke.steps.find((candidate) => candidate.id === "setup-pw");
+  assert.ok(step);
+  assert.equal(step.run, "bash .github/scripts/install-chromium.sh");
+  assert.equal(step["continue-on-error"], true);
+  assert.equal(step["timeout-minutes"], 8);
+});
+
 test("HYCI-282: the installer does not ask Ubuntu for packages", () => {
   const installed = runChromiumInstaller({ fail: 0 });
   assert.equal(installed.status, 0, installed.output);
