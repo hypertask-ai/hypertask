@@ -262,7 +262,7 @@ hold_check() {
   # Finishing an existing PR is never new work (Valentin, 2026-10-28 and 2026-10-29: the PR queue goes first). A ticket
   # with any open PR, whoever opened it, stays claimable: that is adoption, and the brake only stops new app work.
   if jq -e --arg t "$t" 'any(.[];
-      (.title | ascii_upcase | startswith($t + " "))
+      (.live == true) and ((.title | ascii_upcase | startswith($t + " "))
       or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])")))' <<<"$open" >/dev/null; then
     return 0
   fi
