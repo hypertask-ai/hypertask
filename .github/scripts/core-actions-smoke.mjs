@@ -380,19 +380,28 @@ export async function report(
   const sentence = `Core-action smoke ${result.kind}. ${result.action} returned ${status}. ${result.detail}. Rollback ${rollback}.`;
   const html = `<p><strong>${escapeHtml(sentence)}</strong></p><p><a href="${escapeHtml(runUrl)}">Workflow run</a></p>`;
 
-  const postTicket = () =>
-    api("/api/mcp/comments", {
-      method: "POST",
-      headers: {
-        "Idempotency-Key": `core-smoke-6225-${process.env.GITHUB_RUN_ID || Date.now()}`,
-      },
-      body: JSON.stringify({
-        ticket_number: PARENT_TICKET,
-        project_id: ALERT_PROJECT_ID,
-        text: html,
-        content_type: "html",
-      }),
-    });
+  const postTicket = async () => {
+    try {
+      await api("/api/mcp/comments", {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": `core-smoke-6225-${process.env.GITHUB_RUN_ID || Date.now()}`,
+        },
+        body: JSON.stringify({
+          ticket_number: PARENT_TICKET,
+          project_id: ALERT_PROJECT_ID,
+          text: html,
+          content_type: "html",
+        }),
+      });
+      return { destination: PARENT_TICKET, skipped: false };
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 404) {
+        return { destination: PARENT_TICKET, skipped: true };
+      }
+      throw error;
+    }
+  };
 
   const postIncident = async () => {
     const incidentTitle = `[INCIDENT] Core-action smoke: ${String(result.action).slice(0, 100)}`;
@@ -454,6 +463,13 @@ export async function report(
   };
 
   const reports = await Promise.allSettled([postTicket(), postIncident()]);
+  for (const item of reports) {
+    if (item.status === "fulfilled" && item.value?.skipped) {
+      write(
+        `Core-smoke parent ${item.value.destination} is gone; destination skipped.\n`,
+      );
+    }
+  }
   const failures = reports.filter((item) => item.status === "rejected");
   if (failures.length > 0) {
     const reasons = failures
