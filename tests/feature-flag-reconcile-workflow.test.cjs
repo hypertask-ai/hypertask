@@ -510,7 +510,7 @@ for (const job of [reconciliation, singlePullRequest]) {
 
   test(`${name}: short GET reset now allowed then publishes the ordinary verdict`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
-      job, apiFailure: { endpoint: job === singlePullRequest ? '/pulls?' : '/commits/', status: 429, rate: true, reset: 0, once: true },
+      job, apiFailure: { endpoint: job === singlePullRequest ? '/pulls?' : '/statuses?', status: 429, rate: true, reset: 0, once: true },
     });
     assert.equal(result.status, 0, output);
     assert.match(output, /rate limited; waiting 1s until reset/);
@@ -555,7 +555,7 @@ for (const job of [reconciliation, singlePullRequest]) {
 for (const endpoint of ['/commits/', '/pulls?', '/statuses/']) {
   test(`reconcile: rate limit at ${endpoint} exits the parent shell without publishing an error`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
-      apiFailure: { endpoint, after: 0, status: 403, rate: true, reset: 3600 },
+      apiFailure: { endpoint, after: 0, status: 403, rate: true, reset: endpoint === '/pulls?' ? 0 : 3600 },
     });
     assert.equal(result.status, 0, output);
     assert.match(output, /::warning::skipped: GitHub rate limited/);
