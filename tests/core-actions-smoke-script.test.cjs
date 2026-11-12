@@ -370,6 +370,84 @@ test("a transport timeout that happens twice stays failed and files the incident
   }
 });
 
+const walkTimeout = "The operation was aborted due to timeout";
+
+function contextResponse() {
+  return Response.json({
+    user: { id: 6 },
+    teams: [{ id: "team-1", title: "Hypertask" }],
+    projects: [{ id: PROJECT_ID, title: BOARD_TITLE, ownerId: 6 }],
+  });
+}
+
+function failingWalk(respond) {
+  const walk = { calls: 0 };
+  walk.overrides = {
+    "/api/mcp/user/context": async () => {
+      walk.calls += 1;
+      return respond(walk.calls);
+    },
+  };
+  return walk;
+}
+
+test("a fixture request that times out once is retried before the smoke fails", async () => {
+  const originalFetch = global.fetch;
+  const walk = failingWalk((calls) => {
+    if (calls === 1) throw new Error(walkTimeout);
+    return contextResponse();
+  });
+  global.fetch = fixtureFetch({ overrides: walk.overrides });
+
+  try {
+    const { run, shouldRollback } = await import(scriptUrl);
+    const result = await run({ sleep: async () => undefined });
+    assert.equal(result.ok, true);
+    assert.equal(walk.calls, 2);
+    assert.equal(shouldRollback(result, "push"), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a fixture request that times out twice stays failed", async () => {
+  const originalFetch = global.fetch;
+  const walk = failingWalk(() => {
+    throw new Error(walkTimeout);
+  });
+  global.fetch = fixtureFetch({ overrides: walk.overrides });
+
+  try {
+    const { run } = await import(scriptUrl);
+    await assert.rejects(
+      run({ sleep: async () => undefined }),
+      /confirmed twice: The operation was aborted due to timeout/,
+    );
+    assert.equal(walk.calls, 2);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a fixture request that fails with a server error is not retried", async () => {
+  const originalFetch = global.fetch;
+  const walk = failingWalk(() =>
+    Response.json({ message: "boom" }, { status: 500 }),
+  );
+  global.fetch = fixtureFetch({ overrides: walk.overrides });
+
+  try {
+    const { run } = await import(scriptUrl);
+    await assert.rejects(
+      run({ sleep: async () => undefined }),
+      /\/api\/mcp\/user\/context failed: boom/,
+    );
+    assert.equal(walk.calls, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("an unrunnable result that is not a transport failure is not retried", async () => {
   const originalFetch = global.fetch;
   const probe = probeSequence([

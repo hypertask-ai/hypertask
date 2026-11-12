@@ -194,6 +194,30 @@ export async function provision() {
 }
 
 export async function run(options = {}) {
+  const sleep =
+    options.sleep ||
+    ((milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  try {
+    return await attempt(options);
+  } catch (error) {
+    // One slow request is a blip, not a verdict (HTPR-8246). The probe retries a
+    // transport failure it is handed, so a request that aborts before the probe
+    // answers -- the fixture walk is a plain api() call with a 30s timeout -- gets
+    // the same single confirmation instead of failing the tick on first sight.
+    if (!isTransportFailure(classifyProbeStartFailure(error))) throw error;
+    await sleep(1_000);
+    try {
+      return await attempt(options);
+    } catch (confirmationError) {
+      const confirmed = classifyProbeStartFailure(confirmationError);
+      if (!isTransportFailure(confirmed)) throw confirmationError;
+      throw new Error(`confirmed twice: ${confirmed.detail}`);
+    }
+  }
+}
+
+async function attempt(options = {}) {
   const fixture = {
     ...(await provision()),
     runId: process.env.GITHUB_RUN_ID || `local-${Date.now()}`,
