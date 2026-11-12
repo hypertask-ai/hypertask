@@ -14,8 +14,11 @@ function memoryRedis() {
   };
   return {
     values, ttls,
-    pipeline: () => ({ keys: [], incr(key) { this.keys.push(key); return this; },
-      exec: async () => this.keys.map((key) => [null, bump(key)]) }),
+    pipeline: () => ({
+      keys: [],
+      incr(key) { this.keys.push(key); return this; },
+      exec() { return Promise.resolve(this.keys.map((key) => [null, bump(key)])); },
+    }),
     incr: async (key) => bump(key),
     expire: async (key, seconds) => { ttls.set(key, seconds); return 1; },
     get: async (key) => values.get(key) ?? null,
