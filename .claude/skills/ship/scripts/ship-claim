@@ -149,7 +149,7 @@ runner_open_prs() {
 open_prs() {
   local rn=$1 result live
   if result=$(shared_open_prs) && live=$(runner_open_prs "$rn"); then
-    jq --arg n "$rn" --argjson live "$live" 'map(select((.headRefName | test("^runner-?" + $n + "($|[/_-])"; "i")) | not)) + $live | unique_by(.number)' <<<"$result"
+    jq --argjson live "$live" '$live + . | unique_by(.number)' <<<"$result"
     return
   fi
   if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft); then

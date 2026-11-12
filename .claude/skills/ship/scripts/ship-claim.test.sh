@@ -443,7 +443,7 @@ eq "a newly opened PR absent from the copy still holds its runner" "$?" 4
 SHIP_SESSION_NAME='RUNNER 1' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-997 >/dev/null 2>&1
 eq "a newly opened PR absent from the copy remains resumable" "$?" 0
 SHIP_SESSION_NAME='RUNNER 9' SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
-eq "a closed PR remaining in the copy no longer holds its runner" "$?" 0
+eq "a copy row whose live refresh misses it still holds its runner" "$?" 4
 printf '[]' > "$D/no-live.json"
 printf '[{"number":81,"headRefName":"runner9/yper4-996","title":"YPER4-996 [BUGFIX] Compact work","isDraft":false}]' > "$D/compact-live.json"
 SHIP_SESSION_NAME='RUNNER 9' HOLD_OPEN=$D/no-live.json HOLD_COMPACT_OPEN=$D/compact-live.json SHIP_CLAIM_SNAPSHOT=$D/hold-snapshot ./ship-claim hold YPER4-999 >/dev/null 2>&1
