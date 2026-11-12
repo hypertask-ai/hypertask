@@ -72,8 +72,10 @@ test("the hook asks the first screen surface before it settles on anything", () 
 
 test("switching a part before preferences load keeps the parts the board is already showing", () => {
   const hook = read("src/hooks/General/useCardParts.ts");
-  assert.match(hook, /const parts = useCardParts\(\);/);
-  assert.match(hook, /const current = parts \?\? DEFAULT_CARD_PARTS;/);
+  const settings = read("src/components/Modals/Settings/CardSettingsSection.tsx");
+  assert.match(hook, /const useSetCardPart = \(shown: CardParts\) => \{/);
+  assert.match(hook, /const next: CardParts = \{ \.\.\.shown, \[part\]: value \};/);
+  assert.match(settings, /const setPart = useSetCardPart\(parts\);/);
 });
 
 test("the display cookie written from the board carries the person's card parts, so the next reload draws them at once", () => {

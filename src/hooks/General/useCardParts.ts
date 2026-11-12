@@ -6,7 +6,7 @@ import {
   useGetUserPreferences,
   type IUserPreferences,
 } from "@/hooks/General/useGetUserPreferences";
-import { DEFAULT_CARD_PARTS, settleCardParts, type CardPart, type CardParts } from "@/lib/kanban/cardParts";
+import { settleCardParts, type CardPart, type CardParts } from "@/lib/kanban/cardParts";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 
 export const useCardParts = (): CardParts | null => {
@@ -17,21 +17,19 @@ export const useCardParts = (): CardParts | null => {
   return useMemo(() => settleCardParts(saved, boot, isFetched), [saved, boot, isFetched]);
 };
 
-export const useSetCardPart = () => {
+export const useSetCardPart = (shown: CardParts) => {
   const queryClient = useQueryClient();
-  const parts = useCardParts();
   const writeParts = (next: CardParts) =>
     queryClient.setQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY, (previous) =>
       previous ? { ...previous, cardParts: next } : previous,
     );
-  return async (part: CardPart, shown: boolean) => {
-    const current = parts ?? DEFAULT_CARD_PARTS;
-    const next: CardParts = { ...current, [part]: shown };
+  return async (part: CardPart, value: boolean) => {
+    const next: CardParts = { ...shown, [part]: value };
     writeParts(next);
     try {
       await axios.post("/api/users/preferences", { cardParts: next });
     } catch {
-      writeParts(current);
+      writeParts(shown);
     } finally {
       queryClient.invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY });
     }

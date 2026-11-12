@@ -111,6 +111,7 @@ test("the display mirror hands layout back on hydration even when a related flag
         react: { useEffect: noop, useLayoutEffect: callback => layouts.push(callback) },
         "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => false },
         "@/hooks/General/useHydrated": { useHydrated: () => hydrated },
+        "@/hooks/General/useCardParts": { useCardParts: () => null },
         "@/lib/state": { useRecoilValue: () => ({}) }, "@/store": {}, "@/lib/flags/keys": {},
         "./boardDocument": {}, "./boardDisplay": {},
       });

@@ -15,7 +15,7 @@ const CardSettingsSection = () => {
   const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
   const cardPeople = useFlag(HTPR_9026_CARD_PEOPLE_FLAG);
   const parts = useCardParts() ?? DEFAULT_CARD_PARTS;
-  const setPart = useSetCardPart();
+  const setPart = useSetCardPart(parts);
   const rows = [];
   for (const part of CARD_PARTS) {
     if (part.key === "people" && !cardPeople) continue;
