@@ -124,7 +124,8 @@ const KanbanTaskCard = ({
   const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
   const cardPeople = useFlag(HTPR_9026_CARD_PEOPLE_FLAG);
   const savedParts = useCardParts();
-  const card = cardPartsView(task, blockingUser, cardSettings ? savedParts ?? EMPTY_CARD_PARTS : ALL_CARD_PARTS);
+  const parts = savedParts ?? EMPTY_CARD_PARTS;
+  const card = cardPartsView(task, blockingUser, cardSettings ? parts : ALL_CARD_PARTS);
   const subTasks = <CardSubTasks subTasks={card.subTasks} currentSetting={currentSetting} onClick={onSubtaskClick} />;
   return (
   <div
@@ -199,8 +200,8 @@ const KanbanTaskCard = ({
         _count={card.commentCount}
         notifications={card.notifications}
         ticketNumber={card.ticketNumber}
-        assignees={cardSettings && cardPeople && !savedParts.people ? [] : assignedUsers}
-        agentAssignees={cardSettings && cardPeople && !savedParts.people ? [] : agentAssignees}
+        assignees={cardSettings && cardPeople && !parts.people ? [] : assignedUsers}
+        agentAssignees={cardSettings && cardPeople && !parts.people ? [] : agentAssignees}
         countNotifications={card.notificationCount}
         countSubtasks={card.subTaskCount}
         subTaskSetting={currentSetting}
@@ -234,7 +235,7 @@ const KanbanTaskCard = ({
         taskLabels={card.taskLabels}
         hasDraft={hasDraft}
         blockingUser={card.blockingUser}
-        agents={cardSettings && cardPeople && !savedParts.people ? [] : agentAssignees}
+        agents={cardSettings && cardPeople && !parts.people ? [] : agentAssignees}
         cardOverflowClamp={cardOverflowClamp}
       />
       {calm ? <div className="contents [&>div]:gap-1 [&>div>div]:gap-1 [&_span]:!text-micro [&_span]:leading-4">{subTasks}</div> : subTasks}

@@ -2,23 +2,13 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
+const { loadModule, root } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
-function load(relative) {
-  const compiled = ts.transpileModule(read(relative), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const moduleExports = {};
-  new Function("require", "exports", compiled)(require, moduleExports);
-  return moduleExports;
-}
-
 const { CARD_PARTS, DEFAULT_CARD_PARTS, EMPTY_CARD_PARTS, parseCardParts, readCardParts, resolveCardParts, shownCardParts } =
-  load("src/lib/kanban/cardParts.ts");
-const { hasFirstScreenDisplayPreferences } = load("src/lib/firstScreen/contract.ts");
+  loadModule("src/lib/kanban/cardParts.ts");
+const { hasFirstScreenDisplayPreferences } = loadModule("src/lib/firstScreen/contract.ts");
 
 const allOff = Object.fromEntries(CARD_PARTS.map(({ key }) => [key, false]));
 const allOn = Object.fromEntries(CARD_PARTS.map(({ key }) => [key, true]));
@@ -61,8 +51,9 @@ test("a live preferences change wins over the boot card parts", () => {
 test("a card with unknown parts draws no detail and never the default parts", () => {
   const card = read("src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx");
   assert.match(card, /const savedParts = useCardParts\(\);/);
-  assert.match(card, /cardSettings \? savedParts \?\? EMPTY_CARD_PARTS : ALL_CARD_PARTS/);
-  assert.doesNotMatch(card, /savedParts \?\? DEFAULT_CARD_PARTS/);
+  assert.match(card, /const parts = savedParts \?\? EMPTY_CARD_PARTS;/);
+  assert.match(card, /cardSettings \? parts : ALL_CARD_PARTS/);
+  assert.doesNotMatch(card, /\?\? DEFAULT_CARD_PARTS/);
   assert.ok(everyPart(EMPTY_CARD_PARTS));
 });
 
