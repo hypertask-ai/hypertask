@@ -28,7 +28,8 @@ function board() {
       const task = { ...body, id: tasks.length + 1000, status: "Normal", ticketNumber: `HTPR-${tasks.length + 7001}`, labels: body.labels.map((id) => ({ id, name: Object.keys(config.severityLabels).find((key) => config.severityLabels[key] === id) })) };
       tasks.push(task); return response({ success: true, task });
     }
-    if (parsed.pathname === "/api/mcp/comments") { comments.set(options.headers["Idempotency-Key"], body); return response({ success: true }); }
+    if (parsed.pathname === "/api/mcp/agents/runs") return response({ success: true, run: { id: `run-${calls.length}` } }, 201);
+    if (/^\/api\/mcp\/agents\/runs\/[^/]+\/activities$/.test(parsed.pathname)) { comments.set(options.headers["Idempotency-Key"], body); return response({ success: true, activity: { id: "activity-1", text: body.text } }, 201); }
     if (parsed.pathname === "/api/mcp/tasks/update") {
       assert.equal(Object.hasOwn(body, "description"), false, "repeat must not write the description");
       assert.equal(Object.hasOwn(body, "labels"), false, "severity must use per-label mutations");
@@ -347,11 +348,11 @@ test("repeat alerts leave descriptions byte-for-byte intact and produce one shor
   assert.equal(task.description, description);
   assert.equal(state.comments.size, 1);
   const comment = [...state.comments.values()][0];
-  assert.equal(comment.content_type, "html");
-  assert.match(comment.text, /^<p><strong>[^<]+<\/strong><\/p>/);
+  assert.equal(comment.type, "thought");
+  assert.match(comment.text.split("\n")[0], /^PostHog /);
   assert.match(comment.text, /Production hits: 20\. Known users: 3\./);
-  assert.match(comment.text, /<p>Record findings here\.<\/p>$/);
-  assert.equal(state.calls.slice(before).filter((call) => call.url.endsWith("/comments")).length, 1);
+  assert.match(comment.text, /Record findings here\.$/);
+  assert.equal(state.calls.slice(before).filter((call) => call.url.endsWith("/activities")).length, 1);
   assert.equal(state.calls.slice(before).some((call) => call.url.endsWith("/tasks/update")), false);
   assert.doesNotMatch(description, /posthog-count|posthog-users|posthog-issue-(?:start|end)/);
 });
@@ -367,7 +368,7 @@ test("each later Actions alert run gets one comment even when counts are unchang
       await upsertIssue(state.fetchImpl, "fixture", config, issue({ event_id: ID, alert_kind: "issue_created" }));
     }
     assert.equal(state.comments.size, 2);
-    assert.equal(state.calls.filter((call) => call.url.endsWith("/comments")).length, 2);
+    assert.equal(state.calls.filter((call) => call.url.endsWith("/activities")).length, 2);
   } finally {
     if (previous === undefined) delete process.env.GITHUB_RUN_ID;
     else process.env.GITHUB_RUN_ID = previous;

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { setTimeout } from "node:timers/promises";
-import { createIncident, escapeHtml, jsonRequest, mcpHeaders } from "./posthog-error-alert.mjs";
+import { createIncident, jsonRequest, mcpHeaders } from "./posthog-error-alert.mjs";
 
 const POSTHOG = "https://eu.posthog.com";
 const PROJECT = "236160";
@@ -145,29 +145,45 @@ async function linkIssueFlag(fetchImpl, token, config, issue, task) {
     method: "POST", headers: mcpHeaders(token, key),
     body: JSON.stringify({ source_task_id: task.id, target_ticket_number: ticket, target_project_id: config.boardId, relation_type: "RelatedTo" }),
   });
-  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
-    method: "POST", headers: mcpHeaders(token, `${key}-comment`),
-    body: JSON.stringify({ task_id: task.id, content_type: "html", text: `<p><strong>This error names a feature flag.</strong></p><blockquote><p><a href="${escapeHtml(config.appUrl)}/admin/flags/${escapeHtml(issue.feature_flag)}">${escapeHtml(issue.feature_flag)}</a></p></blockquote>` }),
-  });
+  await logIssueActivity(fetchImpl, token, config, task, `${key}-comment`, [
+    "This error names a feature flag.",
+    `${config.appUrl}/admin/flags/${issue.feature_flag}`,
+  ].join("\n"));
 }
 
-export function issueUpdateComment(issue, oldLabels = []) {
+export function issueLogText(issue, oldLabels = []) {
   const note = issue.alert_kind === "issue_spiking"
-    ? `PostHog saw a spike. ${escapeHtml(String(issue.spike_count))} hits, baseline ${escapeHtml(String(issue.spike_baseline))}.`
+    ? `PostHog saw a spike. ${issue.spike_count} hits, baseline ${issue.spike_baseline}.`
     : issue.alert_kind === "issue_reopened" ? "PostHog reopened this issue after it was resolved." : "PostHog reported this issue again.";
-  const severityChanged = oldLabels.length !== 1 || oldLabels[0].id !== issue.severity_label_id;
-  const severityNote = severityChanged
-    ? `<p>Severity changed from ${escapeHtml(oldLabels.map((label) => label.name).join(" + ") || "unrated")} to ${escapeHtml(issue.severity)}. ${escapeHtml(issue.severity_reason)}</p>`
-    : "";
-  return (
-    `<p><strong>${escapeHtml(note)}</strong></p>` +
-    `<p>Severity: ${escapeHtml(issue.severity)}. Production hits: ${escapeHtml(String(issue.count))}. ` +
-    `Known users: ${escapeHtml(String(issue.users))}. Hits without a user identity: ${escapeHtml(String(issue.unidentified_hits))}.</p>` +
-    severityNote +
-    (issue.feature_flag ? "" : "<p>No confirmed feature flag.</p>") +
-    `<p>Last seen ${escapeHtml(String(issue.last_seen))}. <a href="${escapeHtml(issue.issue_url)}">PostHog issue</a></p>` +
-    `<p>Record findings here.</p>`
-  );
+  const lines = [
+    note,
+    `Severity: ${issue.severity}. Production hits: ${issue.count}. Known users: ${issue.users}. Hits without a user identity: ${issue.unidentified_hits}.`,
+  ];
+  if (oldLabels.length !== 1 || oldLabels[0].id !== issue.severity_label_id) {
+    lines.push(`Severity changed from ${oldLabels.map((label) => label.name).join(" + ") || "unrated"} to ${issue.severity}. ${issue.severity_reason}`);
+  }
+  lines.push(`Last seen ${issue.last_seen}. Issue: ${issue.issue_url}`);
+  lines.push("Record findings here.");
+  return lines.join("\n");
+}
+
+export async function logIssueActivity(fetchImpl, token, config, task, key, text) {
+  const openRun = () => jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/agents/runs`, {
+    method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ taskId: Number(task.id), source: "runtime" }),
+  });
+  const post = (runId) => jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/agents/runs/${runId}/activities`, {
+    method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ type: "thought", text }),
+  });
+  const runId = (await openRun())?.run?.id;
+  if (!runId) throw new Error("The agent log run returned no run id");
+  try {
+    await post(runId);
+  } catch (error) {
+    if (!/HTTP (?:404|409)/.test(error instanceof Error ? error.message : "")) throw error;
+    const retried = (await openRun())?.run?.id;
+    if (!retried) throw new Error("The agent log run returned no run id");
+    await post(retried);
+  }
 }
 
 export async function upsertIssue(fetchImpl, token, config, issue) {
@@ -221,9 +237,6 @@ export async function upsertIssue(fetchImpl, token, config, issue) {
     });
   }
   await linkIssueFlag(fetchImpl, token, config, issue, existing);
-  const text = issueUpdateComment({ ...issue, severity_label_id: config.severityLabels[issue.severity] }, oldLabels);
-  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
-    method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ task_id: existing.id, text, content_type: "html" }),
-  });
+  await logIssueActivity(fetchImpl, token, config, existing, key, issueLogText({ ...issue, severity_label_id: config.severityLabels[issue.severity] }, oldLabels));
   return { action: "updated" };
 }
