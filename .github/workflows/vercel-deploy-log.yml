@@ -61,8 +61,6 @@ jobs:
                      -e 's#(token|secret|password|api[_-]?key|authorization)([=: ]+)[^[:space:]]+#\1\2<redacted>#Ig')
           echo "fetched $(printf '%s\n' "$EVENTS" | wc -l) event lines"
 
-          # YPER4-952 / HYCI-331: the agent lane caps a note at 8000 characters, so keep the
-          # newest whole log lines that fit instead of posting an oversized body.
           TEXT="Vercel build log for $DEPLOYMENT (vercel-deploy-log workflow, newest first)."$'\n'"Read at $(date -u +%Y-%m-%dT%H:%M:%SZ). $META"
           KEPT=0
           TOTAL=$(printf '%s\n' "$EVENTS" | grep -c '[^[:space:]]' || true)
@@ -77,7 +75,6 @@ jobs:
             TEXT+=$'\n'"Earlier lines were dropped to fit the agent log limit."
           fi
 
-          # HYCI-331: the agent lane takes the raw log; a people comment needs an audience and refuses it.
           run=$(curl -sS -o /tmp/run.json -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/agents/runs" \
             -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" \
             -d "$(jq -n --arg t "$TICKET" '{taskId: ($t | tonumber), projectId: 15, source: "runtime", title: "Vercel deploy log"}')")
