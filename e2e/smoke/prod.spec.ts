@@ -389,9 +389,19 @@ test('multi-chat window has four 4px corners', { tag: ['@id:multi-chat-window-co
 })
 
 for (const showQuickTips of [true, false]) {
-  test(`floating chats minimize and restore above the footer (tips ${showQuickTips})`, { tag: ['@id:chat-window-minimize-restore'] }, async ({ page }, testInfo) => {
+  test(`floating chats minimize and restore above the footer (tips ${showQuickTips})`, { tag: ['@id:chat-window-minimize-restore'] }, async ({ page, baseURL }, testInfo) => {
     test.skip(!process.env.BROWSER_SMOKE_PR || testInfo.project.name !== 'Desktop', 'isolated desktop PR fixture only')
     await page.setViewportSize({ width: 1920, height: 1032 })
+    const identity = (await page.context().cookies()).find(cookie => cookie.name === 'nookies_user')
+    if (!identity || !baseURL) throw new Error('Floating chat regression needs the authenticated smoke identity and base URL')
+    const { id: accountId } = z.object({ id: z.number().int().positive() }).parse(JSON.parse(decodeURIComponent(identity.value)))
+    await page.context().addCookies([{
+      name: BOARD_DISPLAY_COOKIE, url: baseURL,
+      value: encodeURIComponent(JSON.stringify({ version: 1, accountId, timeZone: 'UTC', locale: 'en-US', boardLayout: 'board', theme: 'graphite',
+        railCollapsed: true, quickTips: showQuickTips, draftsFirst: false, isMobile: false,
+        board: { railOn: false, showEmptyViewTabs: false, hiddenViewTabIds: {}, viewTabsOrder: {}, tableColumns: ['title'], tableWidths: {},
+          tableTitleWrap: false, openChat: false, keepChatClosed: false, chatSuppressed: true, chatPinned: false, chatSidebarMode: false } })),
+    }])
     await page.route('**/api/flags', async route => {
       const response = await route.fetch()
       const body = await response.json()
@@ -430,6 +440,8 @@ for (const showQuickTips of [true, false]) {
         const footerBounds = await footer.boundingBox()
         if (!footerBounds) throw new Error('Visible quick tips footer has no bounds')
         for (const tab of bounds) expect(tab.bottom).toBeLessThanOrEqual(footerBounds.y)
+      } else {
+        await expect(footer).toBeHidden()
       }
       for (let count = 1; count <= 3; count++) {
         await tabs.first().click()
