@@ -6,7 +6,7 @@ import { HTPR_8960_BORDER_ONLY_SELECT_FLAG } from "@/lib/flags/definitions/htpr-
 import { HTPR_8970_CALM_CARDS_FLAG } from "@/lib/flags/definitions/htpr-8970-calm-cards";
 import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import { HTPR_9026_CARD_PEOPLE_FLAG } from "@/lib/flags/definitions/htpr-9026-card-people";
-import { ALL_CARD_PARTS, cardPartsView } from "@/lib/kanban/cardParts";
+import { ALL_CARD_PARTS, EMPTY_CARD_PARTS, cardPartsView } from "@/lib/kanban/cardParts";
 import { useCardParts } from "@/hooks/General/useCardParts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
@@ -124,7 +124,7 @@ const KanbanTaskCard = ({
   const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
   const cardPeople = useFlag(HTPR_9026_CARD_PEOPLE_FLAG);
   const savedParts = useCardParts();
-  const card = cardPartsView(task, blockingUser, cardSettings ? savedParts : ALL_CARD_PARTS);
+  const card = cardPartsView(task, blockingUser, cardSettings ? savedParts ?? EMPTY_CARD_PARTS : ALL_CARD_PARTS);
   const subTasks = <CardSubTasks subTasks={card.subTasks} currentSetting={currentSetting} onClick={onSubtaskClick} />;
   return (
   <div

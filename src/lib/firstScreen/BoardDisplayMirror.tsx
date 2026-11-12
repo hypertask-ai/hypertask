@@ -2,6 +2,8 @@
 
 import { useEffect, useLayoutEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { useCardParts } from "@/hooks/General/useCardParts";
+import { shownCardParts } from "@/lib/kanban/cardParts";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { useRecoilValue } from "@/lib/state";
 import { fcmAtom, currentUserAtom, boardLayoutPreferenceAtom, appShellRailAtom, appShellRailExpandedAtom, showQuickTipsAtom,
@@ -31,6 +33,7 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
   const chatPinned = useRecoilValue(aiChatPinnedAtom);
   const chatWidth = useRecoilValue(aiChatSidebarWidthPxAtom);
   const chatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
+  const cardParts = useCardParts();
   useLayoutEffect(() => {
     if (!hydrated) return;
     document.documentElement.removeAttribute("data-ticket-sidebar");
@@ -49,6 +52,7 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
       const theme = document.documentElement.dataset.theme;
       const value = JSON.stringify({ version: 1, accountId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         locale: navigator.language, boardLayout, theme, railCollapsed, quickTips, draftsFirst: false,
+        ...(cardParts ? { cardParts: shownCardParts(cardParts) } : {}),
         isMobile: window.innerWidth < 768,
         inbox: { nudgeDismissed,
           pushPermission: fcm.permissionStatus, pushEnabled: fcm.statusToggleFromDB === "true" },
@@ -65,6 +69,6 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
     themes.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => { window.removeEventListener("resize", mirror); window.removeEventListener("pagehide", mirror); window.removeEventListener("ht-inbox-display-change", mirror); themes.disconnect(); };
   }, [desktopChat, accountId, user?.id, fcm.permissionStatus, fcm.statusToggleFromDB, boardLayout, railOn, railCollapsed, quickTips, showEmptyViewTabs, hiddenViewTabIds,
-    viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode]);
+    viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode, cardParts]);
   return null;
 }

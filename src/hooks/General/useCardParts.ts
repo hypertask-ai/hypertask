@@ -6,12 +6,15 @@ import {
   useGetUserPreferences,
   type IUserPreferences,
 } from "@/hooks/General/useGetUserPreferences";
-import { parseCardParts, type CardPart, type CardParts } from "@/lib/kanban/cardParts";
+import { parseCardParts, resolveCardParts, type CardPart, type CardParts } from "@/lib/kanban/cardParts";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 
-export const useCardParts = (): CardParts => {
+export const useCardParts = (): CardParts | null => {
   const { data } = useGetUserPreferences();
+  const surface = useFirstScreenSurface();
   const saved = data?.cardParts;
-  return useMemo(() => parseCardParts(saved), [saved]);
+  const boot = surface?.display.cardParts;
+  return useMemo(() => resolveCardParts(saved, boot), [saved, boot]);
 };
 
 export const useSetCardPart = () => {
