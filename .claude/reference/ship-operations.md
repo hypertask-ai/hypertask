@@ -33,4 +33,3 @@ When the Agent Kit blocks work, search board 11514 first and +1 the existing tic
 ## Runner installation
 
 Runner timers, webhooks, pickup, and self-update have their own scripts. Read them only for an installation or dispatch task, not every ticket. New user timers require `user-unit-check` before enablement and one successful first real run afterward.
-
