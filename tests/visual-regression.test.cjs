@@ -289,7 +289,10 @@ test("saved screens are reused across runner images by the fonts that rendered t
     assert.ok(install !== -1 && fonts !== -1 && restore !== -1);
     assert.ok(install < fonts, "the pinned fonts must be installed before they are fingerprinted");
     assert.ok(fonts < restore, "the fonts must be known before the saved screens are restored");
-    assert.match(steps[install].run, /apt-get install -y fontconfig fonts-liberation fonts-noto-core fonts-noto-color-emoji/);
+    assert.match(steps[install].run, /playwright install chromium/);
+    assert.match(steps[install].run, /browser-font-cache\.mjs/);
+    assert.doesNotMatch(steps[install].run, /apt-get/);
+    assert.doesNotMatch(steps[install].run, /--with-deps/);
     assert.ok(!JSON.stringify(steps).includes("ImageVersion"), "the runner image version must not identify a baseline");
   }
   assert.equal(fontsStep(visualWorkflow, "visual-regression").run, fontsStep(testsWorkflow, "visual-compare").run, "producer and consumer must fingerprint the fonts the same way");

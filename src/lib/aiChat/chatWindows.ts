@@ -46,11 +46,12 @@ export const clampChatWindowValue = (value: number, min: number, max: number) =>
 export function clampChatWindowRect(
   rect: ChatWindowRect,
   viewport: ChatWindowViewport,
+  minimum: ChatWindowViewport = { width: CHAT_WINDOW_MIN_WIDTH, height: CHAT_WINDOW_MIN_HEIGHT },
 ): ChatWindowRect {
   const roomWidth = Math.max(0, viewport.width - CHAT_WINDOW_EDGE * 2);
   const roomHeight = Math.max(0, viewport.height - CHAT_WINDOW_EDGE * 2);
-  const minWidth = Math.min(CHAT_WINDOW_MIN_WIDTH, roomWidth);
-  const minHeight = Math.min(CHAT_WINDOW_MIN_HEIGHT, roomHeight);
+  const minWidth = Math.min(CHAT_WINDOW_MIN_WIDTH, minimum.width, roomWidth);
+  const minHeight = Math.min(CHAT_WINDOW_MIN_HEIGHT, minimum.height, roomHeight);
   const width = clampChatWindowValue(rect.width, minWidth, roomWidth);
   const height = clampChatWindowValue(rect.height, minHeight, roomHeight);
   const x = clampChatWindowValue(rect.x, 0, viewport.width - width - CHAT_WINDOW_EDGE);
@@ -76,6 +77,42 @@ export function cascadeChatWindowRect(
   );
 }
 
+export function tileChatWindowRect(
+  index: number,
+  count: number,
+  viewport: ChatWindowViewport,
+): ChatWindowRect {
+  const columns = Math.min(Math.max(1, count), Math.max(1, Math.floor((viewport.width - CHAT_WINDOW_EDGE) / (CHAT_WINDOW_MIN_WIDTH + CHAT_WINDOW_EDGE))));
+  const rows = Math.ceil(Math.max(1, count) / columns);
+  const width = Math.max(0, Math.min(560, Math.floor((viewport.width - CHAT_WINDOW_EDGE * (columns + 1)) / columns)));
+  const height = Math.max(0, Math.min(Math.round(viewport.height * 0.7), Math.floor((viewport.height - CHAT_WINDOW_EDGE * (rows + 1)) / rows)));
+  return {
+    x: viewport.width - CHAT_WINDOW_EDGE - width - (index % columns) * (width + CHAT_WINDOW_EDGE),
+    y: viewport.height - CHAT_WINDOW_EDGE - height - Math.floor(index / columns) * (height + CHAT_WINDOW_EDGE),
+    width,
+    height,
+  };
+}
+
+export function arrangeChatWindowsForUser(
+  windows: ChatWindowState[],
+  userId: number,
+  viewport: ChatWindowViewport,
+): ChatWindowState[] {
+  if (!Array.isArray(windows)) return windows;
+  const count = windows.filter((window) => window.userId === userId).length + 1;
+  let index = 0;
+  let changed = false;
+  const next = windows.map((window) => {
+    if (window.userId !== userId) return window;
+    const rect = tileChatWindowRect(++index, count, viewport);
+    if (window.x === rect.x && window.y === rect.y && window.width === rect.width && window.height === rect.height) return window;
+    changed = true;
+    return { ...window, ...rect };
+  });
+  return changed ? next : windows;
+}
+
 export function createChatWindow(
   window: { id: string; sessionId: string | null; title: string | null; userId: number },
   index: number,
@@ -88,11 +125,13 @@ export function openChatWindowForUser(
   windows: ChatWindowState[],
   window: { id: string; sessionId: string | null; title: string | null; userId: number },
   viewport: ChatWindowViewport,
+  sideBySide = false,
 ): ChatWindowState[] {
   const mine = windows.filter((open) => open.userId === window.userId);
   if (mine.length >= CHAT_WINDOW_MAX) return windows;
   if (window.sessionId && mine.some((open) => open.sessionId === window.sessionId)) return windows;
-  return [...windows, createChatWindow(window, mine.length, viewport)];
+  const next = [...windows, createChatWindow(window, mine.length, viewport)];
+  return sideBySide ? arrangeChatWindowsForUser(next, window.userId, viewport) : next;
 }
 
 export function closeChatWindow(windows: ChatWindowState[], id: string): ChatWindowState[] {
@@ -113,11 +152,12 @@ export function updateChatWindow(
   id: string,
   patch: Partial<Omit<ChatWindowState, "id" | "userId">>,
   viewport: ChatWindowViewport,
+  minimum?: ChatWindowViewport,
 ): ChatWindowState[] {
   return windows.map((window) => {
     if (window.id !== id) return window;
     const next = { ...window, ...patch };
-    return { ...next, ...clampChatWindowRect(next, viewport) };
+    return { ...next, ...clampChatWindowRect(next, viewport, minimum) };
   });
 }
 
@@ -150,6 +190,7 @@ export function readChatWindows(
   raw: unknown,
   viewport: ChatWindowViewport,
   userId: number,
+  minimum?: ChatWindowViewport,
 ): ChatWindowState[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
@@ -166,6 +207,7 @@ export function readChatWindows(
     const rect = clampChatWindowRect(
       { x: candidate.x, y: candidate.y, width: candidate.width, height: candidate.height },
       viewport,
+      minimum,
     );
     windows.push({
       id: candidate.id,

@@ -622,7 +622,7 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
     assert.equal(restore.uses, `actions/cache/restore@${CACHE_SHA}`, key);
     assert.equal(restore.with.path, BROWSERS, key);
     assert.equal(restore.with.key, CACHE_KEY, key);
-    assert.equal(job.steps.indexOf(byName(job, "Generate client and install Chromium")), job.steps.indexOf(restore) + 1, key);
+    assert.deepEqual(job.steps.slice(job.steps.indexOf(restore), job.steps.indexOf(restore) + 3).map((step) => step.name), ["Restore Playwright browser cache", "Restore browser font cache", "Generate client and install Chromium"], key);
   }
 
   const savers = SHARDS.filter((key) => byName(workflow.jobs[key], "Save Playwright browser cache"));
@@ -636,4 +636,32 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
     workflow.jobs["browser-smoke-desktop"].steps.indexOf(save) >
       workflow.jobs["browser-smoke-desktop"].steps.indexOf(byName(workflow.jobs["browser-smoke-desktop"], "Generate client and install Chromium")),
   );
+});
+
+test("HYCI-282: browser shards install Chromium without Ubuntu packages", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const installer = await source(".github/scripts/install-chromium.sh");
+
+  for (const key of SHARDS) {
+    const step = workflow.jobs[key].steps.find((candidate) => candidate.name === "Generate client and install Chromium");
+    assert.ok(step, key);
+    assert.match(step.run, /bash \.github\/scripts\/install-chromium\.sh/, key);
+    assert.doesNotMatch(step.run, /archive\.ubuntu\.com|apt-get|--with-deps/, key);
+  }
+  assert.doesNotMatch(installer, /apt-get|--with-deps|archive\.ubuntu\.com|sudo /);
+  assert.match(installer, /npx playwright install chromium/);
+  assert.match(installer, /browser-font-cache\.mjs/);
+  assert.doesNotMatch(await source(".github/workflows/e2e-ai-pilot.yml"), /archive\.ubuntu\.com|--with-deps|apt-get/);
+  assert.doesNotMatch(await source(".github/workflows/ci-tests.yml"), /apt-get|--with-deps|archive\.ubuntu\.com/);
+});
+
+test("HYCI-286: production health installs Chromium through the shared installer", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/prod-health.yml"));
+  const step = workflow.jobs.smoke.steps.find((candidate) => candidate.id === "setup-pw");
+  assert.ok(step);
+  assert.equal(step.run, "bash .github/scripts/install-chromium.sh");
+  assert.equal(step["continue-on-error"], true);
+  assert.equal(step["timeout-minutes"], 8);
 });

@@ -31,6 +31,7 @@ class FinishChecks(unittest.TestCase):
                         FIXTURE_ROOT=str(self.root))
         self.env.pop('CLAUDE_CODE_SESSION_ID', None)
         self.env.pop('CODEX_THREAD_ID', None)
+        self.env.pop('PI_SESSION_ID', None)
         self.write('hypertask', '''#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -382,6 +383,12 @@ esac
         self.check('cleaned', 'YPER4-697', success=False)
         self.check('branch', 'YPER4-697', 'none', success=False, CODEX_SESSION_ID='')
         self.check('branch', 'YPER4-697', 'none', success=False, CODEX_SESSION_ID='../other')
+
+    def test_pi_session_id_records_ownership(self):
+        pi = 'pi9077abc-1111-2222'
+        self.check('branch', 'YPER4-697', 'none', CODEX_SESSION_ID='', PI_SESSION_ID=pi)
+        self.assertIn('cleaned ok', self.check('cleaned', 'YPER4-697', CODEX_SESSION_ID='', PI_SESSION_ID=pi))
+        self.check('cleaned', 'YPER4-697', success=False, CODEX_SESSION_ID='', PI_SESSION_ID='pi-another')
 
     def test_cannot_replace_ownership_with_none(self):
         self.check('branch', 'YPER4-697', 'own/one')

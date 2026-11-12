@@ -186,7 +186,7 @@ function live(run = command) {
       return run('vcc', args, { env: { ...process.env, SHIP_SESSION_NAME: IDENTITY } });
     },
     recover(title, marker) {
-      const rows = json(run('hypertask', ['tasks', 'list', '--project', '4060', '--search', title, '--limit', '100', '--json'])).tasks;
+      const rows = json(run('hypertask', ['tasks', 'list', '--project', '11514', '--search', title, '--limit', '100', '--json'])).tasks;
       if (!Array.isArray(rows) || rows.length >= 100) throw new Error('Cannot safely reconcile alert creation');
       const matches = rows.filter(t => t.title === title).map(t => this.task(t.ticketNumber))
         .filter(t => t.description?.includes(marker));
@@ -240,12 +240,12 @@ async function plan(data, api, state = { alerts: {} }, now = Date.now()) {
     `Red run: ${data.run.html_url}`, `Last green run: ${data.green.html_url}`, '',
     'PRs merged since the last green run (newest first):', ...data.prs.map(pr => `- #${pr.number} ${pr.title} ${pr.url}`), '',
     fixer ? `Fixer: ${fixer.name} (${fixer.id}), the agent assigned to ${ticket}. Rule: ${rule}. ${why}`
-      : `Fixer: none assigned, ${ticket} has no single agent, so this alert waits unassigned on board 4060. Rule: ${rule}. ${why}`, '', marker
+      : `Fixer: none assigned, ${ticket} has no single agent, so this alert waits unassigned on board 11514. Rule: ${rule}. ${why}`, '', marker
   ].join('\n');
   return { action: 'alert', key, marker, firstRed: data.firstRed.head_sha, run: data.run,
     green: data.green, failures: data.failures, prs: data.prs, chosenPR: chosen.number, fixer, rule, why,
     title: `Production red: ${data.failures[0].file}${data.failures[0].name ? ` ${data.failures[0].name}` : ''}`,
-    description, project: 4060, section: 'In Progress' };
+    description, project: 11514, section: fixer ? 'In Progress' : 'Backlog' };
 }
 function load(dir) {
   try { return json(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')); }
@@ -279,11 +279,11 @@ async function apply(p, state, api, persist) {
     // Save an intent before the non-idempotent create. An interrupted create is reconciled, never blindly repeated.
     a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, runAttempt: p.run.run_attempt || 1, runStartedAt: p.run.run_started_at || p.run.created_at, fixer: p.fixer, files: p.failures.map(f => f.file) };
     persist();
-    const result = json(api.write(['task', 'create', '--project', '4060', '--section', 'In Progress',
-      '--title', p.title, '--description', p.description, '--priority', 'urgent', '--labels', 'Incident,brain-medium', '--json']));
+    const result = json(api.write(['task', 'create', '--project', '11514', '--section', p.section,
+      '--title', p.title, '--description', p.description, '--priority', 'urgent', '--labels', 'Incident,CI,Hypertask CI,brain-medium', '--json']));
     if (result.success !== true) throw new Error('Create returned no success receipt; reconcile saved intent');
     a.ticket = result.task?.ticketNumber || result.tasks?.[0]?.ticketNumber;
-    if (!/^YPER4-\d+$/.test(a.ticket || '')) throw new Error('Create returned no alert ticket reference; reconcile saved intent');
+    if (!/^HYCI-\d+$/.test(a.ticket || '')) throw new Error('Create returned no alert ticket reference; reconcile saved intent');
     persist();
   } else if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
   if (!a.assigned && a.fixer) {
@@ -363,7 +363,7 @@ async function main(args) {
   if (!dryRun && !process.env.PRODUCTION_RED_ALERT_LOCKED) {
     fs.mkdirSync(STATE, { recursive: true, mode: 0o700 });
     return process.stdout.write(command('flock', ['-n', path.join(STATE, 'tick.lock'), process.execPath, __filename], {
-      timeout: 240000, env: { ...process.env, PRODUCTION_RED_ALERT_LOCKED: '1' }
+      timeout: 240000, stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, PRODUCTION_RED_ALERT_LOCKED: '1' }
     }));
   }
   console.log(JSON.stringify(await tick({ dryRun, runId }), null, 2));

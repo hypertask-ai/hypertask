@@ -20,6 +20,18 @@ fi
 if [ "${1:-} ${2:-}" = 'tasks get' ] && [ -n "${VCC_TEST_TASK:-}" ]; then
   exec /bin/cat "$VCC_TEST_TASK"
 fi
+if [ "${1:-} ${2:-}" = 'labels list' ]; then
+  label_project=''
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) label_project=${2:-}; shift ;;
+      --project=*) label_project=${1#--project=} ;;
+    esac
+    shift
+  done
+  [ -n "${VCC_TEST_LABELS:-}" ] && [ -f "$VCC_TEST_LABELS/$label_project.json" ] && exec /bin/cat "$VCC_TEST_LABELS/$label_project.json"
+  exit 93
+fi
 printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
 STUB
 cat > "$T/bin/cat" <<'STUB'
@@ -78,6 +90,11 @@ esac
 STUB
 chmod +x "$T/bin/filing-gate"
 export VCC_FILING_GATE="$T/bin/filing-gate"
+mkdir -p "$T/labels"
+printf '%s\n' '{"success":true,"labels":[{"id":"l1","name":"Infra"},{"id":"l2","name":"Agent Feedback"},{"id":"l3","name":"brain-medium"}]}' > "$T/labels/12057.json"
+printf '%s\n' '{"success":true,"labels":[{"id":"l4","name":"Bug"}]}' > "$T/labels/2101.json"
+printf '%s\n' '{"success":false}' > "$T/labels/12058.json"
+export VCC_TEST_LABELS="$T/labels"
 
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -805,6 +822,17 @@ case "${1:-} ${2:-}" in
   'section list') printf '{"sections":[{"id":31019,"section_title":"Agent Blocked"},{"id":10412,"section_title":"Valentin Review"}]}\n'; exit 0 ;;
   'comments list') exec /bin/cat "$VCC_TEST_COMMENTS" ;;
   'tasks get') exec /bin/cat "$VCC_TEST_TASK" ;;
+  'labels list')
+    label_project=''
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --project) label_project=${2:-}; shift ;;
+        --project=*) label_project=${1#--project=} ;;
+      esac
+      shift
+    done
+    [ -n "${VCC_TEST_LABELS:-}" ] && [ -f "$VCC_TEST_LABELS/$label_project.json" ] && exec /bin/cat "$VCC_TEST_LABELS/$label_project.json"
+    exit 93 ;;
 esac
 printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
 STUB
@@ -875,7 +903,7 @@ filing_refused() {
   run bash "$vcc" "$@"
   [ "$status" = "$code" ] || fail "expected filing-gate exit $code, got $status: $*"
   [[ $(< "$T/err") == *"$message"* ]] || fail "wrong filing-gate message: $(< "$T/err")"
-  ! grep -q '^hypertask ' "$VCC_TEST_TRACE" && [[ $(< "$T/out") != stub:* ]] || fail "filing-gate refusal reached the CLI: $*"
+  ! grep -qE '^hypertask (task|tasks) ' "$VCC_TEST_TRACE" && [[ $(< "$T/out") != stub:* ]] || fail "filing-gate refusal reached the CLI: $*"
 }
 filing_refused 5 'is full' task create --project 4060 --labels Infra,brain-light --title FULLBOARD
 filing_refused 6 'already open' --json tasks create --project=11514 --labels CI,brain-light --title SAMETITLE
@@ -889,4 +917,22 @@ allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labe
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task update X-1 --project 4060 --description 'please create this'
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title 'Board 4060 create note'
 printf 'ok Fleet CI and Fleet Infra creates go through filing-gate\n'
-printf 'vcc helper guard tests passed\n' 
+run bash "$vcc" task create --project 12057 --labels 'Infra,Agent Feedback,brain-light' --title T
+[ "$status" = 0 ] || fail "a board label swap did not reach the CLI: $(< "$T/err")"
+[[ $(< "$T/err") == *'offers no brain-light; using brain-medium'* ]] || fail "no board label swap warning: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Infra,Agent Feedback,brain-medium>'* ]] || fail "brain-light was not swapped: $(< "$T/out")"
+run bash "$vcc" task create --project 12057 --labels=Infra,brain-hard --title T
+[ "$status" = 0 ] || fail "an equals-form board label swap did not reach the CLI: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels=Infra,brain-medium>'* ]] || fail "brain-hard was not swapped: $(< "$T/out")"
+run bash "$vcc" task create --project 2101 --labels 'Bug,brain-medium' --title T
+[ "$status" = 0 ] || fail "a board without brain labels refused a create: $(< "$T/err")"
+[[ $(< "$T/err") == *'has no brain labels; filing without one'* ]] || fail "no drop warning: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Bug>'* ]] || fail "brain label not dropped: $(< "$T/out")"
+run bash "$vcc" task create --project 2101 --labels brain-medium --title T
+[ "$status" = 0 ] || fail "a brain label alone was refused on a board without any: $(< "$T/err")"
+[[ $(< "$T/out") != *'--labels'* ]] || fail "an empty label list still reached the CLI: $(< "$T/out")"
+run bash "$vcc" task create --project 12058 --labels 'Infra,brain-light' --title T
+[ "$status" = 0 ] || fail "an unreadable label response blocked the create: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Infra,brain-light>'* ]] || fail "an unreadable label response changed the create: $(< "$T/out")"
+printf 'ok brain labels follow the board labels\n'
+printf 'vcc helper guard tests passed\n'
