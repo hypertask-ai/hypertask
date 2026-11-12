@@ -95,10 +95,14 @@ test("every alert kind and severity produces a description the ticket API accept
   }
 });
 
-test("the alert comment passes the agent writing rules", async () => {
-  const { issueUpdateComment } = await issueWriter();
-  const comment = issueUpdateComment({ ...issue, severity_label_id: "p2" }, [{ id: "p1", name: "P1" }]);
-  assert.doesNotThrow(() => assertAgentWriting("agent", { text: comment }, {}));
+test("a repeat alert records one plain agent log entry", async () => {
+  const { issueLogText } = await issueWriter();
+  const entry = issueLogText({ ...issue, severity_label_id: "p2" }, [{ id: "p1", name: "P1" }]);
+  assert.match(entry.split("\n")[0], /^PostHog reported this issue again\.$/);
+  assert.match(entry, /Production hits: 3\. Known users: 1\. Hits without a user identity: 2\./);
+  assert.match(entry, /Severity changed from P1 to P2\./);
+  assert.match(entry, /Record findings here\.$/);
+  assert.doesNotMatch(entry, /<(?:p|li|div|br)\b/i);
 });
 
 test("a refused create names the API refusal instead of only the status", async () => {
@@ -109,4 +113,24 @@ test("a refused create names the API refusal instead of only the status", async 
     () => jsonRequest(fetchImpl, "https://app.hypertask.ai/api/mcp/tasks/create", { method: "POST" }),
     /returned HTTP 400: description: Keep each sentence within twelve words/,
   );
+});
+
+test("a repeat alert writes to the agent log, never an untyped people comment", async () => {
+  const { logIssueActivity } = await issueWriter();
+  const posts = [];
+  const fetchImpl = async (url, options = {}) => {
+    posts.push({ url, body: options.body ? JSON.parse(options.body) : null });
+    if (url.endsWith("/api/mcp/agents/runs")) return new Response(JSON.stringify({ success: true, run: { id: `run-${posts.length}` } }), { status: 201 });
+    if (posts.length === 2) return new Response(JSON.stringify({ success: false, error: "run is not active" }), { status: 409 });
+    return new Response(JSON.stringify({ success: true, activity: { id: "a1" } }), { status: 201 });
+  };
+  await logIssueActivity(fetchImpl, "token", { appUrl: "https://app.hypertask.ai" }, { id: 100 }, "key", "PostHog reported this issue again.");
+  assert.deepEqual(posts.map((post) => post.url.replace("https://app.hypertask.ai", "")), [
+    "/api/mcp/agents/runs",
+    "/api/mcp/agents/runs/run-1/activities",
+    "/api/mcp/agents/runs",
+    "/api/mcp/agents/runs/run-3/activities",
+  ]);
+  assert.deepEqual(posts[1].body, { type: "thought", text: "PostHog reported this issue again." });
+  assert.equal(posts.some((post) => post.url.endsWith("/api/mcp/comments")), false);
 });
