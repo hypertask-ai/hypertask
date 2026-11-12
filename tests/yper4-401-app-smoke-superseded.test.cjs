@@ -14,7 +14,7 @@ function pr({ number = 1517, state = "open", draft = false, base = "production",
   return { number, state, draft, base: { ref: base, sha: "a".repeat(40) }, head: { sha, repo: { full_name: "hypertask-ai/hypertask" } } };
 }
 
-function runValidate({ requestPr = "", commitPulls = [], pullByNumber = {} }) {
+function runValidate({ requestPr = "", requestConclusion = "success", commitPulls = [], pullByNumber = {} }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yper4-401-"));
   const fixtures = path.join(dir, "fixtures");
   fs.mkdirSync(fixtures);
@@ -43,7 +43,7 @@ esac
     env: {
       PATH: `${dir}:${process.env.PATH}`,
       REPO: "hypertask-ai/hypertask",
-      REQUEST_CONCLUSION: "success",
+      REQUEST_CONCLUSION: requestConclusion,
       REQUEST_HEAD_SHA: SHA,
       REQUEST_PR: requestPr,
       GITHUB_OUTPUT: output,
@@ -88,14 +88,60 @@ test("an open production pull request is still validated and marked pending", ()
   assert.match(result.calls, /statuses\/6a2159078/);
 });
 
-test("still refused: a draft pull request, a non-production base, or two open pull requests fail", () => {
-  for (const [label, commitPulls] of [
-    ["draft", [pr({ draft: true })]],
-    ["two open", [pr(), pr({ number: 1518 })]],
-  ]) {
+test("skipped draft request workflows stop before API reads or status publication", () => {
+  for (const requestPr of ["", "1517"]) {
+    const result = runValidate({ requestPr, requestConclusion: "skipped" });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.outputs.superseded, "true");
+    assert.equal(result.outputs.pr, undefined);
+    assert.match(result.stdout, /Request workflow was skipped/);
+    assert.equal(result.calls, "");
+  }
+});
+
+test("draft requests stop before status publication with or without a pull-request payload", () => {
+  for (const requestPr of ["", "1517"]) {
+    const draft = pr({ draft: true });
+    const result = runValidate({ requestPr, commitPulls: [draft], pullByNumber: { 1517: draft } });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.outputs.superseded, "true");
+    assert.equal(result.outputs.pr, undefined);
+    assert.equal(result.outputs["head-sha"], undefined);
+    assert.match(result.stdout, /is a draft/);
+    assert.doesNotMatch(result.calls, /statuses/);
+  }
+  for (const job of ["report", "app-smoke"]) {
+    const shouldRun = new Function("needs", "github", "always", "cancelled",
+      `return ${workflow.jobs[job].if.replaceAll(".docs-only", '["docs-only"]')};`);
+    const github = { event_name: "workflow_run", event: { workflow_run: { conclusion: "success" } } };
+    for (const superseded of ["true", "false"]) {
+      const needs = { validate: { outputs: { superseded, "docs-only": "false" } } };
+      assert.equal(shouldRun(needs, github, () => true, () => false), superseded === "false", job);
+    }
+  }
+});
+
+test("a draft made ready during lookup is validated and marked pending", () => {
+  const result = runValidate({ commitPulls: [pr({ draft: true })], pullByNumber: { 1517: pr() } });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.outputs.pr, "1517");
+  assert.equal(result.outputs.superseded, undefined);
+  assert.match(result.calls, /statuses/);
+});
+
+test("failed request workflows remain failures, even for drafts", () => {
+  const result = runValidate({ requestConclusion: "failure", requestPr: "1517", pullByNumber: { 1517: pr({ draft: true }) } });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /Request workflow failed/);
+  assert.equal(result.outputs.superseded, undefined);
+  assert.equal(result.calls, "");
+});
+
+test("still refused: a non-production base or ambiguous open pull requests fail", () => {
+  for (const commitPulls of [[pr(), pr({ number: 1518 })], [pr(), pr({ number: 1518, draft: true })]]) {
     const result = runValidate({ commitPulls });
-    assert.equal(result.status, 1, label);
-    assert.match(result.stdout, /Request is not attached to one open production pull request/, label);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /Request is not attached to one open production pull request/);
   }
   const otherBase = runValidate({ requestPr: "1517", pullByNumber: { 1517: pr({ base: "main" }) } });
   assert.equal(otherBase.status, 1);
