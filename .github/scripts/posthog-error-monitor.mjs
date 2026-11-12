@@ -6,6 +6,10 @@ const APP = "https://app.hypertask.ai";
 export const FAILURE_TITLE = "[INFRA] PostHog error-to-ticket monitoring failed";
 export const MONITORING_BOARD = 11514;
 
+export class BoardReadRefusal extends Error {
+  name = "BoardReadRefusal";
+}
+
 // Independent of the PostHog receiver, credentials, queries and incident parser.
 async function api(fetchImpl, token, path, body, key) {
   const response = await fetchImpl(`${APP}/api/mcp${path}`, {
@@ -13,6 +17,11 @@ async function api(fetchImpl, token, path, body, key) {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
+  if (response.status === 403) {
+    const served = await response.json().catch(() => null);
+    const reason = served?.error || served?.message;
+    throw new BoardReadRefusal(`Hypertask monitoring API refused ${path.split("?")[0]} with HTTP 403${reason ? `: ${reason}` : ""}`);
+  }
   if (!response.ok) throw new Error(`Hypertask monitoring API returned HTTP ${response.status}`);
   const result = await response.json();
   if (result.success === false) throw new Error("Hypertask monitoring API rejected the operation");
@@ -96,6 +105,7 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
   });
   if (triggered.status !== 500) throw new Error(`Production error-test returned HTTP ${triggered.status}, expected 500`);
   let fallbackIssueId;
+  let fallbackRefusal;
   while (now() < deadline) {
     const page = await api(fetchImpl, token, `/tasks?project_id=15&status=Normal&search=${marker}&limit=100`);
     if (!Array.isArray(page.tasks)) throw new Error("Nightly canary lookup returned no tasks");
@@ -103,17 +113,26 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
     let ticket = page.tasks.find((task) => task.description?.includes(marker) && task.description.includes("PostHog issue ID: <code>") && /posthog-alert:issue_(?:created|reopened):/.test(task.description));
     let boardId = 15;
     let delivery = "github";
-    if (!ticket) {
+    if (!ticket && !fallbackRefusal) {
       if (!fallbackIssueId) {
         fallbackIssueId = await findCanaryIssue({ fetchImpl, apiKey, marker, deadline, now });
       }
       if (fallbackIssueId) {
-        const fallback = await api(fetchImpl, token, `/tasks?project_id=${MONITORING_BOARD}&status=Normal&search=${fallbackIssueId}&limit=100`);
-        if (!Array.isArray(fallback.tasks)) throw new Error("Canary fallback lookup returned no tasks");
-        const receipt = new RegExp(`<p>posthog-dispatch-fallback:issue:${fallbackIssueId}:[0-9a-f-]{36}<\\/p>`);
-        ticket = fallback.tasks.find((task) => receipt.test(task.description ?? ""));
-        boardId = MONITORING_BOARD;
-        delivery = "fallback";
+        let fallback;
+        try {
+          fallback = await api(fetchImpl, token, `/tasks?project_id=${MONITORING_BOARD}&status=Normal&search=${fallbackIssueId}&limit=100`);
+        } catch (error) {
+          if (!(error instanceof BoardReadRefusal)) throw error;
+          fallbackRefusal = error.message;
+          console.warn(`Fallback board ${MONITORING_BOARD} is unavailable to this credential, so the canary waits only on the native board 15 ticket: ${error.message}`);
+        }
+        if (fallback) {
+          if (!Array.isArray(fallback.tasks)) throw new Error("Canary fallback lookup returned no tasks");
+          const receipt = new RegExp(`<p>posthog-dispatch-fallback:issue:${fallbackIssueId}:[0-9a-f-]{36}<\\/p>`);
+          ticket = fallback.tasks.find((task) => receipt.test(task.description ?? ""));
+          boardId = MONITORING_BOARD;
+          delivery = "fallback";
+        }
       }
     }
     if (ticket) {
@@ -140,7 +159,8 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
     }
     await wait(Math.min(30_000, Math.max(0, deadline - now())));
   }
-  throw new Error(`No matching board 15 PostHog ticket within 15 minutes: ${marker}`);
+  const fallbackNote = fallbackRefusal ? `; the ${MONITORING_BOARD} fallback board was refused: ${fallbackRefusal}` : "";
+  throw new Error(`No matching board 15 PostHog ticket within 15 minutes: ${marker}${fallbackNote}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
