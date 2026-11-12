@@ -49,7 +49,7 @@ async function requestGuard({ github, context, pull, log }) {
       && candidate.conclusion !== 'skipped')
     .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
   if (!run) throw new Error(`no completed ${GUARD_WORKFLOW} run at ${pull.head.sha}; the change cannot be re-decided`);
-  await github.rest.actions.rerunWorkflowRun({ ...context.repo, run_id: run.id });
+  await github.rest.actions.reRunWorkflow({ ...context.repo, run_id: run.id });
   log(`Change #${pull.number} goes back to the guards as run ${run.id}.`);
 }
 
