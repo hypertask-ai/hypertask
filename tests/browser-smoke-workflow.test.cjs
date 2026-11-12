@@ -638,12 +638,13 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
   );
 });
 
-function runChromiumInstaller({ answering, failures, cached, depsMissing }) {
+function runChromiumInstaller({ answering, failures, cached, depsMissing, hang, deadline, recordTimeout }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-279-"));
   const mirrorFile = path.join(dir, "apt-mirrors.txt");
   fs.writeFileSync(
     path.join(dir, "curl"),
     `#!/bin/bash
+${hang === "probe" ? "exec sleep 300" : ""}
 url="\${@: -1}"
 for hit in ${answering.join(" ")}; do
   case "$url" in *"$hit"*) exit 0;; esac
@@ -657,11 +658,13 @@ exit 6
     `#!/bin/bash
 case "$*" in
   *install-deps*)
+    ${hang === "deps" ? "exec sleep 300" : ""}
     d=$(( $(cat "${dir}/deps-calls" 2>/dev/null || echo 0) + 1 )); echo $d > "${dir}/deps-calls"
     if [ "${depsMissing ? 1 : 0}" = "1" ]; then printf '%s\n' "Missing system dependencies (2): fonts-liberation libnss3" >&2; exit 1; fi
     echo "All system dependencies are installed."; exit 0;;
 esac
 n=$(( $(cat "${dir}/npx-calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/npx-calls"
+${hang === "install" ? "exec sleep 300" : ""}
 if [ "$n" -le ${failures} ]; then printf '%s\n' "E: Failed to fetch packages  Temporary failure resolving" >&2; exit 1; fi
 echo "chromium installed"
 `,
@@ -678,6 +681,14 @@ echo "chromium installed"
     fs.writeFileSync(path.join(cachedDir, "chrome"), '#!/bin/bash\necho "Chromium 120.0.0.0"\n', { mode: 0o755 });
   }
   const aptConf = path.join(dir, "99-ci-timeouts");
+  const timeoutArgs = path.join(dir, "timeout-args");
+  if (recordTimeout) {
+    fs.writeFileSync(path.join(dir, "timeout"), `#!/bin/bash
+printf '%s\\n' "$@" > "${timeoutArgs}"
+exit 124
+`, { mode: 0o755 });
+  }
+  const started = Date.now();
   const child = spawnSync("bash", [path.resolve(".github/scripts/install-chromium.sh")], {
     env: {
       ...process.env,
@@ -686,11 +697,16 @@ echo "chromium installed"
       APT_CONF_FILE: aptConf,
       PLAYWRIGHT_BROWSERS_PATH: browsers,
       RETRY_SLEEP: "0",
+      ...(deadline === undefined ? {} : { CHROMIUM_INSTALL_TIMEOUT: String(deadline) }),
     },
     encoding: "utf8",
+    timeout: deadline === undefined ? 120_000 : 8_000,
+    killSignal: "SIGKILL",
   });
   return {
     status: child.status,
+    elapsed: Date.now() - started,
+    timeoutArgs: fs.existsSync(timeoutArgs) ? fs.readFileSync(timeoutArgs, "utf8").trim().split("\n") : [],
     output: child.stdout + child.stderr,
     mirror: fs.existsSync(mirrorFile) ? fs.readFileSync(mirrorFile, "utf8").trim() : null,
     npxCalls: fs.existsSync(path.join(dir, "npx-calls")) ? Number(fs.readFileSync(path.join(dir, "npx-calls"), "utf8")) : 0,
@@ -765,4 +781,35 @@ test("HYCI-285: short apt timeouts are written before the first install command"
   assert.equal(run.status, 0, run.output);
   assert.match(run.aptConf, /Acquire::http::Timeout "5"/);
   assert.match(run.aptConf, /Acquire::Retries "0"/);
+});
+
+test("HYCI-285: the default whole-install deadline leaves five seconds to kill children", () => {
+  const run = runChromiumInstaller({ answering: [], failures: 0, recordTimeout: true });
+  assert.equal(run.status, 1, run.output);
+  assert.deepEqual(run.timeoutArgs.slice(0, 4), ["-k", "5", "110", "bash"]);
+  assert.equal(run.timeoutArgs.at(-1), "--run");
+  assert.equal((run.output.match(/::error::/g) ?? []).length, 1, run.output);
+  assert.match(run.output, /Chromium installation timed out/);
+});
+
+for (const hang of ["probe", "install", "deps"]) {
+  test(`HYCI-285: the whole-install deadline kills a stalled ${hang}`, () => {
+    const run = runChromiumInstaller({
+      answering: ["archive.ubuntu.com"], failures: 0, cached: hang === "deps", hang, deadline: 1,
+    });
+    assert.equal(run.status, 1, run.output);
+    assert.ok(run.elapsed < 8_000, `${hang} took ${run.elapsed}ms`);
+    assert.equal((run.output.match(/::error::/g) ?? []).length, 1, run.output);
+    assert.match(run.output, /Chromium installation timed out/);
+  });
+}
+
+test("HYCI-285: a disconnected install is killed within two minutes at default budgets", () => {
+  const run = runChromiumInstaller({ answering: [], failures: 0, hang: "install" });
+  assert.equal(run.status, 1, run.output);
+  assert.equal(run.npxCalls, 1, "no retry into a dead network");
+  assert.ok(run.elapsed < 120_000, `disconnected install took ${run.elapsed}ms`);
+  assert.equal((run.output.match(/::error::/g) ?? []).length, 1, run.output);
+  assert.match(run.output, /Chromium installation timed out/);
+  console.log(`HYCI-285 disconnected install: ${run.elapsed}ms, status ${run.status}`);
 });

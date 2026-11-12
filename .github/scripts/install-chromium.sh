@@ -1,15 +1,23 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+if [[ "${1:-}" != "--run" ]]; then
+  started=$SECONDS
+  timeout -k 5 "${CHROMIUM_INSTALL_TIMEOUT:-110}" bash "${BASH_SOURCE[0]}" --run
+  status=$?
+  if ((status == 124 || status == 137)); then
+    echo "::error::Chromium installation timed out after $((SECONDS - started))s; check this runner's outside network"
+    exit 1
+  fi
+  exit "$status"
+fi
+
 SUITE="${UBUNTU_SUITE:-noble}"
 MIRROR_FILE="${APT_MIRROR_FILE:-/etc/apt/apt-mirrors.txt}"
 APT_CONF_FILE="${APT_CONF_FILE:-/etc/apt/apt.conf.d/99-ci-timeouts}"
 BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
 RETRY_SLEEP="${RETRY_SLEEP:-20}"
 PROBE_TIMEOUT="${PROBE_TIMEOUT:-6}"
-DEPS_CHECK_BUDGET="${DEPS_CHECK_BUDGET:-20}"
-DEAD_NETWORK_BUDGET="${DEAD_NETWORK_BUDGET:-45}"
-INSTALL_BUDGET="${INSTALL_BUDGET:-240}"
 ATTEMPTS=2
 MIRROR_ANSWERED=0
 STARTED=$SECONDS
@@ -80,13 +88,8 @@ cached_chromium() {
 }
 
 system_packages_ready() {
-  timeout -k 5 "$DEPS_CHECK_BUDGET" npx playwright install-deps --dry-run chromium > /dev/null 2>&1
+  npx playwright install-deps --dry-run chromium > /dev/null 2>&1
 }
-
-if [[ "${1:-}" == "--install" ]]; then
-  install_once
-  exit $?
-fi
 
 if binary=$(cached_chromium) && command -v strace > /dev/null && system_packages_ready; then
   echo "::notice::Chromium is cached at $binary with its system packages installed; skipping apt ($((SECONDS - STARTED))s)"
@@ -97,11 +100,7 @@ write_apt_timeouts
 
 for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
   choose_mirror
-  budget=$INSTALL_BUDGET
-  if ((MIRROR_ANSWERED == 0)); then
-    budget=$DEAD_NETWORK_BUDGET
-  fi
-  if timeout -k 5 "$budget" bash "${BASH_SOURCE[0]}" --install; then
+  if install_once; then
     echo "::notice::Chromium ready in $((SECONDS - STARTED))s"
     exit 0
   fi
