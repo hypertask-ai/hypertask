@@ -6,11 +6,8 @@ const APP = "https://app.hypertask.ai";
 export const FAILURE_TITLE = "[INFRA] PostHog error-to-ticket monitoring failed";
 export const MONITORING_BOARD = 11514;
 
-const refusedReads = new WeakSet();
-
-// The app refuses a board the credential cannot see. Only the optional fallback board may continue after that.
-export function isRefusedRead(error) {
-  return refusedReads.has(error);
+export class BoardReadRefusal extends Error {
+  name = "BoardReadRefusal";
 }
 
 // Independent of the PostHog receiver, credentials, queries and incident parser.
@@ -23,9 +20,7 @@ async function api(fetchImpl, token, path, body, key) {
   if (response.status === 403) {
     const served = await response.json().catch(() => null);
     const reason = served?.error || served?.message;
-    const refusal = new Error(`Hypertask monitoring API refused ${path.split("?")[0]} with HTTP 403${reason ? `: ${reason}` : ""}`);
-    refusedReads.add(refusal);
-    throw refusal;
+    throw new BoardReadRefusal(`Hypertask monitoring API refused ${path.split("?")[0]} with HTTP 403${reason ? `: ${reason}` : ""}`);
   }
   if (!response.ok) throw new Error(`Hypertask monitoring API returned HTTP ${response.status}`);
   const result = await response.json();
@@ -127,7 +122,7 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
         try {
           fallback = await api(fetchImpl, token, `/tasks?project_id=${MONITORING_BOARD}&status=Normal&search=${fallbackIssueId}&limit=100`);
         } catch (error) {
-          if (!isRefusedRead(error)) throw error;
+          if (!(error instanceof BoardReadRefusal)) throw error;
           fallbackRefusal = error.message;
           console.warn(`Fallback board ${MONITORING_BOARD} is unavailable to this credential, so the canary waits only on the native board 15 ticket: ${error.message}`);
         }
