@@ -34,11 +34,6 @@ export function fillBrowserFontCache(env = process.env) {
 
 const isMain = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 if (isMain) {
-  try {
-    fillBrowserFontCache();
-  } catch (error) {
-    console.error(error.message);
-    process.exit(1);
-  }
+  fillBrowserFontCache();
   console.log("browser font cache ready");
 }
