@@ -50,7 +50,7 @@ test('fallback persists one machine-authored board incident per alert event, wit
 test('failed board delivery cannot claim success, and a retry can persist later', async () => {
   const state = fixture();
   state.available(false);
-  await assert.rejects(state.record(alert, 429), /board is unavailable/);
+  await assert.rejects(state.record(alert, 429), /board 2060 is unavailable/);
   state.available(true);
   state.failWrite(true);
   await assert.rejects(state.record(alert, 403), /write failed/);
