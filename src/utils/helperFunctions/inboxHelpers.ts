@@ -429,7 +429,7 @@ export const getInboxTabs = (
   }
 
   const rankedNeedsYou = needsYouIndices(notifications);
-  if (notifications.some((notice) => notice?.needsYouEnabled && notice.needsYouSource !== "skipped")) autoSplitsWithBlocked.unshift({ splitName: NEEDS_YOU_SPLIT, notificationIndices: rankedNeedsYou, projectId: null });
+  if (rankedNeedsYou.length > 0) autoSplitsWithBlocked.unshift({ splitName: NEEDS_YOU_SPLIT, notificationIndices: rankedNeedsYou, projectId: null });
 
   const splits: NotificationSplit[] = [
     ...autoSplitsWithBlocked,
