@@ -44,9 +44,10 @@ async function replay(featureFlag, { relationStatus = 200 } = {}) {
       relations.set(`${body.source_task_id}:${body.target_ticket_number}`, body);
       return response({ success: true, relation: { id: 1 } });
     }
-    if (url.endsWith("/comments")) {
+    if (parsed.pathname === "/api/mcp/agents/runs") return response({ success: true, run: { id: `run-${calls.length}` } }, 201);
+    if (/^\/api\/mcp\/agents\/runs\/[^/]+\/activities$/.test(parsed.pathname)) {
       comments.set(options.headers["Idempotency-Key"], body);
-      return response({ success: true });
+      return response({ success: true, activity: { id: "activity-1", text: body.text } }, 201);
     }
     if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 999, section_title: "Done" }] }] });
     if (url.endsWith("/tasks/update")) {
