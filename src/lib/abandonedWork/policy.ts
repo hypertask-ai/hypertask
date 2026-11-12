@@ -19,7 +19,7 @@ export type AbandonedRow = {
 export type BoardSpec = { projectId: number; inProgress: string; review: string; intakes: readonly string[]; defaultIntake: string };
 export const BOARDS: readonly BoardSpec[] = [
   { projectId: 15, inProgress: "In Progress", review: "Valentin Review", intakes: ["Bugs", "Improvements", "Features"], defaultIntake: "Improvements" },
-  { projectId: 4060, inProgress: "In Progress", review: "Valentin Review", intakes: ["Backlog"], defaultIntake: "Backlog" },
+  { projectId: 2060, inProgress: "Doing", review: "Valentin Review", intakes: ["Todo"], defaultIntake: "Todo" },
 ];
 export type ReleaseDecision =
   | { action: "keep"; reason: string }
@@ -121,8 +121,8 @@ export function capacityLimit(liveRunners: number): number {
 export function shouldPostCapacityWarning(inProgress: number, liveRunners: number, recentAlerts: number): boolean {
   return recentAlerts === 0 && inProgress > capacityLimit(liveRunners);
 }
-export function capacityWarning(projectId: number, inProgress: number, liveRunners: number): string {
-  return `Abandoned work capacity: board ${projectId} has ${inProgress} tickets In Progress. Live runners are ${liveRunners}. The limit is ${capacityLimit(liveRunners)}.`;
+export function capacityWarning(board: Pick<BoardSpec, "projectId" | "inProgress">, inProgress: number, liveRunners: number): string {
+  return `Abandoned work capacity: board ${board.projectId} has ${inProgress} tickets in ${board.inProgress}. Live runners are ${liveRunners}. The limit is ${capacityLimit(liveRunners)}.`;
 }
 export async function commitIfStillAbandoned(snapshot: AbandonedRow, nowMs: number, board: BoardSpec, io: {
   lockAndReread: (id: number) => Promise<AbandonedRow | null>;

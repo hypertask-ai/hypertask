@@ -10,7 +10,7 @@ export async function sweepValentinWaitingOn(): Promise<number> {
   const changed = await prisma.$transaction(async (tx) => {
     const tasks = await tx.task.findMany({
       where: {
-        projectId: { in: [15, 4060] },
+        projectId: { in: [15, 2060] },
         OR: [
           { status: "Normal", section: { in: WAITING_COLUMNS } },
           { waitingOnUserId: VALENTIN_USER_ID },

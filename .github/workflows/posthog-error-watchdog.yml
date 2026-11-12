@@ -25,6 +25,6 @@ jobs:
           ref: production
       - name: Record failure directly on the Agents and Infra board
         env:
-          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          HYPERTASK_FLEET_BOARD_MCP_TOKEN: ${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}
           POSTHOG_FAILED_RUN: ${{ toJSON(github.event.workflow_run) }}
         run: node .github/scripts/posthog-error-monitor.mjs

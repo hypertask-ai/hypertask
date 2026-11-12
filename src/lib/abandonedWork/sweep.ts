@@ -84,7 +84,7 @@ export async function sweepAbandonedWork(options: { dryRun?: boolean } = {}) {
   if (!enabled) return { enabled: false, liveRunners: 0, boards: [] };
   const nowMs = Date.now();
   const [sectionRows, runnerRows] = await Promise.all([
-    prisma.$queryRaw<Array<{ id: number; projectId: number; title: string }>>`SELECT id, "projectId", "section_title" AS title FROM "Section" WHERE "projectId" IN (15, 4060) AND deleted = false`,
+    prisma.$queryRaw<Array<{ id: number; projectId: number; title: string }>>`SELECT id, "projectId", "section_title" AS title FROM "Section" WHERE "projectId" IN (${Prisma.join(BOARDS.map((board) => board.projectId))}) AND deleted = false`,
     prisma.$queryRaw<Array<{ n: number }>>`SELECT COUNT(*)::int AS n FROM (
       SELECT a.id FROM "Agent" a WHERE a."revokedAt" IS NULL AND a."archivedAt" IS NULL AND a."heartbeatAt" >= now() - interval '45 minutes'
       UNION SELECT r."agentId" FROM "AgentRun" r WHERE r."agentId" IS NOT NULL AND r."lastActivityAt" >= now() - interval '45 minutes'
@@ -96,7 +96,7 @@ export async function sweepAbandonedWork(options: { dryRun?: boolean } = {}) {
   const boards = [];
   const touched = new Set<number>();
   for (const board of BOARDS) {
-    const raw = await prisma.$queryRaw<Raw[]>(snapshotSql(Prisma.sql`t."projectId" = ${board.projectId} AND t.status = 'Normal' AND t.section = 'In Progress'`));
+    const raw = await prisma.$queryRaw<Raw[]>(snapshotSql(Prisma.sql`t."projectId" = ${board.projectId} AND t.status = 'Normal' AND t.section = ${board.inProgress}`));
     const rows = raw.map(toRow);
     const plan = planBoard(rows, nowMs, board);
     const result = {
@@ -121,7 +121,7 @@ export async function sweepAbandonedWork(options: { dryRun?: boolean } = {}) {
     const remaining = rows.length - releasedIds.size;
     const oldest = rows.filter((row) => !releasedIds.has(row.id)).sort((left, right) => Date.parse(left.sectionChangedAt ?? left.createdAt) - Date.parse(right.sectionChangedAt ?? right.createdAt))[0];
     if (!options.dryRun && oldest && shouldPostCapacityWarning(remaining, liveRunners, Number(raw[0]?.recentAlerts ?? 0))) {
-      const plain = capacityWarning(board.projectId, remaining, liveRunners);
+      const plain = capacityWarning(board, remaining, liveRunners);
       await prisma.comment.create({ data: { taskId: oldest.id, text: "", commentText: plain, agentDisplayName: "Hypertask", activity: { type: "AiFeedbackLog", data: { text: plain } } } });
       result.capacityWarning = true;
       touched.add(oldest.id);

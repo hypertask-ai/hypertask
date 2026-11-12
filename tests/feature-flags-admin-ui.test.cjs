@@ -136,7 +136,7 @@ for (const detailsEnabled of [true, false]) {
   });
 }
 
-for (const [key, project, number] of [["htpr-7000-inbox-next-open", 15, 7000], ["yper4-123-board-check", 4060, 123]]) {
+for (const [key, project, number] of [["htpr-7000-inbox-next-open", 15, 7000]]) {
   test(`detail shows just ${key}, metadata, audience, ticket and back link even when overview details are off`, async () => {
     await withAdmin({ flagKey: key }, { flags: rows, detailsEnabled: false }, async ({ document }) => {
       assert.equal(document.querySelector("h1").textContent, key);
@@ -152,6 +152,14 @@ for (const [key, project, number] of [["htpr-7000-inbox-next-open", 15, 7000], [
     });
   });
 }
+
+test("yper4 detail shows the ticket key and does not link to the archived board", async () => {
+  await withAdmin({ flagKey: "yper4-123-board-check" }, { flags: rows, detailsEnabled: false }, async ({ document }) => {
+    assert.match(document.body.textContent, /YPER4-123/);
+    assert.equal(document.querySelector('a[href*="project-4060"]'), null);
+    assert.equal(document.querySelector('a[href*="project-2060"]'), null);
+  });
+});
 
 test("audit metadata uses one existing label line and a safe styled reason link", async () => {
   rows[0].lastChange = {

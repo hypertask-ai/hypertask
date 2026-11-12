@@ -11,7 +11,11 @@ function fixture() {
   let failWrite = false;
   const tx = {
     task: { findFirst: async ({ where }) => { const task = tasks.find(task => task.description.includes(where.description_.is.content.contains)); return task ? { id: task.id } : null; } },
-    project: { findFirst: async () => available ? { uniqueIdentifier: 'YPER4', section: [{ id: 10414, section_title: 'Backlog' }], labels: [{ id: 'existing-infra' }] } : null },
+    project: { findFirst: async ({ where, select }) => {
+      const label = select?.labels?.where?.value;
+      const matches = where?.id === 2060 && where?.status === 'Normal' && select?.section?.where?.section_title === 'Todo' && label?.equals === 'Infra' && label?.mode === 'insensitive';
+      return available && matches ? { uniqueIdentifier: 'IGSH', section: [{ id: 4351, section_title: 'Todo' }], labels: [{ id: 'existing-infra' }] } : null;
+    } },
   };
   const { recordPostHogDispatchFallback } = load('src/utils/controllers/errors/recordPostHogDispatchFallback.ts', {
     '@/lib/prisma': { default: tx },
@@ -31,7 +35,9 @@ test('fallback persists one machine-authored board incident per alert event, wit
   assert.deepEqual(await state.record(alert, 429), first);
   assert.equal(state.tasks.length, 1);
   const task = state.tasks[0];
-  assert.equal(task.projectId, 4060);
+  assert.equal(task.projectId, 2060);
+  assert.equal(task.sectionId, 4351);
+  assert.equal(task.sectionTitle, "Todo");
   assert.equal(task.userId, 332);
   assert.deepEqual(task.labelIds, ['existing-infra']);
   assert.match(task.description, new RegExp(`posthog-dispatch-fallback:issue:${ISSUE}:${alert.event_id}`));
