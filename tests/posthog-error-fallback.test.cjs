@@ -31,7 +31,7 @@ test('fallback persists one machine-authored board incident per alert event, wit
   assert.deepEqual(await state.record(alert, 429), first);
   assert.equal(state.tasks.length, 1);
   const task = state.tasks[0];
-  assert.equal(task.projectId, 4060);
+  assert.equal(task.projectId, 11514);
   assert.equal(task.userId, 332);
   assert.deepEqual(task.labelIds, ['existing-infra']);
   assert.match(task.description, new RegExp(`posthog-dispatch-fallback:issue:${ISSUE}:${alert.event_id}`));
