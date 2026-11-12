@@ -11,14 +11,16 @@ function runInstaller(failPlaywright, { missingFont, fontCacheStatus = 0 } = {})
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hyci-282-mirror-'));
   const source = path.join(dir, 'fonts', 'truetype', 'liberation2');
   fs.mkdirSync(source, { recursive: true });
-  for (const font of ['LiberationSans.ttf', 'NotoSans-Regular.ttf', 'NotoColorEmoji.ttf']) {
+  for (const font of ['LiberationSans-Regular.ttf', 'NotoColorEmoji.ttf']) {
     if (font !== missingFont) fs.writeFileSync(path.join(source, font), 'font-bytes');
   }
   const bin = path.join(dir, 'bin');
   fs.mkdirSync(bin);
-  fs.writeFileSync(path.join(bin, 'fc-cache'), fontCacheStatus === 'missing'
-    ? '#!/nonexistent-fontconfig-interpreter\n'
-    : `#!/bin/sh\nexit ${fontCacheStatus}\n`, { mode: 0o755 });
+  fs.symlinkSync(process.execPath, path.join(bin, 'node'));
+  fs.symlinkSync('/usr/bin/dirname', path.join(bin, 'dirname'));
+  if (fontCacheStatus !== 'missing') {
+    fs.writeFileSync(path.join(bin, 'fc-cache'), `#!/bin/sh\nexit ${fontCacheStatus}\n`, { mode: 0o755 });
+  }
   fs.writeFileSync(path.join(bin, 'strace'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'apt-get'), '#!/bin/sh\necho apt-get >> "$HYCI_CALLS"\nexit 42\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'sudo'), '#!/bin/sh\necho sudo >> "$HYCI_CALLS"\nexit 42\n', { mode: 0o755 });
@@ -26,21 +28,17 @@ function runInstaller(failPlaywright, { missingFont, fontCacheStatus = 0 } = {})
     path.join(bin, 'npx'),
     `#!/bin/sh
 echo "$*" >> "$HYCI_CALLS"
-if [ "$1" = playwright ] && [ "$2" = install ] && [ "$3" = chromium ] && [ "$#" -eq 3 ]; then
-  if [ "$FAIL_PLAYWRIGHT" = 1 ]; then exit 1; fi
-  exit 0
-fi
-echo "unexpected npx $*" >&2
-exit 9
+[ "$*" = 'playwright install chromium' ] || exit 9
+[ "$FAIL_PLAYWRIGHT" != 1 ]
 `,
     { mode: 0o755 },
   );
   const calls = path.join(dir, 'calls');
-  const result = spawnSync('bash', [INSTALLER], {
+  const result = spawnSync('/bin/bash', [INSTALLER], {
     encoding: 'utf8',
     env: {
       ...process.env,
-      PATH: `${bin}:${process.env.PATH}`,
+      PATH: bin,
       HYCI_CALLS: calls,
       FAIL_PLAYWRIGHT: failPlaywright ? '1' : '0',
       BROWSER_FONT_SOURCE: path.join(dir, 'fonts'),
@@ -53,7 +51,7 @@ exit 9
     output: `${result.stdout || ''}${result.stderr || ''}`,
     log: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '',
     dir,
-    font: path.join(dir, 'user', 'truetype', 'liberation2', 'LiberationSans.ttf'),
+    font: path.join(dir, 'user', 'truetype', 'liberation2', 'LiberationSans-Regular.ttf'),
   };
 }
 
@@ -83,7 +81,7 @@ test('a failed browser download does not fall back to apt', () => {
   }
 });
 
-for (const missingFont of ['LiberationSans.ttf', 'NotoSans-Regular.ttf', 'NotoColorEmoji.ttf']) {
+for (const missingFont of ['LiberationSans-Regular.ttf', 'NotoColorEmoji.ttf']) {
   test(`browser font cache rejects missing ${missingFont}`, () => {
     const result = runInstaller(false, { missingFont });
     try {

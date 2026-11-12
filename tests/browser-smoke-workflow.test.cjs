@@ -638,48 +638,6 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
   );
 });
 
-function runChromiumInstaller({ fail }) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-282-"));
-  const source = path.join(dir, "fonts", "truetype", "liberation2");
-  fs.mkdirSync(source, { recursive: true });
-  for (const font of ["LiberationSans.ttf", "NotoSans-Regular.ttf", "NotoColorEmoji.ttf"]) {
-    fs.writeFileSync(path.join(source, font), "font-bytes");
-  }
-  fs.writeFileSync(path.join(dir, "fc-cache"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
-  fs.writeFileSync(path.join(dir, "strace"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
-  fs.writeFileSync(
-    path.join(dir, "npx"),
-    `#!/bin/bash
-printf '%s\\n' "$*" >> "${dir}/npx-args"
-if [ "$1" = playwright ] && [ "$2" = install ] && [ "$3" = chromium ] && [ "$#" = 3 ]; then
-  if [ "${fail}" = 1 ]; then printf '%s\\n' "E: Failed to fetch packages" >&2; exit 1; fi
-  echo "chromium installed"
-  exit 0
-fi
-printf 'unexpected npx %s\\n' "$*" >&2
-exit 9
-`,
-    { mode: 0o755 },
-  );
-  fs.writeFileSync(path.join(dir, "sudo"), "#!/bin/bash\nprintf 'sudo was called\\n' >&2; exit 42\n", { mode: 0o755 });
-  fs.writeFileSync(path.join(dir, "apt-get"), "#!/bin/bash\nprintf 'apt-get was called\\n' >&2; exit 42\n", { mode: 0o755 });
-  const child = spawnSync("bash", [path.resolve(".github/scripts/install-chromium.sh")], {
-    env: {
-      ...process.env,
-      PATH: `${dir}:${process.env.PATH}`,
-      BROWSER_FONT_SOURCE: path.join(dir, "fonts"),
-      BROWSER_FONT_CACHE: path.join(dir, "cache"),
-      BROWSER_FONT_USER: path.join(dir, "user-fonts"),
-    },
-    encoding: "utf8",
-  });
-  return {
-    status: child.status,
-    output: child.stdout + child.stderr,
-    args: fs.existsSync(path.join(dir, "npx-args")) ? fs.readFileSync(path.join(dir, "npx-args"), "utf8").trim() : "",
-  };
-}
-
 test("HYCI-282: browser shards install Chromium without Ubuntu packages", async () => {
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
@@ -706,17 +664,4 @@ test("HYCI-286: production health installs Chromium through the shared installer
   assert.equal(step.run, "bash .github/scripts/install-chromium.sh");
   assert.equal(step["continue-on-error"], true);
   assert.equal(step["timeout-minutes"], 8);
-});
-
-test("HYCI-282: the installer does not ask Ubuntu for packages", () => {
-  const installed = runChromiumInstaller({ fail: 0 });
-  assert.equal(installed.status, 0, installed.output);
-  assert.equal(installed.args, "playwright install chromium");
-  assert.match(installed.output, /browser font cache ready/);
-  assert.doesNotMatch(installed.output, /apt-get was called|sudo was called/);
-
-  const failed = runChromiumInstaller({ fail: 1 });
-  assert.equal(failed.status, 1, failed.output);
-  assert.equal(failed.args, "playwright install chromium");
-  assert.doesNotMatch(failed.output, /apt-get was called|sudo was called/);
 });

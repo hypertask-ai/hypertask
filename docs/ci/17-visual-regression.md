@@ -33,8 +33,8 @@ family the render can reach (`IBM Plex Sans`, `ui-sans-serif`, `system-ui`, `san
 `serif`, `monospace`, `emoji`), hashes those files and every file under `/etc/fonts`, and
 prints sixteen hex characters. It runs after pinned Chromium and the cached browser
 fonts are registered, before the baseline is restored. HYCI-282 removes Ubuntu package
-downloads: the helper seeds its cache from the hosted image's Liberation, Noto Sans and
-Noto Color Emoji fonts, requires all three families, and fails if fontconfig cannot
+downloads: the helper seeds its cache from the hosted image's Liberation and Noto Color Emoji
+fonts, requires both families, and fails if fontconfig cannot
 register them. The v2 cache key excludes earlier, potentially incomplete font caches.
 GitHub rolled `ubuntu-latest` twice inside one hour on 2026-11-03 and each image missed
 the other's saved screens: `visual-compare` rebuilt the base app for 316-325 s of build
