@@ -15,21 +15,21 @@ export function rateIssue(message, users, source) {
     return { severity: "P3", severity_reason: "A deliberate monitoring test, not a user failure." };
   }
   if (/included AI allowance|monthly AI allowance|AI allowance.*(?:used|exceeded)|dedicated team AI Gateway key|direct BYOK key is required/i.test(message)) {
-    return { severity: "P3", severity_reason: "An expected plan limit or missing AI key, not a crash.", user_impact: "AI cannot continue until the team adds a key or renews its allowance." };
+    return { severity: "P3", severity_reason: "An expected plan limit or missing AI key, not a crash.", user_impact: "AI stops until the team adds a key or renews the allowance." };
   }
   if (/^(?:Invalid input|Validation error|Project not found or access denied)$/.test(message)) {
-    return { severity: "P3", severity_reason: "A rejected user request, not a production outage.", user_impact: "The request is refused and the user sees a validation or access message." };
+    return { severity: "P3", severity_reason: "A rejected user request, not a production outage.", user_impact: "The request is refused. The user sees a validation or access message." };
   }
   if (users >= 10 || /data loss|lost data|out of memory|fatal|\bcrash(?:ed)?\b|AI usage persistence failed|Uncaught (?:Error|TypeError)|Minified React error/i.test(message) || source === "client") {
     return {
       severity: "P1",
       severity_reason: users >= 10 ? "At least ten known users are affected." : "A crash or failed durable accounting needs urgent investigation.",
-      ...(/AI usage persistence failed/i.test(message) ? { user_impact: "AI may finish answering, but its usage is not saved, so usage totals and allowance accounting may be wrong." } : source === "client" ? { user_impact: "The page stops working or shows an error fallback instead of the requested content." } : {}),
+      ...(/AI usage persistence failed/i.test(message) ? { user_impact: "AI may finish answering, but its usage is not saved. Usage totals and allowance may be wrong." } : source === "client" ? { user_impact: "The page stops working or shows an error fallback. The requested content does not appear." } : {}),
     };
   }
   return {
     severity: "P2", severity_reason: "A feature failed for some users; no confirmed crash or data loss.",
-    ...(/No output generated/i.test(message) ? { user_impact: "The requested AI reply or draft is empty." } : /prisma\.team\.findUnique/i.test(message) ? { user_impact: "A page that needs team details fails to load or shows an error." } : {}),
+    ...(/No output generated/i.test(message) ? { user_impact: "The requested AI reply or draft is empty." } : /prisma\.team\.findUnique/i.test(message) ? { user_impact: "A page that needs team details fails to load. It may show an error." } : {}),
   };
 }
 
@@ -147,8 +147,27 @@ async function linkIssueFlag(fetchImpl, token, config, issue, task) {
   });
   await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
     method: "POST", headers: mcpHeaders(token, `${key}-comment`),
-    body: JSON.stringify({ task_id: task.id, content_type: "html", text: `<p><strong>Error names this feature flag.</strong></p><p><a href="${escapeHtml(config.appUrl)}/admin/flags/${issue.feature_flag}">${issue.feature_flag}</a></p>` }),
+    body: JSON.stringify({ task_id: task.id, content_type: "html", text: `<p><strong>This error names a feature flag.</strong></p><blockquote><p><a href="${escapeHtml(config.appUrl)}/admin/flags/${escapeHtml(issue.feature_flag)}">${escapeHtml(issue.feature_flag)}</a></p></blockquote>` }),
   });
+}
+
+export function issueUpdateComment(issue, oldLabels = []) {
+  const note = issue.alert_kind === "issue_spiking"
+    ? `PostHog saw a spike. ${escapeHtml(String(issue.spike_count))} hits, baseline ${escapeHtml(String(issue.spike_baseline))}.`
+    : issue.alert_kind === "issue_reopened" ? "PostHog reopened this issue after it was resolved." : "PostHog reported this issue again.";
+  const severityChanged = oldLabels.length !== 1 || oldLabels[0].id !== issue.severity_label_id;
+  const severityNote = severityChanged
+    ? `<p>Severity changed from ${escapeHtml(oldLabels.map((label) => label.name).join(" + ") || "unrated")} to ${escapeHtml(issue.severity)}. ${escapeHtml(issue.severity_reason)}</p>`
+    : "";
+  return (
+    `<p><strong>${escapeHtml(note)}</strong></p>` +
+    `<p>Severity: ${escapeHtml(issue.severity)}. Production hits: ${escapeHtml(String(issue.count))}. ` +
+    `Known users: ${escapeHtml(String(issue.users))}. Hits without a user identity: ${escapeHtml(String(issue.unidentified_hits))}.</p>` +
+    severityNote +
+    (issue.feature_flag ? "" : "<p>No confirmed feature flag.</p>") +
+    `<p>Last seen ${escapeHtml(String(issue.last_seen))}. <a href="${escapeHtml(issue.issue_url)}">PostHog issue</a></p>` +
+    `<p>Record findings here.</p>`
+  );
 }
 
 export async function upsertIssue(fetchImpl, token, config, issue) {
@@ -202,11 +221,7 @@ export async function upsertIssue(fetchImpl, token, config, issue) {
     });
   }
   await linkIssueFlag(fetchImpl, token, config, issue, existing);
-  const note = issue.alert_kind === "issue_spiking"
-    ? `PostHog detected a spike: ${issue.spike_count} hits in its detection window, baseline ${issue.spike_baseline}.`
-    : issue.alert_kind === "issue_reopened" ? "PostHog reopened this issue after it was resolved." : "PostHog reported this issue again.";
-  const severityNote = severityChanged ? `<p>Severity changed from ${escapeHtml(oldLabels.map((label) => label.name).join(" + ") || "unrated")} to ${escapeHtml(issue.severity)}. ${escapeHtml(issue.severity_reason)}</p>` : "";
-  const text = `<p><strong>${escapeHtml(note)}</strong></p><p>${escapeHtml(issue.severity)}: ${issue.count} production hits, ${issue.users} known users in the issue's production history (${issue.unidentified_hits} hits without a user identity).</p>${severityNote}${issue.feature_flag ? "" : "<p>No confirmed feature flag.</p>"}<p>Last seen ${escapeHtml(issue.last_seen)}. <a href="${escapeHtml(issue.issue_url)}">PostHog issue</a></p><p>Next: Investigate the latest production errors in PostHog and record findings here.</p>`;
+  const text = issueUpdateComment({ ...issue, severity_label_id: config.severityLabels[issue.severity] }, oldLabels);
   await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
     method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ task_id: existing.id, text, content_type: "html" }),
   });

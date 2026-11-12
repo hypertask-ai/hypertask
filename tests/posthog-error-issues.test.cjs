@@ -60,7 +60,7 @@ test("issue-id dedupe persists through repeated polls, releases and archived tic
   assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 30, users: 10, severity: "P1" }))).action, "updated");
   assert.equal(state.tasks.length, 1);
   assert.equal(state.comments.size, 2);
-  assert.match([...state.comments.values()][1].text, /30 production hits, 10 known users/);
+  assert.match([...state.comments.values()][1].text, /Production hits: 30\. Known users: 10\./);
   assert.match(task.description, /Production hits: 12/);
   assert.match(task.description, /Human investigation/);
   assert.equal(task.title, "Human edited title");
@@ -180,13 +180,13 @@ test("spikes add their native count and baseline once, or create the same issue-
   const state = board();
   const spike = issue({ alert_kind: "issue_spiking", event_id: "01a11c15-dcdc-7c01-baaf-34a5fb318228", spike_count: 51, spike_baseline: 2 });
   await upsertIssue(state.fetchImpl, "fixture", config, spike);
-  assert.match(state.tasks[0].description, /spike: 51 hits.*baseline 2/);
+  assert.match(state.tasks[0].description, /PostHog saw a spike\. 51 hits, baseline 2\./);
   const nextSpike = { ...spike, event_id: "01a11c15-dcdc-7c01-baaf-34a5fb318229" };
   await upsertIssue(state.fetchImpl, "fixture", config, nextSpike);
   await upsertIssue(state.fetchImpl, "fixture", config, nextSpike);
   assert.equal(state.tasks.length, 1);
   assert.equal(state.comments.size, 1);
-  assert.match([...state.comments.values()][0].text, /spike: 51 hits.*baseline 2/);
+  assert.match([...state.comments.values()][0].text, /PostHog saw a spike\. 51 hits, baseline 2\./);
 });
 
 
@@ -349,8 +349,8 @@ test("repeat alerts leave descriptions byte-for-byte intact and produce one shor
   const comment = [...state.comments.values()][0];
   assert.equal(comment.content_type, "html");
   assert.match(comment.text, /^<p><strong>[^<]+<\/strong><\/p>/);
-  assert.match(comment.text, /20 production hits, 3 known users/);
-  assert.match(comment.text, /<p>Next: [^<]+<\/p>$/);
+  assert.match(comment.text, /Production hits: 20\. Known users: 3\./);
+  assert.match(comment.text, /<p>Record findings here\.<\/p>$/);
   assert.equal(state.calls.slice(before).filter((call) => call.url.endsWith("/comments")).length, 1);
   assert.equal(state.calls.slice(before).some((call) => call.url.endsWith("/tasks/update")), false);
   assert.doesNotMatch(description, /posthog-count|posthog-users|posthog-issue-(?:start|end)/);
@@ -436,12 +436,12 @@ test("review racing creation rechecks before create and converges duplicates on 
   const active = state.tasks.filter((task) => task.status === "Normal");
   assert.equal(active.length, 1);
   assert.equal(active[0].id, 1000);
-  assert.match([...state.comments.values()].at(-1).text, /60 production hits, 12 known users/);
+  assert.match([...state.comments.values()].at(-1).text, /Production hits: 60\. Known users: 12\./);
   assert.deepEqual(active[0].labels.map((label) => label.id), ["label-p1"]);
   assert.equal(state.tasks[1].status, "Archive");
   await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 61, users: 12 }));
   assert.equal(state.tasks.length, 2);
-  assert.match([...state.comments.values()].at(-1).text, /61 production hits/);
+  assert.match([...state.comments.values()].at(-1).text, /Production hits: 61\./);
   const beforeCreate = state.calls.slice(0, state.calls.findIndex((call) => call.url.endsWith("/tasks/create")));
   assert.equal(beforeCreate.filter((call) => call.url.includes("status=Deleted")).length, 4);
 });
@@ -461,5 +461,5 @@ test("review racing creation avoids creating when the immediate recheck finds a 
   assert.equal((await upsertIssue(fetchImpl, "fixture", config, issue({ count: 20 }))).action, "updated");
   assert.equal(state.tasks.length, 1);
   assert.equal(state.calls.filter((call) => call.url.endsWith("/tasks/create")).length, 1);
-  assert.match([...state.comments.values()].at(-1).text, /20 production hits/);
+  assert.match([...state.comments.values()].at(-1).text, /Production hits: 20\./);
 });
