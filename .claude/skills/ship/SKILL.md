@@ -78,4 +78,4 @@ For a broken tool/server after two failed attempts, record the exact error and n
 
 ## Handle exceptions without inventing completion
 
-Load [exceptions and other repositories](../../reference/ship-operations.md) only for a blocked, archived, already-fixed, no-change, dropped, non-app or installation task. Keep unfinished evidence and work; never delete another session's files. A partial fix is not completion.
+Load [exceptions](../../reference/ship-operations.md#exceptions) for blocked, archived, already-fixed, no-change, dropped or human-decision cases. For non-app work, load [other repositories](../../reference/ship-operations.md#other-repositories); for installation tasks, load [runner installation](../../reference/ship-operations.md#runner-installation). Keep unfinished evidence and work; never delete another session's files. A partial fix is not completion.
