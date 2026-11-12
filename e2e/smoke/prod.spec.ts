@@ -388,6 +388,58 @@ test('multi-chat window has four 4px corners', { tag: ['@id:multi-chat-window-co
   }
 })
 
+for (const showQuickTips of [true, false]) {
+  test(`floating chats minimize and restore above the footer (tips ${showQuickTips})`, { tag: ['@id:chat-window-minimize-restore'] }, async ({ page }, testInfo) => {
+    test.skip(!process.env.BROWSER_SMOKE_PR || testInfo.project.name !== 'Desktop', 'isolated desktop PR fixture only')
+    await page.setViewportSize({ width: 1920, height: 1032 })
+    await page.route('**/api/flags', async route => {
+      const response = await route.fetch()
+      const body = await response.json()
+      await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8334-multi-chat-windows': true, 'htpr-8988-chat-window-layout': true, 'htpr-8054-graphite-2': true } } })
+    })
+    await page.addInitScript((tips) => {
+      const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
+      localStorage.setItem('recoil-persist', JSON.stringify({ ...saved, showQuickTips: tips, isAiChatSidebarMode: false, aiChatPinned: false, aiChatAutoOpenSuppressed: true, aiChatAutoOpenPreferences: {}, aiChatWindows: [] }))
+    }, showQuickTips)
+    await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+    await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
+    await page.getByRole('button', { name: 'Open AI chat', exact: true }).click()
+    const frames = page.getByRole('dialog', { name: 'AI chat window', exact: true })
+    await expect(frames).toHaveCount(1)
+    for (const count of [2, 3]) {
+      await page.keyboard.press('Control+Shift+o')
+      await expect(frames).toHaveCount(count)
+    }
+    const tabs = page.locator('[data-chat-window-dock] > button')
+    for (const theme of ['porcelain', 'amoled', 'graphite-2']) {
+      await page.evaluate(name => {
+        document.cookie = `theme=${name}; path=/`
+        document.documentElement.removeAttribute('data-theme')
+      }, theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      for (let count = 1; count <= 3; count++) {
+        await frames.filter({ visible: true }).last().locator('button:has(svg.lucide-minus)').click()
+        await expect(tabs, `${theme}: one tab per single minimize click`).toHaveCount(count)
+        await expect(frames.filter({ visible: true })).toHaveCount(3 - count)
+      }
+      const bounds = await tabs.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()))
+      expect(new Set(bounds.map(rect => rect.y)).size).toBe(1)
+      const footer = page.locator('.quick-tips-bar')
+      if (showQuickTips) {
+        await expect(footer).toBeVisible()
+        const footerBounds = await footer.boundingBox()
+        if (!footerBounds) throw new Error('Visible quick tips footer has no bounds')
+        for (const tab of bounds) expect(tab.bottom).toBeLessThanOrEqual(footerBounds.y)
+      }
+      for (let count = 1; count <= 3; count++) {
+        await tabs.first().click()
+        await expect(frames.filter({ visible: true })).toHaveCount(count)
+        await expect(tabs).toHaveCount(3 - count)
+      }
+    }
+  })
+}
+
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
   const fixture = JSON.parse(readFileSync(path.join(__dirname, '.state', 'card-fixture.json'), 'utf8')) as {

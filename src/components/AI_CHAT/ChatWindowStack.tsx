@@ -117,7 +117,7 @@ export default function ChatWindowStack({ userId }: { userId: number | null }) {
         <div
           data-chat-window-dock
           className={`fixed right-2 z-popup flex max-w-[calc(100vw-1rem)] items-center gap-1 ${sideBySide ? "flex-nowrap overflow-x-auto" : "flex-wrap justify-end"}`}
-          style={{ bottom: sideBySide ? 0 : COLLAPSED_ROW_BOTTOM_PX }}
+          style={{ bottom: sideBySide ? "var(--quick-tips-clearance, 20px)" : COLLAPSED_ROW_BOTTOM_PX }}
         >
           {primaryVisible && chat.minimized && <ChatWindow />}
           {collapsed.map((state) => (

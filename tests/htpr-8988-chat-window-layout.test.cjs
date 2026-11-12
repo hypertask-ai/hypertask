@@ -126,18 +126,22 @@ test("real controller and stack tile three frames, share one minimized dock, res
     assertSeparate(rects(), { width: 1920, height: 1032 });
     const secondaryIds = view.values.windows.map(({ id }) => id);
     const primaryFrame = view.container.querySelector('[data-chat-body="primary"]').closest('[role="dialog"]');
-    React.act(() => primaryFrame.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, button: 0 })));
+    React.act(() => primaryFrame.click());
     assert.ok(primaryFrame.classList.contains("z-popup"), "primary can be brought above overlapping secondary windows");
     assert.ok(frames().at(-1).classList.contains("z-floating"));
-    React.act(() => frames().at(-1).dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, button: 0 })));
+    React.act(() => frames().at(-1).click());
     assert.ok(primaryFrame.classList.contains("z-floating"), "focusing a secondary returns primary to its normal layer");
     for (const id of ["primary", ...secondaryIds]) {
-      React.act(() => view.container.querySelector(`[aria-label="Minimize ${id}"]`).click());
+      const button = view.container.querySelector(`[aria-label="Minimize ${id}"]`);
+      const before = frames();
+      React.act(() => button.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, button: 0 })));
+      assert.deepEqual(frames(), before, "pointerdown must not move the clicked node before mouseup/click");
+      React.act(() => button.click());
     }
     assert.equal(visible().length, 0);
     const docks = view.container.querySelectorAll("[data-chat-window-dock]");
     assert.equal(docks.length, 1);
-    assert.equal(docks[0].style.bottom, "0px");
+    assert.equal(docks[0].style.bottom, "var(--quick-tips-clearance, 20px)");
     assert.equal(docks[0].children.length, 3);
     assert.ok(docks[0].classList.contains("flex-nowrap"));
     assert.ok(docks[0].classList.contains("overflow-x-auto"));
@@ -145,7 +149,7 @@ test("real controller and stack tile three frames, share one minimized dock, res
     React.act(() => docks[0].firstElementChild.click());
     assert.equal(visible().length, 1);
     assert.equal(view.values.primary.minimized, false);
-    React.act(() => view.controller.restore(secondaryIds[0]));
+    React.act(() => view.container.querySelector("[data-chat-window-dock] > button").click());
     assert.equal(visible().length, 2);
     const untouched = view.values.windows.find(({ id }) => id === secondaryIds[1]);
     const moving = view.values.windows.find(({ id }) => id === secondaryIds[0]);

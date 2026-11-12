@@ -579,5 +579,5 @@ message merely to verify navigation.
 
 - Enable `htpr-8334-multi-chat-windows` and `htpr-8988-chat-window-layout` on Sandbox 7049. Sidebar New chat and Ctrl+Shift+O stay in the sidebar.
 - Choose Floating window and add two chats: three top-level frames do not intersect at 1920x1032; narrow screens use rows. Drag, resize, close and focus each independently.
-- Primary Sidebar removes extra windows, not conversations. Minimized restore buttons share one bottom row with horizontal scrolling. Restore and reload: saved secondary conversations stay separate.
+- Primary Sidebar removes extra windows, not conversations. Minimized restore buttons share one bottom row with horizontal scrolling, above the quick-tips footer when shown. Minimize each window with one ordinary click, including an unfocused secondary: no first click may disappear during focus changes. Restore all three through ordinary tab clicks with quick tips both shown and hidden. Restore and reload: saved secondary conversations stay separate.
 - Record both modes and phone at 390x844 in Light, AMOLED and Graphite 2; compare failure captures, not an invented frame. Layout-flag Off retains the old primary panel and positions. No model reply needed.
