@@ -37,10 +37,16 @@ jobs:
           TICKET: ${{ inputs.ticket }}
         run: |
           set -euo pipefail
+          units() { local LC_ALL=C; printf '%s' "${#1}"; }
           api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
           # Manual inputs are untrusted: pin both to their expected shapes before use.
           [[ "$TICKET" =~ ^[0-9]{1,7}$ ]] || { echo "ticket must be a board-15 unique index"; exit 1; }
           [[ -z "$DEPLOYMENT" || "$DEPLOYMENT" =~ ^dpl_[A-Za-z0-9]{1,64}$ ]] || { echo "deployment must look like dpl_..."; exit 1; }
+
+          context=$(curl -sS -o /tmp/me.json -w "%{http_code}" "https://app.hypertask.ai/api/mcp/user/context" \
+            -H "Authorization: Bearer $MCP_TOKEN")
+          [ "$context" = 200 ] || { echo "token check: HTTP $context"; head -c 300 /tmp/me.json; echo; exit 1; }
+          [ -n "$(jq -r '.connected_agent.id // empty' /tmp/me.json)" ] || { echo "HYPERTASK_MCP_TOKEN is not an agent token; only an agent token can open a run and write the agent lane"; exit 1; }
 
           if [ -z "$DEPLOYMENT" ]; then
             DEPLOYMENT=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=1" \
@@ -67,7 +73,7 @@ jobs:
           while IFS= read -r line; do
             if [ -z "${line//[[:space:]]/}" ]; then continue; fi
             line=${line:0:400}
-            if [ $(( ${#TEXT} + ${#line} + 1 )) -gt 7900 ]; then break; fi
+            if [ $(( $(units "$TEXT") + $(units "$line") + 1 )) -gt 7900 ]; then break; fi
             TEXT+=$'\n'"$line"
             KEPT=$((KEPT + 1))
           done < <(printf '%s\n' "$EVENTS" | tac)

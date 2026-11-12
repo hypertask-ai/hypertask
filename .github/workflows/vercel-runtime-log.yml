@@ -56,12 +56,18 @@ jobs:
           LIMIT: ${{ inputs.limit }}
         run: |
           set -euo pipefail
+          units() { local LC_ALL=C; printf '%s' "${#1}"; }
           [[ "$TICKET" =~ ^[0-9]{1,7}$ ]] || { echo "ticket must be a ticket's unique index"; exit 1; }
           [[ "$BOARD" =~ ^[0-9]{1,7}$ ]] || { echo "project must be a project id"; exit 1; }
           [[ "$LIMIT" =~ ^[0-9]{1,3}$ ]] && [ "$LIMIT" -ge 1 ] && [ "$LIMIT" -le 500 ] || { echo "limit must be 1 to 500"; exit 1; }
           [[ -z "$LEVEL" || "$LEVEL" =~ ^(error|warn|info)$ ]] || { echo "level must be error, warn, info or empty"; exit 1; }
           [[ -z "$ROUTE" || "$ROUTE" =~ ^/[A-Za-z0-9._/-]{0,200}$ ]] || { echo "path must be a plain route like /api/ai/chat/stream"; exit 1; }
           [ "${#SEARCH}" -le 200 ] || { echo "search must be 200 characters or fewer"; exit 1; }
+
+          context=$(curl -sS -o /tmp/me.json -w "%{http_code}" "https://app.hypertask.ai/api/mcp/user/context" \
+            -H "Authorization: Bearer $MCP_TOKEN")
+          [ "$context" = 200 ] || { echo "token check: HTTP $context"; head -c 300 /tmp/me.json; echo; exit 1; }
+          [ -n "$(jq -r '.connected_agent.id // empty' /tmp/me.json)" ] || { echo "HYPERTASK_MCP_TOKEN is not an agent token; only an agent token can open a run and write the agent lane"; exit 1; }
 
           now=$(date -u +%s)
           if [[ "$SINCE" =~ ^([0-9]{1,4})([smhd])$ ]]; then
@@ -127,7 +133,7 @@ jobs:
           while IFS= read -r line; do
             if [ -z "${line//[[:space:]]/}" ]; then continue; fi
             line=${line:0:400}
-            if [ $(( ${#TEXT} + ${#line} + 1 )) -gt 7900 ]; then break; fi
+            if [ $(( $(units "$TEXT") + $(units "$line") + 1 )) -gt 7900 ]; then break; fi
             TEXT+=$'\n'"$line"
             KEPT=$((KEPT + 1))
           done <<< "$EVENTS"
