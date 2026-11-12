@@ -90,6 +90,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$REQUEST_CONCLUSION" = "skipped" ]; then
+            echo "::notice::Request workflow was skipped; nothing to smoke."
+            echo "superseded=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           [ "$REQUEST_CONCLUSION" = "success" ] || { echo "::error::Request workflow failed."; exit 1; }
 
           if [ -z "$REQUEST_PR" ]; then
@@ -97,7 +102,6 @@ jobs:
             REQUEST_PR=$(jq -r --arg sha "$REQUEST_HEAD_SHA" '
               [.[] | select(
                 .state == "open" and
-                .draft == false and
                 .base.ref == "production" and
                 .head.sha == $sha
               )] |
@@ -116,6 +120,16 @@ jobs:
           pr_json=$(gh api "repos/$REPO/pulls/$REQUEST_PR")
           head_sha=$(jq -r '.head.sha' <<<"$pr_json")
           head_repository=$(jq -r '.head.repo.full_name' <<<"$pr_json")
+          if jq -e --arg sha "$REQUEST_HEAD_SHA" '
+            .state == "open" and
+            .draft == true and
+            .base.ref == "production" and
+            .head.sha == $sha
+          ' <<<"$pr_json" >/dev/null; then
+            echo "::notice::Pull request #$REQUEST_PR is a draft; ready_for_review will request its app smoke."
+            echo "superseded=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           jq -e --arg sha "$REQUEST_HEAD_SHA" '
             .state == "open" and
             .draft == false and
