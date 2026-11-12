@@ -56,6 +56,7 @@ export function inboxTaskSelect(userId: number, includeCachedDescription = false
     lastCommentAt: true,
     staleNudgedAt: true,
     waitingOnUserId: true,
+    waitingOnAgentId: true,
     waitingOnSetById: true,
     waitingOnSetAt: true,
     comments: {
@@ -80,7 +81,7 @@ export function notificationInboxInclude(
   includeCachedDescription = false
 ): Prisma.NotificationInclude {
   return {
-    comment: { select: { id: true, text: true } },
+    comment: { select: { id: true, text: true, kind: true } },
     reaction: { select: { emoji: true } },
     notification_invite: { select: { inviteURL: true } },
     project: {
@@ -158,14 +159,12 @@ export async function getInboxNotifications(
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
   }
-  const selectedRows = await client.$queryRaw<{ id: number; needsYouScore: number | null }[]>(Prisma.sql`
-    SELECT selected.id, selected."needsYouScore"
+  const selectedRows = await client.$queryRaw<{ id: number }[]>(Prisma.sql`
+    SELECT selected.id
     FROM (
       SELECT DISTINCT ON (n."taskId", n."notification_inviteId")
         n.id,
-        n."createdAt",
-        MAX(CASE WHEN n."needsYouSource" IN ('jev', 'rules') THEN n."needsYouScore" END)
-          OVER (PARTITION BY n."taskId") AS "needsYouScore"
+        n."createdAt"
       FROM "Notification" AS n
       INNER JOIN "Task" AS t ON t.id = n."taskId"
       WHERE ${visibleInboxSql(userId)}
@@ -179,7 +178,6 @@ export async function getInboxNotifications(
   `);
 
   if (!selectedRows.length) return [];
-  const scores = new Map(selectedRows.map((row) => [row.id, row.needsYouScore]));
   const notifications = await client.notification.findMany({
     include: notificationInboxInclude(userId, withCachedDescription),
     where: {
@@ -191,7 +189,7 @@ export async function getInboxNotifications(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     relationLoadStrategy: "join",
   });
-  return notifications.map((notice) => scores.get(notice.id) == null ? notice : { ...notice, needsYouScore: scores.get(notice.id) });
+  return notifications;
 }
 
 const getRecentInboxActorActivity = (userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) => {
@@ -278,7 +276,7 @@ const notificationGetAll = async (
             where: { userId: parsedUserId, agentId: null, status: "Archive", archivedAt: { not: null } },
             orderBy: { archivedAt: "desc" },
             take: 1,
-            select: { archivedAt: true },
+            select: { archivedAt: true, needsYouSource: true },
           },
           project: {
             select: {
@@ -322,7 +320,7 @@ const notificationGetAll = async (
             comment: { kind: { in: ["question", "qa", "done"] } },
           },
           include: {
-            comment: { select: { id: true, text: true } },
+            comment: { select: { id: true, text: true, kind: true } },
             fromUser: { select: { displayName: true, photoURL: true } },
             fromAgent: { select: { displayName: true, photoURL: true } },
           },
@@ -546,7 +544,7 @@ const notificationGetAll = async (
               orderBy: { createdAt: "desc" },
               distinct: ["taskId", "type", "fromAgentId"],
               include: {
-                comment: { select: { id: true, text: true } },
+                comment: { select: { id: true, text: true, kind: true } },
                 fromUser: { select: { displayName: true, photoURL: true } },
                 fromAgent: { select: { displayName: true, photoURL: true } },
               },
@@ -698,6 +696,9 @@ const notificationGetAll = async (
         type: earner.type,
         comment: earner.comment,
         commentId: earner.commentId,
+        needsYouScore: earner.needsYouScore,
+        needsYouReason: earner.needsYouReason,
+        needsYouSource: earner.needsYouSource,
         fromUserId: earner.fromUserId,
         fromUser: earner.fromUser,
         fromAgentId: earner.fromAgentId,
@@ -716,8 +717,8 @@ const notificationGetAll = async (
     const blockedInboxArchive = dismissedBlockedTasks.length > 0
       && await isFeatureEnabled(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG, parsedUserId).catch(() => false);
     const dismissedBlockedTaskIds = new Set(blockedInboxArchive ? dismissedBlockedTasks.map((task) => task.id) : []);
-    const blockedByYouRows = blockedTasks.filter((task) => !dismissedBlockedTaskIds.has(task.id))
-      .map(({ notifications: _archivedNotifications, ...task }) => {
+    const blockedByYouRows = blockedTasks.filter((task) => needsYouEnabled || !dismissedBlockedTaskIds.has(task.id))
+      .map(({ notifications: archivedNotifications, ...task }) => {
       const fromUser =
         (task.waitingOnSetById
           ? waitingOnSetByUserMap.get(task.waitingOnSetById)
@@ -725,6 +726,8 @@ const notificationGetAll = async (
       return {
         id: `-${task.id}`,
         waitingOnSynthetic: true,
+        needsYouOnly: dismissedBlockedTaskIds.has(task.id),
+        needsYouSource: archivedNotifications[0]?.needsYouSource,
         type: "TaskReminder" as const,
         activeNotificationTypes: ["TaskReminder" as const],
         status: "Normal",
