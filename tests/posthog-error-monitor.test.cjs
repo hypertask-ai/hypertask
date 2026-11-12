@@ -221,3 +221,80 @@ test("canary issue discovery uses only bounded same-origin REST reads", async ()
   await assert.rejects(findCanaryIssue({ ...options, fetchImpl: async () => response({}, 403) }), /HTTP 403/);
   await assert.rejects(findCanaryIssue({ ...options, deadline: 0, fetchImpl: async () => assert.fail("expired lookup fetched") }), /exceeded fifteen minutes/);
 });
+
+function refusedFallbackFetch(searchesToFind = 2, refusalBody = { success: false, error: "Project not found or access denied" }) {
+  const calls = [];
+  let searches = 0;
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith("/error-test")) return response({}, 500);
+    if (url.includes("/error_tracking/issues/?")) return response({ results: [{ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1" }], next: null });
+    if (url.includes("/tasks?")) {
+      if (new URL(url).searchParams.get("project_id") === "11514") return response(refusalBody, 403);
+      return response({ tasks: ++searches < searchesToFind ? [] : [
+        { id: 100, description: `PostHog issue ID: <code>${ISSUE_ID}</code> PostHog pipeline canary yper4-331-123-1 posthog-alert:issue_created:alert-id` },
+      ] });
+    }
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }] });
+    if (url.endsWith("/tasks/update")) return response({ success: true });
+    if (url.includes("posthog.com/api/projects/236160/error_tracking/issues/")) return response({ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
+    assert.fail(url);
+  };
+  return { calls, fetchImpl, boards: () => calls.filter((call) => call.url.includes("/tasks?") && new URL(call.url).searchParams.get("project_id") === "11514").length };
+}
+
+test("a refused fallback board does not end the night the native ticket still arrives", async () => {
+  const { runCanary } = await import(script);
+  const state = refusedFallbackFetch();
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (message) => warnings.push(String(message));
+  let clock = 0;
+  try {
+    const result = await runCanary({ ...state, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; } });
+    assert.equal(result.action, "verified");
+    assert.equal(result.delivery, "github");
+    assert.equal(result.boardId, 15);
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(state.boards(), 1);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /Fallback board 11514 is unavailable/);
+  assert.match(warnings[0], /Project not found or access denied/);
+});
+
+test("a refusal that outlasts the window fails and names the served reason", async () => {
+  const { runCanary } = await import(script);
+  const state = refusedFallbackFetch(Infinity);
+  const warn = console.warn;
+  console.warn = () => {};
+  let clock = 0;
+  try {
+    await assert.rejects(
+      runCanary({ ...state, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; } }),
+      /No matching board 15 PostHog ticket within 15 minutes: yper4-331-123-1; the 11514 fallback board was refused: .*HTTP 403: Project not found or access denied/,
+    );
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(clock, 15 * 60_000);
+  assert.equal(state.boards(), 1);
+});
+
+test("only a refused fallback is tolerated; other refusals and failures still fail the run", async () => {
+  const { runCanary } = await import(script);
+  const options = { token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1" };
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const broken = refusedFallbackFetch();
+    await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("/tasks?") && new URL(url).searchParams.get("project_id") === "11514" ? response({}, 500) : broken.fetchImpl(url, opts) }), /returned HTTP 500/);
+    const refusedBoardFifteen = refusedFallbackFetch();
+    await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("/tasks?") && new URL(url).searchParams.get("project_id") === "15" ? response({ success: false, error: "Project not found or access denied" }, 403) : refusedBoardFifteen.fetchImpl(url, opts) }), /refused \/tasks with HTTP 403: Project not found or access denied/);
+    const refusedClose = refusedFallbackFetch(1);
+    await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.endsWith("/tasks/update") ? response({ success: false, error: "Board not found or access denied" }, 403) : refusedClose.fetchImpl(url, opts) }), /refused \/tasks\/update with HTTP 403/);
+  } finally {
+    console.warn = warn;
+  }
+});
