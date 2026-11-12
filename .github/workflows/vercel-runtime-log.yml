@@ -118,35 +118,42 @@ jobs:
           EVENTS=$(tail -100 /tmp/lines.txt \
             | sed -E -e 's#[a-z]+://[^[:space:]]*@[^[:space:]]+#<url-with-credentials>#g' \
                      -e 's#(token|secret|password|api[_-]?key|authorization)([=: ]+)[^[:space:]]+#\1\2<redacted>#Ig')
-          echo "fetched $(wc -l < /tmp/lines.txt) lines, posting up to $(printf '%s\n' "$EVENTS" | wc -l)"
+          TOTAL=$(printf '%s\n' "$EVENTS" | grep -c '[^[:space:]]' || true)
+          echo "fetched $(wc -l < /tmp/lines.txt) lines, keeping up to $TOTAL"
 
-          BODY_JQ=$(cat <<'JQ'
-            ($ev | split("\n") | map(select(length > 0)) | reverse) as $rev
-            | ("<p><strong>Production runtime log</strong> (vercel-runtime-log workflow, newest first).</p>"
-               + "<p>" + ($meta | @html) + "</p>") as $head
-            | ([$rev[] | (if length > 400 then .[0:400] + " [...]" else . end) | @html]) as $lines
-            | (5000 - ($head | length) - 11 - 120) as $budget
-            | reduce $lines[] as $line
-                ({kept: [], used: 0, full: false};
-                 if .full then .
-                 elif (.used + ($line | length) + 1) <= $budget
-                   then {kept: ([$line] + .kept), used: (.used + ($line | length) + 1), full: false}
-                   else {kept: .kept, used: .used, full: true}
-                 end)
-            | {unique_index: ($t | tonumber), project_id: ($p | tonumber), content_type: "html",
-               text: ($head + "<pre>" + (.kept | join("\n")) + "</pre>"
-                      + (if (.kept | length) < ($lines | length)
-                         then "<p>Earlier lines were dropped to fit the 5000-character comment limit.</p>"
-                         else "" end))}
-          JQ
-          )
           WINDOW="$SINCE$([ -z "$LEVEL" ] || printf ', level %s' "$LEVEL")$([ -z "$ROUTE" ] || printf ', route %s' "$ROUTE")$([ -z "$SEARCH" ] || printf ', search %s' "$SEARCH")"
-          BODY=$(jq -n --arg meta "Read at $(date -u +%Y-%m-%dT%H:%M:%SZ). Window $WINDOW." \
-            --arg ev "$EVENTS" --arg t "$TICKET" --arg p "$BOARD" "$BODY_JQ")
-          code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/comments" \
-            -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" -d "$BODY")
-          echo "comment post: HTTP $code"
+          # HYCI-331: the agent lane caps a note at 8000 characters, so keep the newest whole lines.
+          TEXT="Production runtime log (vercel-runtime-log workflow, newest first)."$'\n'"Read at $(date -u +%Y-%m-%dT%H:%M:%SZ). Window $WINDOW."
+          KEPT=0
+          while IFS= read -r line; do
+            if [ -z "${line//[[:space:]]/}" ]; then continue; fi
+            line=${line:0:400}
+            if [ $(( ${#TEXT} + ${#line} + 1 )) -gt 7900 ]; then break; fi
+            TEXT+=$'\n'"$line"
+            KEPT=$((KEPT + 1))
+          done <<< "$EVENTS"
+          if [ "$KEPT" -lt "$TOTAL" ]; then
+            TEXT+=$'\n'"Earlier lines were dropped to fit the agent log limit."
+          fi
+
+          # HYCI-331: the agent lane takes the raw log; a people comment needs an audience and refuses it.
+          run=$(curl -sS -o /tmp/run.json -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/agents/runs" \
+            -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg t "$TICKET" --arg p "$BOARD" \
+              '{taskId: ($t | tonumber), projectId: ($p | tonumber), source: "runtime", title: "Vercel runtime log"}')")
+          if [ "$run" != 201 ]; then
+            echo "run open: HTTP $run"
+            head -c 300 /tmp/run.json; echo; exit 1
+          fi
+          RUN_ID=$(jq -er '.run.id' /tmp/run.json)
+          code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST \
+            "https://app.hypertask.ai/api/mcp/agents/runs/$RUN_ID/activities" \
+            -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg text "$TEXT" '{type: "thought", text: $text}')")
+          echo "activity post: HTTP $code"
+          curl -s -o /dev/null -X POST "https://app.hypertask.ai/api/mcp/agents/runs/$RUN_ID/stop" \
+            -H "Authorization: Bearer $MCP_TOKEN" || true
           case "$code" in
-            200|201|202) echo "posted to ticket $BOARD/$TICKET" ;;
+            200|201|202) echo "posted $KEPT lines to the agent lane of $BOARD/$TICKET" ;;
             *) head -c 300 /tmp/post.out; echo; exit 1 ;;
           esac
