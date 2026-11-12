@@ -136,6 +136,13 @@ test("current recipient blocks beat every model score; noise and resolved blocks
   assert.equal(rules.needsYouRules(rows[0]).reason, "Urgent");
 });
 
+test("routine-only inbox keeps its normal default split instead of an empty Needs you", () => {
+  const rows = [notice({ needsYouSource: "rules", needsYouScore: 0 })];
+  const { tabs, data } = getInboxTabs(rows);
+  assert.equal(tabs.some(({ project }) => project === "Needs you"), false);
+  assert.ok(data[tabs[0].idx].includes(0));
+});
+
 test("addressed agent questions earn a place, but answered questions and bot status mentions do not", () => {
   const rows = [
     notice({ type: "Mentioned", fromAgentId: "runner", comment: { text: "Status: shipped", kind: "done" }, needsYouScore: 100, needsYouSource: "jev" }),
@@ -167,6 +174,8 @@ test("thirty dismissed current blockers stay in Needs you, not ordinary inbox ta
   const database = { $queryRaw: async (query) => query.sql.includes("AS selected") ? noise.map(({ id }) => ({ id })) : [],
     notification: { findMany: async ({ where }) => where.AND?.some((clause) => clause.id) ? noise : [], groupBy: async () => [] },
     task: { findMany: async () => waiting }, userSetting: { findUnique: async () => null },
+    agent: { findMany: async () => [{ id: "runner", permissions: { postsToImportant: false } }] },
+    user: { findMany: async () => [] },
     taskReadState: { findMany: async () => [] }, comment: { groupBy: async () => [] } };
   const entry = loadModule("src/utils/controllers/notifications/getAll.ts", {
     "@/lib/prisma": { default: database },

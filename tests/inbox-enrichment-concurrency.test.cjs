@@ -23,6 +23,7 @@ function notification(id, taskId, type, fromAgentId = null) {
     fromAgent: fromAgentId ? agent : null,
     userId: 2343, agentId: null, status: "Normal", archivedAt: null,
     seen: false, directReply: false, createdAt,
+    needsYouScore: null, needsYouReason: null, needsYouSource: null,
     commentId: null, comment: null,
     task: {
       id: taskId, title: `Task ${taskId}`, priority: "Normal", status: "Normal",
@@ -37,7 +38,8 @@ function fixture({ empty = false, hold = false } = {}) {
     notification(10, 1, "TaskDueDate", agent.id),
     notification(20, 2, "Comment"),
   ];
-  const earner = { ...notification(9, 1, "Mentioned"), createdAt: readAt, commentId: 90, comment: { id: 90, text: "Please look" } };
+  const earner = { ...notification(9, 1, "Mentioned"), createdAt: readAt, commentId: 90, comment: { id: 90, text: "Please look" },
+    needsYouScore: 14, needsYouReason: "Mentions you", needsYouSource: "rules" };
   const gates = Object.fromEntries(["agents", "users", "readStates", "comments", "unread"].map((name) => [name, deferred()]));
   const calls = [];
   const read = (name, args, rows) => {
@@ -96,6 +98,7 @@ function assertResults(result, f) {
   assert.deepEqual(first, {
     ...f.representatives[0],
     type: f.earner.type, comment: f.earner.comment, commentId: f.earner.commentId,
+    needsYouScore: f.earner.needsYouScore, needsYouReason: f.earner.needsYouReason, needsYouSource: f.earner.needsYouSource,
     fromUserId: human.id, fromUser: human, fromAgentId: null, fromAgent: null,
     directReply: false, directReplyTypes: [], unreadCount: 2,
     activeNotificationTypes: ["TaskDueDate", "Mentioned"],
