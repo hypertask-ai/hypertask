@@ -15,7 +15,6 @@ import {
 } from '@/utils/controllers/urls/extractUrlsFromContent'
 import { signSession, SESSION_COOKIE } from '@/lib/auth/session'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
-import { fetchTaskSave, isTaskSaveTimeout, TASK_SAVE_TOO_LONG } from '@/lib/tasks/saveLimit'
 
 interface PublishDraftResponse {
   success: boolean
@@ -166,7 +165,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
       const sessionToken = signSession({ id: userObj.id, email: userObj.email, ...(ctx.agentId ? { agentId: ctx.agentId } : {}), teamScope: ctx.teamScope, agentTokenGeneration: ctx.agentTokenGeneration })
       const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`
 
-      const singleResponse = await fetchTaskSave(`${baseUrl}/api/tasks/single`, {
+      const singleResponse = await fetch(`${baseUrl}/api/tasks/single`, {
         method: 'PUT',
         redirect: 'manual',
         headers: {
@@ -205,7 +204,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
       { status: 400 }
     )
   } catch (error) {
-    if (isTaskSaveTimeout(error)) return NextResponse.json({ success: false, error: TASK_SAVE_TOO_LONG }, { status: 503 })
     if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) }, { status: 400 })
     console.error('[MCP POST Publish Draft] Error:', error)
     reportMcpOperationCrash(request, error)

@@ -1,5 +1,4 @@
 import { signSession, SESSION_COOKIE } from '@/lib/auth/session'
-import { fetchTaskSave } from '@/lib/tasks/saveLimit'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -42,7 +41,7 @@ export async function archiveTaskAsSession(ctx: InternalTaskWriteContext, taskId
   const cookie = await sessionCookieFor(ctx)
   if (!cookie) return USER_NOT_FOUND
   const baseUrl = appBaseUrl()
-  const response = await fetchTaskSave(`${baseUrl}/api/tasks/(un)archive`, {
+  const response = await fetch(`${baseUrl}/api/tasks/(un)archive`, {
     method: 'POST',
     redirect: 'manual',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -55,7 +54,7 @@ export async function trashTaskAsSession(ctx: InternalTaskWriteContext, taskId: 
   const cookie = await sessionCookieFor(ctx)
   if (!cookie) return USER_NOT_FOUND
   const baseUrl = appBaseUrl()
-  const response = await fetchTaskSave(`${baseUrl}/api/queues/tasks/taskDeleteReminder`, {
+  const response = await fetch(`${baseUrl}/api/queues/tasks/taskDeleteReminder`, {
     method: 'POST',
     redirect: 'manual',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },

@@ -1,8 +1,10 @@
+import { waitUntil } from "@vercel/functions"
+
 export const TASK_SAVE_LIMIT_MS = 8_000
 
 export const TASK_SAVE_TOO_LONG = "Saving this ticket took too long. Try again."
 
-const TIMEOUT_TEXT = /timeout exceeded when trying to connect|timeout expired|canceling statement due to (?:lock|statement) timeout|lock timeout/i
+const TIMEOUT_TEXT = /timeout exceeded when trying to connect|connection terminated due to connection timeout|timeout expired|canceling statement due to (?:lock|statement) timeout|lock timeout|transaction.*(?:expired|timed out|timeout)/i
 const TIMEOUT_CODES = new Set(["55P03", "57014", "P2024", "TASK_SAVE_TIMEOUT"])
 
 export function isTaskSaveTimeout(error: unknown): boolean {
@@ -25,37 +27,41 @@ export function taskSaveTimeoutResult(): { status: 503; json: { message: string 
   return { status: 503, json: { message: TASK_SAVE_TOO_LONG } }
 }
 
-type SaveLimitTx = {
-  $executeRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>
-}
-
-export async function applyTaskSaveDbLimits(tx: SaveLimitTx): Promise<void> {
-  const limit = String(TASK_SAVE_LIMIT_MS)
-  await tx.$executeRaw`SELECT set_config('lock_timeout', ${limit}, true)`
-  await tx.$executeRaw`SELECT set_config('statement_timeout', ${limit}, true)`
-}
-
-function isTimeoutAbort(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false
-  const name = (error as { name?: string }).name
-  return name === "TimeoutError" || name === "AbortError"
-}
-
 function saveTooLong(): Error {
   return Object.assign(new Error(TASK_SAVE_TOO_LONG), { code: "TASK_SAVE_TIMEOUT" })
 }
 
-export async function fetchTaskSave(url: string, init: RequestInit = {}): Promise<Response> {
-  const signal = init.signal
-    ? AbortSignal.any([init.signal, AbortSignal.timeout(TASK_SAVE_LIMIT_MS)])
-    : AbortSignal.timeout(TASK_SAVE_LIMIT_MS)
+export function taskSaveBudget(deadline = Date.now() + TASK_SAVE_LIMIT_MS) {
+  const remaining = () => {
+    const ms = deadline - Date.now()
+    if (ms <= 0) throw saveTooLong()
+    return ms
+  }
+  return {
+    deadline,
+    remaining,
+    async run<T>(work: () => Promise<T>): Promise<T> {
+      const ms = remaining()
+      const pending = work()
+      waitUntil(pending.catch(() => undefined))
+      return finishWithin(pending, ms)
+    },
+  }
+}
+
+export async function fetchTaskSave(url: string, init: RequestInit = {}, timeoutMs = TASK_SAVE_LIMIT_MS): Promise<{ ok: boolean; status: number; data: unknown }> {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout
   try {
     const response = await fetch(url, { ...init, signal })
     if (response.status === 504) throw saveTooLong()
-    return response
+    const data = await response.json().catch((error) => {
+      if (signal.aborted) throw error
+      return null
+    })
+    return { ok: response.ok, status: response.status, data }
   } catch (error) {
-    if (isTaskSaveTimeout(error)) throw error instanceof Error ? error : saveTooLong()
-    if (isTimeoutAbort(error)) throw saveTooLong()
+    if (timeout.aborted) throw saveTooLong()
     throw error
   }
 }
@@ -63,13 +69,8 @@ export async function fetchTaskSave(url: string, init: RequestInit = {}): Promis
 export function finishWithin<T>(work: Promise<T>, ms = TASK_SAVE_LIMIT_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const limited = new Promise<T>((resolve, reject) => {
-    timer = setTimeout(() => {
-      reject(Object.assign(new Error(TASK_SAVE_TOO_LONG), { code: "TASK_SAVE_TIMEOUT" }))
-    }, ms)
-    work.then(
-      (value) => resolve(value),
-      (error) => reject(error),
-    )
+    timer = setTimeout(() => reject(saveTooLong()), ms)
+    work.then(resolve, reject)
   })
   return limited.finally(() => clearTimeout(timer))
 }

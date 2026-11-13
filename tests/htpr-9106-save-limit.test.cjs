@@ -1,14 +1,11 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const http = require("node:http");
 const net = require("node:net");
-const path = require("node:path");
 const test = require("node:test");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
-const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
-const save = load(path.join(root, "src/lib/tasks/saveLimit.ts"));
-const { createMcpTimingPool } = load(path.join(root, "src/lib/mcp/dbTiming.ts"));
+const save = loadModule("src/lib/tasks/saveLimit.ts");
+const { createMcpTimingPool } = loadModule("src/lib/mcp/dbTiming.ts");
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -17,70 +14,79 @@ function listen(server) {
   });
 }
 
-test("HTPR-9106 stuck save fails under ten seconds with the plain reason", { timeout: 20_000 }, async () => {
-  assert.ok(save.TASK_SAVE_LIMIT_MS < 10_000);
-  assert.ok(save.TASK_SAVE_LIMIT_MS >= 5_000);
-  assert.equal(save.isTaskSaveTimeout(new Error("Task not found")), false);
-  assert.equal(save.isTaskSaveTimeout(Object.assign(new Error("canceling statement due to lock timeout"), { code: "55P03" })), true);
-  const prismaSource = fs.readFileSync(path.join(root, "src/lib/prisma.ts"), "utf8");
-  const singleSource = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/single.ts"), "utf8");
-  assert.match(prismaSource, /connectionTimeoutMillis:\s*TASK_SAVE_LIMIT_MS/);
-  assert.match(singleSource, /applyTaskSaveDbLimits\(tx\)/);
-
-  const calls = [];
-  await save.applyTaskSaveDbLimits({
-    $executeRaw: (strings, ...values) => {
-      calls.push({ text: strings.join("?"), values });
-      return Promise.resolve(0);
-    },
+test("HTPR-9106 real agent saves, stalled HTTP bodies and pool connections share the short limit", { timeout: 20_000 }, async () => {
+  const sockets = new Set();
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      const data = JSON.parse(body || "{}");
+      requests.push({ url: req.url, cookie: req.headers.cookie, data });
+      const mode = data.newTask?.title ?? req.url.slice(1);
+      if (mode === "hang") return;
+      if (mode === "gateway") { res.writeHead(504); res.end("gateway"); return; }
+      res.writeHead(200, { "content-type": "application/json" });
+      if (mode === "body-hang") { res.flushHeaders(); return; }
+      res.end(JSON.stringify({ id: 101, title: data.newTask?.title ?? "Saved" }));
+    });
   });
-  assert.equal(calls.length, 2);
-  assert.match(calls[0].text, /lock_timeout/);
-  assert.match(calls[1].text, /statement_timeout/);
-  assert.equal(calls[0].values[0], String(save.TASK_SAVE_LIMIT_MS));
-  assert.equal(calls[1].values[0], String(save.TASK_SAVE_LIMIT_MS));
-
-  const okServer = http.createServer((_req, res) => {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end('{"ok":true}');
+  const db = net.createServer(() => {});
+  for (const s of [server, db]) s.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
   });
-  const gateway = http.createServer((_req, res) => {
-    res.writeHead(504);
-    res.end("gateway");
+  await Promise.all([listen(server), listen(db)]);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const pool = createMcpTimingPool({ host: "127.0.0.1", port: db.address().port, connectionTimeoutMillis: save.TASK_SAVE_LIMIT_MS, max: 1 });
+  const { updateTaskText } = loadModule("src/lib/mcp/tasks/fields/text.ts", {
+    "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
+    "@/utils/controllers/urls/extractUrlsFromContent": { persistUrlsForDescription: async () => {} },
+    "@/utils/helperFunctions/sanitizeRichHtml": { sanitizeRichHtml: (html) => html },
   });
-  const hungHttp = http.createServer(() => {});
-  const hungDb = net.createServer(() => {});
-  await Promise.all([listen(okServer), listen(gateway), listen(hungHttp), listen(hungDb)]);
-  const pool = createMcpTimingPool({
-    host: "127.0.0.1",
-    port: hungDb.address().port,
-    connectionTimeoutMillis: save.TASK_SAVE_LIMIT_MS,
-    max: 1,
+  const context = (title) => ({
+    requestBody: { title }, hasTextOrParentUpdate: true, hasDescriptionUpdate: false,
+    baseUrl, ctx: { user: { id: 7 }, agentId: "test-agent" }, authCookieHeader: "test-session=fixture",
   });
   try {
-    const ok = await save.fetchTaskSave(`http://127.0.0.1:${okServer.address().port}/`);
-    assert.equal(ok.status, 200);
-    await assert.rejects(
-      () => save.fetchTaskSave(`http://127.0.0.1:${gateway.address().port}/`),
-      (error) => error.message === save.TASK_SAVE_TOO_LONG && !String(error.message).includes("504"),
-    );
+    assert.equal(save.isTaskSaveTimeout(new Error("Task not found")), false);
+    assert.equal(save.isTaskSaveTimeout({ cause: { code: "55P03" } }), true);
+    assert.equal(save.isTaskSaveTimeout(new Error("Connection terminated due to connection timeout")), true);
+    await updateTaskText(context("Healthy save"), { id: 101 });
+    assert.equal(requests[0].url, "/api/tasks/single");
+    assert.equal(requests[0].cookie, "test-session=fixture");
+    assert.equal(requests[0].data.newTask.title, "Healthy save");
+    assert.equal(requests[0].data.agentId, "test-agent");
+    await assert.rejects(updateTaskText(context("gateway"), { id: 101 }), { message: save.TASK_SAVE_TOO_LONG });
     const started = Date.now();
-    const [fetchError, poolError] = await Promise.all([
-      save.fetchTaskSave(`http://127.0.0.1:${hungHttp.address().port}/`).then(() => null, (error) => error),
-      pool.query("select 1").then(() => null, (error) => error),
-    ]);
+    const failures = await Promise.all([
+      updateTaskText(context("hang"), { id: 101 }),
+      save.fetchTaskSave(`${baseUrl}/body-hang`),
+      pool.query("select 1"),
+    ].map((pending) => pending.then(() => null, (error) => error)));
     const elapsed = Date.now() - started;
-    assert.ok(elapsed < 10_000, `stuck save waited ${elapsed}ms`);
-    assert.ok(elapsed + 1_500 >= save.TASK_SAVE_LIMIT_MS, `stuck save failed too early at ${elapsed}ms`);
-    assert.equal(fetchError && fetchError.message, save.TASK_SAVE_TOO_LONG);
-    assert.equal(String(fetchError && fetchError.message).includes("504"), false);
-    assert.equal(save.isTaskSaveTimeout(poolError), true, String(poolError && poolError.message));
+    assert.ok(elapsed >= 5_000 && elapsed < 10_000, `stuck saves waited ${elapsed}ms`);
+    assert.equal(failures[0]?.message, save.TASK_SAVE_TOO_LONG);
+    assert.equal(failures[1]?.message, save.TASK_SAVE_TOO_LONG);
+    assert.equal(save.isTaskSaveTimeout(failures[2]), true);
+    const healthy = await save.fetchTaskSave(`${baseUrl}/ok`);
+    assert.deepEqual(healthy, { ok: true, status: 200, data: { id: 101, title: "Saved" } });
+    const cancelled = new AbortController();
+    const reason = new Error("Caller cancelled");
+    cancelled.abort(reason);
+    await assert.rejects(save.fetchTaskSave(`${baseUrl}/ok`, { signal: cancelled.signal }), (error) => error === reason);
+    console.log(`save limit ok: stalled HTTP, response body and pg connection rejected in ${elapsed}ms`);
   } finally {
-    await Promise.race([pool.end(), new Promise((resolve) => setTimeout(resolve, 1_000))]);
-    okServer.close();
-    gateway.close();
-    hungHttp.close();
-    hungDb.close();
+    for (const socket of sockets) socket.destroy();
+    await pool.end();
+    await Promise.all([server, db].map((s) => new Promise((resolve) => s.close(resolve))));
   }
-  console.log("save limit ok");
+});
+
+test("HTPR-9106 a shared budget never starts another phase after expiry", async () => {
+  const budget = save.taskSaveBudget(Date.now() + 30);
+  await assert.rejects(budget.run(() => new Promise(() => {})), { message: save.TASK_SAVE_TOO_LONG });
+  let started = false;
+  await assert.rejects(budget.run(async () => { started = true; }), { message: save.TASK_SAVE_TOO_LONG });
+  assert.equal(started, false);
 });

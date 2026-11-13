@@ -5,7 +5,7 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
-import { applyTaskSaveDbLimits, finishWithin, isTaskSaveTimeout, taskSaveTimeoutResult } from "@/lib/tasks/saveLimit";
+import { isTaskSaveTimeout, taskSaveBudget, taskSaveTimeoutResult } from "@/lib/tasks/saveLimit";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { enqueueAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma";
@@ -72,6 +72,8 @@ import {
 import { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } from "@/lib/flags/definitions/htpr-7933-plain-language-ticket-template";
 
 type UpdateTaskSingleOptions = {
+  saveDeadline?: number;
+  onCommitted?: (result: UpdateTaskSingleResult) => void;
   teamScope?: AgentTokenTeamScope | null;
   allowProjectChange?: boolean;
   onProjectChangedInTx?: (
@@ -210,7 +212,10 @@ export async function updateTaskSingle(
   agentId?: string | null,
   options: UpdateTaskSingleOptions = {},
 ): Promise<UpdateTaskSingleResult> {
+  const budget = taskSaveBudget(options.saveDeadline);
+  let committedResult: UpdateTaskSingleResult | undefined;
   try {
+    return await budget.run(async () => {
     if (!newTask || !newTask.id || !currentUser) {
       return {
         status: 500,
@@ -321,7 +326,7 @@ export async function updateTaskSingle(
       analyticsKey,
     } = await prisma.$transaction(
       async (tx) => {
-        await applyTaskSaveDbLimits(tx);
+        budget.remaining();
         const enforceMoveLimits = options.allowProjectChange && requestedMutation.projectId !== undefined && await isPlanLimitsEnabled(currentUser.id);
         if (options.allowProjectChange && requestedMutation.projectId !== undefined && !enforceMoveLimits) {
           const projectIds = [...new Set([oldTask.projectId, requestedMutation.projectId as number])].sort((a, b) => a - b);
@@ -801,8 +806,10 @@ export async function updateTaskSingle(
               updatedEvent,
             )
           : [];
+        const analyticsKey = await enqueueAgentTaskCompletion(tx, currentState, updatedTask, agentId);
+        budget.remaining();
         return {
-          analyticsKey: await enqueueAgentTaskCompletion(tx, currentState, updatedTask, agentId),
+          analyticsKey,
           task: updatedTask,
           newComment: descriptionActivity,
           moveActivity,
@@ -810,8 +817,16 @@ export async function updateTaskSingle(
           agentWebhookDeliveryIds,
         };
       },
-      { timeout: 60_000 },
+      { maxWait: 500, timeout: Math.max(1, budget.remaining() - 750) },
     );
+    committedResult = {
+      status: 200,
+      json: task,
+      oldTask: taskBeforeWrite,
+      commentActivity: newComment,
+      moveActivity,
+    };
+    options.onCommitted?.(committedResult);
     if (!options.trustedCaller) {
       scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId);
     }
@@ -829,30 +844,25 @@ export async function updateTaskSingle(
             return false;
           })
         : Promise.resolve(false);
-    try {
-      await finishWithin(Promise.all([
-        agentWebhookDeliveryIds.length > 0
-          ? publishAgentWebhookDeliveries(agentWebhookDeliveryIds)
-          : Promise.resolve(),
-        boardWebhookDeliveryIds.length > 0
-          ? publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
-          : Promise.resolve(),
-        moveNotification,
-      ]));
-    } catch (error) {
-      if (!isTaskSaveTimeout(error)) throw error;
-      console.warn("[task-update] follow-up publish did not finish", error);
-    }
+    await Promise.all([
+      agentWebhookDeliveryIds.length > 0
+        ? publishAgentWebhookDeliveries(agentWebhookDeliveryIds)
+        : Promise.resolve(),
+      boardWebhookDeliveryIds.length > 0
+        ? publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
+        : Promise.resolve(),
+      moveNotification,
+    ]);
 
     if (requestedMutation.description !== undefined) {
       try {
-        await finishWithin(sendNotificationForTask(
+        await sendNotificationForTask(
           currentUser.id,
           "TaskUpdateDescription",
           taskBeforeWrite.id,
           taskBeforeWrite.projectId,
           agentId ?? null,
-        ));
+        );
       } catch (notificationError) {
         console.log(
           "🤔 ~ updateTaskSingle ~ description notification error:",
@@ -862,19 +872,13 @@ export async function updateTaskSingle(
     }
 
     if (sectionIdChanged && !options.skipAutoAssign) {
-      let autoAssigned: Awaited<ReturnType<typeof autoAssignForSection>> | "pending";
-      try {
-        autoAssigned = await finishWithin(autoAssignForSection({
-          taskId: task.id,
-          projectId: task.projectId,
-          sectionId: task.sectionId,
-          currentUser,
-          agentAssignerId: agentId,
-        }));
-      } catch (error) {
-        if (!isTaskSaveTimeout(error)) throw error;
-        autoAssigned = "pending";
-      }
+      const autoAssigned = await autoAssignForSection({
+        taskId: task.id,
+        projectId: task.projectId,
+        sectionId: task.sectionId,
+        currentUser,
+        agentAssignerId: agentId,
+      });
       if (autoAssigned !== "ready") {
         console.warn(
           "[task-update] column auto-assignment remains pending after the task move",
@@ -890,9 +894,9 @@ export async function updateTaskSingle(
       try {
         if (
           becameArchived ||
-          (sectionIdChanged && (await finishWithin(sectionIsDone(task.sectionId))))
+          (sectionIdChanged && (await sectionIsDone(task.sectionId)))
         ) {
-          await finishWithin(spawnNextRecurrence(task.id, taskBeforeWrite.dueDate, currentUser.id, agentId));
+          await spawnNextRecurrence(task.id, taskBeforeWrite.dueDate, currentUser.id, agentId);
         }
       } catch (error) {
         console.log("🤔 ~ updateTaskSingle ~ recurrence spawn error:", error);
@@ -903,7 +907,7 @@ export async function updateTaskSingle(
       requestedMutation.title !== undefined &&
       requestedMutation.title !== taskBeforeWrite.title;
     try {
-      await finishWithin(upsertTaskToTurbopuffer(task.id, { strict: true }));
+      await upsertTaskToTurbopuffer(task.id, { strict: true });
       if (
         titleChanged ||
         requestedMutation.status ||
@@ -911,7 +915,7 @@ export async function updateTaskSingle(
         requestedMutation.uniqueIndex ||
         requestedMutation.projectId
       ) {
-        await finishWithin(upsertAllCommentsToTurbopuffer(task.id, { strict: true }));
+        await upsertAllCommentsToTurbopuffer(task.id, { strict: true });
       }
     } catch (error) {
       console.log("🤔 ~ updateTaskSingle ~ search index error:", error);
@@ -937,13 +941,8 @@ export async function updateTaskSingle(
       scheduleClassifyTaskAiLabels(task.id, task.projectId, agentId);
     }
 
-    return {
-      status: 200,
-      json: task,
-      oldTask: taskBeforeWrite,
-      commentActivity: newComment,
-      moveActivity,
-    };
+    return committedResult;
+    });
   } catch (error) {
     if (error instanceof AgentWritingError) return { status: 400, json: { message: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) } };
     if (isPlanLimitReachedError(error)) {
@@ -1013,7 +1012,7 @@ export async function updateTaskSingle(
         },
       };
     }
-    if (isTaskSaveTimeout(error)) return taskSaveTimeoutResult();
+    if (isTaskSaveTimeout(error)) return committedResult ?? taskSaveTimeoutResult();
     console.log("🤔 ~ updateTaskSingle ~ error:", error);
     return {
       status: 500,

@@ -104,6 +104,9 @@ function loadUpdateController(
     aliasError = false,
     parentTasks = [],
     stateAtFence,
+    initialLookupGate,
+    transactionGate,
+    indexingGate,
   } = {},
 ) {
   const calls = { transaction: 0, sideEffects: 0 };
@@ -216,13 +219,15 @@ function loadUpdateController(
   };
   const prisma = {
     task: {
-      findUnique: async () => ({ ...currentTask }),
+      findUnique: async () => { await initialLookupGate; return { ...currentTask }; },
     },
     project: {
       findFirst: async ({ where }) => findWritableProject(where),
     },
-    $transaction: async (callback) => {
+    $transaction: async (callback, options) => {
       calls.transaction += 1;
+      calls.transactionOptions = options;
+      await transactionGate;
       if (destinationSectionProjectId === undefined) {
         throw new Error("a denied write reached the transaction");
       }
@@ -287,7 +292,7 @@ function loadUpdateController(
     "@/pages/api/queues/FAST/generateSummary": noop,
     "../turbopuffer/turbopufferHelper": {
       upsertAllCommentsToTurbopuffer: noop,
-      upsertTaskToTurbopuffer: noop,
+      upsertTaskToTurbopuffer: async () => { noop(); await indexingGate; },
     },
     "../assignees/autoAssignForSection": { autoAssignForSection: noop },
     "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels: noop },
@@ -344,6 +349,41 @@ function loadUpdateController(
     aliases,
   };
 }
+
+test("HTPR-9106 late prechecks and late transaction acquisition never start a write", async () => {
+  for (const phase of ["initialLookupGate", "transactionGate"]) {
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, { [phase]: held });
+    const result = await updateTaskSingle({ id: TASK_ID, title: "New title" }, { id: USER_ID }, null, { saveDeadline: Date.now() + 100 });
+    assert.equal(result.status, 503);
+    assert.equal(result.json.message, "Saving this ticket took too long. Try again.");
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.order?.includes("task-update") ?? false, false);
+    assert.equal(calls.transaction, phase === "initialLookupGate" ? 0 : 1);
+    if (phase === "transactionGate") {
+      assert.ok(calls.transactionOptions.maxWait + calls.transactionOptions.timeout < 8_000);
+    }
+  }
+});
+
+test("HTPR-9106 committed saves stay successful when search indexing hangs", async () => {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, { indexingGate: held });
+  let committed;
+  const result = await updateTaskSingle({ id: TASK_ID, title: "Saved title" }, { id: USER_ID }, null, {
+    saveDeadline: Date.now() + 100,
+    onCommitted: (value) => { committed = value; },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.title, "Saved title");
+  assert.equal(committed.json.title, "Saved title");
+  assert.equal(calls.transaction, 1);
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+});
 
 test("expected title rejects a concurrent title-only edit under the mutation fence", async () => {
   for (const expectedTitle of ["Enter task title here", ""]) {

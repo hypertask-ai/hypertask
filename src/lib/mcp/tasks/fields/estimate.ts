@@ -1,11 +1,10 @@
-import { fetchTaskSave } from "@/lib/tasks/saveLimit";
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskEstimate(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
     const { estimateConstant, baseUrl, authCookieHeader, ctx, strictSideEffectFailures } = context;
     if (estimateConstant) {
         const estimateApiUrl = `${baseUrl}/api/estimate/setEstimate`
-        const estimateResponse = await fetchTaskSave(estimateApiUrl, {
+        const estimateResponse = await fetch(estimateApiUrl, {
             method: 'POST',
             redirect: 'manual',
             headers: {

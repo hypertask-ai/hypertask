@@ -1,5 +1,4 @@
 import prisma from "@/lib/prisma";
-import { fetchTaskSave } from "@/lib/tasks/saveLimit";
 import { clearHumanAssignees } from "@/utils/controllers/assignees/assign";
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
@@ -54,7 +53,7 @@ export async function updateTaskAssignees(context: TaskUpdateFieldContext, task:
                     throw new Error('Missing Authorization for assignee update');
                 }
                 const assignUrl = `${baseUrl}/api/mcp/assignees/assign`;
-                const assignResponse = await fetchTaskSave(assignUrl, {
+                const assignResponse = await fetch(assignUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

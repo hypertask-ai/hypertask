@@ -2,10 +2,14 @@ import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { persistUrlsForDescription } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { toErrorMessage } from "@/lib/api/errorMessage";
-import { fetchTaskSave } from "@/lib/tasks/saveLimit";
+import { fetchTaskSave, isTaskSaveTimeout, taskSaveBudget } from "@/lib/tasks/saveLimit";
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskText(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
+    const budget = taskSaveBudget();
+    let saved = false;
+    try {
+    return await budget.run(async () => {
     const { requestBody, hasTextOrParentUpdate, hasDescriptionUpdate, baseUrl, ctx, authCookieHeader } = context;
     const fetchOpts = {
         headers: {
@@ -34,20 +38,23 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
                 newTask,
                 agentId: ctx.agentId || undefined,
             })
-        })
+        }, budget.remaining())
         if (!singleResponse.ok) {
-            const errorData = await singleResponse.json().catch(() => null)
             throw new Error(
                 toErrorMessage(
-                    errorData,
+                    singleResponse.data,
                     `Task update failed: ${singleResponse.status}`
                 )
             )
         }
-        await singleResponse.json().catch(() => null)
-
+        saved = true;
         if (sanitizedDescription) {
             await persistUrlsForDescription(sanitizedDescription, task.id, [], { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
         }
+    }
+    });
+    } catch (error) {
+        if (saved && isTaskSaveTimeout(error)) return;
+        throw error;
     }
 }

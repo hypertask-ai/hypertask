@@ -1,5 +1,4 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
-import { fetchTaskSave } from "@/lib/tasks/saveLimit";
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7990_TASK_MOVE_REFUSAL_FLAG } from '@/lib/flags/definitions/htpr-7990-task-move-refusal';
 import { HTPR_9050_SECTION_COLUMNS_FLAG } from '@/lib/flags/definitions/htpr-9050-section-columns';
@@ -33,7 +32,7 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
     }
     if (requestBody.sectionId && sectionInfo && sectionInfo.projectId === task.projectId) {
         const moveTaskUrl = `${baseUrl}/api/tasks/moveTask`
-        const moveResponse = await fetchTaskSave(moveTaskUrl, {
+        const moveResponse = await fetch(moveTaskUrl, {
             method: 'PUT',
             redirect: 'manual',
             ...fetchOpts,

@@ -1,5 +1,4 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
-import { fetchTaskSave } from "@/lib/tasks/saveLimit";
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskStatus(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
@@ -12,7 +11,7 @@ export async function updateTaskStatus(context: TaskUpdateFieldContext, task: Ta
     }
     if (requestBody.status) {
         const archiveUrl = `${baseUrl}/api/tasks/(un)archive`
-        const archiveResponse = await fetchTaskSave(archiveUrl, {
+        const archiveResponse = await fetch(archiveUrl, {
             method: 'POST',
             redirect: 'manual',
             ...fetchOpts,
