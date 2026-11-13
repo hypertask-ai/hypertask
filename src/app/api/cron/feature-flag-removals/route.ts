@@ -156,7 +156,12 @@ async function sweep() {
       const description = removalDescription(flag.key, flag.releasedAt);
       const projectIdentifier = project.uniqueIdentifier;
       const existing = await prisma.task.findFirst({
-        where: { projectId: REMOVAL_PROJECT_ID, title, status: "Normal" },
+        where: {
+          projectId: REMOVAL_PROJECT_ID,
+          title,
+          status: "Normal",
+          description_: { is: { content: { contains: `/${flag.key}"` } } },
+        },
         select: { id: true },
       });
       const taskId =

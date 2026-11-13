@@ -199,7 +199,8 @@ test("a recorded removal ticket is not filed again", async () => {
 
 test("an existing open removal ticket is reused and no second task is created", async () => {
   const original = prisma.task.findFirst;
-  prisma.task.findFirst = async () => ({ id: 42 });
+  let reuseQuery = null;
+  prisma.task.findFirst = async (query) => { reuseQuery = query; return { id: 42 }; };
   try {
     dueFlags = [{
       key: registeredKey,
@@ -215,6 +216,11 @@ test("an existing open removal ticket is reused and no second task is created", 
     assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
     assert.deepEqual(filed, []);
     assert.equal(dueFlags[0].removalTaskId, 42);
+    assert.equal(reuseQuery.where.title, removalTitle(registeredKey));
+    assert.equal(
+      reuseQuery.where.description_.is.content.contains,
+      `/${registeredKey}"`,
+    );
   } finally {
     prisma.task.findFirst = original;
   }
