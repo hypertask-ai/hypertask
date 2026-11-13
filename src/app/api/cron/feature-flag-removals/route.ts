@@ -23,22 +23,37 @@ const REMOVAL_LABEL_VALUE = "Bug";
 const REMOVAL_SWEEP_LOCK_NAMESPACE = 1_179_207_763;
 const REMOVAL_SWEEP_LOCK_KEY = 1;
 
+const FLAG_KEY_ID = /^[a-z]+[0-9]*-[0-9]+-?/;
+
+function plainSwitchName(key: string) {
+  return key.replace(FLAG_KEY_ID, "").replace(/-/g, " ").trim();
+}
+
 function removalTitle(key: string) {
-  return `Remove feature flag ${key}`;
+  const name = plainSwitchName(key);
+  return name ? `Remove the released switch for ${name}` : "Remove a released switch";
 }
 
 function removalDescription(key: string, releasedAt: Date) {
   const released = releasedAt.toISOString().slice(0, 10);
   const days = removalWindowForFlag({ key });
   return (
-    `<p><strong>Keep this released change. Remove its safety switch.</strong></p>` +
-    `<p>Switch: <a href="${FEATURE_FLAG_ADMIN_URL}/${key}"><code>${key}</code></a></p>` +
-    `<ul><li><p>Live for <strong>Everyone</strong> since ${released}.</p></li>` +
-    `<li><p>Live for more than ${days} days.</p></li>` +
-    `<li><p>Keep enabled behaviour. Remove the switch and unused alternative.</p></li>` +
-    `<li><p>Remove its saved setting too.</p></li>` +
-    `<li><p>Need to keep it? Choose <strong>Keep</strong> on ` +
-    `<a href="${FEATURE_FLAG_ADMIN_URL}">the flags page</a>.</p></li></ul>`
+    `<h2>Problem</h2>` +
+    `<p>The released change is still hidden behind a safety switch.</p>` +
+    `<p>It is live for Everyone since ${released}.</p>` +
+    `<p>That is more than ${days} days.</p>` +
+    `<h2>Fix</h2>` +
+    `<p>Keep the behaviour the switch turned on.</p>` +
+    `<p>Remove the switch, the unused alternative and its saved setting.</p>` +
+    `<p>Switch: <a href="${FEATURE_FLAG_ADMIN_URL}/${key}">open the switch on the flags page</a></p>` +
+    `<h2>Done when</h2>` +
+    `<p>The behaviour still works with the switch gone.</p>` +
+    `<p>No code reads the old switch or its saved setting.</p>` +
+    `<h2>Risk</h2>` +
+    `<p>Low. Undo: revert the change.</p>` +
+    `<h2>Decision</h2>` +
+    `<p>None. To keep the switch, choose Keep on the flags page.</p>` +
+    `<p>Flags: <a href="${FEATURE_FLAG_ADMIN_URL}">the flags page</a></p>`
   );
 }
 

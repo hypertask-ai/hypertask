@@ -71,6 +71,9 @@ const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.j
 const { FEATURE_FLAG_KEYS, RETIRED_FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
 const { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } = jiti(path.join(root, "src/lib/flags/removal.ts"));
 const { GET } = jiti(path.join(root, "src/app/api/cron/feature-flag-removals/route.ts"));
+const { assertAgentWriting, AgentWritingError } = jiti(path.join(root, "src/lib/agents/writing.ts"));
+const removalTitle = (key) =>
+  `Remove the released switch for ${key.replace(/^[a-z]+[0-9]*-[0-9]+-?/, "").replace(/-/g, " ").trim()}`;
 
 let previousSecret;
 test.beforeEach(() => {
@@ -100,7 +103,7 @@ test("the removal sweep skips the legacy shallow-switch flag without blocking ot
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
   assert.deepEqual(candidates.map(({ key }) => key), [registeredKey]);
-  assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
+  assert.deepEqual(filed.map(({ title }) => title), ["Remove the released switch for google calendar"]);
   assert.equal(filed[0].userId, 6);
   assert.equal(filed[0].sectionId, 4389);
   assert.equal(filed[0].sectionTitle, "Backlog");
@@ -150,8 +153,8 @@ test("bugfix flags are due after 7 days while money and data-deletion stay at 14
     deferred: 0,
   });
   assert.deepEqual(filed.map(({ title }) => title), [
-    "Remove feature flag htpr-7702-phone-chat-list",
-    "Remove feature flag yper4-651-self-follow-quiet",
+    "Remove the released switch for phone chat list",
+    "Remove the released switch for self follow quiet",
   ]);
   assert.ok(filed.every((ticket) => ticket.description.includes("more than 7 days")));
   assert.ok(filed.every((ticket) => ticket.mode === undefined));
@@ -175,7 +178,7 @@ test("money and data-deletion flags file after 14 days and a 6 day bugfix does n
     "htpr-7755-bulk-preview-confirmation",
   ]);
   assert.ok(filed.every((ticket) => ticket.description.includes("more than 14 days")));
-  assert.equal(filed.some((ticket) => ticket.title.includes("htpr-7702-phone-chat-list")), false);
+  assert.equal(filed.some((ticket) => ticket.title.includes("phone chat list")), false);
 });
 
 test("a recorded removal ticket is not filed again", async () => {
@@ -227,7 +230,7 @@ test("the conditional claim rejects an unregistered key returned in the candidat
   }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
-  assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
+  assert.deepEqual(filed.map(({ title }) => title), [removalTitle(registeredKey)]);
   assert.deepEqual(removed, before);
   assert.deepEqual(writes, [registeredKey, registeredKey]);
 });
@@ -256,7 +259,42 @@ test("44 eligible flags file the 10 oldest and the rest stay eligible next run",
   assert.equal(next.some((key) => oldest.includes(key)), false);
   assert.deepEqual(
     filed.map(({ title }) => title),
-    [...oldest, ...next].map((key) => `Remove feature flag ${key}`),
+    [...oldest, ...next].map((key) => removalTitle(key)),
   );
   assert.deepEqual(new Set(filed.map(({ title }) => title)).size, 20);
+});
+
+test("the filed removal ticket passes the house writing rules with the switch key out of people text", async () => {
+  const key = "htpr-6868-ticket-prefix";
+  dueFlags = [{
+    key,
+    mode: "EVERYONE",
+    keep: false,
+    removalTaskId: null,
+    releasedAt: new Date(Date.now() - (FEATURE_FLAG_REMOVAL_DAYS + 1) * 24 * 60 * 60 * 1000),
+  }];
+  const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", {
+    headers: { authorization: "Bearer test-cron-secret" },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { filed: 1, keys: [key], failed: [], deferred: 0 });
+  assert.equal(filed.length, 1);
+  const [ticket] = filed;
+  assert.equal(ticket.title, "Remove the released switch for ticket prefix");
+  const visibleText = ticket.description.replace(/<a\b[^>]*>/g, "");
+  assert.equal(visibleText.includes(key), false);
+  assert.equal(ticket.description.includes(`/flags/${key}`), true);
+  assert.doesNotThrow(() =>
+    assertAgentWriting("agent", { title: ticket.title, description: ticket.description }, {}, { create: true, houseRules: true }),
+  );
+  assert.throws(
+    () =>
+      assertAgentWriting(
+        "agent",
+        { title: `Remove feature flag ${key}`, description: ticket.description },
+        {},
+        { create: true, houseRules: true },
+      ),
+    AgentWritingError,
+  );
 });
