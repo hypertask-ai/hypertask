@@ -20,6 +20,7 @@ function loadController(prisma, calls) {
   }).outputText;
 
   const stubs = {
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
     "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),
     "@/lib/flags": { isFeatureEnabled: () => assert.fail("board status must not read a feature flag") },
     "@/utils/controllers/tasks/attachAgentStatus": {

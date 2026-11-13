@@ -202,6 +202,7 @@ export function sanitizeBoardDefaultSubtaskSetting<T>(projectView: T, boardDefau
   if (!boardDefaultShowsSubtasks || !isRecord(projectView)) return projectView;
   const defaultView = projectView.default_view;
   if (!isRecord(defaultView) || showsAllSubtaskCards(defaultView.board_subtask_setting)) return projectView;
+  const defaultViewId = typeof projectView.default_view_id === "string" ? projectView.default_view_id : null;
 
   let changed = false;
   const next: Record<string, unknown> = { ...projectView };
@@ -216,8 +217,10 @@ export function sanitizeBoardDefaultSubtaskSetting<T>(projectView: T, boardDefau
     if (!Array.isArray(rows)) continue;
     const shownRows = rows.map((row) => {
       if (!isRecord(row)) return row;
-      if (key === "allViews") return withSubtaskCardsShown(row);
-      const appliedView = withSubtaskCardsShown(row.appliedView);
+      if (key === "allViews") return row.id === defaultViewId ? withSubtaskCardsShown(row) : row;
+      const appliedView = isRecord(row.appliedView) && row.appliedView.id === defaultViewId
+        ? withSubtaskCardsShown(row.appliedView)
+        : row.appliedView;
       const unsavedView = withSubtaskCardsShown(row.unsavedView);
       if (appliedView === row.appliedView && unsavedView === row.unsavedView) return row;
       return { ...row, appliedView, unsavedView };

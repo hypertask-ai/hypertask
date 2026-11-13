@@ -20,6 +20,7 @@ function loadController(prisma, calls) {
   }).outputText;
 
   const stubs = {
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "./getAllIncludes": {
       getProjectIncludeWithoutTasks: (options) => {

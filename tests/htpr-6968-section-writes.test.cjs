@@ -214,6 +214,7 @@ function serviceController(name, effects, options = {}) {
   const mocks = {
     "@/lib/prisma": { default: prisma },
     "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
     "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: async () => null },
     "@/lib/telemetry/savedWork": { enqueueColumnCreated: async () => "column-key", enqueueColumnRenamed: async () => "rename-key", processAnalyticsIntentSoon: () => {} },
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: () => assert.fail("human section writes must not schedule agent email") },
@@ -282,6 +283,7 @@ for (const name of ["getAll", "getProjectSections"]) test(`${name}: real read co
       } },
       "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getViewFromProject: () => undefined },
       "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
+      "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
     };
     return load(`src/utils/controllers/section/${name}.ts`, mocks).default;
   };

@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..");
 function loadBoardController(prisma) {
   const cache = new Map();
   const stubs = {
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async rows => rows },
     "@/utils/controllers/tasks/attachOpenBlockingTasks": {

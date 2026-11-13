@@ -25,6 +25,7 @@ test("server board and My Tasks always include cached bodies after their authori
   let boardArgs;
   const board = load("src/utils/controllers/projects/getBoardTasks.ts", {
     "@/lib/flags": { isFeatureEnabled: () => assert.fail("board data must not read a feature flag") },
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
     "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async (tasks) => tasks },
     "@/lib/prisma": { __esModule: true, default: {
       project: { findFirst: () => firstRead.promise },

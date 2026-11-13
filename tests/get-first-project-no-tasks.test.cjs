@@ -24,6 +24,7 @@ stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
   getProjectWhere: (userId) => ({ ownerId: userId, teamId: { not: null } }),
 });
 stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => true });
+stubModule("src/lib/savedViews/boardDefaultSubtasks.ts", { boardDefaultShowsSubtasks: async () => false });
 stubModule("src/utils/controllers/projects/create.ts", { createProjectViewAndCreateDefault: async () => {} });
 stubModule("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: () => true });
 

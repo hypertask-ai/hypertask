@@ -219,6 +219,7 @@ function policyController(name, role, effects, options = {}) {
     "./getFirst": { default: record("first-board", { status: 200, json: { id: 16 } }) },
     "./getAllIncludes": { ...access, getProjectIncludeWithoutTasks: () => ({}), getProjectViewInclude: () => ({}), getBoardTaskInclude: () => ({}) },
     "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
     "@/lib/projectPrefix": {}, "@vercel/functions": { waitUntil: () => {} },
     "../turbopuffer/turbopufferHelper": {},
     "@/lib/ai/teamBillingSnapshotSelect": { teamBillingSnapshotSelect: {} },
