@@ -58,23 +58,11 @@ The done comment lists every decision you made on Valentin's behalf, one line ea
 
 ## Scripted chores
 
-Use `scripts/ship-chores rebase` for a clean ticket worktree. It honors `SHIP_BASE`, aborts conflicts and keeps the original branch. Use `scripts/ship-chores live --url https://app.hypertask.ai/login --expect 'Sign in'` for read-only HTTP health, not feature QA. It refuses redirects and sends no credentials.
+Use `scripts/ship-chores rebase` in a clean ticket worktree. It honors `SHIP_BASE` and restores the original branch on conflicts. Use `scripts/ship-chores live --url https://app.hypertask.ai/login --expect 'Sign in'` for bounded HTTP health. No redirects or credentials; feature QA remains separate.
 
-`scripts/ship-chores sweep` discovers runner-App PRs to app production. It skips protected files, drafts, human PRs and incomplete file lists. One timer owns unattended merge, one required-check rerun and post-deployment HTTP health. It reads each head at most once per five minutes, pins merges through the installed guard, mints a runner App token without saved-login fallback, then requires `ship-check deployed`. Non-required reds do not block. A changed head holds the old job; a second failure stops as RED. Inspect `~/.local/state/ship-chores/fleet/TICKET.json` on resume. Bind your PR normally. Feature QA and Done remain the runner's job.
+`scripts/ship-chores sweep` discovers bound runner-App production PRs. It excludes protected files, drafts, human PRs and truncated inventories. One five-minute timer retries required workflows once per head, pins merges through the installed guard, then requires `ship-check deployed` and live HTTP health. Non-required reds never block. Changed heads HOLD; second failures stop RED. Inspect `~/.local/state/ship-chores/fleet/TICKET.json`. Review a changed head before removing its held job to re-enroll it. Feature QA and Done stay with the builder.
 
-Install from the merged checkout only, as the owning runner, never another identity:
-
-```sh
-install -Dm755 .claude/skills/ship/scripts/ship-chores ~/.local/lib/hypertask/ship-chores/ship-chores
-install -m644 .claude/skills/ship/scripts/ship-chores@.{service,timer} ~/.config/systemd/user/
-scripts_dir=.claude/skills/ship/scripts
-"$scripts_dir/user-unit-check" "$HOME/.config/systemd/user/ship-chores@.service" "$HOME/.config/systemd/user/ship-chores@.timer"
-systemctl --user daemon-reload
-systemctl --user enable --now ship-chores@6.timer
-"$scripts_dir/user-unit-check" --first-run ship-chores@6.service
-```
-
-Enable one instance only, owned by the installing runner. Never select another identity. All instances share a lock and head history. A successful sweep creates `~/.local/state/fleet/one-run.on`, enabling the picker hold. Script errors or failed services remove it. Undo by removing that hold first, then `systemctl --user disable --now ship-chores@6.timer`. Protected work still needs its authorized merger; feature QA stays with the builder.
+Install the merged executable to `~/.local/lib/hypertask/ship-chores/ship-chores` and its unit templates to `~/.config/systemd/user/`. Validate both with `user-unit-check`, reload systemd, enable only your own `ship-chores@NUMBER.timer`, then verify `user-unit-check --first-run ship-chores@NUMBER.service`. Never choose another identity. Shared locking and durable head history prevent overlap. Successful sweeps enable `~/.local/state/fleet/one-run.on`; script or service failures remove it. Undo by removing that hold before disabling the timer. Protected work still needs its authorized merger.
 
 ## Helpers
 

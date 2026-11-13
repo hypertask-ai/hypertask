@@ -115,8 +115,16 @@ def save(path, state):
     temporary.replace(path)
 
 
+def bound(ticket, number):
+    folder = Path(os.environ.get('VCC_EVIDENCE_DIR', Path.home() / '.local/state/vcc-evidence')) / ticket
+    return all((folder / k).is_file() and (folder / k).read_text().strip() == v for k, v in
+               dict(pr=str(number), repo='hypertask-ai/hypertask', base='production').items())
+
+
 def step(state, path):
     repo, number = state['repo'], state['pr']
+    if not bound(state['ticket'], number):
+        return 'HOLD'
     pr = pull(repo, number)
     rows = [] if pr['state'] == 'MERGED' else checks(repo, number)
     action = decide(pr, rows, state['head'], state['base'])
@@ -148,18 +156,18 @@ def discover():
     prs = gh('pr', 'list', '-R', 'hypertask-ai/hypertask', '--base', 'production', '--limit', '100', '--json',
              'number,title,headRefOid,isDraft,author,files,changedFiles')
     protected = ('.claude/skills/ship/scripts/ship-gates', '.claude/skills/ship/scripts/ship-check',
-                 '.claude/skills/ship/scripts/ship-identity', '.claude/skills/vcc/', '.claude/skills/unlazy/',
+                 '.claude/skills/ship/scripts/ship-identity', '.claude/skills/ship/scripts/gh-merge-guard', '.claude/skills/vcc/', '.claude/skills/unlazy/',
                  '.claude/hooks/', '.claude/settings.json', 'CLAUDE.md', 'AGENTS.md')
     for pr in prs:
         ticket = re.match(r'([A-Z][A-Z0-9]*-\d+) \[', pr['title'])
-        if not ticket or pr['isDraft'] or pr['author']['login'] != 'hypertask-runners':
+        if not ticket or pr['isDraft'] or pr['author']['login'].removeprefix('app/').removesuffix('[bot]') != 'hypertask-runners':
             continue
         if len(pr['files']) != pr['changedFiles'] or any(f['path'].startswith(protected) for f in pr['files']):
             continue
         path = ROOT / f'{ticket[1]}.json'
-        if path.exists() and json.loads(path.read_text())['head'] == pr['headRefOid']:
+        if path.exists() or not bound(ticket[1], pr['number']):
             continue
-        save(path, dict(STATE_TEMPLATE, pr=pr['number'], ticket=ticket[1], head=pr['headRefOid'], cwd=str(Path.home())))
+        save(path, dict(STATE_TEMPLATE, pr=pr['number'], ticket=ticket[1], head=pr['headRefOid']))
 
 
 STATE_TEMPLATE = dict(repo='hypertask-ai/hypertask', base='production', url='https://app.hypertask.ai/login',
@@ -172,13 +180,12 @@ def main():
     parser.add_argument('--base', default=os.environ.get('SHIP_BASE', 'production'))
     parser.add_argument('--url')
     parser.add_argument('--expect', default='')
-    parser.add_argument('--timeout', type=float, default=20)
     args = parser.parse_args()
     if args.command == 'rebase':
         print(rebase(args.base))
         return
     if args.command == 'live':
-        print(live(args.url or '', args.expect, args.timeout))
+        print(live(args.url or '', args.expect, 20))
         return
     if not os.environ.get('SHIP_SESSION_NAME'):
         raise RuntimeError('queue requires the owning SHIP_SESSION_NAME')
@@ -202,7 +209,6 @@ def main():
             state['at'] = time.time()
             save(path, state)
             try:
-                os.chdir(state['cwd'])
                 os.environ.update(SHIP_REPO=state['repo'], SHIP_BASE=state['base'])
                 state['status'] = step(state, path)
             except Exception as error:

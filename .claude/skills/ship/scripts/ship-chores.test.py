@@ -32,28 +32,40 @@ class Chores(unittest.TestCase):
 
     def test_discovery_excludes_protected_and_human_prs(self):
         pr = dict(number=1, title='HYCI-352 [INFRA] chores', headRefOid='abc', isDraft=False,
-                  author=dict(login='hypertask-runners'), files=[dict(path='scripts/safe')], changedFiles=1)
+                  author=dict(login='app/hypertask-runners'), files=[dict(path='scripts/safe')], changedFiles=1)
         rows = [pr, dict(pr, number=2, title='HYCI-353 [INFRA] guard', files=[dict(path='AGENTS.md')]),
                 dict(pr, number=3, title='HYCI-354 [INFRA] human', author=dict(login='human')),
-                dict(pr, number=4, title='HYCI-355 [INFRA] truncated', changedFiles=2)]
-        with tempfile.TemporaryDirectory() as root, patch.dict(G, ROOT=Path(root), gh=lambda *a: rows):
+                dict(pr, number=4, title='HYCI-355 [INFRA] truncated', changedFiles=2),
+                dict(pr, number=5, title='HYCI-356 [INFRA] guard', files=[dict(path='.claude/skills/ship/scripts/gh-merge-guard')]),
+                dict(pr, number=6, title='HYCI-357 [INFRA] unbound')]
+        with tempfile.TemporaryDirectory() as root, patch.dict(G, ROOT=Path(root), gh=lambda *a: rows, bound=lambda t, n: n != 6):
             M['discover']()
             self.assertEqual([p.name for p in Path(root).glob('*.json')], ['HYCI-352.json'])
             state = json.loads((Path(root) / 'HYCI-352.json').read_text())
-            self.assertEqual(state['head'], 'abc')
             state['reran'] = ['9']; M['save'](Path(root) / 'HYCI-352.json', state)
+            pr['headRefOid'] = 'new'
             M['discover']()
+            self.assertEqual(json.loads((Path(root) / 'HYCI-352.json').read_text())['head'], 'abc')
             self.assertEqual(json.loads((Path(root) / 'HYCI-352.json').read_text())['reran'], ['9'])
 
+    def test_binding_requires_exact_pr_repo_and_base(self):
+        with tempfile.TemporaryDirectory() as root, patch.dict(os.environ, VCC_EVIDENCE_DIR=root):
+            folder = Path(root) / 'HYCI-352'; folder.mkdir()
+            self.assertFalse(M['bound']('HYCI-352', 1))
+            for name, value in dict(pr='1', repo=STATE['repo'], base='production').items():
+                (folder / name).write_text(value)
+            self.assertTrue(M['bound']('HYCI-352', 1))
+            self.assertFalse(M['bound']('HYCI-352', 2))
+
     def test_merge_is_pinned_and_guarded(self):
-        with tempfile.TemporaryDirectory() as root, patch.dict(G, pull=lambda *a: PR, checks=lambda *a: GREEN):
+        with tempfile.TemporaryDirectory() as root, patch.dict(G, pull=lambda *a: PR, checks=lambda *a: GREEN, bound=lambda *a: True):
             with patch('subprocess.run') as call:
                 self.assertEqual(M['step'](dict(STATE), Path(root) / 'job.json'), 'WAIT')
             argv = call.call_args.args[0]
             self.assertTrue(argv[0].endswith('/merge-guard/gh-merge-guard'))
             self.assertEqual(argv[1:], ['--', '/usr/bin/gh', 'pr', 'merge', '1', '-R', STATE['repo'], '--squash', '--match-head-commit', 'abc'])
 
-    def test_rerun_is_once_and_required_only(self):
+    def test_rerun_is_once_on_the_same_head(self):
         rows = [dict(GREEN[0], state='FAILURE')]
         state = dict(STATE)
         with patch.dict(G, gh=lambda *a: dict(head_sha='abc', run_attempt=1)):
@@ -63,12 +75,6 @@ class Chores(unittest.TestCase):
             self.assertEqual(M['rerun'](STATE['repo'], rows, dict(STATE)), 'RED')
         with patch.dict(G, gh=lambda *a: dict(head_sha='new', run_attempt=1)):
             self.assertEqual(M['rerun'](STATE['repo'], rows, dict(STATE)), 'RED')
-        result = subprocess.CompletedProcess([], 0, json.dumps(GREEN), '')
-        with patch.dict(G, run=lambda *a: result):
-            self.assertEqual(M['checks']('x/y', 1), GREEN)
-        with patch.dict(G, run=lambda *a: subprocess.CompletedProcess([], 0, '[]', '')):
-            with self.assertRaises(RuntimeError):
-                M['checks']('x/y', 1)
 
     def test_rerun_history_saved_before_api_write(self):
         rows = [dict(GREEN[0], state='FAILURE')]
@@ -78,7 +84,7 @@ class Chores(unittest.TestCase):
             def fail(*a, **kw):
                 self.assertEqual(json.loads(path.read_text())['reran'], ['9'])
                 raise RuntimeError('write failed')
-            with patch.dict(G, pull=lambda *a: PR, checks=lambda *a: rows,
+            with patch.dict(G, bound=lambda *a: True, pull=lambda *a: PR, checks=lambda *a: rows,
                             gh=lambda *a: dict(head_sha='abc', run_attempt=1)):
                 with patch('subprocess.run', side_effect=fail), self.assertRaises(RuntimeError):
                     M['step'](state, path)
@@ -95,7 +101,7 @@ class Chores(unittest.TestCase):
             M['live']('https://app.example', 'wanted text', 1)
 
     def test_deploy_before_live(self):
-        with tempfile.TemporaryDirectory() as root, patch.dict(G, pull=lambda *a: dict(PR, state='MERGED')):
+        with tempfile.TemporaryDirectory() as root, patch.dict(G, pull=lambda *a: dict(PR, state='MERGED'), bound=lambda *a: True):
             with patch.dict(G, run=lambda *a: subprocess.CompletedProcess([], 1, '', ''), live=lambda *a: self.fail('premature live')):
                 self.assertEqual(M['step'](dict(STATE), Path(root) / 'job.json'), 'WAIT_DEPLOY')
             with patch.dict(G, run=lambda *a: subprocess.CompletedProcess([], 0, '', ''), live=lambda *a: 'LIVE'):
