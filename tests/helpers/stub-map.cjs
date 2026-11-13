@@ -75,6 +75,8 @@ const straightBoardRouteStubs = {
   "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
 };
 
+const BOARD_DEFAULT_SUBTASKS = '@/lib/savedViews/boardDefaultSubtasks'
+
 function withStubs(base = {}, extra = {}) {
   const guard = base['@/lib/agents/writing']
   if (guard && !base['@/lib/agents/writingEnforcement']) {
@@ -86,6 +88,9 @@ function withStubs(base = {}, extra = {}) {
   }
   if (!(USER_COMMENT_COUNTS in base) && !(USER_COMMENT_COUNTS in extra)) {
     defaults[USER_COMMENT_COUNTS] = { userCommentCountsByTaskId: async () => new Map() }
+  }
+  if (!(BOARD_DEFAULT_SUBTASKS in base) && !(BOARD_DEFAULT_SUBTASKS in extra)) {
+    defaults[BOARD_DEFAULT_SUBTASKS] = { boardDefaultShowsSubtasks: async () => false }
   }
   return new Proxy(Object.create(null), {
     has: (_target, request) => request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,

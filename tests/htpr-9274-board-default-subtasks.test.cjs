@@ -11,10 +11,16 @@ const projectWith = ({ defaultSetting, draft, applied, allViews }) => ({
   project_view: {
     id: "project-view",
     default_view_id: "default-view",
-    default_view: { id: "default-view", project_view_id: "project-view", board_subtask_setting: defaultSetting },
+    default_view: {
+      id: "default-view",
+      project_view_id: "project-view",
+      userId: 6,
+      visibility: "Public",
+      board_subtask_setting: defaultSetting,
+    },
     allViews: allViews ?? [
-      { id: "default-view", project_view_id: "project-view", board_subtask_setting: defaultSetting },
-      { id: "rat-stack", project_view_id: "project-view", board_subtask_setting: "Flattened" },
+      { id: "default-view", project_view_id: "project-view", userId: 6, visibility: "Public", board_subtask_setting: defaultSetting },
+      { id: "rat-stack", project_view_id: "project-view", userId: 6, visibility: "Public", board_subtask_setting: "Flattened" },
     ],
     user_project_views: [{
       id: "row",
