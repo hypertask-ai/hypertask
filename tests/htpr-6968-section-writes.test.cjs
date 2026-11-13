@@ -419,6 +419,7 @@ function projectSectionsController(effects, { defaultShape = "populated", active
     } },
     "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
     "@/utils/controllers/notifications/visibleInboxScope": {},
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
   }).default;
 }
 
