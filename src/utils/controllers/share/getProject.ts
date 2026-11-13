@@ -8,6 +8,7 @@ import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/Subtask
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getProjectViewBaseInclude } from "../projects/getAllIncludes";
 import { featureFlagsForUser } from "@/lib/flags";
+import { HTPR_9274_BOARD_DEFAULT_SUBTASKS_FLAG } from "@/lib/flags/definitions/htpr-9274-board-default-subtasks";
 import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 
 export default async function getProject(shareId: string) {
@@ -138,7 +139,13 @@ export default async function getProject(shareId: string) {
             },
         })
 
-        const project = sanitizeProjectBoardFilters(loadedProject, undefined, true);
+        const inviteFlags: Record<string, boolean> = inviteObj.userId ? await featureFlagsForUser(inviteObj.userId) : {};
+        const project = sanitizeProjectBoardFilters(
+            loadedProject,
+            undefined,
+            true,
+            inviteFlags[HTPR_9274_BOARD_DEFAULT_SUBTASKS_FLAG] === true
+        );
         if (!project) {
             return ({
                 status: 404,
@@ -160,7 +167,7 @@ export default async function getProject(shareId: string) {
             projectAsIProject.sections = _sections;
             projectAsIProject.firstTask = firstTask;
 
-            const flags: Record<string, boolean> = inviteObj.userId ? await featureFlagsForUser(inviteObj.userId) : {};
+            const flags = inviteFlags;
             const runtimeContext = { tagHideFilterEnabled: flags[HTPR_8171_HIDE_TAGS_FLAG] === true };
             projectAsIProject.filteredSections = getFilteredSections(_sections, projectAsIProject, undefined, {}, runtimeContext);
             projectAsIProject.filteredSections = getAppliedSubtaskSections(projectAsIProject.filteredSections, projectAsIProject);

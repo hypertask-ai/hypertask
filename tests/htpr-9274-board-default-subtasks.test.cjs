@@ -45,14 +45,14 @@ const projectWith = ({ defaultSetting, applied, draft, allViews }) => ({
 const payload = (project, enabled) =>
   sanitizeProjectBoardFilters(project, 6, false, enabled);
 
-test("the switch is a reversible display bugfix released to the owner and QA first", () => {
+test("the switch is a reversible display bugfix that ships on", () => {
   const { default: flag } = loadModule(
     "src/lib/flags/definitions/htpr-9274-board-default-subtasks.ts",
   );
 
   assert.equal(flag.key, "htpr-9274-board-default-subtasks");
   assert.equal(flag.kind, "bugfix");
-  assert.equal(flag.defaultMode, "OWNER_AND_QA");
+  assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.releaseRisk.risk, "small");
   assert.ok(flag.releaseRisk.reason);
   assert.equal(flag.releaseRisk.highRisk, undefined);
