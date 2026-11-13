@@ -70,7 +70,7 @@ const CANARY_TICKET_MARKER = /PostHog pipeline canary yper4-331-(\d{1,20})-(\d{1
 const ISSUE_ID_RECEIPT = /PostHog issue ID: <code>([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})<\/code>/;
 const NATIVE_ALERT_RECEIPT = /posthog-alert:issue_(?:created|reopened):/;
 
-export function earlierCanaryTickets(tasks, { runId, attempt, ticketId }) {
+export function earlierCanaryTickets(tasks, { runId, attempt, ticketId, doneSectionId }) {
   const currentRun = BigInt(runId);
   const currentAttempt = Number(attempt);
   return tasks.flatMap((task) => {
@@ -78,7 +78,7 @@ export function earlierCanaryTickets(tasks, { runId, attempt, ticketId }) {
     const marker = CANARY_TICKET_MARKER.exec(description);
     const issue = ISSUE_ID_RECEIPT.exec(description);
     if (!marker || !issue || !NATIVE_ALERT_RECEIPT.test(description)) return [];
-    if (task.sectionIsDone === true) return [];
+    if (task.sectionIsDone === true || Number(task.sectionId) === Number(doneSectionId)) return [];
     if (Number(task.id) === Number(ticketId)) return [];
     if (Array.isArray(task.assignees) && task.assignees.length > 0) return [];
     const run = BigInt(marker[1]);
@@ -100,12 +100,12 @@ async function allCanaryTickets({ fetchImpl, token }) {
 }
 
 export async function retireEarlierCanaryTickets({ fetchImpl = fetch, token, apiKey, runId, attempt, ticketId }) {
-  const earlier = earlierCanaryTickets(await allCanaryTickets({ fetchImpl, token }), { runId, attempt, ticketId });
-  if (!earlier.length) return [];
   const projects = await api(fetchImpl, token, "/projects?limit=100");
   const done = projects.projects?.find((item) => Number(item.id) === 15)?.sections
     ?.find((item) => (item.section_title ?? item.title) === "Done");
   if (!done?.id) throw new Error("Board 15 Done section is unavailable");
+  const earlier = earlierCanaryTickets(await allCanaryTickets({ fetchImpl, token }), { runId, attempt, ticketId, doneSectionId: done.id });
+  if (!earlier.length) return [];
   const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
   const retired = [];
   for (const ticket of earlier) {
