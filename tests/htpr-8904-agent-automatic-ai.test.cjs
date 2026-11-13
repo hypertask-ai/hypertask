@@ -34,6 +34,7 @@ function scheduler(relativePath, enabledFor) {
     "@/app/api/ai/_lib/taskSummaryFreshness": {
       taskSummaryOnViewEnabled: async () => false,
       markTaskSummaryStale: async () => false,
+      resolveTaskSummaryOwner: async () => 6,
     },
   });
   return { schedule: loaded.default, jobs, readChecks: () => checks };

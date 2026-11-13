@@ -118,7 +118,7 @@ test("a cached ticket open refreshes on the way out", async () => {
   const h = harness({ enabledFor: [6], owners: { 42: 6 } });
   const pending = [];
   const { markTaskRead } = loadModule("src/utils/controllers/tasks/markRead.ts", {
-    "@/lib/prisma": { default: { taskReadState: { upsert: async () => ({ lastReadAt: new Date() }) } } },
+    "@/lib/prisma": { default: { taskReadState: { upsert: async () => ({ lastReadAt: new Date() }) }, task: { findFirst: async ({ where }) => where.id === 42 ? { userId: 6 } : null } } },
     "@vercel/functions": { waitUntil: (work) => pending.push(work) },
     "@/app/api/ai/_lib/taskSummaryFreshness": h.freshness,
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
