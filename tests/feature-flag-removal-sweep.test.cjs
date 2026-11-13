@@ -247,8 +247,9 @@ test("the runtime failure key produces a ticket accepted by the real writing rul
 });
 
 test("legacy titles and new exact switch links reuse only the matching open ticket", async () => {
+  const flag = { ...dueFlags[3] };
   for (const legacy of [true, false]) {
-    dueFlags = [{ ...dueFlags[3], removalTaskId: null }];
+    dueFlags = [{ ...flag, removalTaskId: null }];
     const key = dueFlags[0].key;
     existingTasks = [
       { id: 40, title: removalTitle(key), description_: { content: `<a href="${FEATURE_FLAG_ADMIN_URL}/${key}-other">Switch</a>` }, status: "Normal" },
