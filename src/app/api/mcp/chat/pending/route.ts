@@ -49,7 +49,9 @@ export async function GET(request: NextRequest) {
     const contextEnabled = await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id);
     const chatAllEnabled = await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, ctx.user.id);
     const unanswered = new URL(request.url).searchParams.get("unanswered") === "true";
-    const result = await prisma.$transaction(async (tx) => {
+    let transactionStarted = false;
+    const loadPending = () => prisma.$transaction(async (tx) => {
+      transactionStarted = true;
       const agents = await tx.$queryRaw<Array<{ id: string; userId: number }>>`
         SELECT "id", "userId"
         FROM "Agent"
@@ -118,7 +120,14 @@ export async function GET(request: NextRequest) {
         ? await readableAgentChatContextIds(tx, { userId: agent.userId, agentId, teamScope: ctx.teamScope }, messages)
         : new Set<string>();
       return { found: true, messages, readableContextIds };
-    }, ctx.teamScope != null ? { isolationLevel: "Serializable" } : undefined);
+    }, { maxWait: 5000, ...(ctx.teamScope != null ? { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } : {}) });
+    let result: Awaited<ReturnType<typeof loadPending>>;
+    try {
+      result = await loadPending();
+    } catch (error) {
+      if (transactionStarted || !(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2028") throw error;
+      result = await loadPending();
+    }
 
     if (!result.found) {
       return NextResponse.json(
