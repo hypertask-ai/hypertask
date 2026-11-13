@@ -62,6 +62,7 @@ async function withChat(options, check) {
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ ...history, chatMounted: true, registerMessageListRef: element => { messageListElement = element; }, handleMessageListScroll() {}, scrollMessagesToBottom: () => { if (messageListElement) messageListElement.scrollTop = 1000; } }) },
     "./MessageItem": { MessageItem: ({ message }) => React.createElement("p", null, message.content) }, "./TypingIndicator": { TypingIndicator: () => null },
     "./useAiChatOpenPreferences": { useSyncAiChatOpenPreferences() {}, useAiChatOpenPreferences: () => ({ enabled: true, ready: true, flagReady: true, values: { aiChatOpenBoards: options.boardAutoOpen !== false, aiChatOpenTickets: true, aiChatOpenNewTickets: options.newTicketAutoOpen !== false } }) },
+    "./useKeepChatClosed": { useKeepChatClosed: () => ({ keepChatClosed: Boolean(options.keepClosed), ready: true }) },
   });
   const { useAiChatSessions } = source("src/hooks/MultiPages/AIChat/useAiChatSessions.ts");
   const { useAiChatState } = source("src/hooks/MultiPages/AIChat/useAiChatState.ts");
