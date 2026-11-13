@@ -11,3 +11,10 @@ test('codex review gate runs only the script from the production branch', () => 
   assert.equal(checkout.with['sparse-checkout'], '.github/scripts');
   assert.equal(gate.if, "hashFiles('.github/scripts/codex-review-gate.cjs') != ''");
 });
+
+test('codex review gate wakes on every push to a pull request against production', () => {
+  const trigger = workflow.on.pull_request_target;
+  assert.deepEqual(trigger.types, ['opened', 'reopened', 'synchronize', 'ready_for_review']);
+  assert.deepEqual(trigger.branches, ['production']);
+  assert.match(workflow.jobs.gate.if, /github\.event_name == 'pull_request_target'/);
+});

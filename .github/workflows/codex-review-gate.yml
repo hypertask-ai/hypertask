@@ -1,6 +1,9 @@
 name: Codex review gate
 
 on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [production]
   pull_request_review:
     types: [submitted]
   pull_request_review_comment:
@@ -24,6 +27,7 @@ jobs:
       queue: max
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
         github.event.comment.user.login == 'chatgpt-codex-connector[bot]') ||
       (github.event_name != 'issue_comment' &&
