@@ -20,8 +20,9 @@ export type TAiModelKey =
   | "deepseek-v4.1-flash-fast"
   | "deepseek-v4-pro"
   | "kimi-k2.5"
-  | "kimi-k3"
-  | "qwen3.7-plus"
+  | "kimi-k3.1-pro"
+  | "qwen3.8-max"
+  | "qwen3.8-max-prime"
   | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
@@ -50,8 +51,9 @@ export type TAiModelOptionId =
   | "deepseek-v4.1-flash-fast"
   | "deepseek-v4-pro"
   | "kimi-k2.5"
-  | "kimi-k3"
-  | "qwen3.7-plus"
+  | "kimi-k3.1-pro"
+  | "qwen3.8-max"
+  | "qwen3.8-max-prime"
   | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
@@ -169,18 +171,25 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 1,
   },
   {
-    key: "kimi-k3",
+    key: "kimi-k3.1-pro",
     modelClass: "kimi-k3",
-    label: "Kimi K3",
+    label: "Kimi K3.1 Pro",
     provider: "moonshot",
     priceTier: 3,
   },
   {
-    key: "qwen3.7-plus",
+    key: "qwen3.8-max",
     modelClass: "qwen-plus",
-    label: "Qwen3.7 Plus",
+    label: "Qwen3.8 Max",
     provider: "alibaba",
     priceTier: 1,
+  },
+  {
+    key: "qwen3.8-max-prime",
+    modelClass: "qwen-max-prime",
+    label: "Qwen3.8 Max Prime",
+    provider: "alibaba",
+    priceTier: 2,
   },
   {
     key: "glm-5.3-flash",
@@ -484,22 +493,31 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "kimi-k2.5",
   },
   {
-    id: "kimi-k3",
+    id: "kimi-k3.1-pro",
     source: "gateway",
-    title: "Kimi K3",
-    model: "moonshotai/kimi-k3",
-    desc: "Flagship, 1M context",
-    reasoning: "instant",
-    modelKey: "kimi-k3",
+    title: "Kimi K3.1 Pro",
+    model: "moonshotai/kimi-k3.1-pro",
+    desc: "Flagship reasoning, 1M context",
+    reasoning: "thinking",
+    modelKey: "kimi-k3.1-pro",
   },
   {
-    id: "qwen3.7-plus",
+    id: "qwen3.8-max",
     source: "gateway",
-    title: "Qwen3.7 Plus",
-    model: "alibaba/qwen3.7-plus",
+    title: "Qwen3.8 Max",
+    model: "alibaba/qwen3.8-max",
     desc: "Strong general model",
     reasoning: "instant",
-    modelKey: "qwen3.7-plus",
+    modelKey: "qwen3.8-max",
+  },
+  {
+    id: "qwen3.8-max-prime",
+    source: "gateway",
+    title: "Qwen3.8 Max Prime",
+    model: "alibaba/qwen3.8-max-prime",
+    desc: "Deeper Qwen reasoning",
+    reasoning: "thinking",
+    modelKey: "qwen3.8-max-prime",
   },
   {
     id: "glm-5.3-flash",
@@ -679,7 +697,11 @@ const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
   "deepseek-v4-flash": "deepseek-v4.1-flash",
   "deepseek/deepseek-v4-flash": "deepseek-v4.1-flash",
   "deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash",
-  "kimi-k2.6": "kimi-k3",
+  "kimi-k2.6": "kimi-k3.1-pro",
+  "kimi-k3": "kimi-k3.1-pro",
+  "moonshotai/kimi-k3": "kimi-k3.1-pro",
+  "qwen3.7-plus": "qwen3.8-max",
+  "alibaba/qwen3.7-plus": "qwen3.8-max",
   "glm-5.2": "glm-5.3-flash",
   "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
   "gemini-3.5-flash": "gemini-3.8-flash",

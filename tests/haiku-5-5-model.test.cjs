@@ -381,7 +381,7 @@ test("plan defaults and stream fallbacks stay unchanged while automatic picks an
   assert.equal(catalog.getDefaultAiModelOptionForPlan("Free", false).id, "gpt-6-luna");
   assert.deepEqual(ladder.SYSTEM_MODEL_LADDERS.fast.map((entry) => entry.model), [
     "google/gemini-3.5-flash-lite", "openai/gpt-6-luna", "anthropic/claude-haiku-5.5",
-    "deepseek/deepseek-v4.1-flash-1017", "moonshotai/kimi-k2.5", "alibaba/qwen3.7-plus", "zai/glm-5.3-flash",
+    "deepseek/deepseek-v4.1-flash-1017", "moonshotai/kimi-k2.5", "alibaba/qwen3.8-max", "zai/glm-5.3-flash",
   ]);
   assert.equal(ladder.resolveUserFacingModelOption("aiChat", {}).id, "gemini-3.5-flash-lite");
   assert.equal(ladder.resolveUserFacingModelOption("aiChat", {}, option.id).id, option.id);

@@ -30,6 +30,8 @@ regexes = [
   '''CMD/CTRL\+SHIFT\+O''',
   '''claude-haiku-4\.5''',
   '''qwen3\.7-plus''',
+  # HTPR-8207: Qwen model ids the generic rule reads as an API key.
+  '''qwen3\.8-max(?:-prime)?''',
   '''sk_test_placeholder''',
   # Feature-flag keys are ticket slugs (htpr, hyfa, yper4), never credentials.
   '''(?:htpr|hyfa|yper4)-[0-9]+-[a-z0-9-]+''',

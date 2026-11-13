@@ -18,7 +18,7 @@ const lookup = { trustedTeamId: "fixture-team", userId: 985 };
 const expectedMap = {
   "deepseek-v4.1-flash": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
   "deepseek-v4.1-flash-fast": "deepseek-ai/DeepSeek-V4.1-Flash-1017-Fast",
-  "kimi-k3": "moonshotai/Kimi-K3",
+  "kimi-k3.1-pro": "moonshotai/Kimi-K3.1-Pro",
   "glm-5.3-flash": "zai-org/GLM-5.3-Flash",
 };
 
