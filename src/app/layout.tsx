@@ -183,6 +183,11 @@ export default async function RootLayout(
           name="description"
           content="Hypertask - AI-powered Project Boards"
         />
+        <script
+          async
+          src="https://cdn.usefathom.com/script.js"
+          data-site="SSBYTYUQ"
+        />
       </head>
       <body style={{fontFamily:"inherit !important"}} id={DIV_ID_CONSTANTS.bodyLayout}>
         <div id="portal-root"></div>

@@ -191,7 +191,8 @@ const nextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
           {
             key: "Content-Security-Policy-Report-Only",
-            value: "script-src https://app.hypertask.ai/_next/static/ https://eu-assets.i.posthog.com; base-uri 'self'",
+            value:
+              "script-src https://app.hypertask.ai/_next/static/ https://eu-assets.i.posthog.com https://cdn.usefathom.com; base-uri 'self'",
           },
         ],
       },
