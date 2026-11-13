@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# ship-rebase: put the current branch on top of the base branch, or name the real conflict.
+# Usage: ship-rebase [--base production] [--remote origin]
+# Exit: 0 rebased or already up to date, 1 refusing (dirty tree or wrong place), 2 real conflict, 3 usage.
+set -uo pipefail
+usage() { echo "usage: ship-rebase [--base production] [--remote origin]" >&2; exit 3; }
+base=production remote=origin
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) base=${2:-}; [ -n "$base" ] || usage; shift 2 || usage ;;
+    --remote) remote=${2:-}; [ -n "$remote" ] || usage; shift 2 || usage ;;
+    *) usage ;;
+  esac
+done
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "ship-rebase: not in a git worktree" >&2; exit 1; }
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  echo "ship-rebase: refusing, this worktree has uncommitted changes (commit or discard them first)" >&2
+  exit 1
+fi
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+[ "$branch" != "HEAD" ] || { echo "ship-rebase: refusing, HEAD is detached" >&2; exit 1; }
+[ "$branch" != "$base" ] || { echo "ship-rebase: refusing, $base is the base branch" >&2; exit 1; }
+git fetch --quiet "$remote" "$base" || { echo "ship-rebase: cannot fetch $remote $base" >&2; exit 1; }
+upstream="$remote/$base"
+behind=$(git rev-list --count "HEAD..$upstream" 2>/dev/null || echo 0)
+if [ "$behind" = 0 ]; then
+  echo "ship-rebase: $branch is already up to date with $upstream"
+  exit 0
+fi
+before=$(git rev-parse --short HEAD)
+if git rebase --quiet "$upstream" >/dev/null 2>&1; then
+  echo "ship-rebase: rebased $branch from $before onto $upstream ($behind new commit(s))"
+  exit 0
+fi
+conflicts=$(git diff --name-only --diff-filter=U 2>/dev/null)
+git rebase --abort >/dev/null 2>&1
+if [ -n "$conflicts" ]; then
+  echo "ship-rebase: real conflict on $upstream, left $branch at $before; nothing changed"
+  while IFS= read -r file; do echo "  $file"; done <<<"$conflicts"
+  exit 2
+fi
+echo "ship-rebase: rebase failed without a file conflict, left $branch at $before; run git rebase $upstream yourself" >&2
+exit 2

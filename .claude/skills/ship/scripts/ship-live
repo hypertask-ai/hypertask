@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""ship-live: check a deployed URL until it answers the way the ticket says it should.
+
+  ship-live <url> [--expect TEXT]... [--status 200,204] [--timeout 300] [--interval 10]
+                 [--header 'Name: value']... [--method GET|POST]
+
+Fetches once, then retries every interval until the timeout while a deployment rolls out.
+Passes only when the status is allowed and every expected substring is in the body.
+It never judges behaviour beyond that, so a green run means "the deployed page answered",
+not "the feature works".
+
+Exit: 0 answered as expected, 1 did not answer in time, 3 usage.
+"""
+import argparse
+import sys
+import time
+import urllib.error
+import urllib.request
+
+DEFAULT_STATUS = (200,)
+
+
+def allowed_codes(text):
+    codes = []
+    for part in text.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if not part.isdecimal() or not 100 <= int(part) <= 599:
+            raise ValueError(f'bad status code {part}')
+        codes.append(int(part))
+    if not codes:
+        raise ValueError('no status codes')
+    return tuple(codes)
+
+
+def fetch(url, method, headers, timeout):
+    request = urllib.request.Request(url, method=method, headers={'User-Agent': 'ship-live', **headers})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status, response.read(2_000_000).decode('utf-8', 'replace')
+    except urllib.error.HTTPError as error:
+        return error.code, error.read(200_000).decode('utf-8', 'replace')
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        return None, str(error)
+
+
+def judge(status, body, want, expects):
+    if status is None:
+        return f'request failed: {body}'
+    if status not in want:
+        return f'status {status}, wanted one of {", ".join(str(code) for code in want)}'
+    for text in expects:
+        if text not in body:
+            return f'status {status} but the body does not contain {text!r}'
+    return ''
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Check a deployed URL until it answers as expected.')
+    parser.add_argument('url', nargs='?')
+    parser.add_argument('--expect', action='append', default=[])
+    parser.add_argument('--status', default=','.join(str(code) for code in DEFAULT_STATUS))
+    parser.add_argument('--timeout', type=int, default=300)
+    parser.add_argument('--interval', type=int, default=10)
+    parser.add_argument('--header', action='append', default=[])
+    parser.add_argument('--method', default='GET')
+    args = parser.parse_args()
+    if not args.url:
+        parser.print_usage(sys.stderr)
+        return 3
+    if not args.url.startswith(('http://', 'https://')):
+        print('ship-live: expected an http or https URL', file=sys.stderr)
+        return 3
+    try:
+        want = allowed_codes(args.status)
+    except ValueError as error:
+        print(f'ship-live: {error}', file=sys.stderr)
+        return 3
+    if args.timeout < 1 or args.interval < 1:
+        print('ship-live: --timeout and --interval must be at least 1 second', file=sys.stderr)
+        return 3
+    headers = {}
+    for raw in args.header:
+        name, _, value = raw.partition(':')
+        if not name.strip() or not value.strip():
+            print(f'ship-live: bad --header {raw!r}', file=sys.stderr)
+            return 3
+        headers[name.strip()] = value.strip()
+    started = time.monotonic()
+    verdict = 'not tried'
+    while True:
+        status, body = fetch(args.url, args.method, headers, min(20, args.timeout))
+        verdict = judge(status, body, want, args.expect)
+        elapsed = time.monotonic() - started
+        if not verdict:
+            print(f'ship-live: {args.url} {status} after {elapsed:.0f}s')
+            return 0
+        if elapsed + args.interval >= args.timeout:
+            print(f'ship-live: {args.url} did not answer as expected within {args.timeout}s: {verdict}', file=sys.stderr)
+            return 1
+        time.sleep(args.interval)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

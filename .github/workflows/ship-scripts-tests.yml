@@ -85,6 +85,8 @@ jobs:
           python3 .claude/skills/ship/scripts/ci-wait.test.py
           bash .claude/skills/ship/scripts/gh-notify.test.sh
           python3 .claude/skills/ship/scripts/ci-why.test.py
+          bash .claude/skills/ship/scripts/ship-rebase.test.sh
+          python3 .claude/skills/ship/scripts/ship-live.test.py
           node --test .claude/skills/ship/scripts/production-red-alert.test.mjs
           bash .claude/skills/ship/scripts/board-check.test.sh
           bash .claude/skills/ship/scripts/user-unit-check.test.sh

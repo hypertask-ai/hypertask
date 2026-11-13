@@ -23,7 +23,7 @@ Push the branch and require targeted checks in CI. Never run tests or builds on 
 
 ## Merge and deploy
 
-1. Read the PR merge state. Resolve conflicts before investigating checks. Read fresh ticket comments and reactions before merging; later corrections still apply.
+1. Read the PR merge state. Put a branch that is behind the base on top of it with `ship-rebase`; the only conflict a model resolves is the one it names. Read fresh ticket comments and reactions before merging; later corrections still apply.
 2. Mint a runner App token for GitHub commands. Stop if minting fails; never fall back to Valentin's saved login. Wait with `~/.local/lib/hypertask/runner-pickup/ci-wait <PR> --repo hypertask-ai/hypertask --timeout 1800 --head <PUSHED_SHA>` using the runner App token. Use the known pushed commit SHA, not a fresh GitHub read. GitHub notifications trigger fresh reads; the fallback is ten minutes. Never use `gh pr checks --watch` or `gh run watch`. Refresh an expired token rather than starting duplicate watchers.
 3. Require all required checks on the current PR head and the latest completed production App Smoke health check to pass. A skipped required test is not a pass. Run `ship-check guard` explicitly in hookless sessions. Do not bypass branch protection or approvals.
 4. Merge only self-mergeable work. Protected Agent Kit changes go to Chief Of Staff on the ticket for review and merge. Money, access, security, irreversible changes, and release changes retain their required decision/review path. A guard block names work to finish, not a check to evade.
@@ -31,7 +31,7 @@ Push the branch and require targeted checks in CI. Never run tests or builds on 
 
 ## Verify and close
 
-Load [verify-qa](../verify-qa/SKILL.md) after deployment and read the matching feature-map recipe. Write the checklist first. Use headless Playwright and the authorized QA identity for the path, never Valentin's account or browser. Confirm the doctor before judging the feature. Every app deployment includes the core inbox cycle.
+Load [verify-qa](../verify-qa/SKILL.md) after deployment and read the matching feature-map recipe. Write the checklist first. Run `ship-live <url> --expect '<text that proves the deployed page>'` for the mechanical live check, then judge behaviour. Use headless Playwright and the authorized QA identity for the path, never Valentin's account or browser. Confirm the doctor before judging the feature. Every app deployment includes the core inbox cycle.
 
 Drive the real parse or dispatch entry point, prove side effects, and reload saved results. Include the declared flag mode and flag-off case where relevant. Changed UI needs desktop and phone captures in all four themes plus a short main-path video. Mocks, previews, and helper-only tests do not replace live proof. Record unreachable paths and the closest real check instead of inventing success.
 

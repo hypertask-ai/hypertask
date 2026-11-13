@@ -41,9 +41,9 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 | Check UI | [design-compliance](../design-compliance/SKILL.md), [verify-on-phone](../verify-on-phone/SKILL.md) | Before/after evidence; unrelated layout unchanged |
 | Document behavior | [update-docs](../update-docs/SKILL.md) | Changed behavior documented or justified no-change record |
 | Open PR | One existing-ticket PR targeting the proper base; bind with `ship-check bind` | `ship-check pr` passes; no auto-merge |
-| Merge | vcc merge routine and `ship-check guard` | Current-head required checks and production health green |
+| Merge | `ship-rebase`, vcc merge routine and `ship-check guard` | Current-head required checks and production health green |
 | Deploy | vcc deployment routine | `ship-check deployed` passes for the merge SHA |
-| Verify live | [verify-qa](../verify-qa/SKILL.md), matching feature-map page | Real entry-point behavior and side effects; `ship-check proof` for app tickets |
+| Verify live | [verify-qa](../verify-qa/SKILL.md), `ship-live`, matching feature-map page | Real entry-point behavior and side effects; `ship-check proof` for app tickets |
 | Close | Plain-language outcome, QA report, then Done | `ship-check docs` and `ship-check done` pass |
 | Clean | [clean-up](../clean-up/SKILL.md) | `ship-check cleaned` passes |
 | Reflect | [reflect](../reflect/SKILL.md), once after the last ticket | Accepted proposals handled, or skip reason in activity |
@@ -62,7 +62,7 @@ The runner itself runs Codex gpt-6.1-sol at medium effort and delegates by defau
 
 ## Release completion
 
-CI is the test gate. Push the branch; never run tests or builds on the VPS. Tests run in CI on the PR. A killed local check, SIGKILL, or exit 137 is not a blocker: push and let CI prove it. Never mark a ticket blocked on HT Product Lead for a killed local test. An independent release error needs its own `Blocker:` line before moving the ticket.
+CI is the test gate. Push the branch; never run tests or builds on the VPS. Tests run in CI on the PR. A killed local check, exit 137 or SIGKILL is not a blocker: push and let CI prove it. Two chores are scripts, not model steps: `ship-rebase` puts the branch on the base and names the only conflict a model resolves, `ship-live` waits for the deployed URL to answer as the ticket says. A model wakes for a real conflict or behaviour that needs judgement. Never mark a ticket blocked on HT Product Lead for a killed local test. An independent release error needs its own `Blocker:` line before moving the ticket.
 
 On board 15, **Flag: Everyone**, **Flag: Only Me + QA**, and **No Flag** are completed states. Close a verified restricted release in its declared mode without widening the flag. **Flag: Off** is not done. Other columns follow the board's `isDone` metadata.
 
