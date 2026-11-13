@@ -21,7 +21,10 @@
 #   ship-check deeper <T>        newest "Deeper:" agent activity names field, raw source, method, outside proof, breaks if and a
 #                                proof gate <T>.deeper-<name> with CHECK: and EXPECT: in this session's .unlazy/s-<id>/gates/*.md
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
-#   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
+#   ship-check deployed <T>      the Production deployment for that merge is success (app repo only); a repo with no release
+#                                takes a recorded live-proof naming sha:, source: and check: systemd-user-unit <unit>.service,
+#                                plus an optional payload: <repo path> that the merge changed; the payload (or the unit's
+#                                ExecStart file) must match the merge, or the live checkout's HEAD, and any mismatch refuses
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
 #   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
 #   ship-check done <T>          ticket is in the done column its own board names
@@ -457,7 +460,7 @@ docs_deploy_ok() {
 }
 
 live_proof_ok() {
-  local t=$1 sha=$2 f="$EVID/$1/live-proof" psha source check unit fragment out tmp exec target relative unit_path start exit_time now fragment_time target_time
+  local t=$1 sha=$2 f="$EVID/$1/live-proof" psha source check unit fragment out tmp exec target relative unit_path payload proof_path live start exit_time now fragment_time target_time
   [ -s "$f" ] || return 1
   psha=$(sed -n 's/^sha:[[:space:]]*//p' "$f" | head -1)
   source=$(sed -n 's/^source:[[:space:]]*//p' "$f" | head -1)
@@ -528,7 +531,18 @@ live_proof_ok() {
       else
         rm -rf "$tmp"; return 1
       fi
-      if ! git -C "$source" show "$sha:$relative" > "$tmp/payload" 2>/dev/null || ! cmp -s "$target" "$tmp/payload"; then rm -rf "$tmp"; return 1; fi
+      payload=$(sed -n 's/^payload:[[:space:]]*//p' "$f" | head -1)
+      proof_path=$relative
+      [ -z "$payload" ] || proof_path=$payload
+      [[ $proof_path =~ ^[A-Za-z0-9_.][A-Za-z0-9._/-]*$ && $proof_path != *..* ]] || { rm -rf "$tmp"; return 1; }
+      if ! git -C "$source" show "$sha:$proof_path" > "$tmp/merge" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
+      live=$target
+      [ "$proof_path" = "$relative" ] || live="$source/$proof_path"
+      [ -f "$live" ] || { rm -rf "$tmp"; return 1; }
+      if ! cmp -s "$live" "$tmp/merge"; then
+        # A live checkout that moved past the merge still proves the fix when it holds the repo's own copy.
+        if ! git -C "$source" show "HEAD:$proof_path" > "$tmp/head" 2>/dev/null || ! cmp -s "$live" "$tmp/head"; then rm -rf "$tmp"; return 1; fi
+      fi
       rm -rf "$tmp"
       if [[ $REPO == hypertask-ai/hypertask ]]; then
         out=$(systemctl --user show "$unit" --timestamp=us -p Result -p ExecMainStatus -p NeedDaemonReload -p ExecMainStartTimestamp -p ExecMainExitTimestamp -p DropInPaths 2>/dev/null) || return 1
@@ -548,7 +562,7 @@ live_proof_ok() {
         target_time=$(stat -Lc %y "$target") && target_time=$(date -d "$target_time" +%s%N) || return 1
         (( start > 0 && start <= now && start >= fragment_time && start >= target_time && exit_time >= start && exit_time <= now )) || return 1
       fi
-      PROOF_UNIT_PATH=$unit_path PROOF_PAYLOAD_PATH=$relative
+      PROOF_UNIT_PATH=$unit_path PROOF_PAYLOAD_PATH=$proof_path
       ;;
     *) return 1 ;;
   esac

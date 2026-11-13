@@ -244,6 +244,34 @@ esac
             self.run_git('add', '-A')
             self.run_git('commit', '-qm', 'remove extra')
 
+        # A later merge to the same tool no longer blocks an older merge (HYCI-354): the live copy at HEAD is accepted.
+        record(sha)
+        payload.write_text('newer\n')
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'later tool change')
+        install(installed, payload.read_text())
+        self.assertIn('agent live proof', self.check('deployed', ticket))
+        installed.write_text('hand edit\n')
+        os.utime(installed, (start - 10, start - 10))
+        self.check('deployed', ticket, success=False)
+        install(installed, payload.read_text())
+        self.assertIn('agent live proof', self.check('deployed', ticket))
+        # The proof can name the file the merge changed, and that file is compared at the merge.
+        other = self.repo / '.claude/skills/ship/scripts/runner-pickup'
+        other.write_text('other tool\n')
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'other tool change')
+        other_sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+        named = f'sha: {other_sha}\nsource: {self.repo}\ncheck: systemd-user-unit runner-selfupdate.service\n'
+        proof.write_text(named + 'payload: .claude/skills/ship/scripts/runner-pickup\n')
+        self.assertIn('agent live proof', self.check('deployed', ticket, MERGE_SHA=other_sha))
+        other.write_text('hand edit\n')
+        self.check('deployed', ticket, success=False, MERGE_SHA=other_sha)
+        other.write_text('other tool\n')
+        proof.write_text(named + 'payload: .claude/skills/ship/scripts/runner-pickup.test.sh\n')
+        self.check('deployed', ticket, success=False, MERGE_SHA=other_sha)
+        proof.write_text(named + 'payload: ../outside\n')
+        self.check('deployed', ticket, success=False, MERGE_SHA=other_sha)
         app = self.repo / 'src/app.ts'
         app.parent.mkdir(parents=True, exist_ok=True)
         app.write_text('old app\n')

@@ -1060,7 +1060,7 @@ case "\$1:\$2" in
     if [[ "\$*" == *'--json title --jq .title'* ]]; then
       echo 'YPER4-999 [INFRA] Fixture'
     else
-      printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"%s","mergeCommit":{"oid":"$inert_sha"},"baseRefName":"master"}\n' "\${INERT_PR_STATE:-MERGED}"
+      printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"%s","mergeCommit":{"oid":"%s"},"baseRefName":"master"}\n' "\${INERT_PR_STATE:-MERGED}" "\${INERT_MERGE_SHA:-$inert_sha}"
     fi ;;
   release:view) exit 1 ;;
   release:list) echo "\${INERT_RELEASES:-[]}" ;;
@@ -1096,6 +1096,30 @@ printf '#!/usr/bin/env bash\necho old build\n' > "$E2/src/bin/fast-lane-close.sh
 L 1 'FAIL: no successful push'
 cp "$E2/installed-copy" "$E2/src/bin/fast-lane-close.sh"
 L 0 'deployed ok (recorded live proof, merged'
+# A merged tool fix still reaches Done after the live checkout moves on (HYCI-354).
+git -C "$E2/src" checkout -q -- systemd/fast-lane-close.service
+printf '#!/usr/bin/env bash\necho shipped again\n' > "$E2/src/bin/fast-lane-close.sh"
+git -C "$E2/src" add -A; git -C "$E2/src" commit -qm 'later tool merge'
+L 0 'deployed ok (recorded live proof, merged'
+printf '#!/usr/bin/env bash\necho hand edited\n' > "$E2/src/bin/fast-lane-close.sh"
+L 1 'FAIL: no successful push'
+git -C "$E2/src" checkout -q -- bin/fast-lane-close.sh
+# The proof names the file the merge changed, and that file is compared at the merge.
+printf 'fixed\n' > "$E2/src/bin/fixed-later.sh"
+git -C "$E2/src" add -A; git -C "$E2/src" commit -qm 'fix the changed file'
+fixed_sha=$(git -C "$E2/src" rev-parse HEAD)
+printf '#!/usr/bin/env bash\necho unrelated later merge\n' > "$E2/src/bin/fast-lane-close.sh"
+git -C "$E2/src" add -A; git -C "$E2/src" commit -qm 'unrelated later merge'
+printf 'sha: %s\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\npayload: bin/fixed-later.sh\n' "$fixed_sha" "$E2/src" > "$proof"
+L 0 'deployed ok (recorded live proof, merged' INERT_MERGE_SHA=$fixed_sha
+printf 'hand edited\n' > "$E2/src/bin/fixed-later.sh"
+L 1 'FAIL: no successful push' INERT_MERGE_SHA=$fixed_sha
+git -C "$E2/src" checkout -q -- bin/fixed-later.sh
+printf 'sha: %s\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\npayload: bin/missing.sh\n' "$fixed_sha" "$E2/src" > "$proof"
+L 1 'FAIL: no successful push' INERT_MERGE_SHA=$fixed_sha
+printf 'sha: %s\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\npayload: ../outside.sh\n' "$fixed_sha" "$E2/src" > "$proof"
+L 1 'FAIL: no successful push' INERT_MERGE_SHA=$fixed_sha
+printf 'sha: %s\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\n' "$inert_sha" "$E2/src" > "$proof"
 L 1 'FAIL: no successful push' INERT_RUNS='[{"head_sha":"'"$inert_sha"'","event":"push","head_branch":"master","conclusion":"neutral","status":"completed"}]'
 L 1 'FAIL: no successful push' INERT_RESULT=failure
 L 1 'FAIL: no successful push' INERT_STATUS=1
