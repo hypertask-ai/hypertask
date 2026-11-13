@@ -5,7 +5,8 @@ import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import prisma from "@/lib/prisma";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
-import { sanitizeBoardFilters, projectVisibleViewRelations } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { sanitizeBoardFilters, projectVisibleViewRelations, subtaskSettingWithCardsShown } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { boardDefaultShowsSubtasks } from "@/lib/savedViews/boardDefaultSubtasks";
 import { defaultEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { defaultFilterSettings } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { defaultSubtaskSettings } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
@@ -149,6 +150,22 @@ const route = taskWriteRoute({
       }, userId);
       const user_project_view = projectView.user_project_views[0] ?? null;
       console.log("🚀 ~ 55: ~ user_project_view:", user_project_view);
+
+      const storedSubtaskSetting =
+        user_project_view?.unsavedView?.board_subtask_setting ??
+        user_project_view?.appliedView?.board_subtask_setting ??
+        projectView.default_view?.board_subtask_setting;
+      const storedHidesSubtaskCards =
+        storedSubtaskSetting !== undefined &&
+        subtaskSettingWithCardsShown(storedSubtaskSetting) !== storedSubtaskSetting;
+      const echoesShownSubtasks =
+        storedHidesSubtaskCards &&
+        requestedBoardSubtaskSetting !== undefined &&
+        requestedBoardSubtaskSetting === subtaskSettingWithCardsShown(storedSubtaskSetting) &&
+        (await boardDefaultShowsSubtasks(userId));
+      const board_subtask_setting = echoesShownSubtasks
+        ? storedSubtaskSetting
+        : requestedBoardSubtaskSetting;
 
       const baseView = hasBaseViewId
         ? baseViewId == null

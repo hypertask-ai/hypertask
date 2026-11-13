@@ -189,6 +189,9 @@ export function sanitizeProjectViewBoardFilters<T>(projectView: T, userId?: numb
   return (changed ? sanitized : visibleProjectView) as T;
 }
 
+export const subtaskSettingWithCardsShown = (setting: unknown): string =>
+  showsAllSubtaskCards(setting) ? String(setting) : DEFAULT_SUBTASK_SETTING;
+
 const showsAllSubtaskCards = (setting: unknown) =>
   typeof setting === "string" && SUBTICKET_SETTINGS_THAT_SHOW_ALL_CARDS.has(setting);
 
