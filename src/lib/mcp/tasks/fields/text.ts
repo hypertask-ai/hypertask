@@ -37,6 +37,7 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
             body: JSON.stringify({
                 newTask,
                 agentId: ctx.agentId || undefined,
+                saveDeadline: budget.deadline,
             })
         }, budget.remaining())
         if (!singleResponse.ok) {

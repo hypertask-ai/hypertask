@@ -13,9 +13,9 @@ import { extractTaskReferencesFromCommentText } from "@/utils/controllers/commen
 import { addRelatedTasks } from "@/utils/controllers/tasks/addRelatedTasks";
 import { taskWriteRoute } from "./route";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
-import { isTaskSaveTimeout, taskSaveBudget, TASK_SAVE_TOO_LONG } from "@/lib/tasks/saveLimit";
+import { isTaskSaveTimeout, taskSaveBudget, TASK_SAVE_LIMIT_MS, TASK_SAVE_TOO_LONG } from "@/lib/tasks/saveLimit";
 
-const schema = z.custom<{ newTask: Record<string, any>; agentId?: unknown }>(
+const schema = z.custom<{ newTask: Record<string, any>; agentId?: unknown; saveDeadline?: unknown }>(
   (body) => !!(body as { newTask?: { id?: unknown } } | null)?.newTask?.id,
 );
 
@@ -32,8 +32,9 @@ export const PUT = taskWriteRoute({
   schema,
   validationMessage: "Task id is required",
   validateBeforeAuth: true,
-  operation: async ({ newTask, agentId }, session) => {
-    const budget = taskSaveBudget();
+  operation: async ({ newTask, agentId, saveDeadline }, session) => {
+    const callerDeadline = typeof saveDeadline === "number" && Number.isFinite(saveDeadline) ? saveDeadline : Infinity;
+    const budget = taskSaveBudget(Math.min(Date.now() + TASK_SAVE_LIMIT_MS, callerDeadline));
     let committedResponse: ReturnType<typeof NextResponse.json> | undefined;
     try {
       return await budget.run(async () => {

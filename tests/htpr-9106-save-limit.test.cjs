@@ -57,6 +57,7 @@ test("HTPR-9106 real agent saves, stalled HTTP bodies and pool connections share
     assert.equal(requests[0].cookie, "test-session=fixture");
     assert.equal(requests[0].data.newTask.title, "Healthy save");
     assert.equal(requests[0].data.agentId, "test-agent");
+    assert.ok(requests[0].data.saveDeadline > Date.now() && requests[0].data.saveDeadline <= Date.now() + save.TASK_SAVE_LIMIT_MS);
     await assert.rejects(updateTaskText(context("gateway"), { id: 101 }), { message: save.TASK_SAVE_TOO_LONG });
     const started = Date.now();
     const failures = await Promise.all([
@@ -81,6 +82,27 @@ test("HTPR-9106 real agent saves, stalled HTTP bodies and pool connections share
     await pool.end();
     await Promise.all([server, db].map((s) => new Promise((resolve) => s.close(resolve))));
   }
+});
+
+test("HTPR-9106 the app save stops at the agent deadline", { timeout: 4_000 }, async () => {
+  const { load } = require("./task-route-loader.cjs");
+  const seen = [];
+  const route = load("src/lib/api/task-writes/update.ts", {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7, source: "better-auth" }) },
+    "@/lib/prisma": { default: { task: { findUnique: async () => ({ projectId: 15 }) }, user: { findUnique: async () => ({ displayName: "QA" }) }, agent: { findFirst: async () => null }, project: { findFirst: async () => ({ id: 15 }) } } },
+    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "@/utils/controllers/tasks/single": { updateTaskSingle: async (_task, _user, _agent, options) => { seen.push(options.saveDeadline); return options.saveDeadline - Date.now() > 2_000 ? { status: 200, json: { id: 101 } } : new Promise(() => {}); } },
+    "@/lib/realtime/server": { broadcastBoardChange() {}, async broadcastTaskChange() {} }, "@/utils/controllers/comments/extractTaskReferences": { extractTaskReferencesFromCommentText: () => [] },
+    "@/utils/controllers/tasks/addRelatedTasks": { addRelatedTasks: async () => {} }, "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
+  }).PUT;
+  const call = async (saveDeadline) => { const response = await route({ headers: new Headers(), json: async () => ({ newTask: { id: 101, title: "T" }, saveDeadline }) }); return { status: response.status, message: (await response.json()).message }; };
+  assert.deepEqual([await call(Date.now() - 50), seen.length], [{ status: 503, message: save.TASK_SAVE_TOO_LONG }, 0]);
+  assert.equal((await call(Date.now() + 999_999)).status, 200);
+  assert.ok(seen[0] <= Date.now() + save.TASK_SAVE_LIMIT_MS && seen[0] > Date.now() + 2_000);
+  const started = Date.now();
+  assert.deepEqual(await call(started + 250), { status: 503, message: save.TASK_SAVE_TOO_LONG });
+  assert.ok(Date.now() - started < 2_000 && seen[1] <= started + 250, `agent deadline waited ${Date.now() - started}ms`);
 });
 
 test("HTPR-9106 a shared budget never starts another phase after expiry", async () => {
