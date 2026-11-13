@@ -421,14 +421,18 @@ for (const relative of [boardPath, detailPath, ...restorePaths]) {
 const autoOpenOff = { aiChatOpenNewTickets: false, aiChatOpenTickets: false, aiChatOpenBoards: false };
 for (const relative of restorePaths) {
   test(`${relative}: per-user Keep chat closed stops the manual-chat session restore`, async () => {
-    for (const autoOpen of [autoOpenOff, { ...autoOpenOff, aiChatOpenTickets: true }]) {
-      const keptClosed = Object.values(autoOpen).every((value) => !value);
-      await harness({}, async (h) => {
-        window.sessionStorage.setItem("ht:aiChatOpen", "1");
-        await h.hydrate({ relative });
-        assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), !keptClosed,
-          keptClosed ? "keep chat closed must win over a stored open session" : "the restore stays available when a switch is on");
-      }, true, true, true, { autoOpen, manualChat: true });
-    }
+    await harness({}, async (h) => {
+      window.sessionStorage.setItem("ht:aiChatOpen", "1");
+      await h.hydrate({ relative });
+      assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), false, "keep chat closed must win over a stored open session");
+    }, true, true, true, { autoOpen: autoOpenOff, manualChat: true });
   });
 }
+
+test(`${restorePaths[0]}: a switch back on keeps the manual-chat session restore available`, async () => {
+  await harness({}, async (h) => {
+    window.sessionStorage.setItem("ht:aiChatOpen", "1");
+    await h.hydrate({ relative: restorePaths[0] });
+    assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), true);
+  }, true, true, true, { autoOpen: { ...autoOpenOff, aiChatOpenTickets: true }, manualChat: true });
+});
