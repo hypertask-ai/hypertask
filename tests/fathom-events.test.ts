@@ -1,19 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import fs from "node:fs";
-import vm from "node:vm";
-import ts from "typescript";
+import { loadModule } from "./helpers/loadModule.cjs";
 
 function loadFathom(window: any) {
-  const compiled = ts.transpileModule(fs.readFileSync("src/lib/analytics/fathom.ts", "utf8"), {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-  }).outputText;
-  const loaded = { exports: {} as any };
-  const guest = { isGuestUser: (user: any) => user?.uid?.startsWith("guest_") ?? false };
-  vm.runInNewContext(`(function(require,module,exports){${compiled}\n})`, { window, setTimeout, clearTimeout })(
-    () => guest, loaded, loaded.exports,
-  );
-  return loaded.exports;
+  (globalThis as any).window = window;
+  return loadModule("src/lib/analytics/fathom.ts", {
+    "@/lib/demo/guest": { isGuestUser: (user: any) => user?.uid?.startsWith("guest_") ?? false },
+  });
 }
 
 const NOW = Date.parse("2026-11-13T12:00:00Z");
