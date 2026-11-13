@@ -223,9 +223,17 @@ export const getActiveSubtaskSettingFromProject = (project?:IProject|null):TBoar
   const view = project?.project_view?.user_project_views[0]
   if (!project || !view) return DEFAULT_SUBTASK_SETTING
   const unsaved = view.unsavedView?.board_subtask_setting
-  const applied = view.appliedView?.board_subtask_setting
+  const applied = view.appliedView
+  const defaultViewId = project.project_view?.default_view_id
   const defaultView = project.project_view?.default_view?.board_subtask_setting
-  return deepCopy(unsaved??applied??defaultView??DEFAULT_SUBTASK_SETTING)
+  const boardDefault = project.project_view?.board_subtask_setting_for_default_view
+  if (boardDefault) {
+    const appliedOnMainTab = !applied?.id || applied.id === defaultViewId
+    if (!appliedOnMainTab) return deepCopy(applied.board_subtask_setting ?? boardDefault)
+    if (unsaved && unsaved !== defaultView) return deepCopy(unsaved)
+    return deepCopy(boardDefault)
+  }
+  return deepCopy(unsaved??applied?.board_subtask_setting??defaultView??DEFAULT_SUBTASK_SETTING)
 }
 
 const personalEmptySectionSetting = (

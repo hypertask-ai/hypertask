@@ -40,6 +40,13 @@ export function isSubtaskSetting(value: unknown): value is SubtaskSetting {
     return typeof value === "string" && SUBTASK_SETTINGS.includes(value as SubtaskSetting)
 }
 
+export function boardDefaultSubtaskSetting(
+    setting: TBoardSubtaskSetting | null | undefined
+): TBoardSubtaskSetting {
+    if (!setting || setting === "None") return DEFAULT_SUBTASK_SETTING
+    return setting
+}
+
 
 export type TCreate_view_body = {
     userId: number,

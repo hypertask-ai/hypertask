@@ -399,6 +399,7 @@ export interface IProjectView {
   default_view_order?: string[] | null;
   default_view_id?: string;
   default_view?: IView;
+  board_subtask_setting_for_default_view?: SubtaskSetting;
 }
 
 export interface IUserProjectView {
