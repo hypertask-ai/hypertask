@@ -152,22 +152,8 @@ def step(state, path):
     return action
 
 
-PROTECTED = (
-    '.claude/skills/ship/scripts/ship-gates',
-    '.claude/skills/ship/scripts/ship-check',
-    '.claude/skills/ship/scripts/ship-identity',
-    '.claude/skills/ship/scripts/gh-merge-guard',
-    '.claude/skills/vcc/',
-    '.claude/skills/unlazy/',
-    '.claude/hooks/',
-    '.claude/settings.json',
-    'CLAUDE.md',
-    'AGENTS.md',
-)
-
-
-def runner_author(pr):
-    return pr['author']['login'].removeprefix('app/').removesuffix('[bot]') == 'hypertask-runners'
+PROTECTED = tuple('.claude/skills/ship/scripts/' + n for n in ('ship-gates', 'ship-check', 'ship-identity', 'gh-merge-guard')) + (
+    '.claude/skills/vcc/', '.claude/skills/unlazy/', '.claude/hooks/', '.claude/settings.json', 'CLAUDE.md', 'AGENTS.md')
 
 
 def discover():
@@ -175,17 +161,14 @@ def discover():
              'number,title,headRefOid,isDraft,author,files,changedFiles')
     for pr in prs:
         ticket = re.match(r'([A-Z][A-Z0-9]*-\d+) \[', pr['title'])
-        if not ticket or pr['isDraft'] or not runner_author(pr):
+        if not ticket or pr['isDraft'] or pr['author']['login'].removeprefix('app/').removesuffix('[bot]') != 'hypertask-runners':
             continue
         paths = [f['path'] for f in pr['files']]
-        if len(paths) != pr['changedFiles'] or any(p.startswith(PROTECTED) for p in paths):
+        if len(paths) != pr['changedFiles'] or any(p.startswith(PROTECTED) for p in paths) or not bound(ticket[1], pr['number']):
             continue
-        key = ticket[1]
-        if not bound(key, pr['number']):
-            continue
-        path = ROOT / f'{key}.json'
+        path = ROOT / f'{ticket[1]}.json'
         if not path.exists():
-            save(path, dict(STATE_TEMPLATE, pr=pr['number'], ticket=key, head=pr['headRefOid']))
+            save(path, dict(STATE_TEMPLATE, pr=pr['number'], ticket=ticket[1], head=pr['headRefOid']))
 
 
 STATE_TEMPLATE = dict(repo='hypertask-ai/hypertask', base='production', url='https://app.hypertask.ai/login',
