@@ -298,3 +298,46 @@ test("only a refused fallback is tolerated; other refusals and failures still fa
     console.warn = warn;
   }
 });
+
+const OLD_ISSUE_ID = "01a1d034-5125-7402-85b2-aafb7ec6e3e2";
+function canaryAlertTicket(id, runId, { assignees = [], sectionIsDone = false, attempt = 1 } = {}) {
+  return {
+    id,
+    assignees,
+    sectionIsDone,
+    description: `<p><strong>Error</strong>. PostHog pipeline canary yper4-331-${runId}-${attempt}</p>`
+      + `<p>PostHog issue ID: <code>${OLD_ISSUE_ID}</code></p><p>posthog-alert:issue_created:alert-${runId}</p>`,
+  };
+}
+
+test("a passing canary retires earlier canary tickets nobody picked up and resolves their issue", async () => {
+  const { earlierCanaryTickets, retireEarlierCanaryTickets } = await import(script);
+  const tasks = [
+    canaryAlertTicket(201, "111"),
+    canaryAlertTicket(202, "112", { assignees: [{ displayName: "Runner 3" }] }),
+    canaryAlertTicket(203, "400"),
+    canaryAlertTicket(204, "111", { sectionIsDone: true }),
+    { id: 205, description: `Former poll PostHog issue ID: <code>${OLD_ISSUE_ID}</code> yper4-331-111-1` },
+    { id: 206, description: "an unrelated error ticket" },
+  ];
+  assert.deepEqual(earlierCanaryTickets(tasks, { runId: "300", attempt: "1", ticketId: 999 }).map((ticket) => ticket.id), [201]);
+  assert.deepEqual(earlierCanaryTickets(tasks, { runId: "112", attempt: "2", ticketId: 202 }).map((ticket) => ticket.id), [201]);
+  assert.deepEqual(earlierCanaryTickets([canaryAlertTicket(207, "112", { attempt: 1 })], { runId: "112", attempt: "2", ticketId: 999 }).map((ticket) => ticket.id), [207]);
+  assert.deepEqual(earlierCanaryTickets([canaryAlertTicket(208, "112", { attempt: 2 })], { runId: "112", attempt: "2", ticketId: 999 }), []);
+
+  const writes = [];
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    if (url.includes("/tasks?")) return response({ tasks });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }] });
+    if (url.endsWith("/tasks/update")) { writes.push(JSON.parse(options.body)); return response({ success: true }); }
+    if (new URL(url).hostname === "eu.posthog.com") return response({ id: OLD_ISSUE_ID, status: options.method === "PATCH" ? "resolved" : "active" });
+    assert.fail(url);
+  };
+  const retired = await retireEarlierCanaryTickets({ fetchImpl, token: "fixture", apiKey: "ph-fixture", runId: "300", attempt: "1", ticketId: 999 });
+  assert.deepEqual(retired, ["PostHog pipeline canary yper4-331-111-1"]);
+  assert.deepEqual(writes, [{ task_id: 201, sectionId: 777 }]);
+  assert.equal(calls.find((call) => call.url.endsWith("/tasks/update")).options.headers["Idempotency-Key"], "posthog-canary-retire-PostHog pipeline canary yper4-331-111-1");
+  assert.equal(calls.filter((call) => new URL(call.url).hostname === "eu.posthog.com").length, 1);
+});
