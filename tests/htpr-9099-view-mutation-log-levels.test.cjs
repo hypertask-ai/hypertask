@@ -20,7 +20,7 @@ function fixture({ update, remove, create } = {}) {
       wrapMcpRoute: handler => handler,
       checkMcpRouteRateLimit: async () => null,
       validateMcpRouteAuth: async () => ({ user: { id: 985 } }),
-      readMcpRouteJsonBody: async () => ({ ok: true, body: { title: 'Renamed' } }),
+      readMcpRouteJsonBody: async () => ({ ok: true, body: { project_id: 15, title: 'Renamed' } }),
     },
     '@/lib/prisma': {},
     '@/utils/controllers/projects/getAllIncludes': {},
@@ -40,7 +40,7 @@ function fixture({ update, remove, create } = {}) {
   };
   const route = load('src/lib/mcp/operations/view/[viewId]/operation.ts', stubs);
   return {
-    create: load('src/lib/mcp/operations/view/operation.ts', stubs).POST(
+    create: () => load('src/lib/mcp/operations/view/operation.ts', stubs).POST(
       new NextRequest('https://app.hypertask.ai/api/mcp/view', { method: 'POST' }),
     ),
     update: () => route.PATCH(
@@ -89,7 +89,21 @@ test('create logs an assignee refusal as a warning, not an error', async () => {
   const route = fixture({ create: async () => { throw refusal(); } });
   const { calls, result } = await capture(() => route.create());
   assert.equal(result.status, 400);
+  const body = await result.json();
+  assert.equal(body.message, assigneeRefusal);
+  assert.deepEqual(body.details, { field: 'assignee_ids', code: 'invalid_value' });
   assert.deepEqual(calls.map(call => call.level), ['warn']);
+  assert.equal(calls[0].args[0], 'Error creating view:');
+});
+
+test('create keeps an unexpected failure on the error stream', async () => {
+  const failure = new Error('database unavailable');
+  const route = fixture({ create: async () => { throw failure; } });
+  const { calls, result } = await capture(() => route.create());
+  assert.equal(result.status, 400);
+  assert.deepEqual(calls.map(call => call.level), ['error']);
+  assert.equal(calls[0].args[0], 'Error creating view:');
+  assert.equal(calls[0].args[1], failure);
 });
 
 function service(method, failure) {
