@@ -109,7 +109,8 @@ stubModule("src/lib/agentWebhooks/outbox.ts", {
 });
 stubModule("src/utils/controllers/assignees/autoAssignForSection.ts", { autoAssignForSection: async () => "ready" });
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
-const { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_SWEEP_AGENT_ID } = jiti(path.join(root, "src/lib/flags.ts"));
+const { FEATURE_FLAG_ADMIN_URL, FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_SWEEP_AGENT_ID } =
+  jiti(path.join(root, "src/lib/flags.ts"));
 const { AgentMutationLeaseMissingError } = jiti(path.join(root, "src/lib/mcp/tasks/agentMutationFence.ts"));
 const { default: upsertTaskDescription } = jiti(path.join(root, "src/utils/controllers/description/common-description-create.ts"));
 const { GET } = jiti(path.join(root, "src/app/api/cron/feature-flag-removals/route.ts"));
@@ -150,9 +151,11 @@ test("the real sweep saves the removal description under an adopted lease and re
   assert.equal(state.description.taskId, state.task.id);
   assert.equal(state.description.creatorId, FEATURE_FLAG_OWNER_USER_ID);
   assert.equal(state.description.agentId, FEATURE_FLAG_SWEEP_AGENT_ID);
-  assert.ok(state.description.content.includes(`<code>${key}</code>`));
+  assert.equal(state.task.title, "Remove the released switch for google calendar");
   assert.ok(state.description.content.includes("Everyone"));
   assert.ok(state.description.content.includes("2026-01-01"));
+  assert.equal(state.description.content.replace(/<a\b[^>]*>/g, "").includes(key), false);
+  assert.ok(state.description.content.includes(`${FEATURE_FLAG_ADMIN_URL}/${key}`));
   assert.equal(state.flag.removalTaskId, state.task.id);
   assert.equal(state.adoptions, 1);
   assert.equal(state.releases, 1);

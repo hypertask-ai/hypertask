@@ -126,7 +126,7 @@ test("the removal sweep leaves overdue unregistered rows unchanged and tickets a
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
   assert.deepEqual(candidates.map(({ key }) => key), [registeredKey]);
-  assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
+  assert.deepEqual(filed.map(({ title }) => title), [removalTitle(registeredKey)]);
   assert.deepEqual([removed, pending], before);
   assert.deepEqual(writes, [registeredKey, registeredKey, registeredKey]);
   assert.equal(dueFlags.find(({ key }) => key === registeredKey).removalTaskId, 99);
