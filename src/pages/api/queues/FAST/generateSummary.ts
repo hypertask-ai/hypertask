@@ -23,9 +23,8 @@ function buildJobId(taskId: number) {
 
 export default async function scheduleTaskSummaryGeneration(req: IReq) {
   const { taskId, agentId } = req;
-  if (await taskSummaryOnViewEnabled(await resolveTaskSummaryOwner(taskId))) {
-    if (await markTaskSummaryStale(taskId)) return;
-  }
+  const summaryOnView = await taskSummaryOnViewEnabled(await resolveTaskSummaryOwner(taskId));
+  if (summaryOnView && (await markTaskSummaryStale(taskId))) return;
   if (!(typeof agentId === "string" && agentId.length > 0) || !(await isFeatureEnabled("htpr-8904-agent-automatic-ai", req.ownerUserId ?? 0))) {
     if (req.activityOnlyOwnerId) {
       if (await isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, req.activityOnlyOwnerId)) return;

@@ -88,8 +88,7 @@ export async function requestTaskSummaryRefreshOnView(args: {
   taskId: number;
   ownerUserId?: number | null;
 }): Promise<SummaryOnViewDecision> {
-  const ownerUserId = args.ownerUserId === undefined ? await resolveTaskSummaryOwner(args.taskId) : args.ownerUserId;
-  const enabled = await taskSummaryOnViewEnabled(ownerUserId);
+  const enabled = await taskSummaryOnViewEnabled(args.ownerUserId);
   if (!enabled) return "off";
   const marked = await readTaskSummaryStaleMarker(args.taskId);
   if (!marked) return "fresh";

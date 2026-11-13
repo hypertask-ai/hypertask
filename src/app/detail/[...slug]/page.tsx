@@ -109,8 +109,12 @@ export default async function Page(
     return <Unauthorized />;
   }
 
-  if (await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, task.userId).catch(() => false)) {
-    waitUntil(requestTaskSummaryRefreshOnView({ taskId: task.id, ownerUserId: task.userId }).catch(() => undefined));
+  try {
+    if (await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, task.userId)) {
+      waitUntil(requestTaskSummaryRefreshOnView({ taskId: task.id, ownerUserId: task.userId }).catch(() => undefined));
+    }
+  } catch (error) {
+    console.warn("[task-summary] Switch lookup failed", task.id, error);
   }
 
   [lastReadAt, agentRunActivities] = await Promise.all([

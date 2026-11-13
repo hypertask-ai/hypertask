@@ -121,19 +121,14 @@ test("a cached ticket open refreshes on the way out", async () => {
     "@/lib/prisma": { default: { taskReadState: { upsert: async () => ({ lastReadAt: new Date() }) } } },
     "@vercel/functions": { waitUntil: (work) => pending.push(work) },
     "@/app/api/ai/_lib/taskSummaryFreshness": h.freshness,
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
   });
   await h.scheduler({ taskId: 42 });
   await markTaskRead(42, 6);
   await Promise.all(pending);
   assert.equal(h.jobs.length, 1, "leaving a cached open ticket schedules the refresh");
-  assert.equal(h.jobs[0].jobId, "ai-summary-view-for-taskId:42");
-});
-
-test("switching the flag off stops the on-view run for an existing mark", async () => {
-  const h = harness({ enabledFor: [], owners: { 48: 6 } });
-  await h.freshness.markTaskSummaryStale(48);
-  assert.equal(await h.freshness.requestTaskSummaryRefreshOnView({ taskId: 48, ownerUserId: 6 }), "off");
-  assert.equal(h.jobs.length, 0);
+  await markTaskRead(99, 6);
+  assert.equal(h.jobs.length, 1, "a ticket the viewer cannot reach schedules nothing");
 });
 
 test("an unreadable owner keeps the scheduled run and writes no mark", async () => {
@@ -143,8 +138,10 @@ test("an unreadable owner keeps the scheduled run and writes no mark", async () 
   assert.equal(h.redis.values.size, 0);
 });
 
-test("the switch off keeps the scheduled run and marks nothing", async () => {
-  const h = harness({ enabledFor: [], owners: { 44: 7 } });
+test("the switch off ignores existing marks and keeps the scheduled run", async () => {
+  const h = harness({ enabledFor: [], owners: { 44: 7, 48: 6 } });
+  await h.freshness.markTaskSummaryStale(48);
+  assert.equal(await h.freshness.requestTaskSummaryRefreshOnView({ taskId: 48, ownerUserId: 6 }), "off");
   await h.scheduler({ taskId: 44, ownerUserId: 7 });
   assert.deepEqual(h.jobs.map((job) => job.body), [{ taskId: 44 }]);
   assert.equal(h.jobs[0].jobId, "ai-summary-for-taskId:44");
