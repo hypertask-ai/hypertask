@@ -218,10 +218,9 @@ export function sanitizeBoardDefaultSubtaskSetting<T>(projectView: T, boardDefau
     const shownRows = rows.map((row) => {
       if (!isRecord(row)) return row;
       if (key === "allViews") return row.id === defaultViewId ? withSubtaskCardsShown(row) : row;
-      const appliedView = isRecord(row.appliedView) && row.appliedView.id === defaultViewId
-        ? withSubtaskCardsShown(row.appliedView)
-        : row.appliedView;
-      const unsavedView = withSubtaskCardsShown(row.unsavedView);
+      const appliedOnDefaultView = !isRecord(row.appliedView) || row.appliedView.id === defaultViewId;
+      const appliedView = appliedOnDefaultView ? withSubtaskCardsShown(row.appliedView) : row.appliedView;
+      const unsavedView = appliedOnDefaultView ? withSubtaskCardsShown(row.unsavedView) : row.unsavedView;
       if (appliedView === row.appliedView && unsavedView === row.unsavedView) return row;
       return { ...row, appliedView, unsavedView };
     });

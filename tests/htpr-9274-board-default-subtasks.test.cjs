@@ -130,3 +130,27 @@ test("the switch is a reversible display bugfix released to the owner and QA fir
   assert.ok(flag.releaseRisk.reason);
   assert.equal(flag.releaseRisk.highRisk, undefined);
 });
+
+test("an edited draft over a filtered view keeps its own sub-ticket setting", () => {
+  const project = projectWith({
+    defaultSetting: "None",
+    draft: "Parent",
+    applied: { id: "rat-stack", setting: "Flattened" },
+  });
+  const sanitized = settings(sanitizeProjectBoardFilters(project, 6, false, true));
+
+  assert.equal(sanitized.draft, "Parent");
+  assert.equal(sanitized.applied, "Flattened");
+});
+
+test("an edited draft over the default view follows the board rule", () => {
+  const project = projectWith({
+    defaultSetting: "None",
+    draft: "Parent",
+    applied: { id: "default-view", setting: "None" },
+  });
+  const sanitized = settings(sanitizeProjectBoardFilters(project, 6, false, true));
+
+  assert.equal(sanitized.draft, "Flattened_Card");
+  assert.equal(sanitized.applied, "Flattened_Card");
+});
