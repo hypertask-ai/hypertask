@@ -9,7 +9,7 @@ import { getTicketShellSeed, type TicketShellSeed } from "@/lib/firstScreen/tick
 import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
-import FathomSignupCompleted from "@/components/Analytics/FathomSignupCompleted";
+import FathomSignupCompleted from "@/lib/analytics/FathomSignupCompleted";
 import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
 import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
