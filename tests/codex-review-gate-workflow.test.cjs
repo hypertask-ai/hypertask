@@ -16,5 +16,5 @@ test('codex review gate wakes on every push to a pull request against production
   const trigger = workflow.on.pull_request_target;
   assert.deepEqual(trigger.types, ['opened', 'reopened', 'synchronize', 'ready_for_review']);
   assert.deepEqual(trigger.branches, ['production']);
-  assert.match(workflow.jobs.gate.if, /github\.event_name == 'pull_request_target'/);
+  assert.ok(workflow.jobs.gate.if.includes("github.event_name == 'pull_request_target'"));
 });
