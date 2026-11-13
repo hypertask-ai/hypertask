@@ -15,7 +15,9 @@ function harness() {
   const state = { consent: "all", eligible: true, failure: "", session: null as { id: number } | null };
   let config: any;
   let initialize: (() => any) | undefined;
+  const fathomEvents: string[] = [];
   const window = {
+    fathom: { trackEvent: (name: string) => fathomEvents.push(name) },
     location: { href: "https://app.hypertask.ai/login?email=private@example.test#secret", pathname: "/login", hostname: "app.hypertask.ai" },
     requestIdleCallback: (callback: () => any) => { initialize = callback; return 1; },
     cancelIdleCallback: () => {},
@@ -42,6 +44,7 @@ function harness() {
     },
     "react/jsx-runtime": { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }), Fragment: "fragment" },
     "next/navigation": { usePathname: () => "/login" },
+    "next/script": { default: "Script" },
     "next/headers": { cookies: async () => ({ get: () => ({ value: "session-token" }) }) },
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => state.session },
     "@/lib/flags": { isFeatureEnabled: async () => false },
@@ -111,7 +114,7 @@ function harness() {
     const result = Component(props);
     return { result, effects: [...effects] };
   }
-  return { load, render, state, mocks, captures, posthog, refs, get config() { return config; }, initialize: () => initialize?.() };
+  return { load, render, state, mocks, captures, fathomEvents, posthog, refs, get config() { return config; }, initialize: () => initialize?.() };
 }
 
 function plain<T>(value: T): T {
@@ -153,6 +156,17 @@ for (const userId of [null, 123]) {
     h.render(Signup, { enabled: true, userId }, true).effects.forEach((effect) => effect());
     assert.equal(received.length, 2);
     assert.notEqual(received[1].properties.event_id, properties.event_id);
+  });
+}
+
+for (const userId of [null, 123]) {
+  test(`Fathom Login page viewed fires once for anonymous visitors only, user=${userId}`, () => {
+    const h = harness();
+    const Signup = h.load("src/app/login/SignupPageViewed.tsx").default;
+    const { effects } = h.render(Signup, { enabled: true, userId });
+    effects.forEach((effect) => effect());
+    effects.forEach((effect) => effect());
+    assert.deepEqual(h.fathomEvents, userId === null ? ["Login page viewed"] : []);
   });
 }
 
@@ -287,6 +301,9 @@ for (const session of [null, { id: 123 }]) {
     const provider = children.find((child: any) => child?.type === "Provider");
     assert.equal(provider.props.children, "existing-content");
     assert.ok(children.indexOf(analytics) < children.indexOf(provider));
+    const fathom = children.find((child: any) => child?.type === "Script");
+    assert.equal(fathom.props["data-site"], "SSBYTYUQ");
+    assert.equal(fathom.props["data-auto"], "false");
   });
 }
 

@@ -113,11 +113,11 @@ test('reservation latch requires the flagged authenticated desktop board snapsho
   assert.notEqual(start, -1);
   const body = source.slice(start, source.indexOf('  const setShowAiChatInterface', start));
   const render = new Function('useState', 'useEffect', 'firstScreen', 'pathname', 'mbl', 'authenticatedUserId',
-    'chatAutoOpenReady', 'keepAiChatClosed', 'aiChatPinned', 'openAiChatByDefault', 'aiChatAutoOpenSuppressed', 'showAiChatInterface',
+    'chatAutoOpenReady', 'keepChatClosed', 'aiChatPinned', 'openAiChatByDefault', 'aiChatAutoOpenSuppressed', 'showAiChatInterface',
     'HTPR_7406_DESKTOP_SERVER_BOARD_FLAG', 'aiChatOpenSwitchesEnabled', transpile(body) + '\nreturn reserveBoardChat;');
   const snapshot = { scope: { route: '/project' }, flags: { values: { [flagKey]: true } } };
   const initial = { firstScreen: snapshot, pathname: '/project', mbl: false, authenticatedUserId: 985,
-    chatAutoOpenReady: true, keepAiChatClosed: false, aiChatPinned: false, openAiChatByDefault: true, aiChatAutoOpenSuppressed: false, showAiChatInterface: false };
+    chatAutoOpenReady: true, keepChatClosed: false, aiChatPinned: false, openAiChatByDefault: true, aiChatAutoOpenSuppressed: false, showAiChatInterface: false };
   function harness() {
     let state;
     return overrides => {
@@ -131,7 +131,7 @@ test('reservation latch requires the flagged authenticated desktop board snapsho
   }
   assert.equal(harness()(), true);
   for (const overrides of [{ firstScreen: null }, { pathname: '/inbox' }, { mbl: true }, { authenticatedUserId: null },
-    { keepAiChatClosed: true }, { chatAutoOpenReady: false }, { openAiChatByDefault: false }, { aiChatAutoOpenSuppressed: true },
+    { keepChatClosed: true }, { chatAutoOpenReady: false }, { openAiChatByDefault: false }, { aiChatAutoOpenSuppressed: true },
     { firstScreen: { ...snapshot, scope: { route: '/inbox' } } },
     { firstScreen: { ...snapshot, flags: { values: { [flagKey]: false } } } }]) {
     assert.equal(harness()(overrides), false, JSON.stringify(overrides));
