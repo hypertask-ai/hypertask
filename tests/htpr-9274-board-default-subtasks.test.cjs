@@ -84,9 +84,15 @@ test("a board default view that hides sub-tickets shows them on the main board",
 });
 
 test("a draft inherited from that board default stops hiding sub-tickets", () => {
-  for (const draft of ["None", "Parent", "Card"]) {
+  const project = payload(projectWith({ defaultSetting: "None", draft: "None" }), true);
+
+  assert.equal(getActiveSubtaskSettingFromProject(project), "Flattened_Card");
+});
+
+test("a draft someone picked on purpose is kept", () => {
+  for (const draft of ["Parent", "Card", "Flattened"]) {
     const project = payload(projectWith({ defaultSetting: "None", draft }), true);
-    assert.equal(getActiveSubtaskSettingFromProject(project), "Flattened_Card");
+    assert.equal(getActiveSubtaskSettingFromProject(project), draft);
   }
 });
 
