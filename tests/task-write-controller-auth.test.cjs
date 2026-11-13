@@ -91,6 +91,15 @@ test("first-task email integration schedules the committed transition with authe
   assert.equal(scheduled.agentId, OWNED_AGENT);
 });
 
+test("trusted background saves still commit without scheduling first-task emails", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT);
+  const result = await updateTaskSingle({ id: TASK_ID, title: "Background title" }, { id: USER_ID }, OWNED_AGENT, { trustedCaller: true, skipAutoAssign: true });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.title, "Background title");
+  assert.equal(calls.transaction, 1);
+  assert.equal(calls.firstTaskEmails?.length ?? 0, 0);
+});
+
 function loadUpdateController(
   projectId,
   destinationSectionProjectId,
