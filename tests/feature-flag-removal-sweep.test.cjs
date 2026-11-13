@@ -13,6 +13,12 @@ let candidates = [];
 let filed = [];
 let writes = [];
 let extraCandidate = null;
+let validateWriting;
+let existingTasks = [];
+function removalTitle(key) {
+  const ticket = key.match(/^([a-z]+\d*-\d+)(?:-|$)/i)?.[1].toUpperCase();
+  return `Remove the safety switch for ${ticket ?? "this released change"}`;
+}
 function matches(flag, where) {
   if (typeof where.key === "string" && flag.key !== where.key) return false;
   if (where.key?.equals && flag.key !== where.key.equals) return false;
@@ -51,7 +57,12 @@ const prisma = {
     return { uniqueIdentifier: "HTPR", section: [{ id: 4389, section_title: "Backlog" }] };
   } },
   label: { findFirst: async () => null },
-  task: { findFirst: async () => null },
+  task: { findFirst: async ({ where }) => existingTasks.find((task) =>
+    task.status === where.status && where.OR.some((condition) =>
+      task.title === condition.title &&
+      (!condition.description_ || task.description_?.content.includes(condition.description_.is.content.contains)),
+    ),
+  ) ?? null },
   $transaction: async (callback) => callback(prisma),
   $queryRaw: async () => [{ acquired: true }],
 };
@@ -63,14 +74,16 @@ stubModule("src/lib/prisma.ts", { __esModule: true, default: prisma });
 stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
 stubModule("src/utils/controllers/tasks/createTaskCore.ts", {
   createProvisionedTaskCore: async (options) => {
+    validateWriting(options.agentId, options, {}, { create: true, houseRules: true });
     filed.push(options);
     return { task: { id: 99 } };
   },
 });
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
-const { FEATURE_FLAG_KEYS, RETIRED_FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
+const { FEATURE_FLAG_KEYS, RETIRED_FEATURE_FLAG_KEYS, FEATURE_FLAG_ADMIN_URL } = jiti(path.join(root, "src/lib/flags.ts"));
 const { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } = jiti(path.join(root, "src/lib/flags/removal.ts"));
 const { GET } = jiti(path.join(root, "src/app/api/cron/feature-flag-removals/route.ts"));
+validateWriting = jiti(path.join(root, "src/lib/agents/writing.ts")).assertAgentWriting;
 
 let previousSecret;
 test.beforeEach(() => {
@@ -85,6 +98,7 @@ test.beforeEach(() => {
   filed = [];
   writes = [];
   extraCandidate = null;
+  existingTasks = [];
   previousSecret = process.env.CRON_SECRET;
   process.env.CRON_SECRET = "test-cron-secret";
 });
@@ -100,7 +114,7 @@ test("the removal sweep skips the legacy shallow-switch flag without blocking ot
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
   assert.deepEqual(candidates.map(({ key }) => key), [registeredKey]);
-  assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
+  assert.deepEqual(filed.map(({ title }) => title), [removalTitle(registeredKey)]);
   assert.equal(filed[0].userId, 6);
   assert.equal(filed[0].sectionId, 4389);
   assert.equal(filed[0].sectionTitle, "Backlog");
@@ -123,7 +137,7 @@ test("the removal sweep leaves overdue unregistered rows unchanged and tickets a
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
   assert.deepEqual(candidates.map(({ key }) => key), [registeredKey]);
-  assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
+  assert.deepEqual(filed.map(({ title }) => title), [removalTitle(registeredKey)]);
   assert.deepEqual([removed, pending], before);
   assert.deepEqual(writes, [registeredKey, registeredKey, registeredKey]);
   assert.equal(dueFlags.find(({ key }) => key === registeredKey).removalTaskId, 99);
@@ -150,8 +164,8 @@ test("bugfix flags are due after 7 days while money and data-deletion stay at 14
     deferred: 0,
   });
   assert.deepEqual(filed.map(({ title }) => title), [
-    "Remove feature flag htpr-7702-phone-chat-list",
-    "Remove feature flag yper4-651-self-follow-quiet",
+    "Remove the safety switch for HTPR-7702",
+    "Remove the safety switch for YPER4-651",
   ]);
   assert.ok(filed.every((ticket) => ticket.description.includes("more than 7 days")));
   assert.ok(filed.every((ticket) => ticket.mode === undefined));
@@ -217,6 +231,40 @@ test("an existing open removal ticket is reused and no second task is created", 
   }
 });
 
+test("the runtime failure key produces a ticket accepted by the real writing rules", async () => {
+  const key = "htpr-6555-idle-comment-mic";
+  assert.throws(() => validateWriting("agent", {
+    title: `Remove feature flag ${key}`,
+  }, {}, { houseRules: true }), /Dashed code name/);
+  dueFlags = [{ ...dueFlags[3], key }];
+  const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", {
+    headers: { authorization: "Bearer test-cron-secret" },
+  }));
+  assert.deepEqual(await response.json(), { filed: 1, keys: [key], failed: [], deferred: 0 });
+  assert.equal(filed[0].title, "Remove the safety switch for HTPR-6555");
+  assert.ok(filed[0].description.includes(`/${key}\"`));
+  assert.ok(!filed[0].description.includes(`<code>${key}</code>`));
+});
+
+test("legacy titles and new exact switch links reuse only the matching open ticket", async () => {
+  for (const legacy of [true, false]) {
+    dueFlags = [{ ...dueFlags[3], removalTaskId: null }];
+    const key = dueFlags[0].key;
+    existingTasks = [
+      { id: 40, title: removalTitle(key), description_: { content: `<a href="${FEATURE_FLAG_ADMIN_URL}/${key}-other">Switch</a>` }, status: "Normal" },
+      { id: 41, title: removalTitle(key), description_: { content: `href="${FEATURE_FLAG_ADMIN_URL}/${key}"` }, status: "Archive" },
+      { id: 42, title: legacy ? `Remove feature flag ${key}` : removalTitle(key),
+        description_: { content: `href="${FEATURE_FLAG_ADMIN_URL}/${key}"` }, status: "Normal" },
+    ];
+    const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", {
+      headers: { authorization: "Bearer test-cron-secret" },
+    }));
+    assert.deepEqual(await response.json(), { filed: 1, keys: [key], failed: [], deferred: 0 });
+    assert.equal(dueFlags[0].removalTaskId, 42);
+    assert.deepEqual(filed, []);
+  }
+});
+
 test("the conditional claim rejects an unregistered key returned in the candidate list", async () => {
   const removed = { ...dueFlags[3], key: removedKey };
   dueFlags.unshift(removed);
@@ -227,7 +275,7 @@ test("the conditional claim rejects an unregistered key returned in the candidat
   }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { filed: 1, keys: [registeredKey], failed: [], deferred: 0 });
-  assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
+  assert.deepEqual(filed.map(({ title }) => title), [removalTitle(registeredKey)]);
   assert.deepEqual(removed, before);
   assert.deepEqual(writes, [registeredKey, registeredKey]);
 });
@@ -256,7 +304,7 @@ test("44 eligible flags file the 10 oldest and the rest stay eligible next run",
   assert.equal(next.some((key) => oldest.includes(key)), false);
   assert.deepEqual(
     filed.map(({ title }) => title),
-    [...oldest, ...next].map((key) => `Remove feature flag ${key}`),
+    [...oldest, ...next].map(removalTitle),
   );
-  assert.deepEqual(new Set(filed.map(({ title }) => title)).size, 20);
+  assert.deepEqual(new Set(filed.map(({ description }) => description)).size, 20);
 });
