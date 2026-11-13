@@ -61,24 +61,26 @@ export async function readTaskSummaryStaleMarker(
   }
 }
 
-export async function clearTaskSummaryStaleMarker(
-  taskId: number,
-  marker: string | null,
-): Promise<void> {
+export async function clearTaskSummaryStaleMarker(taskId: number, marker: string | null): Promise<void> {
   if (!marker) return;
   try {
     const redis = await getRedis();
-    await redis.eval(
-      `if redis.call("get", KEYS[1]) == ARGV[1] then
-         return redis.call("del", KEYS[1])
-       end
-       return 0`,
-      1,
-      staleMarkerKey(taskId),
-      marker,
-    );
+    await redis.eval('if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) end return 0', 1, staleMarkerKey(taskId), marker);
   } catch (error) {
     console.error("[taskSummaries] Could not clear the out-of-date mark for task", taskId, error);
+  }
+}
+
+export async function resolveTaskSummaryOwner(taskId: number): Promise<number | null> {
+  try {
+    const { default: prisma } = await import("@/lib/prisma");
+    const task = await prisma.task.findFirst({ where: { id: taskId }, select: { userId: true, status: true } });
+    if (task && task.status !== "Deleted") return task.userId;
+    await clearTaskSummaryStaleMarker(taskId, await readTaskSummaryStaleMarker(taskId));
+    return null;
+  } catch (error) {
+    console.warn("[taskSummaries] Could not read the ticket owner", taskId, error);
+    return null;
   }
 }
 
@@ -86,7 +88,8 @@ export async function requestTaskSummaryRefreshOnView(args: {
   taskId: number;
   ownerUserId?: number | null;
 }): Promise<SummaryOnViewDecision> {
-  const enabled = await taskSummaryOnViewEnabled(args.ownerUserId);
+  const ownerUserId = args.ownerUserId === undefined ? await resolveTaskSummaryOwner(args.taskId) : args.ownerUserId;
+  const enabled = await taskSummaryOnViewEnabled(ownerUserId);
   if (!enabled) return "off";
   const marked = await readTaskSummaryStaleMarker(args.taskId);
   if (!marked) return "fresh";

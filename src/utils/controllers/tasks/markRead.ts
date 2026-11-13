@@ -1,5 +1,7 @@
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { waitUntil } from "@vercel/functions";
+import { requestTaskSummaryRefreshOnView } from "@/app/api/ai/_lib/taskSummaryFreshness";
 
 const isPrismaError = (error: unknown, ...codes: string[]) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -36,6 +38,7 @@ export const markTaskRead = async (taskId: number, userId: number) => {
         });
       });
 
+    waitUntil(requestTaskSummaryRefreshOnView({ taskId }).catch(() => undefined));
     return { status: 200, json: readState };
   } catch (error) {
     if (isPrismaError(error, "P2003", "P2025") && (await isMissingTask(taskId))) {

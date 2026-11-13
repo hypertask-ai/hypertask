@@ -1,7 +1,7 @@
 import { scheduleJobById } from "@/lib/qstash";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7689_PROMPT_CACHING_FLAG } from "@/lib/flags/definitions/htpr-7689-prompt-caching";
-import { clearTaskSummaryStaleMarker, markTaskSummaryStale, readTaskSummaryStaleMarker, taskSummaryOnViewEnabled } from "@/app/api/ai/_lib/taskSummaryFreshness";
+import { markTaskSummaryStale, resolveTaskSummaryOwner, taskSummaryOnViewEnabled } from "@/app/api/ai/_lib/taskSummaryFreshness";
 
 export interface IReq {
   taskId: number;
@@ -21,22 +21,9 @@ function buildJobId(taskId: number) {
   return "ai-summary-for-taskId:" + taskId;
 }
 
-async function summaryOwnerUserId(taskId: number): Promise<number | null> {
-  try {
-    const { default: prisma } = await import("@/lib/prisma");
-    const task = await prisma.task.findFirst({ where: { id: taskId }, select: { userId: true, status: true } });
-    if (task && task.status !== "Deleted") return task.userId;
-    await clearTaskSummaryStaleMarker(taskId, await readTaskSummaryStaleMarker(taskId));
-    return null;
-  } catch (error) {
-    console.warn("[taskSummaries] Could not read the ticket owner", taskId, error);
-    return null;
-  }
-}
-
 export default async function scheduleTaskSummaryGeneration(req: IReq) {
   const { taskId, agentId } = req;
-  if (await taskSummaryOnViewEnabled(await summaryOwnerUserId(taskId))) {
+  if (await taskSummaryOnViewEnabled(await resolveTaskSummaryOwner(taskId))) {
     if (await markTaskSummaryStale(taskId)) return;
   }
   if (!(typeof agentId === "string" && agentId.length > 0) || !(await isFeatureEnabled("htpr-8904-agent-automatic-ai", req.ownerUserId ?? 0))) {

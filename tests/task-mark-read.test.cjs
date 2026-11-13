@@ -43,7 +43,7 @@ function loadModule(relativePath, stubs) {
 }
 
 function loadController({ upsertError, updateError, taskExists = true, lookupError } = {}) {
-  const calls = { upsert: [], update: [], taskLookup: [] };
+  const calls = { upsert: [], update: [], taskLookup: [], summaryRefreshes: [] };
   const prisma = {
     taskReadState: {
       upsert: async (args) => {
@@ -67,6 +67,8 @@ function loadController({ upsertError, updateError, taskExists = true, lookupErr
   };
   const controller = loadModule("src/utils/controllers/tasks/markRead.ts", {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@vercel/functions": { waitUntil: (work) => { calls.summaryRefreshes.push(work); } },
+    "@/app/api/ai/_lib/taskSummaryFreshness": { requestTaskSummaryRefreshOnView: async () => "scheduled" },
   });
   return { ...controller, calls };
 }
@@ -83,6 +85,7 @@ test("marking read upserts the authenticated user's timestamp", async () => {
   assert.ok(calls.upsert[0].update.lastReadAt instanceof Date);
   assert.deepEqual(calls.update, []);
   assert.deepEqual(calls.taskLookup, []);
+  assert.equal(calls.summaryRefreshes.length, 1, "leaving an open ticket refreshes its summary");
 });
 
 test("a concurrent unique-key conflict retries once as an update", async () => {
@@ -149,7 +152,7 @@ test("invalid ids are rejected without querying Prisma", async () => {
   for (const [invalidTaskId, invalidUserId] of [[NaN, userId], [taskId, Infinity]]) {
     assert.equal((await markTaskRead(invalidTaskId, invalidUserId)).status, 400);
   }
-  assert.deepEqual(calls, { upsert: [], update: [], taskLookup: [] });
+  assert.deepEqual(calls, { upsert: [], update: [], taskLookup: [], summaryRefreshes: [] });
 });
 
 for (const scenario of [

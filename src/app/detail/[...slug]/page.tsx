@@ -109,16 +109,8 @@ export default async function Page(
     return <Unauthorized />;
   }
 
-  try {
-    if (await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, task.userId)) {
-      waitUntil(
-        requestTaskSummaryRefreshOnView({ taskId: task.id, ownerUserId: task.userId }).catch(
-          (error) => console.warn("[task-summary] Refresh on view failed", task.id, error),
-        ),
-      );
-    }
-  } catch (error) {
-    console.warn("[task-summary] Switch lookup failed", task.id, error);
+  if (await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, task.userId).catch(() => false)) {
+    waitUntil(requestTaskSummaryRefreshOnView({ taskId: task.id, ownerUserId: task.userId }).catch(() => undefined));
   }
 
   [lastReadAt, agentRunActivities] = await Promise.all([

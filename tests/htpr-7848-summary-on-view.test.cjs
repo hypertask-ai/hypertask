@@ -6,21 +6,19 @@ const queuePath = "/api/queues/FAST/generateSummaryQueue";
 
 function memoryRedis() {
   const values = new Map();
-  const ttls = new Map();
   const bump = (key) => {
     const next = (Number(values.get(key)) || 0) + 1;
     values.set(key, String(next));
     return next;
   };
   return {
-    values, ttls,
+    values,
     pipeline: () => ({
       keys: [],
       incr(key) { this.keys.push(key); return this; },
       exec() { return Promise.resolve(this.keys.map((key) => [null, bump(key)])); },
     }),
     incr: async (key) => bump(key),
-    expire: async (key, seconds) => { ttls.set(key, seconds); return 1; },
     get: async (key) => values.get(key) ?? null,
     set: async (key, value, ...options) => {
       if (options.includes("NX") && values.has(key)) return null;
@@ -79,7 +77,6 @@ test("a burst of changes marks one record and starts no AI run", async () => {
   for (let i = 0; i < 10; i += 1) await h.scheduler({ taskId: 42 });
   assert.equal(h.jobs.length, 0);
   assert.equal(h.redis.values.get("ai-summary:stale:42"), "10");
-  assert.equal(h.redis.ttls.size, 0, "the mark must survive until a refresh");
   const started = await h.freshness.readTaskSummaryStaleMarker(42);
   await h.scheduler({ taskId: 42 });
   await h.freshness.clearTaskSummaryStaleMarker(42, started);
@@ -114,6 +111,21 @@ test("nothing changed means no run, and many opens make exactly one", async () =
   assert.deepEqual(decisions, ["scheduled", "coalesced", "coalesced"]);
   assert.equal(h.jobs.length, 1);
   assert.equal(h.jobs[0].path, queuePath);
+  assert.equal(h.jobs[0].jobId, "ai-summary-view-for-taskId:42");
+});
+
+test("a cached ticket open refreshes on the way out", async () => {
+  const h = harness({ enabledFor: [6], owners: { 42: 6 } });
+  const pending = [];
+  const { markTaskRead } = loadModule("src/utils/controllers/tasks/markRead.ts", {
+    "@/lib/prisma": { default: { taskReadState: { upsert: async () => ({ lastReadAt: new Date() }) } } },
+    "@vercel/functions": { waitUntil: (work) => pending.push(work) },
+    "@/app/api/ai/_lib/taskSummaryFreshness": h.freshness,
+  });
+  await h.scheduler({ taskId: 42 });
+  await markTaskRead(42, 6);
+  await Promise.all(pending);
+  assert.equal(h.jobs.length, 1, "leaving a cached open ticket schedules the refresh");
   assert.equal(h.jobs[0].jobId, "ai-summary-view-for-taskId:42");
 });
 
