@@ -43,7 +43,7 @@ function loadModule(relativePath, stubs) {
 }
 
 function loadController({ upsertError, updateError, taskExists = true, lookupError } = {}) {
-  const calls = { upsert: [], update: [], taskLookup: [] };
+  const calls = { upsert: [], update: [], taskLookup: [], summaryRefreshes: [] };
   const prisma = {
     taskReadState: {
       upsert: async (args) => {
@@ -67,6 +67,9 @@ function loadController({ upsertError, updateError, taskExists = true, lookupErr
   };
   const controller = loadModule("src/utils/controllers/tasks/markRead.ts", {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@vercel/functions": { waitUntil: (work) => { calls.summaryRefreshes.push(work); } },
+    "@/app/api/ai/_lib/taskSummaryFreshness": { requestTaskSummaryRefreshOnView: async () => "scheduled" },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
   });
   return { ...controller, calls };
 }
@@ -149,7 +152,7 @@ test("invalid ids are rejected without querying Prisma", async () => {
   for (const [invalidTaskId, invalidUserId] of [[NaN, userId], [taskId, Infinity]]) {
     assert.equal((await markTaskRead(invalidTaskId, invalidUserId)).status, 400);
   }
-  assert.deepEqual(calls, { upsert: [], update: [], taskLookup: [] });
+  assert.deepEqual(calls, { upsert: [], update: [], taskLookup: [], summaryRefreshes: [] });
 });
 
 for (const scenario of [

@@ -2,8 +2,8 @@ name: Vercel deploy log
 
 # HTPR-6163: nobody on the server holds a Vercel token, so a stuck or failed
 # production build cannot be diagnosed from the VPS. This job fetches the
-# deployment's build events with the CI token and posts the tail as a comment
-# on a Hypertask ticket. The repo is public: the log never goes to the Actions
+# deployment's build events with the CI token and posts the tail in the agent
+# lane of a Hypertask ticket. The repo is public: the log never goes to the Actions
 # output, only a line count does.
 on:
   workflow_dispatch:
@@ -37,10 +37,16 @@ jobs:
           TICKET: ${{ inputs.ticket }}
         run: |
           set -euo pipefail
+          units() { local LC_ALL=C; printf '%s' "${#1}"; }
           api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
           # Manual inputs are untrusted: pin both to their expected shapes before use.
           [[ "$TICKET" =~ ^[0-9]{1,7}$ ]] || { echo "ticket must be a board-15 unique index"; exit 1; }
           [[ -z "$DEPLOYMENT" || "$DEPLOYMENT" =~ ^dpl_[A-Za-z0-9]{1,64}$ ]] || { echo "deployment must look like dpl_..."; exit 1; }
+
+          context=$(curl -sS -o /tmp/me.json -w "%{http_code}" "https://app.hypertask.ai/api/mcp/user/context" \
+            -H "Authorization: Bearer $MCP_TOKEN")
+          [ "$context" = 200 ] || { echo "token check: HTTP $context"; head -c 300 /tmp/me.json; echo; exit 1; }
+          [ -n "$(jq -r '.connected_agent.id // empty' /tmp/me.json)" ] || { echo "HYPERTASK_MCP_TOKEN is not an agent token; only an agent token can open a run and write the agent lane"; exit 1; }
 
           if [ -z "$DEPLOYMENT" ]; then
             DEPLOYMENT=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=1" \
@@ -61,33 +67,36 @@ jobs:
                      -e 's#(token|secret|password|api[_-]?key|authorization)([=: ]+)[^[:space:]]+#\1\2<redacted>#Ig')
           echo "fetched $(printf '%s\n' "$EVENTS" | wc -l) event lines"
 
-          # YPER4-952: the comment API rejects text over 5000 characters, so keep the newest
-          # whole log lines that fit instead of posting an oversized body.
-          BODY_JQ=$(cat <<'JQ'
-            ($ev | split("\n") | map(select(length > 0)) | reverse) as $rev
-            | ("<p><strong>Vercel build log for " + ($d | @html)
-               + "</strong> (vercel-deploy-log workflow, newest lines).</p><p>" + ($meta | @html) + "</p>") as $head
-            | ([$rev[] | (if length > 400 then .[0:400] + " [...]" else . end) | @html]) as $lines
-            | (5000 - ($head | length) - 11 - 80) as $budget
-            | reduce $lines[] as $line
-                ({kept: [], used: 0, full: false};
-                 if .full then .
-                 elif (.used + ($line | length) + 1) <= $budget
-                   then {kept: ([$line] + .kept), used: (.used + ($line | length) + 1), full: false}
-                   else {kept: .kept, used: .used, full: true}
-                 end)
-            | {unique_index: ($t | tonumber), project_id: 15, content_type: "html",
-               text: ($head + "<pre>" + (.kept | join("\n")) + "</pre>"
-                      + (if (.kept | length) < ($lines | length)
-                         then "<p>Earlier lines were dropped to fit the 5000-character comment limit.</p>"
-                         else "" end))}
-          JQ
-          )
-          BODY=$(jq -n --arg meta "$META" --arg ev "$EVENTS" --arg d "$DEPLOYMENT" --arg t "$TICKET" "$BODY_JQ")
-          code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/comments" \
-            -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" -d "$BODY")
-          echo "comment post: HTTP $code"
+          TEXT="Vercel build log for $DEPLOYMENT (vercel-deploy-log workflow, newest first)."$'\n'"Read at $(date -u +%Y-%m-%dT%H:%M:%SZ). $META"
+          KEPT=0
+          TOTAL=$(printf '%s\n' "$EVENTS" | grep -c '[^[:space:]]' || true)
+          while IFS= read -r line; do
+            if [ -z "${line//[[:space:]]/}" ]; then continue; fi
+            line=${line:0:400}
+            if [ $(( $(units "$TEXT") + $(units "$line") + 1 )) -gt 7900 ]; then break; fi
+            TEXT+=$'\n'"$line"
+            KEPT=$((KEPT + 1))
+          done < <(printf '%s\n' "$EVENTS" | tac)
+          if [ "$KEPT" -lt "$TOTAL" ]; then
+            TEXT+=$'\n'"Earlier lines were dropped to fit the agent log limit."
+          fi
+
+          run=$(curl -sS -o /tmp/run.json -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/agents/runs" \
+            -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg t "$TICKET" '{taskId: ($t | tonumber), projectId: 15, source: "runtime", title: "Vercel deploy log"}')")
+          if [ "$run" != 201 ]; then
+            echo "run open: HTTP $run"
+            head -c 300 /tmp/run.json; echo; exit 1
+          fi
+          RUN_ID=$(jq -er '.run.id' /tmp/run.json)
+          code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST \
+            "https://app.hypertask.ai/api/mcp/agents/runs/$RUN_ID/activities" \
+            -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg text "$TEXT" '{type: "thought", text: $text}')")
+          echo "activity post: HTTP $code"
+          curl -s -o /dev/null -X POST "https://app.hypertask.ai/api/mcp/agents/runs/$RUN_ID/stop" \
+            -H "Authorization: Bearer $MCP_TOKEN" || true
           case "$code" in
-            200|201|202) echo "posted to ticket $TICKET" ;;
+            200|201|202) echo "posted $KEPT lines to the agent lane of 15/$TICKET" ;;
             *) head -c 300 /tmp/post.out; echo; exit 1 ;;
           esac

@@ -81,13 +81,14 @@ function pageHarness(values = defaults, options = {}) {
   const s = stateHarness({ currentUserAtom: { id: 7 }, aiChatNewTicketPathAtom: "/detail/project-15/1", aiChatAutoOpenSuppressedAtom: false, showAIChatInterfaceAtom: false, aiChatAutoOpenPageAtom: null, ...options.state });
   let pathname = "/detail/project-15/1", query = "", mobile = false, enabled = options.enabled ?? true;
   const { useAiChatAutoOpen } = load("src/hooks/General/useAiChatAutoOpen.ts", {
-    "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
+    "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => options.navigation ? "nav" : null, readChatNavigationState: () => options.navigation ?? {}, writeChatNavigationState() {} },
     "@/lib/flags/keys": {},
     "@/lib/aiChat/guestAutoOpen": guestAutoOpen,
     react: h.react, "@/lib/state": s.state, "@/store": atoms,
     "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8088-manual-chat" ? Boolean(options.manualChat) : key === "htpr-8052-fullscreen-chat-return" ? options.fullscreenReturn !== false : options.stabilize !== false },
     "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(query) },
     "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, ready: true, flagReady: true, values }), useSyncAiChatOpenPreferences() {} },
+    "./useKeepChatClosed": { useKeepChatClosed: () => ({ keepChatClosed: Boolean(options.keepClosed), ready: true }) },
   });
   const render = () => s.settle(() => h.render(() => useAiChatAutoOpen(mobile)));
   return { ...s, render, navigate(url, phone = false) { [pathname, query = ""] = url.split("?"); mobile = phone; render(); },
@@ -594,4 +595,33 @@ test("manual chat: no width is reserved for a chat the user did not open", () =>
   const h = manual(settings({ aiChatOpenTickets: true }));
   h.navigate("/detail/project-15/2");
   assert.equal(h.render().reserve, false);
+});
+
+test("keep chat closed blocks every switch, pins and stored navigation on desktop and phone", () => {
+  for (const phone of [false, true]) {
+    const h = pageHarness(settings({ aiChatOpenTickets: true, aiChatOpenBoards: true, aiChatOpenNewTickets: true }), {
+      keepClosed: true, navigation: { open: true },
+      state: { aiChatPinnedAtom: true, showAIChatInterfaceAtom: false },
+    });
+    for (const url of ["/detail/project-15/1", "/detail/project-15/2", "/project?id=15", "/my-tasks", "/inbox"]) {
+      h.navigate(url, phone);
+      assert.equal(h.values.showAIChatInterfaceAtom, false, `${url} must stay shut with keep chat closed`);
+    }
+  }
+});
+
+test("keep chat closed never closes a chat the user opened, and its space stays unreserved", () => {
+  const h = pageHarness(settings({ aiChatOpenTickets: true }), { keepClosed: true, manualChat: true, navigation: { open: true } });
+  h.navigate("/detail/project-15/2");
+  assert.equal(h.render().reserve, false);
+  h.manualOpen();
+  assert.equal(h.values.showAIChatInterfaceAtom, true);
+  h.navigate("/detail/project-15/3");
+  assert.equal(h.values.showAIChatInterfaceAtom, true, "an explicit open survives navigation");
+});
+
+test("stored navigation still restores when keep chat closed is off", () => {
+  const h = pageHarness(settings({ aiChatOpenTickets: true }), { navigation: { open: true } });
+  h.navigate("/detail/project-15/2");
+  assert.equal(h.values.showAIChatInterfaceAtom, true);
 });

@@ -27,7 +27,7 @@ MOCK
 #!/usr/bin/env bash
 [[ $1 == tasks && $2 == get ]] || exit 1
 case "$3" in
-  MARK-173|HEFE-301|HTPR-6570) echo '{"success":true,"tasks":[{"section":"Approved"}]}' ;;
+  MARK-173|HEFE-301|HTPR-6570|SOFT-491|IGSH-266) echo '{"success":true,"tasks":[{"section":"Approved"}]}' ;;
   *) echo '{"success":false,"tasks":[]}' ;;
 esac
 MOCK
@@ -40,6 +40,8 @@ MOCK
   T 0 'MARK-173 [BUG] Help chat back to a floating icon'
   T 0 'HEFE-301 [BUG] Docs link answers the wrong page'
   T 0 'HTPR-6570 [BUGFIX] Keep the same AI chat after Settings'
+  T 0 'SOFT-491 [BUGFIX] Open the app in one tap'
+  T 0 'IGSH-266 [BUG] Approval key reaches the agent'
   T 1 'MARK-99999 [BUG] Made-up ticket number'
   T 1 'MARK-173 Lead ticket without a type tag'
   T 1 '[BUG] MARK-173 Type first, which only the duplicate path takes'
@@ -816,6 +818,8 @@ T fail "stale proof rejected"
 sed -i "s/deadbeef0/${sha:0:9}/" "$E/HTPR-6570/proof.md"
 T fail "empty screenshot rejected"
 printf 'png' > "$R/a.png"; T pass "fresh proof accepted"
+sed -i 's@feature-map/my-tasks.md@feature-map/public-sites.md@' "$E/HTPR-6570/proof.md"
+T pass "public-site proof accepted"
 echo '- PASS: y -> missing output.png' >> "$E/HTPR-6570/proof.md"; T fail "malformed PASS line rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; echo '- PASS: z -> old.png' >> "$E/HTPR-6570/proof.md"; printf 'png' > "$E/HTPR-6570/old.png"
 T fail "evidence outside the current run rejected"
