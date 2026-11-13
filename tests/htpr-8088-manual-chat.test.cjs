@@ -38,6 +38,26 @@ test("manual chat off keeps the old first paint", () => {
   assert.notEqual(state, "closed");
 });
 
+test("manual chat: a saved keep-closed preference wins over this tab's open chat on first paint", () => {
+  const switchless = { aiChatOpenNewTickets: false, aiChatOpenTickets: false, aiChatOpenBoards: false };
+  const state = firstPaint(boot({ manualChat: true, autoOpenSwitches: true, userId: 7 }), {
+    session: { "ht:aiChatOpen": "1" }, storage: { aiChatAutoOpenPreferences: { 7: switchless } },
+  });
+  assert.equal(state, "closed");
+  const legacy = firstPaint(boot({ manualChat: true, keepClosed: true }), {
+    session: { "ht:aiChatOpen": "1" }, storage: { keepAiChatClosed: true },
+  });
+  assert.equal(legacy, "closed");
+});
+
+test("manual chat: one auto-open switch back on restores the tab's first paint", () => {
+  const state = firstPaint(boot({ manualChat: true, autoOpenSwitches: true, userId: 7 }), {
+    session: { "ht:aiChatOpen": "1" },
+    storage: { aiChatAutoOpenPreferences: { 7: { aiChatOpenNewTickets: false, aiChatOpenTickets: true, aiChatOpenBoards: false } } },
+  });
+  assert.notEqual(state, "closed");
+});
+
 test("phone page changes no longer reset the chat", () => {
   const source = read("src/hooks/General/useUIStateManager.ts");
   assert.match(source, /if \(isMbl && !manualChat\) resetAIChat\(\);/);
