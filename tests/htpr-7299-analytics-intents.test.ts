@@ -207,6 +207,7 @@ function taskController(h: Harness) {
       agentWritingPolicyEnabled: async () => true,
       enforceAgentWriting: async (_userId: number, agentId: string | null | undefined, fields: any, previous: any = {}) => h.load("src/lib/agents/writing.ts").assertAgentWriting(agentId, fields, previous),
     },
+    "@/lib/tasks/saveLimit": h.load("src/lib/tasks/saveLimit.ts"),
     "@/lib/tasks/sameBoardRelations": h.load("src/lib/tasks/sameBoardRelations.ts"),
     "@/utils/controllers/tasks/parentTaskAccess": h.load("src/utils/controllers/tasks/parentTaskAccess.ts"),
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: noop },
