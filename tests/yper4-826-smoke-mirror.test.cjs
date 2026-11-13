@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 
 const INSTALLER = path.resolve('.github/scripts/install-chromium.sh');
 
-function runInstaller(failPlaywright, { missingFont, fontCacheStatus = 0 } = {}) {
+function runInstaller(failPlaywright, { missingFont, fontCacheStatus = 0, hang, recordTimeout, deadline } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hyci-282-mirror-'));
   const source = path.join(dir, 'fonts', 'truetype', 'liberation2');
   fs.mkdirSync(source, { recursive: true });
@@ -18,8 +18,15 @@ function runInstaller(failPlaywright, { missingFont, fontCacheStatus = 0 } = {})
   fs.mkdirSync(bin);
   fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   fs.symlinkSync('/usr/bin/dirname', path.join(bin, 'dirname'));
+  fs.symlinkSync('/bin/bash', path.join(bin, 'bash'));
+  const timeoutArgs = path.join(dir, 'timeout-args');
+  if (recordTimeout) {
+    fs.writeFileSync(path.join(bin, 'timeout'), `#!/bin/sh\nprintf '%s\\n' "$@" > "${timeoutArgs}"\nexit 124\n`, { mode: 0o755 });
+  } else {
+    fs.symlinkSync('/usr/bin/timeout', path.join(bin, 'timeout'));
+  }
   if (fontCacheStatus !== 'missing') {
-    fs.writeFileSync(path.join(bin, 'fc-cache'), `#!/bin/sh\nexit ${fontCacheStatus}\n`, { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'fc-cache'), `#!/bin/sh\n${hang === 'fonts' ? 'exec /bin/sleep 300' : `exit ${fontCacheStatus}`}\n`, { mode: 0o755 });
   }
   fs.writeFileSync(path.join(bin, 'strace'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'apt-get'), '#!/bin/sh\necho apt-get >> "$HYCI_CALLS"\nexit 42\n', { mode: 0o755 });
@@ -29,13 +36,17 @@ function runInstaller(failPlaywright, { missingFont, fontCacheStatus = 0 } = {})
     `#!/bin/sh
 echo "$*" >> "$HYCI_CALLS"
 [ "$*" = 'playwright install chromium' ] || exit 9
+${hang === 'download' ? 'exec /bin/sleep 300' : ''}
 [ "$FAIL_PLAYWRIGHT" != 1 ]
 `,
     { mode: 0o755 },
   );
   const calls = path.join(dir, 'calls');
+  const started = Date.now();
   const result = spawnSync('/bin/bash', [INSTALLER], {
     encoding: 'utf8',
+    timeout: 8_000,
+    killSignal: 'SIGKILL',
     env: {
       ...process.env,
       PATH: bin,
@@ -44,10 +55,13 @@ echo "$*" >> "$HYCI_CALLS"
       BROWSER_FONT_SOURCE: path.join(dir, 'fonts'),
       BROWSER_FONT_CACHE: path.join(dir, 'cache'),
       BROWSER_FONT_USER: path.join(dir, 'user'),
+      CHROMIUM_INSTALL_TIMEOUT: deadline === undefined ? '' : String(deadline),
     },
   });
   return {
     status: result.status,
+    elapsed: Date.now() - started,
+    timeoutArgs: fs.existsSync(timeoutArgs) ? fs.readFileSync(timeoutArgs, 'utf8').trim().split('\n') : [],
     output: `${result.stdout || ''}${result.stderr || ''}`,
     log: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '',
     dir,
@@ -88,6 +102,36 @@ for (const missingFont of ['LiberationSans-Regular.ttf', 'NotoColorEmoji.ttf']) 
       assert.equal(result.status, 1, result.output);
       assert.match(result.output, /browser font cache missing/);
       assert.doesNotMatch(result.output, /browser font cache ready/);
+    } finally {
+      fs.rmSync(result.dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test('HYCI-285: default deadline leaves five seconds to kill children', () => {
+  const result = runInstaller(false, { recordTimeout: true });
+  try {
+    assert.equal(result.status, 1, result.output);
+    assert.deepEqual(result.timeoutArgs, ['-k', '5', '110', 'bash', INSTALLER, '--run']);
+    assert.equal((result.output.match(/::error::/g) ?? []).length, 1, result.output);
+    assert.match(result.output, /Chromium installation timed out/);
+    assert.doesNotMatch(result.output, /Chromium ready/);
+  } finally {
+    fs.rmSync(result.dir, { recursive: true, force: true });
+  }
+});
+
+for (const hang of ['download', 'fonts']) {
+  test(`HYCI-285: whole-install deadline kills a stalled ${hang}`, () => {
+    const result = runInstaller(false, { hang, deadline: 1 });
+    try {
+      assert.equal(result.status, 1, result.output);
+      assert.ok(result.elapsed < 8_000, `${hang} took ${result.elapsed}ms`);
+      assert.match(result.log, /^playwright install chromium$/m);
+      assert.equal((result.output.match(/::error::/g) ?? []).length, 1, result.output);
+      assert.match(result.output, /Chromium installation timed out/);
+      assert.doesNotMatch(result.output, /Chromium ready/);
+      console.log(`HYCI-285 stalled ${hang}: ${result.elapsed}ms, status ${result.status}`);
     } finally {
       fs.rmSync(result.dir, { recursive: true, force: true });
     }
