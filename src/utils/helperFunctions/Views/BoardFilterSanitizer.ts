@@ -17,6 +17,9 @@ const SEARCH_PAYLOAD_KEYS = new Set([
   "value",
 ]);
 
+const DEFAULT_SUBTASK_SETTING = "Flattened_Card";
+const SUBTICKET_SETTINGS_THAT_SHOW_ALL_CARDS = new Set(["Flattened", "Flattened_Card"]);
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -186,10 +189,53 @@ export function sanitizeProjectViewBoardFilters<T>(projectView: T, userId?: numb
   return (changed ? sanitized : visibleProjectView) as T;
 }
 
-export function sanitizeProjectBoardFilters<T>(project: T, userId?: number, publicOnly = false): T {
+const showsAllSubtaskCards = (setting: unknown) =>
+  typeof setting === "string" && SUBTICKET_SETTINGS_THAT_SHOW_ALL_CARDS.has(setting);
+
+function withSubtaskCardsShown<T>(view: T): T {
+  if (!isRecord(view) || !("board_subtask_setting" in view)) return view;
+  if (showsAllSubtaskCards(view.board_subtask_setting)) return view;
+  return { ...view, board_subtask_setting: DEFAULT_SUBTASK_SETTING } as T;
+}
+
+export function sanitizeBoardDefaultSubtaskSetting<T>(projectView: T, boardDefaultShowsSubtasks = false): T {
+  if (!boardDefaultShowsSubtasks || !isRecord(projectView)) return projectView;
+  const defaultView = projectView.default_view;
+  if (!isRecord(defaultView) || showsAllSubtaskCards(defaultView.board_subtask_setting)) return projectView;
+
+  let changed = false;
+  const next: Record<string, unknown> = { ...projectView };
+  const shownDefaultView = withSubtaskCardsShown(defaultView);
+  if (shownDefaultView !== defaultView) {
+    next.default_view = shownDefaultView;
+    changed = true;
+  }
+
+  for (const key of ["allViews", "user_project_views"] as const) {
+    const rows = projectView[key];
+    if (!Array.isArray(rows)) continue;
+    const shownRows = rows.map((row) => {
+      if (!isRecord(row)) return row;
+      if (key === "allViews") return withSubtaskCardsShown(row);
+      const appliedView = withSubtaskCardsShown(row.appliedView);
+      const unsavedView = withSubtaskCardsShown(row.unsavedView);
+      if (appliedView === row.appliedView && unsavedView === row.unsavedView) return row;
+      return { ...row, appliedView, unsavedView };
+    });
+    if (shownRows.some((row, index) => row !== rows[index])) {
+      next[key] = shownRows;
+      changed = true;
+    }
+  }
+
+  return (changed ? next : projectView) as T;
+}
+
+export function sanitizeProjectBoardFilters<T>(project: T, userId?: number, publicOnly = false, boardDefaultShowsSubtasks = false): T {
   if (!isRecord(project) || !("project_view" in project)) return project;
 
-  const projectView = sanitizeProjectViewBoardFilters(project.project_view, userId, publicOnly);
+  const sanitizedView = sanitizeProjectViewBoardFilters(project.project_view, userId, publicOnly);
+  const projectView = sanitizeBoardDefaultSubtaskSetting(sanitizedView, boardDefaultShowsSubtasks);
   return (projectView === project.project_view
     ? project
     : { ...project, project_view: projectView }) as T;
