@@ -25,6 +25,9 @@ keywords = ["token", "secret", "key", "password"]
 
 [allowlist]
 description = "Known false positives"
+# Match the line, not just the value: the commit-SHA entries below need the surrounding place
+# to tell a git SHA from a key (HYCI-405). Every other entry still matches inside its line.
+regexTarget = "line"
 regexes = [
   '''AIzaSy[0-9A-Za-z_-]{33}''',
   '''CMD/CTRL\+SHIFT\+O''',
@@ -34,7 +37,7 @@ regexes = [
   # Feature-flag keys are ticket slugs (htpr, hyfa, yper4), never credentials.
   '''(?:htpr|hyfa|yper4)-[0-9]+-[a-z0-9-]+''',
   # These two flag constants also occur in the PR's historical test diffs.
-  '''^(?:flags|keys)\.HTPR_(?:7038_HAIKU_DEFAULT|7010_HAIKU_5_5)_FLAG$''',
+  '''(?:flags|keys)\.HTPR_(?:7038_HAIKU_DEFAULT|7010_HAIKU_5_5)_FLAG''',
   # QA login unit-test fixture, never a live secret.
   '''correct-horse-battery-staple-32b''',
   # HTPR-8276: a sha256 call digest in .github/paid-api-cost-notes.json whose source path
@@ -47,4 +50,11 @@ regexes = [
   # HYCI-254: sha256 call digest in paid-api-cost-notes.json. The path
   # githubLinkAuth.ts contains Auth, so the generic rule reads the digest as a key.
   '''6733e7778b3d8693e30cd26563956cc65d74fd041a697094e8288278fc97945f''',
+  # HYCI-405: git commit SHAs quoted in records, GitHub URLs and prose. The custom rules below
+  # and gitleaks' sourcegraph rule read a 40-character SHA as a key once inherited files land at
+  # a new path. Each entry needs the SHA shape and its documented place.
+  '''"(?:sha|commit|commits|previousCommit|previousSha|sourceCommit|provenanceCommit|pinnedCommit|mergeCommit|headCommit)"\s*:\s*"[0-9a-f]{40}"''',
+  '''/(?:tree|commits?|blob)/[0-9a-f]{40}(?:[`'"\s)#,)]|$)''',
+  '''(?:commit|sha|at) `[0-9a-f]{40}`''',
+  '''#[0-9a-f]{40}`''',
 ]

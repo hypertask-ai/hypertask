@@ -21,3 +21,22 @@ regex = '''(?i)(?:token|secret|api[ _-]?key|password)[^\n]{0,60}?[`'"]([A-Za-z0-
 secretGroup = 1
 entropy = 4.0
 keywords = ["token", "secret", "key", "password"]
+
+# Proven non-secrets, matched by line because a finding carries no context of its own
+# (HYCI-405). The custom rules above and gitleaks' sourcegraph rule read a 40-character git
+# commit SHA as a key when it sits near cloudflare, sourcegraph or a commit word, so inherited
+# files copied to a new path blocked the docs move. Every entry below needs the git SHA shape
+# and its documented place; a key-shaped value anywhere else still blocks.
+[allowlist]
+description = "Git commit SHAs quoted in records, GitHub URLs and prose"
+regexTarget = "line"
+regexes = [
+  # A commit field in a JSON record, for example "previousCommit": "<sha>".
+  '''"(?:sha|commit|commits|previousCommit|previousSha|sourceCommit|provenanceCommit|pinnedCommit|mergeCommit|headCommit)"\s*:\s*"[0-9a-f]{40}"''',
+  # A commit SHA inside a GitHub URL path.
+  '''/(?:tree|commits?|blob)/[0-9a-f]{40}(?:[`'"\s)#,)]|$)''',
+  # A commit SHA in backticks after the word commit, sha or at.
+  '''(?:commit|sha|at) `[0-9a-f]{40}`''',
+  # A commit SHA pinned after a hash in backticks, for example `owner/repo#<sha>`.
+  '''#[0-9a-f]{40}`''',
+]

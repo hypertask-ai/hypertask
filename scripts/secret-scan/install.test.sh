@@ -36,6 +36,20 @@ cf="$(LC_ALL=C tr -dc 'A-Za-z0-9_-' </dev/urandom | head -c 40)"
 echo "| CF API token | in ~/.bashrc (value \`$cf\`) |" > notes.md; git add notes.md
 if git commit -qm leak 2>/dev/null; then bad "Cloudflare token in markdown blocked"; else ok "Cloudflare token in markdown blocked"; fi
 git reset -q --hard
+# The commit that read a git commit SHA as a key: a SHA in a record and in a GitHub URL is not a
+# key, and inherited files copied to a new path must commit (HYCI-405).
+sha=$(git rev-parse HEAD)
+printf '  "sources": ["sourcegraph"],\n  "previousCommit": "%s"\n' "$sha" > .brain-record.json
+git add .brain-record.json
+git commit -qm sha-record 2>/dev/null && ok "git commit SHA in a record passes" || bad "git commit SHA in a record passes"
+git reset -q --hard; rm -f .brain-record.json
+printf 'Source: [x](https://github.com/cloudflare/security-audit-skill/tree/%s) at commit `%s`.\n' "$sha" "$sha" > UPSTREAM.md
+git add UPSTREAM.md
+git commit -qm sha-url 2>/dev/null && ok "git commit SHA in a GitHub URL passes" || bad "git commit SHA in a GitHub URL passes"
+git reset -q --hard; rm -f UPSTREAM.md
+printf 'token: %s\n' "$sha" > hex-key.txt; git add hex-key.txt
+if git commit -qm hex 2>/dev/null; then bad "hex key outside a commit context blocked"; else ok "hex key outside a commit context blocked"; fi
+git reset -q --hard; rm -f hex-key.txt
 
 # A key trufflehog proves still works (a stub stands in for the live check).
 mkdir -p "$tmp/stub"; printf '#!/bin/sh\necho "{\\"DetectorName\\":\\"Cloudflare\\"}"\nexit 183\n' > "$tmp/stub/trufflehog"
@@ -43,6 +57,19 @@ chmod +x "$tmp/stub/trufflehog"; echo "harmless text" > live.txt; git add live.t
 if PATH="$tmp/stub:$PATH" git commit -qm live 2>"$tmp/err"; then bad "working key blocked"; else
   grep -q Cloudflare "$tmp/err" && ok "working key blocked, type named" || bad "working key blocked, type named"; fi
 git reset -q --hard
+# A package lockfile repeats the same package's 32-character peer hash per peer set, and
+# trufflehog's Alchemy detector reads those as keys (HYCI-405). The lockfile must commit.
+mkdir -p "$tmp/stub-lock"; printf '#!/bin/sh\necho "{\\"SourceMetadata\\":{\\"Data\\":{\\"Filesystem\\":{\\"file\\":\\"%s/pnpm-lock.yaml\\",\\"line\\":5048}}},\\"DetectorName\\":\\"Alchemy\\"}"\nexit 183\n' '$2' > "$tmp/stub-lock/trufflehog"
+chmod +x "$tmp/stub-lock/trufflehog"; echo "lockfile: 1" > pnpm-lock.yaml; git add pnpm-lock.yaml
+if PATH="$tmp/stub-lock:$PATH" git commit -qm lockfile 2>"$tmp/err"; then ok "lockfile Alchemy false hit passes"; else bad "lockfile Alchemy false hit passes"; fi
+git reset -q --hard; rm -f pnpm-lock.yaml
+# The same hit in a source file is a real finding and still blocks.
+mkdir -p "$tmp/stub-src"; printf '#!/bin/sh\necho "{\\"SourceMetadata\\":{\\"Data\\":{\\"Filesystem\\":{\\"file\\":\\"%s/src/keys.ts\\",\\"line\\":3}}},\\"DetectorName\\":\\"Alchemy\\"}"\nexit 183\n' '$2' > "$tmp/stub-src/trufflehog"
+chmod +x "$tmp/stub-src/trufflehog"
+mkdir -p src; echo "key" > src/keys.ts; git add src/keys.ts
+if PATH="$tmp/stub-src:$PATH" git commit -qm src 2>/dev/null; then bad "Alchemy hit in a source file blocked"; else ok "Alchemy hit in a source file blocked"; fi
+git reset -q --hard; rm -rf src
+
 # A symlink replaced by a regular file (a type change) is scanned too.
 ln -s a.txt link; git add link; git commit -qm link
 rm link; echo "harmless text" > link; git add link
