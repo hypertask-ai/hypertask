@@ -23,7 +23,7 @@ const TEST_MODEL_KEYS: Partial<Record<TByokProviderKey, TAiModelKey>> = {
   deepseek: "deepseek-v4.1-flash",
   moonshot: "kimi-k2.5",
   zhipu: "glm-5.3-flash",
-  alibaba: "qwen3.7-plus",
+  alibaba: "qwen3.8-max",
 };
 
 type TestRequest = {
