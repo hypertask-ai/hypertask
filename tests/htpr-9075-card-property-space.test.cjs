@@ -28,7 +28,7 @@ const loadRow = (collapseEnabled) =>
     "@/lib/agentStatus/dot": { agentStatusDotMode: () => null },
     "@/lib/agentStatus/minuteClock": { useMinuteClock: () => Date.now() },
     "@/utils/undoActions/helperFuncs": { cn: (...args) => twMerge(clsx(args)) },
-  });
+  }).default;
 
 const rowProps = {
   task: {},
