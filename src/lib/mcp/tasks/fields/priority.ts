@@ -1,10 +1,11 @@
+import { fetchTaskSave } from "@/lib/tasks/saveLimit";
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskPriority(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
     const { priorityConstant, baseUrl, authCookieHeader, ctx, strictSideEffectFailures } = context;
     if (priorityConstant) {
         const priorityApiUrl = `${baseUrl}/api/priority/setPriority`
-        const priorityResponse = await fetch(priorityApiUrl, {
+        const priorityResponse = await fetchTaskSave(priorityApiUrl, {
             method: 'POST',
             redirect: 'manual',
             headers: {

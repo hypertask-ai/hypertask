@@ -13,6 +13,7 @@ import { extractTaskReferencesFromCommentText } from "@/utils/controllers/commen
 import { addRelatedTasks } from "@/utils/controllers/tasks/addRelatedTasks";
 import { taskWriteRoute } from "./route";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
+import { isTaskSaveTimeout, TASK_SAVE_TOO_LONG } from "@/lib/tasks/saveLimit";
 
 const schema = z.custom<{ newTask: Record<string, any>; agentId?: unknown }>(
   (body) => !!(body as { newTask?: { id?: unknown } } | null)?.newTask?.id,
@@ -101,6 +102,9 @@ export const PUT = taskWriteRoute({
       if (isPlanLimitReachedError(error)) {
         const refusal = planLimitResponse(error);
         return NextResponse.json(refusal.body, { status: refusal.status });
+      }
+      if (isTaskSaveTimeout(error)) {
+        return NextResponse.json({ message: TASK_SAVE_TOO_LONG }, { status: 503 });
       }
       console.log(error);
       return NextResponse.json({ message: "Internal server error" }, { status: 500 });

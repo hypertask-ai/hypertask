@@ -2,6 +2,7 @@ import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { persistUrlsForDescription } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { fetchTaskSave } from "@/lib/tasks/saveLimit";
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskText(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
@@ -25,7 +26,7 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
         if (requestBody.parent_task_id !== undefined) newTask.parentTaskId = requestBody.parent_task_id
 
         const singleUrl = `${baseUrl}/api/tasks/single`
-        const singleResponse = await fetch(singleUrl, {
+        const singleResponse = await fetchTaskSave(singleUrl, {
             method: 'PUT',
             redirect: 'manual',
             ...fetchOpts,

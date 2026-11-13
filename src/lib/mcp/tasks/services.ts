@@ -22,6 +22,7 @@ import {
 import { IUser } from '@/models/model';
 import { signSession, SESSION_COOKIE } from '@/lib/auth/session';
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie';
+import { fetchTaskSave } from '@/lib/tasks/saveLimit';
 import {
     persistAgentTaskUpdatedWebhook,
     publishAgentWebhookDeliveries,
@@ -596,7 +597,7 @@ export async function createTask(data: {
         });
     }
 
-    const response = await fetch(apiUrl, {
+    const response = await fetchTaskSave(apiUrl, {
         method: 'POST',
         redirect: 'manual',
         headers: {

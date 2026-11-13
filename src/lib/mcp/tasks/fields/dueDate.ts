@@ -1,4 +1,5 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { fetchTaskSave } from "@/lib/tasks/saveLimit";
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskDueDate(context: TaskUpdateFieldContext, task: TaskUpdateTarget, dueDateValue: Date | null | undefined) {
@@ -11,7 +12,7 @@ export async function updateTaskDueDate(context: TaskUpdateFieldContext, task: T
     }
     if (hasDueDate) {
         const setDueDateUrl = `${baseUrl}/api/tasks/setDueDate`
-        const dueDateResponse = await fetch(setDueDateUrl, {
+        const dueDateResponse = await fetchTaskSave(setDueDateUrl, {
             method: 'POST',
             redirect: 'manual',
             ...fetchOpts,
