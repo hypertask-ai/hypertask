@@ -84,6 +84,7 @@ function harness({ enabled = true, comments = [comment(1)] } = {}) {
       clearTaskSummaryStaleMarker: async () => {},
       markTaskSummaryStale: async () => false,
       taskSummaryOnViewEnabled: async () => false,
+      resolveTaskSummaryOwner: async () => 6,
     },
     "@/lib/qstash": { scheduleJobById: async (job) => {
       jobs.push(job);
