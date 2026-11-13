@@ -668,6 +668,7 @@ model UserSetting {
   // Inbox behaviour: sending a comment on a task that carries an inbox
   // notification archives that notification and moves on to the next task.
   inboxAdvanceOnSend       Boolean       @default(true)
+  inboxSplitsOverflowHidden Boolean      @default(false)
   // Mirror of emoji-mart's frequently-used {emojiId: count} map, so the picker's Frequently row persists across devices.
   emojiFrequency           Json?
   calendarViews            Json?
