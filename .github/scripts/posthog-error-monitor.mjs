@@ -66,6 +66,59 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env.HYP
   return { action: existing ? "updated" : "created", workflow };
 }
 
+const CANARY_TICKET_MARKER = /PostHog pipeline canary yper4-331-(\d{1,20})-(\d{1,3})/;
+const ISSUE_ID_RECEIPT = /PostHog issue ID: <code>([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})<\/code>/;
+const NATIVE_ALERT_RECEIPT = /posthog-alert:issue_(?:created|reopened):/;
+
+export function earlierCanaryTickets(tasks, { runId, attempt, ticketId }) {
+  const currentRun = BigInt(runId);
+  const currentAttempt = Number(attempt);
+  return tasks.flatMap((task) => {
+    const description = typeof task.description === "string" ? task.description : "";
+    const marker = CANARY_TICKET_MARKER.exec(description);
+    const issue = ISSUE_ID_RECEIPT.exec(description);
+    if (!marker || !issue || !NATIVE_ALERT_RECEIPT.test(description)) return [];
+    if (task.sectionIsDone === true) return [];
+    if (Number(task.id) === Number(ticketId)) return [];
+    if (Array.isArray(task.assignees) && task.assignees.length > 0) return [];
+    const run = BigInt(marker[1]);
+    const ticketAttempt = Number(marker[2]);
+    if (run > currentRun || (run === currentRun && ticketAttempt >= currentAttempt)) return [];
+    return [{ id: task.id, marker: marker[0], issueId: issue[1] }];
+  });
+}
+
+async function allCanaryTickets({ fetchImpl, token }) {
+  const tasks = [];
+  for (let offset = 0; offset <= 500; offset += 100) {
+    const page = await api(fetchImpl, token, `/tasks?project_id=15&status=Normal&search=${encodeURIComponent("PostHog pipeline canary")}&limit=100&offset=${offset}`);
+    if (!Array.isArray(page.tasks)) throw new Error("Earlier canary lookup returned no tasks");
+    tasks.push(...page.tasks);
+    if (page.tasks.length < 100) break;
+  }
+  return tasks;
+}
+
+export async function retireEarlierCanaryTickets({ fetchImpl = fetch, token, apiKey, runId, attempt, ticketId }) {
+  const earlier = earlierCanaryTickets(await allCanaryTickets({ fetchImpl, token }), { runId, attempt, ticketId });
+  if (!earlier.length) return [];
+  const projects = await api(fetchImpl, token, "/projects?limit=100");
+  const done = projects.projects?.find((item) => Number(item.id) === 15)?.sections
+    ?.find((item) => (item.section_title ?? item.title) === "Done");
+  if (!done?.id) throw new Error("Board 15 Done section is unavailable");
+  const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+  const retired = [];
+  for (const ticket of earlier) {
+    await api(fetchImpl, token, "/tasks/update", { task_id: ticket.id, sectionId: Number(done.id) }, `posthog-canary-retire-${ticket.marker}`);
+    const resolved = await fetchImpl(`https://eu.posthog.com/api/projects/236160/error_tracking/issues/${ticket.issueId}/`, {
+      method: "PATCH", headers, signal: AbortSignal.timeout(30_000), body: JSON.stringify({ status: "resolved" }),
+    });
+    if (!resolved.ok || (await resolved.json()).status !== "resolved") throw new Error(`Earlier canary issue ${ticket.issueId} resolution failed`);
+    retired.push(ticket.marker);
+  }
+  return retired;
+}
+
 export async function findCanaryIssue({ fetchImpl = fetch, apiKey, marker, deadline, now = Date.now }) {
   const endpoint = "https://eu.posthog.com/api/projects/236160/error_tracking/issues/";
   let next = `${endpoint}?limit=100`;
@@ -149,13 +202,20 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
       const project = projects.projects?.find((item) => Number(item.id) === boardId);
       const done = project?.sections?.find((item) => (item.section_title ?? item.title) === "Done");
       if (!done?.id) throw new Error(`Board ${boardId} Done section is unavailable`);
+      let retired = [];
+      try {
+        retired = await retireEarlierCanaryTickets({ fetchImpl, token, apiKey, runId, attempt, ticketId: ticket.id });
+      } catch (error) {
+        console.log(`::warning::Earlier canary tickets were not retired: ${error instanceof Error ? error.message : "unknown error"}`);
+      }
       await api(fetchImpl, token, "/tasks/update", { task_id: ticket.id, sectionId: Number(done.id) }, `posthog-canary-close-${marker}`);
       const resolved = await fetchImpl(issueUrl, {
         method: "PATCH", headers, signal: AbortSignal.timeout(30_000), body: JSON.stringify({ status: "resolved" }),
       });
       if (!resolved.ok || (await resolved.json()).status !== "resolved") throw new Error("Canary PostHog issue resolution failed");
       console.log(`Nightly PostHog canary passed and closed its ticket (${delivery}): ${marker}`);
-      return { action: "verified", ticketId: ticket.id, marker, boardId, delivery };
+      if (retired.length) console.log(`Nightly PostHog canary retired ${retired.length} earlier canary ticket(s): ${retired.join(", ")}`);
+      return { action: "verified", ticketId: ticket.id, marker, boardId, delivery, retired };
     }
     await wait(Math.min(30_000, Math.max(0, deadline - now())));
   }
