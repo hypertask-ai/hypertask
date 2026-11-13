@@ -152,22 +152,40 @@ def step(state, path):
     return action
 
 
+PROTECTED = (
+    '.claude/skills/ship/scripts/ship-gates',
+    '.claude/skills/ship/scripts/ship-check',
+    '.claude/skills/ship/scripts/ship-identity',
+    '.claude/skills/ship/scripts/gh-merge-guard',
+    '.claude/skills/vcc/',
+    '.claude/skills/unlazy/',
+    '.claude/hooks/',
+    '.claude/settings.json',
+    'CLAUDE.md',
+    'AGENTS.md',
+)
+
+
+def runner_author(pr):
+    return pr['author']['login'].removeprefix('app/').removesuffix('[bot]') == 'hypertask-runners'
+
+
 def discover():
     prs = gh('pr', 'list', '-R', 'hypertask-ai/hypertask', '--base', 'production', '--limit', '100', '--json',
              'number,title,headRefOid,isDraft,author,files,changedFiles')
-    protected = ('.claude/skills/ship/scripts/ship-gates', '.claude/skills/ship/scripts/ship-check',
-                 '.claude/skills/ship/scripts/ship-identity', '.claude/skills/ship/scripts/gh-merge-guard', '.claude/skills/vcc/', '.claude/skills/unlazy/',
-                 '.claude/hooks/', '.claude/settings.json', 'CLAUDE.md', 'AGENTS.md')
     for pr in prs:
         ticket = re.match(r'([A-Z][A-Z0-9]*-\d+) \[', pr['title'])
-        if not ticket or pr['isDraft'] or pr['author']['login'].removeprefix('app/').removesuffix('[bot]') != 'hypertask-runners':
+        if not ticket or pr['isDraft'] or not runner_author(pr):
             continue
-        if len(pr['files']) != pr['changedFiles'] or any(f['path'].startswith(protected) for f in pr['files']):
+        paths = [f['path'] for f in pr['files']]
+        if len(paths) != pr['changedFiles'] or any(p.startswith(PROTECTED) for p in paths):
             continue
-        path = ROOT / f'{ticket[1]}.json'
-        if path.exists() or not bound(ticket[1], pr['number']):
+        key = ticket[1]
+        if not bound(key, pr['number']):
             continue
-        save(path, dict(STATE_TEMPLATE, pr=pr['number'], ticket=ticket[1], head=pr['headRefOid']))
+        path = ROOT / f'{key}.json'
+        if not path.exists():
+            save(path, dict(STATE_TEMPLATE, pr=pr['number'], ticket=key, head=pr['headRefOid']))
 
 
 STATE_TEMPLATE = dict(repo='hypertask-ai/hypertask', base='production', url='https://app.hypertask.ai/login',
@@ -215,12 +233,6 @@ def main():
                 state.update(status='ERROR', error=str(error))
             save(path, state)
             print(state['ticket'], state['status'], state.get('error', ''))
-        flag = Path.home() / '.local/state/fleet/one-run.on'
-        flag.parent.mkdir(parents=True, exist_ok=True)
-        if any(json.loads(p.read_text())['status'] == 'ERROR' for p in ROOT.glob('*.json')):
-            flag.unlink(missing_ok=True)
-            raise RuntimeError('chore failed; picker hold disabled, inspect job error')
-        flag.touch()
 
 
 if __name__ == '__main__':
