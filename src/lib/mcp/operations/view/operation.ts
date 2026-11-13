@@ -4,7 +4,6 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { ValidationError } from '@/lib/mcp-server/utils/errors'
 import { SortingMode, SortingOrder, SubtaskSetting, EmptySections, ViewVisibility } from '@prisma/client'
 import { savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { createView, type CreateViewInput } from '@/lib/mcp/views/services'
@@ -345,7 +344,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, view })
   } catch (error) {
-    if (error instanceof ValidationError) {
+    if (isViewCallerError(error)) {
       console.warn('Error creating view:', error)
     } else {
       console.error('Error creating view:', error)
