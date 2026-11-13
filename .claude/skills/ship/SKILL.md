@@ -56,6 +56,26 @@ Nobody prompts a runner again after its turn ends. Ending the turn while CI, rev
 
 The done comment lists every decision you made on Valentin's behalf, one line each with its reason. Write "Decisions: none" when there were none.
 
+## Scripted chores
+
+Use `scripts/ship-chores rebase` for a clean ticket worktree. It honors `SHIP_BASE`, aborts conflicts and keeps the original branch. Use `scripts/ship-chores live --url https://app.hypertask.ai/login --expect 'Sign in'` for read-only HTTP health, not feature QA. It refuses redirects and sends no credentials.
+
+`scripts/ship-chores sweep` discovers runner-App PRs to app production. It skips protected files, drafts, human PRs and incomplete file lists. One timer owns unattended merge, one required-check rerun and post-deployment HTTP health. It reads each head at most once per five minutes, pins merges through the installed guard, mints a runner App token without saved-login fallback, then requires `ship-check deployed`. Non-required reds do not block. A changed head holds the old job; a second failure stops as RED. Inspect `~/.local/state/ship-chores/fleet/TICKET.json` on resume. Bind your PR normally. Feature QA and Done remain the runner's job.
+
+Install from the merged checkout only, as the owning runner, never another identity:
+
+```sh
+install -Dm755 .claude/skills/ship/scripts/ship-chores ~/.local/lib/hypertask/ship-chores/ship-chores
+install -m644 .claude/skills/ship/scripts/ship-chores@.{service,timer} ~/.config/systemd/user/
+scripts_dir=.claude/skills/ship/scripts
+"$scripts_dir/user-unit-check" "$HOME/.config/systemd/user/ship-chores@.service" "$HOME/.config/systemd/user/ship-chores@.timer"
+systemctl --user daemon-reload
+systemctl --user enable --now ship-chores@6.timer
+"$scripts_dir/user-unit-check" --first-run ship-chores@6.service
+```
+
+Enable one instance only, owned by the installing runner. Never select another identity. All instances share a lock and head history. A successful sweep creates `~/.local/state/fleet/one-run.on`, enabling the picker hold. Script errors or failed services remove it. Undo by removing that hold first, then `systemctl --user disable --now ship-chores@6.timer`. Protected work still needs its authorized merger; feature QA stays with the builder.
+
 ## Helpers
 
 The runner itself runs Codex gpt-6.1-sol at medium effort and delegates by default, with helpers in the background. Code edits: `hax --provider=codex --model=gpt-6.1-terra --effort=medium --no-session -p "<task>"`. Lookups, logs and summaries: `hax --provider=codex --model=gpt-6-luna --effort=low --no-session -p "<task>"`. Sol high (`--model=gpt-6.1-sol --effort=high`) only for hard bugs, security and money.
