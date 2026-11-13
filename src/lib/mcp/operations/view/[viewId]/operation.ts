@@ -277,8 +277,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
     })
     return NextResponse.json({ success: true, view: updated })
   } catch (error) {
+    if (isViewCallerError(error)) return viewMutationRefusal(error)
     console.error('Error updating view:', error)
-    return isViewCallerError(error) ? viewMutationRefusal(error) : plainViewError(error)
+    return plainViewError(error)
   }
 
   })(request)
