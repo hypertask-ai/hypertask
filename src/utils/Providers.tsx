@@ -9,6 +9,7 @@ import { getTicketShellSeed, type TicketShellSeed } from "@/lib/firstScreen/tick
 import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
+import FathomSignupCompleted from "@/lib/analytics/FathomSignupCompleted";
 import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
 import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
@@ -220,6 +221,7 @@ export default function Provider({
                         <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags ?? shell?.flags ?? flagSeed ?? undefined}>
                           <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
+                          <FathomSignupCompleted accountId={authenticatedUserId} />
                           <MobileViewFlagBridge />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}
