@@ -53,6 +53,7 @@ const Provider = load('src/utils/Providers.tsx', {
     './boardDocument': require('../src/lib/firstScreen/boardDocument.ts'),
   }),
   '@/lib/firstScreen/inboxAdoption': { adoptInboxDocument() { throw Error('Shell reached inbox adoption'); } },
+  '@/components/Analytics/FathomSignupCompleted': { default: empty },
   '@/lib/firstScreen/BoardDisplayMirror': { default: empty }, '@/lib/contexts/MobileViewFlagBridge': { default: empty },
   '@/store': atoms, 'next/navigation': navigation, 'react-hot-toast': { Toaster: empty }, '@/lib/contexts/mobileContext': mobile,
   '@tanstack/react-query-persist-client': { PersistQueryClientProvider: ({ client, children }) => {

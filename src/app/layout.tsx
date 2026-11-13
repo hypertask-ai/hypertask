@@ -209,7 +209,7 @@ export default async function RootLayout(
         />
         <DeploySkewGuard />
         <SpeedInsights />
-        <Script src="https://cdn.usefathom.com/script.js" data-site="SSBYTYUQ" strategy="afterInteractive" />
+        <Script src="https://cdn.usefathom.com/script.js" data-site="SSBYTYUQ" data-auto="false" strategy="afterInteractive" />
         <Provider
           initialIsMobile={firstScreen ? (firstScreen.display as BoardDisplay).isMobile : device.isMobile}
           initialIsApple={device.isApple}
