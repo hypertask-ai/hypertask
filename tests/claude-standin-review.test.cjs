@@ -221,3 +221,27 @@ test('HYCI-437 cap: a head reviewed in this same run gets no cap notice', () => 
 test('HYCI-437 cap: the default day cap is above the 60 reviews 14 Nov spent', () => {
   assert.ok(standin.PER_DAY > 60, `default cap is ${standin.PER_DAY}`);
 });
+
+test('HYCI-437 select: a red Actions check run makes a head red, and the oldest head goes first', () => {
+  const rollup = (number, conclusion, committedDate, createdAt) => gateNode(number, {
+    createdAt,
+    commits: { nodes: [{ commit: { committedDate, status: { contexts: [] } } }] },
+    statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'ci-tests', status: 'COMPLETED', conclusion }] } },
+  });
+  const prs = [
+    rollup(1, 'FAILURE', '2026-11-14T11:00:00Z', '2026-11-10T00:00:00Z'),
+    rollup(2, 'SUCCESS', '2026-11-14T12:00:00Z', '2026-11-11T00:00:00Z'),
+    rollup(3, 'SUCCESS', '2026-11-14T05:00:00Z', '2026-11-13T00:00:00Z'),
+  ];
+  assert.deepEqual(pick(prs).map(p => p.number), [3, 2, 1]);
+});
+
+test('HYCI-437 select: a running check run is neither green nor red', () => {
+  const running = gateNode(1, {
+    createdAt: '2026-11-14T00:00:00Z',
+    commits: { nodes: [{ commit: { committedDate: '2026-11-14T00:00:00Z', status: { contexts: [] } } }] },
+    statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'ci-tests', status: 'IN_PROGRESS', conclusion: null }] } },
+  });
+  assert.equal(standin.isGreen(running), true);
+  assert.deepEqual(pick([running]).map(p => p.number), [1]);
+});

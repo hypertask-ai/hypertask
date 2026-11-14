@@ -132,17 +132,39 @@ function buildComment(sha, review) {
 }
 
 const FAILED_STATES = ['failure', 'error'];
+const FAILED_CONCLUSIONS = ['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure'];
+const PENDING_STATUSES = ['in_progress', 'queued', 'requested', 'waiting', 'pending'];
 
 const contextsOf = pr => pr.commits?.nodes?.[0]?.commit?.status?.contexts ?? [];
 
-const isGreen = pr => !contextsOf(pr).some(c => FAILED_STATES.includes(String(c.state).toLowerCase()));
+const rollupOf = pr => (pr.statusCheckRollup?.contexts?.nodes ?? []).filter(Boolean);
+
+// Actions check runs carry a conclusion, legacy statuses carry a state. Reading only
+// commits.status.contexts missed every check run, so a head with red workflows ranked
+// green. The rollup is asked for first, and the legacy statuses stay as the fallback.
+const checksOf = pr => {
+  const rollup = rollupOf(pr);
+  if (rollup.length) {
+    return rollup.map(c => ({
+      name: c.name ?? c.context ?? '',
+      state: c.conclusion
+        ? String(c.conclusion).toLowerCase()
+        : PENDING_STATUSES.includes(String(c.status ?? '').toLowerCase()) ? 'pending' : String(c.state ?? '').toLowerCase(),
+    }));
+  }
+  return contextsOf(pr).map(c => ({ name: c.context ?? '', state: String(c.state ?? '').toLowerCase() }));
+};
+
+const isGreen = pr => !checksOf(pr).some(c => FAILED_CONCLUSIONS.includes(c.state) || FAILED_STATES.includes(c.state));
 
 const createdAtOf = pr => Date.parse(pr.createdAt ?? '') || 0;
 
+const headAgeOf = pr => Date.parse(pr.commits?.nodes?.[0]?.commit?.committedDate ?? '') || createdAtOf(pr);
+
 function waitingForReview(pr, attemptsFor) {
   if (pr.isDraft || pr.isCrossRepository || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '')) return false;
-  const gate = contextsOf(pr).find(c => c.context === 'ai-review');
-  if (gate && String(gate.state).toLowerCase() !== 'pending') return false;
+  const gate = checksOf(pr).find(c => c.name === 'ai-review');
+  if (gate && gate.state !== 'pending') return false;
   const done = (pr.comments?.nodes ?? []).some(c =>
     String(c.author?.login ?? '').replace(/\[bot\]$/, '') === AUTHOR
     && String(c.body ?? '').includes(`${MARKER_PREFIX} {`) && String(c.body).includes(`"sha":"${pr.headRefOid}"`));
@@ -153,6 +175,7 @@ function waitingForReview(pr, attemptsFor) {
 function greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor }) {
   return [...prs.filter(pr => waitingForReview(pr, attemptsFor))].sort((a, b) =>
     (isGreen(a) ? 0 : 1) - (isGreen(b) ? 0 : 1)
+    || headAgeOf(a) - headAgeOf(b)
     || createdAtOf(a) - createdAtOf(b)
     || a.number - b.number);
 }
@@ -193,7 +216,16 @@ query($owner: String!, $name: String!) {
     pullRequests(states: OPEN, first: 100, baseRefName: "production", orderBy: {field: UPDATED_AT, direction: DESC}) {
       nodes {
         number title body isDraft isCrossRepository headRefOid createdAt
-        commits(last: 1) { nodes { commit { status { contexts { context state } } } } }
+        commits(last: 1) { nodes { commit { committedDate status { contexts { context state } } } } }
+        statusCheckRollup {
+          contexts(first: 100) {
+            nodes {
+              __typename
+              ... on CheckRun { name status conclusion }
+              ... on StatusContext { context state }
+            }
+          }
+        }
         comments(last: 100) { nodes { author { login } body } }
       }
     }
