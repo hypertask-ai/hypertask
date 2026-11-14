@@ -216,8 +216,15 @@ export async function POST(request: NextRequest) {
       const response = planLimitResponse(e);
       return NextResponse.json(response.body, { status: response.status });
     }
-    console.error('[MCP attachments]', e);
     const status = e instanceof AttachmentBatchError ? e.status : 500;
+    if (status >= 500) {
+      console.error('[MCP attachments]', e);
+    } else {
+      console.warn('[MCP attachments] caller error', {
+        status,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
     const partialAttachments =
       e instanceof AttachmentBatchError ? e.attachments : [];
     if (partialAttachments.length > 0) {
@@ -227,7 +234,7 @@ export async function POST(request: NextRequest) {
         void broadcastTaskChange(task.id);
       }
     }
-    if (status === 500) {
+    if (status >= 500) {
       reportMcpOperationCrash(request, e);
     }
     return NextResponse.json(
