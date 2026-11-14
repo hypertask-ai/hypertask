@@ -5,6 +5,7 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { isTaskSaveTimeout, taskSaveBudget, taskSaveTimeoutResult, taskSaveTransactionLimits } from "@/lib/tasks/saveLimit";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { enqueueAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma";
@@ -71,6 +72,8 @@ import {
 import { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } from "@/lib/flags/definitions/htpr-7933-plain-language-ticket-template";
 
 type UpdateTaskSingleOptions = {
+  saveDeadline?: number;
+  onCommitted?: (result: UpdateTaskSingleResult) => void;
   teamScope?: AgentTokenTeamScope | null;
   allowProjectChange?: boolean;
   onProjectChangedInTx?: (
@@ -209,7 +212,10 @@ export async function updateTaskSingle(
   agentId?: string | null,
   options: UpdateTaskSingleOptions = {},
 ): Promise<UpdateTaskSingleResult> {
+  const budget = taskSaveBudget(options.saveDeadline);
+  let committedResult: UpdateTaskSingleResult | undefined;
   try {
+    return await budget.run(async () => {
     if (!newTask || !newTask.id || !currentUser) {
       return {
         status: 500,
@@ -320,6 +326,7 @@ export async function updateTaskSingle(
       analyticsKey,
     } = await prisma.$transaction(
       async (tx) => {
+        budget.remaining();
         const enforceMoveLimits = options.allowProjectChange && requestedMutation.projectId !== undefined && await isPlanLimitsEnabled(currentUser.id);
         if (options.allowProjectChange && requestedMutation.projectId !== undefined && !enforceMoveLimits) {
           const projectIds = [...new Set([oldTask.projectId, requestedMutation.projectId as number])].sort((a, b) => a - b);
@@ -799,8 +806,10 @@ export async function updateTaskSingle(
               updatedEvent,
             )
           : [];
+        const analyticsKey = await enqueueAgentTaskCompletion(tx, currentState, updatedTask, agentId);
+        budget.remaining();
         return {
-          analyticsKey: await enqueueAgentTaskCompletion(tx, currentState, updatedTask, agentId),
+          analyticsKey,
           task: updatedTask,
           newComment: descriptionActivity,
           moveActivity,
@@ -808,8 +817,16 @@ export async function updateTaskSingle(
           agentWebhookDeliveryIds,
         };
       },
-      { timeout: 60_000 },
+      taskSaveTransactionLimits(budget.remaining()),
     );
+    committedResult = {
+      status: 200,
+      json: task,
+      oldTask: taskBeforeWrite,
+      commentActivity: newComment,
+      moveActivity,
+    };
+    options.onCommitted?.(committedResult);
     if (!options.trustedCaller) {
       scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId);
     }
@@ -924,13 +941,8 @@ export async function updateTaskSingle(
       scheduleClassifyTaskAiLabels(task.id, task.projectId, agentId);
     }
 
-    return {
-      status: 200,
-      json: task,
-      oldTask: taskBeforeWrite,
-      commentActivity: newComment,
-      moveActivity,
-    };
+    return committedResult;
+    });
   } catch (error) {
     if (error instanceof AgentWritingError) return { status: 400, json: { message: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) } };
     if (isPlanLimitReachedError(error)) {
@@ -1000,6 +1012,7 @@ export async function updateTaskSingle(
         },
       };
     }
+    if (isTaskSaveTimeout(error)) return committedResult ?? taskSaveTimeoutResult();
     console.log("🤔 ~ updateTaskSingle ~ error:", error);
     return {
       status: 500,

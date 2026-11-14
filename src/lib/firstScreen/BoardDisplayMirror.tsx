@@ -2,6 +2,8 @@
 
 import { useEffect, useLayoutEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { useCardParts } from "@/hooks/General/useCardParts";
+import { shownCardParts } from "@/lib/kanban/cardParts";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { useRecoilValue } from "@/lib/state";
 import { fcmAtom, currentUserAtom, boardLayoutPreferenceAtom, appShellRailAtom, appShellRailExpandedAtom, showQuickTipsAtom,
@@ -31,6 +33,7 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
   const chatPinned = useRecoilValue(aiChatPinnedAtom);
   const chatWidth = useRecoilValue(aiChatSidebarWidthPxAtom);
   const chatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
+  const cardParts = useCardParts();
   useLayoutEffect(() => {
     if (!hydrated) return;
     document.documentElement.removeAttribute("data-ticket-sidebar");
@@ -47,15 +50,16 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
         return;
       }
       const theme = document.documentElement.dataset.theme;
-      const value = JSON.stringify({ version: 1, accountId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      const display = { version: 1, accountId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         locale: navigator.language, boardLayout, theme, railCollapsed, quickTips, draftsFirst: false,
         isMobile: window.innerWidth < 768,
         inbox: { nudgeDismissed,
           pushPermission: fcm.permissionStatus, pushEnabled: fcm.statusToggleFromDB === "true" },
-        board: { railOn, showEmptyViewTabs, hiddenViewTabIds, viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode } });
-      const encoded = encodeURIComponent(value);
-      const valid = encoded.length <= 3800 && parseBoardDisplay(value, accountId, { desktopChat });
-      document.cookie = `${BOARD_DISPLAY_COOKIE}=${valid ? encoded : ""}; Path=/; Max-Age=${valid ? 604800 : 0}; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
+        board: { railOn, showEmptyViewTabs, hiddenViewTabIds, viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode } };
+      const stored = [cardParts ? { ...display, cardParts: shownCardParts(cardParts) } : display, display]
+        .map((candidate) => ({ candidate, encoded: encodeURIComponent(JSON.stringify(candidate)) }))
+        .find(({ candidate, encoded }) => encoded.length <= 3800 && parseBoardDisplay(JSON.stringify(candidate), accountId, { desktopChat }));
+      document.cookie = `${BOARD_DISPLAY_COOKIE}=${stored?.encoded ?? ""}; Path=/; Max-Age=${stored ? 604800 : 0}; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
     };
     mirror();
     window.addEventListener("resize", mirror);
@@ -65,6 +69,6 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
     themes.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => { window.removeEventListener("resize", mirror); window.removeEventListener("pagehide", mirror); window.removeEventListener("ht-inbox-display-change", mirror); themes.disconnect(); };
   }, [desktopChat, accountId, user?.id, fcm.permissionStatus, fcm.statusToggleFromDB, boardLayout, railOn, railCollapsed, quickTips, showEmptyViewTabs, hiddenViewTabIds,
-    viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode]);
+    viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode, cardParts]);
   return null;
 }

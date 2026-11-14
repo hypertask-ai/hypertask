@@ -266,12 +266,12 @@ test("integration uses committed fenced task state and excludes trusted backgrou
   const source = read("src/utils/controllers/tasks/single.ts");
   const point = source.indexOf("scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId)");
   assert.ok(point > source.indexOf("taskBeforeWrite = currentState"));
-  assert.ok(point > source.indexOf("{ timeout: 60_000 }"));
+  assert.ok(point > source.indexOf("taskSaveTransactionLimits(budget.remaining())"));
   assert.match(source, /if \(!options.trustedCaller\) \{\s*scheduleAgentFirstTaskEmail\(taskBeforeWrite, task, currentUser.id, agentId\);/);
   assert.doesNotMatch(source, /await scheduleAgentFirstTaskEmail/);
   assert.match(read("src/lib/mcp/tasks/updateTask.ts"), /ctx.agentId \? \{ agentId: ctx.agentId \}/);
   assert.match(read("src/lib/mcp/auth/verifyJwt.ts"), /id: rawAgentId,\s*userId: user.id,\s*revokedAt: null/);
-  assert.match(read("src/lib/api/task-writes/update.ts"), /updateTaskSingle\(newTask, currentUser, actingAgentId, \{ teamScope: session\.teamScope \}\)/);
+  assert.match(read("src/lib/api/task-writes/update.ts"), /updateTaskSingle\(newTask, currentUser, actingAgentId, \{\s*teamScope: session\.teamScope\b/);
 });
 
 test("first-task email flag removal is permanent", () => {

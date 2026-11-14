@@ -198,6 +198,61 @@ async function buildValidatedNativeBoardFilters(projectId: number, value: unknow
     };
 }
 
+function boardFilterEntries(value: unknown): Array<{ type?: unknown; match?: unknown }> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    const added = (value as { addedFilters?: unknown }).addedFilters;
+    if (!Array.isArray(added)) return [];
+    return added.filter(
+        (entry) => entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+    ) as Array<{ type?: unknown; match?: unknown }>;
+}
+
+async function applyLegacyFiltersToBoardFilters(
+    projectId: number,
+    baseBoardFilters: unknown,
+    filters: CreateViewFilters,
+    userId: number | undefined,
+) {
+    const base = baseBoardFilters && typeof baseBoardFilters === 'object' && !Array.isArray(baseBoardFilters)
+        ? baseBoardFilters as { matchFilters?: unknown }
+        : {};
+    const baseAddedFilters = boardFilterEntries(baseBoardFilters);
+    const storedEntry = (type: string) =>
+        baseAddedFilters.find((entry) => entry.type === type) as BoardFilterEntry | undefined;
+    const otherEntries = baseAddedFilters.filter(
+        (entry) => entry.type !== 'Labels' && entry.type !== 'Assignees'
+    );
+
+    const keepMatch = (entry: BoardFilterEntry | undefined, type: 'Labels' | 'Assignees') => {
+        if (!entry) return entry;
+        const previous = storedEntry(type)?.match;
+        return previous === 'ALL' || previous === 'ANY' ? { ...entry, match: previous } : entry;
+    };
+
+    const labelsEntry = filters.label_names === undefined
+        ? withLabelMatch(storedEntry('Labels'), filters.label_match, storedEntry('Labels')?.match)
+        : withLabelMatch(
+              await buildLabelsFilterEntry(projectId, filters.label_names, userId),
+              filters.label_match,
+              storedEntry('Labels')?.match,
+          );
+    const assigneesEntry = filters.assignee_ids === undefined
+        ? storedEntry('Assignees')
+        : keepMatch(
+              await buildAssigneesFilterEntry(projectId, filters.assignee_ids),
+              'Assignees',
+          );
+    const existingMatchFilters =
+        base.matchFilters === 'ALL' || base.matchFilters === 'ANY' ? base.matchFilters : undefined;
+
+    return sanitizeBoardFilters({
+        matchFilters: filters.match ?? existingMatchFilters ?? 'ANY',
+        addedFilters: [...otherEntries, labelsEntry, assigneesEntry].filter(
+            (entry) => entry !== undefined
+        ),
+    });
+}
+
 async function buildBoardFilters(projectId: number, filters?: CreateViewFilters, userId?: number) {
     const addedFilters: BoardFilterEntry[] = [];
 
@@ -359,7 +414,11 @@ export async function updateView(input: UpdateViewInput) {
     const data: Prisma.ViewUpdateInput = {};
 
     if (input.board_filters !== undefined) {
-        data.board_filters = await buildValidatedNativeBoardFilters(projectId, input.board_filters) as Prisma.InputJsonValue;
+        const nativeBoardFilters = await buildValidatedNativeBoardFilters(projectId, input.board_filters);
+        data.board_filters = (input.filters === undefined
+            ? nativeBoardFilters
+            : await applyLegacyFiltersToBoardFilters(projectId, nativeBoardFilters, input.filters, userId)
+        ) as Prisma.InputJsonValue;
     }
     if (input.visible_section_ids !== undefined) {
         data.board_columns_view = await canonicalBoardColumns(projectId, input.visible_section_ids) as unknown as Prisma.InputJsonValue;
@@ -394,71 +453,12 @@ export async function updateView(input: UpdateViewInput) {
         ) as unknown as Prisma.InputJsonValue;
     }
     if (input.filters !== undefined && input.board_filters === undefined) {
-        const storedBoardFilters =
-            view.board_filters &&
-            typeof view.board_filters === 'object' &&
-            !Array.isArray(view.board_filters)
-                ? view.board_filters
-                : {};
-        const storedAddedFilters = Array.isArray(storedBoardFilters.addedFilters)
-            ? storedBoardFilters.addedFilters
-            : [];
-        const storedEntry = (type: string) =>
-            storedAddedFilters.find(
-                (entry) =>
-                    entry !== null &&
-                    typeof entry === 'object' &&
-                    !Array.isArray(entry) &&
-                    entry.type === type
-            );
-        const otherStoredEntries = storedAddedFilters.filter(
-            (entry) =>
-                entry !== null &&
-                typeof entry === 'object' &&
-                !Array.isArray(entry) &&
-                entry.type !== 'Labels' &&
-                entry.type !== 'Assignees'
-        );
-
-        const keepMatch = (
-            entry: BoardFilterEntry | undefined,
-            type: 'Labels' | 'Assignees'
-        ) => {
-            if (!entry) return entry;
-            const previous = storedEntry(type) as { match?: unknown } | undefined;
-            return previous?.match === 'ALL' || previous?.match === 'ANY'
-                ? { ...entry, match: previous.match }
-                : entry;
-        };
-
-        const previousLabels = storedEntry('Labels') as { match?: unknown } | undefined;
-        const labelsEntry =
-            input.filters.label_names === undefined
-                ? withLabelMatch(storedEntry('Labels') as BoardFilterEntry | undefined, input.filters.label_match, previousLabels?.match)
-                : withLabelMatch(
-                      await buildLabelsFilterEntry(projectId, input.filters.label_names, userId),
-                      input.filters.label_match,
-                      previousLabels?.match,
-                  );
-        const assigneesEntry =
-            input.filters.assignee_ids === undefined
-                ? storedEntry('Assignees')
-                : keepMatch(
-                      await buildAssigneesFilterEntry(projectId, input.filters.assignee_ids),
-                      'Assignees'
-                  );
-        const existingMatchFilters =
-            storedBoardFilters.matchFilters === 'ALL' ||
-            storedBoardFilters.matchFilters === 'ANY'
-                ? storedBoardFilters.matchFilters
-                : undefined;
-        const board_filters = sanitizeBoardFilters({
-            matchFilters: input.filters.match ?? existingMatchFilters ?? 'ANY',
-            addedFilters: [...otherStoredEntries, labelsEntry, assigneesEntry].filter(
-                (entry) => entry !== undefined
-            ),
-        });
-        data.board_filters = board_filters as unknown as Prisma.InputJsonValue;
+        data.board_filters = await applyLegacyFiltersToBoardFilters(
+            projectId,
+            view.board_filters,
+            input.filters,
+            userId,
+        ) as Prisma.InputJsonValue;
     }
 
     const updateArgs = {

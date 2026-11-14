@@ -10,7 +10,7 @@ export async function recordPostHogDispatchFallback(
   alert: PostHogDispatchFallbackAlert,
   githubStatus: 403 | 429,
 ) {
-  const projectId = 4060;
+  const projectId = 11514;
   const issueUrl = `https://eu.posthog.com/project/236160/error_tracking/${alert.issue_id}`;
   const marker = `posthog-dispatch-fallback:issue:${alert.issue_id}:${alert.event_id}`;
   const existing = await prisma.task.findFirst({

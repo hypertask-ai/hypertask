@@ -27,7 +27,7 @@ MOCK
 #!/usr/bin/env bash
 [[ $1 == tasks && $2 == get ]] || exit 1
 case "$3" in
-  MARK-173|HEFE-301|HTPR-6570) echo '{"success":true,"tasks":[{"section":"Approved"}]}' ;;
+  MARK-173|HEFE-301|HTPR-6570|SOFT-491|IGSH-266) echo '{"success":true,"tasks":[{"section":"Approved"}]}' ;;
   *) echo '{"success":false,"tasks":[]}' ;;
 esac
 MOCK
@@ -40,6 +40,8 @@ MOCK
   T 0 'MARK-173 [BUG] Help chat back to a floating icon'
   T 0 'HEFE-301 [BUG] Docs link answers the wrong page'
   T 0 'HTPR-6570 [BUGFIX] Keep the same AI chat after Settings'
+  T 0 'SOFT-491 [BUGFIX] Open the app in one tap'
+  T 0 'IGSH-266 [BUG] Approval key reaches the agent'
   T 1 'MARK-99999 [BUG] Made-up ticket number'
   T 1 'MARK-173 Lead ticket without a type tag'
   T 1 '[BUG] MARK-173 Type first, which only the duplicate path takes'
@@ -816,6 +818,8 @@ T fail "stale proof rejected"
 sed -i "s/deadbeef0/${sha:0:9}/" "$E/HTPR-6570/proof.md"
 T fail "empty screenshot rejected"
 printf 'png' > "$R/a.png"; T pass "fresh proof accepted"
+sed -i 's@feature-map/my-tasks.md@feature-map/public-sites.md@' "$E/HTPR-6570/proof.md"
+T pass "public-site proof accepted"
 echo '- PASS: y -> missing output.png' >> "$E/HTPR-6570/proof.md"; T fail "malformed PASS line rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; echo '- PASS: z -> old.png' >> "$E/HTPR-6570/proof.md"; printf 'png' > "$E/HTPR-6570/old.png"
 T fail "evidence outside the current run rejected"
@@ -943,6 +947,15 @@ if args[:2] == ['pr', 'view']:
         print('YPER4-999 [INFRA] Fixture')
     else:
         print(json.dumps({'number': 999, 'title': 'YPER4-999 [INFRA] Fixture', 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': None, 'baseRefName': 'production'}))
+elif args[:1] == ['api'] and args[1].endswith('/status'):
+    import subprocess
+    assert args[1] == 'repos/hypertask-ai/hypertask/commits/' + 'a' * 40 + '/status', args
+    assert '--paginate' in args, args
+    if os.environ.get('FLAG_STATUS_READ_ERROR'):
+        sys.exit(1)
+    statuses = json.loads(os.environ.get('FLAG_EXISTING_STATUSES', '[]'))
+    sys.exit(subprocess.run(['jq', '-r', args[args.index('--jq') + 1]],
+                           input=json.dumps({'statuses': statuses}), text=True).returncode)
 elif args[:1] == ['api'] and '/statuses/' in args[1]:
     import fcntl
     with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
@@ -984,8 +997,14 @@ S() {
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
 posts = [c for c in calls if c[0] == 'api' and '/statuses/' in c[1]]
-if sys.argv[2] == 'none':
+if sys.argv[2] in ('none', 'reused'):
     assert not posts, posts
+    if sys.argv[2] == 'reused':
+        assert sys.argv[4] == 'premerge-evidence: success (' + sys.argv[3] + ')', sys.argv[4]
+        reads = [c for c in calls if c[:2] == ['pr', 'view']]
+        assert len(reads) == 2, reads
+        status_read = next(i for i, c in enumerate(calls) if c[0] == 'api' and c[1].endswith('/status'))
+        assert calls[status_read + 1] == reads[1], calls
 else:
     assert len(posts) == 1, posts
     call = posts[0]
@@ -1016,6 +1035,15 @@ S head_read_error_gets_no_success 1 none '' FLAG_HEAD_ERROR=1
 S base_moved_between_read_and_post_fails 1 failure 'cannot confirm unchanged PR head; retry' FLAG_BASE_RACE=1
 S head_reread_error_gets_no_success 1 failure 'cannot confirm unchanged PR head; retry' FLAG_REREAD_ERROR=1
 S failed_status_post_returns_nonzero 1 success "$removed" FLAG_POST_ERROR=1
+matching_status='[{"context":"premerge-evidence","state":"success","description":"test click removed (Valentin 2026-10-21)"}]'
+S matching_status_survives_exhausted_post_limit 0 reused "$removed" FLAG_EXISTING_STATUSES="$matching_status" FLAG_POST_ERROR=1
+S matching_status_does_not_hide_head_race 1 failure 'cannot confirm unchanged PR head; retry' FLAG_EXISTING_STATUSES="$matching_status" FLAG_HEAD_RACE=1
+S matching_status_does_not_hide_closed_base_race 1 failure 'cannot confirm unchanged PR head; retry' FLAG_EXISTING_STATUSES="$matching_status" FLAG_BASE_RACE=1
+S other_context_does_not_skip_post 0 success "$removed" FLAG_EXISTING_STATUSES='[{"context":"other","state":"success","description":"test click removed (Valentin 2026-10-21)"}]'
+S outdated_description_is_replaced 0 success "$removed" FLAG_EXISTING_STATUSES='[{"context":"premerge-evidence","state":"success","description":"old rules"}]'
+S failing_status_is_replaced 0 success "$removed" FLAG_EXISTING_STATUSES='[{"context":"premerge-evidence","state":"failure","description":"test click removed (Valentin 2026-10-21)"}]'
+S unreadable_status_still_posts 0 success "$removed" FLAG_STATUS_READ_ERROR=1
+S unreadable_status_and_failed_post_fails_closed 1 success "$removed" FLAG_STATUS_READ_ERROR=1 FLAG_POST_ERROR=1
 printf 'not a directory\n' > "$E/lock-blocked"
 S publisher_lock_error_gets_no_success 1 none '' PREMERGE_STATUS_STATE="$E/lock-blocked"
 
@@ -1464,7 +1492,7 @@ N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote bra
 DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/repo/.unlazy/s-abcd1234/gates"
 printf '#!/usr/bin/env bash\n[[ $1 == GET && $2 == /mcp/tasks/YPER4-902/agent-activity* ]] && cat "$DP/acts" || exit 1\n' > "$DP/bin/ht"
 chmod +x "$DP/bin/ht"; export DP
-DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
+DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID -u PI_SESSION_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
 act() { jq -nc --arg t "$1" '{success:true,activities:[{type:"thought",text:"Claimed.",createdAt:"2026-10-17T10:00:00Z"},{type:"thought",text:$t,createdAt:"2026-10-17T11:00:00Z"}]}' > "$DP/acts"; }
 full='Deeper: field: release engineering | raw source: ship-check source | method: stub tests | outside proof: CI run | breaks if: another suite turns red | proof gate: YPER4-902.deeper-ci'
 gate=$'- [ ] YPER4-902.deeper-ci: CI is green\n  CHECK: gh run list --limit 1\n  EXPECT: success\n'

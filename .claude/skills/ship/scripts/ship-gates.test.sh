@@ -6,6 +6,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,7 +34,7 @@ print(markers[sys.argv[1]])
     approval = p / 'approvals'
     approval.mkdir(mode=0o700)
     env = dict(os.environ, HOME=str(home), UNLAZY_APPROVAL_DIR=str(approval), CALLS=str(p/'calls'))
-    for key in ['CLAUDE_CODE_SESSION_ID', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CURSOR_CONVERSATION_ID', 'UNLAZY_SCOPE']:
+    for key in ['CLAUDE_CODE_SESSION_ID', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CURSOR_CONVERSATION_ID', 'PI_SESSION_ID', 'UNLAZY_SCOPE']:
         env.pop(key, None)
     repo = p / 'repo with spaces'
     repo.mkdir()
@@ -95,6 +96,39 @@ print(markers[sys.argv[1]])
     r = run('HYFA-15', CURSOR_CONVERSATION_ID=cursor, CLAUDE_CODE_SESSION_ID='ignoredA-full')
     assert r.returncode == 0 and len(ids(ledger('ignoredA-full'))) == 8, r.stderr
     print('ok Cursor conversation id fallback and precedence')
+
+    pi = 'pi9077abc-1111-2222'
+    r = run('HYFA-16', PI_SESSION_ID=pi)
+    assert r.returncode == 0 and len(ids(ledger(pi))) == 8, r.stderr
+    assert (ledger(pi).parent/'session').read_text() == pi+'\n'
+    r = run('HYFA-17', PI_SESSION_ID=pi, CURSOR_CONVERSATION_ID='ignoredD-full')
+    assert r.returncode == 0 and len(ids(ledger('ignoredD-full'))) == 8, r.stderr
+    print('ok Pi session id fallback and precedence')
+
+    hax = p / 'hax'
+    shutil.copyfile(pathlib.Path(sys.executable).resolve(), hax)
+    hax.chmod(0o755)
+    driver = '''import os, subprocess, sys
+resolver, script = sys.argv[1:]
+assert subprocess.check_output([sys.executable, resolver], text=True,
+                               env=dict(os.environ, CODEX_SESSION_ID='explicit-hax-id')) == 'explicit-hax-id'
+first = subprocess.check_output([sys.executable, resolver], text=True)
+second = subprocess.check_output(['bash', '-c', 'python3 "$1"', 'bash', resolver], text=True)
+assert first and first == second, (first, second)
+print(first, flush=True)
+subprocess.run(['bash', script, 'HYCI-294'], check=True)
+'''
+    r = subprocess.run([str(hax), '-c', driver, str(pathlib.Path(script).with_name('ship-session-id.py')), script],
+                       cwd=repo, env=env, text=True, capture_output=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    hax_session = r.stdout.splitlines()[0]
+    hax_file = ledger(hax_session)
+    assert (hax_file.parent/'session').read_text() == hax_session+'\n'
+    assert len(ids(hax_file)) == 8 and 'HYCI-294.deeper' in ids(hax_file)
+    assert 'HYCI-294.proof' not in ids(hax_file)
+    r = run('HYCI-295', CLAUDE_CODE_SESSION_ID=hax_session)
+    assert r.returncode == 0 and len(ids(hax_file)) == 16, r.stderr
+    print('ok live hax ancestor identity survives nested shells and binds the same HYCI ledger')
 
     before = file.read_text()
     count = len(calls())

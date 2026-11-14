@@ -8,6 +8,52 @@ const BADGES = [/\bP([0-9]) Badge/g, /badge\/P([0-9])-/g, /\[P([0-9])\]/g, /\bP(
 
 const isCodex = login => String(login ?? '').replace(/\[bot\]$/, '') === CODEX_LOGIN;
 
+const REVIEWER_MODELS = { claude: /^claude-sonnet/ };
+const REVIEWER_NAMES = { claude: 'Claude Sonnet' };
+const SWITCH_AUTHOR = 'hypertask-runners';
+const CLAUDE_REVIEW_STATE = /<!-- claude-review:v1 (\{.*?\}) -->/s;
+const SWITCH_LABEL = 'review-switch';
+const SWITCH_STATE = /<!-- review-switch:v1 (\{.*?\}) -->/s;
+
+const isApp = login => String(login ?? '').replace(/\[bot\]$/, '') === SWITCH_AUTHOR;
+const isClaudeReviewAuthor = login => String(login ?? '').replace(/\[bot\]$/, '') === 'github-actions';
+
+function reviewerFromIssues(issues) {
+  for (const issue of issues ?? []) {
+    if (issue.pull_request || !isApp(issue.user?.login)) continue;
+    try {
+      const reviewer = JSON.parse(SWITCH_STATE.exec(String(issue.body ?? ''))?.[1] ?? 'null')?.reviewer;
+      if (reviewer === 'codex' || reviewer === 'claude') return reviewer;
+    } catch {}
+  }
+  return 'codex';
+}
+
+function claudeResultFor(comments, headOid, reviewer) {
+  const modelPattern = REVIEWER_MODELS[reviewer];
+  if (!modelPattern) return null;
+  const short = headOid.slice(0, 7);
+  for (const comment of [...(comments ?? [])].reverse()) {
+    if (!isClaudeReviewAuthor(comment.author)) continue;
+    const raw = [...String(comment.body ?? '').matchAll(new RegExp(CLAUDE_REVIEW_STATE.source, 'gs'))].at(-1)?.[1];
+    if (!raw) continue;
+    let state;
+    try {
+      state = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (state?.sha !== headOid || !modelPattern.test(String(state.model ?? ''))) continue;
+    if (!['APPROVE', 'CONCERNS'].includes(state.verdict) || !Number.isInteger(state.blocking) || state.blocking < 0) continue;
+    const evidence = comment.url ?? '';
+    const name = REVIEWER_NAMES[reviewer];
+    return state.blocking > 0
+      ? { state: 'failure', description: `${name} reviewed ${short}: ${state.blocking} blocker/major finding(s)`, evidence }
+      : { state: 'success', description: `${name} reviewed ${short}: no blocker/major findings`, evidence };
+  }
+  return null;
+}
+
 function priorityOf(body) {
   for (const pattern of BADGES) {
     const levels = [...String(body ?? '').matchAll(pattern)].map(match => Number(match[1]));
@@ -60,10 +106,21 @@ function codeReviewStateFor(comments, headOid) {
     if (!raw) continue;
     try {
       const state = JSON.parse(raw).code_review;
-      if (state?.commit_sha === headOid) return { ...state, url: comment.url ?? '' };
+      if (state?.commit_sha === headOid) return { ...state, url: comment.url ?? '', updatedAt: comment.updatedAt };
     } catch {
       continue;
     }
+  }
+  return null;
+}
+
+const CLEAN_RECEIPT = /Didn['’]t find any major issues[\s\S]{0,500}?Reviewed commit:\**\s*`([0-9a-f]{10,40})`/i;
+
+function cleanHeadReceipt(comments, headOid) {
+  for (const comment of [...(comments ?? [])].sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))) {
+    if (!isCodex(comment.author)) continue;
+    const match = CLEAN_RECEIPT.exec(String(comment.body ?? ''));
+    if (match && headOid.startsWith(match[1])) return comment;
   }
   return null;
 }
@@ -73,16 +130,35 @@ function evaluate(pr) {
   const codexReviews = pr.reviews.filter(review => isCodex(review.author));
   const headReviews = codexReviews.filter(review => review.commit === pr.headOid);
   const staleReviews = codexReviews.filter(review => review.commit !== pr.headOid);
-  const headCommentBodies = staleReviews.flatMap(review => review.comments.filter(
+  const summary = codeReviewStateFor(pr.comments, pr.headOid);
+  const receipt = cleanHeadReceipt(pr.comments, pr.headOid);
+  const receiptUrl = receipt?.url ?? '';
+  const summaryClean = summary?.status === 'completed' && (
+    summary.has_any_findings === false || summary.has_unresolved_findings === false);
+  const reviewedAt = Math.max(0, ...[
+    ...headReviews.map(review => review.submittedAt),
+    summaryClean ? summary.updatedAt : null,
+    summary?.status === 'completed' ? receipt?.createdAt : null,
+  ].map(value => Date.parse(value) || 0));
+  const unclearedReviews = staleReviews.filter(review =>
+    !(Date.parse(review.submittedAt) > 0 && Date.parse(review.submittedAt) < reviewedAt));
+  const remappedBodies = unclearedReviews.flatMap(review => review.comments.filter(
     comment => commentCommit(comment, review) === pr.headOid)).map(commentBody);
-  const unreadStale = !headReviews.length && staleReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
+  const unreadStale = unclearedReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
 
-  const rawBlocking = headReviews.flatMap(review => review.comments.length
+  const rawHeadBlocking = headReviews.flatMap(review => review.comments.length
     ? review.comments.map(commentBody).filter(blocks)
-    : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : [])
-    .concat(headCommentBodies.filter(blocks), unreadStale ? [UNREAD] : []);
-  const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
-  if (blocking.length) {
+    : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : []);
+  const rawStaleBlocking = remappedBodies.filter(blocks).concat(unreadStale ? [UNREAD] : []);
+  const rawBlocking = rawHeadBlocking.concat(rawStaleBlocking);
+  const headBlocking = rawHeadBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
+  const staleBlocking = rawStaleBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
+  const blocking = headBlocking.concat(staleBlocking);
+  const claudeResult = claudeResultFor(pr.comments, pr.headOid, pr.reviewer);
+  const claudeClearsStale = staleBlocking.length > 0 && claudeResult?.state === 'success';
+
+  if (headBlocking.length || (staleBlocking.length && !claudeClearsStale)) {
+    if (!headBlocking.length && claudeResult?.state === 'failure') return claudeResult;
     const levels = blocking.map(priorityOf);
     const worst = levels.includes(0) ? 'P0' : levels.includes(1) ? 'P1' : 'unrated';
     return {
@@ -91,6 +167,7 @@ function evaluate(pr) {
       evidence: codexReviews.find(review => review.url)?.url ?? '',
     };
   }
+  if (claudeClearsStale) return claudeResult;
   if (rawBlocking.length) {
     return {
       state: 'success',
@@ -98,15 +175,21 @@ function evaluate(pr) {
       evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
-  if (headReviews.length || headCommentBodies.length) {
+  if (headReviews.length || remappedBodies.length) {
     return {
       state: 'success',
       description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
       evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
+  if (summary?.status === 'completed' && receiptUrl) {
+    return {
+      state: 'success',
+      description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
+      evidence: receiptUrl,
+    };
+  }
 
-  const summary = codeReviewStateFor(pr.comments, pr.headOid);
   if (summary?.status === 'completed') {
     if (summary.has_unresolved_findings === false || summary.has_any_findings === false
         || summary.has_unresolved_findings === true) {
@@ -123,43 +206,121 @@ function evaluate(pr) {
       };
     }
   }
+  if (claudeResult) return claudeResult;
   return { state: 'pending', description: `Waiting for the Codex review of ${short}`, evidence: '' };
 }
 
-const SWEEP = `
-query($owner: String!, $name: String!, $after: String) {
-  repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: 25, after: $after, baseRefName: "production") {
-      pageInfo { hasNextPage endCursor }
-      nodes {
-        number isDraft isCrossRepository headRefOid
-        commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
-        comments(last: 100) { nodes { author { login } url body } }
+async function readPull(github, owner, repo, number) {
+  const { data: pull } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+  if (pull.state !== 'open' || pull.base.ref !== 'production' || pull.head.repo?.full_name !== pull.base.repo.full_name) return null;
+  const params = { owner, repo, pull_number: number, per_page: 100 };
+  const reviews = await github.paginate(github.rest.pulls.listReviews, params);
+  const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, params);
+  const issueComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
+  const history = await github.paginate(github.rest.repos.listCommitStatusesForRef, { owner, repo, ref: pull.head.sha, per_page: 100 });
+  const latest = new Map();
+  for (const entry of history) if (!latest.has(entry.context)) latest.set(entry.context, entry);
+  return {
+    number: pull.number, isDraft: pull.draft, isCrossRepository: false, headRefOid: pull.head.sha,
+    commits: { nodes: [{ commit: { oid: pull.head.sha, status: { contexts: [...latest.values()] } } }] },
+    reviews: {
+      pageInfo: { hasPreviousPage: false },
+      nodes: reviews.map(review => ({
+        author: review.user, url: review.html_url, body: review.body, submittedAt: review.submitted_at, commit: { oid: review.commit_id },
+        comments: {
+          pageInfo: { hasNextPage: false },
+          nodes: reviewComments.filter(comment => comment.pull_request_review_id === review.id).map(comment => ({
+            body: comment.body, author: comment.user, replyTo: comment.in_reply_to_id, commit: { oid: comment.commit_id },
+          })),
+        },
+      })),
+    },
+    comments: { nodes: issueComments.map(comment => ({ author: comment.user, url: comment.html_url, body: comment.body, createdAt: comment.created_at, updatedAt: comment.updated_at })) },
+  };
+}
+
+async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, result, existingContexts, commentBodies, reviewer }) {
+  const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
+  const existing = new Map(existingContexts.map(entry => [entry.context, entry]));
+  const detailsUrl = result.evidence || `${serverUrl}/${owner}/${repo}/pull/${prNumber}`;
+  const checkConclusion = { success: 'success', failure: 'failure' }[result.state] ?? null;
+  let latestCheckByName = new Map();
+  if (checkConclusion) {
+    const headCheckRuns = await github.paginate(github.rest.checks.listForRef, {
+      owner, repo, ref: sha, per_page: 100,
+    });
+    for (const check of headCheckRuns) {
+      if (!CONTEXTS.includes(check.name)) continue;
+      const prior = latestCheckByName.get(check.name);
+      if (!prior || Date.parse(check.started_at) > Date.parse(prior.started_at)) {
+        latestCheckByName.set(check.name, check);
       }
     }
   }
-}`;
-
-async function run({ github, context, core }) {
-  const { owner, repo } = context.repo;
-  const only = context.payload.pull_request?.number ?? context.payload.issue?.number ?? 0;
-
-  const nodes = [];
-  for (let after = null, more = true; more;) {
-    const { repository: { pullRequests } } = await github.graphql(SWEEP, { owner, name: repo, after });
-    nodes.push(...pullRequests.nodes);
-    ({ hasNextPage: more, endCursor: after } = pullRequests.pageInfo);
+  for (const statusContext of CONTEXTS) {
+    const previous = existing.get(statusContext);
+    const unchanged = previous && previous.state.toLowerCase() === result.state && previous.description === description;
+    if (!previous || !(result.state === 'pending' || unchanged)) {
+      await github.rest.repos.createCommitStatus({
+        owner, repo, sha, state: result.state, context: statusContext, description,
+        target_url: detailsUrl,
+      });
+    }
+    if (checkConclusion) {
+      const existingCheck = latestCheckByName.get(statusContext);
+      const checkOk = existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion;
+      if (!checkOk) {
+        await github.rest.checks.create({
+          owner, repo, name: statusContext, head_sha: sha, status: 'completed',
+          conclusion: checkConclusion, details_url: detailsUrl,
+          output: { title: statusContext, summary: description },
+        });
+      }
+    }
   }
 
-  for (const node of nodes.filter(node => !only || node.number === only)) {
+  const marker = `reviewed-commit: ${sha}`;
+  const alreadyApproved = commentBodies.some(text => text.includes(marker) && /^APPROVE/.test(text));
+  if (result.state === 'success' && !alreadyApproved) {
+    await github.rest.issues.createComment({
+      owner, repo, issue_number: prNumber,
+      body: `APPROVE\n\n${result.description}.${result.evidence ? ` ${result.description.startsWith(REVIEWER_NAMES[reviewer] ?? '\u0000') ? REVIEWER_NAMES[reviewer] : 'Codex'} review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
+    });
+  }
+}
+
+async function run({ github, context, core, single = 0 }) {
+  const { owner, repo } = context.repo;
+  const only = context.payload.pull_request?.number ?? context.payload.issue?.number ?? 0;
+  let reviewer = 'codex';
+  try {
+    const { data } = await github.rest.issues.listForRepo({ owner, repo, labels: SWITCH_LABEL, state: 'open', per_page: 10 });
+    reviewer = reviewerFromIssues(data);
+  } catch (error) {
+    core.warning(`review switch unreadable, using codex: ${error.message}`);
+  }
+  core.info(`reviewer: ${reviewer}`);
+
+  const numbers = only
+    ? [only]
+    : single
+      ? [single]
+      : (await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', base: 'production', per_page: 100 })).map(pull => pull.number);
+  const nodes = [];
+  for (const number of numbers) {
+    const node = await readPull(github, owner, repo, number);
+    if (node) nodes.push(node);
+  }
+
+  for (const node of nodes) {
     const head = node.commits.nodes[0]?.commit;
     if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
     const result = evaluate({
+      reviewer,
       headOid: node.headRefOid,
       statusContexts: head?.status?.contexts ?? [],
       reviews: node.reviews.nodes.map(review => ({
-        author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid,
+        author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid, submittedAt: review.submittedAt,
         comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => ({ body: comment.body ?? '', commit: comment.commit?.oid })).concat(review.comments.pageInfo.hasNextPage ? [UNREAD] : []),
       })),
       comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
@@ -170,7 +331,7 @@ async function run({ github, context, core }) {
     const running = codeReviewStateFor(comments, node.headRefOid)?.status === 'running';
     const requested = comments.some(comment =>
       String(comment.author ?? '').replace(/\[bot\]$/, '') === 'github-actions' && comment.body?.includes(requestMarker));
-    if (result.state === 'pending' && !node.isDraft && !running && !requested) {
+    if (result.state === 'pending' && reviewer === 'codex' && !node.isDraft && !running && !requested) {
       const current = await github.rest.pulls.get({ owner, repo, pull_number: node.number });
       if (current.data.head.sha === node.headRefOid && current.data.state === 'open' && !current.data.draft) {
         await github.rest.issues.createComment({
@@ -180,59 +341,20 @@ async function run({ github, context, core }) {
       }
     }
 
-    const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
-    const existing = new Map((head.status?.contexts ?? []).map(entry => [entry.context, entry]));
-    const detailsUrl = result.evidence || `${context.serverUrl}/${owner}/${repo}/pull/${node.number}`;
-    const checkConclusion = { success: 'success', failure: 'failure' }[result.state] ?? null;
-    let latestCheckByName = new Map();
-    if (checkConclusion) {
-      const headCheckRuns = await github.paginate(github.rest.checks.listForRef, {
-        owner, repo, ref: node.headRefOid, per_page: 100,
-      });
-      for (const check of headCheckRuns) {
-        if (!CONTEXTS.includes(check.name)) continue;
-        const prior = latestCheckByName.get(check.name);
-        if (!prior || Date.parse(check.started_at) > Date.parse(prior.started_at)) {
-          latestCheckByName.set(check.name, check);
-        }
-      }
-    }
-    for (const statusContext of CONTEXTS) {
-      const previous = existing.get(statusContext);
-      const unchanged = previous && previous.state.toLowerCase() === result.state && previous.description === description;
-      if (!previous || !(result.state === 'pending' || unchanged)) {
-        await github.rest.repos.createCommitStatus({
-          owner, repo, sha: node.headRefOid, state: result.state, context: statusContext, description,
-          target_url: detailsUrl,
-        });
-      }
-      if (checkConclusion) {
-        const existingCheck = latestCheckByName.get(statusContext);
-        const checkOk = existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion;
-        if (!checkOk) {
-          await github.rest.checks.create({
-            owner, repo, name: statusContext, head_sha: node.headRefOid, status: 'completed',
-            conclusion: checkConclusion, details_url: detailsUrl,
-            output: { title: statusContext, summary: description },
-          });
-        }
-      }
-    }
-
-    const marker = `reviewed-commit: ${node.headRefOid}`;
-    const alreadyApproved = node.comments.nodes.some(comment => (comment.body ?? '').includes(marker) && /^APPROVE/.test(comment.body));
-    if (result.state === 'success' && !alreadyApproved) {
-      await github.rest.issues.createComment({
-        owner, repo, issue_number: node.number,
-        body: `APPROVE\n\n${result.description}.${result.evidence ? ` Codex review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
-      });
-    }
+    await publishResult({
+      github, owner, repo, sha: node.headRefOid, prNumber: node.number, serverUrl: context.serverUrl, result, reviewer,
+      existingContexts: head.status?.contexts ?? [],
+      commentBodies: node.comments.nodes.map(comment => comment.body ?? ''),
+    });
     core.info(`PR #${node.number} ${node.headRefOid.slice(0, 7)}: ${result.state}. ${result.description}`);
   }
 }
 
 module.exports = {
   evaluate,
+  publishResult,
+  claudeResultFor,
+  reviewerFromIssues,
   priorityOf,
   blocks,
   isCodex,

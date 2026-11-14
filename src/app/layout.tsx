@@ -8,6 +8,7 @@ import "@/styles/tailwindThemes/rounded.css";
 import "@/styles/tailwindThemes/graphite-2.css";
 import "../../tokens.css";
 import { cookies, headers } from "next/headers";
+import Script from "next/script";
 import Provider from "@/utils/Providers";
 import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useFlag";
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
@@ -208,6 +209,7 @@ export default async function RootLayout(
         />
         <DeploySkewGuard />
         <SpeedInsights />
+        <Script src="https://cdn.usefathom.com/script.js" data-site="SSBYTYUQ" data-auto="false" strategy="afterInteractive" />
         <Provider
           initialIsMobile={firstScreen ? (firstScreen.display as BoardDisplay).isMobile : device.isMobile}
           initialIsApple={device.isApple}

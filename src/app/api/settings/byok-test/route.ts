@@ -1,5 +1,6 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
+import { HTPR_8207_QWEN_MAX_BYOK_FLAG } from "@/lib/flags/definitions/htpr-8207-qwen-max-byok";
 import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { NextResponse } from "next/server";
@@ -156,12 +157,20 @@ export async function POST(request: Request) {
     }
   }
 
-  const testRequest = buildByokTestRequest(
-    body.provider,
-    apiKey,
-    customEndpoint,
-    await haiku55ModelEnabled(user.id),
+  const haiku55Enabled = await haiku55ModelEnabled(user.id);
+  const qwenMaxEnabled = await isFeatureEnabled(
+    HTPR_8207_QWEN_MAX_BYOK_FLAG,
+    user.id,
   );
+  const testRequest = qwenMaxEnabled
+    ? buildByokTestRequest(body.provider, apiKey, customEndpoint, haiku55Enabled)
+    : buildByokTestRequest(
+        body.provider,
+        apiKey,
+        customEndpoint,
+        haiku55Enabled,
+        false,
+      );
   if (!testRequest) {
     return NextResponse.json(
       { message: "Provider test is not configured" },

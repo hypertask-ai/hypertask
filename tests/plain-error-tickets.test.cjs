@@ -36,7 +36,7 @@ test("titles are short, plain and never start with a bracket prefix or bare Erro
   assert.ok(plainTitle({ url: "/x", message: "a".repeat(500) }).length <= 99);
   assert.match(
     plainSummary({ url: "/onboarding", message: PRISMA }),
-    /^Something failed on the server while someone was using onboarding/,
+    /^Something failed on the server \(looking up a team failed\). Someone was using onboarding/,
   );
   const dash = String.fromCharCode(8212);
   assert.ok(!title.includes(dash) && !plainSummary({ message: PRISMA }).includes(dash));

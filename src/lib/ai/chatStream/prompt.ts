@@ -13,6 +13,10 @@ export const COMMENT_TASK_LINK_RULE =
 
 export const AGENT_SYSTEM_PROMPT = renderPrompt("agent-system-prompt", (HOUSE_OUTPUT_STYLE), (COMMENT_TASK_LINK_RULE));
 
+export const LEAN_AGENT_SYSTEM_PROMPT = renderPrompt("agent-system-prompt-lean", HOUSE_OUTPUT_STYLE, COMMENT_TASK_LINK_RULE);
+
+export const CHAT_REQUEST_WRITING_STYLE = renderPrompt("chat-request-writing-style");
+
 export const PRODUCT_ANSWERS_FROM_DOCS_PROMPT = renderPrompt("product-answers-from-docs");
 
 export function chatSurfacePrompt(surface: NonNullable<ChatRequest["surface"]>) {

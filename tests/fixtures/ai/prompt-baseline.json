@@ -460,5 +460,19 @@
     "version": "1",
     "partsHash": "355b2bc7e60986d5178004535db969a1a4deaebadd0e1d9b500ea709ac8a9947",
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/lib/ai/chatStream/prompt.ts",
+    "id": "agent-system-prompt-lean",
+    "version": "1",
+    "partsHash": "9e9686c391e6d4b0ce7e8f1f6eae24b572f65971b25edae93426a3e5473ba289",
+    "expressionsHash": "f25482aca279220b626a7e98b3b496b4113853b09f608a5c80187135a0023824"
+  },
+  {
+    "file": "src/lib/ai/chatStream/prompt.ts",
+    "id": "chat-request-writing-style",
+    "version": "1",
+    "partsHash": "c5664ecae375908360b30c05b034f0c3a582b57abdf6e07441478a1ce380db35",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   }
 ]

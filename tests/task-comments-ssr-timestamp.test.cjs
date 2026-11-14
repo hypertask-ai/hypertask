@@ -43,6 +43,8 @@ test("the real task page sends task and comments snapshots once, preserving thei
     "@/utils/controllers/tasks/markRead": { getTaskReadStateLastReadAt: async () => null },
     "@/utils/controllers/comments/readReceipts": { filterCommentReadReceipts: async (data) => data },
     "@/lib/agentRuns/service": { listTaskAgentRunActivities: async () => [] },
+    "@vercel/functions": { waitUntil: () => {} },
+    "@/app/api/ai/_lib/taskSummaryFreshness": { requestTaskSummaryRefreshOnView: async () => "off" },
     "next/navigation": { redirect: () => { throw new Error("Unexpected redirect"); } },
   };
   const loaded = { exports: {} };

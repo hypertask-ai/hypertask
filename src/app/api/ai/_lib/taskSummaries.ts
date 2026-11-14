@@ -31,6 +31,10 @@ import {
   resolveSystemModel,
   type SystemModel,
 } from "@/app/api/ai/_lib/systemModelLadder";
+import {
+  clearTaskSummaryStaleMarker,
+  readTaskSummaryStaleMarker,
+} from "@/app/api/ai/_lib/taskSummaryFreshness";
 
 const MAX_COMMENT_SOURCES = 200;
 const SUMMARY_GENERATION_TIMEOUT_MS = 4 * 60 * 1000;
@@ -128,6 +132,7 @@ async function generateAndStoreTaskSummaryWithLease(
   taskId: number,
   options: { force?: boolean; agentId?: string | null },
 ) {
+  const staleMarker = await readTaskSummaryStaleMarker(taskId);
   const owner = await prisma.task.findUnique({
     where: { id: taskId },
     select: { userId: true },
@@ -252,6 +257,7 @@ async function generateAndStoreTaskSummaryWithLease(
       storedSummary &&
       extractSummaryFingerprint(storedSummary) === fingerprint
     ) {
+      await clearTaskSummaryStaleMarker(taskId, staleMarker);
       return (await scrubStoredTaskSummary(stripSummaryFingerprint(storedSummary), task.id, 0, task.projectId)) ?? stripSummaryFingerprint(storedSummary);
     }
   }
@@ -312,6 +318,7 @@ async function generateAndStoreTaskSummaryWithLease(
     }),
   ]);
 
+  await clearTaskSummaryStaleMarker(taskId, staleMarker);
   return generated.summary;
 }
 

@@ -56,6 +56,14 @@ Nobody prompts a runner again after its turn ends. Ending the turn while CI, rev
 
 The done comment lists every decision you made on Valentin's behalf, one line each with its reason. Write "Decisions: none" when there were none.
 
+## Scripted chores
+
+Use `scripts/ship-chores rebase` in a clean ticket worktree. It honors `SHIP_BASE` and restores the original branch on conflicts. Use `scripts/ship-chores live --url https://app.hypertask.ai/login --expect 'Sign in'` for bounded HTTP health. No redirects or credentials; feature QA remains separate.
+
+`scripts/ship-chores sweep` discovers bound runner-App production PRs. It excludes protected files, drafts, human PRs and truncated inventories. One five-minute timer retries required workflows once per head, pins merges through the installed guard, then requires `ship-check deployed` and live HTTP health. Non-required reds never block. Changed heads HOLD; second failures stop RED. Inspect `~/.local/state/ship-chores/fleet/TICKET.json`. Review a changed head before removing its held job to re-enroll it. Feature QA and Done stay with the builder.
+
+Install the merged executable to `~/.local/lib/hypertask/ship-chores/ship-chores` and its unit templates to `~/.config/systemd/user/`. Validate both with `user-unit-check`, reload systemd, enable only your own `ship-chores@NUMBER.timer`, then verify `user-unit-check --first-run ship-chores@NUMBER.service`. Never choose another identity. Shared locking and durable head history prevent overlap. The sweep never touches `~/.local/state/fleet/one-run.on`; the picker hold belongs to the merger that already runs on this server. Do not enable the sweep timer while that merger runs, or two mergers race for the same PR. Protected work still needs its authorized merger.
+
 ## Helpers
 
 The runner itself runs Codex gpt-6.1-sol at medium effort and delegates by default, with helpers in the background. Code edits: `hax --provider=codex --model=gpt-6.1-terra --effort=medium --no-session -p "<task>"`. Lookups, logs and summaries: `hax --provider=codex --model=gpt-6-luna --effort=low --no-session -p "<task>"`. Sol high (`--model=gpt-6.1-sol --effort=high`) only for hard bugs, security and money.

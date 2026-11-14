@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
           autoDescriptionSuggestions: true,
           dictationLanguage: "en",
           inboxAdvanceOnSend: true,
+          inboxSplitsOverflowHidden: false,
           emojiFrequency: null,
           calendarViews: null,
           aiChatOpenNewTickets: null,
@@ -173,6 +174,7 @@ export async function POST(request: NextRequest) {
       autoDescriptionSuggestions?: boolean;
       dictationLanguage?: string;
       inboxAdvanceOnSend?: boolean;
+      inboxSplitsOverflowHidden?: boolean;
       emojiFrequency?: Prisma.InputJsonValue;
       allTasksDateRange?: string;
       boardSortMode?: BoardSortMode;
@@ -248,6 +250,17 @@ export async function POST(request: NextRequest) {
         );
       }
       data.autoDescriptionSuggestions = body.autoDescriptionSuggestions;
+    }
+    if (Object.hasOwn(body, "inboxSplitsOverflowHidden")) {
+      if (typeof body.inboxSplitsOverflowHidden !== "boolean") {
+        return NextResponse.json(
+          { success: false, error: "Invalid inbox split layout" },
+          { status: 400 },
+        );
+      }
+      if (await isFeatureEnabled("htpr-9080-split-overflow", user.id)) {
+        data.inboxSplitsOverflowHidden = body.inboxSplitsOverflowHidden;
+      }
     }
     if (body.inboxAdvanceOnSend !== undefined) {
       data.inboxAdvanceOnSend = body.inboxAdvanceOnSend as boolean;
@@ -549,6 +562,7 @@ export async function POST(request: NextRequest) {
       autoDescriptionSuggestions: true,
       dictationLanguage: true,
       inboxAdvanceOnSend: true,
+      inboxSplitsOverflowHidden: true,
       emojiFrequency: true,
       calendarViews: true,
       allTasksDateRange: true,

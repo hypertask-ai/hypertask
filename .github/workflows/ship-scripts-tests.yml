@@ -77,6 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           bash .claude/skills/vcc/bin/vcc.test.sh
+          bash .claude/skills/ship/scripts/ship-identity.test.sh
           bash .claude/skills/setup-runner/scripts/setup-runner.test.sh
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/ship-check-finish.test.py
@@ -85,6 +86,7 @@ jobs:
           python3 .claude/skills/ship/scripts/ci-wait.test.py
           bash .claude/skills/ship/scripts/gh-notify.test.sh
           python3 .claude/skills/ship/scripts/ci-why.test.py
+          python3 .claude/skills/ship/scripts/ship-chores.test.py -v
           node --test .claude/skills/ship/scripts/production-red-alert.test.mjs
           bash .claude/skills/ship/scripts/board-check.test.sh
           bash .claude/skills/ship/scripts/user-unit-check.test.sh

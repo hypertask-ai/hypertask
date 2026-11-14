@@ -37,7 +37,7 @@ function bridgeFetches() {
           if (target.startsWith('src/lib/mcp/tasks/fields/')) queue.push(target)
         }
       }
-      if (ts.isCallExpression(node) && node.expression.getText(source) === 'fetch') fetches.push(node)
+      if (ts.isCallExpression(node) && ['fetch', 'fetchTaskSave'].includes(node.expression.getText(source))) fetches.push(node)
       ts.forEachChild(node, visit)
     }
     visit(source)

@@ -67,13 +67,13 @@ test('create rejects mixed filter formats with caller-fixable details before wri
 });
 
 for (const filters of [{ label_names: [] }, { assignee_ids: [] }, { match: 'ANY' }, { label_match: 'HIDE' }]) {
-  test(`update rejects ${Object.keys(filters)[0]} plus native filters before writing`, async () => {
+  test(`update accepts ${Object.keys(filters)[0]} plus native filters and hands both to the write`, async () => {
     const f = fixture({ ...filters, board_filters: {} });
-    await assertFixable(
-      await f.update(), 'label_names',
-      'Use either label_names/assignee_ids/match or board_filters, not both',
-    );
-    assert.deepEqual(f.writes, []);
+    const response = await f.update();
+    assert.equal(response.status, 200);
+    assert.equal(f.writes.length, 1);
+    assert.deepEqual(f.writes[0].board_filters, {});
+    for (const [key, value] of Object.entries(filters)) assert.deepEqual(f.writes[0].filters[key], value);
   });
 }
 
