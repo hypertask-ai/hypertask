@@ -50,6 +50,8 @@ test("HTPR-9106 real agent saves, stalled HTTP bodies and pool connections share
   });
   try {
     assert.equal(save.isTaskSaveTimeout(new Error("Task not found")), false);
+    assert.equal(save.isTaskSaveTimeout({ code: "P2028", message: "Transaction API error: Unable to start a transaction in the given time." }), true);
+    assert.equal(save.isTaskSaveTimeout({ code: "P2028", message: "Transaction not found. Transaction ID is invalid, last committed transaction was 0." }), false);
     assert.equal(save.isTaskSaveTimeout({ cause: { code: "55P03" } }), true);
     assert.equal(save.isTaskSaveTimeout(new Error("Connection terminated due to connection timeout")), true);
     await updateTaskText(context("Healthy save"), { id: 101 });

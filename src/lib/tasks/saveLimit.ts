@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions"
 export const TASK_SAVE_LIMIT_MS = 8_000
 export const TASK_SAVE_TOO_LONG = "Saving this ticket took too long. Try again."
-const TIMEOUT_TEXT = /timeout exceeded when trying to connect|connection terminated due to connection timeout|timeout expired|canceling statement due to (?:lock|statement) timeout|lock timeout|transaction.*(?:expired|timed out|timeout)/i
+const TIMEOUT_TEXT = /timeout exceeded when trying to connect|connection terminated due to connection timeout|timeout expired|canceling statement due to (?:lock|statement) timeout|lock timeout|unable to start a transaction in the given time|transaction.*(?:expired|timed out|timeout)/i
 const TIMEOUT_CODES = new Set(["55P03", "57014", "P2024", "TASK_SAVE_TIMEOUT"])
 export function isTaskSaveTimeout(error: unknown): boolean {
   const seen = new Set<unknown>()
