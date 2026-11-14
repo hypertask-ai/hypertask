@@ -1,0 +1,103 @@
+name: Claude review
+
+on:
+  workflow_run:
+    workflows: ["Claude review request"]
+    types: [completed]
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [production]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to review (backfill for an open PR)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+  statuses: write
+  checks: write
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('review-bootstrap-{0}', github.event.pull_request.number) || github.event_name == 'workflow_run' && format('review-{0}-{1}', github.event.workflow_run.pull_requests[0].number, github.event.workflow_run.head_sha) || format('review-{0}-manual', inputs.pr) }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude Sonnet reviews this pull request
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0] != null) ||
+      (github.event_name == 'pull_request' && github.event.pull_request.number == 3506 &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.sha || 'production' }}
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Resolve the pull request and the active reviewer
+        id: target
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          PR_INPUT: ${{ inputs.pr }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const gate = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/codex-review-gate.cjs`);
+            const run = context.payload.workflow_run;
+            const number = Number(context.payload.pull_request?.number ?? run?.pull_requests?.[0]?.number ?? process.env.PR_INPUT);
+            if (!Number.isInteger(number) || number < 1) core.setFailed('no pull request number');
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, labels: 'review-switch', state: 'open', per_page: 10 });
+            const reviewer = gate.reviewerFromIssues(issues);
+            core.info(`reviewer: ${reviewer}`);
+            const ok = reviewer === 'claude' && pr.state === 'open' && !pr.draft
+              && pr.head.repo?.full_name === `${owner}/${repo}`
+              && pr.base.ref === 'production'
+              && pr.user?.login !== 'dependabot[bot]'
+              && (!run || pr.head.sha === run.head_sha);
+            core.setOutput('number', String(number));
+            core.setOutput('sha', pr.head.sha);
+            core.setOutput('go', ok ? 'yes' : 'no');
+            if (!ok) core.notice(`skipped: reviewer=${reviewer} state=${pr.state} draft=${pr.draft} head=${pr.head.sha}`);
+      - name: Require the Claude subscription token
+        if: steps.target.outputs.go == 'yes'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::The repo secret CLAUDE_CODE_OAUTH_TOKEN is empty or missing. No paid API key is used as a fallback."
+            exit 1
+          fi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.target.outputs.go == 'yes'
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Install the pinned Claude Code CLI
+        if: steps.target.outputs.go == 'yes'
+        run: npm install --global @anthropic-ai/claude-code@2.1.325
+      - name: Review the diff
+        if: steps.target.outputs.go == 'yes'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_REPO: ${{ github.repository }}
+          REVIEW_PR: ${{ steps.target.outputs.number }}
+          REVIEW_SHA: ${{ steps.target.outputs.sha }}
+        run: node .github/scripts/claude-review/claude-review.cjs
+      - name: Publish ai-review and claude-review for this head
+        if: steps.target.outputs.go == 'yes'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const run = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/codex-review-gate.cjs`).run;
+            await run({ github, context, core, single: Number('${{ steps.target.outputs.number }}') });
