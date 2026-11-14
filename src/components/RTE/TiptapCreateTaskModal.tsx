@@ -207,6 +207,14 @@ const TiptapCreateTaskModal = () => {
   const newTaskCtrlJFlag = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
   const guaranteeScreenshots = useFlag(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG);
   const aiStepTimingEnabled = useFlag(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG);
+  const startAiStepTimer = useCallback(
+    () => (aiStepTimingEnabled && typeof performance !== "undefined" ? performance.now() : null),
+    [aiStepTimingEnabled]
+  );
+  const readAiStepMs = useCallback(
+    (startedAt: number | null) => (startedAt === null || typeof performance === "undefined" ? null : performance.now() - startedAt),
+    []
+  );
   let composeShortcutCapture = true;
   if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
   if (newTaskCtrlJFlag && !isMbl) composeShortcutCapture = false;
@@ -629,7 +637,7 @@ const TiptapCreateTaskModal = () => {
         releaseSubmission();
         return;
       }
-      const titleGenerationStartedAt = aiStepTimingEnabled ? performance.now() : 0;
+      const titleGenerationStartedAt = startAiStepTimer();
       titleGenerationForSaveRef.current = true;
       setUploadInProgress(true);
       try {
@@ -660,7 +668,7 @@ const TiptapCreateTaskModal = () => {
         return;
       } finally {
         titleGenerationForSaveRef.current = false;
-        if (aiStepTimingEnabled) titleGenerationMs = performance.now() - titleGenerationStartedAt;
+        if (aiStepTimingEnabled) titleGenerationMs = readAiStepMs(titleGenerationStartedAt);
       }
     }
     if (!titleAtSave) {

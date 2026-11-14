@@ -83,10 +83,12 @@ test("the compose save times the task writer step around its AI call", () => {
     /const writerStartedAt = measureAiSteps && typeof performance !== "undefined" \? performance\.now\(\) : 0;/,
   );
   assert.match(compose, /if \(measureAiSteps && typeof performance !== "undefined"\) \{\s*writerMs = performance\.now\(\) - writerStartedAt;\s*\}/);
-  assert.match(
+  assert.doesNotMatch(
     compose,
-    /beginTaskCreatePerformanceTrace\(\{\s*accountId: userId,\s*projectId: project\.id,\s*taskWriterMs: writerMs,\s*\}\)/,
+    /@\/lib\/analytics\/productPerformance/,
+    "the compose module stays free of the analytics import so its existing test harnesses keep their stubs",
   );
+  assert.match(compose, /const traceScope = trace \? trace\.begin\(writerMs\) : null;/);
   assert.match(compose, /createNewTaskGloballyAPIHandler\(\{[\s\S]*?\}, traceScope\)/);
   const writer = read("src/components/Modals/commands/HTC/ComposeTaskWriter.tsx");
   assert.match(writer, /completeTaskCreatePerformanceTraceAfterPaint\("task_detail", traceScope\)/);
@@ -96,11 +98,8 @@ test("the compose save times the task writer step around its AI call", () => {
 test("the New Task modal save times the title step around its AI call", () => {
   const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
 
-  assert.match(
-    modal,
-    /const titleGenerationStartedAt = aiStepTimingEnabled \? performance\.now\(\) : 0;/,
-  );
-  assert.match(modal, /titleGenerationMs = performance\.now\(\) - titleGenerationStartedAt;/);
+  assert.match(modal, /const titleGenerationStartedAt = startAiStepTimer\(\);/);
+  assert.match(modal, /titleGenerationMs = readAiStepMs\(titleGenerationStartedAt\);/);
   assert.equal(
     (modal.match(/titleGenerationMs,\n\s*\);/g) ?? []).length,
     3,
@@ -124,7 +123,7 @@ test("both AI step timings sit behind the HTPR-8095 flag", () => {
 
   const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
   assert.match(modal, /const aiStepTimingEnabled = useFlag\(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG\);/);
-  assert.match(modal, /if \(aiStepTimingEnabled\) titleGenerationMs = performance\.now\(\) - titleGenerationStartedAt;/);
+  assert.match(modal, /if \(aiStepTimingEnabled\) titleGenerationMs = readAiStepMs\(titleGenerationStartedAt\);/);
 
   const hook = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
   assert.match(hook, /const aiStepTimingEnabled = useFlag\(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG\);/);

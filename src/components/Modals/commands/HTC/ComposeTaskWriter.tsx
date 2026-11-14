@@ -23,7 +23,7 @@ import { HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG } from "@/lib/flags/definitio
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, requestComposeSkillFollowup, type ComposeTaskStage } from "@/lib/ai/composeTask";
-import { completeTaskCreatePerformanceTrace, completeTaskCreatePerformanceTraceAfterPaint, type TaskCreateTraceScope } from "@/lib/analytics/productPerformance";
+import { beginTaskCreatePerformanceTrace, completeTaskCreatePerformanceTrace, completeTaskCreatePerformanceTraceAfterPaint, type TaskCreateTraceScope } from "@/lib/analytics/productPerformance";
 import globalAPIHandlers from "@/utils/api/global";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
@@ -400,7 +400,16 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         ...(currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
-        measureAiSteps: aiStepTimingEnabled,
+        ...(aiStepTimingEnabled ? {
+          trace: {
+            begin: (taskWriterMs: number | null) => beginTaskCreatePerformanceTrace({
+              accountId: user.id,
+              projectId: project.id,
+              taskWriterMs,
+            }),
+            complete: completeTaskCreatePerformanceTrace,
+          },
+        } : {}),
       });
       if (aiStepTimingEnabled) traceScope = composed.traceScope;
       const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = composed;

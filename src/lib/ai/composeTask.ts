@@ -17,7 +17,6 @@ import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/Views
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
 import { isBugsColumn, readTaskWriterTicketType, ticketTypeSection, TICKET_TYPE_HEADER, type TaskWriterTicketType } from "@/lib/ai/taskWriterTicketType";
 import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
-import { beginTaskCreatePerformanceTrace, completeTaskCreatePerformanceTrace, type TaskCreateTraceScope } from "@/lib/analytics/productPerformance";
 
 export function composeTaskBoardId(
   url: string,
@@ -63,9 +62,16 @@ function writerProperties({ priority, estimate }: Pick<ReturnType<typeof extract
 
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
+export type ComposeTaskTraceScope = { traceId: number };
+
+export type ComposeTaskTrace = {
+  begin: (taskWriterMs: number | null) => ComposeTaskTraceScope | null;
+  complete: (result: "task_detail" | "error", scope: ComposeTaskTraceScope | null) => boolean;
+};
+
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, inlineAgentImages = false,
-  applyWriterProperties = false, invokeSkills = false, writerModel, guaranteeScreenshots = false, measureAiSteps = false,
+  applyWriterProperties = false, invokeSkills = false, writerModel, guaranteeScreenshots = false, trace,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   writerModel?: { id: string; source: string };
@@ -73,12 +79,13 @@ export async function createComposedTask({
   inlineAgentImages?: boolean;
   guaranteeScreenshots?: boolean;
   applyWriterProperties?: boolean;
-  measureAiSteps?: boolean;
+  trace?: ComposeTaskTrace;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   explainWriterFailure?: boolean;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
-}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; skills?: TaskWriterSkills; tasks: ITask[]; failedTitles: string[]; traceScope: TaskCreateTraceScope | null }> {
+}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; skills?: TaskWriterSkills; tasks: ITask[]; failedTitles: string[]; traceScope: ComposeTaskTraceScope | null }> {
+  const measureAiSteps = trace !== undefined;
   let defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
     params: { projectId: project.id, position: "top" },
   });
@@ -254,15 +261,9 @@ export async function createComposedTask({
     defaults = await axios.get("/api/tasks/createGlobally", { params: { projectId: project.id, position: "top" } });
     if (!defaults?.data?.sectionId) throw new Error("This board has no column to create a task in.");
   }
-  const traceScope = measureAiSteps
-    ? beginTaskCreatePerformanceTrace({
-        accountId: userId,
-        projectId: project.id,
-        taskWriterMs: writerMs,
-      })
-    : null;
+  const traceScope = trace ? trace.begin(writerMs) : null;
   const failCreate = (error: unknown): never => {
-    completeTaskCreatePerformanceTrace("error", traceScope);
+    trace?.complete("error", traceScope);
     throw error;
   };
   onProgress?.("Saving the ticket");
