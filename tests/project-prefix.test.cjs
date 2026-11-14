@@ -976,6 +976,7 @@ test("round 4: an indexed miss does not scan Task again", async () => {
   assert.equal(f.rawQueries.length, 1);
   assert.match(f.rawQueries[0].text, /lower\("ticketNumber"\) = lower\(\?\)/);
   assert.equal(f.rawQueries[0].value, "UNKNOWN-123");
+  assert.match(f.rawQueries[0].text, /WITH indexed_matches AS MATERIALIZED/);
   assert.deepEqual(f.taskQueries.filter(where => where.ticketNumber !== undefined), [], "an unknown number must not repeat the case-insensitive Task scan");
 });
 
