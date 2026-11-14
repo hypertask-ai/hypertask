@@ -529,6 +529,7 @@ test("same-board section changes do not create a number alias", async () => {
   const result = await updateTaskSingle({ id: TASK_ID, title: "Renamed" }, { id: USER_ID });
   assert.equal(result.status, 200);
   assert.equal(calls.aliases, undefined);
+  assert.ok(calls.transactionOptions.maxWait === 2_000 && calls.transactionOptions.timeout > 2_000);
 });
 
 test("the shared update controller refuses a foreign board before any write or side effect", async () => {

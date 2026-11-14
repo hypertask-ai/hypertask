@@ -266,7 +266,7 @@ test("integration uses committed fenced task state and excludes trusted backgrou
   const source = read("src/utils/controllers/tasks/single.ts");
   const point = source.indexOf("scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId)");
   assert.ok(point > source.indexOf("taskBeforeWrite = currentState"));
-  assert.ok(point > source.indexOf("maxWait: 500"));
+  assert.ok(point > source.indexOf("taskSaveTransactionLimits(budget.remaining())"));
   assert.match(source, /if \(!options.trustedCaller\) \{\s*scheduleAgentFirstTaskEmail\(taskBeforeWrite, task, currentUser.id, agentId\);/);
   assert.doesNotMatch(source, /await scheduleAgentFirstTaskEmail/);
   assert.match(read("src/lib/mcp/tasks/updateTask.ts"), /ctx.agentId \? \{ agentId: ctx.agentId \}/);

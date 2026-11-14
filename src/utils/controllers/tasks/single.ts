@@ -5,7 +5,7 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
-import { isTaskSaveTimeout, taskSaveBudget, taskSaveTimeoutResult } from "@/lib/tasks/saveLimit";
+import { isTaskSaveTimeout, taskSaveBudget, taskSaveTimeoutResult, taskSaveTransactionLimits } from "@/lib/tasks/saveLimit";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { enqueueAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma";
@@ -817,7 +817,7 @@ export async function updateTaskSingle(
           agentWebhookDeliveryIds,
         };
       },
-      { maxWait: 500, timeout: Math.max(1, budget.remaining() - 750) },
+      taskSaveTransactionLimits(budget.remaining()),
     );
     committedResult = {
       status: 200,
