@@ -2,6 +2,7 @@ import { PlanLimitRefusal } from "@/lib/planLimitsClient";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 import { HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { HTPR_9010_TASK_WRITER_MEMORY_FLAG } from "@/lib/flags/definitions/htpr-9010-task-writer-memory";
+import { HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG } from "@/lib/flags/definitions/htpr-8095-task-create-ai-step-timing";
 import { HTPR_8028_MOBILE_WRITER_SAVE_FLAG } from "@/lib/flags/definitions/htpr-8028-mobile-writer-save";
 import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { creationScreenshotAttachments, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
@@ -205,6 +206,7 @@ const TiptapCreateTaskModal = () => {
   const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
   const newTaskCtrlJFlag = useFlag(HTPR_9002_CTRL_J_NEW_TASK_FLAG);
   const guaranteeScreenshots = useFlag(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG);
+  const aiStepTimingEnabled = useFlag(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG);
   let composeShortcutCapture = true;
   if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
   if (newTaskCtrlJFlag && !isMbl) composeShortcutCapture = false;
@@ -627,7 +629,7 @@ const TiptapCreateTaskModal = () => {
         releaseSubmission();
         return;
       }
-      const titleGenerationStartedAt = performance.now();
+      const titleGenerationStartedAt = aiStepTimingEnabled ? performance.now() : 0;
       titleGenerationForSaveRef.current = true;
       setUploadInProgress(true);
       try {
@@ -658,7 +660,7 @@ const TiptapCreateTaskModal = () => {
         return;
       } finally {
         titleGenerationForSaveRef.current = false;
-        titleGenerationMs = performance.now() - titleGenerationStartedAt;
+        if (aiStepTimingEnabled) titleGenerationMs = performance.now() - titleGenerationStartedAt;
       }
     }
     if (!titleAtSave) {

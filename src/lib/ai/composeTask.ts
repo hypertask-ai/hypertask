@@ -65,7 +65,7 @@ export type ComposeTaskStage = "Reading past tickets" | "Understanding the conte
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, inlineAgentImages = false,
-  applyWriterProperties = false, invokeSkills = false, writerModel, guaranteeScreenshots = false,
+  applyWriterProperties = false, invokeSkills = false, writerModel, guaranteeScreenshots = false, measureAiSteps = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   writerModel?: { id: string; source: string };
@@ -73,6 +73,7 @@ export async function createComposedTask({
   inlineAgentImages?: boolean;
   guaranteeScreenshots?: boolean;
   applyWriterProperties?: boolean;
+  measureAiSteps?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   explainWriterFailure?: boolean;
@@ -108,7 +109,7 @@ export async function createComposedTask({
   let writerFailureReason: string | undefined;
   let drafts: ({ title: string; description: string; writerDueDate?: string; writerLabelIds?: string[]; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const writerStartedAt = typeof performance === "undefined" ? 0 : performance.now();
+  const writerStartedAt = measureAiSteps && typeof performance !== "undefined" ? performance.now() : 0;
   let writerMs: number | null = null;
   try {
     onProgress?.("Reading past tickets");
@@ -234,7 +235,7 @@ export async function createComposedTask({
     writerFailed = true;
     drafts = [];
   } finally {
-    if (typeof performance !== "undefined") {
+    if (measureAiSteps && typeof performance !== "undefined") {
       writerMs = performance.now() - writerStartedAt;
     }
   }
@@ -253,11 +254,13 @@ export async function createComposedTask({
     defaults = await axios.get("/api/tasks/createGlobally", { params: { projectId: project.id, position: "top" } });
     if (!defaults?.data?.sectionId) throw new Error("This board has no column to create a task in.");
   }
-  const traceScope = beginTaskCreatePerformanceTrace({
-    accountId: userId,
-    projectId: project.id,
-    taskWriterMs: writerMs,
-  });
+  const traceScope = measureAiSteps
+    ? beginTaskCreatePerformanceTrace({
+        accountId: userId,
+        projectId: project.id,
+        taskWriterMs: writerMs,
+      })
+    : null;
   const failCreate = (error: unknown): never => {
     completeTaskCreatePerformanceTrace("error", traceScope);
     throw error;

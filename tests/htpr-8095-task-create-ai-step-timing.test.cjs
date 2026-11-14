@@ -80,9 +80,9 @@ test("the compose save times the task writer step around its AI call", () => {
 
   assert.match(
     compose,
-    /const writerStartedAt = typeof performance === "undefined" \? 0 : performance\.now\(\);/,
+    /const writerStartedAt = measureAiSteps && typeof performance !== "undefined" \? performance\.now\(\) : 0;/,
   );
-  assert.match(compose, /writerMs = performance\.now\(\) - writerStartedAt;/);
+  assert.match(compose, /if \(measureAiSteps && typeof performance !== "undefined"\) \{\s*writerMs = performance\.now\(\) - writerStartedAt;\s*\}/);
   assert.match(
     compose,
     /beginTaskCreatePerformanceTrace\(\{\s*accountId: userId,\s*projectId: project\.id,\s*taskWriterMs: writerMs,\s*\}\)/,
@@ -98,7 +98,7 @@ test("the New Task modal save times the title step around its AI call", () => {
 
   assert.match(
     modal,
-    /const titleGenerationStartedAt = performance\.now\(\);/,
+    /const titleGenerationStartedAt = aiStepTimingEnabled \? performance\.now\(\) : 0;/,
   );
   assert.match(modal, /titleGenerationMs = performance\.now\(\) - titleGenerationStartedAt;/);
   assert.equal(
@@ -107,6 +107,27 @@ test("the New Task modal save times the title step around its AI call", () => {
     "every save branch passes the title step to the create trace",
   );
   const hook = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
-  assert.match(hook, /titleMs: titleGenerationMs \?\? null,/);
+  assert.match(hook, /titleMs: measuredTitleMs,/);
   console.log("HTPR-8095 both save paths record their AI step");
+});
+
+test("both AI step timings sit behind the HTPR-8095 flag", () => {
+  const definition = read(
+    "src/lib/flags/definitions/htpr-8095-task-create-ai-step-timing.ts",
+  );
+  assert.match(definition, /key: HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG/);
+  assert.match(definition, /defaultMode: "EVERYONE"/);
+
+  const writer = read("src/components/Modals/commands/HTC/ComposeTaskWriter.tsx");
+  assert.match(writer, /const aiStepTimingEnabled = useFlag\(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG\);/);
+  assert.match(writer, /if \(aiStepTimingEnabled\) traceScope = composed\.traceScope;/);
+
+  const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
+  assert.match(modal, /const aiStepTimingEnabled = useFlag\(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG\);/);
+  assert.match(modal, /if \(aiStepTimingEnabled\) titleGenerationMs = performance\.now\(\) - titleGenerationStartedAt;/);
+
+  const hook = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
+  assert.match(hook, /const aiStepTimingEnabled = useFlag\(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG\);/);
+  assert.match(hook, /if \(aiStepTimingEnabled\) measuredTitleMs = titleGenerationMs \?\? null;/);
+  console.log("HTPR-8095 both AI step timings are flag-gated");
 });
