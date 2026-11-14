@@ -5,7 +5,7 @@ export const HTPR_7861_CHAT_PROMPT_LEAN_FLAG = "htpr-7861-chat-prompt-lean";
 export default {
   key: HTPR_7861_CHAT_PROMPT_LEAN_FLAG,
   kind: "improvement",
-  defaultMode: "OWNER_AND_QA",
+  defaultMode: "EVERYONE",
   shippedOn: "2026-11-11",
   description: "Removes repeated chat instructions and names the tools chat can actually call.",
   releaseRisk: {

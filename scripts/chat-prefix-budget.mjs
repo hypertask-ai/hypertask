@@ -124,6 +124,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const after = measurePrefix(`${LEAN_AGENT_SYSTEM_PROMPT}\n\n${CHAT_REQUEST_WRITING_STYLE}`, compactChatToolSchemas(tools));
   console.log(JSON.stringify({ tokenizer: "cl100k_base proxy, not provider billing", optionalFlags: false, before, after }, null, 2));
   assert.ok(after.totalTokens < before.totalTokens, "Lean prefix must reduce tokens");
-  assertBudget(after, Number(process.env.CHAT_PREFIX_TOKEN_BUDGET ?? 22462));
+  assertBudget(after, Number(process.env.CHAT_PREFIX_TOKEN_BUDGET ?? 20576));
   console.log("chat-prefix-budget ok");
 }

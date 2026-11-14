@@ -65,7 +65,7 @@ test("complete runtime catalog has a smaller prefix and growth breaches its budg
   console.log("HTPR-7861 prefix", JSON.stringify({ before, after, tokenizer: "cl100k_base proxy" }));
   assert.ok(after.toolCount >= 84, "Measure the complete catalog, not only the golden ten");
   assert.ok(after.totalTokens < before.totalTokens);
-  assertBudget(after, 22462);
+  assertBudget(after, 20576);
   assert.throws(() => assertBudget({ ...after, totalTokens: after.totalTokens + 1 }, after.totalTokens), /exceeds budget/);
   assertBudget(after, after.totalTokens);
 });
