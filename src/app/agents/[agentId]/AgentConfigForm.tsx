@@ -3,7 +3,8 @@
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
-import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible, isGrokGemini4ModelKey } from "@/lib/aiModelOptions";
+import { HTPR_8207_QWEN_MAX_BYOK_FLAG } from "@/lib/flags/definitions/htpr-8207-qwen-max-byok";
+import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible, isGrokGemini4ModelKey, isHtpr8207ModelKey } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import AgentSelect, { AgentOption } from "../AgentSelect";
@@ -56,6 +57,7 @@ export function AgentConfigForm({
 }: Props) {
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
+  const htpr8207ModelsEnabled = useFlag(HTPR_8207_QWEN_MAX_BYOK_FLAG);
   const flagModelOptions = deepseekFlashFastEnabled
     ? aiModelOptions
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
@@ -64,9 +66,12 @@ export function AgentConfigForm({
   const gatedModelOptions = grokGemini4Enabled
     ? flagModelOptions
     : flagModelOptions.filter((option) => !isGrokGemini4ModelKey(option.modelKey));
+  const ticketModelOptions = htpr8207ModelsEnabled
+    ? gatedModelOptions
+    : gatedModelOptions.filter((option) => !isHtpr8207ModelKey(option.modelKey));
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
-    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
+    ? ticketModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
+    : ticketModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
   return (
     <>
                 <section className="bg-comment-description rounded-[4px] px-4 py-3 shadow-md flex flex-col gap-1.5">
