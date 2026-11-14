@@ -183,6 +183,7 @@ test("getFirst no longer returns teamless 408 or creates a board, while 6 retain
         projectContentAccessWhere: ownerId => ({ ownerId }),
       },
       "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeProjectBoardFilters: project => project },
+      "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
       "./createProjectWithStableName": {}, "./create": {},
       "./getAll": { getProjectViewInclude: () => ({}) },
       "@/lib/telemetry/savedWork": {},

@@ -196,3 +196,33 @@ test('HYCI-269 undated clean evidence cannot clear a remapped finding', () => {
     reviews: [stale], comments: [stateComment(unresolvedHead), { ...receipt(head.slice(0, 10)), createdAt: undefined }],
   }), 'failure');
 });
+
+test('HYCI-456 run with a single pull request asks for that pull request only, never sweeps', async () => {
+  const { run } = require('../.github/scripts/codex-review-gate.cjs');
+  const queries = [];
+  const statuses = [];
+  const node = {
+    number: 7, isDraft: true, isCrossRepository: false, headRefOid: head,
+    commits: { nodes: [{ commit: { oid: head, status: { contexts: [] } } }] },
+    reviews: { pageInfo: { hasPreviousPage: false }, nodes: [] },
+    comments: { nodes: [] },
+  };
+  const github = {
+    graphql: async (query, variables) => {
+      queries.push({ query, variables });
+      return { repository: { pullRequest: node } };
+    },
+    paginate: async () => [],
+    rest: {
+      issues: { listForRepo: async () => ({ data: [] }) },
+      repos: { createCommitStatus: async args => { statuses.push(args); } },
+      checks: { listForRef: async () => ({ data: [] }) },
+    },
+  };
+  const context = { repo: { owner: 'o', repo: 'r' }, payload: {}, serverUrl: 'https://github.test' };
+  await run({ github, context, core: { info() {}, warning() {} }, single: 7 });
+  assert.equal(queries.length, 1);
+  assert.equal(queries[0].variables.number, 7);
+  assert.match(queries[0].query, /pullRequest\(number: \$number\)/);
+  assert.ok(statuses.length > 0 && statuses.every(status => status.sha === head));
+});
