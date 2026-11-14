@@ -783,7 +783,7 @@ test('a refused guard cancellation does not stop later overdue cancellations', a
       return {};
     },
   });
-  assert.deepEqual(outcome, { checked: 2, cancelled: 1 });
+  assert.deepEqual(outcome, { checked: 2, cancelled: 1, refused: 1 });
   assert.deepEqual(cancelled, ['/repos/o/r/actions/runs/62/cancel']);
 });
 
@@ -818,13 +818,13 @@ if (method === 'POST' && path.endsWith('/force-cancel')) {
 }
 `;
 
-function liveSweep(force) {
+function liveSweep(force, extra = []) {
   const dir = mkdtempSync(join(tmpdir(), 'fake-gh-'));
   const log = join(dir, 'calls.log');
   writeFileSync(log, '');
   writeFileSync(join(dir, 'gh'), fakeGhSource);
   chmodSync(join(dir, 'gh'), 0o755);
-  const run = spawnSync(process.execPath, [join(__dirname, '../.github/scripts/ci-stuck-jobs.cjs'), '--apply', '--repo', 'o/r'], {
+  const run = spawnSync(process.execPath, [join(__dirname, '../.github/scripts/ci-stuck-jobs.cjs'), '--apply', '--repo', 'o/r', ...extra], {
     encoding: 'utf8',
     env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, FAKE_GH_LOG: log, FAKE_GH_FORCE: force },
   });
@@ -848,7 +848,7 @@ test('the live sweep force-cancels a guard run GitHub refuses to cancel', () => 
 test('the live sweep says why neither cancel worked and still ends cleanly', () => {
   const { run, report } = liveSweep('refuse');
   assert.equal(run.status, 0);
-  assert.deepEqual(report.guards, { checked: 2, cancelled: 0 });
+  assert.deepEqual(report.guards, { checked: 2, cancelled: 0, refused: 2 });
   assert.match(run.stdout, /::warning::guard run 101 could not be cancelled: gh: Cannot cancel a workflow run that is not in progress\. \(HTTP 409\); force-cancel: gh: Cannot force-cancel this run\. \(HTTP 409\)\./);
 });
 
@@ -857,4 +857,21 @@ test('a guard run GitHub cancels normally is never force-cancelled', async () =>
   const outcome = await cancelOverdueGuards('o/r', { now, api: guardApi({ queued: [guardRun(91, 31)] }, calls) });
   assert.deepEqual(outcome, { checked: 1, cancelled: 1 });
   assert.deepEqual(posts(calls), ['POST /repos/o/r/actions/runs/91/cancel']);
+});
+
+test('a chained link names each refused guard run once and counts it on every tick', () => {
+  const { run, posts } = liveSweep('refuse', ['--chain', '--ticks', '3', '--gap-ms', '1']);
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout.match(/guard run 101 could not be cancelled/g).length, 1);
+  assert.equal(run.stdout.match(/guard run 102 could not be cancelled/g).length, 1);
+  assert.equal(posts.filter(post => post.includes('/101/')).length, 2);
+  assert.match(run.stdout, /::warning::2 guard run\(s\) GitHub refuses to release/);
+  assert.equal(run.stdout.match(/0 overdue guard run\(s\) cancelled, 2 guard run\(s\) GitHub refuses to release\./g).length, 2);
+});
+
+test('a refusal is judged on the whole GitHub answer, not its first eighty characters', async () => {
+  const long = `gh api failed: ${'x'.repeat(90)} (HTTP 409)`;
+  const outcome = await apply('o/r', [{ runId: 7, action: 'cancel' }], { api: async () => { throw new Error(long); } });
+  assert.equal(outcome.at(-1).definitive, true);
+  assert.equal(outcome.at(-1).reason.length <= 'cancel request failed: '.length + 80, true);
 });
