@@ -10,15 +10,15 @@
 // (GitHub-hosted, production code) reads that marker and sets ai-review and
 // claude-review; this script never sets a status itself.
 //
-// Time box: after STANDIN_END the script does nothing. Same date as the gate.
+// Switch: it only reviews a repo that ~/.local/state/review/active.json (written by the
+// review-switch timer) names claude for. The gate reads the same choice from the repo.
 
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const REPO = 'hypertask-ai/hypertask';
-const STANDIN_END = Date.parse('2026-11-15T21:35:00Z');
+const DEFAULT_REPOS = ['hypertask-ai/hypertask'];
 const AUTHOR = 'hypertask-runners';
 const MARKER_PREFIX = 'claude-standin-review:v1';
 const MODEL_ALIAS = 'sonnet';
@@ -148,7 +148,6 @@ function buildComment(sha, review) {
 
 // Pure choice of which pull requests need a stand-in review right now.
 function selectCandidates(prs, { now, attemptsFor, reviewedToday }) {
-  if (!(now < STANDIN_END)) return [];
   const room = Math.max(0, Math.min(PER_RUN, PER_DAY - reviewedToday));
   const picked = [];
   for (const pr of prs) {
@@ -188,20 +187,34 @@ function stateDir() {
   return dir;
 }
 
-function main() {
-  const now = Date.now();
-  if (!(now < STANDIN_END)) {
-    console.log('standin: past 2026-11-15T21:35Z, Codex reviews again; nothing to do');
-    return;
+function claudeRepos() {
+  if (process.env.STANDIN_REPOS) return process.env.STANDIN_REPOS.split(',').filter(Boolean);
+  const file = process.env.REVIEW_ACTIVE || path.join(os.homedir(), '.local/state/review/active.json');
+  try {
+    const repos = JSON.parse(fs.readFileSync(file, 'utf8')).repos ?? {};
+    return DEFAULT_REPOS.filter(repo => repos[repo]?.reviewer === 'claude');
+  } catch {
+    return [];
   }
-  const dir = stateDir();
+}
+
+function main() {
+  const repos = claudeRepos();
+  if (!repos.length) console.log('standin: no repo is switched to claude, nothing to do');
+  for (const repo of repos) reviewRepo(repo);
+}
+
+function reviewRepo(REPO) {
+  const now = Date.now();
+  const dir = path.join(stateDir(), REPO.replace('/', '__'));
+  fs.mkdirSync(path.join(dir, 'attempts'), { recursive: true });
   const day = new Date(now).toISOString().slice(0, 10);
   const dayFile = path.join(dir, `day-${day}`);
   const reviewedToday = () => Number(fs.existsSync(dayFile) ? fs.readFileSync(dayFile, 'utf8') : 0) || 0;
   const attemptFile = sha => path.join(dir, 'attempts', sha);
   const attemptsFor = sha => Number(fs.existsSync(attemptFile(sha)) ? fs.readFileSync(attemptFile(sha), 'utf8') : 0) || 0;
 
-  const listing = JSON.parse(gh(['api', 'graphql', '-f', `query=${LIST}`, '-F', 'owner=hypertask-ai', '-F', 'name=hypertask']));
+  const listing = JSON.parse(gh(['api', 'graphql', '-f', `query=${LIST}`, '-F', `owner=${REPO.split('/')[0]}`, '-F', `name=${REPO.split('/')[1]}`]));
   const prs = listing.data.repository.pullRequests.nodes;
   const picked = selectCandidates(prs, { now, attemptsFor, reviewedToday: reviewedToday() });
   console.log(`standin: ${prs.length} open, ${picked.length} to review, ${reviewedToday()} reviewed today`);
@@ -257,7 +270,7 @@ function main() {
 }
 
 module.exports = {
-  STANDIN_END, AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS, PER_RUN, PER_DAY,
+  AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS, PER_RUN, PER_DAY,
   isBlocking, hasPatch, parseClaudeOutput, buildComment, selectCandidates,
 };
 

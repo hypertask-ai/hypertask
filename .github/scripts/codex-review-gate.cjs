@@ -8,22 +8,38 @@ const BADGES = [/\bP([0-9]) Badge/g, /badge\/P([0-9])-/g, /\[P([0-9])\]/g, /\bP(
 
 const isCodex = login => String(login ?? '').replace(/\[bot\]$/, '') === CODEX_LOGIN;
 
-// HYCI-416: Codex ran out of review credit on 13 Nov 23:33 UTC and stays out until
-// 15 Nov 21:35 UTC. Until then a Claude Sonnet review, posted by the review box as
-// one comment per head, stands in for it. This is a dated switch, not a fallback
-// chain: at STANDIN_END the stand-in is ignored by the date alone, and a real
-// Codex result for the head always wins over it. Remove this block and its tests
-// after the date.
-const STANDIN_END = Date.parse('2026-11-15T21:35:00Z');
+// HYCI-416: which reviewer counts is one explicit switch, set by the review-switch
+// timer on the review box (Codex while it has room, else Claude, DeepSeek once its
+// review test passes). It lives in the body of one open issue labelled review-switch
+// that the runner app opened, because the app cannot write repo variables. This is a
+// logged selector, not a fallback chain: a real Codex result for the head always
+// wins, and anything unreadable means codex.
+const REVIEWER_MODELS = { claude: /^claude-sonnet/, deepseek: /^deepseek/ };
+const REVIEWER_NAMES = { claude: 'Claude Sonnet', deepseek: 'DeepSeek' };
 const STANDIN_AUTHOR = 'hypertask-runners';
 const STANDIN_STATE = /<!-- claude-standin-review:v1 (\{.*?\}) -->/s;
-const STANDIN_MODEL = /^claude-sonnet/;
+const SWITCH_LABEL = 'review-switch';
+const SWITCH_STATE = /<!-- review-switch:v1 (\{.*?\}) -->/s;
 
-function standinResultFor(comments, headOid, now) {
-  if (!(now < STANDIN_END)) return null;
+const isApp = login => String(login ?? '').replace(/\[bot\]$/, '') === STANDIN_AUTHOR;
+
+function reviewerFromIssues(issues) {
+  for (const issue of issues ?? []) {
+    if (issue.pull_request || !isApp(issue.user?.login)) continue;
+    try {
+      const reviewer = JSON.parse(SWITCH_STATE.exec(String(issue.body ?? ''))?.[1] ?? 'null')?.reviewer;
+      if (reviewer === 'codex' || REVIEWER_MODELS[reviewer]) return reviewer;
+    } catch {}
+  }
+  return 'codex';
+}
+
+function standinResultFor(comments, headOid, reviewer) {
+  const modelPattern = REVIEWER_MODELS[reviewer];
+  if (!modelPattern) return null;
   const short = headOid.slice(0, 7);
   for (const comment of [...(comments ?? [])].reverse()) {
-    if (String(comment.author ?? '').replace(/\[bot\]$/, '') !== STANDIN_AUTHOR) continue;
+    if (!isApp(comment.author)) continue;
     // The last marker in the body is the reviewer's own; any earlier one is model text.
     const raw = [...String(comment.body ?? '').matchAll(new RegExp(STANDIN_STATE.source, 'gs'))].at(-1)?.[1];
     if (!raw) continue;
@@ -33,12 +49,13 @@ function standinResultFor(comments, headOid, now) {
     } catch {
       continue;
     }
-    if (state?.sha !== headOid || !STANDIN_MODEL.test(String(state.model ?? ''))) continue;
+    if (state?.sha !== headOid || !modelPattern.test(String(state.model ?? ''))) continue;
     if (!['APPROVE', 'CONCERNS'].includes(state.verdict) || !Number.isInteger(state.blocking) || state.blocking < 0) continue;
     const evidence = comment.url ?? '';
+    const name = REVIEWER_NAMES[reviewer];
     return state.blocking > 0
-      ? { state: 'failure', description: `Claude Sonnet reviewed ${short}: ${state.blocking} blocker/major finding(s)`, evidence }
-      : { state: 'success', description: `Claude Sonnet reviewed ${short}: no blocker/major findings`, evidence };
+      ? { state: 'failure', description: `${name} reviewed ${short}: ${state.blocking} blocker/major finding(s)`, evidence }
+      : { state: 'success', description: `${name} reviewed ${short}: no blocker/major findings`, evidence };
   }
   return null;
 }
@@ -187,7 +204,7 @@ function evaluate(pr) {
       };
     }
   }
-  const standin = standinResultFor(pr.comments, pr.headOid, pr.now ?? Date.now());
+  const standin = standinResultFor(pr.comments, pr.headOid, pr.reviewer);
   if (standin) return standin;
   return { state: 'pending', description: `Waiting for the Codex review of ${short}`, evidence: '' };
 }
@@ -210,6 +227,14 @@ query($owner: String!, $name: String!, $after: String) {
 async function run({ github, context, core }) {
   const { owner, repo } = context.repo;
   const only = context.payload.pull_request?.number ?? context.payload.issue?.number ?? 0;
+  let reviewer = 'codex';
+  try {
+    const { data } = await github.rest.issues.listForRepo({ owner, repo, labels: SWITCH_LABEL, state: 'open', per_page: 10 });
+    reviewer = reviewerFromIssues(data);
+  } catch (error) {
+    core.warning(`review switch unreadable, using codex: ${error.message}`);
+  }
+  core.info(`reviewer: ${reviewer}`);
 
   const nodes = [];
   for (let after = null, more = true; more;) {
@@ -222,6 +247,7 @@ async function run({ github, context, core }) {
     const head = node.commits.nodes[0]?.commit;
     if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
     const result = evaluate({
+      reviewer,
       headOid: node.headRefOid,
       statusContexts: head?.status?.contexts ?? [],
       reviews: node.reviews.nodes.map(review => ({
@@ -236,7 +262,7 @@ async function run({ github, context, core }) {
     const running = codeReviewStateFor(comments, node.headRefOid)?.status === 'running';
     const requested = comments.some(comment =>
       String(comment.author ?? '').replace(/\[bot\]$/, '') === 'github-actions' && comment.body?.includes(requestMarker));
-    if (result.state === 'pending' && !node.isDraft && !running && !requested) {
+    if (result.state === 'pending' && reviewer === 'codex' && !node.isDraft && !running && !requested) {
       const current = await github.rest.pulls.get({ owner, repo, pull_number: node.number });
       if (current.data.head.sha === node.headRefOid && current.data.state === 'open' && !current.data.draft) {
         await github.rest.issues.createComment({
@@ -290,7 +316,7 @@ async function run({ github, context, core }) {
     if (result.state === 'success' && !alreadyApproved) {
       await github.rest.issues.createComment({
         owner, repo, issue_number: node.number,
-        body: `APPROVE\n\n${result.description}.${result.evidence ? ` ${result.description.startsWith('Claude Sonnet') ? 'Claude Sonnet stand-in' : 'Codex'} review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
+        body: `APPROVE\n\n${result.description}.${result.evidence ? ` ${result.description.startsWith(REVIEWER_NAMES[reviewer] ?? '\u0000') ? REVIEWER_NAMES[reviewer] : 'Codex'} review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
       });
     }
     core.info(`PR #${node.number} ${node.headRefOid.slice(0, 7)}: ${result.state}. ${result.description}`);
@@ -300,7 +326,7 @@ async function run({ github, context, core }) {
 module.exports = {
   evaluate,
   standinResultFor,
-  STANDIN_END,
+  reviewerFromIssues,
   priorityOf,
   blocks,
   isCodex,

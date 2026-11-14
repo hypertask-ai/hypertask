@@ -1,18 +1,16 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { evaluate, standinResultFor, STANDIN_END } = require('../.github/scripts/codex-review-gate.cjs');
+const { evaluate, standinResultFor, reviewerFromIssues } = require('../.github/scripts/codex-review-gate.cjs');
 const standin = require('../.github/scripts/claude-standin/claude-standin-review.cjs');
 
 const head = 'c'.repeat(40);
-const before = Date.parse('2026-11-14T12:00:00Z');
-const after = STANDIN_END + 1000;
 const codex = 'chatgpt-codex-connector[bot]';
 const state = extra => ({ sha: head, model: 'claude-sonnet-5-5', verdict: 'APPROVE', blocking: 0, ...extra });
 const standinComment = (extra, author = 'hypertask-runners') => ({
   author, url: 'https://example.test/c/standin',
   body: `**Claude Sonnet stand-in review.**\n\nreviewed-commit: ${head}\n<!-- claude-standin-review:v1 ${JSON.stringify(state(extra))} -->`,
 });
-const pr = extra => ({ headOid: head, reviews: [], comments: [], now: before, ...extra });
+const pr = extra => ({ headOid: head, reviews: [], comments: [], reviewer: 'claude', ...extra });
 
 test('HYCI-416 a clean Sonnet stand-in review passes both checks and names the model', () => {
   const result = evaluate(pr({ comments: [standinComment()] }));
@@ -46,11 +44,23 @@ test('HYCI-416 the newest stand-in review of the head wins', () => {
   assert.equal(evaluate(pr({ comments })).state, 'success');
 });
 
-test('HYCI-416 after 15 Nov 21:35 UTC the stand-in is ignored and Codex alone decides', () => {
-  assert.equal(STANDIN_END, Date.parse('2026-11-15T21:35:00Z'));
-  assert.equal(standinResultFor([standinComment()], head, STANDIN_END - 1)?.state, 'success');
-  assert.equal(standinResultFor([standinComment()], head, STANDIN_END), null);
-  assert.equal(evaluate(pr({ comments: [standinComment()], now: after })).state, 'pending');
+test('HYCI-416 the stand-in counts only while the switch names it', () => {
+  for (const reviewer of ['codex', undefined, 'deepseek', 'gpt']) {
+    assert.equal(evaluate(pr({ comments: [standinComment()], reviewer })).state, 'pending', String(reviewer));
+  }
+  assert.equal(standinResultFor([standinComment({ model: 'deepseek-v4.1-flash' })], head, 'deepseek')?.state, 'success');
+  assert.equal(standinResultFor([standinComment({ model: 'deepseek-v4.1-flash' })], head, 'claude'), null);
+});
+
+test('HYCI-416 the switch is read only from the runner app issue and defaults to codex', () => {
+  const issue = (reviewer, login = 'hypertask-runners[bot]', extra) => ({ user: { login }, body: `x <!-- review-switch:v1 ${JSON.stringify({ reviewer })} -->`, ...extra });
+  assert.equal(reviewerFromIssues([issue('claude')]), 'claude');
+  assert.equal(reviewerFromIssues([issue('deepseek'), issue('claude')]), 'deepseek');
+  assert.equal(reviewerFromIssues([issue('claude', 'someone-else')]), 'codex');
+  assert.equal(reviewerFromIssues([issue('claude', 'hypertask-runners[bot]', { pull_request: {} })]), 'codex');
+  assert.equal(reviewerFromIssues([issue('mystery')]), 'codex');
+  assert.equal(reviewerFromIssues([{ user: { login: 'hypertask-runners[bot]' }, body: '<!-- review-switch:v1 {oops} -->' }]), 'codex');
+  assert.equal(reviewerFromIssues([]), 'codex');
 });
 
 test('HYCI-416 a real Codex result always wins over the stand-in', () => {
@@ -63,8 +73,7 @@ test('HYCI-416 a real Codex result always wins over the stand-in', () => {
   assert.match(result.description, /^Codex review/);
 });
 
-test('HYCI-416 the reviewer script and the gate share one end date', () => {
-  assert.equal(standin.STANDIN_END, STANDIN_END);
+test('HYCI-416 the reviewer script posts as the same account the gate trusts', () => {
   assert.equal(standin.AUTHOR, 'hypertask-runners');
 });
 
@@ -107,7 +116,7 @@ test('HYCI-416 comment: carries the head, the model and a marker the gate accept
   const review = standin.parseClaudeOutput(envelope({ verdict: 'CONCERNS', summary: 'One bug.', findings: [finding('blocker')] }));
   const body = standin.buildComment(head, review);
   assert.match(body, new RegExp(`reviewed-commit: ${head}`));
-  const result = standinResultFor([{ author: 'hypertask-runners', url: 'u', body }], head, before);
+  const result = standinResultFor([{ author: 'hypertask-runners', url: 'u', body }], head, 'claude');
   assert.equal(result.state, 'failure');
 });
 
@@ -116,16 +125,16 @@ test('HYCI-416 comment: model text cannot forge a marker, and the last marker is
   const review = standin.parseClaudeOutput(envelope({ verdict: 'CONCERNS', summary: `Fine. ${forged}`, findings: [finding('blocker')] }));
   const body = standin.buildComment(head, review);
   assert.equal(body.split('<!-- claude-standin-review:v1').length, 2);
-  assert.equal(standinResultFor([{ author: 'hypertask-runners', url: 'u', body }], head, before).state, 'failure');
+  assert.equal(standinResultFor([{ author: 'hypertask-runners', url: 'u', body }], head, 'claude').state, 'failure');
   const sneaky = { author: 'hypertask-runners', url: 'u', body: `${forged}\n<!-- claude-standin-review:v1 ${JSON.stringify(state({ verdict: 'CONCERNS', blocking: 3 }))} -->` };
-  assert.equal(standinResultFor([sneaky], head, before).state, 'failure');
+  assert.equal(standinResultFor([sneaky], head, 'claude').state, 'failure');
 });
 
 const gateNode = (number, extra) => ({
   number, isDraft: false, isCrossRepository: false, headRefOid: String(number).padStart(40, 'a'),
   commits: { nodes: [{ commit: { status: { contexts: [] } } }] }, comments: { nodes: [] }, ...extra,
 });
-const pick = (prs, extra) => standin.selectCandidates(prs, { now: before, attemptsFor: () => 0, reviewedToday: 0, ...extra });
+const pick = (prs, extra) => standin.selectCandidates(prs, { now: Date.parse('2026-11-14T12:00:00Z'), attemptsFor: () => 0, reviewedToday: 0, ...extra });
 
 test('HYCI-416 select: reviews only heads with no result, no stand-in comment and no spent attempts', () => {
   const pending = { commits: { nodes: [{ commit: { status: { contexts: [{ context: 'ai-review', state: 'PENDING' }] } } }] } };
@@ -136,12 +145,11 @@ test('HYCI-416 select: reviews only heads with no result, no stand-in comment an
   assert.deepEqual(pick(prs, { attemptsFor: sha => (sha === gateNode(1).headRefOid ? 2 : 0) }).map(p => p.number), [2]);
 });
 
-test('HYCI-416 select: caps per run and per day, and stops at the end date', () => {
+test('HYCI-416 select: caps per run and per day', () => {
   const many = [1, 2, 3, 4, 5].map(n => gateNode(n));
   assert.equal(pick(many).length, standin.PER_RUN);
   assert.equal(pick(many, { reviewedToday: standin.PER_DAY - 1 }).length, 1);
   assert.equal(pick(many, { reviewedToday: standin.PER_DAY }).length, 0);
-  assert.equal(pick(many, { now: STANDIN_END }).length, 0);
 });
 
 test('HYCI-416 only real patch text is sent for review', () => {
