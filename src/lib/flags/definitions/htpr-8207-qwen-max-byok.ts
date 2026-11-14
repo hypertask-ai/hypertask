@@ -7,7 +7,7 @@ export default {
   defaultMode: "EVERYONE",
   shippedOn: "2026-11-13",
   description:
-    "Tests the Alibaba BYOK connection with Qwen3.8 Max instead of the retired Qwen3.7 Plus.",
+    "Tests the Alibaba BYOK connection with Qwen3.8 Max instead of the retired Qwen3.7 Plus, and adds GLM-5.3 and Gemini 3.1 Pro Preview to the model pickers.",
   releaseRisk: {
     risk: "small",
     reason:
