@@ -145,12 +145,18 @@ function evaluate(pr) {
     comment => commentCommit(comment, review) === pr.headOid)).map(commentBody);
   const unreadStale = unclearedReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
 
-  const rawBlocking = headReviews.flatMap(review => review.comments.length
+  const rawHeadBlocking = headReviews.flatMap(review => review.comments.length
     ? review.comments.map(commentBody).filter(blocks)
-    : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : [])
-    .concat(remappedBodies.filter(blocks), unreadStale ? [UNREAD] : []);
-  const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
-  if (blocking.length) {
+    : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : []);
+  const rawStaleBlocking = remappedBodies.filter(blocks).concat(unreadStale ? [UNREAD] : []);
+  const rawBlocking = rawHeadBlocking.concat(rawStaleBlocking);
+  const headBlocking = rawHeadBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
+  const staleBlocking = rawStaleBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
+  const blocking = headBlocking.concat(staleBlocking);
+  const standin = standinResultFor(pr.comments, pr.headOid, pr.reviewer);
+  const standinClearsStale = staleBlocking.length > 0 && standin?.state === 'success';
+
+  if (headBlocking.length || (staleBlocking.length && !standinClearsStale)) {
     const levels = blocking.map(priorityOf);
     const worst = levels.includes(0) ? 'P0' : levels.includes(1) ? 'P1' : 'unrated';
     return {
@@ -159,6 +165,7 @@ function evaluate(pr) {
       evidence: codexReviews.find(review => review.url)?.url ?? '',
     };
   }
+  if (standinClearsStale) return standin;
   if (rawBlocking.length) {
     return {
       state: 'success',
@@ -197,7 +204,6 @@ function evaluate(pr) {
       };
     }
   }
-  const standin = standinResultFor(pr.comments, pr.headOid, pr.reviewer);
   if (standin) return standin;
   return { state: 'pending', description: `Waiting for the Codex review of ${short}`, evidence: '' };
 }
