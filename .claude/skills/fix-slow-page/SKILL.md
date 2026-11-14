@@ -11,7 +11,7 @@ Use at `/ship`'s fix step for a slow board, inbox or task view. This is the how-
 
 ## Check each measured number (required)
 
-Before reporting any baseline, speedup or regression (ticket, PR body, playbook), load `.claude/skills/principle-explain-the-number/SKILL.md` and `.claude/skills/benchmark-checklist/SKILL.md` and answer all seven questions from runs, not guesses about code. A number without a run count, a range and a named limiter is reported as inconclusive. Measuring and profiling happen through speed-check on live, the approved harness or GitHub, never as test runs on the VPS. The Hypertask specifics below apply on top.
+Before reporting any baseline, speedup or regression (ticket, PR body, playbook), load `~/.agents/skills/principle-explain-the-number/SKILL.md` and `~/.agents/skills/benchmark-checklist/SKILL.md` and answer all seven questions from runs, not guesses about code. A number without a run count, a range and a named limiter is reported as inconclusive. Measuring and profiling happen through speed-check on live, the approved harness or GitHub, never as test runs on the VPS. The Hypertask specifics below apply on top.
 
 - State the claim and read the measurement script: what is timed, counted or omitted? Confirm the work ran inside the timed region and produced correct results. Count errors, retries and non-success responses; a fast failure is not a speedup.
 - Keep baseline and after conditions the same: production build and settings, versions, data, browser, viewport, network/CPU, cache state and concurrency. Check host load (`uptime`, `nproc`). If noise cannot be removed, alternate baseline and after runs and record it. If live baseline and fixed build conditions differ, say the comparison is inconclusive.
