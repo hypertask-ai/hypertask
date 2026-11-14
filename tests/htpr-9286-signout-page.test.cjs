@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 
 const key = "htpr-9286-signout-page";
@@ -77,11 +76,31 @@ test("opening the page signs out once without leaving the page, then offers Sign
   } finally { s.view.close(); }
 });
 
+function trackAssign(events) {
+  const realWindow = window;
+  const location = new Proxy(realWindow.location, {
+    get(target, key) {
+      if (key === "assign") return (url) => { events.assigned.push(String(url)); };
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  global.window = new Proxy(realWindow, {
+    get(target, key) {
+      if (key === "location") return location;
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return () => { global.window = realWindow; };
+}
+
 test("Sign in again sends the person to Google with the account chooser", async () => {
   const s = screen();
+  const restore = [];
   try {
     await s.mountScreen();
-    global.window = { location: { assign: url => s.events.assigned.push(url) } };
+    restore.push(trackAssign(s.events));
     await s.click(0);
     assert.equal(s.events.social.length, 1);
     assert.equal(s.events.social[0].provider, "google");
@@ -91,17 +110,24 @@ test("Sign in again sends the person to Google with the account chooser", async 
     assert.equal(url.origin, "https://accounts.google.com");
     assert.equal(url.searchParams.get("prompt"), "select_account");
     assert.equal(url.searchParams.get("state"), "fixture");
-  } finally { s.view.close(); }
+  } finally {
+    restore.forEach((undo) => undo());
+    s.view.close();
+  }
 });
 
 test("Sign in again falls back to the login page when no Google address comes back", async () => {
   const s = screen({ signInUrl: null });
+  const restore = [];
   try {
     await s.mountScreen();
-    global.window = { location: { assign: url => s.events.assigned.push(url) } };
+    restore.push(trackAssign(s.events));
     await s.click(0);
     assert.deepEqual(s.events.assigned, ["/login"]);
-  } finally { s.view.close(); }
+  } finally {
+    restore.forEach((undo) => undo());
+    s.view.close();
+  }
 });
 
 test("a failed sign-out says so and Try again signs out a second time", async () => {
@@ -152,14 +178,40 @@ test("the shared sign-out hook stays on the page when asked not to redirect", as
   }
 });
 
-test("a signed-in account that has not finished onboarding can still open the sign-out page", () => {
-  const proxy = fs.readFileSync("src/proxy.ts", "utf8");
-  const onboarding = proxy.slice(proxy.indexOf("!checkIfOnboarded(user)"), proxy.indexOf("if (currentPath === trial"));
-  assert.match(onboarding, /currentPath !== '\/signout'/);
+test("a signed-in account that has not finished onboarding can still open the sign-out page", async () => {
+  const { NextRequest } = require("next/server");
+  const user = { id: 182, UserSetting: { onboardingTourStatus: false } };
+  const proxy = loader({
+    "./utils/edgeHelpers": { isValidUser: () => ({ isValid: true, user }) },
+    "./utils/serverActions": { isMobileDevice: () => false },
+    "./utils/helperFunctions/helperFunctions": { canAccessTrialPage: () => false },
+    "@/lib/auth/safeReturnTo": { parseSafeReturnTo: () => null },
+    "@/lib/auth/sessionEdge": { verifySessionEdge: async () => ({ id: user.id }) },
+    "@/lib/net/contentEncoding": { refusedContentEncoding: () => undefined },
+    "@/lib/auth/agentCookieBridgeRoutes": { isAgentCookieBridgeRequestAllowed: () => false },
+    "@/lib/telemetry/signupAnalytics": { recordServerCapture: () => {} },
+    "@/lib/auth/sessionRevocation": { isSessionTokenRevoked: async () => false },
+    "@/lib/auth/cookieIdentity": { verifyCookieIdentity: async () => ({ status: "ok" }) },
+    "@/lib/routing/detailWithoutTicket": { detailWithoutTicketRedirect: () => null },
+    "@/lib/tutorial/keyboardShortcutTutorial": {
+      isKeyboardShortcutTutorialPath: () => false,
+      hasKeyboardShortcutTutorialQuery: () => false,
+      removeKeyboardShortcutTutorialQuery: () => {},
+    },
+  })("src/proxy.ts").default;
+  const headers = { cookie: "nookies_user=account; ht_session=session" };
+  const open = (path) => proxy(new NextRequest(`https://app.hypertask.ai${path}`, { headers }));
+  const signout = await open("/signout");
+  assert.equal(signout.status, 200);
+  assert.equal(signout.headers.get("location"), null);
+  assert.equal(signout.headers.get("x-middleware-next"), "1");
+  const inbox = await open("/inbox");
+  assert.equal(new URL(inbox.headers.get("location")).pathname, "/onboarding");
 });
 
 test("the sign-out flag is ticket-specific and goes live for everyone", () => {
-  const definition = fs.readFileSync("src/lib/flags/definitions/htpr-9286-signout-page.ts", "utf8");
-  assert.match(definition, /defaultMode: "EVERYONE"/);
-  assert.match(definition, new RegExp(`"${key}"`));
+  const flag = loader()("src/lib/flags/definitions/htpr-9286-signout-page.ts");
+  assert.equal(flag.HTPR_9286_SIGNOUT_PAGE_FLAG, key);
+  assert.equal(flag.default.key, key);
+  assert.equal(flag.default.defaultMode, "EVERYONE");
 });
