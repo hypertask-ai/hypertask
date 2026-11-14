@@ -118,6 +118,9 @@ async function demo() {
   const originalIntentCreateMany = prismaMock.analyticsIntent.createMany
   const originalIntentUpdateMany = prismaMock.analyticsIntent.updateMany
   const originalUserFindUnique = prismaMock.user.findUnique
+  const originalProjectFindFirst = prismaMock.project.findFirst
+  prismaMock.project.findFirst = (args: Record<string, any>) =>
+    prismaMock.project.findUnique(args)
 
   try {
     prismaMock.$transaction = async (callback: (tx: any) => Promise<unknown>) => callback(prismaMock)
@@ -386,6 +389,7 @@ async function demo() {
     )
   } finally {
     prismaMock.project.findUnique = originalProjectFindUnique
+    prismaMock.project.findFirst = originalProjectFindFirst
     prismaMock.invite.findFirst = originalInviteFindFirst
     prismaMock.invite.create = originalInviteCreate
     prismaMock.invite.update = originalInviteUpdate
