@@ -240,7 +240,7 @@ async function cancelGuard(repo, run, api) {
   }
 }
 
-async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PENDING_MINUTES, api = json } = {}) {
+async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PENDING_MINUTES, api = json, refusals = new Set() } = {}) {
   const runs = [];
   const seen = new Set();
   let unread;
@@ -256,16 +256,23 @@ async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PEN
     }
   }
   let cancelled = 0;
+  let refused = 0;
   for (const run of overdueRuns(runs, { now, minutes })) {
+    if (refusals.has(run.id)) {
+      refused += 1;
+      continue;
+    }
     const outcome = await cancelGuard(repo, run, api);
     if (outcome.how) {
       cancelled += 1;
       console.log(`::notice::guard run ${run.id} was still ${run.status} after ${minutes} minutes; ${outcome.how}.`);
     } else {
+      refused += 1;
+      refusals.add(run.id);
       console.log(`::warning::guard run ${run.id} could not be cancelled: ${outcome.reason}.`);
     }
   }
-  return unread ? { checked: runs.length, cancelled, unread } : { checked: runs.length, cancelled };
+  return { checked: runs.length, cancelled, ...(refused && { refused }), ...(unread && { unread }) };
 }
 
 async function jobsOf(repo, runId, api = json) {
@@ -307,8 +314,8 @@ async function apply(repo, decisions, { api = json, settle = settleCancel, befor
       }
       await api(`/repos/${repo}/actions/runs/${decision.runId}/cancel`, 'POST');
     } catch (error) {
-      const message = String(error.message).slice(0, 80);
-      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: `${CANCEL_FAILED}: ${message}`, definitive: refusesCancel(message) });
+      const message = String(error.message);
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: `${CANCEL_FAILED}: ${message.slice(0, 80)}`, definitive: refusesCancel(message) });
       continue;
     }
     if (onConfirmed) await onConfirmed(decision);
@@ -657,7 +664,7 @@ function nowFrom(options = {}) {
 // One sweep, with its report. A tick in the middle of a link says less than the
 // first one: the JSON is for a person reading a run, and eight copies of it bury
 // the notices that matter.
-async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = {}) {
+async function sweepOnce(repo, { live, fixture, options = {}, quiet = false, refusals } = {}) {
   const now = nowFrom(options);
   let decisions = [];
   let unread = [];
@@ -667,7 +674,7 @@ async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = 
   let guards = { checked: 0, cancelled: 0 };
   if (live) {
     ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now }));
-    guards = await cancelOverdueGuards(repo, { now });
+    guards = await cancelOverdueGuards(repo, { now, refusals });
   } else {
     try {
       ({ decisions, unread } = fixture
@@ -680,9 +687,10 @@ async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = 
   const report = { repo, decisions, unread, discovery, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, guards, readOnly: !live };
   if (quiet) {
     const recovered = recovery.done.filter(outcome => outcome.action === 'recover').length;
-    console.log(`::notice::tick: ${decisions.length} candidate run(s), ${recovered} recovered, ${recovery.pending.length} carried, ${guards.cancelled} overdue guard run(s) cancelled.`);
+    console.log(`::notice::tick: ${decisions.length} candidate run(s), ${recovered} recovered, ${recovery.pending.length} carried, ${guards.cancelled} overdue guard run(s) cancelled, ${guards.refused ?? 0} guard run(s) GitHub refuses to release.`);
   } else {
     console.log(JSON.stringify(report, null, 2));
+    if (guards.refused) console.log(`::warning::${guards.refused} guard run(s) GitHub refuses to release; each is named once per link.`);
   }
   if (discovery) {
     console.log(`::warning::the run list could not be read this sweep (${discovery}); stored recoveries were still finished.`);
@@ -755,9 +763,10 @@ async function main() {
       return;
     }
   }
-  await sweepOnce(repo, { live, fixture, options });
+  const refusals = new Set();
+  await sweepOnce(repo, { live, fixture, options, refusals });
   if (!chaining) return;
-  const later = await tick(repo, { sweeps, gapMs, once: () => sweepOnce(repo, { live, fixture, options, quiet: true }) });
+  const later = await tick(repo, { sweeps, gapMs, once: () => sweepOnce(repo, { live, fixture, options, quiet: true, refusals }) });
   for (const outcome of later) {
     if (outcome && outcome.error) console.log(`::warning::a tick failed: ${outcome.error}.`);
   }
