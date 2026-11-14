@@ -239,18 +239,6 @@ async function readPull(github, owner, repo, number) {
   };
 }
 
-const SINGLE = `
-query($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) {
-    pullRequest(number: $number) {
-        number isDraft isCrossRepository headRefOid
-        commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body submittedAt commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
-        comments(last: 100) { nodes { author { login } url body createdAt updatedAt } }
-      }
-  }
-}`;
-
 async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, result, existingContexts, commentBodies, reviewer }) {
   const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
   const existing = new Map(existingContexts.map(entry => [entry.context, entry]));
@@ -313,18 +301,15 @@ async function run({ github, context, core, single = 0 }) {
   }
   core.info(`reviewer: ${reviewer}`);
 
-  const nodes = [];
-  if (single) {
-    const { repository: { pullRequest } } = await github.graphql(SINGLE, { owner, name: repo, number: single });
-    if (pullRequest) nodes.push(pullRequest);
-  } else {
-    const numbers = only
-      ? [only]
+  const numbers = only
+    ? [only]
+    : single
+      ? [single]
       : (await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', base: 'production', per_page: 100 })).map(pull => pull.number);
-    for (const number of numbers) {
-      const node = await readPull(github, owner, repo, number);
-      if (node) nodes.push(node);
-    }
+  const nodes = [];
+  for (const number of numbers) {
+    const node = await readPull(github, owner, repo, number);
+    if (node) nodes.push(node);
   }
 
   for (const node of nodes) {
