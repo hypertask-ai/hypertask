@@ -22,7 +22,7 @@ permissions:
   checks: write
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('review-bootstrap-{0}', github.event.pull_request.number) || format('review-{0}', github.event.workflow_run.pull_requests[0].number || inputs.pr) }}
+  group: ${{ github.event_name == 'pull_request' && format('review-bootstrap-{0}', github.event.pull_request.number) || github.event_name == 'workflow_run' && format('review-{0}-{1}', github.event.workflow_run.pull_requests[0].number, github.event.workflow_run.head_sha) || format('review-{0}-manual', inputs.pr) }}
   cancel-in-progress: true
 
 jobs:
@@ -36,8 +36,6 @@ jobs:
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -91,6 +89,7 @@ jobs:
         if: steps.target.outputs.go == 'yes'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           REVIEW_REPO: ${{ github.repository }}
           REVIEW_PR: ${{ steps.target.outputs.number }}
           REVIEW_SHA: ${{ steps.target.outputs.sha }}

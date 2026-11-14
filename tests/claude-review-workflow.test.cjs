@@ -56,7 +56,8 @@ test('HYCI-456 the trusted stage has minimal permissions and runs on a hosted ru
 });
 
 test('HYCI-456 one parallel run per pull request, a newer push cancels the older run', () => {
-  assert.match(workflow.concurrency.group, /format\('review-\{0\}', github\.event\.workflow_run\.pull_requests\[0\]\.number \|\| inputs\.pr\)/);
+  assert.match(workflow.concurrency.group, /format\('review-\{0\}-\{1\}', github\.event\.workflow_run\.pull_requests\[0\]\.number, github\.event\.workflow_run\.head_sha\)/);
+  assert.match(workflow.concurrency.group, /format\('review-\{0\}-manual', inputs\.pr\)/);
   assert.equal(workflow.concurrency['cancel-in-progress'], true);
 });
 
@@ -64,9 +65,11 @@ test('HYCI-456 only the subscription token is used, only in the steps that need 
   assert.ok(parsed.includes('secrets.CLAUDE_CODE_OAUTH_TOKEN'));
   for (const name of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER', 'OPENCODE']) assert.ok(!parsed.includes(name));
   assert.ok(job.steps.some(step => (step.run || '').includes('exit 1')));
-  assert.equal(job.env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+  assert.equal(job.env, undefined);
   const holders = job.steps.filter(step => JSON.stringify(step.env || {}).includes('CLAUDE_CODE_OAUTH_TOKEN'));
   assert.deepEqual(holders.map(step => step.name), ['Require the Claude subscription token', 'Review the diff']);
+  const install = job.steps.find(step => (step.run || '').includes('npm install'));
+  assert.equal(install.env, undefined);
 });
 
 test('HYCI-456 every action is pinned to a commit and the CLI to a version', () => {
