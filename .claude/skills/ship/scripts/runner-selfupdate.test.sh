@@ -22,7 +22,7 @@ setup() {
   export FAKE_SYSTEMCTL_LOG=$C/systemctl.log FAKE_EVENTS=$C/events FAKE_DELIVER_CALLS=$C/deliver-calls
   export FAKE_SYSTEMCTL_FAIL_MARKER=$C/failure-used
   export RUNNER_SELFUPDATE_RETRY_DELAY=0
-  unset RUNNER_SELFUPDATE_GIT FAKE_SYSTEMCTL_FAIL FAKE_NO_RUNNERS FAKE_UPDATER_PID
+  unset RUNNER_SELFUPDATE_GIT RUNNER_SELFUPDATE_SOURCE FAKE_SYSTEMCTL_FAIL FAKE_NO_RUNNERS FAKE_UPDATER_PID
   export TMPDIR=$C/backups
   mkdir -p "$TMPDIR"
   mkdir -p "$HOME" "$C/source/.claude/skills/ship/scripts" "$C/source/.claude/hooks" "$C/source/.claude/systemd" "$C/lib" "$C/units/agent-events.service.d"
@@ -104,6 +104,32 @@ run_ok 'case 1: unchanged production succeeds'
 eq 'no-change is silent' "$(cat "$C/output")" ''
 eq 'no install or service calls' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
 eq 'no event' "$(events)" 0
+
+setup isolated-checkout
+seed_head=$(git -C "$C/live" rev-parse HEAD)
+printf '\nlocal edit\n' >> "$C/live/.claude/skills/ship/scripts/runner-deliver"
+git -C "$C/live" add .
+printf 'untracked work\n' > "$C/live/keep-local"
+cp "$C/live/.claude/skills/ship/scripts/runner-deliver" "$C/local-deliver"
+seed_status=$(git -C "$C/live" status --porcelain)
+merge runner-deliver '# merged update conflicts with local work'
+export RUNNER_SELFUPDATE_SOURCE=$C/live
+unset RUNNER_SELFUPDATE_LIVE
+run_ok 'default updater clones an isolated checkout despite staged source edits'
+eq 'shared source HEAD preserved' "$(git -C "$C/live" rev-parse HEAD)" "$seed_head"
+eq 'shared source index preserved' "$(git -C "$C/live" status --porcelain)" "$seed_status"
+if cmp -s "$C/local-deliver" "$C/live/.claude/skills/ship/scripts/runner-deliver" &&
+  [ "$(cat "$C/live/keep-local")" = 'untracked work' ]; then
+  ok 'shared source files preserved'
+else bad 'shared source files changed'; fi
+eq 'isolated checkout uses merged production' "$(git -C "$C/state/production" rev-parse HEAD)" "$(git -C "$C/source" rev-parse HEAD)"
+if cmp -s "$S/runner-deliver" "$C/lib/runner-deliver"; then ok 'isolated production update installed'; else bad 'isolated update differs'; fi
+: > "$FAKE_SYSTEMCTL_LOG"
+run_ok 'isolated checkout is reused idempotently'
+eq 'isolated second run performs no install' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
+merge runner-deliver '# next merged update'
+run_ok 'isolated checkout follows later production commits'
+if cmp -s "$S/runner-deliver" "$C/lib/runner-deliver"; then ok 'later isolated production update installed'; else bad 'later isolated update differs'; fi
 
 setup merged-change
 merge runner-deliver '# merged production update'
