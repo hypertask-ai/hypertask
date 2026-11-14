@@ -59,14 +59,17 @@ const hasPatch = text => /^diff --git /m.test(String(text ?? ''));
 
 const isBlocking = finding => finding.severity === 'blocker' || (finding.severity === 'major' && finding.confidence === 'high');
 
+const LIMIT_TEXT = /usage limit|limit reached|hit your (?:\w+ )?limit|rate.?limit|out of (?:extra )?usage|credit balance/i;
+const isLimit = text => LIMIT_TEXT.test(String(text ?? ''));
+
 function parseClaudeOutput(stdout) {
   let envelope;
   try {
     envelope = JSON.parse(String(stdout ?? ''));
   } catch {
-    return { ok: false, reason: 'output is not JSON' };
+    return { ok: false, reason: 'output is not JSON', limit: isLimit(stdout) };
   }
-  if (envelope?.is_error) return { ok: false, reason: 'claude reported an error' };
+  if (envelope?.is_error) return { ok: false, reason: 'claude reported an error', limit: isLimit(envelope.result) };
   let review = envelope?.structured_output;
   if (review == null && typeof envelope?.result === 'string' && envelope.result.trim()) {
     try {
@@ -117,7 +120,7 @@ function buildComment(sha, review) {
   };
   lines.push(
     '',
-    'Claude Sonnet reviews this head once on a GitHub-hosted runner while the review switch names claude (HYCI-416).',
+    'Claude Sonnet reviews this head once on a GitHub-hosted runner (HYCI-456).',
     '',
     `reviewed-commit: ${sha}`,
     `<!-- ${MARKER_PREFIX} ${JSON.stringify(state)} -->`,
@@ -146,12 +149,19 @@ function reviewPr({ repo, number, sha }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-review-'));
   try {
     fs.writeFileSync(path.join(tmp, 'instructions.txt'), INSTRUCTIONS, { mode: 0o600 });
-    const stdout = execFileSync(process.env.CLAUDE_BIN || 'claude', [
-      '-p', '--system-prompt-file', path.join(tmp, 'instructions.txt'), '--output-format', 'json',
-      '--json-schema', JSON.stringify(SCHEMA), '--tools', '', '--disable-slash-commands',
-      '--no-session-persistence', '--safe-mode', '--model', MODEL_ALIAS, '--effort', 'high',
-    ], { input: context, encoding: 'utf8', cwd: tmp, timeout: REVIEW_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 });
+    let stdout;
+    try {
+      stdout = execFileSync(process.env.CLAUDE_BIN || 'claude', [
+        '-p', '--system-prompt-file', path.join(tmp, 'instructions.txt'), '--output-format', 'json',
+        '--json-schema', JSON.stringify(SCHEMA), '--tools', '', '--disable-slash-commands',
+        '--no-session-persistence', '--safe-mode', '--model', MODEL_ALIAS, '--effort', 'high',
+      ], { input: context, encoding: 'utf8', cwd: tmp, timeout: REVIEW_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 });
+    } catch (error) {
+      if (isLimit(`${error.stdout ?? ''}${error.stderr ?? ''}`)) return { status: 'limit', note: 'the Claude subscription hit a usage limit' };
+      throw error;
+    }
     const review = parseClaudeOutput(stdout);
+    if (review.limit) return { status: 'limit', note: 'the Claude subscription hit a usage limit' };
     if (!review.ok) throw new Error(`no review: ${review.reason}`);
     const current = JSON.parse(ghApi(['api', `repos/${repo}/pulls/${number}`])).head.sha;
     if (current !== sha) return { status: 'skipped', note: 'head moved while reviewing, dropping this review' };
@@ -166,7 +176,7 @@ function reviewPr({ repo, number, sha }) {
 
 module.exports = {
   AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS,
-  isBlocking, hasPatch, parseClaudeOutput, buildComment, reviewedAlready, reviewPr,
+  isBlocking, isLimit, hasPatch, parseClaudeOutput, buildComment, reviewedAlready, reviewPr,
 };
 
 if (require.main === module) {
@@ -177,4 +187,8 @@ if (require.main === module) {
   }
   const outcome = reviewPr({ repo, number: Number(number), sha });
   console.log(`claude-review: PR #${number} ${sha.slice(0, 7)} ${outcome.status}: ${outcome.note}`);
+  if (outcome.status === 'limit') {
+    if (process.env.REVIEW_HANDOFF === 'codex' && process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'handoff=codex\n');
+    else process.exitCode = 1;
+  }
 }

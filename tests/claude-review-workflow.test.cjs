@@ -28,17 +28,13 @@ test('HYCI-456 the trusted stage runs from base code on workflow_run and never o
   assert.match(job.if, /github\.event\.workflow_run\.conclusion == 'success'/);
 });
 
-test('HYCI-456 the trusted stage checks out the production branch, not the pull request', () => {
+test('HYCI-456 the trusted stage checks out the production branch, not the pull request, and never runs on pull_request', () => {
   const checkout = job.steps.find(step => step.uses && step.uses.startsWith('actions/checkout'));
-  assert.match(checkout.with.ref, /\|\| 'production' \}\}$/);
+  assert.equal(checkout.with.ref, 'production');
   assert.equal(checkout.with['persist-credentials'], false);
   assert.equal(checkout.with['sparse-checkout'], '.github/scripts');
-});
-
-test('HYCI-456 the only pull_request path of the trusted stage is the one bootstrap pull request', () => {
-  assert.match(job.if, /github\.event_name == 'pull_request' && github\.event\.pull_request\.number == 3506/);
-  assert.match(job.if, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
-  assert.match(workflow.concurrency.group, /review-bootstrap-/);
+  assert.equal(workflow.on.pull_request, undefined);
+  assert.ok(!job.if.includes("github.event_name == 'pull_request'"));
 });
 
 test('HYCI-456 fork and dependabot PRs never reach the secret and a stale head is skipped', () => {
@@ -76,4 +72,38 @@ test('HYCI-456 every action is pinned to a commit and the CLI to a version', () 
   for (const step of job.steps.filter(entry => entry.uses)) assert.match(step.uses, /@[0-9a-f]{40}$/);
   for (const step of requestJob.steps.filter(entry => entry.uses)) assert.match(step.uses, /@[0-9a-f]{40}$/);
   assert.ok(job.steps.some(step => /@anthropic-ai\/claude-code@\d+\.\d+\.\d+(\s|$)/.test(step.run || '')));
+});
+
+test('HYCI-456 REVIEWER is a repo variable read at run time by both review workflows', () => {
+  const gate = load('codex-review-gate.yml');
+  const gateStep = gate.jobs.gate.steps.find(step => step.uses && step.uses.startsWith('actions/github-script'));
+  assert.equal(gateStep.env.REVIEWER, '${{ vars.REVIEWER }}');
+  const target = job.steps.find(step => step.id === 'target');
+  assert.equal(target.env.REVIEWER, '${{ vars.REVIEWER }}');
+  const publish = job.steps.find(step => step.name && step.name.startsWith('Publish'));
+  assert.equal(publish.env.REVIEWER, '${{ vars.REVIEWER }}');
+  assert.ok(!JSON.stringify(workflow).includes('review-switch'));
+  assert.ok(!JSON.stringify(gate).includes('review-switch'));
+});
+
+test('HYCI-456 a Codex usage limit comment is the only comment that starts a Claude review', () => {
+  assert.deepEqual(workflow.on.issue_comment.types, ['created']);
+  assert.match(job.if, /github\.event\.comment\.user\.login == 'chatgpt-codex-connector\[bot\]'/);
+  assert.match(job.if, /contains\(github\.event\.comment\.body, 'usage limits have been reached'\)/);
+  assert.match(job.if, /github\.event\.issue\.pull_request != null/);
+  assert.match(workflow.concurrency.group, /github\.run_id/);
+  const target = job.steps.find(step => step.id === 'target').with.script;
+  assert.ok(target.includes("reviewer === (fallback ? 'codex' : 'claude')"));
+});
+
+test('HYCI-456 when Claude hits its usage limit the same run asks Codex once', () => {
+  const review = job.steps.find(step => step.id === 'review');
+  assert.equal(review.env.REVIEW_HANDOFF, '${{ steps.target.outputs.handoff }}');
+  const handoff = job.steps.find(step => step.name && step.name.startsWith('Hand the review to Codex'));
+  assert.equal(handoff.if, "steps.review.outputs.handoff == 'codex'");
+  assert.ok(handoff.with.script.includes('codex-review-request:${sha}'));
+  assert.ok(handoff.with.script.includes('@codex review'));
+  assert.ok(!JSON.stringify(handoff).includes('secrets.'));
+  const publish = job.steps.find(step => step.name && step.name.startsWith('Publish'));
+  assert.match(publish.if, /steps\.review\.outputs\.handoff != 'codex'/);
 });

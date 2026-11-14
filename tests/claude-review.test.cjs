@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { evaluate, claudeResultFor, reviewerFromIssues } = require('../.github/scripts/codex-review-gate.cjs');
+const { evaluate, claudeResultFor, reviewerFromVariable } = require('../.github/scripts/codex-review-gate.cjs');
 const claudeReview = require('../.github/scripts/claude-review/claude-review.cjs');
 
 const head = 'c'.repeat(40);
@@ -46,23 +46,34 @@ test('HYCI-416 the newest review review of the head wins', () => {
   assert.equal(evaluate(pr({ comments })).state, 'success');
 });
 
-test('HYCI-416 the review counts only while the switch names it', () => {
-  for (const reviewer of ['codex', undefined, 'deepseek', 'gpt']) {
-    assert.equal(evaluate(pr({ comments: [claudeComment()], reviewer })).state, 'pending', String(reviewer));
+test('HYCI-456 a Claude verdict for the head counts whichever reviewer is chosen', () => {
+  for (const reviewer of ['claude', 'codex', undefined]) {
+    assert.equal(evaluate(pr({ comments: [claudeComment()], reviewer })).state, 'success', String(reviewer));
   }
-  assert.equal(claudeResultFor([claudeComment({ model: 'deepseek-v4.1-flash' })], head, 'deepseek'), null);
-  assert.equal(claudeResultFor([claudeComment({ model: 'deepseek-v4.1-flash' })], head, 'claude'), null);
+  assert.equal(evaluate(pr({ comments: [claudeComment({ verdict: 'CONCERNS', blocking: 1 })], reviewer: 'codex' })).state, 'failure');
+  assert.equal(claudeResultFor([claudeComment({ model: 'deepseek-v4.1-flash' })], head), null);
 });
 
-test('HYCI-416 the switch is read only from the runner app issue and defaults to codex', () => {
-  const issue = (reviewer, login = 'hypertask-runners[bot]', extra) => ({ user: { login }, body: `x <!-- review-switch:v1 ${JSON.stringify({ reviewer })} -->`, ...extra });
-  assert.equal(reviewerFromIssues([issue('claude')]), 'claude');
-  assert.equal(reviewerFromIssues([issue('deepseek'), issue('claude')]), 'claude');
-  assert.equal(reviewerFromIssues([issue('claude', 'someone-else')]), 'codex');
-  assert.equal(reviewerFromIssues([issue('claude', 'hypertask-runners[bot]', { pull_request: {} })]), 'codex');
-  assert.equal(reviewerFromIssues([issue('mystery')]), 'codex');
-  assert.equal(reviewerFromIssues([{ user: { login: 'hypertask-runners[bot]' }, body: '<!-- review-switch:v1 {oops} -->' }]), 'codex');
-  assert.equal(reviewerFromIssues([]), 'codex');
+test('HYCI-456 the pending text names the chosen reviewer', () => {
+  assert.match(evaluate(pr({ reviewer: 'claude' })).description, /^Waiting for the Claude Sonnet review/);
+  assert.match(evaluate(pr({ reviewer: 'codex' })).description, /^Waiting for the Codex review/);
+});
+
+test('HYCI-456 the REVIEWER variable picks claude, anything else is codex', () => {
+  assert.equal(reviewerFromVariable('claude'), 'claude');
+  assert.equal(reviewerFromVariable(' Claude\n'), 'claude');
+  for (const value of ['codex', '', undefined, null, 'deepseek', 'claude,codex']) assert.equal(reviewerFromVariable(value), 'codex', String(value));
+});
+
+test('HYCI-456 a usage limit is told apart from a real failure', () => {
+  for (const text of ['Claude AI usage limit reached|1760000000', "You've hit your session limit", '5-hour limit reached, resets 3pm', 'rate limit exceeded', 'Credit balance is too low']) {
+    assert.equal(claudeReview.isLimit(text), true, text);
+  }
+  for (const text of ['', 'output is not JSON', 'timeout after 600000ms', 'diff too large', undefined]) assert.equal(claudeReview.isLimit(text), false, String(text));
+  const limited = claudeReview.parseClaudeOutput(JSON.stringify({ is_error: true, result: "You've hit your weekly limit, resets Friday" }));
+  assert.deepEqual([limited.ok, limited.limit], [false, true]);
+  assert.equal(claudeReview.parseClaudeOutput(JSON.stringify({ is_error: true, result: 'internal error' })).limit, false);
+  assert.equal(claudeReview.parseClaudeOutput('Claude AI usage limit reached|1760000000').limit, true);
 });
 
 test('HYCI-416 a real Codex result always wins over the review', () => {

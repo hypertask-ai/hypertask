@@ -8,30 +8,15 @@ const BADGES = [/\bP([0-9]) Badge/g, /badge\/P([0-9])-/g, /\[P([0-9])\]/g, /\bP(
 
 const isCodex = login => String(login ?? '').replace(/\[bot\]$/, '') === CODEX_LOGIN;
 
-const REVIEWER_MODELS = { claude: /^claude-sonnet/ };
-const REVIEWER_NAMES = { claude: 'Claude Sonnet' };
-const SWITCH_AUTHOR = 'hypertask-runners';
+const CLAUDE_MODEL = /^claude-sonnet/;
+const CLAUDE_NAME = 'Claude Sonnet';
 const CLAUDE_REVIEW_STATE = /<!-- claude-review:v1 (\{.*?\}) -->/s;
-const SWITCH_LABEL = 'review-switch';
-const SWITCH_STATE = /<!-- review-switch:v1 (\{.*?\}) -->/s;
 
-const isApp = login => String(login ?? '').replace(/\[bot\]$/, '') === SWITCH_AUTHOR;
 const isClaudeReviewAuthor = login => String(login ?? '').replace(/\[bot\]$/, '') === 'github-actions';
 
-function reviewerFromIssues(issues) {
-  for (const issue of issues ?? []) {
-    if (issue.pull_request || !isApp(issue.user?.login)) continue;
-    try {
-      const reviewer = JSON.parse(SWITCH_STATE.exec(String(issue.body ?? ''))?.[1] ?? 'null')?.reviewer;
-      if (reviewer === 'codex' || reviewer === 'claude') return reviewer;
-    } catch {}
-  }
-  return 'codex';
-}
+const reviewerFromVariable = value => (String(value ?? '').trim().toLowerCase() === 'claude' ? 'claude' : 'codex');
 
-function claudeResultFor(comments, headOid, reviewer) {
-  const modelPattern = REVIEWER_MODELS[reviewer];
-  if (!modelPattern) return null;
+function claudeResultFor(comments, headOid) {
   const short = headOid.slice(0, 7);
   for (const comment of [...(comments ?? [])].reverse()) {
     if (!isClaudeReviewAuthor(comment.author)) continue;
@@ -43,10 +28,10 @@ function claudeResultFor(comments, headOid, reviewer) {
     } catch {
       continue;
     }
-    if (state?.sha !== headOid || !modelPattern.test(String(state.model ?? ''))) continue;
+    if (state?.sha !== headOid || !CLAUDE_MODEL.test(String(state.model ?? ''))) continue;
     if (!['APPROVE', 'CONCERNS'].includes(state.verdict) || !Number.isInteger(state.blocking) || state.blocking < 0) continue;
     const evidence = comment.url ?? '';
-    const name = REVIEWER_NAMES[reviewer];
+    const name = CLAUDE_NAME;
     return state.blocking > 0
       ? { state: 'failure', description: `${name} reviewed ${short}: ${state.blocking} blocker/major finding(s)`, evidence }
       : { state: 'success', description: `${name} reviewed ${short}: no blocker/major findings`, evidence };
@@ -154,7 +139,7 @@ function evaluate(pr) {
   const headBlocking = rawHeadBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   const staleBlocking = rawStaleBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   const blocking = headBlocking.concat(staleBlocking);
-  const claudeResult = claudeResultFor(pr.comments, pr.headOid, pr.reviewer);
+  const claudeResult = claudeResultFor(pr.comments, pr.headOid);
   const claudeClearsStale = staleBlocking.length > 0 && claudeResult?.state === 'success';
 
   if (headBlocking.length || (staleBlocking.length && !claudeClearsStale)) {
@@ -206,7 +191,7 @@ function evaluate(pr) {
     }
   }
   if (claudeResult) return claudeResult;
-  return { state: 'pending', description: `Waiting for the Codex review of ${short}`, evidence: '' };
+  return { state: 'pending', description: `Waiting for the ${pr.reviewer === 'claude' ? CLAUDE_NAME : 'Codex'} review of ${short}`, evidence: '' };
 }
 
 const SWEEP = `
@@ -236,7 +221,7 @@ query($owner: String!, $name: String!, $number: Int!) {
   }
 }`;
 
-async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, result, existingContexts, commentBodies, reviewer }) {
+async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, result, existingContexts, commentBodies }) {
   const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
   const existing = new Map(existingContexts.map(entry => [entry.context, entry]));
   const detailsUrl = result.evidence || `${serverUrl}/${owner}/${repo}/pull/${prNumber}`;
@@ -281,7 +266,7 @@ async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, re
   if (result.state === 'success' && !alreadyApproved) {
     await github.rest.issues.createComment({
       owner, repo, issue_number: prNumber,
-      body: `APPROVE\n\n${result.description}.${result.evidence ? ` ${result.description.startsWith(REVIEWER_NAMES[reviewer] ?? '\u0000') ? REVIEWER_NAMES[reviewer] : 'Codex'} review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
+      body: `APPROVE\n\n${result.description}.${result.evidence ? ` ${result.description.startsWith(CLAUDE_NAME) ? CLAUDE_NAME : 'Codex'} review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
     });
   }
 }
@@ -289,13 +274,7 @@ async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, re
 async function run({ github, context, core, single = 0 }) {
   const { owner, repo } = context.repo;
   const only = context.payload.pull_request?.number ?? context.payload.issue?.number ?? 0;
-  let reviewer = 'codex';
-  try {
-    const { data } = await github.rest.issues.listForRepo({ owner, repo, labels: SWITCH_LABEL, state: 'open', per_page: 10 });
-    reviewer = reviewerFromIssues(data);
-  } catch (error) {
-    core.warning(`review switch unreadable, using codex: ${error.message}`);
-  }
+  const reviewer = reviewerFromVariable(process.env.REVIEWER);
   core.info(`reviewer: ${reviewer}`);
 
   const nodes = [];
@@ -314,8 +293,8 @@ async function run({ github, context, core, single = 0 }) {
     const head = node.commits.nodes[0]?.commit;
     if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
     const result = evaluate({
-      reviewer,
       headOid: node.headRefOid,
+      reviewer,
       statusContexts: head?.status?.contexts ?? [],
       reviews: node.reviews.nodes.map(review => ({
         author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid, submittedAt: review.submittedAt,
@@ -340,7 +319,7 @@ async function run({ github, context, core, single = 0 }) {
     }
 
     await publishResult({
-      github, owner, repo, sha: node.headRefOid, prNumber: node.number, serverUrl: context.serverUrl, result, reviewer,
+      github, owner, repo, sha: node.headRefOid, prNumber: node.number, serverUrl: context.serverUrl, result,
       existingContexts: head.status?.contexts ?? [],
       commentBodies: node.comments.nodes.map(comment => comment.body ?? ''),
     });
@@ -352,7 +331,7 @@ module.exports = {
   evaluate,
   publishResult,
   claudeResultFor,
-  reviewerFromIssues,
+  reviewerFromVariable,
   priorityOf,
   blocks,
   isCodex,

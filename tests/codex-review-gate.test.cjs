@@ -226,3 +226,37 @@ test('HYCI-456 run with a single pull request asks for that pull request only, n
   assert.match(queries[0].query, /pullRequest\(number: \$number\)/);
   assert.ok(statuses.length > 0 && statuses.every(status => status.sha === head));
 });
+
+test('HYCI-456 run asks Codex for a review only while the REVIEWER variable is not claude', async () => {
+  const { run } = require('../.github/scripts/codex-review-gate.cjs');
+  const asked = async value => {
+    const created = [];
+    const node = {
+      number: 8, isDraft: false, isCrossRepository: false, headRefOid: head,
+      commits: { nodes: [{ commit: { oid: head, status: { contexts: [] } } }] },
+      reviews: { pageInfo: { hasPreviousPage: false }, nodes: [] },
+      comments: { nodes: [] },
+    };
+    const github = {
+      graphql: async () => ({ repository: { pullRequest: node } }),
+      paginate: async () => [],
+      rest: {
+        pulls: { get: async () => ({ data: { head: { sha: head }, state: 'open', draft: false } }) },
+        issues: { createComment: async args => { created.push(args.body); } },
+        repos: { createCommitStatus: async () => {} },
+        checks: { listForRef: async () => ({ data: [] }) },
+      },
+    };
+    const before = process.env.REVIEWER;
+    if (value === undefined) delete process.env.REVIEWER; else process.env.REVIEWER = value;
+    try {
+      await run({ github, context: { repo: { owner: 'o', repo: 'r' }, payload: {}, serverUrl: 'https://github.test' }, core: { info() {}, warning() {} }, single: 8 });
+    } finally {
+      if (before === undefined) delete process.env.REVIEWER; else process.env.REVIEWER = before;
+    }
+    return created.some(body => body.startsWith('@codex review'));
+  };
+  assert.equal(await asked('codex'), true);
+  assert.equal(await asked(undefined), true);
+  assert.equal(await asked('claude'), false);
+});

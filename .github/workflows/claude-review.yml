@@ -4,9 +4,8 @@ on:
   workflow_run:
     workflows: ["Claude review request"]
     types: [completed]
-  pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
-    branches: [production]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       pr:
@@ -22,7 +21,7 @@ permissions:
   checks: write
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('review-bootstrap-{0}', github.event.pull_request.number) || github.event_name == 'workflow_run' && format('review-{0}-{1}', github.event.workflow_run.pull_requests[0].number, github.event.workflow_run.head_sha) || format('review-{0}-manual', inputs.pr) }}
+  group: ${{ github.event_name == 'workflow_run' && format('review-{0}-{1}', github.event.workflow_run.pull_requests[0].number, github.event.workflow_run.head_sha) || github.event_name == 'issue_comment' && format('review-{0}-comment-{1}', github.event.issue.number, github.event.comment.user.login == 'chatgpt-codex-connector[bot]' && contains(github.event.comment.body, 'usage limits have been reached') && 'fallback' || github.run_id) || format('review-{0}-manual', inputs.pr) }}
   cancel-in-progress: true
 
 jobs:
@@ -30,16 +29,17 @@ jobs:
     name: Claude Sonnet reviews this pull request
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null &&
+       github.event.comment.user.login == 'chatgpt-codex-connector[bot]' &&
+       contains(github.event.comment.body, 'usage limits have been reached')) ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
-       github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0] != null) ||
-      (github.event_name == 'pull_request' && github.event.pull_request.number == 3506 &&
-       github.event.pull_request.head.repo.full_name == github.repository)
+       github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0] != null)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.sha || 'production' }}
+          ref: production
           fetch-depth: 1
           sparse-checkout: .github/scripts
           persist-credentials: false
@@ -48,18 +48,19 @@ jobs:
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
           PR_INPUT: ${{ inputs.pr }}
+          REVIEWER: ${{ vars.REVIEWER }}
         with:
           script: |
             const { owner, repo } = context.repo;
             const gate = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/codex-review-gate.cjs`);
             const run = context.payload.workflow_run;
-            const number = Number(context.payload.pull_request?.number ?? run?.pull_requests?.[0]?.number ?? process.env.PR_INPUT);
+            const fallback = context.eventName === 'issue_comment';
+            const number = Number(run?.pull_requests?.[0]?.number ?? context.payload.issue?.number ?? process.env.PR_INPUT);
             if (!Number.isInteger(number) || number < 1) core.setFailed('no pull request number');
             const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
-            const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, labels: 'review-switch', state: 'open', per_page: 10 });
-            const reviewer = gate.reviewerFromIssues(issues);
-            core.info(`reviewer: ${reviewer}`);
-            const ok = reviewer === 'claude' && pr.state === 'open' && !pr.draft
+            const reviewer = gate.reviewerFromVariable(process.env.REVIEWER);
+            core.info(`reviewer: ${reviewer}${fallback ? ' (Codex hit its usage limit, Claude takes over)' : ''}`);
+            const ok = reviewer === (fallback ? 'codex' : 'claude') && pr.state === 'open' && !pr.draft
               && pr.head.repo?.full_name === `${owner}/${repo}`
               && pr.base.ref === 'production'
               && pr.user?.login !== 'dependabot[bot]'
@@ -67,6 +68,7 @@ jobs:
             core.setOutput('number', String(number));
             core.setOutput('sha', pr.head.sha);
             core.setOutput('go', ok ? 'yes' : 'no');
+            core.setOutput('handoff', ok && !fallback ? 'codex' : '');
             if (!ok) core.notice(`skipped: reviewer=${reviewer} state=${pr.state} draft=${pr.draft} head=${pr.head.sha}`);
       - name: Require the Claude subscription token
         if: steps.target.outputs.go == 'yes'
@@ -86,6 +88,7 @@ jobs:
         if: steps.target.outputs.go == 'yes'
         run: npm install --global @anthropic-ai/claude-code@2.1.325
       - name: Review the diff
+        id: review
         if: steps.target.outputs.go == 'yes'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -93,10 +96,29 @@ jobs:
           REVIEW_REPO: ${{ github.repository }}
           REVIEW_PR: ${{ steps.target.outputs.number }}
           REVIEW_SHA: ${{ steps.target.outputs.sha }}
+          REVIEW_HANDOFF: ${{ steps.target.outputs.handoff }}
         run: node .github/scripts/claude-review/claude-review.cjs
-      - name: Publish ai-review and claude-review for this head
-        if: steps.target.outputs.go == 'yes'
+      - name: Hand the review to Codex when Claude hit its usage limit
+        if: steps.review.outputs.handoff == 'codex'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          PR_NUMBER: ${{ steps.target.outputs.number }}
+          PR_SHA: ${{ steps.target.outputs.sha }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = process.env.PR_SHA;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const marker = `<!-- codex-review-request:${sha} -->`;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+            if (comments.some(comment => comment.body?.includes(marker))) return core.info('Codex was already asked for this head');
+            await github.rest.issues.createComment({ owner, repo, issue_number, body: `@codex review\n\nClaude hit its usage limit. Review the current head ${sha}.\n${marker}` });
+            core.notice('Claude hit its usage limit, asked Codex to review this head');
+      - name: Publish ai-review and claude-review for this head
+        if: steps.target.outputs.go == 'yes' && steps.review.outputs.handoff != 'codex'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          REVIEWER: ${{ vars.REVIEWER }}
         with:
           script: |
             const run = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/codex-review-gate.cjs`).run;
