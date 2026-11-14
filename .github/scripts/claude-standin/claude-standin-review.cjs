@@ -150,10 +150,7 @@ function waitingForReview(pr, attemptsFor) {
   return attemptsFor(pr.headRefOid) < ATTEMPTS_PER_HEAD;
 }
 
-// The cap is spent on the PRs closest to merging: a head whose checks still pass
-// first, then the one that has waited longest. Newest-first spent a whole day of
-// reviews on the last pushes and left old green heads waiting (HYCI-437).
-function waitingCandidates(prs, { attemptsFor }) {
+function greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor }) {
   return [...prs.filter(pr => waitingForReview(pr, attemptsFor))].sort((a, b) =>
     (isGreen(a) ? 0 : 1) - (isGreen(b) ? 0 : 1)
     || createdAtOf(a) - createdAtOf(b)
@@ -162,7 +159,7 @@ function waitingCandidates(prs, { attemptsFor }) {
 
 function selectCandidates(prs, { now, attemptsFor, reviewedToday }) {
   const room = Math.max(0, Math.min(PER_RUN, PER_DAY - reviewedToday));
-  return waitingCandidates(prs, { attemptsFor }).slice(0, room);
+  return greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor }).slice(0, room);
 }
 
 const capNoticeMarker = day => `<!-- ${CAP_NOTICE_MARKER} ${JSON.stringify({ day })} -->`;
@@ -184,7 +181,7 @@ function capNoticeBody({ sha, day, now }) {
 }
 
 function capNotices(prs, { attemptsFor, day, now, notified }) {
-  return waitingCandidates(prs, { attemptsFor })
+  return greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor })
     .filter(pr => !notified(pr.number))
     .slice(0, MAX_CAP_NOTICES)
     .map(pr => ({ pr, body: capNoticeBody({ sha: pr.headRefOid, day, now }) }));
@@ -322,7 +319,7 @@ function noticeCap(prs, { REPO, dir, day, now, attemptsFor }) {
 module.exports = {
   AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS, PER_RUN, PER_DAY, CAP_NOTICE_MARKER,
   isBlocking, hasPatch, parseClaudeOutput, buildComment, selectCandidates,
-  isGreen, waitingCandidates, capNotices, capNoticeBody, refillAt,
+  isGreen, greenFirstOldestFirstWaitingCandidates, capNotices, capNoticeBody, refillAt,
 };
 
 if (require.main === module) main();
