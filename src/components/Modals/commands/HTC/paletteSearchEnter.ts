@@ -6,10 +6,12 @@ export const commitPaletteSearchEnter = (
   command: ICommandList | null,
   commit: (command: ICommandList) => void,
 ) => {
-  if (event.key !== "Enter" || !command) return false;
+  if (event.key !== "Enter" || event.nativeEvent?.isComposing || !command) {
+    return false;
+  }
   event.preventDefault();
   event.stopPropagation();
-  event.nativeEvent.stopImmediatePropagation();
+  event.nativeEvent?.stopImmediatePropagation?.();
   commit(command);
   return true;
 };

@@ -178,8 +178,8 @@ test("choosing any palette row with Enter stays inside the palette on pages with
   const command = rows(true).find(row => row.key === "triageInbox");
   const calls = [];
   const pageListeners = [];
-  const fire = event => {
-    const stopped = commitPaletteSearchEnter(event, command, chosen => calls.push(chosen.key));
+  const fire = (event, chosen = command) => {
+    const stopped = commitPaletteSearchEnter(event, chosen, picked => calls.push(picked.key));
     if (!event.propagationStopped) pageListeners.forEach(listener => listener());
     return stopped;
   };
@@ -198,8 +198,13 @@ test("choosing any palette row with Enter stays inside the palette on pages with
   assert.deepEqual(calls, ["triageInbox"]);
   calls.length = 0;
   assert.equal(fire({ key: "a", nativeEvent: {}, preventDefault() { throw Error("must not prevent typing"); } }), false);
-  assert.equal(fire({ key: "Enter", nativeEvent: {}, preventDefault() {}, stopPropagation() {} }), false);
-  assert.deepEqual(calls, []);
+  assert.equal(fire({ key: "Enter", nativeEvent: {}, preventDefault() {}, stopPropagation() {} }, null), false);
+  assert.equal(
+    fire({ key: "Enter", nativeEvent: { isComposing: true }, preventDefault() { throw Error("must not consume an IME confirmation"); }, stopPropagation() {}, }),
+    false,
+    "an Enter that confirms an IME composition is left alone",
+  );
+  assert.equal(calls.includes("triageInbox"), false, "no command runs without a chosen row or during IME");
 });
 
 test("both palette search inputs use the guarded Enter commit", () => {
