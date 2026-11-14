@@ -46,8 +46,9 @@ const STUCK_SECONDS = 45;
 const RECENT_MINUTES = 30;
 const GUARD_WORKFLOW = 'feature-flag-gate.yml';
 const GUARD_PENDING_MINUTES = 30;
-// A cancel usually settles in one or two polls; a slower one is now carried by a
-// tick that is TICK_GAP_MS away instead of a whole chain wait.
+// Only `completed` is a finished run, so the guard queue is read once for each of the other five statuses GitHub reports.
+const GUARD_UNFINISHED_STATUSES = ['queued', 'pending', 'requested', 'waiting', 'in_progress'];
+// A cancel usually settles in one or two polls; a slower one is carried by a tick, TICK_GAP_MS away.
 const SETTLE_ATTEMPTS = 10;
 const SETTLE_DELAY_MS = 2000;
 const PR_EVENT = 'pull_request';
@@ -208,31 +209,43 @@ async function plan(repo, { now = Date.now(), stuckSeconds = STUCK_SECONDS, rece
 function overdueRuns(runs, { now = Date.now(), minutes = GUARD_PENDING_MINUTES } = {}) {
   const limit = minutes * 60 * 1000;
   return runs.filter((run) => {
-    if (run.status !== 'pending') return false;
+    if (!GUARD_UNFINISHED_STATUSES.includes(run.status)) return false;
     const created = run.created_at ? Date.parse(run.created_at) : NaN;
     return Number.isFinite(created) && now - created >= limit;
   });
 }
 
+async function guardRuns(repo, status, api) {
+  const payload = await api(`/repos/${repo}/actions/workflows/${GUARD_WORKFLOW}/runs?status=${status}&per_page=100`);
+  return payload.workflow_runs ?? [];
+}
+
 async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PENDING_MINUTES, api = json } = {}) {
-  let runs;
-  try {
-    const payload = await api(`/repos/${repo}/actions/workflows/${GUARD_WORKFLOW}/runs?status=pending&per_page=100`);
-    runs = payload.workflow_runs ?? [];
-  } catch (error) {
-    return { checked: 0, cancelled: 0, unread: String(error.message).slice(0, 120) };
+  const runs = [];
+  const seen = new Set();
+  let unread;
+  for (const status of GUARD_UNFINISHED_STATUSES) {
+    try {
+      for (const run of await guardRuns(repo, status, api)) {
+        if (seen.has(run.id)) continue;
+        seen.add(run.id);
+        runs.push(run);
+      }
+    } catch (error) {
+      unread = String(error.message).slice(0, 120);
+    }
   }
   let cancelled = 0;
   for (const run of overdueRuns(runs, { now, minutes })) {
     try {
       await api(`/repos/${repo}/actions/runs/${run.id}/cancel`, 'POST');
       cancelled += 1;
-      console.log(`::notice::guard run ${run.id} waited over ${minutes} minutes for its turn; cancelled.`);
+      console.log(`::notice::guard run ${run.id} was still ${run.status} after ${minutes} minutes; cancelled.`);
     } catch (error) {
       console.log(`::warning::guard run ${run.id} could not be cancelled: ${String(error.message).slice(0, 120)}.`);
     }
   }
-  return { checked: runs.length, cancelled };
+  return unread ? { checked: runs.length, cancelled, unread } : { checked: runs.length, cancelled };
 }
 
 async function jobsOf(repo, runId, api = json) {
@@ -738,7 +751,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, sweepOnce, nowFrom, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, overdueRuns, cancelOverdueGuards, GUARD_PENDING_MINUTES, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, sweepOnce, nowFrom, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, overdueRuns, cancelOverdueGuards, guardRuns, GUARD_UNFINISHED_STATUSES, GUARD_PENDING_MINUTES, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
 
 if (require.main === module) {
   main().catch(error => {
