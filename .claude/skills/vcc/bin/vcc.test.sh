@@ -51,7 +51,7 @@ printf 'identity lookup\n' >> "$VCC_TEST_TRACE"
 printf '%s\t%s\n' "${VCC_TEST_IDENTITY:-Fixture}" "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 STUB
 chmod +x "$T/bin/"* "$HOME/.agents/skills/ship/scripts/ship-identity"
-printf '%s\n' 'vcc: helpers never write to the board; report to your runner' > "$T/refusal"
+printf '%s\n' 'vcc: helpers never write to the board; report to your runner. If you are a pool runner, this is a bug: file it with agent-feedback and park.' > "$T/refusal"
 cat > "$HOME/.agents/skills/ship/scripts/ship-check" <<'STUB'
 #!/usr/bin/env bash
 exit 0
