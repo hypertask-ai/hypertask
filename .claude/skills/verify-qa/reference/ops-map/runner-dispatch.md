@@ -2,7 +2,7 @@
 
 ## How a customer reaches it
 
-HT Product Lead and the runner timers run `.claude/skills/ship/scripts/runner-dispatch` from the copy that `runner-selfupdate` installs (`~/.local/state/runner-selfupdate/production`, an isolated production checkout; `~/projects/ht-skills-live` is only where the updater reads the origin URL). It reads Claude panes through `runner-snapshot` (next to it, else `~/.claude/skills/runners/scripts/runner-snapshot`), adds hax panes from tmux, reads the boards, and plans which free ticket goes to which idle Claude runner. Hax panes prevent false outage alarms but never receive Claude commands. This is infrastructure, with no app UI.
+HT Product Lead and the runner timers run the installed dispatcher `~/.claude/skills/runners/scripts/runner-dispatch`, which `runner-selfupdate` installs from the isolated production checkout `~/.local/state/runner-selfupdate/production`; that checkout is only the update source, and `~/projects/ht-skills-live` is only where the updater reads the origin URL. It reads Claude panes through `runner-snapshot` (next to it, else `~/.claude/skills/runners/scripts/runner-snapshot`), adds hax panes from tmux, reads the boards, and plans which free ticket goes to which idle Claude runner. Hax panes prevent false outage alarms but never receive Claude commands. This is infrastructure, with no app UI.
 
 ## How to drive it
 
