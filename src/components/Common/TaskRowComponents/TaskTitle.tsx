@@ -165,6 +165,7 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
     const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
     const nameColumn = useFlag(HTPR_8264_INBOX_NAME_COLUMN_FLAG) && rowFill && Boolean(notification);
     const flipMentionHierarchy = !rowFill && notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
+    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG);
 
     const defaultClassName = "truncate flex-1 flex-column sm:flex-initial md:min-w-[180px]"
 
@@ -188,8 +189,10 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
                         fontSize={11}
                         dueDate={task.dueDate}
                         overdue={isOverdue}
-                        className={cn(inboxConfig.bulkSelectionStyling.taskLabels(isIbxSlctd))}
-
+                        className={cn(
+                            inboxConfig.bulkSelectionStyling.taskLabels(isIbxSlctd),
+                            narrowRow && 'hidden @min-[700px]:inline-flex'
+                        )}
                     />
                 )}
                 <div

@@ -44,3 +44,12 @@ test('narrow rows drop their tags before the title, and never shrink a chip into
   assert.match(row, /useFlag\(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG\)/, 'the row must read the flag');
   assert.match(row, /\$\{narrowInboxTabs \? "@container" : ""\}/, 'the row must be its own container when the flag is on');
 });
+
+test('narrow rows also drop the inline due-date chip so the title keeps its room', () => {
+  const title = read('src/components/Common/TaskRowComponents/TaskTitle.tsx');
+  assert.match(title, /narrowRow && 'hidden @min-\[700px\]:inline-flex'/,
+    'the inline due date hides under 700px of row width, flag on only');
+  const inlineDueDate = title.slice(title.indexOf('const TitleContainer'));
+  assert.match(inlineDueDate, /!hideDueDate && task\?\.dueDate && \(/,
+    'the inline due date stays for every other width and when the flag is off');
+});
