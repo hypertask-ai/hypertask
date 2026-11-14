@@ -359,6 +359,7 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
   if (
     !checkIfOnboarded(user) &&
     currentPath !== onboarding &&
+    currentPath !== '/signout' &&
     currentPath !== '/add-to-slack' &&
     currentPath !== '/slack/support' &&
     currentPath !== '/qa/login' &&
