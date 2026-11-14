@@ -60,3 +60,30 @@ test("an explicit hide on the main tab survives a later write whose body matches
   assert.ok(!h.writes.some(([name]) => name === "view-delete"));
   assert.ok(!h.writes.some(([name, query]) => query.data?.board_subtask_explicit === false));
 });
+
+test("a stored explicit hide stops protecting the draft once the request shows sub-tickets again", async () => {
+  const h = fixture({
+    owner: true,
+    unsaved: true,
+    draft: { board_subtask_explicit: true, board_subtask_setting: "None" },
+  });
+  h.mocks["@/lib/savedViews/boardDefaultSubtasks"] = { boardDefaultShowsSubtasks: async () => true };
+  h.mocks["@/utils/helperFunctions/helperFunctions"] = {
+    isDeepEqual: () => true,
+    getCurrentProject: () => ({ _sections: [], firstTask: null }),
+  };
+  statefulDraft(h);
+  const post = h.load("src/lib/api/project-writes/views/unsaved-view.ts").POST;
+
+  assert.equal(h.draft.board_subtask_explicit, true);
+
+  const laterWrite = await post(h.request({ ...body, board_subtask_setting: "Flattened_Card" }));
+  assert.equal(laterWrite.status, 200);
+  assert.ok(
+    h.writes.some(([name]) => name === "view-delete"),
+    "the draft is deleted once the settings match the board again"
+  );
+  assert.equal(h.draft.deleted, true);
+  assert.equal(h.uv.unsavedViewId, null);
+  assert.ok(!h.writes.some(([name]) => name === "view-update"));
+});

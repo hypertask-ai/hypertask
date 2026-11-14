@@ -389,7 +389,8 @@ const route = taskWriteRoute({
             };
 
             const storedExplicitHide =
-              user_project_view.unsavedView.board_subtask_explicit === true;
+              user_project_view.unsavedView.board_subtask_explicit === true &&
+              board_subtask_setting === "None";
             if (
               isDeepEqual(settingsFromReqBody, settingsFromDB) &&
               !(markExplicitSubtask && board_subtask_setting === "None") &&
