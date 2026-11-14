@@ -161,7 +161,7 @@ const headAgeOf = pr => Date.parse(pr.commits?.nodes?.[0]?.commit?.committedDate
 function waitingForReview(pr, attemptsFor) {
   if (pr.isDraft || pr.isCrossRepository || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '')) return false;
   const gate = checksOf(pr).find(c => c.name === 'ai-review');
-  if (gate && gate.state !== 'pending') return false;
+  if (gate && gate.state === 'success') return false;
   const done = (pr.comments?.nodes ?? []).some(c =>
     String(c.author?.login ?? '').replace(/\[bot\]$/, '') === AUTHOR
     && String(c.body ?? '').includes(`${MARKER_PREFIX} {`) && String(c.body).includes(`"sha":"${pr.headRefOid}"`));
