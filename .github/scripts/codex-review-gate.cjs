@@ -210,32 +210,34 @@ function evaluate(pr) {
   return { state: 'pending', description: `Waiting for the Codex review of ${short}`, evidence: '' };
 }
 
-const SWEEP = `
-query($owner: String!, $name: String!, $after: String) {
-  repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: 25, after: $after, baseRefName: "production") {
-      pageInfo { hasNextPage endCursor }
-      nodes {
-        number isDraft isCrossRepository headRefOid
-        commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body submittedAt commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
-        comments(last: 100) { nodes { author { login } url body createdAt updatedAt } }
-      }
-    }
-  }
-}`;
-
-const SINGLE = `
-query($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) {
-    pullRequest(number: $number) {
-        number isDraft isCrossRepository headRefOid
-        commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body submittedAt commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
-        comments(last: 100) { nodes { author { login } url body createdAt updatedAt } }
-      }
-  }
-}`;
+async function readPull(github, owner, repo, number) {
+  const { data: pull } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+  if (pull.state !== 'open' || pull.base.ref !== 'production' || pull.head.repo?.full_name !== pull.base.repo.full_name) return null;
+  const params = { owner, repo, pull_number: number, per_page: 100 };
+  const reviews = await github.paginate(github.rest.pulls.listReviews, params);
+  const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, params);
+  const issueComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
+  const history = await github.paginate(github.rest.repos.listCommitStatusesForRef, { owner, repo, ref: pull.head.sha, per_page: 100 });
+  const latest = new Map();
+  for (const entry of history) if (!latest.has(entry.context)) latest.set(entry.context, entry);
+  return {
+    number: pull.number, isDraft: pull.draft, isCrossRepository: false, headRefOid: pull.head.sha,
+    commits: { nodes: [{ commit: { oid: pull.head.sha, status: { contexts: [...latest.values()] } } }] },
+    reviews: {
+      pageInfo: { hasPreviousPage: false },
+      nodes: reviews.map(review => ({
+        author: review.user, url: review.html_url, body: review.body, submittedAt: review.submitted_at, commit: { oid: review.commit_id },
+        comments: {
+          pageInfo: { hasNextPage: false },
+          nodes: reviewComments.filter(comment => comment.pull_request_review_id === review.id).map(comment => ({
+            body: comment.body, author: comment.user, replyTo: comment.in_reply_to_id, commit: { oid: comment.commit_id },
+          })),
+        },
+      })),
+    },
+    comments: { nodes: issueComments.map(comment => ({ author: comment.user, url: comment.html_url, body: comment.body, createdAt: comment.created_at, updatedAt: comment.updated_at })) },
+  };
+}
 
 async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, result, existingContexts, commentBodies, reviewer }) {
   const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
@@ -299,19 +301,18 @@ async function run({ github, context, core, single = 0 }) {
   }
   core.info(`reviewer: ${reviewer}`);
 
+  const numbers = only
+    ? [only]
+    : single
+      ? [single]
+      : (await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', base: 'production', per_page: 100 })).map(pull => pull.number);
   const nodes = [];
-  if (single) {
-    const { repository: { pullRequest } } = await github.graphql(SINGLE, { owner, name: repo, number: single });
-    if (pullRequest) nodes.push(pullRequest);
-  } else {
-    for (let after = null, more = true; more;) {
-      const { repository: { pullRequests } } = await github.graphql(SWEEP, { owner, name: repo, after });
-      nodes.push(...pullRequests.nodes);
-      ({ hasNextPage: more, endCursor: after } = pullRequests.pageInfo);
-    }
+  for (const number of numbers) {
+    const node = await readPull(github, owner, repo, number);
+    if (node) nodes.push(node);
   }
 
-  for (const node of nodes.filter(node => !only || node.number === only)) {
+  for (const node of nodes) {
     const head = node.commits.nodes[0]?.commit;
     if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
     const result = evaluate({

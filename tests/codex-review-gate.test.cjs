@@ -199,30 +199,29 @@ test('HYCI-269 undated clean evidence cannot clear a remapped finding', () => {
 
 test('HYCI-456 run with a single pull request asks for that pull request only, never sweeps', async () => {
   const { run } = require('../.github/scripts/codex-review-gate.cjs');
-  const queries = [];
+  const reads = [];
   const statuses = [];
-  const node = {
-    number: 7, isDraft: true, isCrossRepository: false, headRefOid: head,
-    commits: { nodes: [{ commit: { oid: head, status: { contexts: [] } } }] },
-    reviews: { pageInfo: { hasPreviousPage: false }, nodes: [] },
-    comments: { nodes: [] },
-  };
+  const api = name => Object.assign(async () => [], { api: name });
   const github = {
-    graphql: async (query, variables) => {
-      queries.push({ query, variables });
-      return { repository: { pullRequest: node } };
-    },
-    paginate: async () => [],
+    graphql: async () => { throw new Error('the gate never reads through GraphQL'); },
+    paginate: async (method, params) => { reads.push({ name: method.api, params }); return []; },
     rest: {
-      issues: { listForRepo: async () => ({ data: [] }) },
-      repos: { createCommitStatus: async args => { statuses.push(args); } },
-      checks: { listForRef: async () => ({ data: [] }) },
+      pulls: {
+        list: api('pulls.list'), listReviews: api('pulls.listReviews'), listReviewComments: api('pulls.listReviewComments'),
+        get: async params => {
+          reads.push({ name: 'pulls.get', params });
+          return { data: { number: params.pull_number, state: 'open', draft: true, head: { sha: head, repo: { full_name: 'o/r' } }, base: { ref: 'production', repo: { full_name: 'o/r' } } } };
+        },
+      },
+      issues: { listComments: api('issues.listComments'), listForRepo: async () => ({ data: [] }) },
+      repos: { listCommitStatusesForRef: api('repos.listCommitStatusesForRef'), createCommitStatus: async args => { statuses.push(args); } },
+      checks: { listForRef: api('checks.listForRef'), create: async () => {} },
     },
   };
   const context = { repo: { owner: 'o', repo: 'r' }, payload: {}, serverUrl: 'https://github.test' };
   await run({ github, context, core: { info() {}, warning() {} }, single: 7 });
-  assert.equal(queries.length, 1);
-  assert.equal(queries[0].variables.number, 7);
-  assert.match(queries[0].query, /pullRequest\(number: \$number\)/);
+  assert.deepEqual(reads.filter(read => read.name === 'pulls.get').map(read => read.params.pull_number), [7]);
+  assert.ok(!reads.some(read => read.name === 'pulls.list'));
+  assert.ok(reads.filter(read => read.params.pull_number).every(read => read.params.pull_number === 7));
   assert.ok(statuses.length > 0 && statuses.every(status => status.sha === head));
 });
