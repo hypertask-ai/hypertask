@@ -3,19 +3,10 @@ const path = require('node:path')
 const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
 const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, cache: false, interopDefault: true })
-const flag = jiti(path.join(root, 'src/lib/flags/definitions/htpr-6371-mobile-search.ts'))
 const { mobileSearchPickerBounds, isMobileSearchSubmit } = jiti(path.join(root, 'src/lib/search/mobile.ts'))
 const { searchCompletion, localValueSuggestions } = jiti(path.join(root, 'src/lib/search/autocomplete.ts'))
 const { candidateQuery, splitSearchChips, chipQuery } = jiti(path.join(root, 'src/lib/search/chips.ts'))
 const { SEARCH_OPERATORS, parseSearchQuery } = jiti(path.join(root, 'src/lib/search/operators.ts'))
-
-test('phone search is a new Owner + QA feature with a release risk', () => {
-  assert.equal(flag.key, 'htpr-6371-mobile-search')
-  assert.equal(flag.kind, 'feature')
-  assert.equal(flag.defaultMode, 'OWNER_AND_QA')
-  assert.equal(flag.releaseRisk.risk, 'small')
-  assert.ok(flag.releaseRisk.reason.length > 20)
-})
 
 test('input events and composition completion handle soft-keyboard @ and # without keydown', () => {
   for (const [text, operator, value] of [['@', 'from', ''], ['@Browser', 'from', 'Browser'], ['fix @Browser', 'from', 'Browser'], ['#', 'in', ''], ['#Board', 'in', 'Board'], ['fix #Board', 'in', 'Board']]) {
@@ -90,7 +81,7 @@ test('real input, composition and native beforeinput events complete phone chips
     return { ok: true, json: async () => ({ candidates: [{ id: operator === 'in' ? 7 : 985, name: operator === 'in' ? 'Fixture board' : 'Fixture person' }] }) }
   }
   try {
-    stub('src/hooks/useFlag.tsx', { useFlag: () => true })
+    stub('src/hooks/useFlag.tsx', { useFlag: (key) => key !== 'htpr-6371-mobile-search' })
     stub('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(true) })
     stub('src/components/Common/UserAvatar.tsx', { default: () => null })
     const Component = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default

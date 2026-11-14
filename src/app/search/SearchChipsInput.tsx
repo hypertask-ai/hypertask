@@ -2,7 +2,7 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG, HTPR_7559_ENTER_RUNS_SEARCH_FLAG } from "@/lib/flags/keys";
+import { HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG, HTPR_7559_ENTER_RUNS_SEARCH_FLAG } from "@/lib/flags/keys";
 import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
@@ -33,9 +33,8 @@ function typedFilter(text: string, completion: ReturnType<typeof searchCompletio
 }
 
 export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, recentSearches = [], layoutEnabled: layoutRequested = false, availableBoards = [], onAskAi, showSuggestions = true }: Props) {
-  const mobileFlagEnabled = useFlag(HTPR_6371_MOBILE_SEARCH_FLAG);
   const isMobile = useContext(MobileViewContext);
-  const mobileEnabled = mobileFlagEnabled && isMobile;
+  const mobileEnabled = isMobile;
   const [composing, setComposing] = useState(false);
   const composingRef = useRef(false);
   const [mobileBounds, setMobileBounds] = useState<(ReturnType<typeof mobileSearchPickerBounds> & { left: number; width: number }) | null>(null);
@@ -515,7 +514,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           </> : rows.map(renderRow)}
           {!tips && loading && <div role="status" className="py-2 text-meta text-text-light-gray">Loading suggestions…</div>}
           {!tips && error && <div role="alert" className="py-2 text-meta text-text-light-gray">Could not load suggestions. Keep typing to retry.</div>}
-          {!(mobileFlagEnabled && isMobile) && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · {plainSearch && !selectedRow ? 'Tab to accept · Enter to search' : 'Tab / Enter to accept'} · {escFooterText}</div>}
+          {!mobileEnabled && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · {plainSearch && !selectedRow ? 'Tab to accept · Enter to search' : 'Tab / Enter to accept'} · {escFooterText}</div>}
         </div>
       ) : open && (
         <div ref={pickerRef} style={pickerStyle} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}

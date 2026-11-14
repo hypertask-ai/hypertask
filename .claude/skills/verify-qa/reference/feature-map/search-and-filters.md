@@ -26,7 +26,7 @@ holds.
 
 ### Phone search operators
 
-With `htpr-6371-mobile-search` enabled (Owner + QA), use the same `/search`
+Phone search is on for everyone. Use the same `/search`
 input as desktop. At widths below 768px, check `@` and `#` using input events,
 including composition and keyboard prediction replacements. Pick from-person,
 commenter, assignee, in/board, label, is, before/after/on and has suggestions.
@@ -36,8 +36,8 @@ buttons are at least 44px tall, and long names truncate without hiding icons.
 The existing Show results row is available above the keyboard; the keyboard
 Search key runs the query rather than choosing an autocomplete suggestion.
 Check wrapping, tap the existing x to remove a filter, and compare the URL and
-results with desktop. Verify 390x844, 375x667 and landscape, all four themes,
-then confirm flag-off and desktop retain the current layout. Simulated viewport
+results with desktop. Verify 390x844, 375x667 and landscape, all four themes.
+Desktop keeps the desktop layout. Simulated viewport
 checks do not replace a physical iOS Safari and Android Chrome check after deploy.
 
 ### What proof to collect
