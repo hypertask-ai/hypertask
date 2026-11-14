@@ -320,3 +320,13 @@ both kinds of assignee return without changing assignments. Check Light,
 AMOLED and Graphite 2 on desktop and phone. Switches use 4px corners.
 Without either flag, cards keep showing their assignees even if a saved
 People choice is false. Restore the QA account's preferences afterward.
+
+### Card settings on reload (HTPR-9097)
+
+With `htpr-8971-card-settings` enabled and every card part off, reload a board
+five times. Every frame of a reload draws cards with no detail parts: no ticket
+number, people, inbox icon, comments, sub-tasks, priority, size, due date, tags,
+staleness or blocked edge appears and then disappears. With tags on and the
+rest off, a reload draws the tag row on its first frame. Change a part in Board
+menu > Card settings and the cards update without a reload. Restore the QA
+account's parts afterwards.

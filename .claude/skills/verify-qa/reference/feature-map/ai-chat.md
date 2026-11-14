@@ -17,6 +17,7 @@
 - `malformed-chat-requests` Malformed chat requests.
 - `clickable-ticket-answers` Clickable ticket answers.
 - `independent-parallel-chats` Independent parallel chats.
+- `floating-window-layout` Floating windows and minimized chat placement.
 - `opening-while-chat-starts` Opening while chat starts.
 - `fullscreen-return-with-automatic-opening-disabled` Fullscreen return with automatic opening disabled.
 - `remembered-sidebar-width` Remembered sidebar width.
@@ -573,3 +574,10 @@ board navigation must not replace the selected conversation; team and account
 switches must not restore another account or team selection. Flag off retains
 existing navigation defaults. Reuse existing draft storage; do not send a
 message merely to verify navigation.
+
+### Floating window layout
+
+- Enable `htpr-8334-multi-chat-windows` and `htpr-8988-chat-window-layout` on Sandbox 7049. Sidebar New chat and Ctrl+Shift+O stay in the sidebar.
+- Choose Floating window and add two chats: three top-level frames do not intersect at 1920x1032; narrow screens use rows. Drag, resize, close and focus each independently.
+- Primary Sidebar removes extra windows, not conversations. Minimized restore buttons share one bottom row with horizontal scrolling. Restore and reload: saved secondary conversations stay separate.
+- Record both modes and phone at 390x844 in Light, AMOLED and Graphite 2; compare failure captures, not an invented frame. Layout-flag Off retains the old primary panel and positions. No model reply needed.
