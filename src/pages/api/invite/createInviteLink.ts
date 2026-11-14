@@ -13,7 +13,8 @@ import { getProjectViewInclude } from "@/utils/controllers/projects/getAll";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { sendEmailNotification } from "@/utils/controllers/notifications/sendNotification";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { unverifiedEmailAccount } from "@/lib/auth/unverifiedEmailAccount";
 
@@ -38,7 +39,7 @@ const handler: NextApiHandler = async (
       return res.status(400).json({ message: "Missing required information" });
     }
     const access = await sessionCanManageProjectInvites(
-      session.userId,
+      session,
       parsedProjectId,
     );
     if (access === "missing") {
@@ -46,21 +47,21 @@ const handler: NextApiHandler = async (
     }
     if (access !== "ok") return res.status(403).json({ message: "Forbidden" });
 
-    const result = await addMemberController(session.userId, parsedProjectId, emails);
+    const result = await addMemberController(session.userId, parsedProjectId, emails, session.agentId, session.teamScope);
     res.status(result?.status).json(result?.json)
   } else {
     res.status(405).json({ message: "Method not allowed" });
   }
 };
 
-async function sessionCanManageProjectInvites(userId: number, projectId: number) {
+async function sessionCanManageProjectInvites(session: SessionUser, projectId: number) {
   const project = await prisma.project.findFirst({
-    where: { id: projectId, status: "Normal" },
+    where: { id: projectId, status: "Normal", ...((session.agentId || session.teamScope) ? projectContentAccessWhere(session.userId, session.agentId, session.teamScope) : {}) },
     select: { id: true },
   });
   if (!project) return "missing";
   const allowed = await getMemberAndOwner(projectId);
-  return Array.isArray(allowed) && allowed.includes(userId) ? "ok" : "forbidden";
+  return Array.isArray(allowed) && allowed.includes(session.userId) ? "ok" : "forbidden";
 }
 
 export const addMemberController = async (
@@ -68,6 +69,7 @@ export const addMemberController = async (
   projectId: number,
   emails: string[],
   actingAgentId?: string | null,
+  teamScope?: SessionUser["teamScope"],
 ) => {
   if ((await unverifiedEmailAccount(userId)) !== "allowed") return { status: 403, json: { message: "Please confirm your email before inviting people." } };
   try {
@@ -75,6 +77,7 @@ export const addMemberController = async (
       where: {
         id: projectId,
         status: "Normal",
+        ...projectContentAccessWhere(userId, actingAgentId, teamScope),
       },
       include: {
         members: {
