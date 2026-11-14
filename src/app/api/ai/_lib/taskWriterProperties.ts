@@ -4,6 +4,7 @@ import {
   EstimateConstants,
   PriorityConstants,
 } from "@/lib/constants/constants";
+import { enforceBrainLabel, type TaskWriterBrainLabels } from "@/lib/ai/taskWriterBrainLabels";
 import {
   isDuplicateNoteTitle,
   repairDuplicateNote,
@@ -55,6 +56,8 @@ function indexFromMarker(
   return allowed.has(value) ? value : undefined;
 }
 
+export const TASK_WRITER_URGENT_PRIORITY_INDEX = 1;
+
 const PRIORITY_INDEXES = new Set(
   PriorityConstants.map((entry) => entry.priority_index)
 );
@@ -67,18 +70,39 @@ export function validateTaskWriterLabelIds(value: unknown, boardLabelIds: string
   return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === "string" && allowed.has(id)))] : [];
 }
 
-export function normalizeTaskWriterLabels(html: string, boardLabelIds: string[]): string {
+export function finalizeTaskWriterLabelIds(value: unknown, boardLabelIds: string[], brain?: TaskWriterBrainLabels | null): string[] {
+  return enforceBrainLabel(validateTaskWriterLabelIds(value, boardLabelIds), brain);
+}
+
+export function normalizeTaskWriterLabels(html: string, boardLabelIds: string[], brain?: TaskWriterBrainLabels | null): string {
   const root = parse(html);
-  for (const marker of root.querySelectorAll("#ai-generated-task-tags")) {
-    const ids = validateTaskWriterLabelIds(marker.textContent.split(",").map((id) => id.trim()), boardLabelIds);
-    marker.set_content(ids.join(","));
+  const markers = root.querySelectorAll("#ai-generated-task-tags");
+  for (const marker of markers) {
+    marker.set_content(finalizeTaskWriterLabelIds(marker.textContent.split(",").map((id) => id.trim()), boardLabelIds, brain).join(","));
+  }
+  const defaultId = brain?.defaultId;
+  if (!markers.length && defaultId) {
+    root.insertAdjacentHTML("beforeend", `<span id="ai-generated-task-tags" style="display:none">${defaultId}</span>`);
+  }
+  return root.toString();
+}
+
+export function forceUrgentPriorityMarker(html: string): string {
+  const root = parse(html);
+  const markers = root.querySelectorAll("#ai-generated-task-priority");
+  for (const marker of markers) marker.set_content(String(TASK_WRITER_URGENT_PRIORITY_INDEX));
+  if (!markers.length) {
+    const siblingMarker = root.querySelector("#ai-generated-task-estimate, #ai-generated-task-tags, #ai-generated-task-status");
+    const priorityMarker = `<span id="ai-generated-task-priority" style="display:none">${TASK_WRITER_URGENT_PRIORITY_INDEX}</span>`;
+    if (siblingMarker) siblingMarker.insertAdjacentHTML("beforebegin", priorityMarker);
+    else root.insertAdjacentHTML("beforeend", priorityMarker);
   }
   return root.toString();
 }
 
 export function extractTaskWriterProperties(
   html: string,
-  options: { fallbackTitle?: string | null; boardLabelIds?: string[] } = {}
+  options: { fallbackTitle?: string | null; boardLabelIds?: string[]; brainLabels?: TaskWriterBrainLabels | null; forceUrgent?: boolean } = {}
 ): TaskWriterProperties {
   const parsed = parse(repairDuplicateNote(html, options.fallbackTitle));
   const root = parsed.querySelector("body") ?? parsed;
@@ -88,18 +112,21 @@ export function extractTaskWriterProperties(
   const title = isDuplicateNoteTitle(rawTitle) ? null : rawTitle;
   titleEl?.remove();
 
-  const priority = indexFromMarker(
+  const modelPriority = indexFromMarker(
     root,
     "ai-generated-task-priority",
     PRIORITY_INDEXES
   );
+  const priority = options.forceUrgent ? TASK_WRITER_URGENT_PRIORITY_INDEX : modelPriority;
   const estimate = indexFromMarker(
     root,
     "ai-generated-task-estimate",
     ESTIMATE_INDEXES
   );
   const tags = root.querySelector("#ai-generated-task-tags");
-  const labelIds = options.boardLabelIds ? validateTaskWriterLabelIds(tags?.textContent.split(",").map((id) => id.trim()), options.boardLabelIds) : undefined;
+  const labelIds = options.boardLabelIds
+    ? finalizeTaskWriterLabelIds(tags?.textContent.split(",").map((id) => id.trim()), options.boardLabelIds, options.brainLabels)
+    : undefined;
   tags?.remove();
   root.querySelector("#ai-generated-task-status")?.remove();
   root.querySelector("#ai-generated-task-properties")?.remove();

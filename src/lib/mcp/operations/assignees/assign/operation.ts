@@ -20,6 +20,7 @@ import { IUser } from "@/models/model";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { assigneeLookupStatusFilter } from "@/lib/mcp/tasks/activeTaskMutation";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
+import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 
 
 export interface McpAssigneeResponseItem extends McpTaskAssignee {
@@ -309,14 +310,28 @@ export async function POST(request: NextRequest) {
       recordAssignmentResult(response.json as AssignmentResult);
     } else if (hasAgentId) {
       const targetAgentId = (agent_id as string).trim();
-      const ownedAgent = await prisma.agent.findFirst({
-        where: { id: targetAgentId, userId: ctx.user.id },
-        select: { id: true },
-      });
-      if (!ownedAgent) {
+      const isRemoval = assignIntent === "unassign";
+      const [visibleAgent, onBoard] = await Promise.all([
+        prisma.agent.findFirst({
+          where: {
+            id: targetAgentId,
+            ...(isRemoval ? {} : { revokedAt: null }),
+            ...boardAgentVisibilityWhere(ctx.user.id),
+          },
+          select: { id: true },
+        }),
+        isAgentOnBoard(task.projectId, targetAgentId),
+      ]);
+      if (!visibleAgent || (!onBoard && !isRemoval)) {
         return NextResponse.json(
-          { success: false, error: "Agent not found or not owned by you" },
-          { status: 404 }
+          {
+            success: false,
+            error:
+              visibleAgent && !onBoard
+                ? "Agent is not a member of this board. Add the agent to the board before assigning."
+                : "Agent not found or not visible to you on this board",
+          },
+          { status: visibleAgent && !onBoard ? 400 : 404 }
         );
       }
       const response = await withAdoptedAgentMutationLease(

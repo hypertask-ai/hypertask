@@ -125,7 +125,7 @@ test('a valid cookie still passes API and page handling without a negative cache
     assert.equal(response.headers.get('x-middleware-next'), '1')
     assert.equal(response.headers.has('location'), false)
   }
-  assert.equal(h.calls.length, 2)
+  assert.equal(h.calls.length, 4)
   await h.writer.revokeSessionToken(token)
   assert.equal((await h.proxy(request('/api/projects', token))).status, 401)
 })

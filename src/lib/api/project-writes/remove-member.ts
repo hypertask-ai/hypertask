@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { legacyTaskWriteSession, taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
 import membersRemove from "@/utils/controllers/projects/removeMember";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -11,7 +12,7 @@ const route = taskWriteRoute({
     const req = { body };
     try {
       const { userId, projectId } = req.body;
-      console.log("🚀 ~ file: removeMember.ts:9 ~ consthandler:NextApiHandler= ~ req.body:", req.body);
+      await logPersonal(session.userId, "remove member", { projectId: projectId ?? null, memberId: userId ?? null, actorId: session.userId, outcome: "received", }, req.body);
       if (!userId || !projectId) {
         return NextResponse.json({ message: "Missing required information" }, { status: 400 });
       }

@@ -264,7 +264,8 @@ export async function POST(
       }
       const sectionCheck = await getSectionForTask(
         parsedProposal.proposal.targetProjectId,
-        parsedProposal.proposal.targetSectionId
+        parsedProposal.proposal.targetSectionId,
+        session.userId
       )
       if (sectionCheck.error) {
         return NextResponse.json(

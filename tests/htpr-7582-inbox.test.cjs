@@ -5,6 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { fixture, loader, source, ctx, session, NOW, ID, FLAG, root } = require('./htpr-7582-fixtures.cjs');
+const { createJiti } = require('jiti');
+const { stubFlags } = createJiti(__filename, { interopDefault: true })(path.join(__dirname, 'helpers/flags.ts'));
 const { loadModule } = require('./helpers/loadModule.cjs');
 const { NextResponse } = require('next/server');
 const React = require('react');
@@ -221,7 +223,7 @@ test('flag OFF transition writes durable cutoff and cancels requests in its own 
   const f = fixture(); await create(f);
   f.db.$executeRaw = async () => 0; f.db.task = { findMany: async () => [] };
   f.db.featureFlag = { findUnique: async () => ({ key: FLAG, mode: 'OWNER_AND_QA' }), upsert: async ({ update }) => ({ key: FLAG, ...update }) };
-  const load = loader({ ...f.stubs, '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [{ key: FLAG, defaultMode: 'OWNER_AND_QA' }] }, '@/lib/flags/keys': {},
+  const load = loader({ ...f.stubs, '@/lib/flags/definitions': stubFlags({ [FLAG]: { defaultMode: 'OWNER_AND_QA' } }), '@/lib/flags/keys': {},
     '@/lib/flags/modeCache': { withFlagModeInvalidation: run => run() }, react: { cache: run => run }, '@prisma/client': {} });
   const original = f.db.$transaction; f.db.$transaction = run => original(run, { isolationLevel: 'Serializable' });
   await load('src/lib/flags.ts').setFeatureFlagMode(FLAG, 'OFF');
@@ -231,7 +233,7 @@ test('non-OFF targeting change preserves pending requests', async () => {
   const f = fixture(); await create(f); f.db.$executeRaw = async () => 0; f.db.task = { findMany: async () => [] };
   f.db.featureFlag = { findUnique: async () => ({ key: FLAG, mode: 'OWNER_AND_QA' }), upsert: async ({ update }) => ({ key: FLAG, ...update }) };
   const original = f.db.$transaction; f.db.$transaction = run => original(run, { isolationLevel: 'Serializable' });
-  const load = loader({ ...f.stubs, '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [{ key: FLAG, defaultMode: 'OWNER_AND_QA' }] }, '@/lib/flags/keys': {}, '@/lib/flags/modeCache': { withFlagModeInvalidation: run => run() }, react: { cache: run => run }, '@prisma/client': {} });
+  const load = loader({ ...f.stubs, '@/lib/flags/definitions': stubFlags({ [FLAG]: { defaultMode: 'OWNER_AND_QA' } }), '@/lib/flags/keys': {}, '@/lib/flags/modeCache': { withFlagModeInvalidation: run => run() }, react: { cache: run => run }, '@prisma/client': {} });
   await load('src/lib/flags.ts').setFeatureFlagMode(FLAG, 'EVERYONE'); assert.equal(f.state.requests[0].status, 'pending');
 });
 test('all changed source files parse and added source comments are forbidden with a positive rejection control', () => {

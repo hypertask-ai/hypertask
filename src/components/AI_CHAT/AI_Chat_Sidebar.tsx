@@ -6,6 +6,7 @@ import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766
 
 import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
 import { HTPR_7318_TICKET_CHAT_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder";
@@ -46,6 +47,7 @@ export const AI_Chat_Sidebar = ({
   const agentHoverChat = useFlag(HTPR_7737_AGENT_HOVER_CHAT_FLAG);
   const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
+  const noEmptyChats = useFlag(HTPR_9021_NO_EMPTY_CHATS_FLAG);
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
   const skillRunsInSidebar = useFlag(HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG);
   const project = useRecoilValue(currentProjectAtom);
@@ -162,7 +164,8 @@ export const AI_Chat_Sidebar = ({
       }
     } else if (options?.createFallbackSession !== false && target.kind === "native-agent" && !aiSessionRef.current && !aiSessionId) {
       setNativeSidebarChat(null);
-      await chat.startNewSession();
+      if (noEmptyChats) await chat.showGeneralChat();
+      else await chat.startNewSession();
     }
     if (intent !== intentRef.current) return;
     if (agentSessionsEnabled) setRosterError(null);
@@ -271,7 +274,7 @@ export const AI_Chat_Sidebar = ({
     if (!generalChatPending || resolvingGeneralChat.current) return;
     if (pastChatsFirst && aiSessionRef.current) return;
     resolvingGeneralChat.current = true;
-    void chat.startNewSession().catch((error) => {
+    void (noEmptyChats ? chat.showGeneralChat() : chat.startNewSession()).catch((error) => {
       setRosterError(error instanceof Error ? error.message : "Could not open AI chat");
     }).finally(() => { resolvingGeneralChat.current = false; });
   }, [generalChatPending, chat.currentSession?.id]);

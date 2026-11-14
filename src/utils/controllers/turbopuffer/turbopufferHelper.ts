@@ -6,16 +6,19 @@ import prisma from "@/lib/prisma";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
+  buildSearchStatusFilter,
   parseTicketSearchQuery,
+  TRASHED_STATUSES,
+  type SearchStatus,
   type TicketSearchQuery,
 } from "@/utils/controllers/search/rankHits";
 import { buildCustomInstructionSearchFilters } from "@/app/api/ai/_lib/boardMemoryContract";
 
-type SearchStatus = "Normal" | "Archive" | "Deleted";
-
 export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const EMBEDDINGS_ENDPOINT = "https://ai-gateway.vercel.sh/v1/embeddings";
 export const EMBEDDING_DIM = 1536;
+
+const KEYWORD_SEARCH_VECTOR = [1, ...new Array(EMBEDDING_DIM - 1).fill(0)];
 
 export const EMBEDDING_MAX_INPUT_CHARS = 4000;
 const EMBEDDING_EMPTY_INPUT = "(empty)";
@@ -238,6 +241,7 @@ type SearchTasksParams = {
   searchQuery: string;
   projectIds: number[];
   status?: SearchStatus | null;
+  excludeStatuses?: SearchStatus[];
   projectId?: number | null;
   topK?: number;
   keywordOnly?: boolean;
@@ -247,10 +251,12 @@ type SearchCommentsParams = {
   searchQuery: string;
   projectIds: number[];
   status?: SearchStatus | null;
+  excludeStatuses?: SearchStatus[];
   topK?: number;
   limit?: number;
   keywordOnly?: boolean;
   groupByTask?: boolean;
+  preserveRanking?: boolean;
 };
 
 type SearchCustomInstructionFilesParams = {
@@ -521,7 +527,7 @@ export async function embedText(text: string): Promise<number[]> {
   return embedding;
 }
 
-export async function upsertTaskToTurbopuffer(taskId: number) {
+export async function upsertTaskToTurbopuffer(taskId: number, options?: { strict?: boolean }) {
   try {
     const task = await prisma.task.findFirst({
       where: {
@@ -534,6 +540,7 @@ export async function upsertTaskToTurbopuffer(taskId: number) {
     return upsertTaskRowsToTurbopuffer([buildTurbopufferTaskRow(task)]);
   } catch (error) {
     console.log("turbopuffer upsertTaskToTurbopuffer error:", error);
+    if (options?.strict) throw error;
   }
 }
 
@@ -665,7 +672,7 @@ export async function upsertPageRowsToTurbopuffer(
   } as any);
 }
 
-export async function upsertAllCommentsToTurbopuffer(taskId: number) {
+export async function upsertAllCommentsToTurbopuffer(taskId: number, options?: { strict?: boolean }) {
   try {
     const allComments = await prisma.comment.findMany({
       where: { taskId },
@@ -680,6 +687,7 @@ export async function upsertAllCommentsToTurbopuffer(taskId: number) {
     return upsertCommentRowsToTurbopuffer(commentRows);
   } catch (error) {
     console.log("turbopuffer upsertAllCommentsToTurbopuffer error:", error);
+    if (options?.strict) throw error;
   }
 }
 
@@ -746,6 +754,20 @@ export async function deleteDocsInTurbopuffer(
   });
 }
 
+export async function deleteTasksFromTurbopuffer(taskIds: number[]) {
+  for (const taskId of taskIds) {
+    await deleteTaskInTurbopuffer(taskId);
+    await deleteManyCommentsInTurbopuffer(taskId);
+  }
+}
+
+export async function upsertTasksToTurbopuffer(taskIds: number[]) {
+  for (const taskId of taskIds) {
+    await upsertTaskToTurbopuffer(taskId);
+    await upsertAllCommentsToTurbopuffer(taskId);
+  }
+}
+
 export async function upsertCustomInstructionFileRowsToTurbopuffer(
   rows: TurbopufferCustomInstructionFileRow[],
   options: {
@@ -799,6 +821,7 @@ export async function searchTasks({
   searchQuery,
   projectIds,
   status,
+  excludeStatuses = TRASHED_STATUSES,
   projectId,
   topK = 50,
   keywordOnly = false,
@@ -809,19 +832,21 @@ export async function searchTasks({
 
   const ticketQuery = parseTicketSearchQuery(query);
   const rankQuery = ticketQuery?.normalizedQuery ?? query;
-  const filters = combineFilters([
-    projectFilter,
-    status ? ["status", "Eq", status] : null,
-  ]);
+  const statusFilter = buildSearchStatusFilter(
+    "status",
+    status,
+    excludeStatuses
+  );
+  const filters = combineFilters([projectFilter, statusFilter]);
   const exactRowsPromise = searchExactTaskRowsByTicket(
     ticketQuery,
     projectFilter,
-    status
+    statusFilter
   );
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks");
+    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks", projectIds.length ? projectIds : projectId ? [projectId] : []);
 
   if (queryVector) {
     try {
@@ -876,10 +901,12 @@ export async function searchComments({
   searchQuery,
   projectIds,
   status,
+  excludeStatuses = TRASHED_STATUSES,
   topK = 200,
   limit = 50,
   keywordOnly = false,
   groupByTask = true,
+  preserveRanking = false,
 }: SearchCommentsParams): Promise<TurbopufferCommentRow[]> {
   const query = searchQuery.trim();
   const projectFilter = buildProjectFilter(projectIds);
@@ -887,12 +914,12 @@ export async function searchComments({
 
   const filters = combineFilters([
     projectFilter,
-    status ? ["taskStatus", "Eq", status] : null,
+    buildSearchStatusFilter("taskStatus", status, excludeStatuses),
   ]);
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchComments");
+    : await embedQueryForSearch(query, "turbopuffer searchComments", projectIds);
 
   if (queryVector) {
     try {
@@ -917,7 +944,7 @@ export async function searchComments({
         } as any);
 
       const rows = getMultiQueryRows<TurbopufferCommentRow>(response);
-      return groupByTask ? normalizeAndGroupCommentRows(rows, limit) : rows.map(normalizeCommentRow);
+      return groupByTask ? normalizeAndGroupCommentRows(rows, limit, preserveRanking) : rows.map(normalizeCommentRow);
     } catch (error) {
       console.error(
         "turbopuffer searchComments hybrid error, falling back to BM25:",
@@ -927,7 +954,7 @@ export async function searchComments({
   }
 
   try {
-    return await searchCommentRowsWithBm25(query, topK, filters, limit, groupByTask);
+    return await searchCommentRowsWithBm25(query, topK, filters, limit, groupByTask, preserveRanking);
   } catch (error) {
     console.error("turbopuffer searchComments error:", error);
     return [];
@@ -952,7 +979,7 @@ export async function searchCustomInstructionFiles({
   );
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles");
+    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles", [projectId]);
 
   if (queryVector) {
     try {
@@ -1132,34 +1159,46 @@ async function ensureNamespaceSchema(
   });
 }
 
-async function embedRowsForWrite<T extends { searchText: string }>(
+async function embedRowsForWrite<T extends { searchText: string; projectId?: number; teamId?: string }>(
   rows: T[],
   context: string
-): Promise<{ rows: Array<TurbopufferVectorRow<T>>; hasVectors: boolean }> {
-  try {
-    const embeddings = await embedTexts(rows.map((row) => row.searchText));
-    return {
-      rows: rows.map((row, index) => ({
-        ...row,
-        vector: embeddings[index],
-      })),
-      hasVectors: true,
-    };
-  } catch (error) {
-    console.error(
-      `${context} embedding error, upserting without vectors:`,
-      error
-    );
-    return { rows, hasVectors: false };
+): Promise<{ rows: Array<T & { vector?: number[] }>; hasVectors: boolean }> {
+  const buckets = new Map<string, T[]>();
+  for (const row of rows) buckets.set(row.teamId || `project:${row.projectId ?? ""}`, [...(buckets.get(row.teamId || `project:${row.projectId ?? ""}`) ?? []), row]);
+  const written: Array<T & { vector?: number[] }> = [];
+  for (const group of buckets.values()) {
+    const { embeddingSpendMode, withSpendCharge } = await import("@/lib/ai/spend/embeddingRoute");
+    const route = await embeddingSpendMode(group.flatMap((row) => row.projectId ? [row.projectId] : []), group.find((row) => row.teamId)?.teamId);
+    if (route === "mixed-keyword" || (typeof route !== "string" && route.mode === "keyword")) {
+      written.push(...group.map((row) => ({ ...row, vector: [...KEYWORD_SEARCH_VECTOR] })));
+      continue;
+    }
+    try {
+      const texts = group.map((row) => row.searchText);
+      const key = typeof route !== "string" && route.mode === "customer-key" ? route.httpKey : process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
+      if (!key) throw new Error("TURBOPUFFER_EMBEDDINGS_API_KEY is not set");
+      const run = () => texts.length === 1 ? shareInFlightEmbedding(toEmbeddingInput(texts[0]), key) : embedInputs(texts.map(toEmbeddingInput), key);
+      const vectors = typeof route !== "string" && route.mode === "vector" && route.teamId ? await withSpendCharge(route, route.teamId, texts, run) : await run();
+      if (!vectors) written.push(...group.map((row) => ({ ...row, vector: [...KEYWORD_SEARCH_VECTOR] })));
+      else written.push(...group.map((row, index) => ({ ...row, vector: vectors[index] })));
+    } catch (error) {
+      console.error(`${context} embedding error, writing keyword-searchable rows:`, error);
+      if (typeof route !== "string" && route.mode === "current") return { rows, hasVectors: false };
+      written.push(...group.map((row) => ({ ...row, vector: [...KEYWORD_SEARCH_VECTOR] })));
+    }
   }
+  return { rows: written, hasVectors: written.length > 0 };
 }
 
-async function embedQueryForSearch(
-  query: string,
-  context: string
-): Promise<number[] | null> {
+export async function embedQueryForSearch(query: string, context: string, projectIds: number[] = []): Promise<number[] | null> {
+  const { embeddingSpendMode, withSpendCharge } = await import("@/lib/ai/spend/embeddingRoute");
+  const route = projectIds.length ? await embeddingSpendMode(projectIds).catch(() => ({ mode: "current" as const })) : { mode: "current" as const };
+  if (route === "mixed-keyword" || route.mode === "keyword") return null;
   try {
-    return await embedText(query);
+    const key = route.mode === "customer-key" ? route.httpKey : undefined;
+    const run = () => key ? embedInputs([toEmbeddingInput(query)], key).then((rows) => rows[0] ?? null) : embedText(query);
+    if (route.mode === "vector" && route.teamId) return await withSpendCharge(route, route.teamId, [query], run);
+    return await run();
   } catch (error) {
     console.error(`${context} embedding error, using BM25 only:`, error);
     return null;
@@ -1188,7 +1227,7 @@ async function searchTaskRowsWithBm25(
 async function searchExactTaskRowsByTicket(
   ticketQuery: TicketSearchQuery | null,
   projectFilter: unknown[],
-  status?: SearchStatus | null
+  statusFilter: unknown[] | null
 ): Promise<TurbopufferTaskRow[]> {
   if (!ticketQuery) return [];
 
@@ -1198,7 +1237,7 @@ async function searchExactTaskRowsByTicket(
       .query({
         filters: combineFilters([
           projectFilter,
-          status ? ["status", "Eq", status] : null,
+          statusFilter,
           ["uniqueIndex", "Eq", ticketQuery.uniqueIndex],
         ]),
         include_attributes: TASK_INCLUDE_ATTRIBUTES,
@@ -1254,7 +1293,8 @@ async function searchCommentRowsWithBm25(
   topK: number,
   filters: unknown[] | undefined,
   limit: number,
-  groupByTask: boolean
+  groupByTask: boolean,
+  preserveRanking: boolean
 ): Promise<TurbopufferCommentRow[]> {
   const response = await turbopuffer
     .namespace(turbopufferNamespaces.comment.name)
@@ -1266,10 +1306,10 @@ async function searchCommentRowsWithBm25(
     } as any);
 
   const rows = (response.rows ?? []) as unknown as TurbopufferCommentRow[];
-  return groupByTask ? normalizeAndGroupCommentRows(rows, limit) : rows.map(normalizeCommentRow);
+  return groupByTask ? normalizeAndGroupCommentRows(rows, limit, preserveRanking) : rows.map(normalizeCommentRow);
 }
 
-function getMultiQueryRows<T>(response: unknown): T[] {
+export function getMultiQueryRows<T>(response: unknown): T[] {
   const result = response as {
     results?: Array<{
       rows?: T[];
@@ -1281,11 +1321,13 @@ function getMultiQueryRows<T>(response: unknown): T[] {
 
 function normalizeAndGroupCommentRows(
   commentRows: TurbopufferCommentRow[],
-  limit: number
+  limit: number,
+  preserveRanking: boolean
 ): TurbopufferCommentRow[] {
-  const rows = commentRows
-    .map(normalizeCommentRow)
-    .sort((a, b) => dateValue(b.createdAt) - dateValue(a.createdAt));
+  const rows = commentRows.map(normalizeCommentRow);
+  if (!preserveRanking) {
+    rows.sort((a, b) => dateValue(b.createdAt) - dateValue(a.createdAt));
+  }
 
   const seenTaskIds = new Set<string>();
   const groupedRows: TurbopufferCommentRow[] = [];
@@ -1300,7 +1342,7 @@ function normalizeAndGroupCommentRows(
   return groupedRows;
 }
 
-function buildProjectFilter(projectIds: number[], projectId?: number | null) {
+export function buildProjectFilter(projectIds: number[], projectId?: number | null) {
   const allowedProjectIds = uniqueNumbers(projectIds);
   if (allowedProjectIds.length === 0) return null;
 

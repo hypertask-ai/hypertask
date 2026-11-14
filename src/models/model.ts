@@ -252,6 +252,7 @@ export interface TaskSections {
 export interface ITeamByokApiKey {
   provider: TByokProviderKey;
   enabled: boolean;
+  alwaysUse?: boolean;
   ciphertext?: string;
 }
 
@@ -369,6 +370,10 @@ export interface IView {
   board_show_archived?: boolean | null;
   table_sort_column?: string | null;
   table_sort_direction?: string | null;
+  table_sort_stack?: { column: string; direction: "asc" | "desc" }[] | null;
+  table_columns?: { keys: string[]; widths: Record<string, number> } | null;
+  table_group_by?: string | null;
+  table_collapsed_sections?: string | null;
   board_layout?: "Board" | "Table" | null;
   ViewLastUsed: IView_Last_Used[];
 }
@@ -549,6 +554,12 @@ export interface ITask {
   staleNudgedAt?: string | null;
   blockerCommentId?: number | null;
   waitingOnUserId?: number | null;
+  waitingOnAgentId?: string | null;
+  waitingOnAgent?: {
+    id: string;
+    displayName: string | null;
+    photoURL: string | null;
+  } | null;
   waitingOnUser?: {
     id: number;
     displayName: string | null;
@@ -685,6 +696,10 @@ export interface ISection {
 }
 
 export interface INotification {
+  needsYouEnabled?: boolean;
+  needsYouScore?: number | null;
+  needsYouReason?: string | null;
+  needsYouSource?: string | null;
   boardAccessRequest?: BoardAccessSummary;
   id: string;
   waitingOnSynthetic?: boolean;
@@ -1127,7 +1142,9 @@ export interface IAllCommands {
   context: HTCContext;
   triageInboxEnabled?: boolean;
   bulkSelectionCount?: number;
+  bulkMoveBoardEnabled?: boolean;
   kanbanSelectAllEnabled?: boolean;
+  columnSelectAllHintEnabled?: boolean;
   task?: {
     taskId: number;
     projectId: number;

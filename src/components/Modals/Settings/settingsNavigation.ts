@@ -22,6 +22,7 @@ export type SettingsSectionId =
   | "calendar"
   | "inbox"
   | "task-page"
+  | "card-settings"
   | "notifications"
   | "my-ai-usage"
   | "accounts"
@@ -118,6 +119,7 @@ export const SETTINGS_TABS: SettingsTab[] = [
           { id: "calendar", label: "Calendar" },
           { id: "inbox", label: "Inbox" },
           { id: "task-page", label: "Task page" },
+          { id: "card-settings", label: "Card settings" },
           { id: "notifications", label: "Notifications" },
           { id: "my-ai-usage", label: "AI usage" },
           { id: "accounts", label: "Accounts" },

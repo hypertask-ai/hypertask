@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { withActivityMetadata } from "@/lib/mcp/comments/activityMetadata";
+import { withPublicWaitingActivities } from "@/lib/tasks/redactWaitingActivities";
 import { TOOL_TASK_ID_DESCRIPTION } from "@/lib/ai/tools/constants";
 import { sortOrderSchema } from "@/lib/ai/chatStream/request";
 import { resolveTaskForTool } from "@/lib/ai/tools/execution";
@@ -67,9 +68,12 @@ export function createGetCommentsForTaskTool(context: ToolContext) {
           }),
         ]);
 
+        const visibleComments = input.include_activity
+          ? await withPublicWaitingActivities(comments, user.id, task.projectId)
+          : comments;
         const commentsPayload = {
           success: true,
-          comments: comments.map((comment) =>
+          comments: visibleComments.map((comment) =>
             input.include_activity
               ? withActivityMetadata(
                 mapCommentToResponse(comment, user.id, task.projectId),
@@ -84,7 +88,7 @@ export function createGetCommentsForTaskTool(context: ToolContext) {
         commentsPayload.comments = commentsPayload.comments.map((mapped, index) =>
           applyDurableCommentAttribution(
             mapped,
-            comments[index],
+            visibleComments[index],
             user.id,
             task.projectId
           )

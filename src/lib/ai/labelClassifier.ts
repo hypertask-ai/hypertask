@@ -3,7 +3,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7850_LABEL_BACKFILL_SKIP_UNCHANGED_FLAG } from "@/lib/flags/definitions/htpr-7850-label-backfill-skip-unchanged";
 import { YPER4_915_ERROR_LOG_NEVER_BUG_FLAG } from "@/lib/flags/definitions/yper4-915-error-log-never-bug";
 import { HTPR_8099_SMART_LABEL_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-8099-smart-label-refusal";
-import { teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
+import { remainingSpendPathEnabled, teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { waitUntil } from "@vercel/functions";
@@ -440,11 +440,12 @@ export async function classifyNewTaskAiLabels(taskId: number, projectId: number)
     taskId,
     projectId,
     new Set(labelsPickedByCreator.map(({ labelId }) => labelId)),
+    { skipAgentCreated: true },
   );
 }
 
-export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number) {
-  waitUntil(classifyTaskAiLabels(taskId, projectId).catch(console.error));
+export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number, agentId?: string | null) {
+  waitUntil(classifyTaskAiLabels(taskId, projectId, new Set(), { agentId }).catch(console.error));
 }
 
 export function scheduleClassifyNewTaskAiLabels(taskId: number, projectId: number) {
@@ -459,7 +460,16 @@ export async function classifyTaskAiLabels(
   taskId: number,
   projectId: number,
   labelIdsLeftToCreator: ReadonlySet<string> = new Set(),
+  trigger?: { agentId?: string | null; skipAgentCreated?: boolean },
 ) {
+  if (trigger?.agentId || trigger?.skipAgentCreated) {
+    const authored = await prisma.task.findFirst({
+      where: { id: taskId, projectId, status: "Normal" },
+      select: { userId: true, agentId: true },
+    });
+    const agentId = trigger.agentId || (trigger.skipAgentCreated ? authored?.agentId : null);
+    if (typeof agentId === "string" && agentId.length > 0 && await isFeatureEnabled("htpr-8904-agent-automatic-ai", authored?.userId ?? 0).catch(() => false)) return;
+  }
   const labels = await prisma.label.findMany({
     where: { projectId, ai_prompt: { not: null } },
     select: { id: true, ai_prompt: true },
@@ -512,7 +522,8 @@ async function trySmartLabelBatch(
     const teamId = tasks[0]?.project.teamId;
     if (!teamId) return false;
     const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: teamId });
-    if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey), await teamPlanAllowanceEnabled(teamId))) return false;
+    const holdsOn = typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(teamId).catch(() => false);
+    if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey), await teamPlanAllowanceEnabled(teamId), holdsOn)) return false;
     const model = gatewayCatalogModelSlug("anthropic/claude-haiku-5.5");
     if (!batchEligibleModel(model)) return false;
     await submitSmartLabelBatch({
@@ -584,6 +595,9 @@ export async function backfillAiLabel(labelId: string, userId?: number) {
         ? []
         : [{ ...task, classificationSnapshot: { inputHash, assigned: isAssigned } }];
     });
+  }
+  if (tasks.some((task) => task.agentId) && await isFeatureEnabled("htpr-8904-agent-automatic-ai", userId ?? 0).catch(() => false)) {
+    tasks = tasks.filter((task) => !task.agentId);
   }
   if (tasks.length === 0) return;
   if (await trySmartLabelBatch(userId, { id: label.id, prompt }, tasks)) return;

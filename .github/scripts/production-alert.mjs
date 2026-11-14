@@ -1,6 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { fileIncident } from "./production-incident.mjs";
 
 // Fetch exceptions may embed credential-bearing URLs and bot tokens, so the
 // reason is stripped of both before it reaches a log line.
@@ -13,7 +14,20 @@ export function alertFailureReason(error) {
     .slice(0, 200);
 }
 
+// Telegram and the daily dedupe run first, unchanged. A live failure or rollback then also files
+// (or adds a note to) the emergency ticket, on every call so a failed filing is retried by the
+// next run. A failure in either half is still reported after both have been tried.
 export async function reportProductionAlert(config, fetchImpl = fetch) {
+  let outcome, failure;
+  try { outcome = await deliverAlert(config, fetchImpl); } catch (error) { failure = error; }
+  if (["live", "rollback"].includes(config.kind) && /^[a-z0-9-]+$/.test(config.cause ?? "")) {
+    try { await fileIncident(config, fetchImpl); } catch (error) { failure ??= error; }
+  }
+  if (failure) throw failure;
+  return outcome;
+}
+
+async function deliverAlert(config, fetchImpl) {
   const { kind, cause, message, repository, githubToken, mcpToken, telegramToken, telegramChat, summaryFile } = config;
   if (!["setup", "live", "rollback"].includes(kind) || !/^[a-z0-9-]+$/.test(cause)) {
     throw new Error("Invalid production alert classification");

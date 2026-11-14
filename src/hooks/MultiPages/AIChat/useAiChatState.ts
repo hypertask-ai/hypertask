@@ -15,16 +15,22 @@ import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
+import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
+import { defaultAiModelOption, toAutoModelOption } from "@/lib/aiModelOptions";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
 import type { AiChatWindowScope } from "@/lib/aiChat/chatWindows";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
+
+const autoDisplayOption = toAutoModelOption(defaultAiModelOption);
+const withAutoOption = (options: TAiModal[]): TAiModal[] => [autoDisplayOption, ...options];
 
 type BoardSessionMap = Record<number, string>;
 
@@ -152,7 +158,8 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   const streamingAssistantMessageRef = useRef<string | null>(null);
   const streamingRequestRef = useRef<string | null>(null);
   const settleSendRef = useRef<(() => void) | null>(null);
-  const [displayAiOptions] = useState<TAiModal[]>(aiOptionsWithoutOpenRouter);
+  const autoModelEnabled = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
+  const displayAiOptions = autoModelEnabled ? withAutoOption(aiOptionsWithoutOpenRouter) : aiOptionsWithoutOpenRouter;
   const [contextList, setContextList] = useState<MentionItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<string | undefined>(undefined);
   const [showRenameChatModal, setShowRenameChatModal] =
@@ -246,6 +253,7 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   const {
     navigationKey,
     startNewSession: createSession,
+    showGeneralChat: showGeneralChatInHistory,
     activeSession,
     currentSession,
     showWelcomeScreen,
@@ -277,7 +285,8 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   }, [sessionQueue, currentSession?.id]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
-  const chatHistoryReady = navigationKey ? !!currentSession || (!activeSession && isHistoryReady && !isSessionPending) : sessionReady;
+  const noEmptyChats = useFlag(HTPR_9021_NO_EMPTY_CHATS_FLAG);
+  const chatHistoryReady = navigationKey || (noEmptyChats && sessionPagingEnabled) ? !!currentSession || (!activeSession && isHistoryReady && !isSessionPending) : sessionReady;
   const chatHistoryReadyRef = useRef(chatHistoryReady);
   chatHistoryReadyRef.current = chatHistoryReady;
   const sessionSetupRef = useRef<{
@@ -339,7 +348,7 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
-  editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, activeSession,
+  editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, showGeneralChatInHistory, activeSession,
   navigationKey, currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,

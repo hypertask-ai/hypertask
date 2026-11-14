@@ -13,7 +13,7 @@ test("the dependency cache is invalidated by every install input", async () => {
   assert.ok(key, "node_modules cache key is missing");
   assert.equal(
     key,
-    "          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}",
+    "          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc', 'src/prisma/schema.prisma', 'prisma.config.ts') }}",
   );
 });
 

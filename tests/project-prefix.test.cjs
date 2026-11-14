@@ -11,6 +11,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
 
 const root = path.resolve(__dirname, "..");
+const blockingListStubs = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
   stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
@@ -25,7 +26,15 @@ function load(file, stubs = {}) {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
-    if (request in stubs) return stubs[request];
+    const listImport = blockingListStubs.resolveListImport(request);
+    if (listImport !== undefined) return listImport;
+    if (request in stubs) {
+      const value = stubs[request];
+      if (request === "@/utils/controllers/projects/getAllIncludes") {
+        return blockingListStubs.mergeGetAllIncludesStub(value);
+      }
+      return value;
+    }
     if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, isPlanLimitsEnabled: async () => false };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
@@ -54,6 +63,7 @@ const prefix = load("src/lib/projectPrefix.ts", {
   "@/utils/helperFunctions/helperFunctions": { getSequentialLetters },
 });
 const flagKey = "htpr-6868-ticket-prefix";
+const agentPulseDotKey = "htpr-7339-agent-pulse-dot";
 function matches(row, where) {
   if (!row) return false;
   return Object.entries(where).every(([key, value]) => {
@@ -279,7 +289,11 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {},
     "@/lib/flags": {
       HTPR_6868_TICKET_PREFIX_FLAG: flagKey,
-      isFeatureEnabled: async (key, id) => { flagCalls.push([key, id]); return key === flagKey && enabled; },
+      isFeatureEnabled: async (key, id) => {
+        flagCalls.push([key, id]);
+        if (key === agentPulseDotKey) return false;
+        return key === flagKey && enabled;
+      },
     },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
@@ -578,6 +592,7 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
     "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
     "@/utils/controllers/tasks/markRead": {}, "@/utils/controllers/comments/readReceipts": {}, "@/lib/agentRuns/service": {},
+    "@vercel/functions": { waitUntil: () => {} }, "@/app/api/ai/_lib/taskSummaryFreshness": { requestTaskSummaryRefreshOnView: async () => "off" },
     "../../unauthorized/page": { __esModule: true, default: "Unauthorized" },
   });
   const props = identifier => ({ params: Promise.resolve({ slug: [`project-${projectId}`, identifier] }), searchParams: Promise.resolve({}) });
@@ -831,7 +846,7 @@ test("round 2: shared detail loader gates ticket identifiers but preserves numer
       f.tasks[0].pullRequests = [];
       const task = await f.detail.fetchTaskDetail("project-15", identifier, 6);
       assert.equal(task?.id ?? null, enabled ? 101 : null);
-      assert.deepEqual(f.flagCalls, [[flagKey, 6]]);
+      assert.deepEqual(f.flagCalls, enabled ? [[flagKey, 6], [agentPulseDotKey, 6]] : [[flagKey, 6]]);
       if (!enabled) {
         assert.deepEqual(f.taskQueries, []);
         assert.equal(f.aliasQueries(), 0);
@@ -841,7 +856,7 @@ test("round 2: shared detail loader gates ticket identifiers but preserves numer
       const f = lookups({ enabled });
       f.tasks[0].pullRequests = [];
       assert.equal((await f.detail.fetchTaskDetail("project-15", identifier, 6)).id, 101);
-      assert.deepEqual(f.flagCalls, []);
+      assert.deepEqual(f.flagCalls, [[agentPulseDotKey, 6]]);
       assert.equal(f.taskQueries.length, 1);
       assert.equal(f.aliasQueries(), 0);
     }

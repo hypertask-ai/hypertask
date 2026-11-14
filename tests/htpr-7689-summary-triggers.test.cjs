@@ -72,12 +72,20 @@ function harness({ enabled = true, comments = [comment(1)] } = {}) {
     $transaction: async (operations) => Promise.all(operations),
   };
   const stubs = {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
       return enabled;
     } },
     "@/lib/flags/definitions/htpr-7689-prompt-caching": flag,
+    "@/app/api/ai/_lib/taskSummaryFreshness": {
+      readTaskSummaryStaleMarker: async () => null,
+      clearTaskSummaryStaleMarker: async () => {},
+      markTaskSummaryStale: async () => false,
+      taskSummaryOnViewEnabled: async () => false,
+      resolveTaskSummaryOwner: async () => 6,
+    },
     "@/lib/qstash": { scheduleJobById: async (job) => {
       jobs.push(job);
       return { messageId: "fixture-job" };

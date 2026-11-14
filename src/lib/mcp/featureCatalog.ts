@@ -5,7 +5,6 @@ import { FEATURE_FLAG_DEFINITIONS } from '@/lib/flags/definitions'
 
 const FEATURE_DESTINATIONS: Record<string, { name: string; url: string }> = {
   'htpr-7092-decisions': { name: 'Decisions', url: 'https://app.hypertask.ai/inbox?split=Decisions' },
-  'htpr-6461-my-tasks-snooze': { name: 'My Tasks snooze', url: 'https://app.hypertask.ai/my-tasks' },
 }
 
 const CORE_DESTINATIONS = [

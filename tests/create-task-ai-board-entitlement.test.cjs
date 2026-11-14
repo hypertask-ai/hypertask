@@ -42,6 +42,7 @@ test("minimal board payload includes the fields needed for destination AI access
       select: {
         provider: true,
         enabled: true,
+        alwaysUse: true,
       },
     },
   });
@@ -104,7 +105,7 @@ test("destination board controls Task Writer entitlement and request scope", () 
   assert.deepEqual(buildTaskWriterRequestScope(context.project, context.billing), {
     projectId: 339,
     teamId: "paid-team",
-    byokProviderFlags: [{ provider: "openai", enabled: true }],
+    byokProviderFlags: [{ provider: "openai", enabled: true, alwaysUse: false }],
   });
 });
 
@@ -208,7 +209,7 @@ test("switching the global writer destination changes its live entitlement and r
     assert.equal(requests[0].payload.projectId, 339);
     assert.equal(requests[0].payload.teamId, "paid-team");
     assert.deepEqual(requests[0].payload.byokProviderFlags, [
-      { provider: "openai", enabled: true },
+      { provider: "openai", enabled: true, alwaysUse: false },
     ]);
     assert.equal(requests[0].signal.aborted, false);
   } finally {

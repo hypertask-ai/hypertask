@@ -33,8 +33,94 @@ import {
 } from "@/utils/helperFunctions/messageHtmlLinks";
 import { TypingIndicator } from "./TypingIndicator";
 import { extractSettingCards } from "@/lib/ai/settings/catalog";
+import { HTPR_7779_SKILL_OFFERS_FLAG } from "@/lib/flags/definitions/htpr-7779-skill-offers";
+import { extractSkillOfferIds, type SkillOfferCard } from "@/lib/ai/skillOffers/contract";
+import { actOnSkillOffer, fetchSkillOffer, skillOfferDraftMessage } from "@/lib/ai/skillOffers/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRecoilValue } from "@/lib/state";
+import { currentUserAtom } from "@/store";
+import SettingsCard from "@/components/Modals/Settings/SettingsCard";
+import { settingsActionButtonClass } from "@/components/Modals/Settings/SettingsBillingRow";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { cn } from "@/utils/undoActions/helperFuncs";
 
 const AiSettingChangeCard = dynamic(() => import("./AiSettingChangeCard").then((module) => module.AiSettingChangeCard), { ssr: false });
+
+const AiSkillOfferCard = ({ id }: { id: string }) => {
+  const enabled = useFlag(HTPR_7779_SKILL_OFFERS_FLAG);
+  const user = useRecoilValue(currentUserAtom);
+  const queryClient = useQueryClient();
+  const { handleSendMessage } = useAiChatContext();
+  const [busy, setBusy] = useState(false);
+  const processing = useRef(false);
+  const [error, setError] = useState<string>();
+  const queryKey = ["ai-skill-offer", user?.id, id];
+  const query = useQuery<SkillOfferCard>({
+    queryKey,
+    enabled: enabled && !!user?.id,
+    queryFn: () => fetchSkillOffer(id),
+    retry: false,
+  });
+  const offer = query.data;
+
+  const act = async (action: "draft" | "dismiss" | "save") => {
+    if (processing.current) return;
+    processing.current = true;
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (action === "draft") {
+        if (!offer) throw new Error("This suggestion is no longer available.");
+        const sent = await handleSendMessage(skillOfferDraftMessage(offer.rule));
+        if (!sent) throw new Error("Chat is busy. Try Draft it again once the reply finishes.");
+        queryClient.setQueryData(queryKey, await actOnSkillOffer(id, "draft"));
+        return;
+      }
+      queryClient.setQueryData(queryKey, await actOnSkillOffer(id, action));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not update skill suggestion");
+    } finally {
+      processing.current = false;
+      setBusy(false);
+    }
+  };
+
+  if (!enabled) return null;
+  const buttonClass = cn(settingsActionButtonClass, MOBILE_TARGET, "text-text-light-gray");
+  const primaryClass = cn(buttonClass, "bg-shadcn-primary text-primary-foreground hover:bg-shadcn-primary disabled:text-primary-foreground disabled:opacity-50");
+  return (
+    <div className="rounded-[4px] bg-modalBackground p-3" aria-busy={busy}>
+      <SettingsCard title="Skill suggestion">
+        {offer ? (
+          <>
+            <p className="break-words">You gave this instruction {offer.occurrences} times across {offer.sessionCount} chats on this board.</p>
+            <p className="break-words font-medium">{offer.rule}</p>
+            {offer.quotes[0] && <p className="break-words text-text-light-gray">You wrote: “{offer.quotes[0]}”</p>}
+            <p className="break-words text-text-light-gray">
+              {offer.kind === "skill"
+                ? "It reads as a multi-step procedure, so it fits a skill. Nothing is saved until you approve the draft."
+                : "It reads as a one-line preference, so it fits a board memory rule."}
+            </p>
+            {offer.status === "pending" && (
+              <div className="flex justify-end gap-2">
+                <button type="button" className={buttonClass} disabled={busy} onClick={() => void act("dismiss")}>Not now</button>
+                {offer.kind === "skill"
+                  ? <button type="button" className={primaryClass} disabled={busy} onClick={() => void act("draft")}>Draft it</button>
+                  : <button type="button" className={primaryClass} disabled={busy} onClick={() => void act("save")}>Save board rule</button>}
+              </div>
+            )}
+            {offer.status === "drafted" && <p role="status">Drafting in chat. Nothing is saved until you approve it.</p>}
+            {offer.status === "saved" && <p role="status">Saved to board memory.</p>}
+            {offer.status === "dismissed" && <p role="status">Not now. This will not be suggested again.</p>}
+          </>
+        ) : (
+          <p className="text-text-light-gray">{query.isPending ? "Loading suggestion…" : query.error?.message}</p>
+        )}
+        {error && <p role="alert" className="text-meta text-text-light-gray">{error}</p>}
+      </SettingsCard>
+    </div>
+  );
+};
 
 const AttachmentsCarousel = dynamic(
   () => import("@/components/Common/AttachmentsView/AttachmentsCarousel"),
@@ -296,6 +382,7 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
     useAiChatContext();
   const isMbl = useContext(MobileViewContext);
   const handoffEnabled = useFlag(HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG);
+  const skillOffersEnabled = useFlag(HTPR_7779_SKILL_OFFERS_FLAG);
 
   const revealNavigationTarget = () => {
     if (isMbl && showAiChatInterface) togglePopover();
@@ -307,15 +394,21 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
   };
 
   const settingCards = useMemo(() => message.role === "assistant" ? extractSettingCards(message.content) : { html: message.content, ids: [] }, [message.content, message.role]);
+  const skillOfferCards = useMemo(
+    () => message.role === "assistant" && skillOffersEnabled
+      ? extractSkillOfferIds(settingCards.html)
+      : { html: settingCards.html, ids: [] },
+    [settingCards.html, message.role, skillOffersEnabled],
+  );
   const messageHtmlWithTableScroll = useMemo(
     () => {
       const content =
         message.role === "assistant"
-          ? normalizeAssistantHtml(settingCards.html)
-          : settingCards.html;
+          ? normalizeAssistantHtml(skillOfferCards.html)
+          : skillOfferCards.html;
       return wrapTablesInMessageHtml(sanitizeAiHtml(content));
     },
-    [settingCards.html, message.role]
+    [skillOfferCards.html, message.role]
   );
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -344,6 +437,7 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
           dangerouslySetInnerHTML={{ __html: messageHtmlWithTableScroll }}
         />
         {settingCards.ids.map((id) => <AiSettingChangeCard key={id} id={id} />)}
+        {skillOffersEnabled && skillOfferCards.ids.map((id) => <AiSkillOfferCard key={id} id={id} />)}
         {message.role === "assistant" && message.isDelivered && ticketGroups?.length ? <AiChatTicketRows groups={ticketGroups} onNavigate={(url) => { followInternalLink(); router.push(url); }} /> : null}
         {message.role === "assistant" && !message.isDelivered && (
           <AssistantStreamingStatus

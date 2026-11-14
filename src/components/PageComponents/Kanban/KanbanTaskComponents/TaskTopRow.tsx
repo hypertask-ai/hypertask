@@ -1,21 +1,47 @@
 import React, { useContext, useMemo } from "react";
+import dynamic from "next/dynamic";
 const Tooltip = dynamic(() => import("@/components/Common/Tooltip"), {
   ssr: false,
 });
 import CommentAndAssignees from "./CommentAndAssignees";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { Circle } from "lucide-react";
-import dynamic from "next/dynamic";
+import { Circle, Inbox } from "lucide-react";
 import UserAvatar from "@/components/Common/UserAvatar";
 import { useRecoilState } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import SubtaskCount from "./SubtaskCount";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
 import HTCButton from "../../TaskDetail/TaskOptions/HTCButton";
-import { IAgent, ITask, IUser } from "@/models/model";
+import { IAgent, IProject, ITask, IUser } from "@/models/model";
+import { useFlag } from "@/hooks/useFlag";
+import { cn } from "@/utils/undoActions/helperFuncs";
+import { HTPR_8970_CALM_CARDS_FLAG } from "@/lib/flags/definitions/htpr-8970-calm-cards";
+import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
+import { HTPR_9075_CARD_PROPERTY_ROW_FLAG } from "@/lib/flags/definitions/htpr-9075-card-property-row";
+import { stackFaces, useCardAgentStatus, type CardAgentStatus } from "@/lib/agentStatus/cardStatus";
+import AgentStatusDot from "@/lib/agentStatus/AgentStatusDot";
+import { agentStatusDotMode, type AgentStatusDotMode } from "@/lib/agentStatus/dot";
+import { useMinuteClock } from "@/lib/agentStatus/minuteClock";
+import type { AgentStep } from "@/lib/agentStatus/chip";
+
+const AGENT_STEP_DOT: Partial<Record<AgentStep, string>> = {
+  working: "bg-[var(--color-pull-request-green)]",
+  "in review": "bg-[var(--color-card-age-warn)]",
+};
+
+const AgentDot = ({ pulse, mode, step }: { pulse: boolean; mode: AgentStatusDotMode | null; step: AgentStep }) => {
+  if (pulse) {
+    return mode ? <AgentStatusDot mode={mode} className="absolute -bottom-px -right-px" /> : null;
+  }
+  const tone = AGENT_STEP_DOT[step];
+  return tone ? (
+    <span data-testid="agent-dot" data-step={step} className={cn("absolute -bottom-px -right-px h-2 w-2 rounded-full", tone)} />
+  ) : null;
+};
 
 interface ITaskTopRow {
   task: ITask;
+  project?: IProject;
   updateActiveItemAndItemInView: (task: ITask) => void;
   setShowAssignModal: React.Dispatch<React.SetStateAction<boolean>>;
   toggleDelete: () => void;
@@ -33,9 +59,11 @@ interface ITaskTopRow {
   archiveNotificationCallback: () => void;
   handleStarTask: () => void;
   avatarSize?: number;
+  staleClock?: React.ReactNode;
 }
 const TaskTopRow: React.FC<ITaskTopRow> = ({
   task,
+  project,
   updateActiveItemAndItemInView,
   setShowAssignModal,
   assignees,
@@ -49,6 +77,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
   subTaskSetting,
   hover,
   avatarSize,
+  staleClock,
 }) => {
   const updateTaskFocus = updateActiveItemAndItemInView;
   const taskSaved =
@@ -65,25 +94,74 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
   const assigneeAvatarSize = avatarSize ?? (isMbl ? 18 : 22);
 
   const htcButtonCallback = () => updateTaskFocus(task);
+  const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG);
+  const collapseEmptyRow = useFlag(HTPR_9075_CARD_PROPERTY_ROW_FLAG);
+  const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG);
+  const agentStatus = useCardAgentStatus(task, project);
+  const agentMinute = useMinuteClock(Boolean(task.agentStatus));
+  const agentDotMode = agentPulseDot && agentStatus && task.agentStatus
+    ? agentStatusDotMode(task.agentStatus.at, agentStatus.step, agentMinute)
+    : null;
+  const faces = stackFaces(assignees, agentAssignees, agentStatus?.agentName);
+  const unread = notifications?.length > 0 && notifications[0]?.seen === false;
+  const stackAvatars: React.ReactNode[] = [];
+  const stackFace = (key: string, status: CardAgentStatus | null, avatar: React.ReactNode) => (
+    <span key={key} className={cn("relative flex shrink-0", stackAvatars.length > 0 && "ml-[-8px]")}>
+      {avatar}
+      {status ? <AgentDot pulse={agentPulseDot} mode={agentDotMode} step={status.step} /> : null}
+    </span>
+  );
+  for (const assignee of faces.users) {
+    stackAvatars.push(stackFace(`user-${assignee.id}`, null,
+      <UserAvatar alt={assignee.displayName} name={assignee.displayName} photoURL={assignee.photoURL} size={20} title={assignee.displayName} />)
+    );
+  }
+  for (const agent of faces.agents) {
+    const status = agent.displayName === agentStatus?.agentName ? agentStatus : null;
+    stackAvatars.push(stackFace(`agent-${agent.id}`, status,
+      <UserAvatar agentId={agent.id} alt={status ? status.text : `Assigned agent: ${agent.displayName}`}
+        name={agent.displayName} photoURL={agent.photoURL} size={20} title={status ? status.text : agent.displayName} />)
+    );
+  }
+  const statusAgentAssigned = faces.agents.some((agent) => agent.displayName === agentStatus?.agentName);
+  if (agentPulseDot && agentStatus && agentDotMode && !statusAgentAssigned) {
+    stackAvatars.push(stackFace("agent-status", agentStatus,
+      <UserAvatar alt={agentStatus.text} name={agentStatus.agentName} size={20} title={agentStatus.text} />)
+    );
+  }
+
+  const showsUnreadDot = !calm && notifications?.length > 0 && notifications[0]?.seen === false;
+  const showsSavedDot = !showsUnreadDot && taskSaved && !(calm && hasNotifications);
+  const showsSubtaskCount = subTaskSetting !== "None" && countSubtasks > 0;
+  const showsCommentCount = Boolean(_count && _count > 0);
+  const showsAvatars = calm ? stackAvatars.length > 0 : assignees.length > 0 || agentAssignees.length > 0;
+  const hasVisibleContent = Boolean(
+    showsUnreadDot ||
+      showsSavedDot ||
+      ticketNumber ||
+      hasNotifications ||
+      showsSubtaskCount ||
+      showsCommentCount ||
+      staleClock ||
+      showsAvatars,
+  );
+
+  if (collapseEmptyRow && !hasVisibleContent) return null;
 
   return (
     <>
-      <div
-        className={`flex gap-1 flex-wrap basis-full items-center
- 
-        `}
-      >
+      <div className={cn("flex gap-1 flex-wrap basis-full items-center", calm && "[&>div.h-labelComponent]:!h-4 [&>div.h-labelComponent]:!px-0")}>
         <span className="flex flex-grow gap-1 items-center relative">
-          {notifications &&
+          {!calm && notifications &&
           notifications?.length > 0 &&
           notifications[0]?.seen === false ? (
             <Circle size={7} className="fill-current text-[#5896F1] w-new-notification relative" strokeWidth={1.75} fill="currentColor"/>
-          ) : taskSaved ? (
+          ) : taskSaved && !(calm && hasNotifications) ? (
             <Circle size={7} className="fill-current text-[#FFCB33] w-new-notification relative" strokeWidth={1.75} fill="currentColor"/>
           ) : (
             <></>
           )}
-          <p className="task-ticket-id font-medium text-content sm:text-meta text-text-light-gray uppercase text-left">{`${ticketNumber}`}</p>
+          <p className={cn("task-ticket-id font-medium text-content sm:text-meta text-text-light-gray uppercase text-left", calm && "text-micro sm:text-micro leading-4")}>{`${ticketNumber}`}</p>
         </span>
 
         {isMbl ? (
@@ -93,7 +171,24 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
             {hover && <HTCButton isKanban={true} htcButtonCallback={htcButtonCallback} />}
           </div>
         )}
-        {hasNotifications ? (
+        {calm ? (
+          hasNotifications && (
+            <span
+              role="button"
+              aria-label={unread ? "New in your inbox" : "Also in your inbox"}
+              title={unread ? "New in your inbox" : "Also in your inbox"}
+              data-testid="card-inbox-flag"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                eHandler();
+              }}
+              className={cn("flex h-4 items-center cursor-pointer", unread ? "text-[var(--color-rich-text-link)]" : "text-text-light-gray")}
+            >
+              <Inbox size={12} strokeWidth={1.75} />
+            </span>
+          )
+        ) : hasNotifications ? (
           <span
             onClick={(e) => {
               e.preventDefault();
@@ -128,13 +223,31 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
         <SubtaskCount
           countSubTask={countSubtasks}
           currentSetting={subTaskSetting}
+          compact={calm}
         />
         <CommentAndAssignees
           commentCount={_count}
           notifications={notifications}
+          compact={calm}
         />
+        {staleClock}
 
-        {(assignees.length > 0 || agentAssignees.length > 0) && (
+        {calm ? (
+          stackAvatars.length > 0 && (
+            <div
+              data-testid="card-avatar-stack"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                updateActiveItemAndItemInView(task);
+                setShowAssignModal(true);
+              }}
+              className="flex items-center"
+            >
+              {stackAvatars}
+            </div>
+          )
+        ) : (assignees.length > 0 || agentAssignees.length > 0) && (
           <div
             onClick={(e) => {
               e.preventDefault();

@@ -224,7 +224,9 @@ test('task context includes the same triggered template and summary', async () =
   const f = fixture()
   f.comments[0].text = 'should we build this'
   f.prisma.taskRelations = { findMany: async () => [] }
-  const route = f.load('src/lib/mcp/operations/tasks/context/operation.ts')
+  const route = f.load('src/lib/mcp/operations/tasks/context/operation.ts', {
+    '@/lib/flags': { isFeatureEnabled: async () => false },
+  })
   const response = await route.GET(request('tasks/context?task_id=150&project_id=15'))
   assert.equal(response.status, 200)
   const body = await response.json()

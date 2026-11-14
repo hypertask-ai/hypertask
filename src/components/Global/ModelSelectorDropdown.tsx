@@ -1,12 +1,25 @@
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
+import { forcedByokProvider, modelOptionMatchesForcedKey } from "@/lib/ai/forcedTeamKey";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
+import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
+import {
+  AI_THINKING_EFFORTS,
+  modelSupportsThinkingControl,
+  type TAiThinkingEffort,
+} from "@/lib/aiThinkingPreference";
+import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
   aiModelDefinitions,
+  AUTO_MODEL_OPTION_ID,
+  toAutoModelOption,
   aiModelOptions,
   isAiModelOptionVisible,
   isGrokGemini4ModelKey,
@@ -36,7 +49,10 @@ import {
 } from "@/store";
 import { getSettingsPath } from "@/components/Modals/Settings/settingsNavigation";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
+import { useAiModelPreference, useAiThinkingPreference } from "@/hooks/General/useAiModelPreference";
+import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
+import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
+import { taskWriterDefersModel, taskWriterShowsAuto, withTaskWriterAutoOption } from "@/lib/taskWriterPickerAuto";
 import { aiOptions } from "@/lib/constants/constants";
 import { resolveTaskWriterBoardContext } from "@/lib/ai/taskWriterBoardContext";
 import type { IProject } from "@/models/model";
@@ -66,6 +82,12 @@ const MENU_WIDTH_PX = 250;
 const MOBILE_MENU_WIDTH_PX = 210;
 const VIEWPORT_GUTTER_PX = 8;
 
+const thinkingEffortLabels: Record<TAiThinkingEffort, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
 const effortNotes: Record<TAiEffort, string> = {
   light: "fastest",
   standard: "balanced",
@@ -90,6 +112,7 @@ const AIModelDropDownList = ({
   keyboardNavigation = false,
   onKeyboardClose,
   shortcutHint,
+  thinkingControls = false,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -108,7 +131,9 @@ const AIModelDropDownList = ({
   keyboardNavigation?: boolean;
   onKeyboardClose?: () => void;
   shortcutHint?: string;
+  thinkingControls?: boolean;
 }) => {
+  const alwaysUseThisKey = useFlag(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG);
   const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const grokGemini4Loaded = useFlagLoaded(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const modelFlagsLoaded = (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded) &&
@@ -134,8 +159,15 @@ const AIModelDropDownList = ({
     resolvedTeamId == null || billing?.teamId === String(resolvedTeamId)
       ? billing
       : null;
-  const { enabledProviders, isLoading: providerSettingsLoading } =
+  const { enabledProviders, isLoading: providerSettingsLoading, ownKeyOnly } =
     useTeamAiProviders(resolvedTeamId);
+  const forcedProvider = alwaysUseThisKey && !ownKeyOnly ? forcedByokProvider(scopedBilling?.byokProviderFlags) : null;
+  const menuModelOptions: TAiModelOption[] = [];
+  for (const option of visibleModelOptions) {
+    if (!forcedProvider || modelOptionMatchesForcedKey(option, forcedProvider)) {
+      menuModelOptions.push(option);
+    }
+  }
   const customEndpoint = useTeamCustomEndpoint(resolvedTeamId);
   const enabledProviderSet = useMemo(
     () => new Set(enabledProviders),
@@ -152,17 +184,18 @@ const AIModelDropDownList = ({
   const listedModelKeys = useMemo(
     () =>
       new Set(
-        visibleModelOptions
+        menuModelOptions
           .filter((option) => listedIds.has(option.id))
           .map((option) => option.modelKey)
       ),
-    [listedIds, visibleModelOptions]
+    [listedIds, menuModelOptions]
   );
   const availableOptions = useMemo(
     () =>
-      visibleModelOptions.filter((option) => {
+      menuModelOptions.filter((option) => {
         if (!listedIds.has(option.id)) return false;
         if (isGuest) return isGuestAllowedModelKey(option.modelKey);
+        if (forcedProvider) return option.source !== "custom" || customEndpoint.configured;
         if (option.source === "custom") return customEndpoint.configured;
         if (!respectTeamAvailability) return true;
         const definition = getAiModelDefinition(option.modelKey);
@@ -175,12 +208,22 @@ const AIModelDropDownList = ({
     [
       customEndpoint.configured,
       enabledProviderSet,
+      forcedProvider,
       listedIds,
-      visibleModelOptions,
+      menuModelOptions,
       respectTeamAvailability,
       isGuest,
     ]
   );
+  const autoFlag = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
+  const pickerAutoFlag = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
+  const thinkingFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
+  const { preference: thinkingPreference, setPreference: setThinkingPreference } = useAiThinkingPreference();
+  const autoOption = autoFlag || pickerAutoFlag
+    ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID) ??
+      (aiSelected?.id === AUTO_MODEL_OPTION_ID ? aiSelected : undefined)
+    : undefined;
+  const autoSelected = Boolean(autoOption) && aiSelected?.id === AUTO_MODEL_OPTION_ID;
   const defaultContext = useAiDefaultModelContext(settingsTeamId);
   const freePlan = scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
@@ -205,14 +248,19 @@ const AIModelDropDownList = ({
     fallbackOption ??
     (haiku55Enabled ? planDefaultOption : defaultAiModelOption);
   const selectedModel = getAiModelDefinition(selectedOption.modelKey);
-  const selectedModelLabel =
-    selectedOption.source === "custom"
+  const selectedModelLabel = autoSelected
+    ? autoOption?.title
+    : selectedOption.source === "custom"
       ? (customEndpoint.modelId ?? selectedModel?.label)
       : selectedModel?.label;
   const selectedEfforts = getAiModelEfforts(
     selectedOption.modelKey,
     availableOptions
   );
+  const thinkingModelSupported =
+    thinkingControls &&
+    !autoSelected &&
+    modelSupportsThinkingControl(selectedOption.modelKey);
 
   const isByokPlan =
     respectTeamAvailability && scopedBilling?.storePlanId === "BYOK";
@@ -246,6 +294,7 @@ const AIModelDropDownList = ({
       !modelFlagsLoaded ||
       (respectTeamAvailability && providerSettingsLoading) ||
       customEndpoint.isLoading ||
+      autoSelected ||
       requestedOption.id === selectedOption.id ||
       availableOptions.length === 0
     ) {
@@ -259,6 +308,7 @@ const AIModelDropDownList = ({
     providerSettingsLoading,
     customEndpoint.isLoading,
     respectTeamAvailability,
+    autoSelected,
     requestedOption.id,
     selectedOption,
   ]);
@@ -326,11 +376,16 @@ const AIModelDropDownList = ({
   const selectModel = (modelKey: TAiModelKey) => {
     const nextOption = getNearestAiModelOption(
       modelKey,
-      selectedOption.effort,
+      thinkingFlag && thinkingModelSupported ? "standard" : selectedOption.effort,
       availableOptions
     );
     if (!nextOption) return;
     optionCallback(nextOption);
+    setSubmenu(null);
+  };
+
+  const selectThinkingEffort = (effort: TAiThinkingEffort) => {
+    setThinkingPreference({ effort });
     setSubmenu(null);
   };
 
@@ -458,9 +513,21 @@ const AIModelDropDownList = ({
             <div className="px-2.5 pb-1 pt-1.5 text-micro font-semibold uppercase tracking-[0.08em] text-text-light-gray">
               Model
             </div>
+            {autoOption ? (
+              <SubmenuRow
+                label={autoOption.title}
+                selected={autoSelected}
+                onClick={() => {
+                  optionCallback(autoOption);
+                  setIsOpen(false);
+                  window.requestAnimationFrame(() => triggerRef.current?.focus());
+                }}
+              />
+            ) : null}
             {quickModelIds.map((quickModelId) => {
               const catalogOption = getAiModelOptionById(quickModelId);
               if (!catalogOption) return null;
+              if (forcedProvider && !modelOptionMatchesForcedKey(catalogOption, forcedProvider)) return null;
               const option = availableOptions.find(
                 (candidate) => candidate.id === catalogOption.id,
               );
@@ -477,7 +544,7 @@ const AIModelDropDownList = ({
                   (scopedBilling?.storePlanId === "BYOK" && !hasCustomerKey));
               const locked = isGuestLocked || isPremiumLocked;
               const disabled = !option && !locked;
-              const selected = selectedOption.id === catalogOption.id;
+              const selected = !autoSelected && selectedOption.id === catalogOption.id;
 
               return (
                 <button
@@ -560,7 +627,7 @@ const AIModelDropDownList = ({
         }}
       >
         <span className="truncate font-medium">{selectedModelLabel}</span>
-        {selectedOption.effort ? (
+        {selectedOption.effort && !autoSelected && !(thinkingFlag && thinkingModelSupported) ? (
           <span
             className={cn(
               "ml-1.5 flex-none text-text-light-gray",
@@ -624,6 +691,16 @@ const AIModelDropDownList = ({
                   : cn("absolute w-[220px] max-w-[calc(100vw-16px)]", submenuPositionClass)
               )}
             >
+              {autoOption ? (
+                <SubmenuRow
+                  label={autoOption.title}
+                  selected={autoSelected}
+                  onClick={() => {
+                    optionCallback(autoOption);
+                    setSubmenu(null);
+                  }}
+                />
+              ) : null}
               {AI_PROVIDERS.map((provider) => {
                 const models = aiModelDefinitions.filter(
                   (model) =>
@@ -661,7 +738,7 @@ const AIModelDropDownList = ({
                           key={model.key}
                           label={model.label}
                           priceTier={model.priceTier}
-                          selected={model.key === selectedOption.modelKey}
+                          selected={!autoSelected && model.key === selectedOption.modelKey}
                           locked={locked}
                           note={
                             isGuestLocked
@@ -697,7 +774,7 @@ const AIModelDropDownList = ({
                   </div>
                   <SubmenuRow
                     label={customEndpoint.modelId ?? "Custom endpoint"}
-                    selected={selectedOption.source === "custom"}
+                    selected={!autoSelected && selectedOption.source === "custom"}
                     disabled={isByokPlan && !isProviderEnabled("custom")}
                     onClick={() => selectModel("custom")}
                   />
@@ -705,7 +782,44 @@ const AIModelDropDownList = ({
               ) : null}
             </div>
           ) : null}
-          {selectedEfforts.length > 0 ? (
+          {thinkingFlag && thinkingModelSupported ? (
+            <>
+              <SettingsToggle
+                square
+                inputId="ai-model-thinking-toggle"
+                label="Thinking"
+                checked={thinkingPreference.enabled}
+                onChange={() => setThinkingPreference({ enabled: !thinkingPreference.enabled })}
+              />
+              <MenuRow
+                label="Effort"
+                value={thinkingEffortLabels[thinkingPreference.effort]}
+                expanded={submenu === "effort"}
+                disabled={!thinkingPreference.enabled}
+                onClick={() => openSubmenu("effort")}
+              />
+              {submenu === "effort" && thinkingPreference.enabled ? (
+                <div
+                  className={cn(
+                    "z-10 rounded-[4px] bg-modalBackground p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.45)]",
+                    stackSubmenus
+                      ? "relative mt-1 w-full"
+                      : cn("absolute w-[210px] max-w-[calc(100vw-16px)]", submenuPositionClass)
+                  )}
+                >
+                  {AI_THINKING_EFFORTS.map((effort) => (
+                    <SubmenuRow
+                      key={effort}
+                      label={thinkingEffortLabels[effort]}
+                      selected={effort === thinkingPreference.effort}
+                      onClick={() => selectThinkingEffort(effort)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          {selectedEfforts.length > 0 && !autoSelected && !(thinkingFlag && thinkingModelSupported) ? (
             <>
               <MenuRow
                 label="Effort"
@@ -757,7 +871,8 @@ const AIModelDropDownList = ({
                 !isProviderEnabled(fallbackOption.source))
             }
             onClick={() => {
-              if (fallbackOption) optionCallback(fallbackOption);
+              const resetOption = autoOption ?? fallbackOption;
+              if (resetOption) optionCallback(resetOption);
               setSubmenu(null);
             }}
           >
@@ -775,18 +890,21 @@ function MenuRow({
   label,
   value,
   expanded,
+  disabled = false,
   onClick,
 }: {
   label: string;
   value: string;
   expanded: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       aria-expanded={expanded}
-      className="flex w-full items-center justify-between gap-2 rounded-[4px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground"
+      disabled={disabled}
+      className="flex w-full items-center justify-between gap-2 rounded-[4px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground disabled:cursor-not-allowed disabled:opacity-45"
       onClick={onClick}
     >
       <span className="flex-none font-semibold">{label}</span>
@@ -879,9 +997,33 @@ function useTaskWriterBoardContext(destinationProject: IProject | null | undefin
   return resolveTaskWriterBoardContext({ destinationProject: destinationProject ?? undefined, openProject, openBilling });
 }
 
-export function useTaskWriterModel(destinationProject: IProject | null | undefined) {
+function useTaskWriterPicker(destinationProject: IProject | null | undefined) {
+  const pickerAuto = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
   const { teamId, billing, boardDefaultId } = useTaskWriterBoardContext(destinationProject);
-  const { currentAiOption } = useAiModelPreference("taskWriter", { teamId, billing, boardDefaultId });
+  const preference = useAiModelPreference("taskWriter", { teamId, billing, boardDefaultId });
+  const { data: userPreferences } = useGetUserPreferences();
+  const [override, setOverride] = useState<{ teamId: typeof teamId; auto: boolean } | null>(null);
+  const stored = getAiModelPreferenceIds(userPreferences.aiModelPreferences, "taskWriter", teamId);
+  const storedPick = stored.teamScoped ?? stored.global;
+  const autoOverride = override?.teamId === teamId ? override.auto : null;
+  const autoSettled = preference.teamModelPending ? false : taskWriterShowsAuto(storedPick, preference.usesPlanDefault);
+  const showAuto = pickerAuto && (autoOverride ?? autoSettled);
+  const currentAiOption = showAuto ? toAutoModelOption(preference.currentAiOption) : preference.currentAiOption;
+  const currentOptions = pickerAuto
+    ? withTaskWriterAutoOption(aiOptions, preference.currentAiOption)
+    : aiOptions;
+  const setAiOption = (option: TAiModal) => {
+    if (pickerAuto) setOverride({ teamId, auto: option.id === AUTO_MODEL_OPTION_ID });
+    preference.setAiOption(option);
+  };
+  const namedPick = Boolean(storedPick && getAiModelOptionById(storedPick));
+  const deferModel = taskWriterDefersModel(pickerAuto, preference.teamModelPending, autoOverride, namedPick);
+  return { teamId, billing, currentAiOption, setAiOption, currentOptions, deferModel };
+}
+
+export function useTaskWriterModel(destinationProject: IProject | null | undefined) {
+  const { currentAiOption, deferModel } = useTaskWriterPicker(destinationProject);
+  if (deferModel) return undefined;
   return currentAiOption
     ? { id: currentAiOption.id, source: currentAiOption.source }
     : undefined;
@@ -896,13 +1038,12 @@ export const TaskWriterModelPicker = ({
   mobile?: boolean;
   className?: ClassNameValue;
 }) => {
-  const { teamId, billing, boardDefaultId } = useTaskWriterBoardContext(project);
-  const { currentAiOption, setAiOption } = useAiModelPreference("taskWriter", { teamId, billing, boardDefaultId });
+  const { teamId, billing, currentAiOption, setAiOption, currentOptions } = useTaskWriterPicker(project);
   return (
     <AIModelDropDownButton
       optionCallback={setAiOption}
       aiSelected={currentAiOption}
-      currentOptions={aiOptions}
+      currentOptions={currentOptions}
       modelTeamId={teamId}
       modelBilling={billing}
       stackSubmenus

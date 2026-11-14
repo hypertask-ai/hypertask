@@ -1,6 +1,7 @@
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { requestCommentSnippetPicker } from "@/lib/snippets";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import { isChatSurfaceElement } from "@/lib/keyboard/chatSurfaceFocus";
 import type { TaskDetailContext } from "./TaskDetailContext";
 import type { TaskDetailCommand } from "./TaskDetailKeyboardContext";
 import { taskDetailEditingKeymap } from "./taskDetailEditingKeymap";
@@ -19,6 +20,24 @@ export function createTaskDetailKeyboard(context: TaskDetailContext) {
   };
   const handleKeyDown = (e: KeyboardEvent) => {
     const classNamesToReturnFrom = [...taskDetailConfig.classNames.returnFrom];
+    const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
+    if (
+      cmdControl &&
+      e.keyCode === KeyCodes.M &&
+      !e.shiftKey &&
+      !e.altKey &&
+      !e.repeat &&
+      !e.isComposing &&
+      isChatSurfaceElement(document.activeElement) &&
+      !document.querySelector(".modal") &&
+      document.activeElement?.role !== "dialog" &&
+      document.activeElement?.id !== taskDetailConfig.modals.htc
+    ) {
+      e.preventDefault();
+      context.setEditMode(taskDetailConfig.editModes.comment);
+      context.focusOn(taskDetailConfig.elementIds.commentInput);
+      return;
+    }
       if (
       document.querySelector(".modal") ||
       showAssignModal ||
@@ -36,7 +55,6 @@ export function createTaskDetailKeyboard(context: TaskDetailContext) {
       document.activeElement?.id === taskDetailConfig.elementIds.boardManager
     )
       return;
-    var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
     const isInsideTipTap = Boolean(
       document.activeElement?.closest(".ProseMirror")
     );

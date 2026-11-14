@@ -13,10 +13,14 @@ const keys = load(path.join(root, "src/lib/flags/keys.ts"));
 const schemas = load(path.join(root, "src/lib/ai/tools/schemas.ts"));
 const constants = load(path.join(root, "src/lib/constants/constants.ts"));
 const properties = load(path.join(root, "src/app/api/ai/_lib/taskWriterProperties.ts"));
+const brainLabels = load(path.join(root, "src/lib/ai/taskWriterBrainLabels.ts"));
 const duplicateGuard = load(path.join(root, "src/lib/ai/taskWriterDuplicateGuard.ts"));
 const { toStoredHtml } = load(path.join(root, "src/utils/helperFunctions/toStoredHtml.ts"));
 const output = '<h1 id="ai-generated-task-title">Writer title</h1><p>Writer body.</p><p id="ai-generated-task-properties"><span id="ai-generated-task-priority">2</span><span id="ai-generated-task-estimate">3</span></p>';
 const flag = "htpr-7513-writer-project-labels";
+const brainFlag = "htpr-9010-task-writer-brain-tag";
+const urgencyFlag = "htpr-9009-writer-urgency";
+const urgency = load(path.join(root, "src/lib/ai/taskWriterUrgency.ts"));
 const boardLabels = [{ id: "multiprompt-id", value: "Multiprompt" }, { id: "wazig-id", value: "Wazig" }, { id: "bug-id", value: "Bug" }];
 const labelMarker = (ids) => `<span id="ai-generated-task-tags" style="display:none">${ids.join(",")}</span>`;
 const fields = [{ id: "score-field", name: "ICE", type: "Number", options: null }];
@@ -56,8 +60,9 @@ function moduleWithStubs(file, stubs) {
 }
 
 function harness(options = {}) {
+  const labelsOnBoard = options.boardLabels ?? boardLabels;
   const saved = [], calls = [], usage = [], selections = [], confirmations = [], retrieval = [], reports = [], labelSaves = [], labelCreates = [];
-  const instructionLoads = [], fieldLoads = [], fieldSaves = [], checks = [];
+  const instructionLoads = [], fieldLoads = [], fieldSaves = [], checks = [], writerResponses = [];
   let active = 0, maxActive = 0;
   const signal = options.controller?.signal;
   let existingLabels = options.existingLabels ?? [];
@@ -103,14 +108,14 @@ function harness(options = {}) {
     errorMessage: (error) => error.message,
   };
   const prisma = {
-    project: { findFirst: async ({ where }) => options.denied || where.id !== 15 ? null : ({ id: 15, title: "Own board", section: [], labels: boardLabels }) },
-    label: { findMany: async ({ where }) => where.projectId === 15 ? boardLabels.filter((label) => !where.id || where.id.in.includes(label.id)) : [], create: async (value) => { labelCreates.push(value); throw new Error("Must not create labels"); } },
+    project: { findFirst: async ({ where }) => options.denied || where.id !== 15 ? null : ({ id: 15, title: "Own board", section: [], labels: labelsOnBoard }) },
+    label: { findMany: async ({ where }) => where.projectId === 15 ? labelsOnBoard.filter((label) => !where.id || where.id.in.includes(label.id)) : [], create: async (value) => { labelCreates.push(value); throw new Error("Must not create labels"); } },
     aI_Custom_Instructions: { findFirst: async ({ where }) => { instructionLoads.push(where); return { customInstruction: where.projectId === 15 ? "OWN_INSTRUCTIONS_SENTINEL" : "FOREIGN_INSTRUCTIONS_SENTINEL" }; } },
     customField: { findMany: async ({ where }) => { fieldLoads.push(where); return where.projectId === 15 ? (options.noFields ? [] : fields) : [{ id: "foreign-field", name: "FOREIGN_FIELD", type: "Number" }]; } },
     section: { findMany: async () => [], findFirst: async () => options.badSection ? null : { id: 7 } },
     taskTemplate: { findMany: async () => [] },
     task: { findFirst: async () => ({ id: 52, projectId: 15, status: "Normal", title: "", description_: { content: "" } }) },
-    taskLabel: { findMany: async () => existingLabels.map((labelId) => ({ labelId, label: boardLabels.find((label) => label.id === labelId) })) },
+    taskLabel: { findMany: async () => existingLabels.map((labelId) => ({ labelId, label: labelsOnBoard.find((label) => label.id === labelId) })) },
     agent: { findFirst: async () => options.badAgent ? null : { id: "agent" } },
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
@@ -121,9 +126,11 @@ function harness(options = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
+      return key === urgencyFlag ? options.urgency === true : key === flag ? options.labels !== false : key === brainFlag ? options.brain === true : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
     } },
     "@/lib/flags/keys": keys,
+    "@/lib/ai/taskWriterBrainLabels": brainLabels,
+    "@/lib/ai/taskWriterUrgency": urgency,
     "@/app/api/ai/_lib/customInstructions": moduleWithStubs("src/app/api/ai/_lib/customInstructions.ts", new Proxy({ "@/lib/prisma": { __esModule: true, default: prisma }, "ai": ai }, { has: () => true, get: (target, id) => target[id] ?? {} })),
     "@/lib/ai/prompts/registry": load(path.join(root, "src/lib/ai/prompts/registry.ts")),
     "@/lib/systemModelLadder": { isAiFeatureEnabled: () => !options.featureDisabled },
@@ -240,11 +247,12 @@ function harness(options = {}) {
     } },
     "@/lib/ai/taskWriterDueDate": {},
     "@/lib/flags/keys": keys,
+    "@/lib/ai/taskWriterBrainLabels": brainLabels,
     "next/server": { NextResponse: { json: Response.json } },
     "better-auth/cookies": { parseCookies: () => new Map() },
     "@prisma/client": { Prisma: { PrismaClientKnownRequestError: class extends Error {} } },
     "@/lib/ai/composeTaskTarget": load(path.join(root, "src/lib/ai/composeTaskTarget.ts")),
-    "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG; } },
+    "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? options.labels !== false : key === brainFlag ? options.brain === true : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG; } },
     "@/lib/prisma": { default: { ...prisma, user: { findUnique: async () => ({ id: 985 }) } }, __esModule: true },
     "@/utils/controllers/customFields": { getCustomFieldsForProject: async (projectId) => { fieldLoads.push({ projectId }); return options.noFields ? [] : fields; }, saveWriterCustomFieldValues: async (taskId, values) => { for (const { fieldId, value } of values) fieldSaves.push(plain([fieldId, taskId, value])); } },
     "@/utils/controllers/tasks/getNextUniqueTaskIndex": { getNextUniqueTaskIndex: async () => 1 },
@@ -282,11 +290,15 @@ function harness(options = {}) {
       return { error: response.status !== 200, resposne: data };
     } },
   });
-  return { tool, saved, calls, usage, selections, confirmations, retrieval, reports, labelSaves, labelCreates, run, instructionLoads, fieldLoads, fieldSaves, checks,
+  return { tool, saved, calls, usage, selections, confirmations, retrieval, reports, labelSaves, labelCreates, run, instructionLoads, fieldLoads, fieldSaves, checks, writerResponses,
     compose: async (extra = {}) => {
       const previousFetch = global.fetch, previousParser = global.DOMParser;
       global.DOMParser = new (require("jsdom").JSDOM)("").window.DOMParser;
-      global.fetch = async (_url, args) => webRoute.POST({ json: async () => JSON.parse(args.body) });
+      global.fetch = async (_url, args) => {
+        const response = await webRoute.POST({ json: async () => JSON.parse(args.body) });
+        writerResponses.push(await response.clone().text());
+        return response;
+      };
       try { return await composer.createComposedTask({ text: "Make this change", files: [], project: { id: 15, ai_custom_instructions: [{ customInstruction: "" }] }, userId: 985, ...extra }); }
       finally { global.fetch = previousFetch; global.DOMParser = previousParser; }
     },
@@ -411,5 +423,293 @@ test("filling an empty Ctrl+J task saves writer labels but keeps existing user l
       assert.deepEqual(h.labelSaves.flat().map((entry) => entry.labelId), labels && !existingLabels.length ? ["wazig-id"] : []);
       if (labels && !existingLabels.length) assert.equal(result.task.taskLabels[0].labelId, "wazig-id");
     }
+  }
+});
+
+const brainBoard = [...boardLabels, { id: "b-light", value: "brain-light" }, { id: "b-medium", value: "brain-medium" }, { id: "b-hard", value: "brain-hard" }, { id: "b-xhard", value: "brain-extra-hard" }];
+const brainIds = new Set(["b-light", "b-medium", "b-hard", "b-xhard"]);
+const brainOf = (ids) => ids.filter((id) => brainIds.has(id));
+const sorted = (ids) => [...ids].sort();
+
+test("brain labels: only the four brain names count, any case, and the default is brain-medium", () => {
+  assert.equal(brainLabels.brainLabelsFromBoard(boardLabels), null);
+  assert.equal(brainLabels.brainLabelsFromBoard([{ id: "x", value: "brain-urgent" }, { id: "y", value: null }]), null);
+  const brain = brainLabels.brainLabelsFromBoard([...boardLabels, { id: "b-hard", value: " Brain-Hard " }, { id: "b-medium", value: "BRAIN-MEDIUM" }]);
+  assert.deepEqual(sorted(brain.ids), ["b-hard", "b-medium"]);
+  assert.equal(brain.defaultId, "b-medium");
+  assert.equal(brainLabels.brainLabelsFromBoard([{ id: "b-hard", value: "brain-hard" }]).defaultId, null);
+});
+
+test("brain labels: exactly one brain label, other labels kept, nothing invented", () => {
+  const brain = brainLabels.brainLabelsFromBoard(brainBoard);
+  const enforce = (ids) => brainLabels.enforceBrainLabel(ids, brain);
+  assert.deepEqual(enforce([]), ["b-medium"]);
+  assert.deepEqual(enforce(["wazig-id"]), ["wazig-id", "b-medium"]);
+  assert.deepEqual(enforce(["b-hard", "wazig-id"]), ["wazig-id", "b-hard"]);
+  assert.deepEqual(enforce(["b-light", "b-hard", "b-xhard"]), ["b-light"]);
+  assert.deepEqual(enforce(["wazig-id", "wazig-id"]), ["wazig-id", "b-medium"]);
+  assert.deepEqual(brainLabels.enforceBrainLabel(["wazig-id", "wazig-id"], null), ["wazig-id"]);
+  assert.deepEqual(brainLabels.enforceBrainLabel(["wazig-id"], undefined), ["wazig-id"]);
+  const withoutMedium = brainLabels.brainLabelsFromBoard([{ id: "b-hard", value: "brain-hard" }]);
+  assert.deepEqual(brainLabels.enforceBrainLabel(["wazig-id"], withoutMedium), ["wazig-id"]);
+});
+
+test("brain labels: streamed HTML gets one brain marker even when the model wrote none", () => {
+  const brain = brainLabels.brainLabelsFromBoard(brainBoard);
+  const ids = brainBoard.map((label) => label.id);
+  const none = properties.normalizeTaskWriterLabels("<h1>T</h1><p>Body</p>", ids, brain);
+  assert.match(none, /<span id="ai-generated-task-tags" style="display:none">b-medium<\/span>/);
+  const two = properties.normalizeTaskWriterLabels(`<p>Body</p>${labelMarker(["b-light", "wazig-id", "b-hard", "Invented"])}`, ids, brain);
+  assert.match(two, />wazig-id,b-light</);
+  assert.equal(properties.normalizeTaskWriterLabels("<p>Body</p>", ids, null).includes("ai-generated-task-tags"), false);
+});
+
+test("brain flag has the Everyone default the flag gate requires and is exported with the other keys", () => {
+  const definition = optionalModule("src/lib/flags/definitions/htpr-9010-task-writer-brain-tag.ts").default;
+  assert.ok(definition);
+  assert.equal(definition.key, brainFlag);
+  assert.equal(keys.HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG, brainFlag);
+  assert.equal(definition.kind, "feature");
+  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.deepEqual([...definition.related], [flag]);
+  assert.equal(definition.releaseRisk.risk, "small");
+});
+
+test("chat: a brain board always gets exactly one brain label, picked by the writer or defaulted to medium", async () => {
+  const cases = [
+    [[], ["b-medium"]],
+    [["wazig-id"], ["wazig-id", "b-medium"]],
+    [["wazig-id", "b-hard"], ["wazig-id", "b-hard"]],
+    [["b-light", "b-xhard", "b-hard"], ["b-light"]],
+    [["Invented", "brain-hard", "foreign-id"], ["b-medium"]],
+  ];
+  for (const [written, expected] of cases) {
+    const h = harness({ enabled: true, brain: true, boardLabels: brainBoard, output: output + (written.length ? labelMarker(written) : "") });
+    assert.equal((await h.execute({ project_id: 15, brief: "Fix Wazig" })).success, true);
+    const [saved] = savedIds(h, "chat");
+    assert.deepEqual(sorted(saved), sorted(expected));
+    assert.equal(brainOf(saved).length, 1);
+    assert.deepEqual(h.labelCreates, []);
+    assert.match(JSON.stringify(h.calls[0].prompt), /exactly one brain label/);
+  }
+});
+
+test("chat: brain flag off or a board without brain labels keeps the old labels and prompt", async () => {
+  for (const options of [{ brain: false, boardLabels: brainBoard }, { brain: true, boardLabels }]) {
+    const h = harness({ enabled: true, ...options, output: output + labelMarker(["wazig-id"]) });
+    assert.equal((await h.execute({ project_id: 15, brief: "Fix Wazig" })).success, true);
+    assert.deepEqual(savedIds(h, "chat"), [["wazig-id"]]);
+    assert.doesNotMatch(JSON.stringify(h.calls[0].prompt), /exactly one brain label/);
+  }
+});
+
+test("chat: explicit labels from the caller are kept and get the writer's brain label unless they already have one", async () => {
+  const h = harness({ enabled: true, brain: true, boardLabels: brainBoard, output: output + labelMarker(["wazig-id", "b-hard"]) });
+  await h.execute({ project_id: 15, brief: "Fix Wazig", labels: ["bug-id"] });
+  assert.deepEqual(sorted(savedIds(h, "chat")[0]), ["b-hard", "bug-id"]);
+  const own = harness({ enabled: true, brain: true, boardLabels: brainBoard, output: output + labelMarker(["wazig-id", "b-hard"]) });
+  await own.execute({ project_id: 15, brief: "Fix Wazig", labels: ["bug-id", "b-light"] });
+  assert.deepEqual(savedIds(own, "chat"), [["bug-id", "b-light"]]);
+  const off = harness({ enabled: true, brain: false, boardLabels: brainBoard, output: output + labelMarker(["wazig-id", "b-hard"]) });
+  await off.execute({ project_id: 15, brief: "Fix Wazig", labels: ["bug-id"] });
+  assert.deepEqual(savedIds(off, "chat"), [["bug-id"]]);
+});
+
+test("filling an empty Ctrl+J task on a brain board adds the brain label even when the task already has labels", async () => {
+  const tasks = [{ title: "Fix Wazig", description: "<p>Wazig body</p>", labelIds: ["wazig-id", "b-hard"] }];
+  const labeled = harness({ brain: true, boardLabels: brainBoard, existingLabels: ["bug-id"], tasks });
+  assert.equal((await labeled.compose({ existingTaskId: 52 })).writerFailed, false);
+  assert.deepEqual(labeled.labelSaves.flat().map((entry) => entry.labelId), ["b-hard"]);
+  const bare = harness({ brain: true, boardLabels: brainBoard, tasks: [{ title: "Fix Wazig", description: "<p>Wazig body</p>", labelIds: [] }] });
+  assert.equal((await bare.compose({ existingTaskId: 52 })).writerFailed, false);
+  assert.deepEqual(bare.labelSaves.flat().map((entry) => entry.labelId), ["b-medium"]);
+  const own = harness({ brain: true, boardLabels: brainBoard, existingLabels: ["b-light"], tasks });
+  assert.equal((await own.compose({ existingTaskId: 52 })).writerFailed, false);
+  assert.deepEqual(own.labelSaves.flat(), []);
+  const off = harness({ brain: false, boardLabels: brainBoard, existingLabels: ["bug-id"], tasks });
+  assert.equal((await off.compose({ existingTaskId: 52 })).writerFailed, false);
+  assert.deepEqual(off.labelSaves.flat(), []);
+});
+
+test("structured write: every split ticket gets its own single brain label", async () => {
+  const h = harness({ brain: true, boardLabels: brainBoard, tasks: [
+    { title: "Fix Multiprompt", description: "<p>Small</p>", labelIds: ["multiprompt-id", "b-light", "b-hard"] },
+    { title: "Fix Wazig", description: "<p>Money</p>", labelIds: ["wazig-id", "b-xhard"] },
+    { title: "Third ticket", description: "<p>Plain</p>", labelIds: [] },
+  ] });
+  assert.equal((await h.compose()).writerFailed, false);
+  const saved = savedIds(h, "compose");
+  assert.deepEqual(saved.map(sorted), [["b-light", "multiprompt-id"], ["b-xhard", "wazig-id"], ["b-medium"]]);
+  assert.ok(saved.every((ids) => brainOf(ids).length === 1));
+  assert.deepEqual(h.labelCreates, []);
+});
+
+test("structured write: view tags stay, the writer's brain label is added once, a view brain label wins", async () => {
+  const tasks = [{ title: "Fix", description: "<p>Body</p>", labelIds: ["wazig-id", "b-hard"] }];
+  const view = harness({ brain: true, boardLabels: brainBoard, tasks, viewTags: [boardLabels[2]] });
+  assert.equal((await view.compose({ viewProject: { id: 15 } })).writerFailed, false);
+  assert.deepEqual(sorted(savedIds(view, "compose")[0]), ["b-hard", "bug-id"]);
+  const owned = harness({ brain: true, boardLabels: brainBoard, tasks, viewTags: [boardLabels[2], brainBoard[3]] });
+  assert.equal((await owned.compose({ viewProject: { id: 15 } })).writerFailed, false);
+  assert.deepEqual(sorted(savedIds(owned, "compose")[0]), ["b-light", "bug-id"]);
+  const off = harness({ brain: false, boardLabels: brainBoard, tasks, viewTags: [boardLabels[2]] });
+  assert.equal((await off.compose({ viewProject: { id: 15 } })).writerFailed, false);
+  assert.deepEqual(savedIds(off, "compose"), [["bug-id"]]);
+});
+
+test("compose save: server keeps one brain label and ignores invented ids", async () => {
+  const on = harness({ brain: true, boardLabels: brainBoard });
+  const response = await on.save({ writerLabelIds: ["wazig-id", "b-light", "b-hard", "Invented", "foreign-id"] });
+  assert.equal(response.status, 200);
+  assert.deepEqual(sorted(savedIds(on, "compose")[0]), ["b-light", "wazig-id"]);
+  assert.deepEqual(on.labelCreates, []);
+  const off = harness({ brain: false, boardLabels: brainBoard });
+  assert.equal((await off.save({ writerLabelIds: ["wazig-id", "b-light", "b-hard"] })).status, 200);
+  assert.deepEqual(sorted(savedIds(off, "compose")[0]), ["b-hard", "b-light", "wazig-id"]);
+  const plainBoard = harness({ brain: true });
+  assert.equal((await plainBoard.save({ writerLabelIds: ["wazig-id"] })).status, 200);
+  assert.deepEqual(savedIds(plainBoard, "compose"), [["wazig-id"]]);
+});
+
+test("MCP drafts on a brain board carry exactly one brain label; off leaves them alone", async () => {
+  for (const brain of [true, false]) {
+    const h = harness({ brain, boardLabels: brainBoard, output: output + labelMarker(["multiprompt-id", "b-hard", "b-light"]) });
+    const draft = await (await h.post({ project_id: 15, prompt: "Fix Multiprompt" })).json();
+    assert.deepEqual(draft.labelIds, brain ? ["multiprompt-id", "b-hard"] : ["multiprompt-id", "b-hard", "b-light"]);
+    assert.doesNotMatch(draft.html, /ai-generated-task-tags/);
+  }
+});
+
+test("brain rule lists every brain label with its id so the writer can pick one", () => {
+  const brain = brainLabels.brainLabelsFromBoard([...boardLabels, { id: "b-hard", value: "Brain-Hard" }, { id: "b-light", value: "brain-light" }, { id: "b-medium", value: "brain-medium" }]);
+  assert.deepEqual(plain(brain.options), [{ id: "b-light", name: "brain-light" }, { id: "b-medium", name: "brain-medium" }, { id: "b-hard", name: "brain-hard" }]);
+  const rule = brainLabels.taskWriterBrainRule(brain);
+  assert.match(rule, /only the ID and never the name/);
+  assert.ok(rule.includes('Brain labels: [{"id":"b-light","name":"brain-light"},{"id":"b-medium","name":"brain-medium"},{"id":"b-hard","name":"brain-hard"}].'));
+  assert.match(rule, /exactly one brain label/);
+  assert.match(rule, /typo/);
+  assert.match(rule, /payments/);
+  assert.doesNotMatch(rule, /"name":"brain-extra-hard"/);
+});
+
+test("the board vocabulary cuts a long label list, so brain ids must come from the brain rule", async () => {
+  const { formatBoardVocabulary } = load(path.join(root, "src/app/api/ai/_lib/taskWriterBoardResearch.ts"));
+  const longBoard = [
+    ...Array.from({ length: 60 }, (_, index) => ({ id: `0f0f0f0f-0000-4000-8000-${String(index).padStart(12, "0")}`, value: `Label number ${index}` })),
+    { id: "8ab3def4-0000-4000-8000-000000000001", value: "brain-light" },
+    { id: "8ab3def4-0000-4000-8000-000000000002", value: "brain-medium" },
+    { id: "8ab3def4-0000-4000-8000-000000000003", value: "brain-hard" },
+    { id: "8ab3def4-0000-4000-8000-000000000004", value: "brain-extra-hard" },
+  ];
+  const vocabulary = formatBoardVocabulary({ labels: longBoard.map(({ id, value }) => ({ id, name: value })) });
+  assert.doesNotMatch(vocabulary, /brain-light/);
+  const h = harness({ brain: true, boardLabels: longBoard, output });
+  assert.equal((await h.post({ project_id: 15, prompt: "Fix a typo" })).status, 200);
+  const prompt = JSON.stringify(h.calls[0].prompt);
+  for (const option of brainLabels.brainLabelsFromBoard(longBoard).options) assert.ok(prompt.includes(option.id) && prompt.includes(option.name), option.name);
+});
+
+const urgentPriority = constants.PriorityConstants.find((entry) => entry.Priority_Value === "Urgent").priority_index;
+const priorityMarkerCount = (html) => (html.match(/ai-generated-task-priority/g) ?? []).length;
+
+test("urgency words: the listed words and translations count, negated or look-alike ones do not", () => {
+  const urgent = [
+    "Fix login, it is urgent", "URGENT: checkout is broken", "do this asap", "needs doing today", "the API is down right now",
+    "fix it immediately", "this is a blocker for the release", "production down for all users", "prod is down", "Das ist dringend", "Bitte sofort beheben",
+    "C'est urgent", "a faire tout de suite", "es urgente", "hazlo ahora mismo", "dit is dringend", "doe het meteen", "A.S.A.P. please",
+    "Not sure why, but fix it today", "please do not forget, this is urgent",
+  ];
+  const calm = [
+    "This is not urgent", "not that urgent", "Non-urgent cleanup", "isn't urgent at all", "no longer a blocker", "Not today", "never urgent",
+    "Add a dark mode toggle", "Rename the unblock button", "Improve the ad blocker detection copy", "Add urgency labels to the docs", "Keep tasks in a todays list",
+    "", "nicht dringend", "pas urgent",
+  ];
+  for (const note of urgent) assert.equal(urgency.noteIsUrgent(note), true, note);
+  for (const note of calm) assert.equal(urgency.noteIsUrgent(note), false, note);
+});
+
+test("urgency note: the user's own words are read, not the original description inside the prompt", () => {
+  const fromDescription = urgency.taskWriterUserNote({ PROMPT: "Original Description: <p>urgent old text</p>\nMake it shorter", userRetrievalTexts: [], taskDescription: "<p>urgent old text</p>" });
+  assert.equal(urgency.noteIsUrgent(fromDescription), false);
+  assert.equal(urgency.taskWriterUserNote({ PROMPT: "p", userRetrievalTexts: ["a", "b asap"], taskDescription: "" }), "a\nb asap");
+  assert.equal(urgency.taskWriterUserNote({ PROMPT: "fix it", userRetrievalTexts: [], taskDescription: "" }), "fix it");
+});
+
+test("urgency: forcing Urgent replaces the model's priority and leaves title, size and body alone", () => {
+  const plainProps = properties.extractTaskWriterProperties(output);
+  const forced = properties.extractTaskWriterProperties(output, { forceUrgent: true });
+  assert.equal(plainProps.priority, 2);
+  assert.equal(forced.priority, urgentPriority);
+  assert.equal(forced.title, plainProps.title);
+  assert.equal(forced.estimate, plainProps.estimate);
+  assert.equal(forced.description, plainProps.description);
+  assert.equal(properties.extractTaskWriterProperties(output, { forceUrgent: false }).priority, 2);
+  assert.equal(properties.extractTaskWriterProperties('<h1 id="ai-generated-task-title">T</h1><p>Body</p>', { forceUrgent: true }).priority, urgentPriority);
+});
+
+test("urgency: the marker rewrite keeps exactly one priority marker and adds one when the model wrote none", () => {
+  const rewritten = properties.forceUrgentPriorityMarker(output);
+  assert.equal(priorityMarkerCount(rewritten), 1);
+  assert.equal(properties.extractTaskWriterProperties(rewritten).priority, urgentPriority);
+  assert.equal(properties.extractTaskWriterProperties(rewritten).estimate, properties.extractTaskWriterProperties(output).estimate);
+  const added = properties.forceUrgentPriorityMarker("<h1 id=\"ai-generated-task-title\">T</h1><p>Body</p>");
+  assert.equal(priorityMarkerCount(added), 1);
+  assert.equal(properties.extractTaskWriterProperties(added).priority, urgentPriority);
+  assert.equal(properties.extractTaskWriterProperties(added).description, "<p>Body</p>");
+});
+
+test("urgency flag ships to everyone as a small feature and is exported with the other keys", () => {
+  const definition = load(path.join(root, "src/lib/flags/definitions/htpr-9009-writer-urgency.ts")).default;
+  assert.equal(definition.key, urgencyFlag);
+  assert.equal(keys.HTPR_9009_WRITER_URGENCY_FLAG, urgencyFlag);
+  assert.equal(definition.kind, "feature");
+  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.releaseRisk.risk, "small");
+});
+
+test("MCP drafts: an urgency word makes the priority Urgent; no word, a negation or the flag off keeps the model's priority", async () => {
+  const baseline = await (await harness({ urgency: false }).post({ project_id: 15, prompt: "Fix login" })).json();
+  assert.equal(baseline.priority, 2);
+  for (const [urgencyOn, prompt, expected] of [[true, "Fix login asap", urgentPriority], [true, "Fix login, it is not urgent", 2], [true, "Fix login", 2], [false, "Fix login asap", 2]]) {
+    const h = harness({ urgency: urgencyOn });
+    const draft = await (await h.post({ project_id: 15, prompt })).json();
+    assert.equal(draft.priority, expected, `${urgencyOn} ${prompt}`);
+    assert.equal(draft.title, baseline.title);
+    assert.equal(draft.html, baseline.html);
+    assert.equal(draft.estimate, baseline.estimate);
+  }
+});
+
+test("MCP drafts: a model that wrote no priority still gets Urgent from the note", async () => {
+  const h = harness({ urgency: true, output: '<h1 id="ai-generated-task-title">Writer title</h1><p>Writer body.</p>' });
+  const draft = await (await h.post({ project_id: 15, prompt: "blocker: nobody can log in" })).json();
+  assert.equal(draft.priority, urgentPriority);
+  assert.doesNotMatch(draft.html, /ai-generated-task-priority/);
+});
+
+test("chat: an urgent brief saves the ticket as Urgent and a calm one keeps the writer's priority", async () => {
+  const urgent = harness({ enabled: true, urgency: true });
+  assert.equal((await urgent.execute({ project_id: 15, brief: "Checkout is broken, fix it right now" })).success, true);
+  assert.equal(urgent.saved[0].priorityIndex, urgentPriority);
+  const calm = harness({ enabled: true, urgency: true });
+  assert.equal((await calm.execute({ project_id: 15, brief: "Checkout copy looks off" })).success, true);
+  assert.equal(calm.saved[0].priorityIndex, 2);
+});
+
+test("structured write: only urgent notes carry the Urgent marker, titles and bodies are untouched", async () => {
+  const tasks = [{ title: "Fix login", description: "<p>Login body</p>", labelIds: [] }, { title: "Add export", description: "<p>Export body</p>", labelIds: [] }];
+  const urgent = harness({ urgency: true, tasks });
+  assert.equal((await urgent.compose({ text: "Fix login immediately and add export" })).writerFailed, false);
+  const urgentTasks = JSON.parse(urgent.writerResponses[0]).tasks;
+  assert.deepEqual(urgentTasks.map((task) => task.title), ["Fix login", "Add export"]);
+  for (const task of urgentTasks) {
+    assert.equal(properties.extractTaskWriterProperties(task.description).priority, urgentPriority);
+    assert.equal(priorityMarkerCount(task.description), 1);
+  }
+  assert.deepEqual(urgentTasks.map((task) => properties.extractTaskWriterProperties(task.description).description), ["<p>Login body</p>", "<p>Export body</p>"]);
+  for (const [urgencyOn, text] of [[true, "Fix login and add export"], [true, "Fix login, this is not urgent"], [false, "Fix login asap"]]) {
+    const h = harness({ urgency: urgencyOn, tasks });
+    assert.equal((await h.compose({ text })).writerFailed, false);
+    assert.deepEqual(JSON.parse(h.writerResponses[0]).tasks.map((task) => task.description), ["<p>Login body</p>", "<p>Export body</p>"], text);
   }
 });

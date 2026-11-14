@@ -9,14 +9,24 @@
     "reason": "HTPR-7979 sends the original note to Hypertask's own same-origin task questions route. The browser call itself pays nothing; the route's model cost is noted on the route entry.",
     "source": "https://app.hypertask.ai/detail/project-15/7979"
   },
+  "src/components/Modals/Settings/AiUsageSection.tsx:558dbef4821e9f2372b80b15063d75a6f9cb8bfc160014a8e1ec2c7ef10d90de": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7788 lists the teams the signed-in owner may see in full, from Hypertask's own same-origin settings API. No paid provider call; the per-team gateway report cost is unchanged and already noted on the route.",
+    "source": "https://app.hypertask.ai/detail/project-15/7788"
+  },
+  "src/components/Modals/Settings/AiUsageSection.tsx:b7d56347f5ce86d23eb734cdd40e426709fc12ffab7004b16e33383c3febdda3": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7788 reuses the existing per-team AI usage endpoint once per owned team, the same request today's single-team page already makes. No new provider, retry or token budget.",
+    "source": "https://app.hypertask.ai/detail/project-15/7788"
+  },
   "src/components/Modals/Settings/GitHubSection.tsx:aea21b21a5fc71a8aec8029bd4b0da5f2c32aaf3f9e3ba497671ca232d1bca00": {
     "maxUsdPerDay": 0,
-    "reason": "Saves board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "reason": "Saves board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
   },
   "src/components/Modals/Settings/GitHubSection.tsx:c401886c70ab215a16bc73fde68f0d908d363e08777c43b6fabb1536f8c51f12": {
     "maxUsdPerDay": 0,
-    "reason": "Reads board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "reason": "Reads board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
   },
   "src/hooks/General/useFollowerKanban.ts:1f078df2800a6871f1d34ba832e8cce99475af075913f2e9ba33e1fd9491d003": {
@@ -28,6 +38,11 @@
     "maxUsdPerDay": 0,
     "reason": "Same follower write and follower email requests that already existed in this hook; the diff only moved them under one try block and added a message. No new request, provider, retry or token budget.",
     "source": "https://app.hypertask.ai/detail/project-15/8199"
+  },
+  "src/hooks/Homepage/Views/useKanbanViews.ts:02ec18c9f602d03aad7e074a0f6bf0480bbd0baf48a1099c97d96db7debb7458": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8630 keeps the same same-origin POST to Hypertask's own /api/projects/views/create-view. The diff only sends one extra field the browser already holds (table_group_by), so a saved view keeps its grouping. No paid provider, retry or token budget changes.",
+    "source": "https://app.hypertask.ai/detail/project-15/8630"
   },
   "src/lib/ai/chatStream/modelReply.ts:942cd87065de1b8f3cd5835d7eeaed3c1ea91e97128acf509f6efde980565521": {
     "maxUsdPerDay": 0,
@@ -69,6 +84,11 @@
     "reason": "HTPR-8265 does not add a request or a provider. It is the same Ctrl+J writer call to Hypertask's own same-origin task writer route; only modelSelected and sourceSelected can now come from the Ctrl+J picker instead of the board default, and that route applies the same team plan, key and BYOK limits to whichever model it receives.",
     "source": "https://app.hypertask.ai/detail/project-15/8265"
   },
+  "src/lib/pullRequests/githubLinkAuth.ts:6733e7778b3d8693e30cd26563956cc65d74fd041a697094e8288278fc97945f": {
+    "maxUsdPerDay": 0,
+    "reason": "HYCI-254 asks GitHub for a one-hour read-only token so pull request checks are not stuck on the shared anonymous limit. GitHub does not bill these reads.",
+    "source": "https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#create-an-installation-access-token-for-an-app"
+  },
   "src/lib/pullRequests/taskPullRequests.ts:0740d7598d70bd9dcd9f21aaab7545bd3941c4fa96937a39b4b8fa0e6ee70073": {
     "maxUsdPerDay": 0,
     "reason": "HTPR-8301 reads a linked pull request's head check runs from the free public GitHub REST API so its check state stops sitting on the pending default. It runs at most once per linked pull request per minute, needs no token and bills nothing; a refused or rate-limited response leaves the stored state untouched.",
@@ -83,6 +103,16 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-8250 links one task to its parent through Hypertask's own same-origin add-parent route. The refactor only moves the listed option lookup; the request, payload and route are the ones that already shipped, so no provider, retry or token budget is added.",
     "source": "https://app.hypertask.ai/detail/project-15/8250"
+  },
+  "src/lib/contexts/Kanban/BulkSelectionContext.tsx:7d16835058a53d15770f1b910c32d02541e6f55fecbcc6a970107e8f8d4e89d1": {
+    "maxUsdPerDay": 0,
+    "reason": "The browser sends selected tasks to Hypertask's own same-origin bulk-move-board API; this call has no third-party API charge.",
+    "source": "https://app.hypertask.ai/detail/project-15/8737"
+  },
+  "src/lib/contexts/Kanban/BulkSelectionContext.tsx:f3674c8615f24685280d686182c0eb898a780fd28735c7d75799b7fbd532482c": {
+    "maxUsdPerDay": 0,
+    "reason": "axios.isAxiosError only inspects an error locally; it makes no network request or paid API call.",
+    "source": "https://axios-http.com/docs/handling_errors"
   },
   "src/lib/slack/api.ts:358f54578c5f4b9f87252011a8fcb3513c6b94b60e70fa98c555a6aeaa09567c": {
     "maxUsdPerDay": 0,
@@ -108,5 +138,79 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-7980: Requests a Checkout session through the same-origin route. Session creation submits no payment; later completed payments may incur Stripe fees, not per-request fees.",
     "source": "https://stripe.com/pricing"
+  },
+  "src/app/cli-auth/page.tsx:349b7ad490423bc9bfbe0cf0d0c07c72f76533bf11e19bc7867042faea732f3a": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7552 posts agent sign-in start, status, approve and deny to Hypertask's own same-origin /api/cli/device route. The browser call pays nothing.",
+    "source": "https://app.hypertask.ai/detail/project-15/7552"
+  },
+  "src/components/Modals/Settings/ApiKeysSection.tsx:d81492e3ad427ad3c756a6a9df025a18ce34c8bf15e826af7843ac301b086548": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8049 saves the Always use this key switch through Hypertask's own same-origin team keys route. The browser call pays nothing and does not start an AI request.",
+    "source": "https://app.hypertask.ai/detail/project-15/8049"
+  },
+  "src/components/Modals/Settings/ApiKeysSection.tsx:f3674c8615f24685280d686182c0eb898a780fd28735c7d75799b7fbd532482c": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8049 checks whether a failed same-origin save is an Axios error so the settings toast can show the server message. It sends no request.",
+    "source": "https://app.hypertask.ai/detail/project-15/8049"
+  },
+  "src/lib/ai/chatStream/modelReply.ts:a49fc1e3b28bb1d506a8a82c571bc80bca283bd028ef2062539e1b307774bfe4": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8049 keeps the existing chat streamText call. The error callback now pauses when a team key is forced, instead of starting another model request. No new model, retry, or token budget.",
+    "source": "https://app.hypertask.ai/detail/project-15/8049"
+  },
+  "src/lib/ai/skillOffers/detect.ts:ff398dc84664a12c1415afef087ce4eeee16ca6c56887b9f04272d37a822778d": {
+    "maxUsdPerDay": 2,
+    "reason": "HTPR-7779 adds one gpt-6-luna classification call per person and board, at most once every 6 hours (the scan claim is a Redis NX lock), over at most 80 short chat messages clipped to 700 characters each. That is under 60k input tokens and about 900 output tokens per scan, so even 200 active people and boards a day stays around 2 USD at luna prices. The call is skipped entirely while the flag htpr-7779-skill-offers is off.",
+    "source": "https://app.hypertask.ai/detail/project-15/7779"
+  },
+  "src/lib/ai/skillOffers/client.ts:519a3631722b3b46fa3828b03e901225716edc89772d760f2b603da8157d27c6": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7779 loads and updates one skill offer through Hypertask's own same-origin /api/ai/skill-offers route. No third-party paid API is called from the browser; the route's own work is noted on the detection entry.",
+    "source": "https://app.hypertask.ai/detail/project-15/7779"
+  },
+  "src/lib/ai/skillOffers/client.ts:04670b3afa2e2d340b1603948f0667ce7226400c4c3656c7751557610b4d406c": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7779 loads and updates one skill offer through Hypertask's own same-origin /api/ai/skill-offers route. No third-party paid API is called from the browser; the route's own work is noted on the detection entry.",
+    "source": "https://app.hypertask.ai/detail/project-15/7779"
+  },
+  "src/lib/ai/chatStream/title.ts:f2d6086639093804e118e0f46a8e23264c844b74a6f05b3fc368991d1ca8904b": {
+    "maxUsdPerDay": 1,
+    "reason": "HTPR-7854 keeps the existing first-turn title generateText call on the same title model but caps maxOutputTokens at 64 and sends chat-title effort none so reasoning tokens cannot exceed the cap. That lowers spend versus uncapped titles, so one dollar per day remains a generous ceiling for this path.",
+    "source": "https://app.hypertask.ai/detail/project-15/7854"
+  },
+  "src/hooks/General/useAiModelPreference.ts:c6f3b06f9b7e4e8f3ccfaf1be02a7b37cf4e574554057eff713b8b14439fc673": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-9004 saves the Thinking and Effort choice with one small same-origin POST to Hypertask's own preferences route. The browser call pays nothing and no model is called. Thinking cost is set by the chat request, behind the htpr-9004-thinking-effort flag, and stays off until the user switches it on.",
+    "source": "https://app.hypertask.ai/detail/project-15/9004"
+  },
+  "src/hooks/MultiPages/Tasks/useNewTaskWriteChips.ts:c57e9a3305e777924bf5238428f700e24cc2a7da440aac5bcf886f8c67b81d59": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-9002 reads the board's task templates from Hypertask's own same-origin /api/task-templates route. The browser call pays nothing and the route only reads the database.",
+    "source": "https://app.hypertask.ai/detail/project-15/9002"
+  },
+  "src/lib/ai/newTaskWrite.ts:7f4656f0415bae7bfe8fdf137825726c3a9a95dc4efcc572fb779b698d6aa5bd": {
+    "maxUsdPerDay": 1,
+    "reason": "HTPR-9002 sends one request per Write press on the new task screen to the existing task writer route on the board's already chosen model. It replaces the same task writer call that the compose palette makes today, behind a flag at Owner and QA, so a dollar a day is a generous ceiling.",
+    "source": "https://app.hypertask.ai/detail/project-15/9002"
+  },
+  "src/hooks/General/useCardParts.ts:2b694b6f508025a0c5f3f279f6c4bf32f752e15c7ad19f0ab9f9cb2b71657d01": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8971 saves one card part switch to Hypertask's own same-origin preferences route when a person flips a switch in Card settings. No provider, no model and no paid API.",
+    "source": "https://app.hypertask.ai/detail/project-15/8971"
+  },
+  "src/lib/ai/jevDuplicateHint.ts:3b8a01b98ea50e503f5349738109738b52c15dd373403a777d9e2e8c01d5563d": {
+    "maxUsdPerDay": 2,
+    "reason": "HTPR-9046 asks Jev, a fast decision model on the team gateway, one yes or no question per similar ticket, at most eight per draft, 16 output tokens each and a 900 ms deadline. The ticket prices a call at about 0.0001 USD, so a draft is under 0.001 USD and 500 drafts a day stay under 0.40 USD. Flag off makes no call, and teams funding AI with their own gateway key are skipped.",
+    "source": "https://app.hypertask.ai/detail/project-15/9046"
+  },
+  "src/lib/ai/jevAutoModelShadow.ts:1ebb9320f1ac0678007e341095b90bbe4f315f3acd3107d54e5639a36f930faf": {"maxUsdPerDay": 1, "reason": "HTPR-9048 asks Jev, typesafe/jev-1.14 on the OpenRouter decisions API, one choice per Auto chat turn: which effort level fits the message. One call, a 900 ms deadline, no retries and no provider fallback. The ticket prices a call at about 0.0001 USD, so 1,000 Auto turns a day stay under 0.10 USD. The guess is logged only, and Auto's own pick still serves the reply. Flag off makes no call, a missing OpenRouter key makes no call, and teams funding AI with their own gateway key are skipped.", "source": "https://app.hypertask.ai/detail/project-15/9048"},
+  "src/lib/ai/jevInboxTriageRun.ts:804f2471cfc53b6c990586cb2784295ade8442379e346464dec92fa8ac69bdf3": {"maxUsdPerDay": 1, "reason": "HTPR-9045 explicitly approves typesafe/jev-1.14 through OpenRouter decisions. At most ten questions per call, eight calls in flight and 500 items per preview, with a 900 ms deadline and no retries or provider/model fallback. Missing answers keep items. At the ticket estimate of 0.000013 USD per notification, 500 items cost about 0.0065 USD; this is an estimate, not a billing cap. Own-key-only, BYOK plans and customer-funded teams are skipped. Manual production-only evaluation uses the existing capped test key for 300 labelled items and five 500-item trials, about 0.0364 USD estimated; never runs automatically or on a PR.", "source": "https://app.hypertask.ai/detail/project-15/9045"},
+  "src/lib/ai/needsYouScore.ts:f23ff40773ec8e302782da21e3e5243582baafe9e910fd601a21baef7f28107a": {"maxUsdPerDay": 2, "reason": "HTPR-9055 approves typesafe/jev-1.14 through OpenRouter for arrival-time inbox ranking. Owner + QA only; one request per notification, no retries or model fallback, four-second timeout, 300 title and 2000 body characters. Own-AI-account teams are excluded. The spike measured $0.00315 for 104 notices: even 50000 notices/day is about $1.52. This is an estimate, not a billing cap. Actual response cost is stored on each notice. The minute cron does not scan the day. Missing credentials and outages use free rules.", "source": "https://app.hypertask.ai/detail/project-15/9055"},
+  "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx:95ebcd9e872942a55fa3840bef80443623ff424a67fcd43eaba46b2f384f8424": {"maxUsdPerDay": 0, "reason": "HTPR-9066 replaces 50 separate archive clicks with one save to Hypertask's own same-origin bulk archive route. No provider, model or paid API call: the row is the same archive the board already made, sent once instead of per card.", "source": "https://app.hypertask.ai/detail/project-15/9066"},
+  "src/components/notifications/ManageSplitsModal.tsx:9a575505d1bd02e4f4198d8fec32340a250ed093693a1bba4126631dc4477652": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-9080 saves one boolean per person through Hypertask's own same-origin preferences API. No paid provider call, no retries, no token budget.",
+    "source": "https://app.hypertask.ai/detail/project-15/9080"
   }
 }

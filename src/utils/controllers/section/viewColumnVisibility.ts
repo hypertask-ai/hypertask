@@ -23,3 +23,12 @@ export const applyColumnVisibility = (
     columnId(column) === section.id ? { ...column, visibility: visible } : column
   )
 }
+
+export const viewColumnsToWrite = <T>(
+  incoming: unknown,
+  fallback?: readonly T[] | null
+): T[] | null => {
+  if (Array.isArray(incoming) && incoming.length > 0) return incoming as T[]
+  const backup = Array.isArray(fallback) ? [...fallback] : []
+  return backup.length > 0 ? backup : null
+}

@@ -1,6 +1,6 @@
 # Universal agent onboarding
 
-**Last updated:** 2026-09-16
+**Last updated:** 2026-11-11
 
 This is the shared operating guide for every agent provider. The provider may change; the board, repository, and CI rules do not.
 
@@ -29,15 +29,17 @@ When finished, report the changed files, verification performed, remaining risks
 The formal release flow is:
 
 ```text
-Bugs → In Progress → AI Review → QA → Done
+Backlog → In Progress → AI Review → QA → No Flag / Flag: Only Me + QA / Flag: Everyone
 ```
+
+Every column name above is a real board 15 column. Read the list with `hypertask project sections --project 15` before moving a ticket, and never send one to a column the board does not have.
 
 - The shipping agent fixes the ticket, merges its pull request, verifies production, adds the plain-language closing comment, moves the ticket to **QA**, and unassigns itself.
 - The GitHub webhook also moves a linked ticket to **QA** when its pull request merges, except a ticket already in a **Done** column: a merged follow-up pull request leaves it in Done (YPER4-299).
 - The **QA** column is owned by the QA Agent as the only agent assignee. The QA Agent verifies the shipped change on production on desktop and mobile, including the reported behavior and regressions. When a ticket names a feature flag, QA verifies the flagged behavior is available in its allow-listed account and unavailable in a normal member account before release to Everyone.
-- A passing check adds evidence and moves the ticket to **Done**.
-- A failing check adds the exact reproduction steps, moves the ticket back to **Bugs**, and assigns it to the shipping agent for repair.
-- Nothing moves to **Done** without QA evidence.
+- A passing check adds evidence and moves the ticket to the column its release mode names: **No Flag** when it has no flag, **Flag: Only Me + QA** while it is restricted, **Flag: Everyone** once it is live for everyone.
+- A failing check adds the exact reproduction steps, moves the ticket back to **In Progress**, and assigns it to the shipping agent for repair.
+- Nothing closes without QA evidence.
 
 Before moving a fixed ticket to **QA**, add a final comment explaining **what changed in plain language**. In 1–2 sentences, state the user-visible problem, what now works differently, and what the user will notice. A PR link, file list, or technical-only explanation is not enough.
 
@@ -57,8 +59,8 @@ When escalating, the trusted reviewer must write one plain-language question, th
 The intended flow is:
 
 ```text
-producer PR → DeepSeek PRs on Hold (if lower-trust)
-  → trusted AI code review → AI Review → merge/deploy
+producer PR → AI Review, `hold` label kept (if lower-trust)
+  → trusted AI code review → merge/deploy
   ↘ owner decision needed → Valentin Review → answer the question → resume the AI workflow
 ```
 
@@ -150,10 +152,10 @@ DeepSeek/Pi and other lower-confidence producer sessions may create code and pul
 
 1. Add the GitHub `hold` or `valentin-review` label.
 2. Verify that auto-merge is disabled.
-3. Move the board 15 ticket to **DeepSeek PRs on Hold**.
+3. Move the board 15 ticket to **AI Review**.
 4. Stop and report the PR URL, label, board status, and checks.
 
-The board column is a queue, not a GitHub merge gate; both the board status and the PR hold label are required. A trusted reviewer session batch-reviews the queue and handles low-risk merges. **Valentin Review** is reserved for human/business escalations, not routine code review. If the hold column is missing, stop and report it rather than substituting another column.
+The board column is a queue, not a GitHub merge gate; both the board status and the PR hold label are required. A trusted reviewer session batch-reviews the queue and handles low-risk merges. **Valentin Review** is reserved for human/business escalations, not routine code review. Use the column names the board actually has (`hypertask project sections --project 15`); never invent one. If **AI Review** is missing, stop and report it rather than substituting another column.
 
 ## Canonical references
 

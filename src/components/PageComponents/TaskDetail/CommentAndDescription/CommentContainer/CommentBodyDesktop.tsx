@@ -1,20 +1,19 @@
-import globalConstants from "@/lib/constants";
-import { useCommentsContext } from "@/lib/contexts/CommentsContext";
+import { useContext } from "react";
+import { CommentsContext } from "@/lib/contexts/CommentsContext";
 import styles from '@/styles/tiptap.module.scss'
 
 const CommentBodyDesktop  =(
     {
-        children
+        children,
+        isStacked: isStackedProp,
     }:{
         children: React.ReactNode;
-        
+        isStacked?: boolean;
     }
 )=>{
+    const comment = useContext(CommentsContext);
+    const isStacked = isStackedProp ?? Boolean(comment?.isStacked);
 
-    const { 
-        isStacked
-      } = useCommentsContext();
-   
     return (
         <div 
 

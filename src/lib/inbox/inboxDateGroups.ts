@@ -67,7 +67,9 @@ export const groupInboxItemsByDate = <T extends { date: Date }>(
   items: T[],
   oldestFirst = false,
   snapshot?: FirstScreenSnapshot | null,
+  ranked = false,
 ): Record<string, { label: string; items: T[] }> => {
+  if (ranked) return { ranked: { label: "Needs you", items } };
   const groups: Record<string, { label: string; items: T[] }> = {};
 
   const groupedByDate: Record<string, T[]> = {};

@@ -8,6 +8,7 @@ import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server"
 import { getAgentRole } from "@/lib/mcp/agents/scopes";
 import { getSectionForTask, validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   chatProposalDescriptionHtml,
   chatTicketProposalSelect,
@@ -175,7 +176,8 @@ async function confirmProposal(
     }
     const sectionCheck = await getSectionForTask(
       proposal.targetProjectId,
-      proposal.targetSectionId
+      proposal.targetSectionId,
+      userId
     );
     if (sectionCheck.error) {
       return fail(sectionCheck.error.message, sectionCheck.error.status);
@@ -213,7 +215,7 @@ async function confirmProposal(
     });
     if (attached.count === 0) {
       await prisma.task.update({
-        where: { id: task.id },
+        where: { id: task.id, project: getProjectWhere(userId, agentId, sessionUser?.teamScope) },
         data: { status: "Archive", archivedAt: new Date() },
       });
     }

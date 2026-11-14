@@ -1,13 +1,17 @@
 # Agent chat roster ordering
 
-## How a customer reaches it
+## Sub-features
+
+- `agent-chat-roster-ordering` Agent chat roster ordering.
+
+## How to get to it (user POV)
 
 `/agents/chat` normally redirects to the board's chat sidebar. The standalone
 roster remains reachable with `?agent=<owned-agent-id>` when that owned agent
 has no accessible board. A nonexistent UUID also reaches the empty-selection
 fallback without creating a chat. Never detach an agent to force this path.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Run the QA 985 doctor and core inbox cycle.
 2. Use customer 2343 for read-only roster checks. Its `/api/agents/owned`
@@ -31,18 +35,18 @@ fallback without creating a chat. Never detach an agent to force this path.
    advances after 30 seconds without reloading, using a recent-signal fixture
    only if one already exists. Never modify an existing agent to force it.
 
-## What usually breaks
+## Gotchas
 
 Board-post ordering returns; missing timestamps lose name ties; revoked or
 archived agents reappear; a mobile selected chat hides the roster during QA.
 
-## What proof to collect
+### What proof to collect
 
 Save bootstrap identity, doctor screenshot, redacted owned-agent projection,
 ordered roster row text, desktop/phone screenshots and reload comparisons.
 Record unreachable fixtures honestly. The owned GET handler and navigation
 hook are the tested dispatch boundaries.
 
-## Cleanup
+### Cleanup
 
 Read-only verification creates no fixtures. Never revoke existing agents.

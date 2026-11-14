@@ -43,6 +43,9 @@ const common = {
   "@/hooks/useFlag": { useFlag: () => cachedLayout },
   "@/lib/taskDetail/initialTicketPosition": require("jiti").createJiti(__filename)(path.join(root, "src/lib/taskDetail/initialTicketPosition.ts")),
   "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: "unread-ticket-opens-top" },
+  "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" },
+  "@/lib/flags/definitions/htpr-9054-remove-agent-chip-under-title": { HTPR_9054_REMOVE_AGENT_CHIP_FLAG: "htpr-9054-remove-agent-chip-under-title" },
+  "@/lib/agentStatus/TaskDetailAgentStatusChip": { default: () => null },
   "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
   "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
 };
@@ -55,6 +58,13 @@ const title = load("src/components/PageComponents/TaskDetail/TopRow/TaskDetailTi
   "./SubtaskLink": { default: marker("parent") },
   "./BaseTitleContainer": { default: ({ hasSummary, children }) => React.createElement("header", { "data-summary-space": String(hasSummary) }, children) },
   "./MobileTaskDueDate": { default: marker("due") },
+  "@/hooks/useFlag": { useFlag: key => key !== "htpr-8991-right-column" && cachedLayout },
+  "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+  "@/lib/flags/definitions/htpr-8992-sticky-title": { HTPR_8992_STICKY_TITLE_FLAG: "htpr-8992-sticky-title" },
+  "@/lib/flags/definitions/htpr-8997-id-row": { HTPR_8997_ID_ROW_FLAG: "htpr-8997-id-row" },
+  "@/hooks/General/useCopyURL": { default: () => ({ copyTicketNumber: noop }) },
+  "@/components/Common/Tooltip": { default: () => null },
+  "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
 }).default;
 const info = marker("info");
 const lateInfo = marker("late-info");
@@ -161,6 +171,10 @@ test("flag-off title and mobile virtual rows retain the original layout and page
 
 const rail = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx", {
   ...common,
+  "@/hooks/useFlag": { useFlag: key => key !== "htpr-8991-right-column" && cachedLayout },
+  "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+  "@/lib/taskDetail/rightColumnFields": require("jiti").createJiti(__filename)(path.join(root, "src/lib/taskDetail/rightColumnFields.ts")),
+  "@/lib/assignees": require("jiti").createJiti(__filename)(path.join(root, "src/lib/assignees.ts")),
   "@/lib/api/typedClient": { getTaskCycle: noop },
   axios: { default: {} },
   "react-hot-toast": { default: {} },
@@ -195,6 +209,8 @@ const rail = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskI
   "@/lib/recurrence": { RECURRENCE_LABELS: {} },
   "@/components/Modals/CyclePicker": { default: () => null },
   "@/lib/waitingOn": { formatWaitingOnAge: () => null, WAITING_ON_OVERDUE_MS: 1000 },
+  "@/lib/flags/definitions/htpr-8917-agent-waiting-person": { HTPR_8917_AGENT_WAITING_PERSON_FLAG: "htpr-8917-agent-waiting-person" },
+  "@/lib/flags/definitions/htpr-7868-empty-field-labels": { HTPR_7868_EMPTY_FIELD_LABELS_FLAG: "htpr-7868-empty-field-labels" },
   "@/lib/pullRequests/githubPullRequests": { derivePullRequestDisplayState: () => "merged" },
   "@/components/PageComponents/TaskDetail/pullRequestBadge": { pullRequestBadgeByState: { merged: { color: "purple", label: "Merged" } } },
   "@prisma/client": { CustomFieldType: {} },

@@ -34,14 +34,19 @@ import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } 
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG, HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
+import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
+import { HTPR_8945_CTRL_TAB_PALETTE_FLAG } from "@/lib/flags/definitions/htpr-8945-ctrl-tab-palette";
+import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
 import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
+import { ComposerPlusActions } from "@/components/Common/ComposerPlusActions";
+import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
 import { TaskWriterModelPicker, useTaskWriterModel } from "@/components/Global/ModelSelectorDropdown";
 import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
@@ -78,6 +83,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const newTaskWindow = true;
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const inlineAgentImages = useFlag(HTPR_7514_INLINE_AGENT_IMAGES_FLAG);
+  const guaranteeScreenshots = useFlag(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
   const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
@@ -87,7 +93,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const ctrlEnterSends = useFlag(HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG);
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
-  const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow);
+  const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
+  const tabPaletteCycle = useFlag(HTPR_8945_CTRL_TAB_PALETTE_FLAG);
+  const sharedPlusMenu = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
+  const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const stopDictationButtonId = "compose-task-stop-dictation";
   const cancelDictationButtonId = "compose-task-cancel-dictation";
   const createAfterDictation = useRef(false);
@@ -96,6 +105,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const boardChip = useRef<HTMLButtonElement>(null);
+  const plusMenu = useRef<HTMLDetailsElement>(null);
   const caret = useRef<{ start: number; end: number; direction: "forward" | "backward" | "none" } | null>(null);
   const showProgress = newTaskWindow;
   const taskContext = useContext(TaskContext);
@@ -110,6 +120,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const dictating = newTaskWindow && (recording || transcribing);
   const mobile = Boolean(useContext(MobileViewContext));
   const phoneTaskWriterSheet = mobile && active;
+  const plusLayout = Boolean(plusComposerEnabled && newTaskWindow && !mobile && !phoneTaskWriterSheet);
+  const tabPaletteCycleActive = plusLayout && tabPaletteCycle;
+  const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow && !plusLayout);
   const [text, setText] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [writing, setWriting] = useState(false);
@@ -124,6 +137,18 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const mounted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const composer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!tabPaletteCycleActive || !active) return;
+    const root = composer.current;
+    if (!root) return;
+    const tabOut = "[data-compose-plus-row] summary, [data-compose-plus-row] button, #compose-task-audio-button, [data-compose-below-row] [data-compose-board-chip]";
+    for (const node of root.querySelectorAll<HTMLElement>(tabOut)) node.tabIndex = -1;
+    return () => {
+      for (const node of root.querySelectorAll<HTMLElement>(tabOut)) {
+        if (node.tabIndex === -1) node.tabIndex = 0;
+      }
+    };
+  }, [tabPaletteCycleActive, active, text, dictating, addingImages, boardPickerOpen]);
   const [writingHeight, setWritingHeight] = useState<number>();
   const user = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -168,6 +193,28 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const skillMenu = useSkillSlashMenu({ textAreaRef: input, setValue: setText });
   const skillMenuConsumedKey = useRef(false);
   const boardShortcut = getShortcutDisplay({ key: 66, modifiers: ["ctrl", "shift"], description: "Change board" }, isApple).join("+");
+  const closePlusMenu = () => {
+    if (plusMenu.current) plusMenu.current.open = false;
+  };
+  const insertContextMark = () => {
+    const field = input.current;
+    const current = field?.value ?? text;
+    const start = field?.selectionStart ?? current.length;
+    const end = field?.selectionEnd ?? start;
+    const previous = current[start - 1];
+    const mark = start > 0 && previous !== " " && previous !== "\n" ? " @" : "@";
+    const next = current.slice(0, start) + mark + current.slice(end);
+    typedTextNotRendered.current = next;
+    textHeldUntilRendered.current = null;
+    setText(next);
+    const caretAt = start + mark.length;
+    requestAnimationFrame(() => {
+      const nextField = input.current;
+      if (!nextField) return;
+      nextField.focus();
+      nextField.setSelectionRange(caretAt, caretAt);
+    });
+  };
   const openBoardPicker = () => {
     if (writing || dictating) return;
     const field = input.current;
@@ -175,8 +222,30 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     setBoardPickerOpen(true);
   };
   useEffect(() => {
-    if (!active) setBoardPickerOpen(false);
+    if (!active) {
+      setBoardPickerOpen(false);
+      closePlusMenu();
+    }
   }, [active]);
+  useEffect(() => {
+    if (!plusLayout) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const menu = plusMenu.current;
+      if (menu?.open && !menu.contains(event.target as Node)) menu.open = false;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !plusMenu.current?.open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closePlusMenu();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [plusLayout]);
 
   useEffect(() => {
     if (!newTaskWindow || !active || !input.current) return;
@@ -233,7 +302,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     const attachShortcut = (event: KeyboardEvent) => {
       if (boardPickerOpen) return;
       const cmdControl = (isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey);
-      if (composerKeysLayout && dictating && cmdControl && !event.altKey && !event.shiftKey && !event.isComposing && event.key === "Enter") {
+      if ((composerKeysLayout || plusLayout) && dictating && cmdControl && !event.altKey && !event.shiftKey && !event.isComposing && event.key === "Enter") {
         event.preventDefault();
         event.stopImmediatePropagation();
         createAfterDictation.current = true;
@@ -246,7 +315,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         event.preventDefault();
         event.stopImmediatePropagation();
         if (!addingImages) {
-          const dictationButtonId = composerKeysLayout && dictating ? stopDictationButtonId : "compose-task-audio-button";
+          const dictationButtonId = (composerKeysLayout || plusLayout) && dictating ? stopDictationButtonId : "compose-task-audio-button";
           document.getElementById(dictationButtonId)?.click();
         }
         return;
@@ -268,7 +337,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
     document.addEventListener("keydown", attachShortcut, true);
     return () => document.removeEventListener("keydown", attachShortcut, true);
-  }, [active, writing, addingImages, handleAttachmentClick, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout]);
+  }, [active, writing, addingImages, handleAttachmentClick, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout, plusLayout]);
 
   const addImages = async (images: File[]) => {
     if (sending.current || dictating) return;
@@ -322,7 +391,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = await createComposedTask({
-        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
+        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(guaranteeScreenshots ? { guaranteeScreenshots } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(writerModelPicker && writerModel ? { writerModel } : {}),
         ...(currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
@@ -450,6 +519,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           setRecording(on);
         }} onProcessingChange={setTranscribing}
         disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact"
+        {...(plusLayout ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, stopButtonId: stopDictationButtonId, hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] } } : {})}
         {...(composerKeysLayout ? { hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] }, stopButtonId: stopDictationButtonId, cancelButtonId: cancelDictationButtonId } : {})}
         callbackHandler={(transcript, replace) => {
           dictationDelivered.current = true;
@@ -468,7 +538,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
       disabled={dictating} onClick={openBoardPicker}
       onKeyDown={(event) => {
-        if (event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (!plusLayout && event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
           event.preventDefault();
           event.stopPropagation();
           input.current?.focus({ preventScroll: true });
@@ -503,7 +573,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         </div>
       ) : (
         <div ref={composer} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col p-2" : "p-2"}>
-          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : "flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2"}>
+          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : plusLayout || (integratedTabsFlag && newTaskWindow && !mobile) ? "flex w-full flex-col rounded-[4px] bg-ai-tiptap px-3 py-2" : "flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2"}>
             {(newTaskWindow || phoneTaskWriterSheet) && attachments && (phoneTaskWriterSheet ? (
               <div className="min-h-0 overflow-y-auto">{attachments}</div>
             ) : mobile ? attachments : (
@@ -532,7 +602,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
-              className={phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content caret-hypertasks-ai-purple" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
+              className={phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content caret-hypertasks-ai-purple" : plusLayout ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple placeholder:opacity-50" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
               onPaste={(event) => {
                 const images = extractPastedImageFiles(event.clipboardData?.items);
                 if (!images.length) return;
@@ -543,7 +613,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               onKeyDown={(event) => {
                 skillMenuConsumedKey.current = skillMenuEnabled && !event.nativeEvent.isComposing && skillMenu.onKeyDown(event);
                 if (skillMenuConsumedKey.current) return;
-                if (showBoardChip && event.key === "Tab" && !event.shiftKey &&
+                if (showBoardChip && !plusLayout && event.key === "Tab" && !event.shiftKey &&
                     !event.ctrlKey && !event.metaKey && !event.altKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   event.stopPropagation();
@@ -565,6 +635,52 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             />
             {skillMenuEnabled && skillMenu.menu}
             {!newTaskWindow && !phoneTaskWriterSheet && attachments}
+            {plusLayout ? (
+              <div data-compose-plus-row className="flex w-full items-center justify-between pt-2">
+                {sharedPlusMenu ? (
+                  <ComposerPlusActions
+                    disabled={addingImages || dictating}
+                    active={active}
+                    attachShortcut={getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}
+                    onAttach={handleAttachmentClick}
+                    onAddContext={insertContextMark}
+                  />
+                ) : (
+                  <details ref={plusMenu} className="relative">
+                    <summary
+                      aria-label="Add"
+                      aria-disabled={addingImages || dictating}
+                      onClick={(event) => {
+                        if (addingImages || dictating) event.preventDefault();
+                      }}
+                      className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-[4px] text-icon-dark-gray hover:bg-hover-active hover:text-white-black [&::-webkit-details-marker]:hidden"
+                    >
+                      <Plus size={18} strokeWidth={1.75} aria-hidden />
+                    </summary>
+                    <div role="group" aria-label="Add" className="absolute bottom-[calc(100%+0.25rem)] left-0 z-popup flex min-w-44 flex-col rounded-[4px] bg-modalBackground p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
+                      <button type="button" aria-label="Attach file" disabled={addingImages || dictating}
+                        className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => { closePlusMenu(); handleAttachmentClick(); }}>
+                        <span>Attach file</span>
+                        <span className="text-text-light-gray">{getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}</span>
+                      </button>
+                      <button type="button" aria-label="Add context" disabled={addingImages || dictating}
+                        className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => { closePlusMenu(); insertContextMark(); }}>
+                        <span>Add context</span>
+                        <span className="text-text-light-gray">@</span>
+                      </button>
+                    </div>
+                  </details>
+                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  {dictationControl}
+                  <SendMessageButton label="Send" textButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={false} onClick={() => void send()} />
+                </div>
+              </div>
+            ) : (
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
@@ -601,7 +717,14 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                 )}
               </div>
             </div>
+            )}
           </div>
+          {plusLayout && (
+            <div data-compose-below-row className="flex w-full items-center justify-between gap-2 pt-2">
+              {boardControl || <span />}
+              {writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={false} className="bottom-[110%] top-auto right-0 left-auto" />}
+            </div>
+          )}
           <input type="file" accept={newTaskWindow ? undefined : "image/*"} multiple hidden ref={fileInputRef} onChange={(event) => {
             void addImages(Array.from(event.target.files ?? []));
             event.target.value = "";
@@ -609,7 +732,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           {error && <p role="alert" className="px-2 pt-2 text-meta text-text-light-gray">{error}</p>}
         </div>
       )}
-      {!phoneTaskWriterSheet && (composerKeysLayout ? <div className="flex items-center justify-between gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
+      {!phoneTaskWriterSheet && !plusLayout && (composerKeysLayout ? <div className="flex items-center justify-between gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
         <div className="flex min-w-0 flex-wrap items-center gap-4">
           {footerKeys.left.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
         </div>

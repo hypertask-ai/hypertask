@@ -19,7 +19,20 @@ export function resolveFocusedCardIndex(
   return indexInParent;
 }
 
-export function focusKanbanCard(card: HTMLElement | null): void {
+export type FocusKanbanCardOptions = {
+  scrollRealColumn?: boolean;
+};
+
+const claimsVerticalScroll = (list: HTMLElement, view: Window | null) =>
+  /^(auto|scroll)$/.test(view?.getComputedStyle(list).overflowY ?? "");
+
+const canMoveVertically = (element: HTMLElement) =>
+  element.scrollHeight > element.clientHeight + 1;
+
+export function focusKanbanCard(
+  card: HTMLElement | null,
+  options?: FocusKanbanCardOptions,
+): void {
   if (!card) return;
   card.focus({ preventScroll: true });
   const column = card.closest<HTMLElement>('[id^="droppable-section-container-"]');
@@ -27,7 +40,9 @@ export function focusKanbanCard(card: HTMLElement | null): void {
   const list = card.closest<HTMLElement>('[id^="tasks-list-"]');
   const view = card.ownerDocument.defaultView;
   const scroller =
-    list && /^(auto|scroll)$/.test(view?.getComputedStyle(list).overflowY ?? "")
+    list &&
+    claimsVerticalScroll(list, view) &&
+    (!options?.scrollRealColumn || canMoveVertically(list))
       ? list
       : column;
   const rect = scroller.getBoundingClientRect();

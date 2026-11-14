@@ -7,10 +7,10 @@ import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8144_PHONE_MY_TASKS_FLAG } from "@/lib/flags/definitions/htpr-8144-phone-my-tasks";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import { HTPR_6940_DROP_BOARD_TABS_FLAG } from "@/lib/flags/definitions/htpr-6940-drop-board-tabs";
 import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
-  MY_TASKS_SNOOZE_FLAG,
 } from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
@@ -157,7 +157,6 @@ const MyTasks = ({
   }, []);
   const splitIndex = boardTabsHidden ? 0 : activeSplit;
 
-  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const tableColumnsFeatureEnabled = true;
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
   const { data: runningTimerEntries } = useRunningTimers();
@@ -208,9 +207,7 @@ const MyTasks = ({
   );
   const scopesRef = useRef(reconcileScopes);
   scopesRef.current = reconcileScopes;
-  const showSnoozed = Boolean(
-    myTasksSnoozeEnabled && viewConfig.filters.showSnoozed,
-  );
+  const showSnoozed = Boolean(viewConfig.filters.showSnoozed);
   const showSnoozedRef = useRef(showSnoozed);
   showSnoozedRef.current = showSnoozed;
   if (showSnoozedRef.current) {
@@ -285,12 +282,11 @@ const MyTasks = ({
   }, []);
 
   useEffect(() => {
-    if (!myTasksSnoozeEnabled) return;
     reconcileRunner.request();
-  }, [myTasksSnoozeEnabled, reconcileRunner, showSnoozed]);
+  }, [reconcileRunner, showSnoozed]);
 
   useEffect(() => {
-    if (!myTasksSnoozeEnabled || !nearestSnoozeUntil) return;
+    if (!nearestSnoozeUntil) return;
     const targetMs = new Date(nearestSnoozeUntil).getTime();
     if (!Number.isFinite(targetMs)) return;
     let cancelled = false;
@@ -316,7 +312,7 @@ const MyTasks = ({
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [myTasksSnoozeEnabled, nearestSnoozeUntil, reconcileRunner]);
+  }, [nearestSnoozeUntil, reconcileRunner]);
 
   useEffect(() => {
     const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
@@ -410,12 +406,16 @@ const MyTasks = ({
     [availableBoards],
   );
 
+  const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
+  let tagHideOn = false;
+  if (tagHideFilterEnabled) tagHideOn = true;
   const runtimeContext = useMemo(() => {
-    if (!Array.isArray(runningTimerEntries)) return undefined;
+    if (!Array.isArray(runningTimerEntries)) return { tagHideFilterEnabled: tagHideOn };
     return {
       runningTaskIds: new Set(runningTimerEntries.map((timer) => timer.taskId)),
+      tagHideFilterEnabled: tagHideOn,
     };
-  }, [runningTimerEntries]);
+  }, [runningTimerEntries, tagHideOn]);
 
   const allTasksForBoardTabs = useMemo(() => {
     if (groupBy !== "time") return [];
@@ -978,7 +978,7 @@ const boardTabCounts = useMemo(() => {
           config={viewConfig}
           onChange={updateViewConfig}
           tableColumnsEnabled={tableColumnsFeatureEnabled}
-          snoozeEnabled={myTasksSnoozeEnabled}
+          snoozeEnabled
           onOpenTableColumns={openTableColumnsPicker}
           onOpenKanbanFilters={() => {
             updateViewConfig((current) =>
@@ -1017,7 +1017,7 @@ const boardTabCounts = useMemo(() => {
           currentUser={currentUser}
           myTasksSort={viewConfig.sort}
           myTasksSortKey={activeViewId}
-          myTasksSnoozeActive={myTasksSnoozeEnabled}
+          myTasksSnoozeActive
           onMyTasksSortChange={updateViewSort}
           myTasksVisibleColumns={myTasksVisibleColumns}
           onMyTasksVisibleColumnsChange={
@@ -1153,7 +1153,7 @@ const boardTabCounts = useMemo(() => {
           boards={boards}
           config={viewConfig}
           onViewChange={updateViewConfig}
-          snoozeEnabled={myTasksSnoozeEnabled}
+          snoozeEnabled
           settings={viewConfig.filterSettings}
           onChange={onFilterSettingsChange}
           onClearAll={onClearAllFilters}

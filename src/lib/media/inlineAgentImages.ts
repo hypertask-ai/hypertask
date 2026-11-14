@@ -57,3 +57,54 @@ export function inlineAgentImages(html: string, options: InlineAgentImageOptions
   }
   return html + images;
 }
+
+const CREATION_URL_RE = /https?:\/\/[^\s<>"']+/gi;
+const CREATION_IMG_SRC_RE = /<img\b[^>]*\bsrc\s*=\s*("([^"]*)"|'([^']*)')/gi;
+
+export function creationScreenshotCandidates(
+  files: { url?: string | null; fileName?: string | null; mimeType?: string | null }[] | undefined,
+  text?: string,
+  mediaHtml?: string[],
+): AgentImageAttachment[] {
+  const candidates: AgentImageAttachment[] = [];
+  const seen = new Set<string>();
+  const push = (file: { url?: string | null; fileName?: string | null; mimeType?: string | null }) => {
+    const url = file.url?.trim();
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    candidates.push({ url, fileName: file.fileName, mimeType: file.mimeType });
+  };
+  for (const html of mediaHtml ?? []) {
+    for (const match of html.matchAll(CREATION_IMG_SRC_RE)) {
+      push({ url: (match[2] ?? match[3] ?? "").replaceAll("&amp;", "&") });
+    }
+  }
+  for (const file of files ?? []) push(file);
+  for (const match of (text ?? "").matchAll(CREATION_URL_RE)) {
+    push({ url: match[0].replace(/[.,;!?)\]}]+$/, "") });
+  }
+  return candidates;
+}
+
+export function creationScreenshotAttachments(
+  files: { url?: string | null; source?: string | null; fileName?: string | null; name?: string | null; mimeType?: string | null; type?: string | null }[] | undefined,
+): AgentImageAttachment[] {
+  return creationScreenshotCandidates(
+    (files ?? []).map((file) => ({
+      url: file.source ?? file.url,
+      fileName: file.name ?? file.fileName,
+      mimeType: file.type ?? file.mimeType,
+    })),
+  ).filter((file) => isBrowserRenderableImage(file.mimeType, file.fileName ?? file.url));
+}
+
+export function guaranteeCreationScreenshots(
+  html: string,
+  options: { instructions?: string; attachments?: AgentImageAttachment[] },
+): string {
+  return inlineAgentImages(html, {
+    enabled: true,
+    instructions: options.instructions,
+    attachments: options.attachments,
+  });
+}

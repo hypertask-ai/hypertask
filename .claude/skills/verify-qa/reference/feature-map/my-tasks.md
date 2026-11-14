@@ -1,11 +1,15 @@
 # My Tasks
 
-## How a customer reaches it
+## Sub-features
+
+- `settings-button-accessible-name` Settings button accessible name.
+
+## How to get to it (user POV)
 
 `https://app.hypertask.ai/my-tasks`, or press `g` then `m` anywhere in the
 app. On a phone it is the My Tasks tab.
 
-## How to drive it
+## Driving it with agent-browser
 
 `phone-shot.sh` or `agent-browser`, headless, against production. Load the
 page, wait for the table, then look at what sits between the filter row and
@@ -17,7 +21,7 @@ bulk selection, snooze), so check with the QA flag identity
 cycle board tabs; C opens task creation and Back cancels it. The list uses
 the available page width beside the app rail.
 
-## What usually breaks
+## Gotchas
 
 - Controls nobody asked for showing up on top of the table, like the
   "Quick add a task" bar removed in
@@ -30,7 +34,7 @@ titles stay in separate columns. Scroll to the final task and confirm it
 clears the floating Back button. Controls sit together below the heading;
 desktop placement stays unchanged. Check all four themes at 390x844.
 
-## What proof to collect
+### What proof to collect
 
 Screenshot `/my-tasks` signed in, desktop and phone width, with both
 accounts when a flag is involved. For a removal, also search the page text
@@ -44,11 +48,11 @@ absent.
 exercises board URL restoration, Tab bursts, full-width rendering and global
 C shortcut eligibility without the retired shortcuts/width flag.
 
-## Cleanup
+### Cleanup
 
 Nothing to clean up for a look-only check. Hard-delete any task you created.
 
-## Settings button accessible name
+### Settings button accessible name
 
 With `htpr-8146-settings-name` on, the desktop rail gear is named Settings
 without hovering. From My Tasks, Inbox and a board, locate

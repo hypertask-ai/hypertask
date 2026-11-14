@@ -131,6 +131,7 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
       "@/lib/contexts/mobileContext": { useMobileView: () => isMobile },
       "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "htpr-7328-rounded-theme" },
       "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
+      "@/lib/flags/definitions/htpr-7870-appearance-heading-once": { HTPR_7870_APPEARANCE_HEADING_ONCE_FLAG: "htpr-7870-appearance-heading-once" },
       "lucide-react": { Check: () => null },
       "@/hooks/MultiPages/HTC/useDarkMode": { default: () => ({ currentTheme: "system" }) },
       "@/lib/themePreferences": { themeOptions, availableThemeOptions },

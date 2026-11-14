@@ -1,3 +1,5 @@
+import type { BoardGithubRepositoryMapping } from "@/lib/github/boardConnections";
+
 export type PullRequestLifecycle = "open" | "closed" | "merged";
 export type PullRequestCheckState = "pending" | "passing" | "failing";
 export type PullRequestDisplayState =
@@ -59,43 +61,31 @@ export function parseGithubPullRequestUrl(
   };
 }
 
-const BOARD_15_GITHUB_REPOSITORIES = new Set([
-  "hypertask-ai/android",
-  "hypertask-ai/app-releases",
-  "hypertask-ai/cli",
-  "hypertask-ai/docs",
-  "hypertask-ai/hypertask",
-  "hypertask-ai/skills",
-]);
-
-const BOARD_15_PULL_REQUEST_AUTHOR_IDS = new Set([
+const LEGACY_BOARD_15_PULL_REQUEST_AUTHOR_IDS = new Set([
   "3296316",
   "340644717",
   "49699333",
 ]);
 
+const REPOSITORY_WRITE_ASSOCIATIONS = new Set([
+  "OWNER",
+  "MEMBER",
+  "COLLABORATOR",
+]);
+
 export function isAuthorizedPullRequestAuthor(
   boardId: number,
   authorId: number,
+  mapping?: Pick<BoardGithubRepositoryMapping, "provenance"> | null,
+  authorAssociation?: string | null,
 ): boolean {
-  return boardId === 15 && BOARD_15_PULL_REQUEST_AUTHOR_IDS.has(String(authorId));
-}
-
-export function boardForGithubRepository(repository: {
-  fullName?: unknown;
-  isPrivate?: unknown;
-  isFork?: unknown;
-}): number | null {
-  if (
-    typeof repository.fullName !== "string" ||
-    repository.isPrivate !== false ||
-    repository.isFork !== false
-  ) {
-    return null;
+  if (mapping?.provenance === "installed") {
+    return REPOSITORY_WRITE_ASSOCIATIONS.has(authorAssociation ?? "");
   }
-  return BOARD_15_GITHUB_REPOSITORIES.has(repository.fullName.toLowerCase())
-    ? 15
-    : null;
+  return (
+    boardId === 15 &&
+    LEGACY_BOARD_15_PULL_REQUEST_AUTHOR_IDS.has(String(authorId))
+  );
 }
 
 export function isStaleCheckSuiteObservation(

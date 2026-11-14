@@ -10,6 +10,11 @@ import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constant
 import { sendEmail } from '@/lib/email/sendEmail'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { SESSION_COOKIE } from '@/lib/auth/session'
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7294_DAILY_FUNNEL_PROBE_FLAG } from '@/lib/flags/definitions/htpr-7294-daily-funnel-probe'
+import { storeProbeVerificationLink } from '@/lib/funnelProbe/inbox'
+import { isProbeRecipientEmail } from '@/lib/funnelProbe/inbox'
+import { gateProbeInstantSignup } from '@/lib/funnelProbe/signupGuard'
 
 const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
 
@@ -91,6 +96,14 @@ async function sendVerificationEmail(to: string, link: string) {
         `,
   })
 
+  if (
+    isProbeRecipientEmail(to) &&
+    (await isFeatureEnabled(HTPR_7294_DAILY_FUNNEL_PROBE_FLAG, FEATURE_FLAG_OWNER_USER_ID))
+  ) {
+    const runId = to.split('@')[0] ?? 'probe'
+    await storeProbeVerificationLink(to, runId, link)
+  }
+
   console.log('✅ Verification email sent via Resend')
 }
 
@@ -120,6 +133,18 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.trim().toLowerCase()
     console.log('📧 Instant signup for:', normalizedEmail)
+
+    const probeGate = await gateProbeInstantSignup(
+      request.headers.get('authorization'),
+      normalizedEmail,
+      process.env.CRON_SECRET,
+    )
+    if (!probeGate.ok) {
+      return NextResponse.json(
+        { success: false, error: probeGate.error, code: probeGate.code },
+        { status: probeGate.status },
+      )
+    }
 
     const rateLimitCheck = VerificationCodeService.isRateLimited(normalizedEmail)
     if (rateLimitCheck.limited) {
@@ -217,7 +242,11 @@ export async function POST(request: NextRequest) {
     }
 
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
-    console.log('📊 UTM Data for instant signup:', utmParams)
+    if (await isFeatureEnabled("htpr-7786-quiet-personal-logs", userData?.id ?? FEATURE_FLAG_OWNER_USER_ID)) {
+      console.log('instant signup', { userId: userData?.id ?? null, outcome: 'created' })
+    } else {
+      console.log('instant signup', utmParams)
+    }
 
     const verificationToken = createVerificationToken(normalizedEmail)
 

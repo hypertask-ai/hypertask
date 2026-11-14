@@ -22,7 +22,7 @@ args = sys.argv[1:]
 secret = 'fixture-only-bearer-value'
 mode = os.environ.get('FAKE_MODE', '')
 if args[:2] == ['agents', 'create']:
-    assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '4060', '--json']
+    assert args == ['agents', 'create', '--name', args[3], '--project', '15', '--project', '11514', '--json']
     call = ['create', args[3]]
 else:
     assert args == ['--json', '--token', secret, 'tasks', 'get', 'YPER4-159']
@@ -201,5 +201,18 @@ else:
     assert set(numbers) == {'RUNNER 1', 'RUNNER 2', 'RUNNER 3'}
     assert len([c for c in calls(home) if c[0] == 'create']) == 3
     print('ok concurrent setups reserve distinct numbers')
+
+    home, creds, sessions, env = fixture('local-bin')
+    local = home / '.local/bin'
+    local.mkdir(parents=True)
+    os.link(cli, local / 'hypertask')
+    decoy = root / 'decoy-bin'
+    decoy.mkdir()
+    (decoy / 'hypertask').write_text('#!/bin/sh\necho person-only >&2\nexit 2\n')
+    (decoy / 'hypertask').chmod(0o755)
+    r = run(dict(env, PATH=str(decoy) + os.pathsep + '/usr/bin:/bin'))
+    assert r.returncode == 0, r.stderr
+    assert calls(home) == [['create', 'Runner 1'], ['read', 'verified token']]
+    print('ok login finds hypertask in the local command folder')
     print('setup-runner tests passed')
 PY

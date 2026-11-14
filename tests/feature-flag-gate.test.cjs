@@ -206,6 +206,53 @@ test("server gates reject client hooks, dead calls, unrelated flags and unchange
   assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
 });
 
+test("agent snapshots preserve real flag dataflow and reject unused or fake readers", async (t) => {
+  const imports = 'import {isFeatureEnabled as read} from "@/lib/flags";\nimport {withFeatureFlagSnapshot as snapshot} from "@/lib/flags/modeCache";\nimport {OTHER_FLAG as key} from "@/lib/flags/keys";\n';
+  const dynamic = 'const {isFeatureEnabled: read} = await import("@/lib/flags"); const {withFeatureFlagSnapshot: snapshot} = await import("@/lib/flags/modeCache"); const {OTHER_FLAG: key} = await import("@/lib/flags/definitions/htpr-1-other");';
+  const cases = [
+    ['static snapshot', imports, 'const enabled = await snapshot(() => read(key, 0), "agent"); if (enabled) return "new"; return "old";', true],
+    ['dynamic snapshot from PR 3382', '', dynamic + 'const enabled = await snapshot(() => read(key, 0), "agent"); if (enabled) return "new"; return "old";', true],
+    ['dynamic direct read', '', dynamic + 'if (await read(key, 0)) return "new"; return "old";', true],
+    ['async callback return', imports, 'const enabled = await snapshot(async () => { return await read(key, 0); }, "agent"); return enabled ? "new" : "old";', true],
+    ['callback internal branch', imports, 'return snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent");', true],
+    ['returned direct snapshot', imports, 'return snapshot(() => read(key, 0), "agent");', true],
+    ['consumed internal branch', imports, 'const result = await snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent"); return result;', true],
+    ['discarded internal branch', imports, 'await snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent"); return "ungated";', false],
+    ['unused internal branch binding', imports, 'const result = await snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent"); return "ungated";', false],
+    ['masked internal branch result', imports, 'const result = await snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent"); return result && false ? "new" : "old";', false],
+    ['discarded nested internal branch', imports, 'await snapshot(() => snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent"), "agent"); return "ungated";', false],
+    ['nested snapshots', imports, 'const enabled = await snapshot(() => snapshot(() => read(key, 0), "agent"), "agent"); return enabled ? "new" : "old";', true],
+    ['discarded snapshot', imports, 'await snapshot(() => read(key, 0), "agent"); return "new";', false],
+    ['unused snapshot binding', imports, 'const enabled = await snapshot(() => read(key, 0), "agent"); return "new";', false],
+    ['discarded callback result', imports, 'const enabled = await snapshot(() => { read(key, 0); return true; }, "agent"); return enabled ? "new" : "old";', false],
+    ['constant callback result', imports, 'const enabled = await snapshot(() => { read(key, 0); return true; }, "agent"); if (enabled) return "new"; return "old";', false],
+    ['masked snapshot result', imports, 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled && false ? "new" : "old";', false],
+    ['unknown key', imports, 'const enabled = await snapshot(() => read("htpr-1-fake", 0), "agent"); return enabled ? "new" : "old";', false],
+    ['unrelated key', imports, 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false, 2],
+    ['fake static wrapper', imports.replace('@/lib/flags/modeCache', '@/lib/fake'), 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['fake dynamic wrapper', '', dynamic.replace('@/lib/flags/modeCache', '@/lib/fake') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['fake dynamic reader', '', dynamic.replace('import("@/lib/flags")', 'import("@/lib/fake")') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['fake key module', '', dynamic.replace('@/lib/flags/definitions/htpr-1-other', '@/lib/fake') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['shadowed reader', imports, 'const read = () => true; const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['shadowed wrapper', imports, 'const snapshot = () => true; const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['dead snapshot', imports, 'if (false) { const enabled = await snapshot(() => read(key, 0), "agent"); if (enabled) return "new"; } return "old";', false],
+    ['generator callback', imports, 'const enabled = snapshot(function* () { return read(key, 0); }, "agent"); return enabled ? "new" : "old";', false],
+    ['mutable dynamic reader', '', dynamic.replace('const {isFeatureEnabled:', 'let {isFeatureEnabled:') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['unawaited dynamic reader', '', dynamic.replace('await import("@/lib/flags")', 'import("@/lib/flags")') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['defaulted dynamic reader', '', dynamic.replace('isFeatureEnabled: read}', 'isFeatureEnabled: read = () => true}') + 'const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['reassigned wrapper', imports, 'snapshot = () => true; const enabled = await snapshot(() => read(key, 0), "agent"); return enabled ? "new" : "old";', false],
+    ['unused helper', imports + 'async function dead() { return snapshot(async () => { if (await read(key, 0)) return "new"; return "old"; }, "agent"); }\n', 'return "ungated";', false],
+  ];
+  for (const [name, prelude, body, expected, ticket = 1] of cases) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/mcp/auth/rateLimit.ts", `${prelude}export async function execute() { ${body} }\n`);
+    const result = await evaluate(`HTPR-${ticket} [COST] snapshot behavior`, base, commit(git, name), dir);
+    assert.equal(result.pass, expected, `${name}: ${result.reason}`);
+  }
+});
+
 test("server coverage cannot excuse unrelated UI or use a client gate", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
@@ -820,6 +867,31 @@ test("flags added to production after a PR branches are not treated as PR remova
   writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, NEW_PRODUCTION_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: NEW_PRODUCTION_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
   const base = commit(git, "production advances");
   assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir)).pass, true);
+});
+
+test("flag ownership uses current production without treating stale heads as removals", async (t) => {
+  for (const shipped of [true, false]) {
+    const { dir, git } = makeRepo(t);
+    const common = commit(git, "common base");
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const WRONG_FLAG = "htpr-9-wrong";\n');
+    if (shipped) writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"']));
+    const base = commit(git, "production advances independently");
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"']));
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "feature with independently copied flag");
+    const result = await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir);
+    assert.equal(result.pass, shipped, result.reason);
+    if (!shipped) assert.match(result.reason, /New feature flag keys must start with htpr-1-/);
+
+    if (shipped) {
+      writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"', '"htpr-9-new"']));
+      const wrongHead = commit(git, "also add an unshipped wrong-ticket flag");
+      const wrong = await evaluate("HTPR-1 [FEATURE] update widget", base, wrongHead, dir);
+      assert.equal(wrong.pass, false);
+      assert.match(wrong.reason, /New feature flag keys must start with htpr-1-/);
+    }
+  }
 });
 
 test("a ticket-specific definition without runtime use fails", async (t) => {
@@ -1631,6 +1703,170 @@ function perFlagLayout(dir) {
   writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
 }
 
+test("copied production definitions retain rollout approval only while unchanged", async (t) => {
+  for (const highRisk of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const common = commit(git, "common per-file base");
+    const file = "src/lib/flags/definitions/htpr-2-new.ts";
+    const source = `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-11", description: "Shipped flag", releaseRisk: { risk: "small", reason: "Shipped behavior"${highRisk ? ', highRisk: "access"' : ""} } } as const;`;
+    writeFile(dir, file, source);
+    const base = commit(git, "production ships unrelated restricted flag");
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, file, source);
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "copy shipped definition alongside own UI repair");
+    const result = await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    const definitions = await evaluateFlagDefinitions(base, head, dir);
+    assert.equal(definitions.pass, true, definitions.reason);
+
+    const unshipped = await evaluateFlagDefinitions(common, head, dir);
+    assert.equal(unshipped.pass, false, unshipped.reason);
+    assert.match(unshipped.reason, highRisk ? /harmEvidence/ : /must set defaultMode/);
+
+    writeFile(dir, file, highRisk
+      ? source.replace('reason: "Shipped behavior"', 'reason: "Changed risk"')
+      : source.replace('defaultMode: "OWNER_AND_QA"', 'defaultMode: "OFF"'));
+    const changedHead = commit(git, "alter copied definition");
+    const changed = await evaluateFlagDefinitions(base, changedHead, dir);
+    assert.equal(changed.pass, false, changed.reason);
+    assert.match(changed.reason, highRisk ? /harmEvidence/ : /must set defaultMode/);
+  }
+});
+
+test("flag ownership reads current production when the pull request base is stale", async (t) => {
+  for (const shipped of [true, false]) {
+    const { dir, git } = makeRepo(t);
+    const common = commit(git, "common base");
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const WRONG_FLAG = "htpr-9-wrong";\n');
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"']));
+    const production = commit(git, "production ships an unrelated flag");
+    if (shipped) git(["update-ref", "refs/remotes/origin/production", production]);
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-wrong"']));
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "repair carries a flag production already shipped");
+    const result = await evaluate("HTPR-1 [FEATURE] update widget", common, head, dir);
+    assert.equal(result.pass, shipped, result.reason);
+    if (!shipped) assert.match(result.reason, /New feature flag keys must start with htpr-1-/);
+  }
+});
+
+test("copied definitions follow current production when the pull request base is stale", async (t) => {
+  for (const altered of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const common = commit(git, "common per-file base");
+    const file = "src/lib/flags/definitions/htpr-2-new.ts";
+    const source = `export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-11", description: "Shipped flag", releaseRisk: { risk: "small", reason: "Shipped behavior" } } as const;`;
+    writeFile(dir, file, source);
+    const production = commit(git, "production ships the restricted flag");
+    git(["update-ref", "refs/remotes/origin/production", production]);
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, file, altered ? source.replace('defaultMode: "OWNER_AND_QA"', 'defaultMode: "OFF"') : source);
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "repair copies the shipped definition");
+    const result = await evaluateFlagDefinitions(common, head, dir);
+    assert.equal(result.pass, !altered, result.reason);
+    if (altered) assert.match(result.reason, /must set defaultMode/);
+  }
+});
+
+test("stale pull request bases do not charge a repair for server files production changed", async (t) => {
+  for (const scenario of ["production-owned", "own server edit", "wrongly named flag"]) {
+    const { dir, git } = makeRepo(t);
+    const chatRoute = "src/app/api/agent-chat/messages/route.ts";
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const CHAT_FLAG = "htpr-2-chat";\n');
+    writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, CHAT_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: CHAT_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+    const common = commit(git, "common base");
+    writeFile(dir, chatRoute, 'export async function POST() { return "production"; }\n');
+    const production = commit(git, "production changes the chat route");
+    git(["update-ref", "refs/remotes/origin/production", production]);
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { CHAT_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(CHAT_FLAG) ? <div /> : null;\n');
+    if (scenario === "own server edit") {
+      writeFile(dir, chatRoute, 'export async function POST() { return "repair"; }\n');
+    }
+    if (scenario === "wrongly named flag") {
+      writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const CHAT_FLAG = "htpr-2-chat";\nexport const WRONG_FLAG = "htpr-9-wrong";\n');
+      writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, CHAT_FLAG, WRONG_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: CHAT_FLAG },\n  { key: WRONG_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+    }
+    const head = commit(git, `repair ${scenario}`);
+    const result = await evaluate("HTPR-2 [FEATURE] repair the chat window", common, head, dir);
+    if (scenario === "production-owned") {
+      assert.equal(result.pass, true, result.reason);
+      assert.doesNotMatch(result.reason, /changes server behavior/);
+    }
+    if (scenario === "own server edit") {
+      assert.equal(result.pass, false, result.reason);
+      assert.match(result.reason, /changes server behavior/);
+    }
+    if (scenario === "wrongly named flag") {
+      assert.equal(result.pass, false, result.reason);
+      assert.match(result.reason, /New feature flag keys must start with htpr-2-/);
+    }
+  }
+});
+
+test("production UI changes do not count against an exempt bugfix repair", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const common = commit(git, "common base");
+  writeFile(dir, "src/components/ProductionOnly.tsx", Array.from({ length: 200 }, (_, index) => `export const Row${index} = () => <div />;`).join("\n"));
+  const production = commit(git, "production ships a large screen");
+  git(["update-ref", "refs/remotes/origin/production", production]);
+  git(["checkout", "-q", "-b", "pr", common]);
+  writeFile(dir, "src/components/ChatWindow.tsx", "export const ChatWindow = () => <div />;\n");
+  const head = commit(git, "chat window repair");
+  const result = await evaluate("HTPR-8988 [BUGFIX] Place floating chats side by side", common, head, dir);
+  assert.equal(result.pass, true, result.reason);
+  assert.equal(result.ownerReview, "exempt-ui");
+});
+
+test("production's own server gate does not excuse a stale-base repair", async (t) => {
+  for (const ownGate of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    const chatRoute = "src/app/api/agent-chat/messages/route.ts";
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const CHAT_FLAG = "htpr-2-chat";\n');
+    writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, CHAT_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: CHAT_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+    writeFile(dir, chatRoute, 'export async function POST() {\n  return new Response("base");\n}\n');
+    const common = commit(git, "common base");
+    writeFile(dir, chatRoute, [
+      'import { isFeatureEnabled } from "@/lib/flags";',
+      'import { CHAT_FLAG } from "@/lib/flags/keys";',
+      "export async function POST() {",
+      '  return new Response("base");',
+      "}",
+      "export async function GET() {",
+      "  if (isFeatureEnabled(CHAT_FLAG) === false) return new Response(\"off\");",
+      '  return new Response("production");',
+      "}",
+      "",
+    ].join("\n"));
+    const production = commit(git, "production gates its own chat route");
+    git(["update-ref", "refs/remotes/origin/production", production]);
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, chatRoute, ownGate
+      ? [
+        'import { isFeatureEnabled } from "@/lib/flags";',
+        'import { CHAT_FLAG } from "@/lib/flags/keys";',
+        "export async function POST() {",
+        "  if (!isFeatureEnabled(CHAT_FLAG)) return new Response(\"off\");",
+        '  return new Response("repair");',
+        "}",
+        "",
+      ].join("\n")
+      : 'export async function POST() {\n  return new Response("repair");\n}\n');
+    commit(git, "chat window repair");
+    git(["merge", "-q", "--no-edit", production]);
+    const head = git(["rev-parse", "HEAD"]).trim();
+    const result = await evaluate("HTPR-2 [FEATURE] repair the chat window", common, head, dir);
+    assert.equal(result.pass, ownGate, result.reason);
+    if (!ownGate) assert.match(result.reason, /changes server behavior/);
+  }
+});
+
 test("runtime flag keys must come from their own registered definition or a supported barrel", async (t) => {
   const { dir, git } = makeRepo(t);
   perFlagLayout(dir);
@@ -2084,7 +2320,7 @@ test("first placement of an existing local component needs a flag", async (t) =>
 
 test("added-file default policy preserves existing flags and requires explicit Everyone only for new eligible definitions", async (t) => {
   const risk = 'releaseRisk: { risk: "new", reason: "Fixture" }';
-  const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" }';
+  const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller could bypass authorization." } }';
   const ownerRequest = 'ownerRequest: { quote: "Keep this Owner only for now.", ticketUrl: "https://app.hypertask.ai/detail/project-15/2" }';
   const requested = `releaseRisk: { risk: "new", reason: "Fixture", ${ownerRequest} }`;
   for (const [extra, pass, message] of [
@@ -2104,8 +2340,8 @@ test("added-file default policy preserves existing flags and requires explicit E
     [`defaultMode: "OFF", ${requested}`, false, /must set defaultMode: "EVERYONE"/],
     [requested, false, /must set defaultMode: "EVERYONE"/],
     [`defaultMode: "EVERYONE", ${requested}`, true],
-    [`defaultMode: "OWNER_AND_QA", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, true],
-    [`defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, false, /releaseRisk\.highRisk may not default to Everyone/],
+    [`defaultMode: "OWNER_AND_QA", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller could bypass authorization." }, ${ownerRequest} }`, true],
+    [`defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller could bypass authorization." }, ${ownerRequest} }`, false, /releaseRisk\.highRisk may not default to Everyone/],
     [`kind: "bugfix", ${risk}`, true],
     [`kind: "feature", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
     [`kind: "feature", defaultMode: "EVERYONE", ${sensitive}`, false],
@@ -2838,10 +3074,103 @@ export default { key: OTHER_FLAG, kind: "bugfix", defaultMode: "OWNER_AND_QA", s
     writeFile(dir, "src/lib/flags/keys.ts", `export { OTHER_FLAG } from "./definitions/htpr-1-other";`);
     const base = commit(git, "existing money flag");
     writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
-export default { key: NEW_FLAG, kind: "bugfix", defaultMode: "${mode}", shippedOn: "2026-10-28", description: "New money flag", releaseRisk: { risk: "small", reason: "Paid reporting", highRisk: "money" } } as const;`);
+export default { key: NEW_FLAG, kind: "bugfix", defaultMode: "${mode}", shippedOn: "2026-10-28", description: "New money flag", releaseRisk: { risk: "small", reason: "Paid reporting", highRisk: "money", harmEvidence: { harm: "charge", scenario: "A customer could be charged." } } } as const;`);
     const head = commit(git, "new money flag");
     const result = await evaluate("HTPR-2 [BUGFIX] money fixture", base, head, dir);
     assert.equal(result.pass, mode === "OWNER_AND_QA", result.reason);
     if (["OFF", "OWNER_ONLY"].includes(mode)) assert.match(result.reason, /new money flag htpr-2-new must set defaultMode: "OWNER_AND_QA"/);
   }
+});
+
+test("lasting harm evidence is required for new or changed high-risk metadata", async (t) => {
+  const scenarios = [
+    ['highRisk: "money", harmEvidence: { harm: "charge", scenario: "A customer is charged." }', true],
+    ['highRisk: "access", harmEvidence: { harm: "private-data-exposure", scenario: "Another team can read private tickets." }', true],
+    ['highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller bypasses authorization." }', true],
+    ['highRisk: "data-deletion", harmEvidence: { harm: "permanent-deletion", scenario: "A ticket is deleted permanently." }', true],
+    ['highRisk: "customer-email", harmEvidence: { harm: "customer-email", scenario: "Customers receive an unsolicited email." }', true],
+    ['highRisk: "access"', false],
+    ['highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: " " }', false],
+    ['highRisk: "access", harmEvidence: { harm: "permanent-deletion", scenario: "Deletes data." }', false],
+    ['highRisk: "access", harmEvidence: { harm: "owner-agent-action", scenario: "An owner acts as their agent." }', false],
+    ['highRisk: "money", harmEvidence: { harm: "ai-usage", scenario: "Uses AI." }', false],
+    ['highRisk: "access", harmEvidence: { harm: "auth-bypass", harm: "auth-bypass" }', false],
+    ['highRisk: "access", harmEvidence: { harm: "auth-bypass", unknown: "A caller bypasses authorization." }', false],
+    ['highRisk: "access", harmEvidence: "auth-bypass"', false],
+    ['harmEvidence: { harm: "auth-bypass", scenario: "A caller bypasses authorization." }', false],
+  ];
+  for (const [metadata, pass] of scenarios) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture", ${metadata} } } as const;`);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "new risk"), dir);
+    assert.equal(result.pass, pass, `${metadata}: ${result.reason}`);
+  }
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const file = "src/lib/flags/definitions/htpr-1-other.ts";
+  const legacy = `export const OTHER_FLAG = "htpr-1-other";
+export default { key: OTHER_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Legacy", releaseRisk: { risk: "new", reason: "Legacy risk", highRisk: "access" } } as const;`;
+  writeFile(dir, file, legacy);
+  const base = commit(git, "legacy");
+  writeFile(dir, file, legacy.replace('description: "Legacy"', 'description: "Updated"'));
+  assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "unrelated edit"), dir)).pass, true);
+  writeFile(dir, file, legacy.replace('reason: "Legacy risk"', 'reason: "Changed risk"'));
+  const changed = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "changed risk"), dir);
+  assert.equal(changed.pass, false);
+  assert.match(changed.reason, /harmEvidence/);
+  writeFile(dir, file, legacy.replace('"htpr-1-other"', '"htpr-2-new"'));
+  const replaced = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "replace key"), dir);
+  assert.equal(replaced.pass, false);
+  assert.match(replaced.reason, /filename must match the flag key/);
+  writeFile(dir, file, legacy.replace('highRisk: "access"', 'highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller bypasses authorization." }'));
+  assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "evidence"), dir)).pass, true);
+});
+
+test("owner-scoped agent actions and ordinary AI use can default to Everyone", async (t) => {
+  for (const reason of ["Owner acts as their own agent.", "Uses AI for ordinary assistance."]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, defaultMode: "EVERYONE", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "${reason}" } } as const;`);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "safe feature"), dir);
+    assert.equal(result.pass, true, result.reason);
+  }
+});
+
+async function evaluateFlagDefinitions(baseSha, headSha, cwd, changedFiles) {
+  const original = process.cwd();
+  process.chdir(cwd);
+  try {
+    const { evaluateFlagDefinitionChanges } = await import(scriptUrl);
+    return evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles });
+  } finally {
+    process.chdir(original);
+  }
+}
+
+test("evaluateFlagDefinitionChanges stops new flags with no defaultMode before push", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "feature", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture" } } as const;`);
+  const head = commit(git, "new flag without defaultMode");
+  const result = await evaluateFlagDefinitions(base, head, dir, ["src/lib/flags/definitions/htpr-2-new.ts"]);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /must set defaultMode: "EVERYONE"/);
+});
+
+test("evaluateFlagDefinitionChanges accepts a new flag with defaultMode EVERYONE", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "feature", defaultMode: "EVERYONE", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture" } } as const;`);
+  const head = commit(git, "new flag");
+  const result = await evaluateFlagDefinitions(base, head, dir, ["src/lib/flags/definitions/htpr-2-new.ts"]);
+  assert.equal(result.pass, true, result.reason);
 });

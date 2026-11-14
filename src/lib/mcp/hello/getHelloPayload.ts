@@ -35,7 +35,7 @@ export const HELLO_CAPABILITIES = {
   batch:
     'Read or update up to 100 tasks in one request through POST /api/mcp/tasks/batch.',
   comments:
-    'Without a kind, agent text goes only to the hidden ticket agent log, which people do not see, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
+    'An agent comment with no kind is refused and nothing is saved, even for replies or mentions. Resend with kind question, qa or done for people, or use hypertask activity add for the agent log. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
   pages:
     'Create, read, update, list, and search task-attached pages, with markdown as the default format.',
   leases:
@@ -81,12 +81,17 @@ async function helloGuidedStart(
 }
 
 async function helloCapabilities(userId: number) {
-  const [{ isFeatureEnabled }, { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG }] = await Promise.all([
+  const [{ isFeatureEnabled }, { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG }, { HTPR_7742_AGENT_CHAT_ALL_FLAG }] = await Promise.all([
     import('@/lib/flags'),
     import('@/lib/flags/definitions/htpr-7322-agent-feature-discovery'),
+    import('@/lib/flags/definitions/htpr-7742-agent-chat-all'),
   ])
   return {
     ...HELLO_CAPABILITIES,
+    ...(await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, userId) ? {
+      agent_chat:
+        'Read unanswered sidebar chats with hypertask_chat_inbox or hypertask chat listen. Reply with hypertask_chat_reply or hypertask chat reply <sessionId> --text "...". Call the inbox at startup and on your next run. POST /api/mcp/chat/heartbeat with {} while listening so the sidebar says Online. No extra chat setup is required.',
+    } : {}),
     ...(await isFeatureEnabled(HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG, userId) ? {
       features:
         'List every enabled feature-kind flag and core product destinations for the authenticated user, with registry descriptions, shipped dates and verified URLs where known, through hypertask_list_features (hypertask_user_context action features) or GET /api/mcp/features. Non-feature kinds and unavailable features are omitted.',

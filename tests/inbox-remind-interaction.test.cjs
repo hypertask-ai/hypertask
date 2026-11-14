@@ -68,7 +68,7 @@ function fixture(mobile, shortcutPeers = false) {
     "@/hooks/General/useGetTimeOptions": { default: () => ({ getRemindMeOptions: () => options }) },
     "@/hooks/MultiPages/useQueryState": { default: (_key, initial) => React.useState(initial) },
     "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/keys": { MY_TASKS_SNOOZE_FLAG: "htpr-6461-my-tasks-snooze" },
+    "@/lib/flags/keys": { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG: "htpr-6938-my-tasks-icon-controls" },
     "@/utils/helperFunctions/dateParse": { inputChange: () => [] },
     "@/utils/generateTime": { default: () => "tomorrow" },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },

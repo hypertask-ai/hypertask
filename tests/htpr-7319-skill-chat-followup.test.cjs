@@ -37,6 +37,13 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/flags/keys") return keys;
     if (id === "@/lib/flags/definitions/htpr-7736-chat-follows-task") return jiti(path.join(root, "src/lib/flags/definitions/htpr-7736-chat-follows-task.ts"));
     if (id === "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys") return { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG: "htpr-8260-ctrlj-composer-keys" };
+    if (id === "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer") return { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG: "htpr-8829-ctrlj-plus-composer" };
+    if (id === "@/lib/flags/definitions/htpr-8945-ctrl-tab-palette") return { HTPR_8945_CTRL_TAB_PALETTE_FLAG: "htpr-8945-ctrl-tab-palette" };
+    if (id === "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs") return { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG: "htpr-8931-ctrlk-integrated-tabs" };
+    if (id === "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer") return { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: "htpr-8824-ai-chat-one-composer" };
+    if (id === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
+    if (id === "@/components/Common/ComposerPlusActions") return { ComposerPlusActions: () => null };
+    if (id === "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top") return { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG: "htpr-8943-ctrlk-tabs-on-top" };
     if (id === "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model") return { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG: "htpr-8265-task-shortcuts-writer-model" };
     if (id === "@/components/Global/ModelSelectorDropdown") return { TaskWriterModelPicker: () => null, useTaskWriterModel: () => undefined };
     if (id === "@/lib/configs/composeWriterFooterKeys") return jiti(path.join(root, "src/lib/configs/composeWriterFooterKeys.ts"));
@@ -53,6 +60,7 @@ function load(file, mocks = {}, sourceRoot = root) {
 function questionsRoute(options = {}) {
   const calls = [], scopes = [], lookups = [], cacheInputs = [];
   const route = load("src/app/api/ai/task-questions/route.ts", {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/app/api/ai/_lib/allowanceRefusal": { warnIfAllowanceRefused: () => null },
     "@/lib/flags/definitions/htpr-7716-allowance-fallbacks": { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG: "htpr-7716-allowance-fallbacks" },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ agentId: options.agentId }) },
@@ -331,6 +339,7 @@ async function withCompose(options, check) {
     "./taskSummaryAction": { taskSummaryActionFor: () => ({ label: "Summarize the current task", prompt: "Summarize" }) },
     "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
     "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
+    "@/lib/flags/definitions/htpr-9031-chip-starters": { HTPR_9031_CHIP_STARTERS_FLAG: "htpr-9031-chip-starters" },
   });
   const Compose = load("src/components/Modals/commands/HTC/ComposeTaskWriter.tsx", {
     ...basic,

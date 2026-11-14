@@ -119,6 +119,9 @@ test("task-detail subtasks retain identical links, archive colors, playlist, and
       "../../../TopRow/CreateSummaryButton": { __esModule: true, default: () => null },
       "@/lib/configs/taskDetail.config": { taskDetailSpacing: { mobile: { descriptionContainer: "" } } },
       "./TaskPagesContext": { useTaskPages: () => ({ loading: false, hasPages: false, createAndOpenPage: () => pages++ }) },
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+      "@/components/PageComponents/TaskDetail/MainPageComponents": { QuietAddLink: () => null },
     });
     const tree = Description();
     markup.push(renderToStaticMarkup(tree));

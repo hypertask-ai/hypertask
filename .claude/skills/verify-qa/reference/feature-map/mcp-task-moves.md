@@ -1,11 +1,15 @@
 # MCP task moves
 
-## How a customer reaches it
+## Sub-features
+
+- `mcp-task-moves` MCP task moves.
+
+## How to get to it (user POV)
 
 Agents use `hypertask task move` or `POST /api/mcp/tasks/update` with `sectionId`.
 The section adapter calls the ordinary task move route.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Confirm the production deployment and QA 985 doctor screenshot.
 2. Create one disposable child ticket through `vcc`, tagged MCP and qa-fixture.
@@ -15,16 +19,16 @@ The section adapter calls the ordinary task move route.
 6. Move it between two ordinary columns. Read back both successful moves.
 7. Check real server failures, partial updates and flag rollback locally with `node --test tests/htpr-7990-task-move-refusal.test.cjs`; never induce production server failures.
 
-## What usually breaks
+## Gotchas
 
 The internal move route's 409 response becomes a plain Error. Persistence then
 returns 500 and opens a false crash alert. Successful moves must remain intact.
 
-## What proof to collect
+### What proof to collect
 
 CLI replies and exit codes, before/after columns, flag mode, regression output,
 deployment SHA, QA 985 doctor screenshot and the core inbox cycle.
 
-## Cleanup
+### Cleanup
 
 Mark only the fixture created by this run Deleted through `vcc`.

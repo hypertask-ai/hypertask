@@ -1,6 +1,10 @@
 # CLI install commands and login
 
-## How a customer reaches it
+## Sub-features
+
+- `cli-install-commands-and-login` CLI install commands and login.
+
+## How to get to it (user POV)
 
 - Settings, CLI tab: `https://app.hypertask.ai/settings/cli` (`CliSection.tsx`).
 - Command menu "Install CLI" opens `CliInstallModal`.
@@ -10,7 +14,7 @@
 
 Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note sits behind `htpr-7033-cli-install-command`.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Shoot `/settings/cli` with `phone-shot.sh` (390x844) and at 1440x900 with the QA state; read the command text from the page, not the source.
 2. `curl -fsS https://app.hypertask.ai/llms.txt` and check both commands.
@@ -19,17 +23,17 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 5. Repeat with a trailing slash in `--api-url`. The CLI waits at most about 1.5 s for the guide. Use a local failure/delay endpoint: any hello failure or no response within about 1.5 s must print the old saved output in both modes, exit 0 and keep the token saved. Do not point failure injection at production.
 6. Reuse `node ~/.local/state/vcc-evidence/HTPR-7519/live-check.mjs` with env inputs `HT_QA_AGENT_TOKEN`, `CLI_BIN`, `API_URL` (API base including `/api`) and optionally `MCP_URL` (default `https://mcp.hypertask.ai/mcp`). It uses temporary homes, calls MCP `tools/list` with the same token, checks that each step tool and action is advertised, checks role-dependent step counts when the role is exposed (otherwise accepts 2 or 3 with list and playbook required), asserts each login finishes within 5 s, and runs only list/playbook reads. Never run the create step against production. The CLI prints the server's steps; with MCP v2 (on for Everyone), those advertise `hypertask_tasks` with `{"action":"list","input":{"project_id":ID}}` or `{"action":"create","input":{"project_id":ID,"title":"My first task"}}`, and `hypertask_projects` with `{"action":"playbook","input":{"project_id":ID}}`. Legacy catalogs retain the old tool names and top-level arguments. Check no-board, fallback and trailing-slash cases separately.
 
-## What usually breaks
+## Gotchas
 
 - hypertask.ai serving the homepage HTML instead of the script (the installers live in the `hypertask-ai/astro` repo, `public/install.sh`, `public/install.ps1`, `_redirects`, `_headers`).
 - A command without `https://`: curl and irm then start over plain HTTP (HTPR-7276 review).
 - Hello errors or timeouts turn a successful token save into a failed or hanging login.
 - Test fixtures in `tests/fixtures/cli-install/legacy.json` holding the old command.
 
-## What proof to collect
+### What proof to collect
 
 Settings CLI screenshots (desktop and phone, four themes when the layout changed), the llms.txt lines, and the install transcript with the version or checksum line. For login, collect redacted JSON/human output, exit status, elapsed fallback time and confirmation the token stayed saved, never its value.
 
-## Cleanup
+### Cleanup
 
 Delete the scratch install folders and temporary login homes. Nothing is written to the board.

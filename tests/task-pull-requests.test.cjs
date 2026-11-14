@@ -10,12 +10,14 @@ const jiti = require("jiti")(__filename, {
 });
 
 const {
-  boardForGithubRepository,
   checkStateFromSuites,
   derivePullRequestDisplayState,
   isStaleCheckSuiteObservation,
   parseGithubPullRequestUrl,
 } = jiti(path.join(root, "src/lib/pullRequests/githubPullRequests.ts"));
+const { resolveBoardGithubRepository } = jiti(
+  path.join(root, "src/lib/github/boardConnections.ts"),
+);
 const {
   fetchGithubPullRequest,
   linkTaskPullRequest,
@@ -111,36 +113,65 @@ test("check suite observations reset per pull request head", () => {
 });
 
 test("GitHub webhook repository policy cannot target another board", () => {
+  const legacyBoard15 = [
+    "hypertask-ai/android",
+    "hypertask-ai/app-releases",
+    "hypertask-ai/cli",
+    "hypertask-ai/docs",
+    "hypertask-ai/hypertask",
+    "hypertask-ai/skills",
+  ].map((fullName) => ({
+    projectId: 15,
+    fullName,
+    repositoryId: null,
+    provenance: "legacy",
+    installationId: null,
+    revokedAt: null,
+  }));
   const publicRepository = (fullName) => ({
     fullName,
     isPrivate: false,
     isFork: false,
   });
   assert.equal(
-    boardForGithubRepository(publicRepository("hypertask-ai/hypertask")),
+    resolveBoardGithubRepository(publicRepository("hypertask-ai/hypertask"), legacyBoard15),
     15,
   );
   assert.equal(
-    boardForGithubRepository(publicRepository("HYPERTASK-AI/CLI")),
+    resolveBoardGithubRepository(publicRepository("HYPERTASK-AI/CLI"), legacyBoard15),
     15,
   );
   assert.equal(
-    boardForGithubRepository(publicRepository("fork-owner/hypertask")),
+    resolveBoardGithubRepository(publicRepository("fork-owner/hypertask"), legacyBoard15),
     null,
   );
   assert.equal(
-    boardForGithubRepository({
+    resolveBoardGithubRepository({
       ...publicRepository("hypertask-ai/hypertask"),
       isPrivate: true,
-    }),
+    }, legacyBoard15),
     null,
   );
   assert.equal(
-    boardForGithubRepository({
+    resolveBoardGithubRepository({
       ...publicRepository("hypertask-ai/hypertask"),
       isFork: true,
-    }),
+    }, legacyBoard15),
     null,
+  );
+  assert.equal(
+    resolveBoardGithubRepository({
+      ...publicRepository("hypertask-ai/hypertask"),
+      id: "42",
+    }, [{
+      projectId: 7049,
+      fullName: "hypertask-ai/hypertask",
+      repositoryId: "42",
+      provenance: "installed",
+      installationId: "123",
+      revokedAt: null,
+    }]),
+    7049,
   );
 });
 
@@ -157,11 +188,19 @@ const githubMetadata = {
 
 async function withMockFetch(mock, callback) {
   const originalFetch = global.fetch;
+  const appId = process.env.GITHUB_PR_LINK_APP_ID;
+  const appKey = process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+  delete process.env.GITHUB_PR_LINK_APP_ID;
+  delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
   global.fetch = mock;
   try {
     await callback();
   } finally {
     global.fetch = originalFetch;
+    if (appId === undefined) delete process.env.GITHUB_PR_LINK_APP_ID;
+    else process.env.GITHUB_PR_LINK_APP_ID = appId;
+    if (appKey === undefined) delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+    else process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = appKey;
   }
 }
 
@@ -618,6 +657,7 @@ test("webhook does not return a fallback task after a concurrent global link win
             return { id: 36202 };
           },
         },
+        $executeRaw: async () => 0,
         $queryRaw: async () => [],
         user: { findUnique: async () => null },
       }),

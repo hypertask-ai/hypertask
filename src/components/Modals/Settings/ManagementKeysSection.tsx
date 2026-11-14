@@ -31,14 +31,18 @@ const EXPIRY_OPTIONS = [
 const inputClass =
   "h-10 w-full rounded-lg border-0 bg-comment-description px-3 text-dense font-medium text-white-black outline-none transition placeholder:text-text-light-gray focus:bg-modalBackground";
 
+const teamChoiceRadiusClass = "rounded-[4px]";
+
 const ChoiceButton = ({
   active,
   children,
+  className,
   disabled = false,
   onClick,
 }: {
   active: boolean;
   children: string;
+  className?: string;
   disabled?: boolean;
   onClick: () => void;
 }) => (
@@ -48,6 +52,7 @@ const ChoiceButton = ({
       settingsActionButtonClass,
       active ? "bg-active-modal-element" : "text-text-light-gray",
       disabled && "cursor-not-allowed opacity-50",
+      className,
     )}
     disabled={disabled}
     onClick={onClick}
@@ -221,6 +226,7 @@ const ManagementKeysSection = () => {
               <div className="flex flex-wrap gap-2">
                 <ChoiceButton
                   active={teamId === null}
+                  className={teamChoiceRadiusClass}
                   onClick={() => setTeamId(null)}
                 >
                   Whole account
@@ -228,6 +234,7 @@ const ManagementKeysSection = () => {
                 {teams.map((team) => (
                   <ChoiceButton
                     active={teamId === team.id}
+                    className={teamChoiceRadiusClass}
                     disabled={
                       scope === "full" || (scope === "usage" && !team.isOwner)
                     }

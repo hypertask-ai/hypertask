@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 SCRIPT = Path(__file__).with_name('pr-drain-pick')
@@ -21,6 +22,7 @@ class PickerTests(unittest.TestCase):
                         PATH=f'{self.bin}:/usr/bin:/bin')
         self.env.pop('SHIP_APP_FREEZE', None)
         self.env.pop('SHIP_FREEZE_FILE', None)
+        self.env.pop('FLEET_PICK_STATE', None)
         self.command('gh-app-token', 'printf fixture-token')
         self.command('gh', '''
 [ "$GH_TOKEN" = fixture-token ] || exit 99
@@ -132,6 +134,63 @@ cat "$HOME/prs.json"
         for check in [{'conclusion': 'FAILURE'}, {'conclusion': 'TIMED_OUT'}, {'state': 'ERROR'}]:
             self.prs = [self.pr(4, draft=False, checks=[check])]
             self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 4 '))
+
+    def snapshot(self, prs=None, age=0):
+        prs = prs if prs is not None else [dict(number=1, title='HTPR-1 [BUGFIX] Example',
+            branch='runner-1/htpr-1', updated=self.pr(1)['updatedAt'], draft=True, red=False)]
+        path = self.home / '.local/state/fleet-pick/open-prs.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(dict(at=time.time() - age, prs=prs)))
+        return path
+
+    def test_shared_snapshot_avoids_a_second_github_read(self):
+        self.snapshot()
+        self.command('gh', 'exit 99')
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 1 '))
+        self.assertFalse((self.home / 'gh-args').exists())
+
+    def test_shared_empty_snapshot_is_complete(self):
+        self.snapshot([])
+        self.command('gh', 'exit 99')
+        self.assertEqual(self.pick().stdout, 'NONE\n')
+
+    def test_shared_red_and_green_preserve_queue_ranking(self):
+        self.snapshot([dict(number=n, title=f'HTPR-{n} [BUGFIX] Example', branch=f'runner1/htpr-{n}',
+                            updated=self.pr(n)['updatedAt'], draft=False, red=(n == 2)) for n in [1, 2]])
+        self.command('gh', 'exit 99')
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 2 '))
+
+    def test_stale_future_and_malformed_snapshots_require_live_read(self):
+        for age in [121, -60]:
+            self.snapshot(age=age)
+            self.assertEqual(self.pick().stdout, 'NONE\n')
+        for invalid in ['bad', '{}', '{"at":0,"prs":{}}']:
+            self.snapshot().write_text(invalid)
+            self.assertEqual(self.pick().stdout, 'NONE\n')
+        for field, value in [('red', None), ('number', '1'), ('updated', 'invalid')]:
+            path = self.snapshot()
+            data = json.loads(path.read_text())
+            data['prs'][0][field] = value
+            path.write_text(json.dumps(data))
+            self.assertEqual(self.pick().stdout, 'NONE\n')
+        self.assertTrue((self.home / 'gh-args').exists())
+
+    def test_duplicate_snapshot_prs_require_live_read(self):
+        path = self.snapshot()
+        data = json.loads(path.read_text())
+        data['prs'] *= 2
+        path.write_text(json.dumps(data))
+        self.assertEqual(self.pick().stdout, 'NONE\n')
+        self.assertTrue((self.home / 'gh-args').exists())
+
+    def test_shared_snapshot_state_override(self):
+        path = self.snapshot()
+        target = self.home / 'custom-state'
+        target.mkdir()
+        path.rename(target / path.name)
+        self.env['FLEET_PICK_STATE'] = str(target)
+        self.command('gh', 'exit 99')
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 1 '))
 
     def test_failed_or_empty_auth_never_calls_github(self):
         for command in ['exit 1', 'exit 0']:

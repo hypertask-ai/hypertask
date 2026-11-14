@@ -14,6 +14,7 @@ import { useRecoilState, useRecoilValue } from '@/lib/state';
 import { moveTaskToDifferentBoardAPI } from '@/lib/constants/APIRouteConstants';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_8014_COMPOSE_BOARD_ORDER_FLAG } from '@/lib/flags/keys';
+import { HTPR_8737_BULK_MOVE_BOARD_FLAG } from '@/lib/flags/definitions/htpr-8737-bulk-move-board';
 
 interface ICreateTask {
     projectId: number;
@@ -32,9 +33,13 @@ type IProps = {
     closeHTC: () => void;
     onSelectBoard?: (boardId: number) => void;
     boards?: IProject[];
+    bulkSourceProjectId?: number;
+    onBulkMove?: (projectId: number, sectionId: number) => Promise<void>;
 }
 const MoveTaskGlobal = (props: IProps) => {
     const composeBoardPicker = Boolean(props.onSelectBoard);
+    const bulkBoardMoveEnabled = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
+    const bulkMove = useRef(Boolean(props.onBulkMove) && bulkBoardMoveEnabled).current;
     const projects = useGetAllProjectsMinimal(["projectsAllMinimal"], undefined, { enabled: !composeBoardPicker });
     const usageOrderEnabled = useFlag(HTPR_8014_COMPOSE_BOARD_ORDER_FLAG);
     const lastUsedBoards = useRecoilValue(lastUsedBoardsAtom);
@@ -45,7 +50,10 @@ const MoveTaskGlobal = (props: IProps) => {
             || (a.title ?? a.name ?? "").localeCompare(b.title ?? b.name ?? "")
         );
     }, [composeBoardPicker, usageOrderEnabled, props.boards, lastUsedBoards]);
-    const data = composeBoardPicker ? orderedBoards : projects.data;
+    const data = useMemo(() => {
+        const boards = composeBoardPicker ? orderedBoards : projects.data;
+        return props.onBulkMove ? boards?.filter((board: IProject) => board.id !== props.bulkSourceProjectId) : boards;
+    }, [composeBoardPicker, orderedBoards, projects.data, props.onBulkMove, props.bulkSourceProjectId]);
     const isLoading = composeBoardPicker ? !props.boards : projects.isLoading;
     const [inViewObject, __] = useRecoilState(inViewObjectAtom);
 
@@ -86,6 +94,11 @@ const MoveTaskGlobal = (props: IProps) => {
         try {
             console.log('Submitting...', values);
             setRedirectingToTask(true)
+            if (props.onBulkMove && !bulkBoardMoveEnabled) return;
+            if (bulkMove) {
+                await props.onBulkMove?.(values.projectId, values.sectionId);
+                return;
+            }
             const body = {
                 sectionId: formik.values.sectionId,
                 projectId: formik.values.projectId,
@@ -129,17 +142,21 @@ const MoveTaskGlobal = (props: IProps) => {
             return;
         }
         if (currentScreenValue === 0) {
+            const board = data[callbackIndexorString];
+            if (props.onBulkMove && board.id === props.bulkSourceProjectId) return;
             formik.setValues({
                 ...formik.values,
-                projectId: data[callbackIndexorString].id
+                projectId: board.id
             })
+            const columns = returnActiveOrDefaultColumnSections(board) ?? [];
+            const availableSections = new Map((board.section ?? []).filter((section: { visibility?: boolean; deleted?: boolean }) => section.visibility !== false && !section.deleted).map((section: { id?: number }) => [section.id, section] as const));
             setCurrentScreen({
                 ...currentScreen,
                 value: 1,
                 next: 2,
                 prev: 0,
                 title: "Select Column",
-                data: returnActiveOrDefaultColumnSections(data[callbackIndexorString])??[]
+                data: props.onBulkMove ? columns.flatMap((section: { id?: number }) => { const current = availableSections.get(section.id); return current ? [current] : []; }) : columns
             })
         }
         else if (currentScreenValue === 1) {
@@ -225,7 +242,7 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
             return
         }
         else if (e.key === "Enter" && data) {
-            if (value === 0 && filteredData) {
+            if (value === 0 && filteredData?.[selectedIndex]) {
                 setKeyword("")
                 const indexof = data.findIndex(item => item.id === filteredData[selectedIndex].id)
                 console.log("🚀 ~ file: index.tsx:204 ~ handleKeyDown ~ indexof:", indexof)

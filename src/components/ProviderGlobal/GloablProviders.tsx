@@ -1,7 +1,7 @@
 
 "use client";
 import { useAiChatAutoOpen } from "@/hooks/General/useAiChatAutoOpen";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
 import {
   lazy,
   ReactNode,
@@ -37,7 +37,6 @@ import {
   aiChatAutoOpenSuppressedAtom,
   aiChatPinnedAtom,
   openAiChatByDefaultAtom,
-  keepAiChatClosedAtom,
   showAIChatInterfaceAtom,
   isAiChatSidebarModeAtom,
   mobileCommentComposerOpenAtom,
@@ -180,11 +179,14 @@ import { boardFromDeviceFirst, boardFromFreshList } from "@/lib/keyboard/boardSh
 import { HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG } from "@/lib/flags/definitions/htpr-7588-board-shortcut-from-device";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { useKeepChatClosed } from "@/hooks/General/useKeepChatClosed";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
+import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/keys";
+import { isGuestUser } from "@/lib/demo/guest";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import ChatWindowStackMount from "../AI_CHAT/ChatWindowStackMount";
@@ -261,6 +263,7 @@ import {
   shouldShowMobileCreateTaskButton,
   shouldEnableMobilePullDownCommand,
   isAgentChatPath,
+  shouldShowMobileTabBar,
 } from "../Global/mobileShellVisibility";
 import { BoardStartupContext } from "@/lib/contexts/boardStartupContext";
 import {
@@ -268,6 +271,36 @@ import {
   shouldShowMobileBoardControls,
 } from "@/lib/boardStartup/mobileControls";
 import { shouldEnableSecondaryStartup } from "@/lib/boardStartup/secondaryRequests";
+
+type StraightBoardAccount = { email?: string | null; uid?: string | null; straightBoardSignup?: boolean; UserSetting?: { isVerified?: boolean | null } | null };
+
+const isStraightBoardAccount = (user: StraightBoardAccount | null) =>
+  Boolean(user && (user.straightBoardSignup || String(user.uid ?? "").startsWith("email_sb_")));
+
+function StraightBoardConfirmStrip({
+  pathname,
+  currentUser,
+}: {
+  pathname: string | null;
+  currentUser: StraightBoardAccount | null;
+}) {
+  if (!currentUser || isGuestUser(currentUser) || !isStraightBoardAccount(currentUser)) return null;
+  if (currentUser.UserSetting?.isVerified ?? true) return null;
+  if (pathname && ["/login","/onboarding","/verify-email","/invite","/share","/unauthorized"].some((p) => pathname.startsWith(p))) return null;
+  return (
+    <div
+      data-straight-board-confirm
+      className={`w-full border-b border-light-black-border-1 bg-containerBackground px-4 py-3 text-center text-content text-white-black ${
+        shouldShowMobileTabBar(pathname)
+          ? "max-md:fixed max-md:inset-x-0 max-md:top-[calc(48px+env(safe-area-inset-top))] max-md:z-floating max-md:flex max-md:h-10 max-md:items-center max-md:justify-center max-md:py-0 md:z-sticky"
+          : "z-sticky"
+      }`}
+      role="status"
+    >
+      <span className="text-hypertasks-green">Please confirm your email</span>
+    </div>
+  );
+}
 
 const preventEscapeOnCommandModes: CommandMode[] = [
   CommandMode.AICustomInstruction,
@@ -400,16 +433,11 @@ export default function GlobalProvider({
   const { reserve: aiChatSwitchReserve } = useAiChatAutoOpen(mbl);
   let aiChatOpenSwitchesEnabled = !useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   if (useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG)) aiChatOpenSwitchesEnabled = true;
-  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
-  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
-  let keepAiChatClosed = false;
-  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+  const { keepChatClosed, ready: chatAutoOpenReady } = useKeepChatClosed();
   const [reserveBoardChat, setReserveBoardChat] = useState(() =>
     firstScreen?.scope.route === "/project" && pathname?.startsWith("/project") === true &&
     firstScreen.flags.values[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] === true &&
-    !aiChatOpenSwitchesEnabled && !mbl && authenticatedUserId !== null && chatAutoOpenReady && !keepAiChatClosed &&
+    !aiChatOpenSwitchesEnabled && !mbl && authenticatedUserId !== null && chatAutoOpenReady && !keepChatClosed &&
     (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
   );
   useEffect(() => {
@@ -506,12 +534,12 @@ export default function GlobalProvider({
     }
     hasAttemptedChatRestoreRef.current = true;
     if (!manualChat && window.innerWidth < 768) return;
-    if (!manualChat && (keepAiChatClosed || aiChatAutoOpenSuppressed)) return;
+    if (keepChatClosed || (!manualChat && aiChatAutoOpenSuppressed)) return;
     if (!readChatOpenForSession()) return;
     setChatRuntimeMounted(true);
     setShowAiChatInterface(true);
     setAiChatExplicitOpenAt(null);
-  }, [currentUser?.id, aiChatOpenSwitchesEnabled, manualChat, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
+  }, [currentUser?.id, aiChatOpenSwitchesEnabled, manualChat, chatAutoOpenReady, keepChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
     if (!hasAttemptedChatRestoreRef.current) return;
@@ -623,6 +651,10 @@ export default function GlobalProvider({
 
   const { showEmailVerificationModal, setShowEmailVerificationModal } =
     useEmailVerificationModal();
+  const enrolledStraightBoard =
+    isStraightBoardAccount(currentUser as StraightBoardAccount | null) && !isGuestUser(currentUser);
+  const straightBoardSignupOn = useFlag(HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG);
+  const emailVerificationBlocking = showEmailVerificationModal && !enrolledStraightBoard;
 
   const navigateFromGlobalGShortcut = useCallback(
     async (action: GlobalGShortcutAction) => {
@@ -674,7 +706,7 @@ export default function GlobalProvider({
   const globalGShortcutIgnoreRef = useRef(false);
   globalGShortcutIgnoreRef.current =
     showTrialModal ||
-    showEmailVerificationModal ||
+    emailVerificationBlocking ||
     !areGlobalShortcutsEnabled(pathname);
 
   useEffect(() => {
@@ -708,12 +740,12 @@ export default function GlobalProvider({
     isApple,
     pathname,
     showTrialModal,
-    showEmailVerificationModal,
+    emailVerificationBlocking,
     toggleShowCommands,
   );
 
   const handleKeyPress = async (e: KeyboardEvent) => {
-    if (showTrialModal || showEmailVerificationModal) return;
+    if (showTrialModal || emailVerificationBlocking) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
     if (isFavoriteBoardShortcut(e, isApple)) {
@@ -1274,7 +1306,7 @@ export default function GlobalProvider({
         />
       )}
 
-      {showEmailVerificationModal && currentUser && (
+      {emailVerificationBlocking && currentUser && (
         <EmailVerificationModal
           currentUser={currentUser}
           onVerified={() => {
@@ -1303,6 +1335,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
+      {(straightBoardSignupOn || enrolledStraightBoard) && <StraightBoardConfirmStrip pathname={pathname} currentUser={currentUser} />}
       {!mbl && <NotificationPromoteBanner />}
       {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}

@@ -561,18 +561,43 @@ test('layout lock: board card hover keeps content and selection usable', async (
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
   const { flags } = await (await response).json() as { flags: Record<string, boolean> }
   const enabled = flags['htpr-8629-kanban-hover-layout'] === true
+  const borderOnly = flags['htpr-8960-border-only-select'] === true
+  const emptyCard = flags['htpr-8971-card-settings'] === true
   const card = page.locator(`#task-${fixture.taskId}`)
   const link = card.locator(`a[href="${fixture.detailPath}"]`)
-  const id = link.locator('.task-ticket-id')
+  const id = emptyCard ? link.locator('p.text-dense').first() : link.locator('.task-ticket-id')
   const checkbox = card.locator('button').and(card.getByRole('button', { name: 'Select item', exact: true, includeHidden: true }))
   await expect(id).toBeVisible({ timeout: boardCardSignalTimeout })
   await page.mouse.move(0, 0)
   const before = await id.boundingBox()
   await link.hover()
-  await expect(checkbox).toBeVisible()
+  if (!borderOnly) await expect(checkbox).toBeVisible()
   const after = await id.boundingBox()
   expect(before).not.toBeNull()
   expect(after).not.toBeNull()
+  if (borderOnly) {
+    await expect(checkbox).toHaveCount(0)
+    expect(after!.x).toBeCloseTo(before!.x, 1)
+    const picked = card.locator('.kanban-task-card[class*="outline-hypertasks-purple"], .kanban-task-card[class*="ring-hypertasks-purple"]')
+    await link.click({ modifiers: ['Shift'] })
+    await expect(picked).toHaveCount(1)
+    expect((await id.boundingBox())!.x).toBeCloseTo(before!.x, 1)
+    await expect(checkbox).toHaveCount(0)
+    await expect(page).not.toHaveURL(url => url.pathname === fixture.detailPath)
+    await link.click()
+    await expect(picked).toHaveCount(0)
+    await expect(page).not.toHaveURL(url => url.pathname === fixture.detailPath)
+    await link.click({ modifiers: ['Shift'] })
+    await expect(picked).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await expect(picked).toHaveCount(0)
+    await card.focus()
+    await page.keyboard.press('x')
+    await expect(picked).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await expect(picked).toHaveCount(0)
+    return
+  }
   if (enabled) {
     expect(after!.x).toBeCloseTo(before!.x, 1)
     const box = await checkbox.boundingBox()

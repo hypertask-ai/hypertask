@@ -4,7 +4,6 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { ValidationError } from '@/lib/mcp-server/utils/errors'
 import { SortingMode, SortingOrder, SubtaskSetting, EmptySections, ViewVisibility } from '@prisma/client'
 import { savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { createView, type CreateViewInput } from '@/lib/mcp/views/services'
@@ -299,10 +298,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.filters !== undefined && body.board_filters !== undefined) {
-      return NextResponse.json(
-        { success: false, error: 'Use either filters or board_filters, not both' },
-        { status: 400 }
-      )
+      return viewInputRefusal('Use either filters or board_filters, not both', 'filters')
     }
 
     if (body.subtask_setting !== undefined && !isSubtaskSetting(body.subtask_setting)) {
@@ -348,7 +344,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, view })
   } catch (error) {
-    if (error instanceof ValidationError) {
+    if (isViewCallerError(error)) {
       console.warn('Error creating view:', error)
     } else {
       console.error('Error creating view:', error)

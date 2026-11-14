@@ -1,0 +1,671 @@
+{
+ "fetchedAt": "2026-11-10T13:46:34Z",
+ "source": "hypertask CLI: task get and labels list on boards 15 and 4060",
+ "priorityScale": {
+  "1": "Urgent",
+  "2": "High",
+  "3": "Medium",
+  "4": "Low"
+ },
+ "estimateScale": {
+  "2": "XS",
+  "3": "S",
+  "4": "M",
+  "5": "L",
+  "6": "XL"
+ },
+ "boards": {
+  "15": {
+   "labels": [
+    {
+     "id": "f5dfa5b2-a498-4b41-a8a6-8f3386a5b4fe",
+     "name": "AI"
+    },
+    {
+     "id": "ee8f14db-6988-4eb5-960e-71b1903fa1c6",
+     "name": "AI CHAT 💬"
+    },
+    {
+     "id": "2a4eb246-8cc1-4f54-a672-cea315a967f8",
+     "name": "AI Cost"
+    },
+    {
+     "id": "6f90e56a-41d4-472e-90aa-62cbb4d07ae8",
+     "name": "ANNOYING 🤬💥"
+    },
+    {
+     "id": "58032b80-4ee0-41d9-ad1c-1cc246d182dd",
+     "name": "Agent Features"
+    },
+    {
+     "id": "50d15c0d-b5fc-497f-bf53-2b58fa543854",
+     "name": "Agent-first 🤖"
+    },
+    {
+     "id": "556d0e42-1318-45b1-954d-a8f6ad5c6e9a",
+     "name": "Ai ✨"
+    },
+    {
+     "id": "047dcd66-2729-46cd-8bee-44b3d6d19a43",
+     "name": "Android Native"
+    },
+    {
+     "id": "637feb95-d91a-4da4-be08-b8236fb93449",
+     "name": "Bug"
+    },
+    {
+     "id": "cbca278f-fbd6-41a4-947d-cb2a375bf5ad",
+     "name": "CI"
+    },
+    {
+     "id": "732bfa28-26e7-4d06-b9db-b4ee839dde96",
+     "name": "CLI"
+    },
+    {
+     "id": "40a1b843-e532-4a89-aceb-ee87f818da43",
+     "name": "Calendar 📅"
+    },
+    {
+     "id": "24a27d8c-9a55-4ab0-af40-99385e46d287",
+     "name": "Cursor Cloud 7 Nov"
+    },
+    {
+     "id": "13725b4e-9f00-4497-aeb0-a5ee18b9831f",
+     "name": "Cursor bugs 7 Nov"
+    },
+    {
+     "id": "bf1ab962-4e1c-4630-b7a3-25c763984923",
+     "name": "Cursor runners 6 Nov"
+    },
+    {
+     "id": "82aa421d-b58c-4952-a747-6d3d03b29993",
+     "name": "DESIGN🎨"
+    },
+    {
+     "id": "b3fde543-de61-4e13-98e3-c55ebf52f79a",
+     "name": "Error Log"
+    },
+    {
+     "id": "0b75c899-98a6-43fd-a2dc-b046eb4a6585",
+     "name": "FEATURE 💎"
+    },
+    {
+     "id": "9162c96c-0f3f-437f-b9c3-9004ec23a447",
+     "name": "HyperAI"
+    },
+    {
+     "id": "a00ffd87-756d-4fbe-9bff-dd5376dfc9ef",
+     "name": "IMPROVEMENT ⚒️"
+    },
+    {
+     "id": "f26ef434-c2ab-477f-877e-1f5501c6b1f2",
+     "name": "INBOX📩"
+    },
+    {
+     "id": "ff65d1a5-0aa5-4fa9-8eab-4d5fa7833f1b",
+     "name": "Infra"
+    },
+    {
+     "id": "32019cd1-e585-4327-9f14-8a63defc5212",
+     "name": "Interactive Tutorial"
+    },
+    {
+     "id": "77f96601-7457-4778-8f3e-f194f6154e8b",
+     "name": "Keyboard"
+    },
+    {
+     "id": "987d06b5-ef55-496c-889a-17d7d8690902",
+     "name": "MARKETING FUNNEL 🎯"
+    },
+    {
+     "id": "7fc584a5-bad0-498d-a256-7397f1a47e8d",
+     "name": "MCP"
+    },
+    {
+     "id": "7930c2d6-ac66-4e02-9d2a-6fcda87dcc0e",
+     "name": "Missing implementation"
+    },
+    {
+     "id": "7dc037cc-e641-4033-b589-3c81444470b8",
+     "name": "NEW USER ONBOARDING ❇️"
+    },
+    {
+     "id": "2e369fea-d000-4a1a-a5c4-bdc991841e0b",
+     "name": "Needs Upgrade"
+    },
+    {
+     "id": "1d08bfcd-728c-4853-b493-0ba2b06b68de",
+     "name": "P1"
+    },
+    {
+     "id": "9310a47a-ca3c-4030-8f8d-876641acb5fb",
+     "name": "P2"
+    },
+    {
+     "id": "44d6d725-16fa-49e8-9dda-6110ea39e36c",
+     "name": "P3"
+    },
+    {
+     "id": "a99962c5-1c52-4b36-8cce-29a8740f58ea",
+     "name": "Performance"
+    },
+    {
+     "id": "a4c9c4ee-3c36-4ce9-a10a-d41800147742",
+     "name": "QA ✅"
+    },
+    {
+     "id": "9e7ecf6d-6c2a-4231-adaa-d6c294511d3f",
+     "name": "QA7098 broken"
+    },
+    {
+     "id": "94c82b0c-3757-4444-b967-5d8c061dbc15",
+     "name": "QA7098 run2 broken"
+    },
+    {
+     "id": "b3ea2050-c4ca-4450-b851-248d3c909ffe",
+     "name": "QA7098 run3 broken"
+    },
+    {
+     "id": "623c0618-2371-4e1f-b674-3a5e02f62fdc",
+     "name": "Quick wins"
+    },
+    {
+     "id": "5a895a42-7d5b-42aa-8054-9b78ff7f63fb",
+     "name": "SPEED OPTIMIZATION ⏩"
+    },
+    {
+     "id": "63ce6044-fc80-461f-bb59-a36f34ad3e9a",
+     "name": "Screen Responsiveness"
+    },
+    {
+     "id": "098dbf4d-7221-40e0-b5bf-06acf193c4c4",
+     "name": "Security"
+    },
+    {
+     "id": "fd198dd9-26f8-4de1-bfed-70ab9b731465",
+     "name": "Speech-to-Text (Voice)"
+    },
+    {
+     "id": "969c8fc4-1ca4-4c14-866c-6067d07e6296",
+     "name": "Stripe"
+    },
+    {
+     "id": "d4cfe43d-c649-4303-9cbc-38794677af57",
+     "name": "Task Detail Page"
+    },
+    {
+     "id": "fbc019fc-981c-4640-b43d-1740495c8ea2",
+     "name": "Themes"
+    },
+    {
+     "id": "482846cf-61f3-4793-acad-ae5c0f82906d",
+     "name": "Used Daily ⬆️"
+    },
+    {
+     "id": "b9cffc45-7438-4105-8766-97bba5ae9111",
+     "name": "Viral Features"
+    },
+    {
+     "id": "dac1e54d-7775-4cc5-ac71-61480ff0f8b8",
+     "name": "Write with AI"
+    },
+    {
+     "id": "0979349f-a2db-4031-b22a-341b4d980adc",
+     "name": "__probe_delete_me"
+    },
+    {
+     "id": "7d8b0cf2-954c-4e96-85f8-e43e700c9d21",
+     "name": "agent-fleet"
+    },
+    {
+     "id": "5b953c68-8092-40a7-965c-05d596e4c15b",
+     "name": "ai-feedback"
+    },
+    {
+     "id": "2fbda544-9e7f-4e26-8280-7e59d68226bf",
+     "name": "announced-rocket"
+    },
+    {
+     "id": "ffd4e4bb-f40c-420f-9c8d-eb48ae8a77ee",
+     "name": "announced-x"
+    },
+    {
+     "id": "9195864e-325b-4dd1-b2ca-ca6b275bd031",
+     "name": "announced-youtube"
+    },
+    {
+     "id": "49f32835-5a8f-4ff5-92fc-e357c4d738e7",
+     "name": "anthropic-standards"
+    },
+    {
+     "id": "53ce91cd-644c-4e89-a168-7ce66a7c9d3a",
+     "name": "api"
+    },
+    {
+     "id": "96bf126f-a764-42f9-abb1-4a1c16fc0891",
+     "name": "auto-error"
+    },
+    {
+     "id": "cb3744e6-d861-497b-95ef-d9092fff1dfa",
+     "name": "brain-extra-hard"
+    },
+    {
+     "id": "8ab3def4-0801-4ba1-ae9e-b6e419463531",
+     "name": "brain-hard"
+    },
+    {
+     "id": "1ca2ceeb-cfdb-42c2-8666-562d8349750a",
+     "name": "brain-light"
+    },
+    {
+     "id": "bc10c71c-e6a8-4918-be8f-5f6580fda1e1",
+     "name": "brain-medium"
+    },
+    {
+     "id": "f53eab4f-8263-4006-9e53-d2b8604e0660",
+     "name": "cli-mcp-ai"
+    },
+    {
+     "id": "f2fe3edf-735a-44de-a0b5-e40845b4839d",
+     "name": "design-pass"
+    },
+    {
+     "id": "acb45582-441b-409e-a890-d79900088ce6",
+     "name": "e2b"
+    },
+    {
+     "id": "440ecd27-8e2a-4a38-89e6-8304d7d2907e",
+     "name": "easy"
+    },
+    {
+     "id": "f8b699f3-deb1-4668-8000-24e5e59ea12b",
+     "name": "emergency"
+    },
+    {
+     "id": "491e2550-a10f-415a-b74e-188e2a8e7a16",
+     "name": "flag:everyone"
+    },
+    {
+     "id": "2c634fcc-eefb-4197-9824-fe4e01e37e7a",
+     "name": "flag:internal"
+    },
+    {
+     "id": "d5c81958-a835-4c11-ae11-8634e20f05e6",
+     "name": "flag:off"
+    },
+    {
+     "id": "c8c91db4-9e23-4d54-9de8-14023ca2eb3b",
+     "name": "flag:owner-only"
+    },
+    {
+     "id": "ef15648b-60f1-4b63-86ed-2ba91ff34e13",
+     "name": "flag:qa-only"
+    },
+    {
+     "id": "0ab66b83-7125-4d21-a1de-b686a1ff1858",
+     "name": "hard"
+    },
+    {
+     "id": "6be72a6a-bedb-4693-95f6-097a724ba584",
+     "name": "iOS App"
+    },
+    {
+     "id": "e9b5cda7-80ed-4881-9a13-700f64576a62",
+     "name": "incident"
+    },
+    {
+     "id": "44ad1612-730c-4aa5-9451-02a62e4f3865",
+     "name": "initiative"
+    },
+    {
+     "id": "f4ec682c-6040-4dd7-a4ca-b623edfcee9a",
+     "name": "intensity:easy"
+    },
+    {
+     "id": "42e4c20a-fbee-4715-9f20-31e5bf8ce943",
+     "name": "intensity:hard"
+    },
+    {
+     "id": "78928c61-485c-4eff-8a18-9160d3467f87",
+     "name": "intensity:medium"
+    },
+    {
+     "id": "8950a355-6a45-4a52-867b-c486a168c2c9",
+     "name": "linear-features"
+    },
+    {
+     "id": "aa02be71-b232-4650-b3b5-cb4ce0eb5379",
+     "name": "llm:claude-opus-5"
+    },
+    {
+     "id": "bb230e99-305b-4174-b2c6-2c3b4534367d",
+     "name": "llm:claude-sonnet-5"
+    },
+    {
+     "id": "57b38310-b633-4933-858d-1fb4e6db0fc2",
+     "name": "llm:cursor-auto"
+    },
+    {
+     "id": "51dad5d9-220a-4d1b-a30a-731937673167",
+     "name": "llm:glm-5.3"
+    },
+    {
+     "id": "e8682183-e151-4235-be87-54fcc29adf36",
+     "name": "llm:glm-5.3-flash"
+    },
+    {
+     "id": "3196bb54-b7dd-467e-914b-67922617a731",
+     "name": "llm:gpt-5.6-luna"
+    },
+    {
+     "id": "9b65a0e8-c224-49ef-a0b1-49da6f79c9d9",
+     "name": "llm:gpt-5.6-sol"
+    },
+    {
+     "id": "2cbc221d-e702-4600-b881-0d6a2b9d8091",
+     "name": "my-tasks"
+    },
+    {
+     "id": "a079d150-afc9-46a6-a25b-48eb8176e716",
+     "name": "my-tasks-view"
+    },
+    {
+     "id": "326a8757-baab-4be2-953d-3692629c815a",
+     "name": "needs-human"
+    },
+    {
+     "id": "4250aab0-33f9-455b-9588-f856dbcdda86",
+     "name": "needs-info"
+    },
+    {
+     "id": "1eb3d7e6-60b5-4af5-a4f3-f18db3369456",
+     "name": "onboarding"
+    },
+    {
+     "id": "288a4603-d809-448a-b5ff-16ca82363991",
+     "name": "planner"
+    },
+    {
+     "id": "9b3f390d-53b4-46bb-a81e-81b89c9d2761",
+     "name": "prod-error"
+    },
+    {
+     "id": "1c3fa0bb-88a8-4b2f-9876-263f76ef8b32",
+     "name": "qa-fixture"
+    },
+    {
+     "id": "896e179f-fd2e-4495-b309-c5a5bd242758",
+     "name": "qa-runner"
+    },
+    {
+     "id": "89c46966-0052-4327-8be9-1e716575dd02",
+     "name": "reports"
+    },
+    {
+     "id": "f4f93032-07cf-44d8-b880-2231ede942fe",
+     "name": "skills-pilot"
+    },
+    {
+     "id": "e6b1b64e-e9d9-4f6c-9a66-98eefe0dd721",
+     "name": "sol"
+    },
+    {
+     "id": "4d88e574-e299-4346-a113-8ec16f73da9d",
+     "name": "stale"
+    },
+    {
+     "id": "e195f9be-53d1-4792-b180-35af9a3f53a5",
+     "name": "tes"
+    },
+    {
+     "id": "dd9ac1cc-ca6a-4f18-9358-2fe5ab494525",
+     "name": "time-tracking"
+    },
+    {
+     "id": "bdc7b121-1b79-49c3-9063-46cf098d9a15",
+     "name": "urgent"
+    },
+    {
+     "id": "1ac90c54-b82d-438b-98ad-446020335015",
+     "name": "user-feedback"
+    },
+    {
+     "id": "1ece9dd6-06bd-457e-ae2a-8acce670e795",
+     "name": "ux-affected"
+    },
+    {
+     "id": "f961e946-14f4-4a98-8df4-3cbb4c633d0c",
+     "name": "verify-fleet"
+    },
+    {
+     "id": "9f29b13f-c079-4d7e-a51f-b070c6f6911c",
+     "name": "wayfinder"
+    },
+    {
+     "id": "265edec5-0cda-41a9-9345-b29101f20e7c",
+     "name": "📲MOBILE"
+    },
+    {
+     "id": "4de59901-3efd-4053-9220-dfd154d73638",
+     "name": "🖥️DESKTOP"
+    }
+   ],
+   "title": "Hypertask Product"
+  },
+  "4060": {
+   "labels": [],
+   "partial": true,
+   "title": "Fleet Infra"
+  }
+ },
+ "cases": {
+  "HTPR-7982": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "FEATURE 💎",
+    "NEW USER ONBOARDING ❇️"
+   ],
+   "priority": 2,
+   "estimate": null
+  },
+  "HTPR-7978": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "AI CHAT 💬",
+    "FEATURE 💎"
+   ],
+   "priority": 2,
+   "estimate": null
+  },
+  "HTPR-7980": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "FEATURE 💎",
+    "NEW USER ONBOARDING ❇️",
+    "brain-hard"
+   ],
+   "priority": 2,
+   "estimate": null
+  },
+  "HTPR-7981": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "IMPROVEMENT ⚒️",
+    "NEW USER ONBOARDING ❇️",
+    "brain-hard"
+   ],
+   "priority": 2,
+   "estimate": null
+  },
+  "HTPR-7975": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "IMPROVEMENT ⚒️",
+    "brain-medium",
+    "flag:off",
+    "🖥️DESKTOP"
+   ],
+   "priority": 2,
+   "estimate": null
+  },
+  "HTPR-7923": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "IMPROVEMENT ⚒️",
+    "NEW USER ONBOARDING ❇️"
+   ],
+   "priority": null,
+   "estimate": null
+  },
+  "HTPR-7792": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "Bug",
+    "INBOX📩"
+   ],
+   "priority": 2,
+   "estimate": 4
+  },
+  "HTPR-7924": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "FEATURE 💎",
+    "NEW USER ONBOARDING ❇️"
+   ],
+   "priority": null,
+   "estimate": null
+  },
+  "HTPR-7770": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "AI CHAT 💬",
+    "Bug",
+    "🖥️DESKTOP"
+   ],
+   "priority": 1,
+   "estimate": 4
+  },
+  "HTPR-7759": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "AI CHAT 💬",
+    "MCP",
+    "SPEED OPTIMIZATION ⏩",
+    "user-feedback"
+   ],
+   "priority": 2,
+   "estimate": 4
+  },
+  "HTPR-7958": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "AI Cost",
+    "Infra"
+   ],
+   "priority": null,
+   "estimate": null
+  },
+  "HTPR-7938": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "Bug",
+    "NEW USER ONBOARDING ❇️"
+   ],
+   "priority": null,
+   "estimate": null
+  },
+  "HTPR-7957": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "IMPROVEMENT ⚒️",
+    "Infra"
+   ],
+   "priority": 3,
+   "estimate": null
+  },
+  "HTPR-7955": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "Infra",
+    "brain-light"
+   ],
+   "priority": null,
+   "estimate": null
+  },
+  "HTPR-7951": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "Infra"
+   ],
+   "priority": 3,
+   "estimate": null
+  },
+  "HTPR-7950": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "Infra",
+    "brain-medium"
+   ],
+   "priority": 3,
+   "estimate": null
+  },
+  "HTPR-7854": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "AI",
+    "IMPROVEMENT ⚒️",
+    "brain-medium"
+   ],
+   "priority": 3,
+   "estimate": null
+  },
+  "HTPR-7907": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "FEATURE 💎",
+    "Keyboard"
+   ],
+   "priority": 3,
+   "estimate": 4
+  },
+  "HTPR-7795": {
+   "projectId": 15,
+   "fieldScored": true,
+   "labels": [
+    "AI Cost",
+    "FEATURE 💎",
+    "brain-hard"
+   ],
+   "priority": 2,
+   "estimate": null
+  },
+  "YPER4-751": {
+   "projectId": 4060,
+   "fieldScored": false,
+   "labels": [
+    "Cluster: Fleet Setup And Sessions",
+    "brain-medium"
+   ],
+   "priority": 1,
+   "estimate": null
+  }
+ }
+}

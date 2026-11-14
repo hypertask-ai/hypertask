@@ -37,6 +37,7 @@ export function parseSafeReturnTo(raw: string | null | undefined): string | null
   const isCliAuth =
     path === CLI_AUTH_PREFIX || path.startsWith(`${CLI_AUTH_PREFIX}/`);
   if (isCliAuth) return path + search;
+  if (path === '/login/agent') return path;
   if (path === SLACK_SETTINGS_PATH) return path;
   if (path === SLACK_LINK_PATH) return path + search;
   return null;

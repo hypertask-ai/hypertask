@@ -33,14 +33,14 @@ export async function updateCommentService(params: UpdateCommentParams) {
 
   const comment = await prisma.comment.findFirst({
     where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId, teamScope) } },
-    select: { id: true, taskId: true, text: true, task: { select: { projectId: true } } }
+    select: { id: true, taskId: true, text: true, task: { select: { projectId: true, userId: true } } }
   })
 
   if (!comment) {
     throw new Error('Comment not found or not owned by user')
   }
 
-  await enforceAgentWriting(userId, agentId, { text }, { text: comment.text })
+  await enforceAgentWriting(userId, agentId, { text }, { text: comment.text }, { commentEdit: true })
   await invalidateHyperAiCommentOrigin(commentId)
   const textChanged = text !== normalizeBlockHtml(comment.text)
   const updatedComment = await prisma.$transaction(async (transaction) => {
@@ -148,12 +148,12 @@ export async function updateCommentService(params: UpdateCommentParams) {
     })
   })
 
-  await scheduleCommentSummaryGeneration({ commentId }).catch((err) =>
+  await scheduleCommentSummaryGeneration({ commentId, agentId: agentId ?? null, ownerUserId: comment.task.userId }).catch((err) =>
     console.warn('[updateCommentService] comment summary schedule failed:', err)
   )
 
   upsertCommentToTurbopuffer(commentId)
-  scheduleTaskSummaryGeneration({ taskId: comment.taskId, agentId: agentId ?? null })
+  scheduleTaskSummaryGeneration({ taskId: comment.taskId, agentId: agentId ?? null, ownerUserId: comment.task.userId })
 
   await processMentionsFromCommentText({
     text,

@@ -6,6 +6,9 @@ import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
+import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
+import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
+import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
 
 import {
   FC,
@@ -18,7 +21,7 @@ import {
   useState,
 } from "react";
 
-import { Search, Settings2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Settings2, X } from "lucide-react";
 import {
   INotification,
   ISavedContent,
@@ -101,7 +104,11 @@ import {
 } from "@/lib/inboxSync/optimistic";
 import { canWarmPreviousBoardFromInbox } from "@/lib/inboxSync/warmPreviousBoard";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
-import { shouldPreserveNativeInboxTab } from "@/lib/inboxKeyboardNavigation";
+import {
+  resolveInboxOpeningPosition,
+  shouldPreserveNativeInboxTab,
+  shouldResumeInboxRow,
+} from "@/lib/inboxKeyboardNavigation";
 import { getInitialInboxSplitIndex } from "@/lib/inboxSplitSettings";
 
 const Inbox = ({
@@ -124,6 +131,7 @@ const Inbox = ({
   const showSelectedCount = useFlag(HTPR_7111_INBOX_SELECTED_COUNT_FLAG);
   const inboxKeepsScroll = useFlag(HTPR_7841_INBOX_KEEPS_SCROLL_FLAG);
   const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
+  const inboxFirstRow = useFlag(HTPR_8868_INBOX_FIRST_ROW_FLAG);
   const snapshot = useFirstScreenSurface(currentUser.id);
   const queryClient = useQueryClient();
   const [inboxDocument] = useState(() => {
@@ -150,6 +158,17 @@ const Inbox = ({
   const searchParams = useSearchParams();
   const preselectedProject = queryParams?.projectId;
   const preselectedSplit = queryParams?.split;
+  const inboxTab = `${preselectedProject ?? ""}|${preselectedSplit ?? ""}`;
+  const [openingTab] = useState(inboxTab);
+  const [inboxOpening] = useState(() =>
+    inboxFirstRow
+      ? resolveInboxOpeningPosition({
+          split: preselectedSplit,
+          projectId: preselectedProject,
+          lastIndex: globalFocus.currIdx,
+        })
+      : { index: globalFocus.currIdx ?? 0, resumes: false },
+  );
   const notificationsQuery = useGetNotifications(currentUser.id);
   useWarmProjectsAllQuery({
     user: currentUser,
@@ -274,7 +293,7 @@ const Inbox = ({
   const [_notifications, setNotifications] = useState<INotification[] | undefined>(() => inboxDocument?.data.payload.structuredData.data[inboxDocument.selection.split ?? 0]);
   const [_selectedInbox, setSelectedInbox] = useState<INotification | null | undefined>(() => inboxDocument?.data.payload.structuredData.data[inboxDocument.selection.split ?? 0]?.[0]);
   const [initialIndexReset, setInitialIndexReset] = useState<number>(
-    globalFocus.currIdx ?? 0,
+    inboxOpening.index,
   );
   const classNamesToReturnFrom = [
     "modal-open",
@@ -951,6 +970,11 @@ const Inbox = ({
                     }
                     _notifications={notification}
                     initialFocus={initialIndexReset}
+                    resumesPosition={shouldResumeInboxRow({
+                      resumes: inboxOpening.resumes,
+                      openingTab,
+                      currentTab: inboxTab,
+                    })}
                     markAsDone={markAsDone}
                     starTaskUpdateInCache={starTaskUpdateInCache}
                     appShellRail={appShellRailOn}
@@ -1046,15 +1070,103 @@ const SplitTitlesContainer: FC<IProps> = ({
   SelectedCount = null,
   trailingAction,
 }) => {
+  const stickySplits = useFlag(HTPR_9029_STICKY_SPLITS_FLAG);
+  const overflowEnabled = useFlag("htpr-9080-split-overflow");
+  const { data: preferences } = useGetUserPreferences();
+  const overflowHidden = overflowEnabled && preferences?.inboxSplitsOverflowHidden === true;
+  const [globalFocus] = useRecoilState(globalNotificationFocusAtom);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const row = tabsRef.current;
+    if (!overflowHidden || !row) return;
+    const updateArrows = () => {
+      setCanScrollLeft(row.scrollLeft > 1);
+      setCanScrollRight(row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
+    };
+    const revealSelected = () => {
+      const selected = row.children[globalFocus.currSplit];
+      if (selected instanceof HTMLElement) {
+        const bounds = row.getBoundingClientRect();
+        const tabBounds = selected.getBoundingClientRect();
+        if (tabBounds.left < bounds.left) row.scrollLeft += tabBounds.left - bounds.left;
+        else if (tabBounds.right > bounds.right) row.scrollLeft += tabBounds.right - bounds.right;
+      }
+      updateArrows();
+    };
+    revealSelected();
+    const observer = new ResizeObserver(revealSelected);
+    observer.observe(row);
+    for (const child of row.children) observer.observe(child);
+    row.addEventListener("scroll", updateArrows, { passive: true });
+    return () => {
+      observer.disconnect();
+      row.removeEventListener("scroll", updateArrows);
+    };
+  }, [overflowHidden, globalFocus.currSplit, children]);
+  const [listScrolled, setListScrolled] = useState(false);
+
+  useEffect(() => {
+    if (!stickySplits) return;
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      const bar = barRef.current;
+      if (!bar || target === bar) return;
+      if (target instanceof Document) {
+        setListScrolled(window.scrollY > 0);
+        return;
+      }
+      if (target instanceof HTMLElement && (target.contains(bar) || target.matches('[data-testid="inbox-list"]'))) {
+        setListScrolled(target.scrollTop > 0);
+      }
+    };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
+  }, [stickySplits]);
+
   return (
     <div
-      className={`inbox-text-left relative hidden items-baseline pr-[16px] pt-4 ${
+      ref={barRef}
+      className={`inbox-text-left ${
+        stickySplits
+          ? `sticky top-0 z-sticky ${contentGap ? "bg-taskDetailPage" : "bg-containerBackground"} ${listScrolled ? "shadow-[0_1px_0_0_var(--border-light-gray-thin)]" : ""}`
+          : "relative"
+      } hidden items-baseline pr-[16px] pt-4 ${
         contentGap ? "mx-[12px] w-[calc(100%-24px)] pb-4" : "w-full"
       } responsive-inbox-padding @md:flex @md:gap-[9px] h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
     >
-      <div className="pills-row group relative flex min-h-8 grow flex-wrap items-center gap-[9px]">
+      {overflowHidden && (canScrollLeft || canScrollRight) && (
+        <button
+          type="button"
+          aria-label="Scroll splits left"
+          disabled={!canScrollLeft}
+          className="shrink-0 rounded-[4px] border border-border-light-gray-thin bg-containerBackground p-1 text-text-light-gray disabled:opacity-30"
+          onClick={() => tabsRef.current?.scrollBy({ left: -Math.max(160, tabsRef.current.clientWidth * 0.75), behavior: "smooth" })}
+        >
+          <ChevronLeft size={14} />
+        </button>
+      )}
+      <div
+        ref={tabsRef}
+        data-testid="inbox-split-titles"
+        className={`pills-row group relative flex min-h-8 grow items-center gap-[9px] ${overflowHidden ? "min-w-0 flex-1 flex-nowrap overflow-x-auto scrollbar-none [&>div]:shrink-0" : "flex-wrap"}`}
+      >
         {children}
       </div>
+      {overflowHidden && (canScrollLeft || canScrollRight) && (
+        <button
+          type="button"
+          aria-label="Scroll splits right"
+          disabled={!canScrollRight}
+          className="shrink-0 rounded-[4px] border border-border-light-gray-thin bg-containerBackground p-1 text-text-light-gray disabled:opacity-30"
+          onClick={() => tabsRef.current?.scrollBy({ left: Math.max(160, tabsRef.current.clientWidth * 0.75), behavior: "smooth" })}
+        >
+          <ChevronRight size={14} />
+        </button>
+      )}
       {trailingAction}
       <ButtonGroup SelectedCount={SelectedCount} />
     </div>

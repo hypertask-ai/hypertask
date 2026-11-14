@@ -12,6 +12,11 @@ import { unknownToolMessage } from './nearest-tool'
 import { SEARCH_TOOLS_NAME, DESCRIBE_TOOL_NAME } from './config/tool-summaries'
 import { getMcpRequestOrigin } from './resource-url'
 
+export function agentChatInstructions(tools: readonly PortableTool[]): string | undefined {
+  if (!tools.some((tool) => tool.name === 'hypertask_chat_inbox')) return undefined
+  return 'Agent Chat: use your own agent token. Call hypertask_chat_inbox at startup and on your next run to read unanswered sidebar chats. Reply with hypertask_chat_reply using sessionId as session_id and the message id as reply_to_message_id. No separate chat registration is needed. POST /api/mcp/chat/heartbeat with {} while you are listening so the sidebar says Online. The same listen and reply commands are hypertask chat listen and hypertask chat reply.'
+}
+
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
   version: '1.0.0',
@@ -226,6 +231,7 @@ async function dispatchMethod(
           tools: { listChanged: false },
         },
         serverInfo: MCP_SERVER_INFO,
+        ...(agentChatInstructions(tools) ? { instructions: agentChatInstructions(tools) } : {}),
       })
     }
     case 'ping':

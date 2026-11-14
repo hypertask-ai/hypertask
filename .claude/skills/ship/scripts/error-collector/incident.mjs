@@ -36,16 +36,37 @@ export function incidentOf({ message = '', stack = '', route = '' }) {
   return { route: path, routeKey, root, ...(root ? { key: createHash('sha256').update(`${routeKey}|${root}`).digest('hex').slice(0, 16) } : {}), wrapper };
 }
 
+function linkFields(description) {
+  const match = /href="(https:\/\/app\.hypertask\.ai\/search\?[^"]*)"/.exec(String(description ?? ""));
+  if (!match) return;
+  let url;
+  try { url = new URL(match[1].replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"')); } catch { return; }
+  return {
+    routes: (url.searchParams.get("routes") ?? "").split(",").map(value => value.trim()).filter(Boolean),
+    count: url.searchParams.get("count") ?? "",
+    first: url.searchParams.get("first") ?? "",
+    last: url.searchParams.get("last") ?? "",
+    root: url.searchParams.get("root") ?? "",
+    route: url.searchParams.get("route") ?? "",
+    routeKey: url.searchParams.get("routeKey") ?? "",
+  };
+}
+
 export function taskIncident(task) {
+  const link = linkFields(task.description);
   const text = plain(task.description);
-  const routes = /Routes:\s*([^\n]*?)(?=\s+(?:Count in window|First seen):)/.exec(text)?.[1]?.split(',').map(value => value.trim()) ?? [];
-  const route = routes.find(value => value.startsWith('/api/')) ?? routes[0] ?? '';
+  const routes = link?.routes?.length ? link.routes : (/Routes:\s*([^\n]*?)(?=\s+(?:Count in window|First seen):)/.exec(text)?.[1]?.split(",").map(value => value.trim()).filter(Boolean) ?? []);
+  const route = link?.route || routes.find(value => value.startsWith("/api/")) || routes[0] || "";
   const feedback = /Tool:\s*hypertask_projects\b/.test(text) && /HTTP status:\s*500\b/.test(text);
-  const message = feedback ? 'HTTP 500 hypertask_projects' : /Sample message:\s*Failed to list projects\s*\|\s*Internal server error/.test(text) ? 'Failed to list projects | Internal server error' : text;
+  const message = feedback ? "HTTP 500 hypertask_projects" : /Sample message:\s*Failed to list projects\s*\|\s*Internal server error/.test(text) ? "Failed to list projects | Internal server error" : text;
   const stored = /Error root:\s*(\/[^\s|]+)\s*\|\s*(prisma-validation:[\w]+:unknown-argument:[\w.]+)/.exec(text);
-  const incident = stored ? { route: stored[1], routeKey: /Error route:\s*([a-f0-9]{64})/.exec(text)?.[1] ?? createHash('sha256').update(stored[1]).digest('hex'), root: stored[2], wrapper: false } : incidentOf({ message, route });
+  const incident = link?.root
+    ? { route: link.route || route, routeKey: link.routeKey || createHash("sha256").update(link.route || route).digest("hex"), root: link.root, wrapper: false }
+    : stored
+      ? { route: stored[1], routeKey: /Error route:\s*([a-f0-9]{64})/.exec(text)?.[1] ?? createHash("sha256").update(stored[1]).digest("hex"), root: stored[2], wrapper: false }
+      : incidentOf({ message, route });
   if (!incident) return;
-  const ts = /(?:First seen|Last seen):\s*(\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text)?.[1];
+  const ts = link?.first || /(?:First seen|Last seen):\s*(\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text)?.[1] || link?.last;
   return { ...incident, ts, feedback };
 }
 

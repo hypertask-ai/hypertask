@@ -333,7 +333,7 @@ test("live updates stay active without a feature flag", () => {
   const reactRoot = renderMyTasks(dom);
   try {
     assert.equal(realtimeSubscriptions.at(-1)[2], true);
-    assert.equal(reconcileRequests, before + 1);
+    assert.equal(reconcileRequests, before + 2, "scope refresh and the always-on snooze refresh each request once");
     assert.ok(dom.window.document.body.textContent.includes("Live list updates on"));
     assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
   } finally {

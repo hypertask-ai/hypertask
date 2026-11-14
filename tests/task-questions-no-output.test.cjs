@@ -23,6 +23,7 @@ function harness({ content = [], finishReason = "length", failure, viewer = { id
     },
   };
   const stubs = {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/app/api/ai/_lib/allowanceRefusal": { warnIfAllowanceRefused: () => null },
     "@/lib/flags/definitions/htpr-7716-allowance-fallbacks": { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG: "htpr-7716-allowance-fallbacks" },
     "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },

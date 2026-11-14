@@ -99,6 +99,7 @@ function fixture(options = {}) {
   };
   const mocks = {
     '@/lib/prisma': { default: db },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key === 'htpr-9021-no-empty-chats' ? !!options.noEmptyChats : false },
     '@/lib/auth/currentUser': { loadCurrentUser: async () => options.unauthorized ? null : { userId: 985, user: { id: 985 } } },
     '@/utils/edgeHelpers': { isValidUser: () => ({ isValid: !options.unauthorized, user: options.unauthorized ? null : { id: 985 } }) },
     '@/lib/redis': { getRedis: async () => {
@@ -148,6 +149,14 @@ test('fresh answered chat deletion removes messages and attachments', async () =
   assert.deepEqual(f.calls, ['attachments', 'storage', 'transaction', 'deleteAttachments', 'delete', 'count', 'create']);
   assert.deepEqual(f.storageSnapshots, [expected], 'storage cleanup precedes any database deletion');
   assert.equal(f.rows.length, 1, 'last-chat deletion still seeds an empty replacement');
+});
+
+test('with the no-empty-chats flag on, deleting the last chat seeds no replacement', async () => {
+  const f = fixture({ noEmptyChats: true, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+  const response = await f.remove();
+  assert.equal(response.status, 200);
+  assert.deepEqual(f.calls, ['attachments', 'storage', 'transaction', 'deleteAttachments', 'delete']);
+  assert.equal(f.rows.length, 0);
 });
 
 test("another user's session is refused before attachment side effects", async () => {

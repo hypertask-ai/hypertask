@@ -233,10 +233,10 @@ exec /bin/sleep 0.01
         user_turn = '{"type":"user_turn","elapsed_ms":1}'
         for final_line, cooldown, recovery, trailing in [
             ('RUNNER DONE YPER4-1 Done', 30, False, ''),
-            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done', 30, False, ''),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-11514/1 Done', 30, False, ''),
             ('RUNNER DONE YPER4-1 Agent Blocked', 30, False, user_turn),
             ('RUNNER DONE YPER4-776 Done', 30, False, user_turn),
-            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30, False, user_turn),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-11514/776 Done', 30, False, user_turn),
             ('• RUNNER IDLE no free tickets', 900, False, user_turn),
             ('RUNNER DONE YPER4-776 Done', 30, True, user_turn),
         ]:
@@ -277,7 +277,7 @@ exec /bin/sleep 0.01
                 self.assertIn('recovery drain 8', events)
                 if final_line in [
                     'RUNNER DONE YPER4-1 Done',
-                    'RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done',
+                    'RUNNER DONE https://app.hypertask.ai/detail/project-11514/1 Done',
                 ]:
                     self.assertIn('recovery ack 8 YPER4-1', events)
                     self.assertLess(events.index('final-phase'), events.index('recovery ack 8 YPER4-1'))
@@ -512,6 +512,68 @@ exec /bin/sleep 0.001
         self.assertTrue(os.access(picker, os.X_OK))
         unit = self.home / '.config/systemd/user/ht-hax-runner-keeper.service'
         self.assertNotIn(str(scripts), unit.read_text())
+
+
+    def test_runner_shell_finds_local_commands_the_session_path_omits(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        local = self.home / '.local/bin'
+        npm = self.home / '.npm-global/bin'
+        npm.mkdir(parents=True)
+
+        def tool(directory, name, body):
+            path = directory / name
+            path.write_text('#!/bin/sh\n' + body + '\n')
+            path.chmod(0o755)
+
+        tool(local, 'ceo-ht', 'echo ceo-ok')
+        tool(local, 'verify', '[ "$1" = chat-view ] && echo chat-ok || exit 1')
+        tool(local, 'hypertask', '''
+case "$1 $2" in
+  "attachments download") echo file-ok ;;
+  "task waiting-on") [ "$3" = --agent ] && [ -n "$4" ] && echo "waiting $4" || exit 2 ;;
+  *) exit 1 ;;
+esac''')
+        tool(npm, 'gh', '[ "$1 $2" = "workflow run" ] && echo dispatch-ok || exit 1')
+        self.command('gh', 'echo "Resource not accessible by integration" >&2; exit 1')
+        self.command('hypertask', 'echo person-only; exit 2')
+        self.command('clear', 'exit 0')
+        self.command('hax', '''
+{
+  command -v ceo-ht
+  ceo-ht
+  verify chat-view
+  hypertask attachments download
+  hypertask task waiting-on --agent reviewer
+  gh workflow run proof.yml
+} > "$HOME/tools.out" 2>"$HOME/tools.err"
+exit 42
+''')
+        self.command('sleep', '''
+case "$1" in
+  30) echo retry >> "$HOME/events"; kill -TERM "$PPID" ;;
+  *) exec /bin/sleep 30 ;;
+esac''')
+        process = subprocess.Popen(['bash', str(SCRIPT), '6', '--loop'], env=self.env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+        try:
+            process.communicate(timeout=3)
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+        self.assertEqual((self.home / 'tools.out').read_text().splitlines(), [
+            str(local / 'ceo-ht'),
+            'ceo-ok',
+            'chat-ok',
+            'file-ok',
+            'waiting reviewer',
+            'dispatch-ok',
+        ])
+        self.assertNotIn('Resource not accessible by integration', (self.home / 'tools.err').read_text())
+        self.assertIn('retry', self.events.read_text().splitlines())
 
 
 if __name__ == '__main__':

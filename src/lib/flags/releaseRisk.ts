@@ -6,6 +6,7 @@ export type FeatureFlagReleaseRisk = {
   risk: "none" | "small" | "new";
   reason: string;
   highRisk?: "money" | "access" | "data-deletion" | "customer-email";
+  harmEvidence?: { harm: "charge" | "private-data-exposure" | "auth-bypass" | "permanent-deletion" | "customer-email"; scenario: string };
   ownerRequest?: { quote: string; ticketUrl: string };
 };
 

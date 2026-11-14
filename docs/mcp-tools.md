@@ -55,7 +55,7 @@ Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST
 | `hypertask_user_context` | `hello`, `features`, `get`, `profile`, `connections` | `hypertask_hello`, `hypertask_list_features`, `hypertask_get_user_context`, `hypertask_update_profile`, `hypertask_list_connections` |
 | `hypertask_pages` | `create`, `get`, `update`, `list`, `search`, `versions`, `restore`, `archive` | `hypertask_create_page`, `hypertask_get_page`, `hypertask_update_page`, `hypertask_list_pages`, `hypertask_search_pages`, `hypertask_page_history` |
 | `hypertask_reports` | `list`, `get`, `create`, `update`, `delete` | `hypertask_report` |
-| `hypertask_projects` | `list`, `manifest`, `playbook`, `create`, `rename`, `members`, `archive`, `invite_member`, `get_playbook`, `set_playbook`, `get_instructions`, `set_instructions` | `hypertask_list_projects`, `hypertask_board_manifest`, `hypertask_get_board_playbook`, `hypertask_create_board`, `hypertask_rename_board`, `hypertask_list_project_members`, `hypertask_project_admin`, `hypertask_board_config` |
+| `hypertask_projects` | `list`, `manifest`, `playbook`, `create`, `rename`, `members`, `archive`, `invite_member`, `get_playbook`, `set_playbook`, `get_instructions`, `set_instructions`, `github_repos`, `set_github_repos` | `hypertask_list_projects`, `hypertask_board_manifest`, `hypertask_get_board_playbook`, `hypertask_create_board`, `hypertask_rename_board`, `hypertask_list_project_members`, `hypertask_project_admin`, `hypertask_board_config`, `hypertask_list_board_github_repos`, `hypertask_set_board_github_repos` |
 | `hypertask_inbox` | `list`, `archive`, `unarchive`, `move_task` | `hypertask_inbox_list`, `hypertask_inbox_archive`, `hypertask_inbox_unarchive`, `hypertask_move_task_to_inbox` |
 | `hypertask_labels` | `list`, `create` | `hypertask_list_labels`, `hypertask_create_label` |
 | `hypertask_search` | `tasks`, `semantic`, `related`, `help` | `hypertask_search_tasks`, `hypertask_rag_retrieval`, `hypertask_find_related_tasks`, `hypertask_search_help_docs` |
@@ -73,6 +73,10 @@ A person's MCP connection (OAuth or account token, not an agent token or managem
 2. `as_agent: <agent UUID>` inside `input` on `hypertask_tasks` create/update/move/assign, `hypertask_comments` list/add/update/delete and `hypertask_decisions` create/list/get/cancel runs the action with the agent's identity. The server checks that the caller owns the agent, that it is not revoked or archived, that it is an Accepted member of the ticket's board (and of `target_project_id` on move), and that a read-role agent does not write.
 3. `hypertask_inbox list {as_agent}` returns the agent's notifications in `agent_notifications`, each with the comment id to pass as `reply_to_comment_id` (or the notification id for `reply_to_invocation_id` when the mention was in a description). `archive` and `unarchive` take `as_agent` too.
 4. `hypertask_webhooks configure {agent_id, url, events: ["comment.mention", "comment.created"]}` makes Hypertask post a signed delivery with the ticket number, comment id and author whenever someone mentions the agent, so a host that supports external wakes can start a session. Polling `inbox list {as_agent}` stays the fallback.
+
+## Sidebar agent chat
+
+An agent token reads unanswered sidebar chats with `hypertask_chat_inbox` and answers with `hypertask_chat_reply`. `hypertask chat listen` and `hypertask chat reply` call the same routes. `GET /api/mcp/chat/pending?unanswered=true` keeps returning a human message, with the same id, until an agent reply to it exists, for every agent token, so a run that dies after reading loses nothing. `POST /api/mcp/chat/heartbeat` with `{}` keeps the sidebar on Online. The switch `htpr-7742-agent-chat-all` controls the status sentence and whether the chat tools are advertised; with it off, the old status sentence stays and unanswered messages are still returned.
 
 ## Agent identity listing
 
@@ -104,6 +108,8 @@ The CLI-facing `POST /api/mcp/tasks/waiting-on` endpoint and MCP `hypertask_set_
 { "taskId": 42, "userId": 7, "blockerCommentId": 101 }
 ```
 
+Send `agentId` (an agent UUID that is a member of the board) instead of `userId` to wait on an agent. The ticket switch `htpr-8917-agent-waiting-person` defaults to Everyone. Off refuses that write, hides the agent in the waiting field, and leaves person writes unchanged. A person set, or `userId: null`, clears a stored agent. The agent then sees the ticket in `GET /api/mcp/inbox/list?waiting_on=me` and in the inbox tab Blocked by you.
+
 Both fields are updated atomically. The person must be a board member, and the comment must belong to that ticket and not be an activity entry. Omit either field to preserve it; send both as `null` to clear both. A comment-only update or clear leaves the blocking person unchanged. Task reads and marker-write receipts expose `blockerCommentId`. Deleting the marked comment clears the marker automatically.
 
 This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Owner + QA because it can move a ticket to Trash. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.
@@ -128,6 +134,6 @@ Matching is request-local: ticket get examines its title, description and latest
 
 ### List blockers
 
-`GET /api/mcp/inbox/list?waiting_on=me` lists normal tickets on accessible boards waiting on the authenticated person. Use `waiting_on=<positive user ID>` to select another person. Repeat `projectId=<board ID>` or `project=<board ID>` to combine board filters. `state=waiting|answered|no-question` filters the result. Omit `state` for all states.
+`GET /api/mcp/inbox/list?waiting_on=me` lists normal tickets on accessible boards waiting on the authenticated person. An agent caller also sees tickets waiting on that agent. Use `waiting_on=<positive user ID>` to select another person, or `waiting_on=<agent UUID>` while `htpr-8917-agent-waiting-person` is on. Repeat `projectId=<board ID>` or `project=<board ID>` to combine board filters. `state=waiting|answered|no-question` filters the result. Omit `state` for all states.
 
 The response is `{ "success": true, "blockers": [...], "total": 1 }`. Each row has `id`, `ticketNumber`, `url`, `title`, `projectId`, `boardTitle`, `section`, `priority`, `waitingSince`, `blockerCommentId`, `question`, `recommendation`, and `state`. `total` is the number of returned rows after filtering. Missing values are null. `answered` requires a later task comment or non-deleted reaction to the marked Question, by the target person rather than an agent; `no-question` means the marked comment is missing or not a Question. Invalid filters return 400; management tokens return 403; the disabled feature returns 404. Results never include boards outside the caller's access.

@@ -1,4 +1,5 @@
-import { SwipeUnread, FeedbackModal, TrialModal, MoveTaskGlobal, TaskRelationPicker, SignOutModal, ConfirmTaskDelete, ConfirmArchiveBoard, ConfirmDeleteBoard, AllFilterHTC, DeleteMessage, DueDateModal, StartDateModal, OptionPickerModal, AssignModal, BlockedByPersonModal, AutoAssignColumn, CreateTeam, CreateBoard, BoardCreationAssistant, ManageFavorites, AddColumn, MoveToColumn, ManageColumns, EditBoard, InviteMember, BoardPriorityMode, ManageLabels, SetPriorityModal, TaskEstimateModal, SubtaskSettings, ManageViews, SmartSplitModal, ViewsForBoard, SubtaskLinkingModal, ShareTaskModal, McpTokenModal, SwitchAccountModal, CliInstallModal, RestApiModal, TableColumnsPicker, ManageCustomFieldsModal, RenameTaskModal, AgentModal, CreateCustomFieldModal, TaskDescriptionHistoryModal } from "./commandModals";
+import { SwipeUnread, FeedbackModal, TrialModal, TaskRelationPicker, SignOutModal, ConfirmTaskDelete, ConfirmArchiveBoard, ConfirmDeleteBoard, AllFilterHTC, DeleteMessage, DueDateModal, StartDateModal, OptionPickerModal, AssignModal, BlockedByPersonModal, AutoAssignColumn, CreateTeam, CreateBoard, BoardCreationAssistant, ManageFavorites, AddColumn, MoveToColumn, ManageColumns, EditBoard, InviteMember, BoardPriorityMode, ManageLabels, SetPriorityModal, TaskEstimateModal, SubtaskSettings, ManageViews, SmartSplitModal, ViewsForBoard, SubtaskLinkingModal, ShareTaskModal, McpTokenModal, SwitchAccountModal, CliInstallModal, RestApiModal, TableColumnsPicker, ManageCustomFieldsModal, RenameTaskModal, AgentModal, CreateCustomFieldModal, TaskDescriptionHistoryModal } from "./commandModals";
+import MoveTaskGlobal from "./Modals/MoveTaskToBoard";
 import { type IShowHypertaskHTC } from "@/store";
 import { CommandMode } from "@/models/enums";
 import { IProject } from "@/models/model";
@@ -94,8 +95,10 @@ function renderPaletteModalGroup1(context: Context) {
           {commandMode === CommandMode.TrialModal && _currentProject && (
             <TrialModal closeCallback={boardCloseHandler} />
           )}
-          {commandMode === CommandMode.MoveTaskToBoard && (
+          {commandMode === CommandMode.MoveTaskToBoard && (!hasBulkSelection || kanbanBulkSelection?.bulkMoveBoardEnabled) && (
             <MoveTaskGlobal
+              bulkSourceProjectId={hasBulkSelection ? bulkActionProjectId ?? undefined : undefined}
+              onBulkMove={hasBulkSelection && kanbanBulkSelection?.bulkMoveBoardEnabled ? kanbanBulkSelection.moveSelectedToBoard : undefined}
               closeHTC={() => {
                 boardCloseHandler();
                 refreshRowTaskList();

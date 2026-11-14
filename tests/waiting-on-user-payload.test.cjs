@@ -3,8 +3,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
+const createJiti = require("jiti");
 
 const root = path.resolve(__dirname, "..");
+const jiti = createJiti(__filename, {
+  alias: { "@": path.join(root, "src") },
+});
 
 const loadAttachWaitingOnUsers = (prisma) => {
   const source = fs.readFileSync(
@@ -25,7 +29,7 @@ const loadAttachWaitingOnUsers = (prisma) => {
     (request) =>
       request === "@/lib/prisma"
         ? { __esModule: true, default: prisma }
-        : require(request),
+        : jiti(request),
   );
   return mod.exports.attachWaitingOnUsers;
 };

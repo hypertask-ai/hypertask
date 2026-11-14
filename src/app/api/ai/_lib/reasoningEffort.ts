@@ -26,20 +26,42 @@ export type ReasoningProvider =
   | "baseten"
   | "custom";
 
-export const FEATURE_REASONING_EFFORT = {
-  "chat-title": "none",
-  labels: "none",
-  summaries: "none",
-  tldr: "none",
-  heartbeat: "none",
-  "suggested-questions": "none",
-  "slash-rewrite": "none",
-  chat: "low",
-  "hyper-mentioned": "low",
-  "task-writer": "low",
-} as const satisfies Record<string, ReasoningEffort>;
+export type AutoTier = 1 | 2 | 3;
 
-const USAGE_FEATURE_TO_REASONING: Record<string, keyof typeof FEATURE_REASONING_EFFORT> = {
+export const FEATURE_PROFILE = {
+  "chat-title": { effort: "none", tier: 1 },
+  labels: { effort: "none", tier: 1 },
+  summaries: { effort: "none", tier: 1 },
+  tldr: { effort: "none", tier: 1 },
+  heartbeat: { effort: "none", tier: 1 },
+  "suggested-questions": { effort: "none", tier: 1 },
+  "slash-rewrite": { effort: "none", tier: 1 },
+  "board-generation": { effort: "none", tier: 3 },
+  chat: { effort: "low", tier: 1 },
+  "hyper-mentioned": { effort: "low", tier: 2 },
+  "task-writer": { effort: "low", tier: 1 },
+} as const satisfies Record<string, { effort: ReasoningEffort; tier: AutoTier }>;
+
+export const FEATURE_REASONING_EFFORT = Object.fromEntries(
+  Object.entries(FEATURE_PROFILE).map(([feature, profile]) => [feature, profile.effort]),
+) as { [K in keyof typeof FEATURE_PROFILE]: (typeof FEATURE_PROFILE)[K]["effort"] };
+
+const AI_FEATURE_PROFILE_KEY = {
+  aiChat: "chat",
+  askAi: "chat",
+  taskWriter: "task-writer",
+  hyperAi: "hyper-mentioned",
+  writeWithAi: "slash-rewrite",
+  improveWriting: "slash-rewrite",
+  boardGeneration: "board-generation",
+} as const;
+
+export function tierForFeature(feature: string | null | undefined): AutoTier {
+  const key = AI_FEATURE_PROFILE_KEY[feature as keyof typeof AI_FEATURE_PROFILE_KEY];
+  return key ? FEATURE_PROFILE[key].tier : 2;
+}
+
+const USAGE_FEATURE_TO_REASONING: Record<string, keyof typeof FEATURE_PROFILE> = {
   "chat-title": "chat-title",
   labels: "labels",
   "smart-label": "labels",

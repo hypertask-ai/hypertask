@@ -2,14 +2,25 @@ import { NextRequest } from "next/server";
 import { noStore } from "@/lib/flags/http";
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { authorize } from "@/lib/flags/agentAuthorization";
-import { applyManagerLeaseAction, isManagerClassAgentName, ManagerLeaseError, type ManagerLeaseAction } from "@/lib/flags/managerLease";
+import {
+  applyManagerLeaseAction,
+  hashManagerGrant,
+  isManagerClassAgentName,
+  ManagerLeaseError,
+  readManagerLeaseOperation,
+  type ManagerLeaseAction,
+} from "@/lib/flags/managerLease";
 import { wrapMcpRoute } from "@/lib/mcp/routeWrapper";
 import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ACTIONS: readonly string[] = ["take", "renew", "release", "handoff"];
+const ACTIONS: readonly string[] = ["take", "renew", "release", "handoff", "status"];
+
+function confirmed(action: string, expiresAt: Date | null) {
+  return { ok: true, action, expiresAt: expiresAt ? expiresAt.toISOString() : null };
+}
 
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
@@ -25,21 +36,44 @@ export async function POST(request: NextRequest) {
       if (text.length > 1024) return noStore({ error: "Request is too large" }, 413);
       const body = JSON.parse(text) as Record<string, unknown> | null;
       if (!body || Array.isArray(body) || typeof body.action !== "string" || !ACTIONS.includes(body.action)) {
-        return noStore({ error: "action must be take, renew, release or handoff" }, 400);
+        return noStore({ error: "action must be take, renew, release, handoff or status" }, 400);
       }
       const agent = await prisma.agent.findUniqueOrThrow({ where: { id: ctx.agentId as string }, select: { displayName: true } });
       if (!isManagerClassAgentName(agent.displayName)) {
         return noStore({ error: "Only manager agents register manager leases" }, 403);
       }
+      let grantHash = typeof body.grantHash === "string" ? body.grantHash : undefined;
+      if (typeof body.grant === "string") {
+        const hashed = hashManagerGrant(body.grant);
+        if (grantHash && grantHash !== hashed) return noStore({ error: "grantHash does not match grant" }, 400);
+        grantHash = hashed;
+      } else if (Object.prototype.hasOwnProperty.call(body, "grant")) {
+        return noStore({ error: "grant must be the take receipt" }, 400);
+      }
+      let operationId: string | undefined;
+      if (Object.prototype.hasOwnProperty.call(body, "operationId")) {
+        if (typeof body.operationId !== "string" || !/^[A-Za-z0-9_-]{16,64}$/.test(body.operationId)) {
+          return noStore({ error: "operationId must be 16 to 64 url-safe characters" }, 400);
+        }
+        operationId = body.operationId;
+      }
+      if (body.action === "status") {
+        const found = await prisma.$transaction((tx) => readManagerLeaseOperation(tx, {
+          agentId: ctx.agentId as string,
+          operationId: operationId ?? "",
+        }));
+        if (!found) return noStore({ ok: false, committed: false }, 404);
+        return noStore({ ok: true, committed: true, action: found.action, expiresAt: found.expiresAt ? found.expiresAt.toISOString() : null });
+      }
       const result = await prisma.$transaction((tx) => applyManagerLeaseAction(tx, {
         agentId: ctx.agentId as string,
         action: body.action as ManagerLeaseAction,
+        operationId,
         session: typeof body.session === "string" ? body.session : undefined,
-        grantHash: typeof body.grantHash === "string" ? body.grantHash : undefined,
-        grant: typeof body.grant === "string" ? body.grant : undefined,
+        grantHash,
         ttlMinutes: typeof body.ttlMinutes === "number" ? body.ttlMinutes : undefined,
       }));
-      return noStore({ ok: true, action: body.action, expiresAt: result.expiresAt?.toISOString() ?? null });
+      return noStore(confirmed(body.action, result.expiresAt));
     } catch (error) {
       if (error instanceof ManagerLeaseError) return noStore({ error: error.message }, error.status);
       if (error instanceof SyntaxError) return noStore({ error: "Invalid JSON" }, 400);

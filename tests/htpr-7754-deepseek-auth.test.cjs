@@ -66,6 +66,7 @@ function harness({ enabled = true, flagError = false, failure = authError(), ret
     "@/lib/flags/keys": {},
     "@/lib/ai/chatStream/models": {},
     "@/lib/ai/chatStream/content": { withHigherEffort: (options) => options },
+    "@/lib/ai/chatStream/thinkingChoice": { userThinkingChoice: async () => null },
     "@/lib/ai/tools/metadata": {},
     ai: { stepCountIs: () => ({}), streamText: ({ onError }) => ({ textStream: (async function* () {
       if (failure) await onError({ error: failure });

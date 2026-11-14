@@ -105,6 +105,8 @@ interface GlobalStates extends TaskContextProps {
   requestDescriptionFocus: (taskId: number) => void;
   stacked: StackedType;
   setStacked: React.Dispatch<React.SetStateAction<StackedType>>;
+  agentLaneFold: { taskId: number | undefined; collapsed: boolean; version: number };
+  setAgentLaneFold: React.Dispatch<React.SetStateAction<{ taskId: number | undefined; collapsed: boolean; version: number }>>;
   returnCurrentFocusedType(): TReturnFocusedEl;
   CTRL_J_ENTER_Handler: (shouldTriggerAi?: boolean) => void;
   comments: IComment[];

@@ -6,6 +6,7 @@ import { generateCorrelationId } from '../../utils/correlation';
 import {
   AddProjectMembersInputSchema,
   BoardConfigInputSchema,
+  BoardGithubReposInputSchema,
   BoardManifestInputSchema,
   BoardPlaybookInputSchema,
   CreateLabelInputSchema,
@@ -15,6 +16,7 @@ import {
   ListProjectsInputSchema,
   ListSectionsInputSchema,
   ProjectAdminInputSchema,
+  SetBoardGithubReposInputSchema,
 } from '../../validations/project.validation';
 import { buildPaginationMetadata } from '../../utils/pagination';
 import { appendListQueryParams } from '@/lib/mcp/listQuery';
@@ -78,6 +80,17 @@ export interface BoardPlaybookResponse {
   success: boolean;
   projectId: number;
   playbook: BoardPlaybook | null;
+}
+
+export interface BoardGithubReposResponse {
+  success: boolean;
+  projectId: number;
+  version: string;
+  canConnect: boolean;
+  installations: Array<Record<string, unknown>>;
+  connected: Array<Record<string, unknown>>;
+  available: Array<Record<string, unknown>>;
+  githubUnavailable: boolean;
 }
 
 export interface SectionListItem {
@@ -256,6 +269,50 @@ export class ProjectService {
       return response;
     } catch (error) {
       logger.failure('Failed to get board playbook', error, {
+        correlationId,
+      });
+      throw error;
+    }
+  }
+
+  async listBoardGithubRepos(params: unknown): Promise<BoardGithubReposResponse> {
+    const correlationId = generateCorrelationId();
+
+    try {
+      const validatedInput = BoardGithubReposInputSchema.parse(params);
+
+      return await this.apiClient.makeRequest<BoardGithubReposResponse>(
+        `/mcp/projects/${validatedInput.project_id}/github`,
+        { method: 'GET' },
+        correlationId
+      );
+    } catch (error) {
+      logger.failure('Failed to list board GitHub repositories', error, {
+        correlationId,
+      });
+      throw error;
+    }
+  }
+
+  async setBoardGithubRepos(params: unknown): Promise<BoardGithubReposResponse> {
+    const correlationId = generateCorrelationId();
+
+    try {
+      const validatedInput = SetBoardGithubReposInputSchema.parse(params);
+
+      return await this.apiClient.makeRequest<BoardGithubReposResponse>(
+        `/mcp/projects/${validatedInput.project_id}/github`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            repositoryIds: validatedInput.repository_ids,
+            version: validatedInput.version,
+          }),
+        },
+        correlationId
+      );
+    } catch (error) {
+      logger.failure('Failed to set board GitHub repositories', error, {
         correlationId,
       });
       throw error;

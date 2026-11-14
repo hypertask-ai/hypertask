@@ -19,6 +19,17 @@ export interface ListAgentsResponse {
 export class AgentService {
   constructor(private readonly apiClient: IApiClient) {}
 
+  async chatInbox(): Promise<unknown> {
+    return this.apiClient.makeRequest('/mcp/chat/pending?unanswered=true', { method: 'GET' }, generateCorrelationId())
+  }
+
+  async chatReply(input: { session_id: string; reply_to_message_id: string; text: string }): Promise<unknown> {
+    return this.apiClient.makeRequest(`/mcp/chat/sessions/${encodeURIComponent(input.session_id)}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text: input.text, replyToMessageId: input.reply_to_message_id }),
+    }, generateCorrelationId())
+  }
+
   async listAgents(params: unknown): Promise<ListAgentsResponse> {
     const validatedInput = ListAgentsInputSchema.parse(params)
     const queryParams = new URLSearchParams()

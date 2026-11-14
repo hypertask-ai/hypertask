@@ -1,0 +1,4 @@
+{
+  "tests/htpr-7132-cold-start.test.cjs": 1,
+  "tests/htpr-7322-agent-feature-discovery.test.cjs": 1
+}

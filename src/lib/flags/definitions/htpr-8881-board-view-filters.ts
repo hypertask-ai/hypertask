@@ -5,7 +5,7 @@ export const HTPR_8881_BOARD_VIEW_FILTERS_FLAG = "htpr-8881-board-view-filters";
 export default {
   key: HTPR_8881_BOARD_VIEW_FILTERS_FLAG,
   kind: "bugfix",
-  defaultMode: "OWNER_AND_QA",
+  defaultMode: "EVERYONE",
   shippedOn: "2026-11-07",
   description: "Keeps board filters on the open view and gives unnamed saved views a readable title.",
   releaseRisk: {

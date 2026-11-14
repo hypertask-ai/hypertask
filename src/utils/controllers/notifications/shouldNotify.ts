@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { NotificationType } from "@prisma/client";
+import { accountNotificationsBlocked } from "@/lib/auth/unverifiedEmailAccount";
 
 type NotificationChannel = "email" | "push";
 type NotificationCategory =
@@ -72,6 +73,8 @@ export async function shouldNotify(
   type: NotificationType,
   channel: NotificationChannel
 ): Promise<boolean> {
+  if (await accountNotificationsBlocked(userId)) return false;
+
   const userSetting = await prisma.userSetting.findUnique({
     where: { userId },
     select: {

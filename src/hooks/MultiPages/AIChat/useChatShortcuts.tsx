@@ -1,5 +1,7 @@
 import toast from "react-hot-toast";
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useRouter } from "next/navigation";
+import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { useRecoilState } from "@/lib/state";
 import { aiChatPinnedSessionIdsAtom } from "@/store";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -8,6 +10,7 @@ import { CHAT_SHORTCUTS, adjacentChatSession, chatShortcutHint, dispatchChatShor
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
+import { focusChatComposerAcrossSurfaces } from "@/lib/keyboard/chatSurfaceFocus";
 
 export function useChatShortcuts(options: {
   enabled: boolean;
@@ -16,9 +19,11 @@ export function useChatShortcuts(options: {
   onSelectSession?: (id: string) => void;
   sessionIds?: string[];
   onSearch?: () => void;
+  onExpand?: () => void;
 }) {
   const enabled = options.enabled && options.active !== false;
   const isApple = useDeviceContext();
+  const router = useRouter();
   const chat = useAiChatContext();
   const [pinnedIds, setPinnedIds] = useRecoilState(aiChatPinnedSessionIdsAtom);
   const [picker, setPicker] = useState<"search" | "help" | null>(null);
@@ -90,9 +95,20 @@ export function useChatShortcuts(options: {
         focusComposer();
         return true;
       case "expand":
-        if (!chat.isSidebarMode) return false;
-        chat.toggleSidebarMode();
-        focusComposer();
+        if (options.onExpand) {
+          options.onExpand();
+          focusChatComposerAcrossSurfaces(rootRef.current);
+          return true;
+        }
+        chat.restoreChat();
+        chat.setAiChatAutoOpenSuppressed(false);
+        router.push(
+          buildFullScreenChatPath(
+            `${window.location.pathname}${window.location.search}${window.location.hash}`,
+            chat.currentSession?.id,
+          ),
+        );
+        focusChatComposerAcrossSurfaces(rootRef.current);
         return true;
       case "model": return click("[data-ai-chat-model] button");
       case "attach":
@@ -116,7 +132,7 @@ export function useChatShortcuts(options: {
       case "stop":
         if (chat.isRecording) return click("[data-ai-chat-recording-cancel]");
         if (document.activeElement instanceof HTMLInputElement) return false;
-        if (!chat.isTyping || document.getElementById(DIV_ID_CONSTANTS.aiMentionList) || document.getElementById(SLASH_MENU_DOM_ID) || root.querySelector("[aria-expanded='true']")) return false;
+        if (!chat.isTyping || document.getElementById(DIV_ID_CONSTANTS.aiMentionList) || document.getElementById(SLASH_MENU_DOM_ID) || root.querySelector("[aria-expanded='true']:not([data-chat-rail-section])")) return false;
         chat.handleCancelStream();
         focusComposer();
         return true;

@@ -13,4 +13,8 @@ export type FeatureFlagDefinition = {
   releaseRisk?: FeatureFlagReleaseRisk;
 };
 
+export type FeatureFlagDefinitionWithDefaultMode = FeatureFlagDefinition & {
+  defaultMode: FeatureFlagMode;
+};
+
 export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;

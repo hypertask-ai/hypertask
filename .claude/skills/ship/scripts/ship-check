@@ -16,6 +16,7 @@
 #   ship-check premerge-status <pr> publish the required current-head GitHub status
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
 #   ship-check ci-tests <pr>     latest ci-tests on the PR head passes; failures name tests and production status
+#   ship-check fresh <pr>        head carries every base commit, and its sha is recorded for the pinned merge
 #   ship-check ticket <T>        ticket exists on the board
 #   ship-check deeper <T>        newest "Deeper:" agent activity names field, raw source, method, outside proof, breaks if and a
 #                                proof gate <T>.deeper-<name> with CHECK: and EXPECT: in this session's .unlazy/s-<id>/gates/*.md
@@ -35,10 +36,14 @@ REPO=${SHIP_REPO:-hypertask-ai/hypertask}
 BASE=${SHIP_BASE:-production}
 readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node valentinyeo/ceo)
 EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
-PREFIXES='HTPR|HYFA|YPER4|HYCI|IGSH|MARK|HEFE|HTFE'
+PREFIXES='HTPR|HYFA|YPER4|HYCI|SOFT|IGSH|MARK|HEFE|HTFE'
 TITLE_RE="^($PREFIXES)-[0-9]+ \\[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\\] [^ ]"
 
 fail() { echo "FAIL: $*"; exit 1; }
+
+ship_session_id() {
+  printf '%s' "${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-${CURSOR_CONVERSATION_ID:-${PI_SESSION_ID:-}}}}}"
+}
 
 check_ticket() {
   hypertask tasks get "$1" --json 2>/dev/null | jq -e '.success == true and (.tasks | length) > 0' >/dev/null \
@@ -47,7 +52,7 @@ check_ticket() {
 }
 
 deeper_gate_runnable() {
-  local f id=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
+  local f id; id=$(ship_session_id)
   [[ ${id:0:8} =~ ^[A-Za-z0-9._-]{1,8}$ ]] || return 1
   for f in "$PWD/.unlazy/s-${id:0:8}"/gates/*.md; do
     [ -f "$f" ] || continue
@@ -76,7 +81,7 @@ check_deeper() {
   deeper_gate_runnable "$id"
   case $? in
     0) ;;
-    1) fail "deeper needs this session's id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID) to find its scope" ;;
+    1) fail "deeper needs this session's id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID, CODEX_THREAD_ID, CURSOR_CONVERSATION_ID or PI_SESSION_ID) to find its scope" ;;
     *) fail "$id has no gate with CHECK: and EXPECT: in this session's $PWD/.unlazy/s-<id>/gates/*.md; a manual note does not count" ;;
   esac
   echo "deeper ok"
@@ -89,11 +94,48 @@ check_title() {
   echo "title ok"
 }
 
+ci_gh_request() {
+  local label=$1 err result reason; shift
+  err=$(mktemp) || { echo "$label: cannot capture GitHub error"; return 1; }
+  if result=$(gh "$@" 2>"$err"); then
+    rm -f "$err"
+    printf '%s\n' "$result"
+    return 0
+  fi
+  reason=$(python3 - "$err" <<'PYCODE'
+import re, sys
+with open(sys.argv[1], errors="replace") as f:
+    text = f.read(65536)
+code = re.search(r'(?i)\bHTTP[ /:]+([1-5][0-9]{2})\b', text)
+if code:
+    print("HTTP " + code.group(1))
+else:
+    for pattern, reason in [
+        (r'(?i)rate limit', 'rate limit'),
+        (r'(?i)timed? out|timeout', 'request timed out'),
+        (r'(?i)could not resolve|no such host|name resolution', 'DNS resolution failed'),
+        (r'(?i)connection refused', 'connection refused'),
+        (r'(?i)network is unreachable', 'network unreachable'),
+    ]:
+        if re.search(pattern, text):
+            print(reason)
+            break
+    else:
+        print('no safe error detail available')
+PYCODE
+  )
+  rm -f "$err"
+  echo "$label: GitHub request failed ($reason)"
+  return 1
+}
+
 latest_ci_tests() {
-  local json; json=$(gh api "repos/$REPO/commits/$1/check-runs?per_page=100&filter=all" --paginate 2>/dev/null) || return 1
-  jq -cs 'if length > 0 and all(.[]; (.check_runs | type) == "array") then
+  local json result label=$2
+  json=$(ci_gh_request "$label" api "repos/$REPO/commits/$1/check-runs?per_page=100&filter=all" --paginate) || { echo "$json"; return 1; }
+  result=$(jq -cs 'if length > 0 and all(.[]; type == "object" and (.check_runs | type) == "array" and all(.check_runs[]; type == "object")) then
     [.[].check_runs[] | select(.name == "ci-tests")] | max_by([.id, .started_at])
-    else error("cannot read check runs") end' <<<"$json"
+    else error("invalid check runs") end' <<<"$json" 2>/dev/null) || { echo "$label: malformed JSON or invalid check-runs shape"; return 1; }
+  printf '%s\n' "$result"
 }
 
 ci_test_failures() {
@@ -111,9 +153,9 @@ check_ci_tests() {
   local unreadable="cannot read ci-tests for PR $1; retry"
   # Only the app repo has ci-tests; other repos must not depend on these API reads.
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
-  sha=$(gh api "repos/$REPO/pulls/$1" --jq .head.sha 2>/dev/null) || fail "$unreadable"
-  [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "$unreadable"
-  run=$(latest_ci_tests "$sha") || fail "$unreadable"
+  sha=$(ci_gh_request "head PR" api "repos/$REPO/pulls/$1" --jq .head.sha) || fail "$unreadable: $sha"
+  [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "$unreadable: head PR: invalid head SHA"
+  run=$(latest_ci_tests "$sha" "head check-runs") || fail "$unreadable: $run"
   if [ "$run" = null ]; then
     fail "ci-tests is missing on head ${sha:0:7}; wait for the current-head run, or retrigger it (gh workflow run, or push the branch again)"
   fi
@@ -122,7 +164,7 @@ check_ci_tests() {
   # Only a real green run counts: a newer skipped or neutral run must not hide a failed one (ci-tests.yml).
   case "$conclusion" in success)
     # A green run on an older base can hide a test that fails on today's red production (PR 1392).
-    production=$(latest_ci_tests "$BASE") || fail "$unreadable"
+    production=$(latest_ci_tests "$BASE" "production check-runs") || fail "$unreadable: $production"
     if [ "$(jq -r '.status' <<<"$production")" = completed ] \
       && [[ $(jq -r '.conclusion' <<<"$production") =~ ^(failure|cancelled|timed_out|action_required|stale)$ ]] \
       && [[ $(jq -r '.started_at' <<<"$run") < $(jq -r '.started_at' <<<"$production") ]]; then
@@ -132,7 +174,7 @@ check_ci_tests() {
   esac
   details=$(ci_test_failures "$run")
   reason="ci-tests $conclusion on head ${sha:0:7} ($details)"
-  production=$(latest_ci_tests "$BASE") || fail "$unreadable"
+  production=$(latest_ci_tests "$BASE" "production check-runs") || fail "$unreadable: $production"
   status=$(jq -r '.status' <<<"$production"); conclusion=$(jq -r '.conclusion' <<<"$production")
   if [ "$status" = completed ]; then
     case "$conclusion" in
@@ -143,6 +185,29 @@ check_ci_tests() {
     esac
   fi
   fail "$reason"$'\n'"run ci-why $1 for the failed step"
+}
+
+check_fresh() {
+  local head behind
+  [ "$REPO" = hypertask-ai/hypertask ] || return 0
+  head=$(gh api "repos/$REPO/pulls/$1" --jq .head.sha 2>/dev/null) || fail "cannot read the head of PR $1; retry"
+  [[ $head =~ ^[0-9a-f]{40}$ ]] || fail "cannot read the head of PR $1; retry"
+  behind=$(gh api "repos/$REPO/compare/$BASE...$head" --jq .behind_by 2>/dev/null) || fail "cannot compare PR $1 with $BASE; retry"
+  [[ $behind =~ ^[0-9]+$ ]] || fail "cannot compare PR $1 with $BASE; retry"
+  [ "$behind" -eq 0 ] \
+    || fail "head ${head:0:7} is $behind commit(s) behind $BASE, so its green checks predate that work; update the branch (gh api -X PUT repos/$REPO/pulls/$1/update-branch), wait for fresh checks, then merge"
+  record_fresh_head "$head"
+  echo "branch up to date"
+}
+
+record_fresh_head() {
+  [ -n "${SHIP_MERGE_PIN:-}" ] || return 0
+  printf '%s\n' "$1" > "$SHIP_MERGE_PIN" || fail "cannot record the head checked for freshness, so the merge cannot be pinned to it; retry"
+}
+
+require_fresh() {
+  local out
+  out=$(check_fresh "$1") || { echo "ship-check blocked the merge at ${2:-merge}: ${out#FAIL: }.$unresolved" >&2; exit 2; }
 }
 
 # Newest PR for the ticket into BASE, as "number state mergeSha". Exits 1 if GitHub cannot be read.
@@ -172,7 +237,7 @@ pr_row() {
 }
 
 check_branch() {
-  local session=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}} record
+  local session record; session=$(ship_session_id)
   [[ ${2:-} =~ ^[A-Za-z0-9._/-]+$ ]] || fail "usage: ship-check branch <T> <branch|none>"
   [[ $session =~ ^[A-Za-z0-9_-]+$ ]] || fail "cleanup needs this session's full id"
   record="$EVID/$1/cleanup/$session"
@@ -392,7 +457,7 @@ docs_deploy_ok() {
 }
 
 live_proof_ok() {
-  local t=$1 sha=$2 f="$EVID/$1/live-proof" psha source check unit fragment out
+  local t=$1 sha=$2 f="$EVID/$1/live-proof" psha source check unit fragment out tmp exec target relative unit_path start exit_time now fragment_time target_time
   [ -s "$f" ] || return 1
   psha=$(sed -n 's/^sha:[[:space:]]*//p' "$f" | head -1)
   source=$(sed -n 's/^source:[[:space:]]*//p' "$f" | head -1)
@@ -439,18 +504,51 @@ live_proof_ok() {
       fragment=$(systemctl --user show "$unit" -p FragmentPath --value 2>/dev/null) || return 1
       [ -f "$fragment" ] || return 1
       tmp=$(mktemp -d) || return 1
-      if ! git -C "$source" show "$sha:systemd/$unit" > "$tmp/unit" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
-      if ! cmp -s "$fragment" "$tmp/unit"; then rm -rf "$tmp"; return 1; fi
+      unit_path="systemd/$unit"
+      if [[ $REPO == hypertask-ai/hypertask ]]; then
+        unit_path=".claude/systemd/$unit"
+        [[ $unit != *@?*.service ]] || unit_path=".claude/systemd/${unit%%@*}@.service"
+        git -C "$source" cat-file -e "$sha:$unit_path" 2>/dev/null || unit_path="systemd/$unit"
+      fi
+      if ! git -C "$source" show "$sha:$unit_path" > "$tmp/unit" 2>/dev/null || ! cmp -s "$fragment" "$tmp/unit"; then rm -rf "$tmp"; return 1; fi
+      if [[ $REPO == hypertask-ai/hypertask ]] && [ "$(grep -c '^[[:space:]]*ExecStart[[:space:]]*=' "$tmp/unit")" -ne 1 ]; then rm -rf "$tmp"; return 1; fi
       exec=$(sed -n 's/^ExecStart=//p' "$tmp/unit" | head -1)
       target=${exec%% *}
       target=${target/#\%h/$HOME}
-      if [[ $target != "$source"/* ]]; then rm -rf "$tmp"; return 1; fi
-      relative=${target#"$source"/}
-      if ! git -C "$source" show "$sha:$relative" > "$tmp/payload" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
-      if ! cmp -s "$target" "$tmp/payload"; then rm -rf "$tmp"; return 1; fi
+      if [[ $target == "$source"/* ]]; then
+        relative=${target#"$source"/}
+      elif [[ $REPO == hypertask-ai/hypertask && $target == "$HOME/.local/lib/hypertask/runner-pickup/"* ]]; then
+        case ${target##*/} in
+          runner-pickup|runner-selfupdate|ci-wait|runner-deliver|runner-chat-reply|ship-identity|user-unit-check|runner-domain-pickup.py|runner_domains.py|runner-webhook)
+            relative=".claude/skills/ship/scripts/${target##*/}" ;;
+          runner-inbox-stop.sh) relative=".claude/hooks/runner-inbox-stop.sh" ;;
+          *) rm -rf "$tmp"; return 1 ;;
+        esac
+        [[ $target == "$HOME/.local/lib/hypertask/runner-pickup/${target##*/}" ]] || { rm -rf "$tmp"; return 1; }
+      else
+        rm -rf "$tmp"; return 1
+      fi
+      if ! git -C "$source" show "$sha:$relative" > "$tmp/payload" 2>/dev/null || ! cmp -s "$target" "$tmp/payload"; then rm -rf "$tmp"; return 1; fi
       rm -rf "$tmp"
-      out=$(systemctl --user show "$unit" -p Result -p ExecMainStatus 2>/dev/null) || return 1
-      grep -qx 'Result=success' <<<"$out" && grep -qx 'ExecMainStatus=0' <<<"$out"
+      if [[ $REPO == hypertask-ai/hypertask ]]; then
+        out=$(systemctl --user show "$unit" --timestamp=us -p Result -p ExecMainStatus -p NeedDaemonReload -p ExecMainStartTimestamp -p ExecMainExitTimestamp -p DropInPaths 2>/dev/null) || return 1
+      else
+        out=$(systemctl --user show "$unit" -p Result -p ExecMainStatus 2>/dev/null) || return 1
+      fi
+      grep -qx 'Result=success' <<<"$out" && grep -qx 'ExecMainStatus=0' <<<"$out" || return 1
+      if [[ $REPO == hypertask-ai/hypertask ]]; then
+        grep -qx 'NeedDaemonReload=no' <<<"$out" && grep -qx 'DropInPaths=' <<<"$out" || return 1
+        start=$(sed -n 's/^ExecMainStartTimestamp=//p' <<<"$out")
+        exit_time=$(sed -n 's/^ExecMainExitTimestamp=//p' <<<"$out")
+        [ -n "$start" ] && [ -n "$exit_time" ] || return 1
+        start=$(date -d "$start" +%s%N 2>/dev/null) || return 1
+        exit_time=$(date -d "$exit_time" +%s%N 2>/dev/null) || return 1
+        now=$(date +%s%N) || return 1
+        fragment_time=$(stat -Lc %y "$fragment") && fragment_time=$(date -d "$fragment_time" +%s%N) || return 1
+        target_time=$(stat -Lc %y "$target") && target_time=$(date -d "$target_time" +%s%N) || return 1
+        (( start > 0 && start <= now && start >= fragment_time && start >= target_time && exit_time >= start && exit_time <= now )) || return 1
+      fi
+      PROOF_UNIT_PATH=$unit_path PROOF_PAYLOAD_PATH=$relative
       ;;
     *) return 1 ;;
   esac
@@ -460,7 +558,7 @@ check_deployed() {
   dropped_ok deployed "$1" && return 0
   elsewhere_ok deployed "$1" && return 0
   nochange_ok deployed "$1" && return 0
-  local sha id state
+  local sha id state PROOF_UNIT_PATH= PROOF_PAYLOAD_PATH=
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   if [ "$REPO" != hypertask-ai/hypertask ]; then
     local tag cmp releases runs jobs
@@ -579,6 +677,33 @@ check_deployed() {
     cmp=$(gh api "repos/$REPO/compare/$sha...$tag" --jq .status 2>/dev/null) || fail "could not compare $sha with release $tag"
     [[ $cmp == ahead || $cmp == identical ]] || fail "latest release $tag of $REPO does not contain $sha yet"
     echo "deployed ok (release $tag)"; return
+  fi
+  local source paths path status agent_only=false test_base
+  source=$(sed -n 's/^source:[[:space:]]*//p' "$EVID/$1/live-proof" 2>/dev/null | head -1)
+  if [[ $REPO == hypertask-ai/hypertask && $BASE == production ]] && live_proof_ok "$1" "$sha" \
+    && [[ $PROOF_UNIT_PATH == .claude/systemd/* && $PROOF_UNIT_PATH != *../* ]] \
+    && [[ $PROOF_PAYLOAD_PATH == .claude/skills/ship/scripts/* || $PROOF_PAYLOAD_PATH == .claude/hooks/* ]] \
+    && [[ $PROOF_PAYLOAD_PATH != *../* ]]; then
+    paths=$(mktemp) || fail "could not inspect merge paths"
+    if git -C "$source" diff-tree --no-commit-id --name-status -r -M -z "$sha^1" "$sha" > "$paths" 2>/dev/null && [ -s "$paths" ]; then
+      agent_only=true
+      test_base=${PROOF_PAYLOAD_PATH##*/}
+      while IFS= read -r -d '' status && IFS= read -r -d '' path; do
+        [[ $status == A || $status == M ]] || { agent_only=false; break; }
+        case $path in
+          "$PROOF_UNIT_PATH"|"$PROOF_PAYLOAD_PATH") ;;
+          ".claude/skills/ship/scripts/$test_base.test.sh"|".claude/skills/ship/scripts/$test_base.test.py")
+            [[ $PROOF_PAYLOAD_PATH == ".claude/skills/ship/scripts/$test_base" ]] || agent_only=false ;;
+          .claude/skills/ship/scripts/ship-check-finish.test.py)
+            [[ $PROOF_PAYLOAD_PATH == .claude/skills/ship/scripts/ship-check ]] || agent_only=false ;;
+          *) agent_only=false ;;
+        esac
+      done < "$paths"
+    fi
+    rm -f "$paths"
+    if [ "$agent_only" = true ]; then
+      echo "deployed ok (agent live proof, merged ${sha:0:9})"; return
+    fi
   fi
   local ignored
   ignored=$(gh api "repos/$REPO/commits/$sha/status" --jq '[.statuses[] | select(.context == "Vercel")][0]
@@ -736,12 +861,70 @@ if any(local_failure(statement) for statement in statements):
 PYCODE
 }
 
+open_observation_gate() {
+  python3 -c 'import html,json,re,sys
+try:
+    payload=json.loads(sys.stdin.read() or "{}")
+except json.JSONDecodeError:
+    sys.exit(1)
+task=(payload.get("tasks") or [{}])[0]
+open_words=r"\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b"
+negated=r"(?:\bno longer\b|\bnot\b|\bnever\b)\s+$"
+label=r"^(?:[-*\u2022]\s*)?(?:the\s+|this\s+|our\s+)?(?:full[- ]day\s+)?observation(?:\s+gate)?\b"
+def text_of(value):
+    return re.sub(r"\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",value))).strip()
+def open_item(source):
+    for match in re.finditer(r"<li\b([^>]*)>(.*?)(?=</li>|<li\b|</ul>|$)", source, re.I | re.S):
+        checked=re.search(r"data-checked\s*=\s*[\"\x27]?([a-z]+)", match.group(1), re.I)
+        if not checked or checked.group(1).lower() == "true":
+            continue
+        label_text=text_of(match.group(2))
+        if re.search(r"\bobservation\b", label_text, re.I):
+            return label_text
+    return None
+def open_line(source):
+    blocks=re.sub(r"<\s*br\s*/?\s*>", "\n", source, flags=re.I)
+    blocks=re.sub(r"</\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>", "\n", blocks, flags=re.I)
+    for line in re.split(r"\n", re.sub(r"<[^>]+>", " ", blocks)):
+        line=re.sub(r"\s+"," ",html.unescape(line)).strip()
+        match=re.match(label, line, re.I)
+        if not match:
+            continue
+        clause=re.split(r"[.;,]", line[match.end():])[0]
+        for word in re.finditer(open_words, clause, re.I):
+            if not re.search(negated, line[:match.end() + word.start()], re.I):
+                return line
+    return None
+def gates(source):
+    found=[]
+    for label_text in (open_item(source), open_line(source)):
+        if label_text and label_text not in found:
+            found.append(label_text)
+    return found
+found=[]
+for source in (str(task.get(key) or "") for key in ("description","acceptanceCriteria")):
+    for gate in gates(source):
+        if gate not in found:
+            found.append(gate)
+if not found:
+    sys.exit(1)
+print(" and ".join(found))
+'
+}
+
+check_observation_gate() {
+  local t=$1 payload=$2 labels
+  labels=$(printf "%s" "$payload" | open_observation_gate) || return 0
+  fail "$t has an unfinished full-day observation gate: $labels"
+}
+
 check_move() {
-  local ref=${1:-} section=${2:-} project=${3:-} destination=${4:-} t rc
+  local ref=${1:-} section=${2:-} project=${3:-} destination=${4:-} t rc payload
   local -a args=(tasks get "$ref" --json)
   [ -z "$project" ] || args+=(--project "$project")
-  t=$(hypertask "${args[@]}" 2>/dev/null | jq -er --arg prefixes "^($PREFIXES)-[0-9]+$" \
-    '.tasks | select(length == 1) | .[0].ticketNumber | select(test($prefixes))') || fail "cannot resolve ticket $ref for completion checks"
+  payload=$(hypertask "${args[@]}" 2>/dev/null) || fail "cannot resolve ticket $ref for completion checks"
+  t=$(jq -er --arg prefixes "^($PREFIXES)-[0-9]+$" \
+    '.tasks | select(length == 1) | .[0].ticketNumber | select(test($prefixes))' <<<"$payload") || fail "cannot resolve ticket $ref for completion checks"
   local title="$section" board=${destination:-$project}
   if [[ $section =~ ^[0-9]+$ ]]; then
     [ -n "$board" ] || board=$(hypertask tasks get "$t" --json | jq -er '.tasks[0].boardId // .tasks[0].projectId') \
@@ -754,6 +937,7 @@ check_move() {
   is_done_section "$t" "$section" "${destination:-$project}"; rc=$?
   [ "$rc" != 3 ] || fail "cannot resolve destination column $section; refusing section change"
   if [ "$rc" = 0 ]; then
+    check_observation_gate "$t" "$payload"
     local explicit=false explicit_base=false
     [ "${SHIP_REPO+x}" != x ] || explicit=true
     [ "${SHIP_BASE+x}" != x ] || explicit_base=true
@@ -784,12 +968,14 @@ is_done_section() {
 }
 
 check_done() {
-  local section rc
-  section=$(hypertask tasks get "$1" --json 2>/dev/null | jq -r '.tasks[0].section // empty')
+  local payload section rc
+  payload=$(hypertask tasks get "$1" --json 2>/dev/null) || payload=''
+  section=$(jq -r '.tasks[0].section // empty' <<<"$payload" 2>/dev/null || true)
   [ -n "$section" ] || fail "cannot read the section of $1"
   is_done_section "$1" "$section"; rc=$?
   [ "$rc" = 3 ] && fail "cannot match \"$section\" against the columns of the board holding $1; retry when the board answers"
   [ "$rc" = 0 ] || fail "$1 is in \"$section\", which is not the board's done column"
+  check_observation_gate "$1" "$payload"
   echo "done ok"
 }
 
@@ -806,7 +992,7 @@ cleaned_branch_checks() {
 }
 
 check_cleaned() {
-  local b repo=${SHIP_CHECKOUT:-} session=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}} record
+  local b repo=${SHIP_CHECKOUT:-} session record; session=$(ship_session_id)
   [[ $session =~ ^[A-Za-z0-9_-]+$ ]] || fail "cleanup needs this session's full id"
   record="$EVID/$1/cleanup/$session"
   [ -s "$record" ] || fail "record this session's branches first: ship-check branch $1 <branch>, or none if you created none"
@@ -951,7 +1137,9 @@ PY
       [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number.$unresolved" >&2; exit 2; }
       out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist).$unresolved" >&2; exit 2; }
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
+      require_fresh "$pr" pre-status
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
+      require_fresh "$pr" merge-time
     fi
     # Move to the board's done column, by task move or task update --section: needs merge, deploy and
     # docs (FEATURE/IMPROVE); app tickets also need proof.md.
@@ -1005,6 +1193,7 @@ case "${1:-}" in
   premerge-status) check_premerge_status "$2" ;;
   title) check_title "$2" ;;
   ci-tests) check_ci_tests "$2" ;;
+  fresh) check_fresh "$2" ;;
   ticket) check_ticket "$2" ;;
   deeper) check_deeper "${2:-}" ;;
   pr) check_pr "$2" ;;

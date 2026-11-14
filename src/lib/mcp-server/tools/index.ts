@@ -5,6 +5,8 @@ import { reportFeedbackTool } from './report-feedback.tool';
 import { helloTool } from './hello.tool';
 import { listFeaturesTool } from './list-features.tool';
 import { agentPresenceTool } from './agent-presence.tool';
+import { chatInboxTool } from './chat-inbox.tool';
+import { chatReplyTool } from './chat-reply.tool';
 import { listAgentsTool } from './list-agents.tool';
 import { agentWebhookTool } from './agent-webhook.tool';
 import { createAgentTool } from './create-agent.tool';
@@ -33,6 +35,8 @@ import { projectAdminTool } from './project-admin.tool';
 import { boardManifestTool } from './board-manifest.tool';
 import { getBoardPlaybookTool } from './get-board-playbook.tool';
 import { boardConfigTool } from './board-config.tool';
+import { listBoardGithubReposTool } from './list-board-github-repos.tool';
+import { setBoardGithubReposTool } from './set-board-github-repos.tool';
 import { listProjectMembersTool } from './list-project-members.tool';
 import { createLabelTool } from './create-label.tool';
 import { listLabelsTool } from './list-labels.tool';
@@ -91,6 +95,8 @@ export const MCP_TOOLS = [
   helloTool,
   listFeaturesTool,
   agentPresenceTool,
+  chatInboxTool,
+  chatReplyTool,
   listAgentsTool,
   agentWebhookTool,
   createAgentTool,
@@ -118,6 +124,8 @@ export const MCP_TOOLS = [
   boardManifestTool,
   getBoardPlaybookTool,
   boardConfigTool,
+  listBoardGithubReposTool,
+  setBoardGithubReposTool,
   createBoardTool,
   renameBoardTool,
   listProjectMembersTool,

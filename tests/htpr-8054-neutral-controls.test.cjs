@@ -39,6 +39,7 @@ function renderControls(enabled, theme) {
     "@/components/RTE/Components/AudioButton": { AudioButton: () => null },
     "@/lib/configs/general.config": { MOBILE_TARGET: "" },
     "@/components/Common/SendArrow": { SendArrow: icon },
+    "@/components/AI_CHAT/SendMessageButton": { SendMessageButton: () => null },
   });
   return documentFor(React.createElement(React.Fragment, null,
     React.createElement(Writer, { id: "writer" }),

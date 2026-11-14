@@ -40,23 +40,27 @@ const conditions = load("src/utils/helperFunctions/Views/FilterHelperFunctions.t
   "@/lib/constants/builtinViews": {},
 });
 
-async function create({ activeFilters = emptyFilters, position = "bottom", view = "appliedView", fail = false, existing = true, sorting = "Manual", error, planToastEnabled = false } = {}) {
+async function create({ activeFilters = emptyFilters, position = "bottom", view = "appliedView", fail = false, existing = true, sorting = "Manual", error, planToastEnabled = false, showInColumn = false, visibleSections, cacheSections, boardTasks } = {}) {
   const project = {
-    id: 15, uniqueIdentifier: "HTPR", sorting_mode: sorting, sections: [{ sectionId: 7 }],
+    id: 15, uniqueIdentifier: "HTPR", sorting_mode: sorting, sections: visibleSections ?? [{ sectionId: 7 }],
     project_view: { user_project_views: [{ [view]: { board_filters: activeFilters } }] },
+    ...(boardTasks ? { tasks: boardTasks } : {}),
   };
   if (view === null) delete project.project_view;
   const previousTask = { id: 100, ranking: "a" };
-  const sections = [{ sectionId: 7, items: existing ? [previousTask] : [] }];
-  const allData = { updatedProjects: [{ ...project, sections }] };
+  const sections = cacheSections ?? [{ sectionId: 7, items: existing ? [previousTask] : [] }];
+  const allData = { updatedProjects: [{ ...project, sections, ...(boardTasks ? { tasks: boardTasks } : {}) }] };
   const posts = [];
   const toasts = [];
   const cached = new Map();
   let inserted;
   let selected;
+  let writtenSections;
+  let writtenTasks;
   const hook = load("src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx", {
-    "@/hooks/useFlag": { useFlag: () => planToastEnabled },
+    "@/hooks/useFlag": { useFlag: (flag) => flag === "htpr-9006-quick-add-column" ? showInColumn === true : planToastEnabled },
     "@/lib/flags/definitions/htpr-7686-free-plan-limits": { HTPR_7686_FREE_PLAN_LIMITS_FLAG: "htpr-7686-free-plan-limits" },
+    "@/lib/flags/definitions/htpr-9006-quick-add-column": { HTPR_9006_QUICK_ADD_COLUMN_FLAG: "htpr-9006-quick-add-column" },
     "@/lib/planLimitsClient": { planLimitRefusalMessage },
     "react-hot-toast": { default: { error: message => toasts.push(message) } },
     "@/store": { currentProjectAtom: "project", currentUserAtom: "user", activeSectionAtom: "section", aiChatNewTicketPathAtom: "new-ticket-path" },
@@ -67,7 +71,7 @@ async function create({ activeFilters = emptyFilters, position = "bottom", view 
     "axios": { default: { post: async (url, body) => { posts.push({ url, body }); if (error) throw error; return { status: 200, data: { ...body, id: 101, taskLabels: [] } }; } } },
     "./useUpdateTaskInBoards": { default: () => ({
       getProjectIdxAndAllData: async () => ({ allData, projectToUpdateIndex: 0 }),
-      mutationHandler: (index, next) => { assert.equal(index, 0); inserted = next[0].items; },
+      mutationHandler: (index, next, _all, tasksArg) => { assert.equal(index, 0); inserted = next[0].items; writtenSections = next; writtenTasks = tasksArg; },
       updateActiveItemAndItemInView: (id) => { selected = id; },
     }) },
     "@/utils/helperFunctions/helperFunctions": {},
@@ -91,7 +95,7 @@ async function create({ activeFilters = emptyFilters, position = "bottom", view 
   try {
     success = await hook.createItem({ sectionId: 7, section: "Bugs", item: { title: "Quick ticket", description: "", id: -1 }, position, createAnother: true, projectId: 15 });
   } finally { console.log = originalLog; }
-  return { success, posts, cached, inserted, selected, toasts };
+  return { success, posts, cached, inserted, selected, toasts, writtenSections, writtenTasks };
 }
 
 test("label-filter quick add inserts a matching card with labels immediately at either end", async () => {
@@ -296,4 +300,44 @@ test("both inline create branches toast only flagged plan refusals without inser
       }
     }
   }
+});
+
+test("N quick add keeps the new card in the open column after the board rebuilds from tasks", async () => {
+  const visibleSections = [{ sectionId: 9 }, { sectionId: 7 }];
+  const cacheSections = [
+    { sectionId: 7, items: [{ id: 100, ranking: "a", sectionId: 7 }] },
+    { sectionId: 9, items: [{ id: 200, ranking: "z", sectionId: 9 }] },
+  ];
+  const boardTasks = [
+    { id: 100, ranking: "a", sectionId: 7, taskLabels: [] },
+    { id: 200, ranking: "z", sectionId: 9, taskLabels: [] },
+  ];
+  const labeled = await create({
+    activeFilters: filters({ Labels: labels }),
+    showInColumn: true,
+    visibleSections,
+    cacheSections,
+    boardTasks,
+  });
+  assert.equal(labeled.success, true);
+  const labeledColumn = labeled.writtenSections.find((section) => section.sectionId === 7);
+  const otherColumn = labeled.writtenSections.find((section) => section.sectionId === 9);
+  assert.equal(labeledColumn.items.at(-1).id, 101);
+  assert.equal(labeledColumn.items.at(-1).sectionId, 7);
+  assert.equal(otherColumn.items.some((task) => task.id === 101), false);
+  assert.equal(labeled.writtenTasks.at(-1).id, 101);
+  assert.equal(labeled.writtenTasks.at(-1).sectionId, 7);
+  assert.equal(conditions.labelFilterCondition(labeled.writtenTasks.at(-1), labels, undefined, "ALL"), true);
+  const plain = await create({
+    showInColumn: true,
+    visibleSections,
+    cacheSections,
+    boardTasks,
+  });
+  assert.equal(plain.success, true);
+  assert.equal(plain.posts[0].url, "/api/tasks/create");
+  assert.equal(plain.writtenSections.find((section) => section.sectionId === 7).items.at(-1).id, 101);
+  assert.equal(plain.writtenSections.find((section) => section.sectionId === 9).items.some((task) => task.id === 101), false);
+  assert.equal(plain.writtenTasks.at(-1).sectionId, 7);
+  console.log("HTPR-9006 column proof ok");
 });

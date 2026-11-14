@@ -32,23 +32,35 @@ export interface IFilterCommandRowEl {
 
 export type TFilter = "Labels" | "Assignees" | "BlockedByPerson" | "UpdatedBy" | "CreatedBy" | "Priority" | "Size" | "Status" | "Inbox" | "Unread" | "UpdatedRange" | "CreatedAt" |"DueDate"|"Starred"|"NoRecentComment"|"StuckInColumn"|"RunningTimer"|"StaleOnBoard"|"NotStale";
 export type TMatchFilters = "ALL"|"ANY";
+export type TFilterMatch = TMatchFilters | "HIDE";
 export interface IFilterRuntimeContext {
   runningTaskIds?: ReadonlySet<number>;
   blockedByMeListEnabled?: boolean;
   agentCreatorFilterEnabled?: boolean;
   legacyAgentAssigneeMatch?: boolean;
   legacyMissingPersonalViewFilters?: boolean;
+  tagHideFilterEnabled?: boolean;
 }
-export type TCondition = (item: ITask, value: any, project?: IProject, match?: TMatchFilters, runtimeContext?: IFilterRuntimeContext) => boolean;
+export type TCondition = (item: ITask, value: any, project?: IProject, match?: TFilterMatch, runtimeContext?: IFilterRuntimeContext) => boolean;
 export interface IFilter {
   type: TFilter;
   searchPayload: any[];
   condition: TCondition
-  match?: TMatchFilters;
+  match?: TFilterMatch;
 };
 
 export const MULTI_VALUE_FILTERS: TFilter[] = ["Labels", "Assignees"];
 export const supportsMatchMode = (type: TFilter) => MULTI_VALUE_FILTERS.includes(type);
+
+export const nextFilterMatch = (
+  current: TFilterMatch | undefined,
+  hideEnabled: boolean,
+): TFilterMatch => {
+  if (!hideEnabled) return current === "ALL" ? "ANY" : "ALL";
+  if (current === "ANY") return "ALL";
+  if (current === "ALL") return "HIDE";
+  return "ANY";
+};
 
 export interface IFilterSettings{
   matchFilters :TMatchFilters;

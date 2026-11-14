@@ -7,8 +7,17 @@ const test = require("node:test");
 const source = readFileSync(path.join(__dirname, "..", "next.config.js"), "utf8");
 
 for (const smoke of [false, true]) {
-  for (const posthog of [false, true]) {
-    test(`build memory limits survive smoke=${smoke} and PostHog=${posthog}`, async () => {
+  for (const [posthog, webpack] of [[false, false], [false, true], [true, false], [true, true]]) {
+    test(`build memory limits survive smoke=${smoke}, PostHog=${posthog} and webpack=${webpack}`, async (t) => {
+      const previous = { WEBPACK: process.env.WEBPACK, TURBOPACK: process.env.TURBOPACK };
+      t.after(() => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      });
+      process.env.WEBPACK = webpack ? "1" : "0";
+      process.env.TURBOPACK = webpack ? "0" : "1";
       const configModule = { exports: {} };
       let wrapped = false;
       const env = {
@@ -26,6 +35,9 @@ for (const smoke of [false, true]) {
         } };
         if (["@next/bundle-analyzer", "next-pwa"].includes(specifier)) {
           return () => (config) => config;
+        }
+        if (specifier === "./scripts/build-memory-plugin.cjs") {
+          return require("../scripts/build-memory-plugin.cjs");
         }
         assert.equal(specifier, "@posthog/nextjs-config");
         return {
@@ -57,8 +69,27 @@ for (const smoke of [false, true]) {
       assert.equal(config.experimental.parallelServerBuildTraces, smoke);
       assert.equal(config.experimental.parallelServerCompiles, undefined);
       assert.equal(config.productionBrowserSourceMaps, true);
-      assert.equal(config.outputFileTracingExcludes, undefined);
-      assert.deepEqual(config.serverExternalPackages, ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk"]);
+      assert.deepEqual(config.outputFileTracingExcludes, posthog && webpack ? { "*": [".next/server/**/*.map"] } : undefined);
+      assert.deepEqual(config.serverExternalPackages, [
+        "isomorphic-dompurify", "jsdom", "pusher", "aws-sdk",
+        "stripe", "posthog-node", "@modelcontextprotocol/sdk", "mcp-handler",
+        "evlog",
+      ]);
+      const productionCache = {
+        cache: { type: "filesystem", maxMemoryGenerations: Infinity },
+        resolve: { alias: {} },
+      };
+      config.webpack(productionCache, { dev: false });
+      assert.equal(productionCache.cache.type, "filesystem");
+      assert.equal(productionCache.cache.maxMemoryGenerations, 0);
+      assert.ok(productionCache.plugins.some(plugin => plugin.constructor.name === "BuildMemoryPlugin"));
+      const developmentCache = {
+        cache: { type: "filesystem", maxMemoryGenerations: Infinity },
+        resolve: { alias: {} },
+      };
+      config.webpack(developmentCache, { dev: true });
+      assert.equal(developmentCache.cache.maxMemoryGenerations, Infinity);
+      assert.equal(developmentCache.plugins?.some(plugin => plugin.constructor.name === "BuildMemoryPlugin") ?? false, false);
     });
   }
 }
@@ -73,6 +104,17 @@ test("production build heap cap leaves half the build machine for native memory"
     `heap cap ${cap[1]} MB must stay within half of the ${VERCEL_STANDARD_MACHINE_MB} MB build machine, ` +
       "or the parent Next process, native webpack memory and the page worker run the container out of memory " +
       "(YPER4-957)",
+  );
+  const MEASURED_HEAP_MB = 3840;
+  assert.equal(
+    Number(cap[1]),
+    MEASURED_HEAP_MB,
+    `heap cap ${cap[1]} MB must be ${MEASURED_HEAP_MB}: ` +
+      "4000 MB with webpack cache generations still in RAM OOM-killed six production builds in 24h (HYCI-224). " +
+      "HYCI-220 sets maxMemoryGenerations=0 so the worker no longer holds every cache generation in memory. " +
+      "3840 MB leaves 4352 MiB for native memory on the 8192 MiB machine and stays above the 3080 MB V8 peak " +
+      "measured at HYCI-184 once the disk-cache fix is live. " +
+      "If production logs \"Reached heap limit\", the paid Enhanced Build Machine is Valentin's decision.",
   );
 });
 

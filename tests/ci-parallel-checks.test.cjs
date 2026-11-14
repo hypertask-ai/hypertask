@@ -12,11 +12,13 @@ const lanes = [
   "changed-style-tokens",
   "contracts",
   "eslint",
+  "github-comments",
   "lint-overlap-guard",
   "oxlint",
   "paid-api-cost-notes",
   "typescript",
 ];
+const launchedBeforeTests = ["board-registration-boundaries", "github-comments"];
 const formerSteps = [
   "Board filter and sort contracts",
   "Changed style tokens",
@@ -82,17 +84,24 @@ function assertParallelChecks(ci) {
   assert.match(run, /^ *while read -r name pid; do$/m);
   assert.match(run, /^ *if wait "\$pid"; then$/m);
   assert.match(run, /^ *exit 1$/m);
-  assert.ok(
-    run.indexOf("run_lane board-registration-boundaries") < run.indexOf('if [ "$RUN_TESTS" = "true" ]'),
-    "the boundary gate also guards the boundary-only run",
-  );
-  for (const gated of lanes.filter((name) => name !== "board-registration-boundaries")) {
+  for (const early of launchedBeforeTests) {
+    assert.ok(
+      run.indexOf(`run_lane ${early}`) < run.indexOf('if [ "$RUN_TESTS" = "true" ]'),
+      `${early} also guards the boundary-only run`,
+    );
+  }
+  for (const gated of lanes.filter((name) => !launchedBeforeTests.includes(name))) {
     assert.ok(run.indexOf(`run_lane ${gated}`) > run.indexOf('if [ "$RUN_TESTS" = "true" ]'), `${gated} is a TypeScript or lint gate`);
   }
 
   const generated = checks.steps.findIndex((step) => step.name === "Generate Prisma client and flag index");
+  const restoreTypescript = checks.steps.findIndex((step) => step.name === "Restore TypeScript cache");
   assert.ok(generated >= 0, "the generated sources are built before the lanes");
   assert.ok(generated < checks.steps.indexOf(launcher), "generated sources exist before any lane reads them");
+  assert.ok(
+    restoreTypescript < 0 || generated < restoreTypescript,
+    "Prisma client is fresh before the TypeScript cache restores",
+  );
   assert.match(launcher.run, /node scripts\/generate-flag-index\.mjs/, "the typescript lane rebuilds the flag index it reads");
   const saves = checks.steps.filter((step) => step.uses?.startsWith("actions/cache/save@"));
   assert.equal(saves.length, 3);

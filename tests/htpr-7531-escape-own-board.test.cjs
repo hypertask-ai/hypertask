@@ -115,6 +115,7 @@ test("Escape dispatches the same corrected back-arrow handler", (t) => {
     "@/lib/configs/taskDetail.config": { __esModule: true, default: config.default },
     "@/lib/snippets": { requestCommentSnippetPicker: () => {} },
     "@/lib/constants/keyboard-handler": { KeyCodes: { ESCAPE: 27, O: 79 } },
+    "@/lib/keyboard/chatSurfaceFocus": { isChatSurfaceElement: () => false },
     "./taskDetailEditingKeymap": { taskDetailEditingKeymap: () => [] },
     "./taskDetailNavigationKeymap": { taskDetailNavigationKeymap: () => [] },
   };

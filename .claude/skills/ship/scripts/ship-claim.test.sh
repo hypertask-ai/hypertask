@@ -208,7 +208,7 @@ cat > "$D/hypertask" <<'EOF'
 if [ "$1 $2" = "tasks get" ]; then
   [ -z "${FAKE_TASK_FAIL:-}" ] || exit 1
   if [ -n "${FAKE_TASK:-}" ]; then cat "$FAKE_TASK";
-  else printf '{"success":true,"tasks":[{"ticketNumber":"%s","projectId":4060,"section":"Todo","labels":[],"assignees":[]}]}' "$3"; fi
+  else printf '{"success":true,"tasks":[{"ticketNumber":"%s","projectId":11514,"section":"Todo","labels":[],"assignees":[]}]}' "$3"; fi
   exit
 fi
 cat "$FAKE_COMMENTS"
@@ -216,7 +216,7 @@ EOF
 cat > "$D/ht" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$2" == /mcp/tasks\?* ]] && [ -n "${FAKE_RELATED:-}" ]; then cat "$FAKE_RELATED"; exit; fi
-[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/HYCI-30/agent-activity?limit=100'* ]] || exit 1
+[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/HTPR-5000/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/HYCI-30/agent-activity?limit=100'* ]] || exit 1
 if [ -n "${FAKE_AGENT_LOG:-}" ]; then
   offset=0; [[ "$2" == *'&offset='* ]] && offset=${2##*&offset=}
   [ -z "${FAKE_REPEAT_ACTIVITY:-}" ] || offset=0
@@ -278,7 +278,7 @@ out=$(SHIP_CLAIM_GH=$D/hold-gh HOLD_OPEN='[]' SHIP_CLAIM_HYPERTASK=$D/hold-ht HO
 mk
 : > "$D/log"; out=$(FAKE_NOT_MEMBER=1 ./ship-claim HYCI-30 2>&1); rc=$?
 eq "member refusal stops the claim" "$rc" 4
-[[ $out == *'board 11514 (Hypertask CI)'* && $out == *'does not list member'* ]] \
+[[ $out == *'board 11514 (Fleet CI & Infra)'* && $out == *'does not list member'* ]] \
   && ok "refusal names the board and the missing member" || bad "unclear refusal: $out"
 [[ $out == *'ask CI Boss to add'* ]] && ok "refusal names who to ask" || bad "no person to ask: $out"
 [[ $out != *'assign failed'* ]] && ok "no bare assign failure hides the refusal" || bad "bare assign failure: $out"
@@ -295,7 +295,7 @@ mk "$(c 10 2026-10-11T09:00:00.000Z a1 'RUNNER 2' "$(claim other-sess)")" \
    "$(c 13 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 : > "$D/log"; out=$(./ship-claim YPER4-999); rc=$?
 eq "takeover with existing question succeeds" "$rc" 0
-[[ $out == *'https://app.hypertask.ai/detail/project-4060/999#comment-11'* && $out == *'Add the four new models?'* ]] \
+[[ $out == *'https://app.hypertask.ai/detail/project-11514/999#comment-11'* && $out == *'Add the four new models?'* ]] \
   && ok "takeover shows original question and link" || bad "takeover omitted existing question: $out"
 grep -q '^activity add YPER4-999 Takeover:.*comment-11' "$D/log" \
   && ok "takeover records question handoff in agent lane" || bad "takeover handoff missing"
@@ -374,6 +374,8 @@ cat > "$D/hold-gh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$HOLD_READS"
 case " $* " in
+  *' api '*'/pulls?'*) [ -n "${HOLD_REST_OPEN:-}" ] || exit 1; cat "$HOLD_REST_OPEN" ;;
+  *' api '*'search/issues'*) [ -n "${HOLD_REST_MERGED:-}" ] || exit 1; cat "$HOLD_REST_MERGED" ;;
   *' --state open '*) [ -z "${HOLD_OPEN_FAIL:-}" ] || exit 1; cat "$HOLD_OPEN" ;;
   *' --state merged '*) [ -z "${HOLD_MERGED_FAIL:-}" ] || exit 1; cat "$HOLD_MERGED" ;;
   *) exit 1 ;;
@@ -382,20 +384,20 @@ EOF
 cat > "$D/hold-ht" <<'EOF'
 #!/usr/bin/env bash
 if [ "$1 $2" = 'tasks list' ] && [[ " $* " != *' --status '* ]]; then
-  project=15; [[ " $* " == *' --project 4060 '* ]] && project=4060
+  project=15; [[ " $* " == *' --project 11514 '* ]] && project=11514
   jq --argjson project "$project" '[.tasks[] | select(.projectId == $project) | .labels = (.labels // [])] | {success:true,total:length,tasks:.}' "$HOLD_BOARD"
   exit
 fi
 if [ "$1 $2" = 'tasks get' ] && [ "$3" = 'YPER4-999' ]; then
   [ -z "${FAKE_TASK_FAIL:-}" ] || exit 1
   if [ -n "${FAKE_TASK:-}" ]; then cat "$FAKE_TASK"; exit; fi
-  printf '{"success":true,"tasks":[{"ticketNumber":"YPER4-999","projectId":4060,"section":"Todo","labels":[],"assignees":[]}]}'
+  printf '{"success":true,"tasks":[{"ticketNumber":"YPER4-999","projectId":11514,"section":"Todo","labels":[],"assignees":[]}]}'
   exit
 fi
 if [ "$1 $2" != 'tasks list' ]; then exec "$HOLD_ORIGINAL_HT" "$@"; fi
 printf '%s\n' "$*" >> "$HOLD_READS"
 [ -z "${HOLD_BOARD_FAIL:-}" ] || exit 1
-if [[ " $* " == *' --project 4060 '* ]] && [ -n "${HOLD_INFRA:-}" ]; then cat "$HOLD_INFRA"; exit; fi
+if [[ " $* " == *' --project 11514 '* ]] && [ -n "${HOLD_INFRA:-}" ]; then cat "$HOLD_INFRA"; exit; fi
 if [[ " $* " == *' --offset 100 '* ]]; then cat "$HOLD_BOARD_PAGE2"; else cat "$HOLD_BOARD"; fi
 EOF
 chmod +x "$D/hold-gh" "$D/hold-ht"
@@ -457,6 +459,24 @@ printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-456 >/dev/null; eq "open PR resumption survives other merged work" "$?" 0
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-123 >/dev/null; eq "merged work resumption survives another open PR" "$?" 0
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "mixed open and merged work still holds new claims" "$?" 4
+cp "$HOLD_BOARD" "$D/keep-board"; cp "$HOLD_OPEN" "$D/keep-open"; cp "$HOLD_MERGED" "$D/keep-merged"
+printf '[]' > "$HOLD_MERGED"
+printf '[{"number":61,"headRefName":"runner-6/htpr-789","title":"HTPR-789 [BUGFIX] Parked work","isDraft":false}]' > "$HOLD_OPEN"
+parked() { jq -n --arg s "$1" --argjson a "$2" '{success:true,total:1,tasks:[{ticketNumber:"HTPR-789",projectId:15,uniqueIndex:789,section:$s,assignees:(if $a then [{agent:{id:"r6",displayName:"Runner 6"}}] else [] end)}]}' > "$HOLD_BOARD"; }
+parked "In Progress" true; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket the runner still builds holds" "$?" 4
+parked "AI Review" true; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket in AI Review holds" "$?" 4
+parked "QA" true; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket in QA holds" "$?" 4
+parked "Bugs" false; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a parked ticket (home column, unassigned) does not hold" "$?" 0
+parked "Valentin Review" true; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket parked in Valentin Review does not hold" "$?" 0
+parked "In Progress" false; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on an unassigned ticket in a building column does not hold" "$?" 0
+jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket missing from boards 15 and 11514 still holds" "$?" 4
+parked "Bugs" false
+printf '[{"number":61,"headRefName":"runner-6/htpr-789","title":"No ticket in this title","isDraft":false}]' > "$HOLD_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR with no ticket in its title still holds" "$?" 4
+printf '[{"number":61,"headRefName":"runner-6/htpr-789","title":"HTPR-789 [BUGFIX] Parked work","isDraft":false},{"number":62,"headRefName":"runner-6/htpr-790","title":"HTPR-790 [BUGFIX] Other work","isDraft":false}]' > "$HOLD_OPEN"
+out=$(SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 2>&1); rc=$?
+[[ $rc = 4 && $out == *'/pull/62'* && $out != *'/pull/61'* ]] && ok "only the parked ticket's PR is dropped from the hold" || bad "mixed parked and live PRs: rc=$rc $out"
+cp "$D/keep-board" "$HOLD_BOARD"; cp "$D/keep-open" "$HOLD_OPEN"; cp "$D/keep-merged" "$HOLD_MERGED"
 printf '[]' > "$HOLD_OPEN"
 jq '.tasks=[.tasks[0]] | .total=1' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
@@ -486,7 +506,7 @@ for file in "$HOLD_BOARD" "$HOLD_OPEN" "$HOLD_MERGED"; do
   cp "$D/valid-board" "$HOLD_BOARD"; cp "$D/valid-open" "$HOLD_OPEN"; cp "$D/valid-merged" "$HOLD_MERGED"
 done
 jq '.total=101 | .tasks=[range(100) | {ticketNumber:("HTPR-"+(.+1000|tostring)),section:"Done",assignees:[]}]' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
-jq '.tasks[0].projectId=4060 | .tasks[0].ticketNumber="YPER4-123" | .tasks[0].uniqueIndex=123 | .total=101' "$D/valid-board" > "$HOLD_BOARD_PAGE2"
+jq '.tasks[0].projectId=11514 | .tasks[0].ticketNumber="YPER4-123" | .tasks[0].uniqueIndex=123 | .total=101' "$D/valid-board" > "$HOLD_BOARD_PAGE2"
 printf '[{"number":42,"title":"YPER4-123 [INFRA] Existing work"}]' > "$HOLD_MERGED"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "unfinished work on a later board page still holds" "$?" 4
 printf '{"success":true,"total":101,"tasks":[]}' > "$HOLD_BOARD_PAGE2"
@@ -498,8 +518,8 @@ SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1; eq "du
 jq '.total=100' "$HOLD_BOARD_PAGE2" > "$D/next"; mv "$D/next" "$HOLD_BOARD_PAGE2"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1; eq "changed total during paging refuses" "$?" 4
 printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_BOARD"
-jq '.tasks[0].projectId=4060 | .tasks[0].ticketNumber="YPER4-123"' "$D/valid-board" > "$D/infra.json"
-HOLD_INFRA=$D/infra.json SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "merged work on board 4060 also holds" "$?" 4
+jq '.tasks[0].projectId=11514 | .tasks[0].ticketNumber="YPER4-123"' "$D/valid-board" > "$D/infra.json"
+HOLD_INFRA=$D/infra.json SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "merged work on board 11514 also holds" "$?" 4
 cp "$D/valid-board" "$HOLD_BOARD"
 jq '.tasks[0].projectId=null' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1; eq "unusable assigned ticket link refuses" "$?" 4
@@ -519,7 +539,7 @@ printf '[{"number":99,"headRefName":"runner6/yper4-999","title":"YPER4-999 [INFR
 jq -e '.["6"]["HTPR-123"].protected == true' "$RUNNER_INBOX_DIR/domain-ownership.json" >/dev/null && ok "uppercase Runner 6 assignment imported" || bad "uppercase assignment not imported"
 grep -q '^task move YPER4-999 --section In Progress' "$D/log" && ok "recognized open work reaches the claim move" || bad "open resumption failed to write"
 printf '[]' > "$HOLD_OPEN"
-jq '.tasks += [.tasks[0] | .ticketNumber="YPER4-999" | .projectId=4060 | .uniqueIndex=999] | .total=2' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
+jq '.tasks += [.tasks[0] | .ticketNumber="YPER4-999" | .projectId=11514 | .uniqueIndex=999] | .total=2' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"},{"number":99,"title":"YPER4-999 [INFRA] Existing merged work"}]' > "$HOLD_MERGED"
 : > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "actual claim dispatch resumes merged work despite another unfinished ticket" "$?" 0
 grep -q '^task move YPER4-999 --section In Progress' "$D/log" && ok "recognized merged work reaches the claim move" || bad "merged resumption failed to write"
@@ -535,7 +555,7 @@ prs_own() { jq -n --argjson n "$1" --arg own "$2" --arg tk "$3" \
   '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: false}]
    + [{number: 999, headRefName: $own, title: "\($tk) [INFRA] own open work", isDraft: false}]' > "$HOLD_OPEN"; }
 free_infra() { jq -n --arg tk "$1" --arg ti "$2" \
-  '{success:true,total:1,tasks:[{ticketNumber:$tk,title:$ti,section:"Backlog",projectId:4060,uniqueIndex:1,agent:null,assignees:[]}]}' > "$HOLD_INFRA"; }
+  '{success:true,total:1,tasks:[{ticketNumber:$tk,title:$ti,section:"Backlog",projectId:11514,uniqueIndex:1,agent:null,assignees:[]}]}' > "$HOLD_INFRA"; }
 empty_infra() { printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_INFRA"; }
 prs_adopt() { jq -n --argjson n "$1" --arg tk "$2" \
   '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: false}]
@@ -572,14 +592,50 @@ eq "assigned Backlog infra ticket never blocks an app claim" "$(holdrc 'RUNNER 6
 free_infra YPER4-7 'assigned to an agent assignee'; jq '.tasks[0].assignees=[{agent:{id:"a1",displayName:"Runner 16"}}]' "$HOLD_INFRA" > "$D/next"; mv "$D/next" "$HOLD_INFRA"
 eq "agent-assigned Backlog infra ticket never blocks an app claim" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 5; empty_infra
-cat > "$D/ht4060fail" <<'EOF'
+cat > "$D/ht11514fail" <<'EOF'
 #!/usr/bin/env bash
-case " $* " in *' --project 4060 '*) exit 1 ;; esac
+case " $* " in *' --project 11514 '*) exit 1 ;; esac
 exec "$HOLD_ORIGINAL_HT" "$@"
 EOF
-chmod +x "$D/ht4060fail"
-eq "board 4060 read fails -> app hold" "$(SHIP_CLAIM_HYPERTASK=$D/ht4060fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 4
-eq "board 4060 read fails -> every claim held" "$(SHIP_CLAIM_HYPERTASK=$D/ht4060fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
+chmod +x "$D/ht11514fail"
+eq "board 11514 read fails -> app hold" "$(SHIP_CLAIM_HYPERTASK=$D/ht11514fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 4
+eq "board 11514 read fails -> every claim held" "$(SHIP_CLAIM_HYPERTASK=$D/ht11514fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
+free_infra YPER4-8 'assigned to a human'; jq '.tasks[0].assignees=[{displayName:"Chief Of Staff"}]' "$HOLD_INFRA" > "$D/next"; mv "$D/next" "$HOLD_INFRA"
+eq "human-assigned Backlog infra ticket never blocks an app claim" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+prs 5; free_infra YPER4-4 free
+eq "picked by the launcher, free infra waits -> app claim allowed" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 0
+eq "picked by the launcher, board 11514 unreadable -> app claim still held" "$(SHIP_CLAIM_PICKED=1 SHIP_CLAIM_HYPERTASK=$D/ht11514fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 4
+prs 21; eq "picked by the launcher, queue over 20 -> fleet/pick WIP cap decides, app claim allowed" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 0
+# Incident lane (YPER4-1375): SHIP_CLAIM_INCIDENT=1 skips every hold, but only for a real open incident ticket.
+inc_task() { jq -n --arg l "$1" --arg s "${2:-Bugs}" --argjson done "${3:-false}" \
+  '{success:true,tasks:[{ticketNumber:"HTPR-5000",projectId:15,section:$s,status:"Normal",sectionIsDone:$done,labels:[{name:$l}],assignees:[]}]}' > "$D/inc.json"; }
+inc_task incident
+prs_own 21 runner6/htpr-7-x HTPR-7; free_infra YPER4-4 free
+eq "own open PR, full queue, free infra, no flag -> held" "$(FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 4
+eq "incident flag, own open PR, full queue, free infra -> no hold" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 0
+inc_task Incident
+eq "incident label is case-insensitive" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 0
+inc_task Bug
+eq "flag without the incident label -> still held" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 4
+inc_task incident Done true
+eq "flag on a Done incident -> still held" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 4
+inc_task incident
+eq "flag on a Fleet Infra ticket -> still held" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' YPER4-2)" 4
+eq "flag, ticket read fails -> still held" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK_FAIL=1 holdrc 'RUNNER 6' HTPR-5000)" 4
+eq "empty flag value -> still held" "$(SHIP_CLAIM_INCIDENT= FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 4
+mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
+: > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/inc.json ./ship-claim HTPR-5000 >/dev/null 2>&1
+eq "full claim, own open PR, no flag -> hold" "$?" 4
+: > "$D/log"; out=$(SHIP_SESSION_NAME='RUNNER 6' SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json ./ship-claim HTPR-5000 2>&1); rc=$?
+eq "full claim, own open PR, incident flag -> claimed" "$rc" 0
+grep -q '^task move HTPR-5000 --section In Progress' "$D/log" && ok "incident claim reaches the move" || bad "incident claim wrote no move: $out"
+[[ $out != *'Domain admission failed'* ]] && ok "incident claim skips the working-area check" || bad "incident claim hit the area check: $out"
+inc_task brain-extra-hard
+jq '.tasks[0].labels += [{name:"incident"}]' "$D/inc.json" > "$D/next"; mv "$D/next" "$D/inc.json"
+SHIP_SESSION_NAME='RUNNER 6' SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json ./ship-claim HTPR-5000 >/dev/null 2>&1
+eq "incident flag never overrides brain-extra-hard" "$?" 4
+prs 5; empty_infra
+prs 5; empty_infra
 prs 5; eq "PR read fails -> hold" "$(HOLD_OPEN_FAIL=1 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
 prs_own 21 runner6/htpr-7-x HTPR-7
 eq "own open app PR ticket, queue full -> allowed" "$(holdrc 'RUNNER 6' HTPR-7)" 0
@@ -609,7 +665,7 @@ grep -q '^task move HYCI-30 --section In Progress' "$D/log" && ok "a runner's CI
 export SHIP_CLAIM_HYPERTASK=$D/hold-ht
 mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
 eligible_task() {
-  jq -n --arg section "$1" --arg label "$2" '{success:true,tasks:[{ticketNumber:"YPER4-999",projectId:4060,section:$section,labels:[{name:$label}],assignees:[]}]}' > "$D/eligibility.json"
+  jq -n --arg section "$1" --arg label "$2" '{success:true,tasks:[{ticketNumber:"YPER4-999",projectId:11514,section:$section,labels:[{name:$label}],assignees:[]}]}' > "$D/eligibility.json"
 }
 for ticket in HTPR-8264 HYFA-1 YPER4-999 HYCI-30; do
   for section in 'In Progress' 'AI Review' Backlog; do
@@ -626,6 +682,17 @@ for ticket in HTPR-8264 HYFA-1 YPER4-999 HYCI-30; do
   eq "$ticket extra-hard refuses runner even in QA" "$rc" 4
   [[ $out == *'brain-extra-hard'* ]] && ok 'refusal explains brain restriction' || bad "unclear brain refusal: $out"
   [ ! -s "$D/log" ] && [ ! -s "$HOLD_READS" ] && ok 'brain refusal precedes writes and hold reads' || bad 'extra-hard claim reached hold or writes'
+  mkdir -p "$D/rstate"; echo claude > "$D/rstate/engine-6"
+  : > "$D/log"
+  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1)
+  [[ $out != *'is brain-extra-hard'* ]] && ok "$ticket extra-hard passes the brain gate on a claude runner" || bad "claude runner refused extra-hard: $out"
+  echo codex > "$D/rstate/engine-6"
+  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1)
+  [[ $out != *'is brain-extra-hard'* ]] && ok "$ticket extra-hard passes the brain gate on a codex runner" || bad "codex runner refused extra-hard: $out"
+  echo opencode > "$D/rstate/engine-6"
+  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1); rc=$?
+  eq "$ticket extra-hard still refuses an opencode runner" "$rc" 4
+  rm -rf "$D/rstate"
 done
 for identity in 'RUNNER 6' 'HT Design Builder' 'Infra Runner 2'; do
   for label in design-pass brain-extra-hard; do
@@ -666,5 +733,48 @@ done
 SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK_FAIL=1 ./ship-claim YPER4-999 >/dev/null 2>&1
 eq 'failed eligibility read fails closed' "$?" 2
 [ ! -s "$D/log" ] && ok 'failed eligibility read writes nothing' || bad 'failed eligibility read wrote a claim'
+
+cp "$D/valid-board" "$HOLD_BOARD"
+printf '[]' > "$HOLD_OPEN"
+printf '[]' > "$HOLD_MERGED"
+export HOLD_OPEN_FAIL=1 HOLD_REST_OPEN=$D/rest-open.json
+printf '[[]]' > "$HOLD_REST_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST backup permits an empty complete queue' "$?" 0
+jq -n '[[{number:99,title:"HTPR-456 [BUGFIX] Existing work",head:{ref:"runner6/htpr-456"},draft:false}]]' > "$HOLD_REST_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST backup preserves another open PR hold' "$?" 4
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-456 >/dev/null
+eq 'REST backup permits resuming the same PR' "$?" 0
+jq -n '[[{number:7,title:"Other work",head:{ref:"other/work"},draft:false}],
+  [{number:99,title:"HTPR-456 [BUGFIX] Existing work",head:{ref:"runner6/htpr-456"},draft:false}]]' > "$HOLD_REST_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST backup reads ownership on later pages' "$?" 4
+for payload in '{}' '[]' '[{}]' '[[{"number":1}]]' '[[{"number":1}],[{"number":1}]]'; do
+  printf '%s' "$payload" > "$HOLD_REST_OPEN"
+  SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null 2>&1
+  eq 'REST backup refuses malformed or repeated pages' "$?" 4
+done
+printf '[[]]' > "$HOLD_REST_OPEN"
+export HOLD_MERGED_FAIL=1 HOLD_REST_MERGED=$D/rest-merged.json
+jq -n '{incomplete_results:false,total_count:1,items:[{number:42,title:"HTPR-123 [BUGFIX] Existing work",pull_request:{url:"fixture"}}]}' > "$HOLD_REST_MERGED"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST search preserves unfinished merged work hold' "$?" 4
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-123 >/dev/null
+eq 'REST search permits resuming merged work' "$?" 0
+jq -n '{incomplete_results:false,total_count:0,items:[]}' > "$HOLD_REST_MERGED"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null
+eq 'REST search complete empty result permits new work' "$?" 0
+for payload in '{}' '{"incomplete_results":true,"total_count":0,"items":[]}' \
+  '{"incomplete_results":false,"total_count":1,"items":[]}' \
+  '{"incomplete_results":false,"total_count":100,"items":[]}' \
+  '{"incomplete_results":false,"total_count":1,"items":[{"number":1,"title":"Issue"}]}'; do
+  printf '%s' "$payload" > "$HOLD_REST_MERGED"
+  : > "$D/log"
+  SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null 2>&1
+  eq 'REST search refuses incomplete results before claiming' "$?" 4
+  [ ! -s "$D/log" ] && ok 'incomplete REST search writes nothing' || bad 'incomplete REST search wrote a claim'
+done
+unset HOLD_OPEN_FAIL HOLD_REST_OPEN HOLD_MERGED_FAIL HOLD_REST_MERGED
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]

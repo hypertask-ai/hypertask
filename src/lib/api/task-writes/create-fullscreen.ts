@@ -2,6 +2,7 @@ import { isPlanLimitReachedError } from "@/lib/planLimits";
 import create from "@/utils/controllers/tasks/create";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 export const createFullScreenTaskAndReturn = async(projectId:number, userId:number, projectIdentifier:number, title:string, currentUser:{id:number}, agentId?:string | null)=>{
     try {
@@ -37,7 +38,7 @@ export const createFullScreenTaskAndReturn = async(projectId:number, userId:numb
 
         })
         const ranking = generateRank(undefined, task?task.ranking:undefined)
-        console.log("🚀 ~ createFullScreenTaskAndReturn ~ task:", task)
+        await logPersonal(userId, "createFullScreenTaskAndReturn task", { taskId: task?.id ?? null }, task)
         const response = await create({
             title,
             description:"",

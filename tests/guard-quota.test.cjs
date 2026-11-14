@@ -45,12 +45,24 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
         }
         return { data: { ...eventPr, ...(typeof current === 'function' ? current(calls) : current) } };
       } },
-      repos: { createCommitStatus: async post => {
-        calls.push('repos.createCommitStatus');
-        if (limitedPost && (baseline || post.state !== 'pending')) { limitedPost = false; throw limited(); }
-        posts.push(post);
-        visibleStatus = post.state;
-      } },
+      repos: {
+        getCommit: async ({ ref }) => {
+          calls.push('repos.getCommit');
+          assert.equal(ref, 'production');
+          return { data: { sha: 'c'.repeat(40) } };
+        },
+        compareCommitsWithBasehead: async ({ basehead }) => {
+          calls.push('repos.compareCommitsWithBasehead');
+          assert.equal(basehead, `${'c'.repeat(40)}...${sha}`);
+          return { data: { files: [{ filename: 'src/example.ts', additions: 1, deletions: 1 }] } };
+        },
+        createCommitStatus: async post => {
+          calls.push('repos.createCommitStatus');
+          if (limitedPost && (baseline || post.state !== 'pending')) { limitedPost = false; throw limited(); }
+          posts.push(post);
+          visibleStatus = post.state;
+        },
+      },
       issues: { listComments() {} },
     },
     paginate: async method => {
@@ -107,7 +119,7 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
   }
 }
 
-test('executed production workflow baseline spends 22 calls versus eight for the candidate', async () => {
+test('executed production workflow baseline spends 22 calls versus nine for the candidate', async () => {
   const old = process.env.HYPERTASK_MCP_TOKEN;
   process.env.HYPERTASK_MCP_TOKEN = 'isolated-fixture';
   try {
@@ -115,7 +127,7 @@ test('executed production workflow baseline spends 22 calls versus eight for the
     assert.equal(before.calls.length, 22);
     assert.equal(before.posts.length, 10);
     const after = await run();
-    assert.equal(after.calls.length, 8);
+    assert.equal(after.calls.length, 9);
     assert.equal(after.posts.length, 2);
     assert.deepEqual(before.failures, []);
     assert.deepEqual(after.failures, []);
@@ -131,7 +143,7 @@ test('ten workflow push replays recover read and status quota refusals with fres
   try {
     for (let push = 0; push < 10; push++) {
       const normal = await run();
-      assert.deepEqual(normal.calls, ['pulls.get', 'repos.createCommitStatus', 'pulls.get', 'pulls.listFiles', 'pulls.get', 'issues.listComments', 'pulls.get', 'repos.createCommitStatus']);
+      assert.deepEqual(normal.calls, ['pulls.get', 'repos.createCommitStatus', 'pulls.get', 'repos.getCommit', 'repos.compareCommitsWithBasehead', 'pulls.get', 'issues.listComments', 'pulls.get', 'repos.createCommitStatus']);
       assert.deepEqual(normal.posts.map(({ context, state, sha: head }) => ({ context, state, head })), [
         { context: 'pr-title', state: 'pending', head: sha },
         { context: 'pr-title', state: 'success', head: sha },
@@ -139,7 +151,7 @@ test('ten workflow push replays recover read and status quota refusals with fres
       const recovered = await run({ limitedRead: true, limitedPost: true });
       assert.deepEqual(recovered.failures, []);
       assert.deepEqual(recovered.waits, [1000, 1000]);
-      assert.equal(recovered.calls.length, 11);
+      assert.equal(recovered.calls.length, 12);
       assert.equal(recovered.posts.length, 2);
       assert.equal(recovered.posts.at(-1).state, 'success');
     }

@@ -1,0 +1,57 @@
+name: Desktop live readback
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: [.github/scripts/desktop-live-readback.py, .github/workflows/desktop-live-readback.yml]
+permissions:
+  contents: read
+concurrency:
+  group: desktop-live-readback-${{ github.event.pull_request.number || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  self-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 .github/scripts/desktop-live-readback.py --self-check
+  readback:
+    needs: self-check
+    name: desktop-live-readback
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Require the private QA login
+        env:
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+        run: |
+          if [ -z "$QA_LOGIN_EMAIL" ] || [ -z "$QA_LOGIN_PASSWORD" ]; then
+            echo "::error::not tested: QA login is missing"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Fetch the reviewed desktop core anonymously
+        run: |
+          set -euo pipefail
+          sha=$(python3 .github/scripts/desktop-live-readback.py --desktop-sha)
+          git init -q desktop
+          git -C desktop remote add origin https://github.com/hypertask-ai/hypertask-desktop
+          git -C desktop fetch --depth 1 origin "$sha"
+          git -C desktop checkout -q FETCH_HEAD
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - name: Build the desktop core
+        working-directory: desktop
+        run: cargo build --release -p ht-core
+      - name: Read desktop writes back from the live app
+        env:
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+        run: python3 .github/scripts/desktop-live-readback.py

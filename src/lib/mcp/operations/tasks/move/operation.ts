@@ -227,7 +227,8 @@ export async function POST(request: NextRequest) {
 
     const sectionResult = await getSectionForTask(
       target_project_id,
-      target_section_id
+      target_section_id,
+      user.id
     );
     if (sectionResult.error) {
       return NextResponse.json(
@@ -298,7 +299,7 @@ export async function POST(request: NextRequest) {
     void broadcastBoardChange(target_project_id, { originUserId: user.id });
 
     const fullTask = await prisma.task.findUnique({
-      where: { id: taskRef.id },
+      where: { id: taskRef.id, project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) },
       include: taskDetailInclude(user.id),
     });
 

@@ -37,3 +37,13 @@ export function radiusVerdict(px, py, w, h, roundAllowed = true) {
 export function isRoundMarker(names) {
   return names.split(/\s+/).some(name => /^(?:[\w-]*[-_])?(?:avatar|status-dot)(?:[-_][\w-]*)?$/i.test(name));
 }
+const failIntake = ['bugs', 'backlog', 'to do', 'todo']
+const failSkip = new Set(['doing', 'in progress', 'ai review', 'valentin review', 'review', 'qa', 'done', 'shipped'])
+export function failColumn(names) {
+  const list = names.map(name => String(name).trim()).filter(Boolean)
+  for (const wanted of failIntake) {
+    const found = list.find(name => name.toLowerCase() === wanted)
+    if (found) return found
+  }
+  return list.find(name => !failSkip.has(name.toLowerCase())) || ''
+}

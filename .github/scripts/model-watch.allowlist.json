@@ -1,0 +1,44 @@
+{
+  "note": "Families the daily AI model watch is allowed to file tickets about, and the oldest version worth reporting for each. A family not listed here is silent, however new the gateway says it is. Add one line to watch another family. Set the version to the version we ship today so an old model never comes back.",
+  "watch": {
+    "anthropic": {
+      "claude-opus": "5.5",
+      "claude-sonnet": "5.5",
+      "claude-haiku": "5.5",
+      "claude-fable": "5.1"
+    },
+    "openai": {
+      "gpt": "6.1",
+      "gpt-sol": "6.1",
+      "gpt-terra": "6.1",
+      "gpt-luna": "6",
+      "gpt-astra": "6"
+    },
+    "google": {
+      "gemini-flash": "3.8",
+      "gemini-flash-lite": "3.5",
+      "gemini-argon": "4",
+      "gemini-pro": "3"
+    },
+    "spacexai": {
+      "grok": "4.7"
+    },
+    "deepseek": {
+      "deepseek": "4.1",
+      "deepseek-flash": "4.1",
+      "deepseek-pro": "4",
+      "deepseek-r": "2"
+    },
+    "moonshotai": {
+      "kimi-k": "3"
+    },
+    "alibaba": {
+      "qwen": "3.8",
+      "qwen-plus": "3.7"
+    },
+    "zai": {
+      "glm-flash": "5.3",
+      "glm": "5.3"
+    }
+  }
+}

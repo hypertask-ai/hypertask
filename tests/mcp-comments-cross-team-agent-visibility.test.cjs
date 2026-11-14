@@ -26,6 +26,7 @@ function loadRoute(comments) {
     },
   };
   const stubs = {
+    ...require("./helpers/stub-map.cjs").waitingActivityStubs,
     "@/lib/mcp/skills/context": require("./helpers/mcp-skill-context.cjs"),
     "@/utils/controllers/projects/getAllIncludes": {},
     "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },

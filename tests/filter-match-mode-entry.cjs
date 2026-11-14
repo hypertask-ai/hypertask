@@ -14,11 +14,12 @@ const {
   path.join(root, "src/utils/helperFunctions/Views/FilterHelperFunctions.ts")
 );
 
-const { supportsMatchMode } = jiti(path.join(root, "src/models/Filters/model.ts"));
+const { nextFilterMatch, supportsMatchMode } = jiti(path.join(root, "src/models/Filters/model.ts"));
 
 module.exports = {
   applyFilters,
   assigneeFilterCondition,
   labelFilterCondition,
+  nextFilterMatch,
   supportsMatchMode,
 };

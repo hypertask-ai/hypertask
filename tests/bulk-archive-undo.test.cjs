@@ -40,8 +40,16 @@ function fixture(enabled = true, { archiveFailure, restoreFailure, subtasks = fa
   let selectedIds, failedIds;
   const env = {
     useCallback: fn => fn, isProcessing: false, selectedTasks: tasks,
-    useFlag: key => { assert.equal(key, "htpr-7137-bulk-archive-undo-all"); return enabled; },
-    HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG: "htpr-7137-bulk-archive-undo-all", refreshTaskDetailReadAfterWrite,
+    useFlag: key => {
+      if (key === "htpr-7137-bulk-archive-undo-all") return enabled;
+      if (key === "htpr-8928-bulk-archive-instant-hide") return false;
+      return false;
+    },
+    HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG: "htpr-7137-bulk-archive-undo-all",
+    HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG: "htpr-8928-bulk-archive-instant-hide",
+    onArchiveSelectedBatch: undefined,
+    clearSelection() {},
+    refreshTaskDetailReadAfterWrite,
     _currentProject: project, _currentUser: { id: 985 },
     toast: Object.assign(() => {}, { dismiss() {}, success: text => messages.push(text), error: text => messages.push(text) }),
     queryClient: new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } }),
@@ -69,7 +77,7 @@ function fixture(enabled = true, { archiveFailure, restoreFailure, subtasks = fa
   env.onArchiveTask = env.archiveTaskForBulk;
   env.registerArchiveUndo = env.deleteTodo;
   Object.assign(env, load(homepageFile, ["onArchiveUndo"], env));
-  Object.assign(env, load(bulkFile, ["bulkArchiveUndoAll", "runTaskOperation"], env));
+  Object.assign(env, load(bulkFile, ["bulkArchiveUndoAll", "bulkArchiveInstantHide", "runTaskOperation"], env));
   Object.assign(env, load(bulkFile, ["archiveSelected"], env));
   return { ...env, tasks, store, project, undos, requests, reconciliations, messages,
     selection: () => ({ selectedIds, failedIds }),

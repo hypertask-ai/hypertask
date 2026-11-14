@@ -82,6 +82,7 @@ for (const removeImageGeneration of [false, true]) test(`choosing triage closes 
     document: { activeElement: { blur() {} } },
     pagesEnabled: false, standalonePages: false,
     triageInboxFlag, safeInboxBatches, freshChatHandoff,
+    rightColumnFlag: false, scope: undefined, addFieldPayload: undefined,
     resetShowCommands: () => calls.push("close"),
     setAiChatPendingPrompt: prompt => calls.push(prompt),
     buildFullScreenChatPath: load(path.join(root, "src/lib/aiChatDisplayMode.ts")).buildFullScreenChatPath,

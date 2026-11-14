@@ -125,7 +125,7 @@ test('another module instance immediately sees revocation after a prior negative
   assert.equal(await a.isSessionTokenRevoked(token, { failClosed: false }), false)
   await b.revokeSessionToken(token)
   assert.equal(await a.isSessionTokenRevoked(token, { failClosed: false }), true)
-  assert.equal(redis.calls.get.length, 3)
+  assert.equal(redis.calls.get.length, 6)
 })
 
 test('only confirmed revocations survive an outage, and expired tokens are ignored', async (t) => {

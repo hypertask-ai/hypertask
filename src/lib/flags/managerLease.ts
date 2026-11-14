@@ -10,6 +10,7 @@ const MANAGER_AGENT_NAMES = new Set(["HT Finance", "Mini Boss CEO", "Chief Of St
 const MANAGER_AGENT_PATTERN = /^HT [A-Za-z]+(?: [A-Za-z]+)* Lead$/;
 const GRANT_TOKEN = /^[A-Za-z0-9_-]{32,128}$/;
 const GRANT_HASH = /^[0-9a-f]{64}$/;
+const OPERATION_ID = /^[A-Za-z0-9_-]{16,64}$/;
 
 export type ManagerLeaseAction = "take" | "renew" | "release" | "handoff";
 
@@ -31,6 +32,35 @@ function refusal(reason: string): FeatureFlagApprovalError {
   return new FeatureFlagApprovalError(`Manager lease proof refused: ${reason}. Switch flags only while you hold the current manager lease and send your take receipt token in the X-Manager-Grant header.`);
 }
 
+function denied(): ManagerLeaseError {
+  return new ManagerLeaseError("grant is unknown, replaced, released or expired", 403);
+}
+
+function live(row: { releasedAt: Date | null; replacedAt: Date | null; expiresAt: Date }, now: Date): boolean {
+  return row.releasedAt === null && row.replacedAt === null && row.expiresAt.getTime() > now.getTime();
+}
+
+async function remember(
+  tx: Prisma.TransactionClient,
+  input: { agentId: string; operationId: string; action: ManagerLeaseAction; grantHash: string; expiresAt: Date | null },
+): Promise<void> {
+  await tx.managerLeaseOperation.create({ data: input });
+}
+
+export async function readManagerLeaseOperation(
+  tx: Prisma.TransactionClient,
+  input: { agentId: string; operationId: string },
+): Promise<{ action: string; expiresAt: Date | null } | null> {
+  if (!OPERATION_ID.test(input.operationId)) {
+    throw new ManagerLeaseError("operationId must be 16 to 64 url-safe characters", 400);
+  }
+  const row = await tx.managerLeaseOperation.findUnique({
+    where: { agentId_operationId: { agentId: input.agentId, operationId: input.operationId } },
+  });
+  if (!row) return null;
+  return { action: row.action, expiresAt: row.expiresAt };
+}
+
 export async function requireCurrentManagerGrant(
   tx: Prisma.TransactionClient,
   input: { agentId: string; grant: string | null; now?: Date },
@@ -48,48 +78,82 @@ export async function requireCurrentManagerGrant(
 
 export async function applyManagerLeaseAction(
   tx: Prisma.TransactionClient,
-  input: { agentId: string; action: ManagerLeaseAction; session?: string; grantHash?: string; grant?: string; ttlMinutes?: number; now?: Date },
+  input: { agentId: string; action: ManagerLeaseAction; operationId?: string; session?: string; grantHash?: string; ttlMinutes?: number; now?: Date },
 ): Promise<{ expiresAt: Date | null }> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(CAST(${MANAGER_LEASE_LOCK_NAMESPACE} AS integer), 0)`;
-  const nowAfterLock = input.now ?? new Date();
+  const now = input.now ?? new Date();
+  if (input.operationId !== undefined && !OPERATION_ID.test(input.operationId)) {
+    throw new ManagerLeaseError("operationId must be 16 to 64 url-safe characters", 400);
+  }
+  if (!input.grantHash || !GRANT_HASH.test(input.grantHash)) {
+    throw new ManagerLeaseError("grantHash must be 64 hex characters", 400);
+  }
+  const grantHash = input.grantHash;
+  const ttl = input.ttlMinutes;
+  if (input.action === "take" && (!input.session || input.session.length > 100 || !Number.isInteger(ttl) || (ttl as number) < 1 || (ttl as number) > MANAGER_LEASE_MAX_TTL_MINUTES)) {
+    throw new ManagerLeaseError("take needs session, grantHash (64 hex) and ttlMinutes (1 to 240)", 400);
+  }
+  if (input.operationId) {
+    const prior = await tx.managerLeaseOperation.findUnique({
+      where: { agentId_operationId: { agentId: input.agentId, operationId: input.operationId } },
+    });
+    if (prior) {
+      if (prior.action !== input.action || prior.grantHash !== grantHash) {
+        throw new ManagerLeaseError("operation id already confirmed a different change", 409);
+      }
+      if (input.action === "take") {
+        const taken = await tx.managerLeaseGrant.findUnique({ where: { tokenHash: grantHash } });
+        if (!taken || taken.session !== input.session || taken.ttlMinutes !== ttl) throw new ManagerLeaseError("operation id already confirmed a different change", 409);
+      }
+      return { expiresAt: prior.expiresAt };
+    }
+  }
 
   if (input.action === "take") {
-    const ttl = input.ttlMinutes;
-    if (!input.session || input.session.length > 100 || !input.grantHash || !GRANT_HASH.test(input.grantHash)
-      || !Number.isInteger(ttl) || (ttl as number) < 1 || (ttl as number) > MANAGER_LEASE_MAX_TTL_MINUTES) {
-      throw new ManagerLeaseError("take needs session, grantHash (64 hex) and ttlMinutes (1 to 240)", 400);
+    const same = await tx.managerLeaseGrant.findUnique({ where: { tokenHash: grantHash } });
+    if (same) {
+      if (same.agentId !== input.agentId || !live(same, now)) throw denied();
+      if (same.session !== input.session || same.ttlMinutes !== ttl) throw new ManagerLeaseError("take does not match the current lease", 409);
+      if (input.operationId) await remember(tx, { agentId: input.agentId, operationId: input.operationId, action: input.action, grantHash, expiresAt: same.expiresAt });
+      return { expiresAt: same.expiresAt };
     }
-    const live = await tx.managerLeaseGrant.findFirst({
-      where: { releasedAt: null, replacedAt: null, expiresAt: { gt: nowAfterLock } },
+    const holder = await tx.managerLeaseGrant.findFirst({
+      where: { releasedAt: null, replacedAt: null, expiresAt: { gt: now } },
       select: { session: true },
     });
-    if (live) throw new ManagerLeaseError(`manager lease held by ${live.session}`, 409);
+    if (holder) throw new ManagerLeaseError(`manager lease held by ${holder.session}`, 409);
     await tx.managerLeaseGrant.updateMany({
       where: { releasedAt: null, replacedAt: null },
-      data: { replacedAt: nowAfterLock },
+      data: { replacedAt: now },
     });
-    const expiresAt = new Date(nowAfterLock.getTime() + (ttl as number) * 60_000);
+    const expiresAt = new Date(now.getTime() + (ttl as number) * 60_000);
     await tx.managerLeaseGrant.create({
-      data: { agentId: input.agentId, session: input.session, tokenHash: input.grantHash, ttlMinutes: ttl as number, expiresAt },
+      data: { agentId: input.agentId, session: input.session as string, tokenHash: grantHash, ttlMinutes: ttl as number, expiresAt },
     });
+    if (input.operationId) await remember(tx, { agentId: input.agentId, operationId: input.operationId, action: input.action, grantHash, expiresAt });
     return { expiresAt };
   }
 
-  if (!input.grant || !GRANT_TOKEN.test(input.grant)) {
-    throw new ManagerLeaseError(`${input.action} needs the grant from your take receipt`, 400);
+  await tx.$queryRaw`SELECT id FROM "ManagerLeaseGrant" WHERE "tokenHash" = ${grantHash} FOR UPDATE`;
+  const decidedAt = input.now ?? new Date();
+  const row = await tx.managerLeaseGrant.findUnique({ where: { tokenHash: grantHash } });
+  if (!row || row.agentId !== input.agentId || row.replacedAt) throw denied();
+  if (row.releasedAt) {
+    if (input.action === "renew") throw denied();
+    if (row.endedReason !== input.action) {
+      throw new ManagerLeaseError("grant already ended by a different action", 409);
+    }
+    if (input.operationId) await remember(tx, { agentId: input.agentId, operationId: input.operationId, action: input.action, grantHash, expiresAt: null });
+    return { expiresAt: null };
   }
-  const tokenHash = hashManagerGrant(input.grant);
-  await tx.$queryRaw`SELECT id FROM "ManagerLeaseGrant" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
-  const row = await tx.managerLeaseGrant.findUnique({ where: { tokenHash } });
-  const nowAfterGrantLock = input.now ?? new Date();
-  if (!row || row.agentId !== input.agentId || row.releasedAt || row.replacedAt || row.expiresAt.getTime() <= nowAfterGrantLock.getTime()) {
-    throw new ManagerLeaseError("grant is unknown, replaced, released or expired", 403);
-  }
+  if (row.expiresAt.getTime() <= decidedAt.getTime()) throw denied();
   if (input.action === "renew") {
-    const expiresAt = new Date(nowAfterGrantLock.getTime() + row.ttlMinutes * 60_000);
-    await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { expiresAt, renewedAt: nowAfterGrantLock } });
+    const expiresAt = new Date(decidedAt.getTime() + row.ttlMinutes * 60_000);
+    await tx.managerLeaseGrant.update({ where: { tokenHash: grantHash }, data: { expiresAt, renewedAt: decidedAt } });
+    if (input.operationId) await remember(tx, { agentId: input.agentId, operationId: input.operationId, action: input.action, grantHash, expiresAt });
     return { expiresAt };
   }
-  await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { releasedAt: nowAfterGrantLock, endedReason: input.action } });
+  await tx.managerLeaseGrant.update({ where: { tokenHash: grantHash }, data: { releasedAt: decidedAt, endedReason: input.action } });
+  if (input.operationId) await remember(tx, { agentId: input.agentId, operationId: input.operationId, action: input.action, grantHash, expiresAt: null });
   return { expiresAt: null };
 }

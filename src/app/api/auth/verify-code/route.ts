@@ -5,6 +5,7 @@ import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
 import { takeSignupCodeContext } from '@/lib/auth/signupAttributionContext'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
+import { logPersonal } from '@/utils/controllers/logs/quietPersonalLog'
 import update_or_create_user from '@/utils/controllers/users/update_or_create_user'
 import { IProject, ITaskShare } from '@/models/model'
 import authConfig from '@/lib/configs/auth.config'
@@ -23,6 +24,7 @@ import {
   getEmailCodeClientIp,
 } from '@/lib/auth/emailCodeRateLimit'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
+import { revokeOtherUserSessions } from '@/lib/auth/sessionRevocation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -101,6 +103,8 @@ export async function POST(request: NextRequest) {
         uid: true,
         displayName: true,
         photoURL: true,
+        emailVerified: true,
+        UserSetting: { select: { isVerified: true } },
       },
     })
 
@@ -145,6 +149,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (userData.UserSetting) {
+      if (
+        existingUser &&
+        !existingUser.emailVerified &&
+        !existingUser.UserSetting?.isVerified &&
+        !(await revokeOtherUserSessions(userData.id))
+      ) {
+        console.error('Email verification could not end the earlier sessions for user', userData.id)
+      }
       await prisma.userSetting.update({
         where: { id: userData.UserSetting.id },
         data: { isVerified: true },
@@ -168,13 +180,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('✅ User updated successfully:', {
-      id: userData!.id,
-      email: userData!.email,
-      displayName: userData!.displayName,
-      onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus,
-      trialStatus: (userData as any).UserSetting?.trialStatus
-    })
+    await logPersonal(userData!.id, '✅ User updated successfully:', { id: userData!.id, email: userData!.email, outcome: 'signed-in', }, { id: userData!.id, email: userData!.email, onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus, trialStatus: (userData as any).UserSetting?.trialStatus, displayName: userData!.displayName, })
 
     let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {

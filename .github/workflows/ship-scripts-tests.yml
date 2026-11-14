@@ -7,6 +7,7 @@ on:
     paths:
       - '.claude/skills/ship/scripts/**'
       - '.claude/skills/vcc/bin/**'
+      - '.claude/skills/setup-runner/scripts/**'
       - '.claude/skills/scriptify/scripts/**'
       - '.claude/skills/maintain-verification-skill/scripts/**'
       - '.claude/systemd/**'
@@ -76,6 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           bash .claude/skills/vcc/bin/vcc.test.sh
+          bash .claude/skills/setup-runner/scripts/setup-runner.test.sh
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/ship-check-finish.test.py
           python3 .claude/skills/ship/scripts/gh-merge-guard.test.py -v
@@ -83,6 +85,7 @@ jobs:
           python3 .claude/skills/ship/scripts/ci-wait.test.py
           bash .claude/skills/ship/scripts/gh-notify.test.sh
           python3 .claude/skills/ship/scripts/ci-why.test.py
+          python3 .claude/skills/ship/scripts/ship-chores.test.py -v
           node --test .claude/skills/ship/scripts/production-red-alert.test.mjs
           bash .claude/skills/ship/scripts/board-check.test.sh
           bash .claude/skills/ship/scripts/user-unit-check.test.sh
@@ -154,6 +157,7 @@ jobs:
           node --test .claude/skills/ship/scripts/error-collector/collector.test.mjs
           node --test .claude/skills/ship/scripts/error-collector/sources.test.mjs
           node --test .claude/skills/ship/scripts/error-collector/vercel-logs.test.mjs
+          node --test .claude/skills/ship/scripts/error-collector/vercel-hosted.test.mjs
           bash .claude/skills/ship/scripts/mcp-contract-watch.test.sh
           bash .claude/skills/ship/scripts/ship-gates.test.sh
           python3 scripts/daily-stats.test.py

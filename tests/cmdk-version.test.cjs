@@ -61,7 +61,7 @@ function renderPalette({ mobile = false, env = buildEnv, rows = 2 } = {}) {
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": {
       getActiveEmptySectionSettingFromProject: () => "Shown", getActiveStalenessFromProject: () => false,
     },
-    "./AllCommands": { getAllCommands: () => commands, getMobileCommandGroups: (groups) => groups, getBoardMenuCommands: (groups) => groups },
+    "./AllCommands": { getAllCommands: () => commands, getMobileCommandGroups: (groups) => groups, getBoardMenuCommands: (groups) => groups, withCardSettingsCommand: (groups) => groups },
     "./MobileCommandIcon": { MobileCommandIcon: () => null },
     "./ComposeTaskWriter": defaultExport(() => null),
     "@/utils/getCurrentUser": { getCurrentUserFromCookies: () => null },

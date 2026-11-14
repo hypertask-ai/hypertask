@@ -7,6 +7,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from "@/lib/flags/keys";
 import { HTPR_7801_INBOX_VISIBLE_ORDER_FLAG } from "@/lib/flags/definitions/htpr-7801-inbox-visible-order";
 import { decisionsSplitName } from "@/lib/configs/inbox.config";
+import { NEEDS_YOU_SPLIT } from "@/lib/inbox/needsYou";
 import {
   buildInboxTasksPlaylist,
   inboxPlaylistHoldsTask,
@@ -36,7 +37,7 @@ const InboxPlaylistRestorer = ({ userId, task }: Props) => {
       buildInboxTasksPlaylist(
         picked.notifications,
         decisionCommentLinkEnabled && picked.splitName === decisionsSplitName,
-        inboxVisibleOrder ? { oldestFirst: picked.splitName === "Blocked by you" } : undefined,
+        inboxVisibleOrder && picked.splitName !== NEEDS_YOU_SPLIT ? { oldestFirst: picked.splitName === "Blocked by you" } : undefined,
       ),
     );
   }, [structuredData, tasksPlayList, task.projectId, task.uniqueIndex, split, decisionCommentLinkEnabled, inboxVisibleOrder]);

@@ -66,12 +66,12 @@ const toIso = (date: Date | string | null | undefined): string | undefined =>
   date ? new Date(date).toISOString() : undefined;
 
 export function taskStaleness(task: {
-  createdAt: Date | string;
+  createdAt?: Date | string | null;
   sectionChangedAt?: Date | string | null;
   lastCommentAt?: Date | string | null;
-}, thresholds?: StalenessThresholds): TaskStaleness {
-  const daysInColumn = daysSince(task.sectionChangedAt ?? task.createdAt);
-  const daysSinceLastComment = daysSince(task.lastCommentAt ?? task.createdAt);
+}, thresholds?: StalenessThresholds, now?: number): TaskStaleness {
+  const daysInColumn = daysSince(task.sectionChangedAt ?? task.createdAt, now);
+  const daysSinceLastComment = daysSince(task.lastCommentAt ?? task.createdAt, now);
   const columnLevel = stalenessLevel(daysInColumn, thresholds);
   const commentLevel = stalenessLevel(daysSinceLastComment, thresholds);
   const level: StalenessLevel =
@@ -82,7 +82,7 @@ export function taskStaleness(task: {
       : "none";
 
   return {
-    daysOnBoard: daysSince(task.createdAt),
+    daysOnBoard: daysSince(task.createdAt, now),
     daysInColumn,
     daysSinceLastComment,
     level,

@@ -101,7 +101,7 @@ test("real board query trims unused team and billing columns without changing en
   }
   assert.deepEqual(team.googleAccount, { select: { userId: true } });
   assert.deepEqual(team.team_activity, { select: { hasCompletedTrial: true } });
-  assert.deepEqual(team.byokApiKeys.select, { provider: true, enabled: true });
+  assert.deepEqual(team.byokApiKeys.select, { provider: true, enabled: true, alwaysUse: true });
   assert.deepEqual(team.subscriptionPlan.select, {
     priceId: true,
     subscriptionId: true,

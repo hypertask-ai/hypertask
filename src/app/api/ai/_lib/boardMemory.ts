@@ -17,6 +17,7 @@ import {
   gatewayProviderOptionsForModel,
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
+import { isFeatureEnabled } from "@/lib/flags";
 import {
   BOARD_MEMORY_CONFIG_FILE_TYPE,
   BOARD_MEMORY_CONFIG_SOURCE,
@@ -29,6 +30,7 @@ import {
   isBoardMemoryFactSource,
   normalizeLearnedMemoryFacts,
 } from "@/app/api/ai/_lib/boardMemoryContract";
+import type { TaskWriterFieldDiffSignal } from "@/app/api/ai/_lib/taskWriterFieldDiff";
 import {
   BoardMemoryBusyError,
   bumpBoardMemoryRevision,
@@ -63,7 +65,8 @@ export type BoardMemorySignal =
       type: "edited_ai_title";
       originalText: string;
       correctedText: string;
-    };
+    }
+  | TaskWriterFieldDiffSignal;
 
 export type BoardMemoryEntry = {
   content: string;
@@ -73,27 +76,53 @@ export type BoardMemoryEntry = {
 
 export async function getBoardMemoryState(userId: number, projectId: number) {
   await assertProjectAccess(userId, projectId);
-  return loadBoardMemoryState(projectId);
+  return loadBoardMemoryState(projectId, userId);
 }
 
-async function loadBoardMemoryState(projectId: number) {
-  const [configRows, memoryRows] = await Promise.all([
-    listCustomInstructionFileRows({
-      projectId,
-      fileType: BOARD_MEMORY_CONFIG_FILE_TYPE,
-      topK: 1,
-    }),
-    listCustomInstructionFileRows({
-      projectId,
-      fileType: BOARD_MEMORY_FILE_TYPE,
-      topK: BOARD_MEMORY_MAX_FACTS_PER_BOARD,
-    }),
-  ]);
+async function loadBoardMemoryState(projectId: number, userId = 0) {
+  const skipMemoryList = await isFeatureEnabled("htpr-9015-search-lookups", userId);
+  if (!skipMemoryList) {
+    const [configRows, memoryRows] = await Promise.all([
+      listCustomInstructionFileRows({
+        projectId,
+        fileType: BOARD_MEMORY_CONFIG_FILE_TYPE,
+        topK: 1,
+      }),
+      listCustomInstructionFileRows({
+        projectId,
+        fileType: BOARD_MEMORY_FILE_TYPE,
+        topK: BOARD_MEMORY_MAX_FACTS_PER_BOARD,
+      }),
+    ]);
+    return {
+      enabled: configRows.some((row) => row.source === BOARD_MEMORY_CONFIG_SOURCE),
+      memories: memoryRows
+        .filter((row) => row.chunkIndex === 0 && isBoardMemoryFactRow(row))
+        .map<BoardMemoryEntry>((row) => ({
+          content: row.content,
+          createdAt: row.updatedAt,
+          source: row.source,
+        })),
+    };
+  }
+  const configRows = await listCustomInstructionFileRows({
+    projectId,
+    fileType: BOARD_MEMORY_CONFIG_FILE_TYPE,
+    topK: 1,
+  });
+  const enabled = configRows.some(
+    (row) => row.source === BOARD_MEMORY_CONFIG_SOURCE,
+  );
+  if (!enabled) return { enabled: false, memories: [] as BoardMemoryEntry[] };
+
+  const memoryRows = await listCustomInstructionFileRows({
+    projectId,
+    fileType: BOARD_MEMORY_FILE_TYPE,
+    topK: BOARD_MEMORY_MAX_FACTS_PER_BOARD,
+  });
 
   return {
-    enabled: configRows.some(
-      (row) => row.source === BOARD_MEMORY_CONFIG_SOURCE,
-    ),
+    enabled: true,
     memories: memoryRows
       .filter((row) => row.chunkIndex === 0 && isBoardMemoryFactRow(row))
       .map<BoardMemoryEntry>((row) => ({
@@ -155,6 +184,45 @@ export async function deleteBoardMemory(args: {
   });
 }
 
+export async function saveBoardMemoryRule(args: {
+  userId: number;
+  projectId: number;
+  rule: string;
+}) {
+  const project = await assertProjectAccess(args.userId, args.projectId);
+  const rule = args.rule.replace(/\s+/g, " ").trim();
+  if (!rule || rule.length > BOARD_MEMORY_MAX_FACT_LENGTH) {
+    throw new Error("That rule is too long to save as a board memory.");
+  }
+  const state = await loadBoardMemoryState(project.id, args.userId);
+  if (!state.enabled) {
+    throw new Error("Board memory is off for this board. Turn it on in Settings, then save the rule.");
+  }
+  if (state.memories.length >= BOARD_MEMORY_MAX_FACTS_PER_BOARD) {
+    throw new Error("This board already has the maximum number of memory rules.");
+  }
+  const [fact] = normalizeLearnedMemoryFacts(
+    [rule],
+    state.memories.map((memory) => memory.content),
+  );
+  if (!fact) throw new Error("That rule is already saved on this board.");
+
+  return withBoardMemoryLock(project.id, async (lease) => {
+    await bumpBoardMemoryRevision(project.id);
+    await lease.assertCurrent();
+    const rows = buildCustomInstructionFileRows({
+      projectId: project.id,
+      teamId: project.teamId ?? "",
+      source: boardMemorySourceForFact(fact),
+      fileName: "Board memory",
+      fileType: BOARD_MEMORY_FILE_TYPE,
+      content: fact,
+    });
+    await writeBoardMemoryRows(rows, lease.assertCurrent);
+    return { rule: fact };
+  });
+}
+
 export async function learnBoardMemoryFromSignal(args: {
   projectId: number;
   signal: BoardMemorySignal;
@@ -162,7 +230,7 @@ export async function learnBoardMemoryFromSignal(args: {
 }) {
   const project = await assertProjectAccess(args.userId, args.projectId);
   const revisionBeforeInference = await getBoardMemoryRevision(project.id);
-  const state = await loadBoardMemoryState(project.id);
+  const state = await loadBoardMemoryState(project.id, args.userId);
   if ((await getBoardMemoryRevision(project.id)) !== revisionBeforeInference) {
     throw new BoardMemoryBusyError();
   }
@@ -221,7 +289,7 @@ export async function learnBoardMemoryFromSignal(args: {
       project.id,
       async (lease) => {
         const [latestState, currentRevision] = await Promise.all([
-          loadBoardMemoryState(project.id),
+          loadBoardMemoryState(project.id, args.userId),
           getBoardMemoryRevision(project.id),
         ]);
         if (currentRevision !== revisionBeforeInference) {

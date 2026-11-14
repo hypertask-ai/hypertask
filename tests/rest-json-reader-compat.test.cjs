@@ -137,13 +137,15 @@ const baseline = {
                 "autoDescriptionSuggestions": true,
                 "dictationLanguage": true,
                 "inboxAdvanceOnSend": true,
+                "inboxSplitsOverflowHidden": true,
                 "emojiFrequency": true,
                 "calendarViews": true,
                 "allTasksDateRange": true,
                 "boardSortMode": true,
                 "aiChatOpenNewTickets": true,
                 "aiChatOpenTickets": true,
-                "aiChatOpenBoards": true
+                "aiChatOpenBoards": true,
+                "cardParts": true
               }
             }
           ]
@@ -289,13 +291,15 @@ const baseline = {
                 "autoDescriptionSuggestions": true,
                 "dictationLanguage": true,
                 "inboxAdvanceOnSend": true,
+                "inboxSplitsOverflowHidden": true,
                 "emojiFrequency": true,
                 "calendarViews": true,
                 "allTasksDateRange": true,
                 "boardSortMode": true,
                 "aiChatOpenNewTickets": true,
                 "aiChatOpenTickets": true,
-                "aiChatOpenBoards": true
+                "aiChatOpenBoards": true,
+                "cardParts": true
               }
             }
           ]

@@ -6,6 +6,7 @@ import { styleGuideLintConfig } from "./eslint-local-rules/style-guide.mjs";
 import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
 import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
 import { testHarnessLintConfig } from "./eslint-local-rules/test-harness.mjs";
+import { flagStubsLintConfig } from "./eslint-local-rules/flag-stubs.mjs";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -48,6 +49,7 @@ export default defineConfig([
   uiPatternsLintConfig,
   noCommentsLintConfig,
   testHarnessLintConfig,
+  flagStubsLintConfig,
   {
     // HTPR-6160: "@/lib/flags" reaches ioredis through getSessionUser, so a browser
     // component importing it breaks the production build with `Can't resolve 'tls'`.
@@ -66,6 +68,8 @@ export default defineConfig([
       "src/app/(tutorial space)/demo/page.tsx",
       // HTPR-6536: server component; gates the public /qa/login page.
       "src/app/qa/login/page.tsx",
+      // HTPR-7552: server component; gates the agent-board consent form.
+      "src/app/oauth/consent/page.tsx",
       // Server component; gates ticket-number detail URL resolution.
       "src/app/detail/\\[...slug\\]/page.tsx",
       "src/app/\\[...boardURL\\]/page.tsx",
@@ -116,5 +120,25 @@ export default defineConfig([
     rules: Object.fromEntries(
       oxlintOwnedRules().map((rule) => [rule, "off"]),
     ),
+  },
+  {
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
+    plugins: { import: nextConfigs[0].plugins["import"] },
+    rules: {
+      "import/no-duplicates": "error",
+    },
+  },
+  {
+    files: ["**/*.{js,jsx,mjs,cjs}"],
+    rules: {
+      "no-redeclare": "error",
+    },
+  },
+  {
+    files: ["**/*.{ts,tsx,mts,cts}"],
+    rules: {
+      "no-redeclare": "off",
+      "@typescript-eslint/no-redeclare": "error",
+    },
   },
 ]);

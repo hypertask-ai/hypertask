@@ -79,6 +79,7 @@ function modal({ board = project(), payload, duplicate } = {}) {
     ...context, defaultViewFieldOwnership, formValuesRef, editedViewFieldsRef, openingViewDefaultsRef, defaultFormValues: form, formValues: form,
     saveEpochRef: { current: 0 }, setIsGeneratingTitle() {}, setTitleGenerationError() {}, setTaskWriterFilled() {},
     generatedTitleTrackerRef: { current: { reset() {} } },
+    taskWriterFieldDiffTrackerRef: { current: { reset() {} } },
     autoTitleCoordinator: { boardChanged: () => false, manualTitleChanged() {}, emptyTitleChanged() {}, reset() {}, cancelPending() {} },
     descriptionText: evaluate(initializer(source, "descriptionText").getText(source), {}), lastDescriptionTextRef: { current: "" },
     pathname: "/kanban", router: { replace() {} }, localStorage: { setItem() {} },

@@ -21,6 +21,8 @@ function loadTs(relativePath, aliases = {}) {
     '@/lib/flags/keys': require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts'),
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
     '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
+    '@/hooks/useFlag': { useFlag: () => false },
+    '@/lib/auth/getSessionUser': { getSessionUser: async () => null },
   }, aliases)
 
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
@@ -104,6 +106,11 @@ function makeHarness(redis = makeRedis()) {
     } },
     '@/lib/auth/safeReturnTo': loadTs('src/lib/auth/safeReturnTo.ts'),
     '@/lib/email/sendEmail': { sendEmail: async (args) => { calls.emails.push(args) } },
+    '@/lib/flags/definitions/htpr-7294-daily-funnel-probe': { HTPR_7294_DAILY_FUNNEL_PROBE_FLAG: 'htpr-7294-daily-funnel-probe' },
+    '@/lib/funnelProbe/inbox': { storeProbeVerificationLink: async () => {} },
+    '@/lib/funnelProbe/inbox': { isProbeRecipientEmail: () => false, storeProbeVerificationLink: async () => {} },
+    '@/lib/funnelProbe/signupGuard': { gateProbeInstantSignup: async () => ({ ok: true }) },
+    '@/lib/auth/sessionRevocation': { revokeOtherUserSessions: async () => true },
   }
   if (fs.existsSync(path.join(root, 'src/lib/auth/emailLinkToken.ts'))) {
     aliases['@/lib/auth/emailLinkToken'] = loadTs('src/lib/auth/emailLinkToken.ts', {

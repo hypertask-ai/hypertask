@@ -10,8 +10,14 @@ import { useTableActions } from "./useTableActions";
 import { useTableKeyboard } from "./useTableKeyboard";
 import { createTableRowRenderer } from "./TableTaskRow";
 
-import { lazy, Suspense, useCallback, useRef, type ReactNode } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { lazy, Suspense, useCallback, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { ChevronDown, MoreHorizontal, RotateCcw } from "lucide-react";
+import OptionPickerModal from "@/components/Modals/OptionPicker";
+import { ViewControlButton } from "../HeaderComponents/ShellViewControls";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
+import { HTPR_8974_TABLE_GROUP_MODES_FLAG } from "@/lib/flags/definitions/htpr-8974-table-group-modes";
+import { effectiveTableGrouping, tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
 
 
 
@@ -174,14 +180,23 @@ const TableView = ({
   dragOverSectionId, setDragOverSectionId, moveTaskToSection, dragOverColumn, setDragOverColumn,
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
-  expanded, setExpanded, setExcludedTaskIds, sortState, setSortState,
-  setTableSortViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
+  expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
+  setTableSortViewAndReturn, setTableGroupVisibilityViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
   } = useTableState({
     myTasksSnoozeActive, _currentProject, myTasksVisibleColumns, onMyTasksVisibleColumnsChange, currentUser,
     myTasksSort, myTasksSortKey, filteredSections, _sections,
   });
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
+  const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
+  const tableGroupModesEnabled = useFlag(HTPR_8974_TABLE_GROUP_MODES_FLAG);
+  const [groupMenu, setGroupMenu] = useState<{ id: string; title: string } | null>(null);
+  const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
+  const tableGrouping = effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled);
+  const hasHiddenGroups = Boolean(tableGrouping.hiddenGroupIds?.length || tableGrouping.onlyGroupId);
+  let tagGroupingActive = false;
+  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled) && tableGrouping.mode !== "column") tagGroupingActive = true;
   const {
   visibleColumns, getColumnWidth, frozenColumnOffset, setColumnWidth, freezeTitleWidth,
   gridTemplateColumns, tableMinWidth, reorderColumn, normalizedColumnOrder, storedColumnKeys,
@@ -195,7 +210,7 @@ const TableView = ({
   focusRowElement, focusTo, expandSection,
   } = useTableRows({
     sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
-    timeTotals, timeNow, sections, expanded, enableMyTasksBulkSelection,
+    timeTotals, timeNow, sections, expanded, collapsedSections, enableMyTasksBulkSelection,
     myTasksBulk, setExcludedTaskIds, persistedActiveItem, showArchivedOnBoard, isApple,
     myTasksSnoozeEnabled, setSelectedIndex, updateActiveItemAndItemInView, setExpanded,
   });
@@ -205,7 +220,7 @@ const TableView = ({
   closeAssignModal, runTaskShortcut,
   } = useTableActions({
     customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
-    _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
+    _currentProject, setTableSortViewAndReturn, setSortAccount, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
     rows, navigateToTask, focusRowElement, draggedTaskRef, setDragOverSectionId,
     currentProjectSectionIds, moveTaskToSection, timerToggling, queryClient, removeFromListWithStatus,
     setExcludedTaskIds, router, updateTaskInCache, starTask, currentUser,
@@ -226,11 +241,13 @@ const TableView = ({
   renderTaskRow,
   } = createTableRowRenderer({
     snapshot: useFirstScreenSurface(currentUser?.id),
+    tagGroupingActive: tagGroupingActive && tableGroupFoldEnabled,
     selectedIndex, dragOverSectionId, currentProjectSectionIds, sortState, openTask,
     customFieldBySortColumn, frozenColumnOffset, getTicketText, _currentProject, sectionTitleBySid,
     timeTotals, timeNow, draggedTaskRef, clearTaskDrag, handleMouseEnter,
     handleMouseLeave, gridTemplateColumns, enableMyTasksBulkSelection, myTasksBulk, visibleColumns,
   });
+  if (tableSortColumnsEnabled) queryClient.getQueryData(["projectsAll"]);
 
   const selectedAssignees = splitAssignees(assignTask?.assignees);
   let cursor = -1;
@@ -261,6 +278,17 @@ const TableView = ({
       style={{ maxHeight: "calc(100vh - 64px)" }}
     >
       <div className="w-full px-4 pb-6 pt-3">
+        {tableGroupModesEnabled && _currentProject && hasHiddenGroups && (
+          <ViewControlButton
+            label="Show all groups"
+            tooltipLeft={0}
+            className="min-h-11 !w-auto gap-2 px-2 text-dense md:hidden"
+            onClick={() => { void setTableGroupVisibilityViewAndReturn(_currentProject, "reset", ""); }}
+          >
+            <RotateCcw size={18} strokeWidth={1.75} />
+            <span>Show all groups</span>
+          </ViewControlButton>
+        )}
         <TableCreateTaskControl
           {...getTableCreateTaskControlProps({
             currentProject: _currentProject,
@@ -359,14 +387,18 @@ const TableView = ({
               );
             })}
           </div>
-          {(shouldFlattenSortedRows(
-            Boolean(_currentProject),
-            sortState.length > 0,
-            isPrioritySort
-          ) || savedViewPrioritySort) ? (
+          {(
+            (shouldFlattenSortedRows(
+              Boolean(_currentProject),
+              sortState.length > 0,
+              isPrioritySort,
+            ) || savedViewPrioritySort) && !((tableGroupFoldEnabled || tableGroupModesEnabled) && Boolean(_currentProject))
+          ) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
-                {rows.filter(isTaskRow).map(({ task }, index) => renderTaskRow(task, index))}
+                {rows.filter(isTaskRow).map((row, index) =>
+                  renderTaskRow(row.task, index, row.rowKey, row.sid),
+                )}
               </ul>
             </div>
           ) : (
@@ -382,6 +414,7 @@ const TableView = ({
                   ? sectionRows.find((row) => row.type === "more")?.hidden ?? 0
                   : rawItems.length - shown.length;
                 const destinationSectionId = tableSectionNumber(section) ?? null;
+                const folded = tableGroupFoldEnabled && collapsedSections.has(String(sid));
                 return (
                   <div
                     key={sid}
@@ -399,14 +432,50 @@ const TableView = ({
                     }}
                     className={`${destinationSectionId !== null && dragOverSectionId === destinationSectionId ? "bg-hover-active" : "bg-containerBackground"} shadow-md rounded-md py-2`}
                   >
-                    <div className="px-[10px] pt-1">
-                      <SplitTitle isSelected={true} onClick={() => {}} tab={{ idx: sectionIndex, project: section.section_title, length: rawItems.length, hasUnseen: false, overdueCount: myTasksSectionOverdueCounts?.[sectionIndex] ?? 0 }} />
+                    <div className={tableGroupModesEnabled && _currentProject ? "flex items-center justify-between pr-[10px]" : undefined}>
+                    <div
+                      role={tableGroupFoldEnabled ? "button" : undefined}
+                      tabIndex={tableGroupFoldEnabled ? 0 : undefined}
+                      className={`flex items-center gap-1 px-[10px] pt-1 ${tableGroupFoldEnabled ? "cursor-pointer" : ""}`}
+                      onClick={tableGroupFoldEnabled ? () => toggleCollapsedSection(sid) : undefined}
+                      onKeyDown={tableGroupFoldEnabled ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        toggleCollapsedSection(sid);
+                      } : undefined}
+                    >
+                      {tableGroupFoldEnabled && (
+                        <ChevronDown
+                          size={14}
+                          strokeWidth={1.75}
+                          className={`shrink-0 text-text-light-gray transition-transform ${folded ? "-rotate-90" : ""}`}
+                          aria-hidden
+                        />
+                      )}
+                      <SplitTitle isSelected onClick={() => {}} tab={{ idx: sectionIndex, project: section.section_title, length: rawItems.length, hasUnseen: false, overdueCount: myTasksSectionOverdueCounts?.[sectionIndex] ?? 0 }} />
                     </div>
+                    {tableGroupModesEnabled && _currentProject && (
+                      <ViewControlButton
+                        label={`Group actions: ${section.section_title}`}
+                        tooltipLeft={-80}
+                        onClick={() => setGroupMenu({ id: String(sid), title: section.section_title })}
+                      >
+                        <MoreHorizontal size={18} strokeWidth={1.75} />
+                      </ViewControlButton>
+                    )}
+                    </div>
+                    {!folded && (
                     <ul className="px-0">
                       {shown.map((task) => {
                         cursor += 1;
                         const flatIndex = cursor;
-                        return renderTaskRow(task, flatIndex);
+                        return renderTaskRow(
+                          task,
+                          flatIndex,
+                          tableTaskRowKey(task.id, sid),
+                          sid,
+                        );
                       })}
                       {hidden > 0 && (() => {
                         cursor += 1;
@@ -424,6 +493,7 @@ const TableView = ({
                         );
                       })()}
                     </ul>
+                    )}
                   </div>
                 );
               })}
@@ -431,6 +501,21 @@ const TableView = ({
           )}
         </div>
       </div>
+      {tableGroupModesEnabled && _currentProject && groupMenu && (
+        <OptionPickerModal
+          header={groupMenu.title}
+          options={[
+            { id: "hide", label: "Hide this group" },
+            { id: "filter", label: "Filter to this group" },
+          ]}
+          onSelect={(option) => {
+            if (option.id !== "hide" && option.id !== "filter") return;
+            void setTableGroupVisibilityViewAndReturn(_currentProject, option.id, groupMenu.id);
+            setGroupMenu(null);
+          }}
+          onClose={() => setGroupMenu(null)}
+        />
+      )}
       {showCommands.show && (
         <Suspense fallback={null}>
           <HypertasksCommands contextOptions={buildCommandContext()} />

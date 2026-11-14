@@ -1,7 +1,7 @@
 import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
 import { isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
-import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
@@ -12,9 +12,13 @@ import { z } from "zod";
 import { parseCookies } from "better-auth/cookies";
 import { Prisma } from "@prisma/client";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
+import { AgentWritingError } from "@/lib/agents/writing";
+import { enforceAgentWriting } from "@/lib/agents/writingEnforcement";
+import { HTPR_8905_SHARED_TICKET_WRITING_FLAG } from "@/lib/flags/definitions/htpr-8905-shared-ticket-writing";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { getNextUniqueTaskIndex } from "@/utils/controllers/tasks/getNextUniqueTaskIndex";
 import generateRank from "@/utils/generateRank";
 import { createTaskWithBoardWebhookOutbox } from "@/lib/mcp/webhooks/taskEvents";
@@ -29,6 +33,32 @@ import { taskWriteRoute, type TaskWriteRoute } from "./route";
 
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 class TaskSectionValidationError extends Error {}
+
+export async function refuseSharedTicketWriting(
+  userId: number,
+  agentId: string | null,
+  fields: { title: unknown; description: unknown },
+  headers: Headers,
+) {
+  if (!agentId) return null;
+  let sharedWriting = true;
+  try {
+    const sharedWritingOn = await isFeatureEnabled(HTPR_8905_SHARED_TICKET_WRITING_FLAG, userId);
+    if (!sharedWritingOn) sharedWriting = false;
+  } catch {
+    sharedWriting = true;
+  }
+  if (!sharedWriting) return null;
+  try {
+    await enforceAgentWriting(userId, agentId, fields, {}, { create: true });
+  } catch (error) {
+    if (error instanceof AgentWritingError) {
+      return NextResponse.json({ message: error.message, code: error.code, field: error.field }, { status: 400, headers });
+    }
+    throw error;
+  }
+  return null;
+}
 
 const route = (requestStartedAt: number) => taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -56,7 +86,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       createTaskFromComment,
       agentId: requestedAgentId,
     } = body;
-    console.log("🤔 ~ creating task ~ body:", body);
+    await logPersonal(session.userId, "creating task", { projectId: Number(requestedProjectId) || null, actorId: session.userId, outcome: "started", }, body);
     if (
       requestedUserId != null &&
       Number(requestedUserId) !== session.userId
@@ -140,12 +170,21 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     const dueDate = writerDueDate ?? requestedDueDate;
     let writerLabelIds: string[] = [];
     let boardLabelIds: string[] = [];
-    if (!tags?.length && body.requestKind === "compose-task" && Array.isArray(body.writerLabelIds) && body.writerLabelIds.length &&
+    let brainTools: typeof import("@/lib/ai/taskWriterBrainLabels") | null = null;
+    let writerBrain: import("@/lib/ai/taskWriterBrainLabels").TaskWriterBrainLabels | null = null;
+    if (body.requestKind === "compose-task" && Array.isArray(body.writerLabelIds) && body.writerLabelIds.length &&
         await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId)) {
       const { validateTaskWriterLabelIds } = await import("@/app/api/ai/_lib/taskWriterProperties");
-      const boardLabels = await prisma.label.findMany({ where: { projectId }, select: { id: true } });
+      const boardLabels = await prisma.label.findMany({ where: { projectId }, select: { id: true, value: true } });
       boardLabelIds = boardLabels.map((label) => label.id);
-      writerLabelIds = validateTaskWriterLabelIds(body.writerLabelIds, boardLabelIds);
+      const validated = validateTaskWriterLabelIds(body.writerLabelIds, boardLabelIds);
+      if (await isFeatureEnabled(HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG, userId)) {
+        brainTools = await import("@/lib/ai/taskWriterBrainLabels");
+        writerBrain = brainTools.brainLabelsFromBoard(boardLabels);
+      }
+      if (!tags?.length) writerLabelIds = validated;
+      else if (writerBrain) writerLabelIds = validated.filter((id) => writerBrain!.ids.has(id));
+      if (brainTools && writerBrain && writerLabelIds.length) writerLabelIds = brainTools.enforceBrainLabel(writerLabelIds, writerBrain);
     }
     if (body.existingTaskId != null) {
       const taskId = Number(body.existingTaskId);
@@ -175,9 +214,12 @@ const route = (requestStartedAt: number) => taskWriteRoute({
           where: { id: agentId },
           select: { id: true, userId: true, displayName: true, photoURL: true },
         }) : null;
-        await mutateTaskLabels(taskId, projectId, { add: writerLabelIds, skipIfPresent: boardLabelIds }, {
-          id: userId, email: currentUser.email ?? "", displayName: currentUser.displayName, photoURL: currentUser.photoURL,
-        }, actingAgent);
+        const labelActor = { id: userId, email: currentUser.email ?? "", displayName: currentUser.displayName, photoURL: currentUser.photoURL };
+        await mutateTaskLabels(taskId, projectId, { add: writerLabelIds, skipIfPresent: boardLabelIds }, labelActor, actingAgent);
+        const writerBrainIds = writerBrain ? writerLabelIds.filter((id) => writerBrain!.ids.has(id)) : [];
+        if (writerBrain && writerBrainIds.length) {
+          await mutateTaskLabels(taskId, projectId, { add: writerBrainIds, skipIfPresent: [...writerBrain.ids] }, labelActor, actingAgent);
+        }
         result.json.taskLabels = await prisma.taskLabel.findMany({ where: { taskId }, include: { label: true } });
       }
       if (customFields.length) {
@@ -193,6 +235,8 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       await Promise.all([broadcastBoardChange(projectId, { originUserId: userId }), broadcastTaskChange(taskId)]);
       return NextResponse.json({ newTask: result.json }, { status: 200, headers: responseHeaders });
     }
+    const writingRefusal = await refuseSharedTicketWriting(userId, agentId, { title, description: storedDescription }, responseHeaders);
+    if (writingRefusal) return writingRefusal;
     let tagIds: string[] = [];
     if (tags != null && !Array.isArray(tags)) {
       return NextResponse.json({ message: "Invalid labels" }, { status: 400, headers: responseHeaders });
@@ -216,7 +260,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         }, { status: 400, headers: responseHeaders });
       }
     }
-    if (!tagIds.length) tagIds = writerLabelIds;
+    if (writerLabelIds.length) {
+      tagIds = brainTools?.enforceBrainLabel([...tagIds, ...writerLabelIds], writerBrain) ?? [...new Set([...tagIds, ...writerLabelIds])];
+    }
     const initializeWriterDefaults = body.initializeWriterDefaults === true &&
       await isFeatureEnabled(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, session.userId);
     const initialPriority = initializeWriterDefaults ? { priority_index: 0, Priority_Value: "No Priority" } : priority;
@@ -591,10 +637,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       "🚀 ~ consthandler:NextApiHandler= ~ tagsCreated:",
       tagsCreated
     );
-    console.log(
-      "🚀 ~ consthandler:NextApiHandler= ~ description:",
-      description
-    );
+    await logPersonal(session.userId, "task description", { taskId: newTask.id }, description);
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
     schedulePostCreateWork({
       task: newTask,

@@ -30,7 +30,7 @@ export async function fetch({ until, env, cursor }) {
     if (slow.length > 50) throw new Error();
     const events = slow.map(row => {
       if (typeof row.query !== 'string' || !row.query.trim() || row.query.length > 500 || !['total_ms', 'mean_ms', 'max_ms'].every(field => Number.isFinite(Number(row[field])) && row[field] != null && Number(row[field]) >= 0) || !['calls', 'rows_returned'].every(field => /^\d+$/.test(String(row[field]))) || !/^-?\d+$/.test(String(row.queryid))) throw new Error();
-      return { service: name, board: 4060, message: `slow query: ${row.query.replace(/\s+/g, ' ').trim()}`, stack: `queryid: ${row.queryid}\ncalls: ${row.calls}\nmean_ms: ${row.mean_ms}\nmax_ms: ${row.max_ms}\ntotal_ms: ${row.total_ms}\nrows_returned: ${row.rows_returned}\nstats_since: ${row.stats_since ?? 'unknown'}\nCumulative statistics, not window-only calls.`, ts: until, count: 1, mean: Number(row.mean_ms) };
+      return { service: name, board: 11514, message: `slow query: ${row.query.replace(/\s+/g, ' ').trim()}`, stack: `queryid: ${row.queryid}\ncalls: ${row.calls}\nmean_ms: ${row.mean_ms}\nmax_ms: ${row.max_ms}\ntotal_ms: ${row.total_ms}\nrows_returned: ${row.rows_returned}\nstats_since: ${row.stats_since ?? 'unknown'}\nCumulative statistics, not window-only calls.`, ts: until, count: 1, mean: Number(row.mean_ms) };
     }).filter(event => event.mean >= threshold).map(({ mean, ...event }) => event);
     const rows = await sql('SELECT * FROM ops_stats.db_counters()', []);
     if (rows.length !== 1) throw new Error();
@@ -44,7 +44,7 @@ export async function fetch({ until, env, cursor }) {
         const delta = BigInt(next[field]) - BigInt(cursor[field]);
         if (delta <= (field === 'xact_rollback' ? BigInt(rollbackAlert) : 0n)) continue;
         if (delta > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error();
-        events.push({ service: name, board: 4060, message: `database ${field} increased`, stack: `delta: ${delta}\nprevious: ${cursor[field]}\ncurrent: ${next[field]}\nread window: ${cursor.read_at} to ${next.read_at}\nstats_reset: ${next.stats_reset ?? 'unknown'}`, ts: until, count: Number(delta) });
+        events.push({ service: name, board: 11514, message: `database ${field} increased`, stack: `delta: ${delta}\nprevious: ${cursor[field]}\ncurrent: ${next[field]}\nread window: ${cursor.read_at} to ${next.read_at}\nstats_reset: ${next.stats_reset ?? 'unknown'}`, ts: until, count: Number(delta) });
       }
     }
     return { events, cursor: next };

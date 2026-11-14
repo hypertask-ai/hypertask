@@ -1,7 +1,9 @@
 import { parse } from 'node-html-parser'
 import { FLAG_CHAT_RECORD, normalizeVisibleText } from '@/lib/flags/approvalWords'
+import { MAX_CHECK_TEXT_LENGTH, dropBlockquotes, stripTags } from '@/lib/text/safeHtmlText.mjs'
 
-const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i
+const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Resume|Session|tmux|Worktree|Ledger)\s*:/i
+const BARE_GATE_LABEL = /^\s*(Gate|Gates)\s*:/i
 const FEEDBACK_TALLY_LINE = /^(?:AI feedback tally|Fingerprint): ai-fb-[0-9a-f]{12}$/
 const BUILD_ID = 'a build or commit id'
 const TECHNICAL_KINDS: Array<[RegExp, string]> = [
@@ -83,7 +85,7 @@ function refusedValue(text: string, index: number, length: number): string {
 }
 
 function lines(text: string): string[] {
-  return parse(text.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '\n'))
+  return parse(dropBlockquotes(text))
     .structuredText.split('\n').map((line) => line.trim()).filter((line) => line && !FEEDBACK_TALLY_LINE.test(line))
 }
 
@@ -104,7 +106,7 @@ function lineHit(id: string, line: string): Hit | null {
   if (FLAG_RECORD_RULES.has(id) && isFlagSwitchRecord(line)) return null
   const plain = line.replace(/https?:\/\/\S+/g, 'LINK')
   if (id === 'robot-status') {
-    const status = plain.match(ROBOT_STATUS)
+    const status = plain.match(ROBOT_STATUS) ?? plain.match(BARE_GATE_LABEL)
     return status ? { legacy: true, reason: 'Robot status belongs in the agent log', offender: status[0] } : null
   }
   if (id === 'technical-detail') {
@@ -139,13 +141,30 @@ function labelPattern(label: string): RegExp {
   return new RegExp(`(?:^|\\s)${label.replace(/\s+/g, '\\s+')}\\s*:`, 'i')
 }
 
+function contextPointsBeforeQuestion(html: string): number {
+  const beforeQuestion = dropBlockquotes(html).split(/Question\s*:/i)[0] ?? ''
+  const lists = beforeQuestion.split(/<\/(?:ul|ol)\s*>/i)
+  const closed = lists.slice(0, -1).join(' ').match(/<li\b/gi)?.length ?? 0
+  const lastList = lists[lists.length - 1] ?? ''
+  const opens = lastList.match(/<li\b/gi)?.length ?? 0
+  const closes = lastList.match(/<\/li>/gi)?.length ?? 0
+  return closed + (opens > closes ? opens - 1 : opens)
+}
+
 function questionHit(html: string): Hit | null {
-  const textLines = lines(html)
-  if (!textLines.some((line) => labelPattern('Question').test(line))) return null
-  const blocks = html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '\n').split(/<br\s*\/?>|<\/(?:p|li|h[1-6]|div)>/i)
+  const allBlocks = dropBlockquotes(html).split(/(?=<br\s*\/?>|<\/(?:p|li|h[1-6]|div)>)/i)
+  const blockTexts = allBlocks.map((block) => parse(stripTags(block)).text)
+  const questionAt = blockTexts.findIndex((text) => labelPattern('Question').test(text))
+  if (questionAt === -1) return null
+  let start = 0
+  for (let index = 0; index <= questionAt; index += 1) {
+    if (labelPattern('What this is').test(blockTexts[index])) start = index
+  }
+  const blocks = allBlocks.slice(start)
+  const part = blocks.join('')
+  const textLines = lines(part)
   const owners = new Map<string, number>()
-  blocks.forEach((block, index) => {
-    const text = block.replace(/<[^>]+>/g, ' ')
+  blockTexts.slice(start).forEach((text, index) => {
     for (const label of QUESTION_PARTS) {
       if (labelPattern(label).test(text) && !owners.has(label)) owners.set(label, index)
     }
@@ -158,11 +177,10 @@ function questionHit(html: string): Hit | null {
     if (!textLines.some((line) => labelPattern(label).test(line))) return { reason: `${label} is missing`, offender: label }
   }
   const questionLine = textLines.find((line) => labelPattern('Question').test(line)) ?? ''
-  const asked = questionLine.replace(/^[\s\S]*\bQuestion\s*:\s*/i, '').trim()
+  const questionLabel = questionLine.match(/\bQuestion\s*:/i)
+  const asked = questionLabel ? questionLine.slice((questionLabel.index ?? 0) + questionLabel[0].length).trim() : ''
   if (!asked.endsWith('?')) return { reason: 'the question must end with a question mark', offender: questionLine }
-  const beforeQuestion = html.split(/Question\s*:/i)[0] ?? ''
-  const bullets = beforeQuestion.match(/<li\b/gi)?.length ?? 0
-  if (bullets > 3) return { reason: 'keep the context to three points', offender: 'Question:' }
+  if (contextPointsBeforeQuestion(part) > 3) return { reason: 'keep the context to three points', offender: 'Question:' }
   return null
 }
 
@@ -183,7 +201,7 @@ function fail(field: string, id: string, hit: Hit): never {
   throw new AgentWritingError(field, `Rule ${rule.name}: ${hit.reason}`, hit.offender, hit.fix ?? rule.fix, rule.id)
 }
 
-export type AgentWritingContext = { create?: boolean; houseRules?: boolean }
+export type AgentWritingContext = { create?: boolean; houseRules?: boolean; commentEdit?: boolean }
 
 const HOUSE_RULES = new Set(["dashed-code-name", "plain-valentin-quote", "question-shape", "ticket-parts"])
 
@@ -200,8 +218,11 @@ export function assertAgentWriting(
   for (const field of ['title', 'description', 'text'] as const) {
     const value = fields[field]
     if (typeof value !== 'string') continue
+    if (value.length > MAX_CHECK_TEXT_LENGTH) {
+      throw new AgentWritingError(field, `Keep text within ${MAX_CHECK_TEXT_LENGTH} characters`)
+    }
     const old = previous[field]
-    const unchanged = new Set(typeof old === 'string' ? lines(old) : [])
+    const unchanged = new Set(typeof old === 'string' && old.length <= MAX_CHECK_TEXT_LENGTH ? lines(old) : [])
     const fresh = lines(value).filter((line) => !unchanged.has(line))
     for (const line of fresh) {
       for (const rule of lineRules) {

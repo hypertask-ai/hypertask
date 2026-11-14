@@ -151,9 +151,10 @@ test('scope filtering advertises only callable actions for management, agent and
 })
 
 const agentOnlyTools = new Set(['hypertask_request_board_access', 'hypertask_get_board_access_request'])
+const flagAppendedChatTools = new Set(['hypertask_chat_inbox', 'hypertask_chat_reply'])
 test('legacy dispatch keeps every existing name callable and forwards credentials and invocation identity', async () => {
   const { calls, tools } = spyTools()
-  for (const tool of legacy.filter((candidate) => !agentOnlyTools.has(candidate.name))) {
+  for (const tool of legacy.filter((candidate) => !agentOnlyTools.has(candidate.name) && !flagAppendedChatTools.has(candidate.name))) {
     const args = sample(z.toJSONSchema(tool.parameters, { unrepresentable: 'any' }))
     if (tool.name === 'hypertask_time') args.action = 'running'
     const result = await rpc(tools, 'tools/call', { name: tool.name, arguments: args })
@@ -605,8 +606,7 @@ test('legacy and consolidated comment catalogs explain hidden logs and human-fac
     const name = consolidated ? 'hypertask_comments' : 'hypertask_add_comment_to_task'
     let tool = toolNamed(catalog, name)
     if (!consolidated) {
-      assert.match(tool.description, /hidden agent log/)
-      assert.match(tool.description, /kind question\|qa\|done for people/)
+      assert.match(tool.description, /refusal when an agent omits kind/)
       const described = await rpc(selected, 'tools/call', { name: 'hypertask_describe_tool', arguments: { name } })
       tool = JSON.parse(described.result.content[0].text)
     }
@@ -615,7 +615,7 @@ test('legacy and consolidated comment catalogs explain hidden logs and human-fac
       ? tool.inputSchema.oneOf.find((variant) => variant.properties.action.const === 'add').properties.input
       : tool.inputSchema
     for (const text of [tool.description, schema.properties.kind.description]) {
-      assert.match(text, /(?:Without a kind, agent text goes only to the hidden ticket agent log|Untyped agent notes stay hidden)/)
+      assert.match(text, /(?:An agent comment with no kind is refused and nothing is saved|Untyped agent notes stay hidden)/)
       assert.match(text, /(?:even for replies or mentions|including replies and mentions)/)
       assert.match(text, /question for (?:a decision by a person|decisions)/)
       assert.match(text, /qa for (?:a QA verdict|verdicts)/)

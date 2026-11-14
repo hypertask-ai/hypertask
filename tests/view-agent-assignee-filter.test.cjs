@@ -62,6 +62,9 @@ function loadCreateView({ agents = [], users = [] } = {}) {
       project_View: {
         upsert: async () => ({ id: "project-view-1" }),
       },
+      section: {
+        findMany: async () => [],
+      },
       user: {
         findMany: async (args) =>
           users.filter((user) => args.where.id.in.includes(user.id)),

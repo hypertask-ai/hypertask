@@ -7,6 +7,7 @@ import type {
   IFilterSettings,
   IValuePropUpdatedAt,
   TFilter,
+  TFilterMatch,
   TMatchFilters,
 } from "@/models/Filters/model";
 import type {
@@ -21,7 +22,7 @@ export type SerializableFilterSettings = {
   addedFilters: Array<{
     type: TFilter;
     searchPayload: unknown[];
-    match?: TMatchFilters;
+    match?: TFilterMatch;
   }>;
 };
 
@@ -34,7 +35,7 @@ const cloneSettings = (
     searchPayload: Array.isArray(filter.searchPayload)
       ? [...filter.searchPayload]
       : [],
-    ...(filter.match === "ALL" || filter.match === "ANY"
+    ...(filter.match === "ALL" || filter.match === "ANY" || filter.match === "HIDE"
       ? { match: filter.match }
       : {}),
   })),
@@ -108,7 +109,7 @@ export function toggleMatchFilters(
 export function toggleFilterValueMatchMode(
   settings: SerializableFilterSettings,
   type: TFilter,
-  nextMatch?: TMatchFilters,
+  nextMatch?: TFilterMatch,
 ): SerializableFilterSettings {
   const next = cloneSettings(settings);
   const existing = next.addedFilters.find((filter) => filter.type === type);

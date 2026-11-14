@@ -26,7 +26,7 @@ export async function prepareCommentNotifications(context: CommentFanoutContext)
 
   const clearsWaitingOn = !agentId && task.waitingOnUserId === creatorIdNum;
 
-  await scheduleCommentSummaryGeneration({ commentId: comment.id }).catch(
+  await scheduleCommentSummaryGeneration({ commentId: comment.id, agentId: agentId ?? null, ownerUserId: task.userId }).catch(
     (err) =>
       console.warn(
         "[createCommentService] comment summary schedule failed:",
@@ -83,6 +83,7 @@ export async function prepareCommentNotifications(context: CommentFanoutContext)
   const taskSummary = scheduleTaskSummaryGeneration({
     taskId,
     agentId: agentId ?? null,
+    ownerUserId: task.userId,
   });
   if (inboundEmailId) {
     await taskSummary;

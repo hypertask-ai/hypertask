@@ -79,7 +79,8 @@ function setup(options = {}) {
           (key === 'htpr-7512-attach-keeps-comment' && options.attachFlag !== false) ||
           (key === 'htpr-7514-inline-agent-images' && options.inlineImages === true) ||
           (key === 'htpr-8344-log-post-status' && options.logStatusFlag === true) ||
-          (key === 'htpr-8811-agent-note-image-links' && options.imageNoteLinks !== false)
+          (key === 'htpr-8811-agent-note-image-links' && options.imageNoteLinks !== false) ||
+          (key === 'htpr-9063-comment-audience' && options.refuseUntyped === true)
       },
     },
     '@/lib/mcp/listQuery': load('src/lib/mcp/listQuery.ts', {}),

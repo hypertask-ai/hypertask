@@ -7,6 +7,8 @@ run-name: ${{ inputs.journey || 'visual' }} @ ${{ inputs.head || github.head_ref
 on:
   push:
     branches: [production]
+  schedule:
+    - cron: '5 4 * * 1'
   workflow_dispatch:
     inputs:
       base:
@@ -22,11 +24,11 @@ on:
         description: Optional single pre-PR journey instead of visual comparison
         default: visual
         type: choice
-        options: [visual, inbox-cycle, inbox-cycle-broken]
+        options: [visual, inbox-cycle, inbox-cycle-broken, hands-free-drives]
 
 concurrency:
-  group: ${{ inputs.journey && inputs.journey != 'visual' && 'verify-qa' || format('visual-regression-{0}', github.event.pull_request.number || github.sha) }}
-  cancel-in-progress: ${{ (!inputs.journey || inputs.journey == 'visual') && github.event_name != 'push' }}
+  group: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.journey == 'inbox-cycle' && inputs.head == 'production')) && 'feature-map-live-weekly' || (inputs.journey && inputs.journey != 'visual' && 'verify-qa' || format('visual-regression-{0}', github.event.pull_request.number || github.sha)) }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' && (!inputs.journey || inputs.journey == 'visual') && github.event_name != 'push' }}
 
 jobs:
   visual-regression:
@@ -86,10 +88,16 @@ jobs:
         with:
           node-version: ^24.22.1
           check-latest: true
+      - name: Restore browser font cache
+        id: restore-browser-fonts
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/hypertask-browser-fonts
+          key: hypertask-browser-fonts-${{ runner.os }}-v2
       - name: Install pinned Chromium and fonts once
         run: |
-          npm exec --yes --package=@playwright/test@1.64.0 -- playwright install --with-deps chromium
-          sudo apt-get install -y fontconfig fonts-liberation fonts-noto-core fonts-noto-color-emoji
+          npm exec --yes --package=@playwright/test@1.64.0 -- playwright install chromium
+          node head/.github/scripts/browser-font-cache.mjs
       # HYCI-106: GitHub rolls ubuntu-latest to a new image without warning, and two
       # images in one hour each missed the other's saved screens, rebuilding the base
       # app for 316-325 s plus 94-97 s of capture. The pixels are the same when the
@@ -177,6 +185,7 @@ jobs:
             printf '%s\n' 'TURBOPUFFER_API_KEY=disposable-fixture'
             printf '%s\n' 'HT_PREMERGE_AI_STUB=1'
             printf '%s\n' 'HT_PREMERGE_QUEUE_STUB=1'
+            printf '%s\n' 'FLAG_PROCESS_CACHE_MS=0'
             printf '%s\n' 'QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3100'
             printf '%s\n' 'QSTASH_AUTO_REGISTER_SWEEP=false'
             printf '%s\n' 'NEXT_PUBLIC_PUSHER_KEY=app-key'
@@ -236,12 +245,16 @@ jobs:
 
   verify-qa:
     name: verify-qa
-    if: github.event_name == 'workflow_dispatch' && inputs.journey != '' && inputs.journey != 'visual'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.journey != '' && inputs.journey != 'visual')
+      || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
       packages: read
+    env:
+      VERIFY_QA_JOURNEY: ${{ github.event_name == 'schedule' && 'inbox-cycle' || inputs.journey }}
     services:
       postgres:
         image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
@@ -290,7 +303,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ inputs.head }}
+          ref: ${{ github.event_name == 'schedule' && 'production' || inputs.head }}
           persist-credentials: false
       - name: Initialize evidence
         run: mkdir -p verify-qa
@@ -300,13 +313,15 @@ jobs:
           check-latest: true
           cache: npm
       - name: Test verification helpers
+        if: github.event_name != 'schedule'
         run: node --test tests/verify-qa.test.cjs tests/verify-qa-premerge.test.cjs
       - name: Install dependencies and Chromium
         run: |
           set -o pipefail
           npm ci --prefer-offline --no-audit --no-fund 2>&1 | tee verify-qa/install.log
           npx prisma generate
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
+          node .github/scripts/browser-font-cache.mjs
       - name: Prepare disposable local credentials
         shell: bash
         run: |
@@ -332,6 +347,7 @@ jobs:
             printf '%s\n' 'TURBOPUFFER_API_KEY=disposable-fixture'
             printf '%s\n' 'HT_PREMERGE_AI_STUB=1'
             printf '%s\n' 'HT_PREMERGE_QUEUE_STUB=1'
+            printf '%s\n' 'FLAG_PROCESS_CACHE_MS=0'
             printf '%s\n' 'QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3100'
             printf '%s\n' 'QSTASH_AUTO_REGISTER_SWEEP=false'
             printf '%s\n' 'NEXT_PUBLIC_PUSHER_KEY=app-key'
@@ -366,11 +382,11 @@ jobs:
           exit 1
       - name: Launch, doctor, drive, and tear down
         env:
-          VERIFY_QA_JOURNEY: ${{ inputs.journey }}
           VERIFY_QA_BASE: http://127.0.0.1:3100
           VERIFY_QA_STATE_FILE: e2e/smoke/.state/smoke-state.json
           VERIFY_QA_FIXTURE: e2e/smoke/.state/inbox-cycle-fixture.json
           VERIFY_QA_REPORT_ONLY: '0'
+          PREMERGE_LOCAL: '1'
         run: |
           set -euo pipefail
           node scripts/premerge-local-search.mjs e2e/smoke/.state/card-fixture.json 53101 > verify-qa/search.log 2>&1 &
@@ -378,12 +394,11 @@ jobs:
           npx next start -H 127.0.0.1 -p 3100 > verify-qa/server.log 2>&1 &
           server=$!
           trap 'kill "$server" "$search" 2>/dev/null || true' EXIT
-          timeout --signal=TERM --kill-after=20s 240s node scripts/verify-qa-run.mjs 2>&1 | tee verify-qa/journey.log
+          timeout --signal=TERM --kill-after=20s 900s node scripts/verify-qa-run.mjs 2>&1 | tee verify-qa/journey.log
       - name: Summarize and sanitize evidence
         if: always()
         env:
           VERIFY_QA_JOB_STATUS: ${{ job.status }}
-          VERIFY_QA_JOURNEY: ${{ inputs.journey }}
           VERIFY_QA_STATE_FILE: e2e/smoke/.state/smoke-state.json
         run: node scripts/verify-qa-run.mjs --summary
       - name: Upload verification evidence
@@ -401,3 +416,13 @@ jobs:
           ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
         run: |
           printf '\nEvidence artifact: %s\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: File fleet-board weekly result
+        if: >-
+          always() && (
+            github.event_name == 'schedule'
+            || (github.event_name == 'workflow_dispatch' && inputs.journey == 'inbox-cycle' && inputs.head == 'production')
+          )
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}
+          FEATURE_MAP_LIVE_ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
+        run: node .github/scripts/feature-map-live-weekly-file.mjs

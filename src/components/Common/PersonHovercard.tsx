@@ -12,6 +12,7 @@ import { aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, isAiChatSidebar
 import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8964_REMOVE_PERSON_HOVER_FLAG } from "@/lib/flags/definitions/htpr-8964-remove-person-hover";
 import {
   autoUpdate,
   flip,
@@ -73,6 +74,7 @@ const PersonHovercardSurfaceContent = ({
 }: PersonHovercardSurfaceProps) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const hovercardDisabled = useFlag(HTPR_8964_REMOVE_PERSON_HOVER_FLAG);
   const controlled = externallyOpen !== undefined;
   const open = controlled ? externallyOpen : internalOpen;
   const setOpen = (next: boolean) => {
@@ -95,7 +97,7 @@ const PersonHovercardSurfaceContent = ({
   }, [anchor, refs]);
 
   const hover = useHover(context, {
-    enabled: !controlled,
+    enabled: !controlled && !hovercardDisabled,
     mouseOnly: true,
     handleClose: safePolygon({ blockPointerEvents: true }),
   });
@@ -276,6 +278,7 @@ const ParentPersonHovercard = ({
   const closeTimerRef = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
+  const hovercardDisabled = useFlag(HTPR_8964_REMOVE_PERSON_HOVER_FLAG);
   const cancelClose = () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
@@ -297,14 +300,6 @@ const ParentPersonHovercard = ({
       cancelClose();
       setOpen(true);
     };
-    const showOnHover = (event: PointerEvent) => {
-      if (!fromMouse(event)) return;
-      show();
-    };
-    const hideOnLeave = (event: PointerEvent) => {
-      if (!fromMouse(event)) return;
-      scheduleClose();
-    };
     const showOnTap = (event: MouseEvent) => {
       if (fromMouse(event)) return;
       show();
@@ -318,22 +313,39 @@ const ParentPersonHovercard = ({
       if (event.key === "Escape") setOpen(false);
     };
 
-    parent.addEventListener("pointerenter", showOnHover);
-    parent.addEventListener("pointerleave", hideOnLeave);
     parent.addEventListener("click", showOnTap);
     parent.addEventListener("focusin", showOnFocus);
     parent.addEventListener("focusout", scheduleClose);
     parent.addEventListener("keydown", dismissOnEscape);
     return () => {
       cancelClose();
-      parent.removeEventListener("pointerenter", showOnHover);
-      parent.removeEventListener("pointerleave", hideOnLeave);
       parent.removeEventListener("click", showOnTap);
       parent.removeEventListener("focusin", showOnFocus);
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);
     };
   }, [projectId, subject]);
+
+  useEffect(hovercardDisabled ? () => {} : () => {
+    const parent = markerRef.current?.parentElement;
+    if (!parent || !projectId || !subject) return;
+    const fromMouse = (event: PointerEvent | MouseEvent) => (event as PointerEvent).pointerType === "mouse";
+    const showOnHover = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      cancelClose();
+      setOpen(true);
+    };
+    const hideOnLeave = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      scheduleClose();
+    };
+    parent.addEventListener("pointerenter", showOnHover);
+    parent.addEventListener("pointerleave", hideOnLeave);
+    return () => {
+      parent.removeEventListener("pointerenter", showOnHover);
+      parent.removeEventListener("pointerleave", hideOnLeave);
+    };
+  }, [projectId, subject, hovercardDisabled]);
 
   useEffect(() => {
     if (!anchor) return;

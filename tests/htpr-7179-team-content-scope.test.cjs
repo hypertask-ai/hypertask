@@ -269,7 +269,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       for (const board of [15, 25]) {
         const before = f.writes.length;
         const result = await route[action](req(`comments/${board * 10}`, action, action === 'PATCH' ? { text: 'fixture edit' } : undefined), { params: Promise.resolve({ comment_id: String(board * 10) }) });
-        assert.equal(result.status, board === 15 ? 200 : 403);
+        assert.equal(result.status, board === 15 ? 200 : 404);
         const text = JSON.stringify(await result.json());
         assert.ok(!text.includes('B1-sentinel'));
         assert.equal(f.writes.length, before + (board === 15 ? 1 : 0));

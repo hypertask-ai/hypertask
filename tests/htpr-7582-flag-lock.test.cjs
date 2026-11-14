@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
+const { createJiti } = require('jiti');
 const { fixture, loader, ctx, session, NOW, FLAG } = require('./htpr-7582-fixtures.cjs');
+const { stubFlags } = createJiti(__filename, { interopDefault: true })(path.join(__dirname, 'helpers/flags.ts'));
 
 const deferred = () => {
   let resolve;
@@ -19,7 +22,7 @@ function flagFixture() {
   const transact = f.db.$transaction;
   f.db.$transaction = (run, options) => transact(() => run(Object.create(f.db)), options);
   const flags = loader({ ...f.stubs,
-    '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [{ key: FLAG, defaultMode: 'EVERYONE' }] },
+    '@/lib/flags/definitions': stubFlags({ [FLAG]: { defaultMode: 'EVERYONE' } }),
     react: { cache: run => run },
     '@/lib/flags/modeCache': { withFlagModeInvalidation: run => run(), flagModeScope: { getStore: () => ({ modes: Promise.resolve(null) }) } },
   })('src/lib/flags.ts');
@@ -103,7 +106,7 @@ test('transactional flag reads bypass stale request caches and fail closed on da
     const f = flagFixture();
     const cache = { modes: Promise.resolve([{ key: FLAG, mode: 'EVERYONE' }]) };
     const load = loader({ ...f.stubs,
-      '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [{ key: FLAG, defaultMode: 'EVERYONE' }] },
+      '@/lib/flags/definitions': stubFlags({ [FLAG]: { defaultMode: 'EVERYONE' } }),
       '@/lib/flags/modeCache': { flagModeScope: { getStore: () => cache } },
       react: { cache: run => run },
     });

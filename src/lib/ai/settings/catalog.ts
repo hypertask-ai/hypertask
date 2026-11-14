@@ -8,6 +8,7 @@ export const settingsPages = {
   calendar: "Week starts on, show weekends, Google Calendar connection, task sync and disconnect (manual-only)",
   inbox: "Archive and go to next task after sending a comment; display avatar in inbox (manual-only)",
   "task-page": "Collapse comments, play GIFs, suggest descriptions from titles, show task history, read receipts, scroll position, AI chat auto-open on new tickets, existing tickets and boards (manual-only)",
+  "card-settings": "Which parts show on your own board cards: ticket number, inbox icon, comments, sub-tasks, priority, size, due date, tags, staleness and blocked edge (manual-only)",
   "my-ai-usage": "Your personal AI usage",
   accounts: "Connected accounts",
   members: "Team name, seats, auto-join email domains, invitations, board member roles and removing team members",

@@ -22,7 +22,8 @@ function loader(overrides = {}, before = false) {
         const resolved = name.startsWith('@/') ? path.join(root, 'src', name.slice(2)) : path.resolve(path.dirname(filename), name)
         if (fs.existsSync(`${resolved}.ts`)) return load(`${resolved}.ts`)
         if (fs.existsSync(path.join(resolved, 'index.ts'))) return load(path.join(resolved, 'index.ts'))
-        if (resolved.endsWith('.json')) return JSON.parse(fs.readFileSync(resolved, 'utf8'))
+        if (resolved.endsWith('.json') && fs.existsSync(resolved)) return JSON.parse(fs.readFileSync(resolved, 'utf8'))
+        if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return load(resolved)
       }
       return require(name)
     })

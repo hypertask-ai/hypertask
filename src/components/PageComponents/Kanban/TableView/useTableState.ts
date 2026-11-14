@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { ITask } from "@/models/model";
 import { useShowArchivedOnBoard } from "@/hooks/Homepage/useShowArchivedOnBoard";
-import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, normalizeMyTasksTableVisibleColumns } from "@/store";
+import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, tableSortAccountAtom, tableColumnsAccountAtom, normalizeTableVisibleColumns, normalizeMyTasksTableVisibleColumns } from "@/store";
 import { returnSortedItems } from "@/utils/helperFunctions/helperFunctions";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
@@ -20,7 +20,14 @@ import { useRouter } from "next/navigation";
 import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
+import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
+import { getActiveTableColumnsFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
+import {
+  buildTableSectionsForGrouping,
+  effectiveTableGrouping,
+  getActiveTableCollapsedSectionsFromProject,
+} from "@/lib/table-view/tableGroupByTag";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
@@ -36,9 +43,17 @@ export function useTableState(context: Context) {
   } = context;
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
+  const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
+  const tableSortColumnsEnabled =
+    useFlag("htpr-8973-table-sort-columns");
+  const tableViewId =
+    _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
+    _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
+    _currentProject?.project_view?.default_view?.id;
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
+  const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
-  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
+  const myTasksSnoozeEnabled = Boolean(myTasksSnoozeActive);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
@@ -53,9 +68,28 @@ export function useTableState(context: Context) {
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
   const myTasksColumnsControlled = myTasksVisibleColumns !== undefined;
   const [atomVisibleColumns, setAtomVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
+  const [accountColumns, setAccountColumns] = useRecoilState(tableColumnsAccountAtom);
+  const sortAccount = useRecoilValue(tableSortAccountAtom);
+  const setSortAccount = useSetRecoilState(tableSortAccountAtom);
+  const savedTableColumns = tableSortColumnsEnabled && !myTasksColumnsControlled
+    ? getActiveTableColumnsFromProject(_currentProject)
+    : null;
+  const accountForView = tableSortColumnsEnabled && accountColumns?.viewId === tableViewId
+    ? accountColumns
+    : null;
+  const defaultVisibleColumns = normalizeTableVisibleColumns(undefined);
+  const savedOrDefaultKeys = savedTableColumns?.keys ?? (
+    _currentProject?.showTimeTotals && !defaultVisibleColumns.includes("time")
+      ? [...defaultVisibleColumns, "time"]
+      : defaultVisibleColumns
+  );
   const storedVisibleColumns = myTasksColumnsControlled
     ? myTasksVisibleColumns
-    : atomVisibleColumns;
+    : accountForView
+      ? accountForView.keys
+      : tableSortColumnsEnabled
+        ? savedOrDefaultKeys
+        : atomVisibleColumns;
   const normalizeVisibleColumns = myTasksColumnsControlled
     ? normalizeMyTasksTableVisibleColumns
     : normalizeTableVisibleColumns;
@@ -67,19 +101,68 @@ export function useTableState(context: Context) {
         onMyTasksVisibleColumnsChange(typeof next === "function" ? next(current) : next);
         return;
       }
+      if (tableSortColumnsEnabled && tableViewId) {
+        const current = accountForView?.keys ?? savedOrDefaultKeys;
+        const keys = typeof next === "function" ? next(current) : next;
+        if (keys === current || (keys.length === current.length && keys.every((key, index) => key === current[index]))) return;
+        setAccountColumns({
+          viewId: tableViewId,
+          keys,
+          widths: accountForView?.widths ?? savedTableColumns?.widths ?? {},
+        });
+        return;
+      }
       setAtomVisibleColumns(next);
     },
     [
+      accountForView?.keys,
+      accountForView?.widths,
       myTasksColumnsControlled,
       myTasksVisibleColumns,
       onMyTasksVisibleColumnsChange,
+      savedOrDefaultKeys,
+      savedTableColumns?.widths,
+      setAccountColumns,
       setAtomVisibleColumns,
+      tableSortColumnsEnabled,
+      tableViewId,
     ],
   );
   const [timeColumnSeededBoards, setTimeColumnSeededBoards] = useRecoilState(
     tableTimeColumnSeededBoardsAtom,
   );
-  const [columnWidths, setColumnWidths] = useRecoilState(tableColumnWidthsAtom);
+  const [atomColumnWidths, setAtomColumnWidths] = useRecoilState(tableColumnWidthsAtom);
+  const columnWidths = accountForView
+    ? accountForView.widths
+    : tableSortColumnsEnabled && !myTasksColumnsControlled
+      ? (savedTableColumns?.widths ?? {})
+      : atomColumnWidths;
+  const setColumnWidths = useCallback(
+    (next: Record<string, number> | ((current: Record<string, number>) => Record<string, number>)) => {
+      if (tableSortColumnsEnabled && tableViewId && !myTasksColumnsControlled) {
+        const current = accountForView?.widths ?? savedTableColumns?.widths ?? {};
+        const widths = typeof next === "function" ? next(current) : next;
+        setAccountColumns({
+          viewId: tableViewId,
+          keys: accountForView?.keys ?? savedOrDefaultKeys,
+          widths,
+        });
+        return;
+      }
+      setAtomColumnWidths(next);
+    },
+    [
+      accountForView?.keys,
+      accountForView?.widths,
+      myTasksColumnsControlled,
+      savedOrDefaultKeys,
+      savedTableColumns?.widths,
+      setAccountColumns,
+      setAtomColumnWidths,
+      tableSortColumnsEnabled,
+      tableViewId,
+    ],
+  );
   const { timeTotals } = useBoardRunningTimers(_currentProject?.id ?? null);
   const hasActiveBoardTimer = useMemo(
     () =>
@@ -124,11 +207,49 @@ export function useTableState(context: Context) {
     }
   }, [assignProject?.name, assignProjectError, assignProjectLoading, assignTask]);
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() =>
+    getActiveTableCollapsedSectionsFromProject(_currentProject),
+  );
   const [excludedTaskIds, setExcludedTaskIds] = useState<Set<number>>(() => new Set());
   const [sortState, setSortState] = useState<SortState>(() =>
-    myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
+    myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject, tableSortColumnsEnabled),
   );
-  const { setTableSortViewAndReturn, changeBoardLayout } = useKanbanViews(_currentProject);
+  const {
+    setTableSortViewAndReturn,
+    setTableColumnsViewAndReturn,
+    setTableCollapsedSectionsViewAndReturn,
+    setTableGroupVisibilityViewAndReturn,
+    changeBoardLayout,
+  } = useKanbanViews(_currentProject);
+  const lastSavedColumns = useRef("");
+  const pendingColumnsWrite = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!tableSortColumnsEnabled || myTasksColumnsControlled || !tableViewId || !_currentProject) return;
+    if (!accountColumns || accountColumns.viewId !== tableViewId) return;
+    const signature = JSON.stringify({ viewId: tableViewId, keys: accountColumns.keys, widths: accountColumns.widths });
+    if (signature === lastSavedColumns.current) return;
+    const write = () => {
+      pendingColumnsWrite.current = null;
+      lastSavedColumns.current = signature;
+      void setTableColumnsViewAndReturn(_currentProject, {
+        keys: accountColumns.keys,
+        widths: accountColumns.widths,
+      });
+    };
+    pendingColumnsWrite.current = write;
+    const handle = setTimeout(write, 400);
+    return () => clearTimeout(handle);
+  }, [
+    accountColumns,
+    myTasksColumnsControlled,
+    setTableColumnsViewAndReturn,
+    tableSortColumnsEnabled,
+    tableViewId,
+    _currentProject,
+  ]);
+  useEffect(() => () => {
+    if (tableSortColumnsEnabled) pendingColumnsWrite.current?.();
+  }, [tableSortColumnsEnabled]);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
   const lastGAt = useRef<number | null>(null);
@@ -137,17 +258,54 @@ export function useTableState(context: Context) {
     _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
     _currentProject?.project_view?.default_view?.id;
   useEffect(() => {
+    if (tableSortColumnsEnabled) return;
     setSortState(
-      myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
+      myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject, false),
     );
-
   }, [
     activeSortViewId,
     myTasksSort?.direction,
     myTasksSort?.field,
     myTasksSortKey,
     _currentProject?.showTimeTotals,
+    tableSortColumnsEnabled,
   ]);
+  useEffect(() => {
+    if (!tableSortColumnsEnabled) return;
+    if (sortAccount != null && sortAccount.viewId === activeSortViewId && sortAccount.sort) {
+      setSortState(sortAccount.sort as SortState);
+      return;
+    }
+    setSortState(
+      myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject, true),
+    );
+  }, [
+    activeSortViewId,
+    myTasksSort?.direction,
+    myTasksSort?.field,
+    myTasksSortKey,
+    sortAccount,
+    tableSortColumnsEnabled,
+    _currentProject,
+  ]);
+  useEffect(() => {
+    setCollapsedSections(getActiveTableCollapsedSectionsFromProject(_currentProject));
+  }, [activeSortViewId, _currentProject?.id]);
+  const toggleCollapsedSection = useCallback(
+    (sid: string | number) => {
+      const key = String(sid);
+      setCollapsedSections((previous) => {
+        const next = new Set(previous);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        if (_currentProject && tableGroupFoldEnabled) {
+          void setTableCollapsedSectionsViewAndReturn(_currentProject, next);
+        }
+        return next;
+      });
+    },
+    [_currentProject, setTableCollapsedSectionsViewAndReturn, tableGroupFoldEnabled],
+  );
   const sortedSections = useMemo(() => {
     const base = filteredSections ?? _sections ?? [];
     const withoutExcluded =
@@ -168,6 +326,10 @@ export function useTableState(context: Context) {
     if (_currentProject) sections = getFilteredEmptySections(sortedSections, _currentProject, true);
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
+  }
+  if (_currentProject && (tableGroupModesEnabled || legacyTableGroupEnabled)) {
+    const grouping = effectiveTableGrouping(_currentProject, tableGroupModesEnabled, legacyTableGroupEnabled);
+    sections = buildTableSectionsForGrouping(sections, grouping) as typeof sections;
   }
 
   useEffect(() => {
@@ -224,8 +386,8 @@ export function useTableState(context: Context) {
   dragOverSectionId, setDragOverSectionId, moveTaskToSection, dragOverColumn, setDragOverColumn,
   resizeGuide, setResizeGuide, tableWrapperRef, titleHeaderRef, customFields,
   selectedIndex, setSelectedIndex, assignTask, setAssignTask, assignProject,
-  expanded, setExpanded, setExcludedTaskIds, sortState, setSortState,
-  setTableSortViewAndReturn, changeBoardLayout, didRestore, timerToggling, lastGAt,
+  expanded, setExpanded, collapsedSections, toggleCollapsedSection, setExcludedTaskIds, sortState, setSortState,
+  setTableSortViewAndReturn, setTableGroupVisibilityViewAndReturn, setSortAccount, changeBoardLayout, didRestore, timerToggling, lastGAt,
   sections, currentProjectSectionIds, sectionTitleBySid, sectionOrderBySid, customFieldBySortColumn,
   customFieldBySortColumnRef, customFieldById,
   };

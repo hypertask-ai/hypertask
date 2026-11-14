@@ -22,6 +22,7 @@ export async function sweepValentinWaitingOn(): Promise<number> {
         section: true,
         status: true,
         waitingOnUserId: true,
+        waitingOnAgentId: true,
         waitingOnSetById: true,
         waitingOnSetAt: true,
         sectionEvents: {
@@ -91,6 +92,7 @@ export async function sweepValentinWaitingOn(): Promise<number> {
           (reaction.updatedAt ?? reaction.createdAt) > question.createdAt,
         )
       );
+      if (task.waitingOnAgentId) continue;
       const shouldWait = inWaitingColumn && !answered;
       if (shouldWait === (task.waitingOnUserId === VALENTIN_USER_ID)) continue;
       const departure = task.sectionEvents[0];

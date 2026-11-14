@@ -11,6 +11,8 @@ let activeWebhook;
 let pendingRows;
 let replies;
 let rawQueries;
+let chatAllEnabled;
+let heartbeatReads;
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
@@ -18,7 +20,9 @@ function stubModule(relativePath, exports) {
 }
 
 function sqlText(args) {
-  return Array.isArray(args[0]) ? args[0].join("?") : String(args[0]);
+  return Array.isArray(args[0])
+    ? require("@prisma/client").Prisma.sql(args[0], ...args.slice(1)).sql
+    : String(args[0]);
 }
 
 const chatMessage = {
@@ -54,8 +58,11 @@ const tx = {
     rawQueries.push(sql);
     if (/FROM "Agent"/.test(sql)) return [{ id: "agent-polling" }];
     if (/WITH pending AS/.test(sql)) {
-      const claimed = pendingRows.filter((row) => !row.isDelivered).slice(0, 50);
-      claimed.forEach((row) => {
+      const claimed = pendingRows.filter((row) =>
+        (!sql.includes('AND message."isDelivered" = false') || !row.isDelivered)
+        && !replies.some((reply) => reply.replyToMessageId === row.id)
+      ).slice(0, 50);
+      if (sql.includes('SET "isDelivered" = true')) claimed.forEach((row) => {
         row.isDelivered = true;
       });
       return claimed.map(({ id, sessionId, text, userName }) => ({
@@ -68,7 +75,14 @@ const tx = {
     return [];
   },
   agentWebhookSubscription: {
-    findUnique: async () => (activeWebhook ? { active: true } : null),
+    findUnique: async () => (activeWebhook ? { active: true, events: ["chat.message"] } : null),
+  },
+  agent: {
+    findFirst: async () => {
+      heartbeatReads += 1;
+      return { heartbeatAt: new Date() };
+    },
+    updateMany: async () => ({ count: 1 }),
   },
   chatSession: { update: async () => null },
   chatMessage,
@@ -81,6 +95,10 @@ const prisma = {
 };
 
 stubModule("src/lib/prisma.ts", { default: prisma });
+stubModule("src/lib/auth/agentScope.ts", {
+  prepareAgentScope: async () => {},
+  withAgentScopeRequest: (_request, run) => run(),
+});
 stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => null,
   validateMcpAuth: async () => authContext,
@@ -101,7 +119,7 @@ stubModule("src/lib/agents/chatAccess.ts", {
       : { ok: false, status: 404, error: "Session not found" },
 });
 stubModule("src/lib/flags.ts", {
-  isFeatureEnabled: async () => false,
+  isFeatureEnabled: async (key) => key === "htpr-7742-agent-chat-all" && chatAllEnabled,
 });
 stubModule("src/lib/agents/chatBroadcast.ts", {
   broadcastChatSession: async () => null,
@@ -141,13 +159,16 @@ const replyRoute = load(
   "agent-chat-pending-reply-entry",
 );
 
-const request = () =>
-  new Request("https://app.hypertask.ai/api/mcp/chat/pending", {
+const { chatInboxTool } = load("src/lib/mcp-server/tools/chat-inbox.tool.ts", "chat-inbox-dispatch-entry");
+const { chatReplyTool } = load("src/lib/mcp-server/tools/chat-reply.tool.ts", "chat-reply-dispatch-entry");
+
+const request = (unanswered = false) =>
+  new Request(`https://app.hypertask.ai/api/mcp/chat/pending${unanswered ? "?unanswered=true" : ""}`, {
     headers: { authorization: "Bearer agent-token" },
   });
 
-async function fetchPending() {
-  const response = await pendingRoute.GET(request());
+async function fetchPending(unanswered = false) {
+  const response = await pendingRoute.GET(request(unanswered));
   return { response, body: await response.json() };
 }
 
@@ -178,6 +199,7 @@ test.beforeEach(() => {
     user: { id: 6, displayName: "Valentin" },
   };
   activeWebhook = false;
+  chatAllEnabled = false;
   pendingRows = [
     {
       id: "message-1",
@@ -189,6 +211,7 @@ test.beforeEach(() => {
   ];
   replies = [];
   rawQueries = [];
+  heartbeatReads = 0;
 });
 
 test("pending returns the daemon payload and marks each message delivered", async () => {
@@ -212,6 +235,72 @@ test("pending returns the daemon payload and marks each message delivered", asyn
 
   const second = await fetchPending();
   assert.deepEqual(second.body.messages, []);
+});
+
+test("MCP tools dispatch inbox and reply through the real shared operation registry", async () => {
+  chatAllEnabled = true;
+  const inbox = JSON.parse(await chatInboxTool.execute({}, "agent-token"));
+  assert.equal(inbox.messages[0].id, "message-1");
+  assert.equal(pendingRows[0].isDelivered, false);
+
+  const args = { session_id: inbox.messages[0].sessionId, reply_to_message_id: inbox.messages[0].id, text: "Received through MCP." };
+  const reply = JSON.parse(await chatReplyTool.execute(args, "agent-token"));
+  assert.equal(reply.message.content, args.text);
+  assert.equal(replies[0].authorAgentId, "agent-polling");
+  const retried = JSON.parse(await chatReplyTool.execute(args, "agent-token"));
+  assert.equal(retried.message.id, reply.message.id);
+  assert.equal(replies.length, 1);
+  assert.deepEqual(JSON.parse(await chatInboxTool.execute({}, "agent-token")).messages, []);
+});
+
+test("MCP tool dispatch keeps foreign agents and user tokens refused", async () => {
+  chatAllEnabled = true;
+  const args = { session_id: "session-1", reply_to_message_id: "message-1", text: "Not mine." };
+  authContext = { agentId: "agent-other", user: { id: 6 } };
+  await assert.rejects(chatReplyTool.execute(args, "other-agent-token"), /Session not found/);
+  assert.equal(replies.length, 0);
+  authContext = { agentId: null, user: { id: 6 } };
+  await assert.rejects(chatInboxTool.execute({}, "user-token"), /agent token/i);
+  await assert.rejects(chatReplyTool.execute(args, "user-token"), /agent token/i);
+  assert.equal(replies.length, 0);
+});
+
+test("MCP inbox retries delivered but unanswered messages until a reply exists", async () => {
+  chatAllEnabled = true;
+  pendingRows[0].isDelivered = true;
+  activeWebhook = true;
+  assert.equal((await fetchPending(true)).body.messages[0].id, "message-1");
+  assert.equal((await fetchPending(true)).body.messages[0].id, "message-1");
+  assert.equal((await postReply()).response.status, 200);
+  assert.deepEqual((await fetchPending(true)).body.messages, []);
+});
+
+test("MCP inbox replays a read but unanswered message with the switch off, without touching the online status", async () => {
+  pendingRows[0].isDelivered = true;
+
+  const first = await fetchPending(true);
+  assert.equal(first.response.status, 200);
+  assert.equal(first.body.messages[0].id, "message-1");
+
+  const second = await fetchPending(true);
+  assert.equal(second.body.messages[0].id, "message-1");
+  assert.equal(pendingRows[0].isDelivered, true);
+  assert.equal(heartbeatReads, 0);
+
+  assert.equal((await postReply()).response.status, 200);
+  assert.deepEqual((await fetchPending(true)).body.messages, []);
+});
+
+test("MCP inbox replays until answered with the switch on and leaves the message undelivered", async () => {
+  chatAllEnabled = true;
+
+  assert.equal((await fetchPending(true)).body.messages[0].id, "message-1");
+  assert.equal(pendingRows[0].isDelivered, false);
+  assert.equal((await fetchPending(true)).body.messages[0].id, "message-1");
+  assert.ok(heartbeatReads >= 1);
+
+  assert.equal((await fetchPending()).body.messages[0].id, "message-1");
+  assert.equal(pendingRows[0].isDelivered, true);
 });
 
 test("the fetching agent can reply after pending marks the message delivered", async () => {

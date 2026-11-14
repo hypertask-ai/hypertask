@@ -270,6 +270,12 @@ export const getBulkTaskCommands = (
       ? `${commandOptions.bulkSelectionCount} selected tasks`
       : "Selected tasks",
     commandLists: [
+      ...(commandOptions.bulkMoveBoardEnabled ? [{
+        key: "bulkMoveToBoard",
+        name: "Move selected tasks to board",
+        commandMode: CommandMode.MoveTaskToBoard,
+        keywords: "move selected tasks board project",
+      }] : []),
       {
         key: "bulkMoveToColumn",
         name: commandOptions.kanbanSelectAllEnabled ? "Move to column" : "Move selected tasks to column",
@@ -309,6 +315,7 @@ export const getBulkTaskCommands = (
         {
           key: "bulkSelectAllInColumn",
           name: "Select all in this column",
+          ...(commandOptions.columnSelectAllHintEnabled ? { keyboard: ["SHIFT", "A"] } : {}),
           commandMode: CommandMode.SelectAllInColumn,
           keywords: "select all column section focused selected tasks",
         },

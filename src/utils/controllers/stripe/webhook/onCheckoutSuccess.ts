@@ -160,7 +160,12 @@ const sessionOnSuccess = async (
       return createdPlan;
     });
 
-    generateSummaryAfterUpsertionReminder(team.id);
+    const seeded = await import("@/app/api/ai/_lib/taskSummaryCheckoutSeed")
+      .then(({ seedTeamSummaryRefreshesOnCheckout }) =>
+        seedTeamSummaryRefreshesOnCheckout(team.id)
+      )
+      .catch(() => false);
+    if (!seeded) generateSummaryAfterUpsertionReminder(team.id);
     assertHeld();
     await completePendingStripeCancellation(storedPlan, assertHeld);
   });

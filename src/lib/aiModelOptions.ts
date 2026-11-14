@@ -574,6 +574,12 @@ export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
 
 export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
 
+export const AUTO_MODEL_OPTION_ID = "auto";
+
+export function toAutoModelOption(base: TAiModelOption): TAiModelOption {
+  return { ...base, id: AUTO_MODEL_OPTION_ID as string as TAiModelOptionId, title: "Auto", desc: "Picks the right model for each job" };
+}
+
 export type AiDefaultModelContext = {
   haiku55Enabled?: boolean;
   haikuDefaultEnabled?: boolean;
@@ -583,6 +589,7 @@ export type AiDefaultModelContext = {
   openaiOnlyDefaultEnabled?: boolean;
   hasDirectOpenAiKey?: boolean;
   hasClaudeRoute?: boolean;
+  ownModelsOnly?: boolean;
 };
 
 export function isOpenAiOnlyPaidTeam({ openaiOnlyDefaultEnabled, plan, hasClaudeRoute, hasDirectOpenAiKey }: AiDefaultModelContext): boolean {
@@ -719,6 +726,7 @@ export function getMobileAiChatModelLabel(
   option: { id: string } | undefined,
 ): string {
   const catalogOption = getAiModelOptionById(option?.id);
+  if (option?.id === AUTO_MODEL_OPTION_ID) return "Auto";
   if (!catalogOption) return "Select model";
   const modelLabel = getAiModelDefinition(catalogOption.modelKey)?.label;
   let effortLabel: string | null = null;

@@ -73,6 +73,7 @@ function welcome(editTaskId = 123) {
     "./taskSummaryAction": { taskSummaryActionFor: () => ({ label: "Summarize the current task", prompt: "summary" }) },
     "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
     "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
+    "@/lib/flags/definitions/htpr-9031-chip-starters": { HTPR_9031_CHIP_STARTERS_FLAG: "htpr-9031-chip-starters" },
   });
   return { element: WelcomeScreen(), sent };
 }

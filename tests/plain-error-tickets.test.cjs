@@ -36,7 +36,7 @@ test("titles are short, plain and never start with a bracket prefix or bare Erro
   assert.ok(plainTitle({ url: "/x", message: "a".repeat(500) }).length <= 99);
   assert.match(
     plainSummary({ url: "/onboarding", message: PRISMA }),
-    /^Something failed on the server while someone was using onboarding/,
+    /^Something failed on the server \(looking up a team failed\). Someone was using onboarding/,
   );
   const dash = String.fromCharCode(8212);
   assert.ok(!title.includes(dash) && !plainSummary({ message: PRISMA }).includes(dash));
@@ -50,4 +50,11 @@ test("browser errors say browser, not server", async () => {
   );
   assert.match(plainSummary({ source: "client", message: "boom" }), /^Something failed in the browser/);
   assert.match(plainSummary({ source: "server", message: "boom" }), /^Something failed on the server/);
+});
+
+test("ticket template block must open the description", async () => {
+  const mod = await import("../src/lib/tickets/plainLanguageTicket.mjs");
+  const html = mod.renderPlainLanguageTicketDescription({ whatWrongOrWanted: "Checkout failed.", whoItAffects: "testers", recommendedCourseAndWhy: "Fix checkout.", whatValentinMustDecide: "nothing", howToUndo: "revert" });
+  assert.equal(mod.hasPlainLanguageTicketBlock(html), true);
+  assert.equal(mod.hasPlainLanguageTicketBlock(`<p>intro</p>${html}`), false);
 });

@@ -4,11 +4,11 @@ const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 
 const flag = "htpr-8042-amoled-chat-border";
 
-function windowView({ enabled = true, mobile = false, minimized = false } = {}) {
+function windowView({ enabled = true, multiChat = false, mobile = false, minimized = false } = {}) {
   const load = loader({
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
-    "@/hooks/useFlag": { useFlag: key => key === flag && enabled },
+    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === "htpr-8334-multi-chat-windows" && multiChat },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {
       useAiChatContext: () => ({ showWelcomeScreen: true, minimized, currentSession: { title: "Saved conversation" } }),
@@ -44,13 +44,33 @@ for (const enabled of [false, true]) {
   });
 }
 
+test("desktop multi-chat uses a 4px control radius and keeps the outline", () => {
+  const view = windowView({ enabled: true, multiChat: true });
+  try {
+    const panel = view.container.querySelector(".chatwindow");
+    assert.equal(panel.classList.contains("[--bs-border-radius:4px]"), true);
+    assert.equal(panel.classList.contains("[--bs-border-radius:var(--radius-chat-window)]"), false);
+    assert.equal(panel.classList.contains("[outline:var(--outline-floating-panel)]"), true);
+  } finally { view.close(); }
+});
+
 test("phone content keeps its sizing; the surrounding sheet owns its outline", () => {
   const view = windowView({ mobile: true });
   try {
     const panel = view.container.querySelector(".chatwindow");
+    assert.equal(panel.classList.contains("[--bs-border-radius:4px]"), false);
     assert.ok(panel.classList.contains("rounded-none"));
     assert.ok(panel.classList.contains("h-full"));
     assert.equal(panel.classList.contains("[outline:var(--outline-floating-panel)]"), false);
+  } finally { view.close(); }
+});
+
+test("phone multi-chat leaves the desktop control radius off", () => {
+  const view = windowView({ mobile: true, multiChat: true, enabled: true });
+  try {
+    const panel = view.container.querySelector(".chatwindow");
+    assert.equal(panel.classList.contains("[--bs-border-radius:4px]"), false);
+    assert.equal(panel.classList.contains("[--bs-border-radius:var(--radius-chat-window)]"), false);
   } finally { view.close(); }
 });
 

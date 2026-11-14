@@ -37,3 +37,13 @@ The dependency-free `ci-image-sources.test.cjs` guard scans every file under
 must copy those sources; its consumers are not exempt. The existing root
 `docker-compose.yml` is local-only PostgreSQL 14 and is not used by CI, so it
 is left unchanged rather than silently upgrading a developer's data directory.
+
+## Feature flag stubs
+
+`tests/helpers/flags.ts` exports `stubFlags(overrides?)`. It builds `FEATURE_FLAG_DEFINITIONS`
+from the real files in `src/lib/flags/definitions`, so adding or renaming a flag needs no test
+edit. Override one field per real key, for example
+`stubFlags({ "htpr-7582-agent-access-request": { defaultMode: "EVERYONE" } })`. An unknown key
+throws instead of passing a stale test. ESLint fails a new hand-made `FEATURE_FLAG_DEFINITIONS`
+list and a hand mock of `@/lib/flags` in `tests/`; `eslint-local-rules/flag-stubs-baseline.json`
+holds the two older fixture files until someone touches them.

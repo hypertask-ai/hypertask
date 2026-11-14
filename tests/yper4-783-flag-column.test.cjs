@@ -26,7 +26,7 @@ function fixture({ flags = [own, dependency], projectId = 15, section = "Flag: E
   };
   const mocks = {
     "@/lib/prisma": { default: db },
-    "@/lib/flags": { listFeatureFlagModes: async () => { calls.push("flags"); if (flagError) throw new Error("unavailable"); return flags; } },
+    "@/lib/flags": { isFeatureEnabled: async () => false, listFeatureFlagModes: async () => { calls.push("flags"); if (flagError) throw new Error("unavailable"); return flags; } },
     "@/lib/auth/agentScope": { recordAgentBoardScopeMiss() {} },
     "@/lib/telemetry/analyticsIntents": {},
     "@/lib/tasks/sameBoardRelations": {},

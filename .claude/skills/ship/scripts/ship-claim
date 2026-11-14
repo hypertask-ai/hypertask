@@ -23,6 +23,12 @@
 # A claim whose claim id starts with "-" (a flag recorded as the id, e.g. "[--resume]") names no session and never counts.
 # Resume command: 2nd argument (or --resume <cmd>), else SHIP_CLAIM_RESUME, else CLAUDE_CODE_SESSION_ID, else CODEX_SESSION_ID / CODEX_THREAD_ID.
 # Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
+# SHIP_CLAIM_PICKED=1 (set by fleet/pick, which already chose the ticket and the order): skips the queue brake and the infra-first check.
+# SHIP_CLAIM_INCIDENT=1 (set by fleet/pick for an open board 15 ticket labelled incident, YPER4-1375): skips the open-PR hold,
+#   the unfinished-merged-work hold, the queue brake, infra first and the working-area check, because a live outage outranks
+#   the work a runner already holds. The flag counts only when the ticket is an HTPR ticket that really carries the incident
+#   label and is not Done or archived (re-read here, so a stray flag does nothing). The brain-extra-hard and design-pass
+#   refusals, the related-alert check and the claim race check all still apply.
 set -uo pipefail
 
 # decide <claim-id> <comments.json> [idle-ids] [assigned-ids] [self-resume]
@@ -82,18 +88,18 @@ QUEUE_MAX=20  # queue brake: above this many open non-draft app PRs (CI, Fleet I
 
 # Infra first (Valentin, 2026-10-27: "infrastructure fixes always go first, in code, not prose"). After the open-PR and
 # unfinished-merged-work holds, a NEW app (non-YPER4, non-HYCI) claim is refused while more than QUEUE_MAX non-draft PRs are open
-# or while board 4060 Backlog has a free ticket (no agent, no agent assignee, not "do not touch"). Reads every page.
+# or while board 11514 (Fleet CI & Infra) Backlog has a free ticket (no assignee at all, not "do not touch"). Reads every page.
 # A ticket that already has an open PR is adoption, not new work, and is never braked.
 infra_free() {
   local page offset=0 total count found=""
   while :; do
-    page=$(${SHIP_CLAIM_HYPERTASK:-hypertask} tasks list --project 4060 --status Normal --limit 100 --offset "$offset" --json) || return 1
+    page=$(${SHIP_CLAIM_HYPERTASK:-hypertask} tasks list --project 11514 --status Normal --limit 100 --offset "$offset" --json) || return 1
     jq -e '.success == true and (.tasks | type == "array") and all(.tasks[];
       (.ticketNumber | type == "string") and (.section | type == "string"))' <<<"$page" >/dev/null || return 1
     total=$(jq '.total // (.tasks | length)' <<<"$page"); count=$(jq '.tasks | length' <<<"$page")
     found+=$(jq -r '[.tasks[]
       | select(.section == "Backlog" and ((.title // "") | ascii_downcase | contains("do not touch") | not)
-          and .agent == null and ([.assignees[]? | select(.agent)] | length) == 0)
+          and .agent == null and ((.assignees // []) | length) == 0)
       | .ticketNumber] | join(" ")' <<<"$page") || return 1
     found+=' '
     [ "$((offset + count))" -lt "$total" ] || break
@@ -103,11 +109,49 @@ infra_free() {
   read -ra found <<<"$found"; echo "${found[*]:0:3}"
 }
 
+# incident_ok <TICKET>: SHIP_CLAIM_INCIDENT=1 is honoured only for an open HTPR ticket that carries the incident label.
+incident_ok() {
+  [ -n "${SHIP_CLAIM_INCIDENT:-}" ] && [[ $1 == HTPR-* ]] || return 1
+  local got=${task:-}
+  [ -n "$got" ] || got=$("${SHIP_CLAIM_HYPERTASK:-hypertask}" tasks get "$1" --json 2>/dev/null) || return 1
+  jq -e '.success == true and (.tasks | length == 1) and (.tasks[0]
+    | ((.labels // []) | any((.name // "") | ascii_downcase == "incident"))
+    and ((.status // "Normal") == "Normal") and (.sectionIsDone != true)
+    and ((.section // "") | IN("Done", "Archive", "Archived") | not))' <<<"$got" >/dev/null 2>&1
+}
+
+open_prs() {
+  local result
+  if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft); then
+    printf '%s\n' "$result"
+    return
+  fi
+  result=$(${SHIP_CLAIM_GH:-gh} api --paginate --slurp 'repos/hypertask-ai/hypertask/pulls?state=open&per_page=100') || return 1
+  jq -e 'if type == "array" and length > 0 and all(.[]; type == "array")
+    then [ .[][] | {number, title, headRefName: .head.ref, isDraft: .draft} ]
+      | if (map(.number) | unique | length) == length then . else error("repeated PR page") end
+    else error("invalid PR pages") end' <<<"$result"
+}
+
+merged_prs() {
+  local result
+  if result=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state merged --base production --search "$1 in:title" --limit 100 --json number,title); then
+    printf '%s\n' "$result"
+    return
+  fi
+  result=$(${SHIP_CLAIM_GH:-gh} api --method GET search/issues -f "q=repo:hypertask-ai/hypertask is:pr is:merged base:production $1 in:title" -f per_page=100) || return 1
+  jq -e 'if .incomplete_results == false and (.total_count | type == "number" and . >= 0 and . < 100)
+    and (.items | type == "array") and (.items | length) == .total_count
+    and all(.items[]; .pull_request != null)
+    then [.items[] | {number, title}] else error("incomplete merged PR search") end' <<<"$result"
+}
+
 hold_check() {
-  local t=$1 rn open n free board page total offset count expected_total candidates ticket project number merged matches seen unfinished=''
+  local t=$1 rn open n free board page total offset count expected_total candidates ticket project number merged matches seen unfinished='' known='' mine=''
   [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
   rn=${BASH_REMATCH[1]}
-  open=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft) \
+  if incident_ok "$t"; then echo "ship-claim: INCIDENT lane. Holds, queue brake and infra first skipped for $t."; return 0; fi
+  open=$(open_prs) \
     || { echo "ship-claim: HOLD. Cannot read open PRs, so no new claim for RUNNER $rn. Retry later." >&2; return 4; }
   jq -e 'type == "array" and length < 300 and all(.[];
     (.number | type == "number") and (.headRefName | type == "string") and (.title | type == "string")
@@ -119,7 +163,7 @@ hold_check() {
       then "RESUME" else ($m | map("https://github.com/hypertask-ai/hypertask/pull/\(.number)") | join(" ")) end' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
   [ "$HELD" != RESUME ] || return 0
-  for board in 15 4060; do
+  for board in 15 11514; do
     offset=0; expected_total=''; seen=''
     while :; do
       page=$(${SHIP_CLAIM_HYPERTASK:-hypertask} tasks list --project "$board" --status Normal --limit 100 --offset "$offset" --json) \
@@ -137,6 +181,11 @@ hold_check() {
       if [ "$(printf '%s' "$seen" | sed '/^$/d' | sort -u | wc -l)" -ne "$((offset + count))" ]; then
         echo "ship-claim: HOLD. Board $board repeated a ticket while paging." >&2; return 4
       fi
+      known+=$(jq -r '.tasks[].ticketNumber' <<<"$page"); known+=$'\n'
+      mine+=$(jq -r --arg runner "runner $rn" '.tasks[]
+        | select(.section | IN("In Progress", "AI Review", "QA"))
+        | select(any(.assignees[]; (.agent.displayName // "" | ascii_downcase) == $runner))
+        | .ticketNumber' <<<"$page"); mine+=$'\n'
       candidates=$(jq -r --arg runner "runner $rn" '.tasks[]
         | select(.section | IN("In Progress", "AI Review"))
         | select(any(.assignees[]; (.agent.displayName // "" | ascii_downcase) == $runner))
@@ -146,7 +195,7 @@ hold_check() {
         [ -n "$ticket" ] || continue
         [[ $ticket =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ && $project =~ ^[1-9][0-9]*$ && $number =~ ^[1-9][0-9]*$ ]] \
           || { echo "ship-claim: HOLD. Invalid assigned ticket on board $board." >&2; return 4; }
-        merged=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state merged --base production --search "$ticket in:title" --limit 100 --json number,title) \
+        merged=$(merged_prs "$ticket") \
           || { echo "ship-claim: HOLD. Cannot read merged PRs for $ticket." >&2; return 4; }
         jq -e 'type == "array" and length < 100 and all(.[]; (.number | type == "number") and (.title | type == "string"))' <<<"$merged" >/dev/null \
           || { echo "ship-claim: HOLD. Merged PR read is malformed or incomplete for $ticket." >&2; return 4; }
@@ -159,6 +208,17 @@ hold_check() {
       [ "$offset" -lt "$total" ] || break
     done
   done
+  # A parked ticket (fleet/park: back in its home column and unassigned, or in Valentin Review) no longer holds its runner,
+  # even though its PR is still open. A PR whose ticket is not on boards 15 and 11514, or has no ticket in its title, still holds.
+  if [ -n "$HELD" ]; then
+    HELD=$(jq -r --arg n "$rn" --arg known "$known" --arg mine "$mine" '
+      ($known | split("\n")) as $k | ($mine | split("\n")) as $m
+      | [.[] | select(.headRefName | test("^runner-?" + $n + "($|[/_-])"; "i"))
+        | select(((.title | ascii_upcase | capture("^(?<t>[A-Z0-9]+-[0-9]+) ").t?) // "") as $t
+            | $t == "" or (any($k[]; . == $t) | not) or any($m[]; . == $t))
+        | "https://github.com/hypertask-ai/hypertask/pull/\(.number)"] | join(" ")' <<<"$open") \
+      || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
+  fi
   if [ -n "$HELD" ]; then
     echo "ship-claim: HOLD. RUNNER $rn still has open PRs: $HELD"
     echo "ship-claim: do NOT claim $t or any other ticket. Drive one of these PRs to merged, live and Done first."
@@ -177,6 +237,7 @@ hold_check() {
     return 0
   fi
   [[ $t == YPER4-* || $t == HYCI-* ]] && return 0  # Fleet Infra and CI work are never braked (Valentin, 2026-10-31: "CI work only, so CI gets fixed first")
+  [ -z "${SHIP_CLAIM_PICKED:-}" ] || return 0
   n=$(jq -e '[.[] | select((.isDraft | not)
       and (.title | test("^(YPER4|HYCI)-") | not)
       and (.headRefName | test("^(ci-runner-[0-9]+|ci-boss|infra-lead|dependabot|cursor)/") | not))] | length' <<<"$open") \
@@ -186,7 +247,7 @@ hold_check() {
     return 4
   fi
   free=$(infra_free) \
-    || { echo "ship-claim: HOLD. Cannot read board 4060 to check infra first, so no app claim for RUNNER $rn." >&2; return 4; }
+    || { echo "ship-claim: HOLD. Cannot read board 11514 to check infra first, so no app claim for RUNNER $rn." >&2; return 4; }
   if [ -n "$free" ]; then
     echo "ship-claim: HOLD. infra first: free Fleet Infra tickets wait ($free). Do NOT claim $t; claim one of those."
     return 4
@@ -209,8 +270,8 @@ fi
 T=${1:-}
 [[ $T =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4|HYCI-NNNN> [\"<resume command>\"]" >&2; exit 2; }
 # The board a ticket lives on, so a refusal can name it. HYCI is the CI board (11514), owned by CI Boss.
-case "$T" in HTPR-*|HYFA-*) TICKET_BOARD=15 ;; YPER4-*) TICKET_BOARD=4060 ;; HYCI-*) TICKET_BOARD=11514 ;; *) TICKET_BOARD='' ;; esac
-ticket_board_name() { case "$1" in 15) echo "Hypertask" ;; 4060) echo "Fleet Infra" ;; 11514) echo "Hypertask CI" ;; *) echo "its own" ;; esac; }
+case "$T" in HTPR-*|HYFA-*) TICKET_BOARD=15 ;; YPER4-*|HYCI-*) TICKET_BOARD=11514 ;; *) TICKET_BOARD='' ;; esac
+ticket_board_name() { case "$1" in 15) echo "Hypertask" ;; 11514) echo "Fleet CI & Infra" ;; *) echo "its own" ;; esac; }
 ticket_board_owner() { case "$1" in 11514) echo "CI Boss" ;; *) echo "its owner" ;; esac; }
 VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}; HT_API=${SHIP_CLAIM_HT:-ht}
 SID=${CLAUDE_CODE_SESSION_ID:-}
@@ -237,8 +298,9 @@ if [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
     (.section | type == "string") and (.labels | type == "array")
     and all(.labels[]; .name | type == "string"))' <<< "$task" >/dev/null \
     || { echo "ship-claim: cannot parse ticket eligibility before claiming" >&2; exit 2; }
-  if jq -e '.tasks[0].labels | any(.name == "brain-extra-hard")' <<< "$task" >/dev/null; then
-    echo "ship-claim: REFUSED. $T is brain-extra-hard; RUNNER n skips this ticket. Pick an eligible ticket." >&2
+  engine=$(cat "${SHIP_CLAIM_RUNNER_STATE:-$HOME/.local/state/ht-or-runners}/engine-${BASH_REMATCH[1]}" 2>/dev/null)
+  if [ "$engine" != claude ] && [ "$engine" != codex ] && jq -e '.tasks[0].labels | any(.name == "brain-extra-hard")' <<< "$task" >/dev/null; then
+    echo "ship-claim: REFUSED. $T is brain-extra-hard; only a RUNNER on the codex (Sol high) or claude engine takes it. Pick an eligible ticket." >&2
     exit 4
   fi
   if jq -e '.tasks[0] | .section != "QA" and any(.labels[]; .name == "design-pass")' <<< "$task" >/dev/null; then
@@ -260,7 +322,7 @@ if [[ $T == HTPR-* ]]; then
 fi
 
 # A CI ticket has no working area; its board (11514) decides who joins (YPER4-980).
-if [[ $T != HYCI-* && ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
+if [[ $T != HYCI-* && ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] && ! incident_ok "$T"; then
   python3 "$(dirname "$(readlink -f "$0")")/runner-domain-admit.py" "${BASH_REMATCH[1]}" "$T" \
     || { echo "ship-claim: HOLD. Domain admission failed." >&2; exit 4; }
 fi
@@ -334,7 +396,7 @@ case "$res" in
     if jq -e --arg rid "$RID" '[.comments[], .activities[]?] | any(.[];
       (.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed.") and (contains($rid) | not))' "$W" >/dev/null; then
       project=$(jq -r '.tasks[0] | .projectId // .boardId // empty' "$MERGED" 2>/dev/null)
-      case "$T" in HTPR-*) project=${project:-15} ;; YPER4-*) project=${project:-4060} ;; esac
+      case "$T" in HTPR-*) project=${project:-15} ;; YPER4-*|HYCI-*) project=${project:-11514} ;; esac
       questions=$(jq -r --arg project "$project" --arg number "${T#*-}" '
         .comments | sort_by(.createdAt, .id) | .[]
         | ((.text // .commentText // "") | gsub("<[^>]*>"; " ") | gsub("[[:space:]]+"; " ")) as $text

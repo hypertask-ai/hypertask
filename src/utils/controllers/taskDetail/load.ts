@@ -24,6 +24,10 @@ import {
   type AgentVisibility,
 } from "@/lib/agents/visibility";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
+import { visibleWaitingOnActivity } from "@/lib/tasks/waitingOnActivitySql";
+import { scrubStoredTaskSummary } from "@/lib/tasks/redactWaitingActivities";
+import { attachAgentStatus } from "@/utils/controllers/tasks/attachAgentStatus";
+import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
 
 type Db = Pick<PrismaClient, "$queryRaw">;
 
@@ -153,6 +157,22 @@ const userSelect = {
   email: true,
 } satisfies Prisma.UserSelect;
 
+function publicWaitingAgent(
+  agent: {
+    id: string;
+    displayName: string | null;
+    photoURL: string | null;
+    userId: number;
+    visibility: AgentVisibility;
+    members: readonly { projectId: number }[];
+  } | null,
+  userId: number,
+  projectId: number,
+) {
+  if (!agent || !isAgentVisibleToUser(agent, userId, projectId)) return null;
+  return { id: agent.id, displayName: agent.displayName, photoURL: agent.photoURL };
+}
+
 export function projectVisibleTaskAgent(
   agent:
     | (PublicAgent & {
@@ -240,6 +260,16 @@ export async function findTaskByTicketNumber(ticketNumber: string, userId: numbe
 export function taskDetailInclude(userId: number, projectId: number) {
   return {
     user: { select: userSelect },
+    waitingOnAgent: {
+      select: {
+        id: true,
+        displayName: true,
+        photoURL: true,
+        userId: true,
+        visibility: true,
+        members: { select: { projectId: true } },
+      },
+    },
     description_: {
       select: {
         id: true,
@@ -313,7 +343,7 @@ export function taskDetailInclude(userId: number, projectId: number) {
               },
               orderBy: { subscriptionStaretdAt: "desc" },
             },
-            byokApiKeys: { select: { provider: true, enabled: true } },
+            byokApiKeys: { select: { provider: true, enabled: true, alwaysUse: true } },
           },
         },
         uniqueIdentifier: true,
@@ -490,12 +520,26 @@ export async function fetchTaskDetail(
         .catch((error) => console.warn("[Pull requests] Background refresh failed", task.id, error)),
     );
   }
+  const summaryRow = task.Task_Summary?.[0];
+  if (summaryRow?.content) summaryRow.content = await scrubStoredTaskSummary(summaryRow.content, task.id, userId, task.projectId) ?? summaryRow.content;
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
+  const waitingAgent = publicWaitingAgent(task.waitingOnAgent, userId, task.projectId);
+  let agentStatus = null;
+  if (await isFeatureEnabled(HTPR_7339_AGENT_PULSE_DOT_FLAG, userId)) {
+    const [withAgentStatus] = await attachAgentStatus([{ id: task.id }], Date.now(), {
+      userId,
+      projectId: task.projectId,
+    });
+    agentStatus = withAgentStatus.agentStatus;
+  }
   return {
     ...stripForeignTaskRelations(task),
+    waitingOnAgentId: waitingAgent ? task.waitingOnAgentId : null,
+    waitingOnAgent: waitingAgent,
     agentId: visibleAgent ? task.agentId : null,
     agent: visibleAgent,
+    agentStatus,
     description_: task.description_
       ? { ...task.description_, reactions }
       : task.description_,
@@ -506,7 +550,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw<IComment[]>`
     WITH base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-        ${assignmentActivityWithCurrentAvatars} AS activity,
+        ${visibleWaitingOnActivity(userId, Prisma.sql`comment_task."projectId"`, assignmentActivityWithCurrentAvatars)} AS activity,
         c."seen",
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
@@ -644,7 +688,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     task_row AS (SELECT id AS "taskId", "projectId" FROM authorized_task),
     base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-        ${assignmentActivityWithCurrentAvatars} AS activity,
+        ${visibleWaitingOnActivity(userId, Prisma.sql`ti."projectId"`, assignmentActivityWithCurrentAvatars)} AS activity,
         c."seen",
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
@@ -727,7 +771,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
 export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw`
     SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-      c.activity, c."seen",
+      ${visibleWaitingOnActivity(userId, Prisma.sql`comment_task."projectId"`, Prisma.sql`c.activity`)} AS activity, c."seen",
       CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
       CASE WHEN agent_visibility.hidden THEN 'Private agent'
         ELSE c."agentDisplayName" END AS "agentDisplayName",

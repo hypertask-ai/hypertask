@@ -79,7 +79,20 @@ test("lazy rail controls reserve their final 56px before cached board content pa
 });
 
 test("empty inbox split titles reserve the loaded 32px row and remain hidden on phones", () => {
-  const SplitTitles = load("src/app/inbox/Inbox.tsx", { ButtonGroup: noop }, "SplitTitlesContainer");
+  const SplitTitles = load("src/app/inbox/Inbox.tsx", {
+    ButtonGroup: noop,
+    useFlag: () => false,
+    useRef: React.useRef,
+    useState: React.useState,
+    useEffect: React.useEffect,
+    useLayoutEffect: React.useLayoutEffect,
+    useRecoilState: () => [{ currSplit: 0 }],
+    globalNotificationFocusAtom: {},
+    ChevronLeft: noop,
+    ChevronRight: noop,
+    useGetUserPreferences: () => ({ data: { inboxSplitsOverflowHidden: false } }),
+    HTPR_9029_STICKY_SPLITS_FLAG: "htpr-9029-sticky-splits",
+  }, "SplitTitlesContainer");
   const SplitTitle = load("src/components/notifications/inboxSplit/SplitTitle.tsx", {
     "@/hooks/Inbox/useInboxZeroStyling": { useInboxZeroStyling: () => ({ classes: {} }) },
     "lucide-react": { Circle: noop },
@@ -99,6 +112,34 @@ test("empty inbox split titles reserve the loaded 32px row and remain hidden on 
   }
 });
 
+test("Overflow hidden keeps the split titles on one line only when the person turned it on", () => {
+  const render = (saved) => {
+    const SplitTitles = load("src/app/inbox/Inbox.tsx", {
+      ButtonGroup: noop,
+      useFlag: () => true,
+      useRef: React.useRef,
+      useState: React.useState,
+      useEffect: React.useEffect,
+      useLayoutEffect: React.useLayoutEffect,
+      useRecoilState: () => [{ currSplit: 0 }],
+      globalNotificationFocusAtom: {},
+      ChevronLeft: noop,
+      ChevronRight: noop,
+      useGetUserPreferences: () => ({ data: { inboxSplitsOverflowHidden: saved } }),
+      HTPR_9029_STICKY_SPLITS_FLAG: "htpr-9029-sticky-splits",
+    }, "SplitTitlesContainer");
+    return new JSDOM(renderToString(React.createElement(SplitTitles, {
+      contentGap: false,
+    }, React.createElement("div", null, "First"), React.createElement("div", null, "Last")))).window.document;
+  };
+  const oneLine = render(true).querySelector(".pills-row");
+  assert.match(oneLine.className, /(?:^|\s)flex-nowrap(?:\s|$)/);
+  assert.doesNotMatch(oneLine.className, /(?:^|\s)flex-wrap(?:\s|$)/);
+  const wrapped = render(false).querySelector(".pills-row");
+  assert.match(wrapped.className, /(?:^|\s)flex-wrap(?:\s|$)/);
+  assert.doesNotMatch(wrapped.className, /(?:^|\s)flex-nowrap(?:\s|$)/);
+});
+
 const globalProvider = "src/components/ProviderGlobal/GloablProviders.tsx";
 
 function reservations(state) {
@@ -109,6 +150,7 @@ function reservations(state) {
   const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: "htpr-7650-ai-chat-open-switches" },
     "@/hooks/General/useKeepAiChatClosed": { useKeepAiChatClosed: () => ({ keepAiChatClosed: state.keepAiChatClosed ?? false, ready: true }) },
     "@/lib/state": { useRecoilValue: (atom) => state[atom] },
@@ -127,6 +169,7 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
     "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "next/navigation": { usePathname: () => pathname },
     "lucide-react": { ChevronLeft: noop },
@@ -292,6 +335,7 @@ function renderTaskTitle(task, { descriptionStart, onSizing = noop } = {}) {
   const Title = load("src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", {
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/keys": {},
     "@/models/enums": { CommandMode: {} },
     react: React,
@@ -339,6 +383,7 @@ test("an unset priority stays null while its background query loads, keeping the
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/keys": {},
     "@/lib/taskDetailReads": {},
   });
@@ -399,6 +444,7 @@ function editorPanels(cachedStaticFirst = false) {
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     HTPR_7393_COMMENT_INLINE_AI_FLAG: "comment-inline-ai",
     HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts",
+    HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG: "htpr-9028-inline-creation-screenshots",
     useSetRecoilState: () => noop,
     useRecoilValue: () => false,
     showAIChatInterfaceAtom: "chat-open",

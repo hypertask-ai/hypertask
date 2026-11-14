@@ -34,7 +34,7 @@ test("task detail SSR sends the board's subscription and BYOK state", () => {
     orderBy: { subscriptionStaretdAt: "desc" },
   });
   assert.deepEqual(team.byokApiKeys, {
-    select: { provider: true, enabled: true },
+    select: { provider: true, enabled: true, alwaysUse: true },
   });
 });
 

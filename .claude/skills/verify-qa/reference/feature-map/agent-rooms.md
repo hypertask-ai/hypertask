@@ -1,12 +1,16 @@
 # Board agent rooms
 
-## How a customer reaches it
+## Sub-features
+
+- `board-agent-rooms` Board agent rooms.
+
+## How to get to it (user POV)
 
 Open `/agents/chat?view=rooms` or the standalone roster's **Board rooms** button.
 Room availability is permanent; the embedded board chat intentionally hides that
 navigation link.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Run the doctor and core inbox cycle as QA 985.
 2. Read `GET /api/agent-rooms` using the same browser session. Record status and
@@ -24,18 +28,18 @@ navigation link.
    may start paid AI work. Mark sending, Stop and budget mutation checks
    UNREACHABLE when those fixtures are unavailable.
 
-## What usually breaks
+## Gotchas
 
 The rooms route redirects to a direct-chat sidebar; embedded navigation gains an
 unwanted rooms link; membership scopes disappear; expired sessions look empty.
 
-## What proof to collect
+### What proof to collect
 
 Save doctor and desktop/phone room screenshots, GET status and board ID projection,
 and reload results. Pair live reads with route tests for authenticated success,
 unauthenticated refusal and agent membership scope.
 
-## Cleanup
+### Cleanup
 
 Record any room created, including its board and room IDs. Clean up core inbox
 fixtures.

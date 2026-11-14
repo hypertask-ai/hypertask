@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { batchEligibleWhenCapped } from "@/lib/ai/spend/remainingSpend";
+
 import {
   labelClassifierPrompt,
   LABEL_CLASSIFIER_INSTRUCTIONS,
@@ -21,8 +23,8 @@ export const BATCH_MAX_REQUESTS = 1000;
 export const BATCH_STALE_MS = 25 * 60 * 60 * 1000;
 export const BATCH_USAGE_PROVIDER = "gateway-batch";
 
-export function batchEligibleFunding(source: "customer" | "managed" | "shared", planMode = false): boolean {
-  return !planMode && source === "managed";
+export function batchEligibleFunding(source: "customer" | "managed" | "shared", planMode = false, holdsOn = false): boolean {
+  return batchEligibleWhenCapped(source, planMode, holdsOn);
 }
 
 export type BatchKind = "slack-summary" | "smart-label";

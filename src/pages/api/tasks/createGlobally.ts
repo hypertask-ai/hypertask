@@ -2,6 +2,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { getDesktopCliTokenUser, logDesktopCliAuthorization } from "@/lib/auth/desktopCliTokenUser";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -80,7 +81,7 @@ const loadDefaults: NextApiHandler = async (
           ranking: position === "top" ? "asc" : "desc",
         },
       });
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ task:", task);
+      await logPersonal(session.userId, "task defaults", { taskId: task?.id ?? null }, task);
 
       if (position === "bottom") {
         ranking = generateRank(task ? task.ranking : undefined, undefined);

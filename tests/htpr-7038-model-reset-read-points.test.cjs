@@ -93,6 +93,8 @@ test("chat and every editor saved-model surface await reset before reading and s
         },
         "@/lib/ai/tools/helpers": { loadActingAgent: async () => null },
         "@/lib/nativeAgent/modelPin": { resolveAgentModelPin: () => null },
+        "@/lib/flags": { isFeatureEnabled: async () => false },
+        "@/app/api/ai/_lib/autoModel": { autoModelEnabled: async () => false, isAutoRequest: () => false },
         "@/lib/ai/chatStream/models": { resolveModelSelection: (_provider, _model, _option, _settings, _surface, id) => { assert.equal(id, "team-choice"); events.push("select"); throw selected; } },
         "@/lib/ai/chatStream/errors": { reportHandledChatError: async () => {}, errorMessage: () => "selection reached", createSseErrorResponse: () => { throw selected; } },
       };
@@ -139,7 +141,7 @@ test("server saved-choice readers are covered, and the UI fetches the shared pre
   visit(path.join(root, "src"));
   assert.deepEqual(readers.sort(), [
     "src/app/api/ai/_lib/editorAi.ts", "src/app/api/users/preferences/route.ts",
-    "src/lib/ai/chatStream/turnModel.ts", preferenceFile,
+    "src/lib/ai/chatStream/thinkingChoice.ts", "src/lib/ai/chatStream/turnModel.ts", preferenceFile,
   ].sort());
   const requested = [];
   const hook = load("src/hooks/General/useGetUserPreferences.tsx", {

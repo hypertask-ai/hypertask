@@ -1,6 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
-import { resolveAiFallbackCredential, getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getByokOrTeamGatewayApiKeyForModelOption, resolveForcedTeamKey, ForcedTeamKeyError } from "@/app/api/ai/_lib/byokKeys";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
 import { getAiModelOptionById, isHaiku55Model, resolveHaikuModelId } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
@@ -22,6 +22,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7857_HEARTBEAT_STEP_CAP_FLAG, HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG } from "@/lib/flags/keys";
 
 import { selectModel } from "@/lib/ai/chatStream/models";
+import { userThinkingChoice } from "@/lib/ai/chatStream/thinkingChoice";
 
 import { withHigherEffort } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
@@ -64,7 +65,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     const ownKeyProvider = state.selected.usageProvider === "byok:deepseek" ? undefined : state.selected.usageProvider;
     const nameOwnKey = Boolean(ownKeyProvider) && await isFeatureEnabled("htpr-7751-own-key-rejected", dbUser.id);
     state.send("error", {
-      content: userFacingErrorMessage(error, "model-stream", nameOwnKey ? ownKeyProvider : undefined),
+      content: userFacingErrorMessage(error, "model-stream", nameOwnKey ? ownKeyProvider : undefined, state.requestLogEnabled),
       toolsExecuted: toolExecutions.length > 0,
       ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
     });
@@ -72,7 +73,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     if (heartbeatExecutionId) {
       await failHeartbeatExecution(
         heartbeatExecutionId,
-        errorMessage(error)
+        errorMessage(error, state.requestLogEnabled)
       );
       state.heartbeatExecutionTerminal = true;
     }
@@ -88,6 +89,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const chunks: string[] = [];
   let ranTools = false;
   let reachedStepLimit = false;
+  const thinkingChoice = heartbeatExecutionId ? null : await userThinkingChoice(dbUser.id, state.body?.modelOptionId);
   for (let attempt = 0; attempt < 2; attempt++) {
     ranTools = false;
     reachedStepLimit = false;
@@ -101,6 +103,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       provider: state.selected.usageProvider,
       feature: "chat",
       reasoningFeature: heartbeatExecutionId ? "heartbeat" : "chat",
+      ...(thinkingChoice ? { reasoningEffort: thinkingChoice, userReasoning: true } : {}),
     });
     const result = streamText({
       model: state.selected.model,
@@ -123,6 +126,19 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
 
       },
       onError: async ({ error }) => {
+        const forcedLookup = { trustedTeamId: gatewayTags.teamId, projectId: usageProjectId, userId: dbUser.id, agentId: actingAgent?.id };
+        try {
+          const forced = typeof resolveForcedTeamKey === "function" ? await resolveForcedTeamKey(forcedLookup) : null;
+          if (forced) {
+            await handleModelError(new ForcedTeamKeyError(forced.provider));
+            return;
+          }
+        } catch (lookupError) {
+          if (lookupError instanceof ForcedTeamKeyError) {
+            await handleModelError(lookupError);
+            return;
+          }
+        }
         if (
           attempt === 0 &&
           !state.cancelled &&

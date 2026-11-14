@@ -122,7 +122,7 @@ export function useCommentToAiChat() {
       if (!(await waitForSession())) return;
       if (isTypingRef.current) return;
       await handleSendMessageRef.current?.(
-        "Summarize this ticket, its description and the key points from the comments, concisely."
+        "Summarize the current task. First say what it is in one or two lines, then where it stands in one line, then up to three bullets for what is still open. No Next action line. No flag names, pull request numbers, screen sizes, or owner names."
       );
     } finally {
       sendingRef.current = false;

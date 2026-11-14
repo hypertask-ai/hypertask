@@ -1,12 +1,14 @@
 # Style-guide lint baseline
 
-`npm run lint` enables the four rules exported by `style-guide.mjs`. The existing
-Lint step in `.github/workflows/ci-tests.yml` runs that same command, so style
-errors fail the required `ci-tests` check without a separate job or merge gate.
+`npm run lint` enables the four rules exported by `style-guide.mjs` plus the
+duplicate-import and repeated-name rules in `eslint.config.mjs` (HTPR-8990). The
+existing Lint step in `.github/workflows/ci-tests.yml` runs that same command, so
+these errors fail the required `ci-tests` check without a separate job or merge gate.
 
 `style-guide-suppressions.json` is ESLint's native bulk-suppression baseline of
-existing production violations. Only the four style-guide rules are suppressed;
-other lint errors still fail. ESLint tracks counts per file and rule, not line
+existing production violations. Only those six rules are suppressed; other lint
+errors still fail. The duplicate-import rule reaches files outside `src/` too, so
+its entries also cover `tests/` and `scripts/`. ESLint tracks counts per file and rule, not line
 numbers: new files and counts above the baseline fail, but replacing an old
 violation with another of the same rule within its allowance is not detected.
 
@@ -26,8 +28,16 @@ npm run lint -- \
   --suppress-rule tailwindcss/no-custom-classname \
   --suppress-rule hypertask-style/no-raw-tailwind-colors \
   --suppress-rule hypertask-style/no-unapproved-color-literals \
-  --suppress-rule hypertask-style/no-forbidden-utilities
+  --suppress-rule hypertask-style/no-forbidden-utilities \
+  --suppress-rule import/no-duplicates \
+  --suppress-rule no-redeclare \
+  --suppress-rule @typescript-eslint/no-redeclare
 ```
+
+`import/no-duplicates` and the two `no-redeclare` rules are the cheap check that
+catches a mistake before it waits on the type check, which can run out of time.
+The TypeScript rule replaces the core one for `.ts`/`.tsx` files because only it
+accepts overload declarations.
 
 ## Added-line token check
 

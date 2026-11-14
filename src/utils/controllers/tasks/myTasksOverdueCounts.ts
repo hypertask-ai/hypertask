@@ -11,6 +11,8 @@ import {
   type MyTasksScope,
 } from "@/lib/myTasksScopes";
 import { listRunning } from "@/lib/timeTracking";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import type { ISection } from "@/models/model";
@@ -75,6 +77,7 @@ export async function getMyTasksOverdueCounts(args: {
   );
   const runtimeContext: IFilterRuntimeContext = {
     runningTaskIds: new Set(running.map((entry) => entry.taskId)),
+    tagHideFilterEnabled: await isFeatureEnabled(HTPR_8171_HIDE_TAGS_FLAG, args.userId),
   };
   const options: ApplyMyTasksViewOptions = {
     applyFilterSettings: args.applyFilterSettings,

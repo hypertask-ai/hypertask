@@ -5,6 +5,7 @@ const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const blockingStubs = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 const routePath = path.join(root, "src/lib/mcp/operations/tasks/operation.ts");
 const routeJavascript = ts.transpileModule(fs.readFileSync(routePath, "utf8"), {
   compilerOptions: {
@@ -52,7 +53,10 @@ function loadRoute(tasks = []) {
     },
     "@/utils/controllers/projects/getAllIncludes": {
       getProjectWhere: () => ({}),
+      blockedByRelationsInclude: blockingStubs.blockedByRelationsIncludeStub,
     },
+    "@/utils/controllers/tasks/attachOpenBlockingTasks": blockingStubs.attachOpenBlockingTasksStub,
+    "@/lib/blockingTasks": blockingStubs.blockingTasksMapperStub,
     "@/lib/mcp/agents": {
       mapVisibleMcpAgent: () => undefined,
       mcpVisibleAgentSelect: () => ({}),
@@ -60,6 +64,7 @@ function loadRoute(tasks = []) {
     "@/lib/agents/visibility": {
       accessibleAgentWhere: () => ({}),
     },
+    "@/lib/tasks/redactWaitingActivities": { scrubStoredTaskSummary: async (content) => content },
     "@/lib/mcp/tasks/mappers": {
       mapMcpTaskLabel: () => ({}),
       mapTaskAssignee: () => undefined,
@@ -111,6 +116,9 @@ function loadRoute(tasks = []) {
     "@/lib/mcp/boards/columnRole": require("./task-route-loader.cjs").load("src/lib/mcp/boards/columnRole.ts", {}),
     "@/utils/controllers/notifications/inboxZero": {
       loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])),
+    },
+    "@/utils/controllers/tasks/userCommentCounts": {
+      userCommentCountsByTaskId: async () => new Map(),
     },
   };
   const routeModule = { exports: {} };

@@ -1,24 +1,46 @@
-const { withStubs } = require("./helpers/stub-map.cjs");
+const { withStubs, quietPersonalLogStub, straightBoardGuardStubs } = require("./helpers/stub-map.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
+const plainLanguageTicketStubs = require("./helpers/plain-language-ticket-stubs.cjs");
+const blockingStubs = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 
 function load(file, mocks = {}) {
   const cache = new Map();
   function requireSource(specifier, directory) {
     if (specifier in mocks) {
-      const mock = mocks[specifier];
+      let mock = mocks[specifier];
+      if (specifier === "@/utils/controllers/projects/getAllIncludes" && !mock.blockedByRelationsInclude) {
+        mock = { blockedByRelationsInclude: blockingStubs.blockedByRelationsIncludeStub, ...mock };
+      }
       return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
     }
+    if (specifier in require("./helpers/stub-map.cjs").waitingActivityStubs) return require("./helpers/stub-map.cjs").waitingActivityStubs[specifier];
+    if (specifier === "@/utils/controllers/tasks/attachOpenBlockingTasks" && !(specifier in mocks)) {
+      return blockingStubs.attachOpenBlockingTasksStub;
+    }
+    if (specifier === "@/utils/controllers/tasks/attachAgentStatus" && !(specifier in mocks)) {
+      return { attachAgentStatus: async (tasks) => tasks.map((task) => ({ ...task, agentStatus: null })) };
+    }
+    if (specifier === "@/lib/flags/definitions/htpr-7339-agent-pulse-dot" && !(specifier in mocks)) {
+      return { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" };
+    }
+    if (specifier === "@/lib/blockingTasks" && !file.endsWith("blockingTasks.ts") && !(specifier in mocks)) {
+      return blockingStubs.blockingTasksMapperStub;
+    }
+    if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
+    if (specifier === "@/utils/controllers/logs/quietPersonalLog") return quietPersonalLogStub();
+    if (specifier in straightBoardGuardStubs) return straightBoardGuardStubs[specifier];
     if (specifier === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (specifier === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {}, assertTicketRoom: async () => {} };
     if (specifier === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
+    if (specifier === "@/utils/controllers/tasks/userCommentCounts") return { userCommentCountsByTaskId: async () => new Map() };
     if (!specifier.startsWith("@/") && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return require(specifier);
     const base = specifier.startsWith("@/")
       ? path.join(root, "src", specifier.slice(2))
       : path.resolve(directory, specifier);
-    const filename = [base, `${base}.ts`, `${base}.cjs`].find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+    const filename = [base, `${base}.ts`, `${base}.cjs`, `${base}.mjs`].find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
     if (/src[\\/]lib[\\/]flags[\\/](?:keys|definitions|definitions[\\/]index\.generated)\.ts$/.test(filename ?? "")) {
       return require("./helpers/flag-files.cjs").load(filename);
     }

@@ -276,6 +276,8 @@ test('shared server writer sends Compose through the same board access check as 
 });
 
 function loadCreateGlobal(stubs) {
+  const writing = require("./helpers/stub-map.cjs").sharedTicketWritingStubs;
+  for (const key of Object.keys(writing)) if (!(key in stubs)) stubs[key] = writing[key];
   stubs['@/lib/media/inlineAgentImages.server'] = { inlineAgentImagesForUser: async (html) => html };
   stubs["@/lib/auth/agentScope"] = require("./helpers/agent-board-scope.cjs").enforcedScope;
   stubs['@/utils/controllers/tasks/parentTaskAccess'] = createJiti(__filename)(path.join(root, 'src/utils/controllers/tasks/parentTaskAccess.ts'));
@@ -288,6 +290,7 @@ function loadCreateGlobal(stubs) {
     if (real.has(request)) return require(request);
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
+    if (request === "@/utils/controllers/logs/quietPersonalLog") return require("./helpers/stub-map.cjs").quietPersonalLogStub();
     assert.ok(request in stubs, `Unexpected dependency: ${request}`);
     return stubs[request];
   });

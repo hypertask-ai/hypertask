@@ -1,6 +1,10 @@
 # Board report agent doors
 
-## How a customer reaches it
+## Sub-features
+
+- `board-report-agent-doors` Board report agent doors.
+
+## How to get to it (user POV)
 
 Two MCP read and write doors on the existing `hypertask_report` tool, both backed by the same computation the board report screen uses.
 
@@ -9,7 +13,7 @@ Two MCP read and write doors on the existing `hypertask_report` tool, both backe
 
 The web screen lives at `https://app.hypertask.ai/report/<projectSlug>/velocity` (board 15 is `project-15`). Both doors are flag-gated server-side; with a flag off the route answers 404 `{"success":false,"error":"Not found"}` and every other report action keeps working.
 
-## How to drive it
+## Driving it with agent-browser
 
 Use any agent token, not a human session: `curl -H "Authorization: Bearer <agent token>" "https://app.hypertask.ai/api/mcp/reports/velocity?project_id=15"`. Compare `report.totals` and `report.speed` with the numbers the report screen shows for the same board and range.
 
@@ -17,7 +21,7 @@ For the status update, `curl -X POST -H "Authorization: Bearer <agent token>" -H
 
 `scripts/verify-qa`-style evidence: the door response, the screen text, and desktop 1440x900 plus phone 390x844 screenshots.
 
-## What usually breaks
+## Gotchas
 
 - The agent door drifting from the web screen: both must call `loadVelocityReport` in `src/utils/controllers/reports/velocityReport.ts` and `generateStatusUpdateReport` in `src/utils/controllers/reports/statusUpdate.ts`. A second copy of the maths is the bug.
 - A new route that is missing from `config/parity/contract.json` and `config/parity/generated-inventory.json` fails `parity-contract-trusted` before it can merge.
@@ -25,10 +29,10 @@ For the status update, `curl -X POST -H "Authorization: Bearer <agent token>" -H
 - A flag with no entry in `e2e/smoke/flag-modes/` fails `tests/shared-lists-build.test.cjs` until `node scripts/shared-lists/build.mjs --write` runs.
 - Status updates need a model for the board's team; a team with status updates turned off answers 400, not a half-written report.
 
-## What proof to collect
+### What proof to collect
 
 Checklist first, then: the agent door JSON, the matching screen text, desktop and phone screenshots of the report page, the flag-off 404 for each door, and the core inbox cycle (every app deployment). Record the account id and role, never credentials.
 
-## Cleanup
+### Cleanup
 
 Read-only door: nothing to clean up. The status update door writes one saved report per board; a QA run may edit or delete only the report it created on the QA board.

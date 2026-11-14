@@ -525,11 +525,11 @@ test("owner access requires both the approved id and login identity", async () =
 });
 
 test("QA access requires both the approved id and login identity", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-7037-shared-email-layout", 985), true);
   usersById.set(985, { email: "someone@example.com" });
-  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-7037-shared-email-layout", 985), false);
   usersById.set(7, { email: "valentin@hypertask.ai" });
-  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 7), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-7037-shared-email-layout", 7), false);
 });
 
 test("feature flag modes enforce owner, QA, everyone, and off access", () => {
@@ -756,6 +756,30 @@ test("My Tasks quick-add flag is retired and default-board patches stay enabled 
   listedRows = [];
 });
 
+test("the retired My Tasks snooze flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6461-my-tasks-snooze";
+  assert.equal(flags.MY_TASKS_SNOOZE_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_6461_my_tasks_snooze_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [{ key, mode, updatedAt: new Date() }];
+    row = { mode, updatedAt: new Date() };
+    assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+    for (const userId of [6, 985, 42]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(42))[key], true);
+});
+
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
   assert.equal(flags.HTPR_6899_STABLE_LAYOUT_FLAG, "htpr-6899-stable-layout");
   const listed = await flags.listFeatureFlagModes();
@@ -785,8 +809,8 @@ test("search Ask AI fullscreen has its own Owner + QA flag and respects OFF", as
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
-  assert.equal(qaFlags["htpr-3533-google-calendar"], true);
-  assert.equal(normalFlags["htpr-3533-google-calendar"], false);
+  assert.equal(qaFlags["htpr-7037-shared-email-layout"], true);
+  assert.equal(normalFlags["htpr-7037-shared-email-layout"], false);
 });
 
 test("stored owner-only flags stay unavailable to QA until changed", async () => {
@@ -1176,21 +1200,21 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fixture = path.join(dir, "flags.ts");
-  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6461-my-tasks-snooze" ? { ...definition, kind: "bugfix" } : definition))};`);
+  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6177-auto-task-descriptions" ? { ...definition, kind: "bugfix" } : definition))};`);
   fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
     .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
   const bugfixFlags = jiti(fixture);
-  const key = "htpr-6461-my-tasks-snooze";
+  const key = "htpr-6177-auto-task-descriptions";
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
   const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
-  const seeded = localFlagModes(defaults, { "htpr-3533-google-calendar": false });
+  const seeded = localFlagModes(defaults, { "htpr-7037-shared-email-layout": false });
   assert.equal(seeded[key], "EVERYONE");
-  assert.equal(seeded["htpr-3533-google-calendar"], "OWNER_AND_QA");
+  assert.equal(seeded["htpr-7037-shared-email-layout"], "OWNER_AND_QA");
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), true);
   assert.equal(await bugfixFlags.featureFlagCandidateUserIds(key), null);
   assert.equal((await bugfixFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
-  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-3533-google-calendar", 2343), false);
+  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-7037-shared-email-layout", 2343), false);
   row = { key, mode: "OFF" };
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), false);
   assert.deepEqual(await bugfixFlags.featureFlagCandidateUserIds(key), []);
@@ -1206,7 +1230,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "explicit-bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
-  const key = "htpr-6461-my-tasks-snooze";
+  const key = "htpr-6177-auto-task-descriptions";
   for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
     const fixture = path.join(dir, `flags-${mode}.ts`);
     fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === key ? { ...definition, kind: "bugfix", defaultMode: mode } : definition))};`);

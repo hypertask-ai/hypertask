@@ -312,6 +312,7 @@ test("page index includes, rows, schema and namespace contain only page-owned me
     } } } },
     "@/lib/turbopuffer": { default: { namespace: (name) => ({ write: async (body) => { writes.push({ name, body }); } }) }, turbopufferNamespaces: namespaces },
     "@/utils/controllers/search/rankHits": {}, "@/app/api/ai/_lib/boardMemoryContract": {},
+    "@/lib/ai/spend/embeddingRoute": { embeddingSpendMode: async () => "current", withSpendCharge: async (_route, _teamId, _texts, work) => work() },
   }, {
     env: { TURBOPUFFER_EMBEDDINGS_API_KEY: "synthetic-test-key" },
     fetch: async (_url, options) => {

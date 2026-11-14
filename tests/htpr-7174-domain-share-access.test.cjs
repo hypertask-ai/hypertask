@@ -21,7 +21,9 @@ function load(relPath, stubs) {
 }
 
 const { isShareLinkLive } = load("src/utils/controllers/tasks/getSharedTask.ts", {
+  ...require("./helpers/stub-map.cjs").waitingActivityStubs,
   "@/lib/prisma": {},
+  "@prisma/client": { Prisma: { sql: () => ({}) } },
   "@/lib/agents/publicAgent": {},
   "@/models/model": {},
 });

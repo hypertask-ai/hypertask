@@ -8,15 +8,24 @@ import { visibleTasksFromRows } from "@/lib/myTasksBulkSelection";
 import type { TableViewProps } from "./tableViewShared";
 import type { useTableState } from "./useTableState";
 import { getSortComparator, Row, SECTION_CAP, isTaskRow } from "./tableViewShared";
+import { tableTaskRowKey } from "@/lib/table-view/tableGroupByTag";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
+
+const NO_COLLAPSED_SECTIONS: ReadonlySet<string> = new Set();
 
 type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableMyTasksBulkSelection"> &
-  Pick<ReturnType<typeof useTableState>, "sortState" | "customFieldBySortColumnRef" | "sectionOrderBySid" | "timeTotals" | "timeNow" | "sections" | "expanded" | "myTasksBulk" | "setExcludedTaskIds" | "persistedActiveItem" | "showArchivedOnBoard" | "isApple" | "myTasksSnoozeEnabled" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setExpanded">;
+  Pick<ReturnType<typeof useTableState>, "sortState" | "customFieldBySortColumnRef" | "sectionOrderBySid" | "timeTotals" | "timeNow" | "sections" | "expanded" | "collapsedSections" | "myTasksBulk" | "setExcludedTaskIds" | "persistedActiveItem" | "showArchivedOnBoard" | "isApple" | "myTasksSnoozeEnabled" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setExpanded">;
 
 export function useTableRows(context: Context) {
+  const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
+  if (tableSortColumnsEnabled) getSortComparator("updated", "desc", new Map());
   const snapshot = useFirstScreenSurface();
   const {
   sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
-  timeTotals, timeNow, sections, expanded, enableMyTasksBulkSelection,
+  timeTotals, timeNow, sections, expanded, collapsedSections, enableMyTasksBulkSelection,
   myTasksBulk, setExcludedTaskIds, persistedActiveItem, showArchivedOnBoard, isApple,
   myTasksSnoozeEnabled, setSelectedIndex, updateActiveItemAndItemInView, setExpanded,
   } = context;
@@ -24,14 +33,18 @@ export function useTableRows(context: Context) {
 
   const isPrioritySort = sortState[0]?.column === "priority";
   const savedViewPrioritySort = myTasksSort?.field === "priority";
+  const effectiveCollapsed = tableGroupFoldEnabled ? collapsedSections : NO_COLLAPSED_SECTIONS;
+  const foldGroups = (tableGroupFoldEnabled || tableGroupModesEnabled) && Boolean(_currentProject);
 
   const rows = useMemo(() => {
     if (sortState.length > 0) {
-      const flattenSort = shouldFlattenSortedRows(
-        Boolean(_currentProject),
-        true,
-        isPrioritySort
-      ) || savedViewPrioritySort;
+      const flattenSort = !foldGroups && (
+        shouldFlattenSortedRows(
+          Boolean(_currentProject),
+          true,
+          isPrioritySort,
+        ) || savedViewPrioritySort
+      );
       const comparators = sortState.map(({ column, direction }, index) =>
         getSortComparator(
           column,
@@ -54,20 +67,32 @@ export function useTableRows(context: Context) {
         });
 
       if (flattenSort) {
-        const allTasks = sections.flatMap((section) => section.items || []);
-        return sortTasks(allTasks).map((task) => ({
-          type: "task" as const,
-          task,
-          sid: sortedTaskRowSectionKey(Boolean(_currentProject), task),
-        }));
+        const flatTasks = sections.flatMap((section) => section.items || []);
+        return sortTasks(flatTasks).map((task) => {
+          const sid = sortedTaskRowSectionKey(Boolean(_currentProject), task);
+          return {
+            type: "task" as const,
+            task,
+            sid,
+            rowKey: tableTaskRowKey(task.id, sid),
+          };
+        });
       }
 
       const next: Row[] = [];
       sections.forEach((section, index) => {
         const sid = tableSectionKey(section) ?? `i${index}`;
+        if (effectiveCollapsed.has(String(sid))) return;
         const items = sortTasks(section.items || []);
         const shown = expanded.has(sid) ? items : items.slice(0, SECTION_CAP);
-        shown.forEach((task) => next.push({ type: "task", task, sid }));
+        shown.forEach((task) =>
+          next.push({
+            type: "task",
+            task,
+            sid,
+            rowKey: tableTaskRowKey(task.id, sid),
+          }),
+        );
         if (items.length > shown.length)
           next.push({ type: "more", sid, hidden: items.length - shown.length });
       });
@@ -77,9 +102,19 @@ export function useTableRows(context: Context) {
     const next: Row[] = [];
     sections.forEach((section, index) => {
       const sid = tableSectionKey(section) ?? `i${index}`;
-      const items = section.items || [];
+      if (effectiveCollapsed.has(String(sid))) return;
+      const items = tableSortColumnsEnabled && _currentProject
+        ? [...(section.items || [])].sort((a, b) => (a.ranking ?? "").localeCompare(b.ranking ?? ""))
+        : (section.items || []);
       const shown = expanded.has(sid) ? items : items.slice(0, SECTION_CAP);
-      shown.forEach((task) => next.push({ type: "task", task, sid }));
+      shown.forEach((task) =>
+        next.push({
+          type: "task",
+          task,
+          sid,
+          rowKey: tableTaskRowKey(task.id, sid),
+        }),
+      );
       if (items.length > shown.length)
         next.push({ type: "more", sid, hidden: items.length - shown.length });
     });
@@ -87,7 +122,11 @@ export function useTableRows(context: Context) {
   }, [
     sections,
     expanded,
+    effectiveCollapsed,
+    tableGroupFoldEnabled,
+    foldGroups,
     sortState,
+    tableSortColumnsEnabled,
     sectionOrderBySid,
     _currentProject,
     timeNow,
@@ -151,12 +190,12 @@ export function useTableRows(context: Context) {
 
 
   const scrollToRow = useCallback((row: Row) => {
-    const id = isTaskRow(row) ? `inbox-${row.task.id}` : `table-more-${row.sid}`;
+    const id = isTaskRow(row) ? `inbox-${row.rowKey}` : `table-more-${row.sid}`;
     document.getElementById(id)?.scrollIntoView({ block: "nearest" });
   }, []);
 
-  const focusRowElement = useCallback((taskId: number) => {
-    const element = document.getElementById(`inbox-${taskId}`);
+  const focusRowElement = useCallback((rowKey: string) => {
+    const element = document.getElementById(`inbox-${rowKey}`);
     if (element instanceof HTMLElement) {
       element.focus({ preventScroll: true });
     }
@@ -170,7 +209,7 @@ export function useTableRows(context: Context) {
       setSelectedIndex(nextIndex);
       if (isTaskRow(row)) {
         updateActiveItemAndItemInView(row.task);
-        focusRowElement(row.task.id);
+        focusRowElement(row.rowKey);
       }
       scrollToRow(row);
     },

@@ -4,6 +4,7 @@ const path = require("node:path");
 const ts = require("typescript");
 const React = require("react");
 const { createRoot } = require("react-dom/client");
+const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
 const { JSDOM } = require("jsdom");
 const root = path.resolve(__dirname, "../..");
 
@@ -42,9 +43,10 @@ function mount() {
   for (const [key, value] of Object.entries(values)) Object.defineProperty(global, key, { value, configurable: true, writable: true });
   const container = document.getElementById("root");
   const reactRoot = createRoot(container);
+  const queryClient = new QueryClient();
   return {
     container,
-    render: element => React.act(() => reactRoot.render(element)),
+    render: element => React.act(() => reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, element))),
     close() {
       React.act(() => reactRoot.unmount());
       dom.window.close();

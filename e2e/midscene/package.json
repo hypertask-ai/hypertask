@@ -14,5 +14,8 @@
   "dependencies": {
     "@midscene/web": "^1.16.5",
     "puppeteer": "^23.0.0"
+  },
+  "overrides": {
+    "basic-ftp": "^6.2.4"
   }
 }

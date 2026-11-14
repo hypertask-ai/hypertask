@@ -5,6 +5,7 @@ import type { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { AI_Chat_API, isPagedChatSessions, mergeSessionHistory, mergeSessionTranscript, type ChatSessionScope, type ChatSessionSummary, type TPagedChatSessionsResponse } from "@/utils/api/ai_chat";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 
 import { useChatSessionSelection } from "./useChatSessionSelection";
 import { findGeneralNavigationSession } from "@/lib/aiChat/chatNavigationState";
@@ -19,6 +20,7 @@ const staleTime = 1000 * 60 * 3;
 
 export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined; restoreSelection?: boolean }, navigationKey?: string | null, navigationBoardId?: number, pinnedSessionId?: string | null) {
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  const noEmptyChats = useFlag(HTPR_9021_NO_EMPTY_CHATS_FLAG);
   const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
   const queryClient = useQueryClient();
   const summaryKey = ["chat-session-summaries", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, "history"];
@@ -66,10 +68,11 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     staleTime,
   });
 
-  const historySessions = enabled ? mergeSessionHistory<Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "agentId">>(
+  const allHistorySessions = enabled ? mergeSessionHistory<Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "agentId"> & { hasMessages?: boolean }>(
     summaryQuery.data?.pages.flatMap((page) => page.sessions) ?? [], []
   ) : [];
-  const activeSummary = historySessions.find((session) => session.id === activeSession);
+  const historySessions = noEmptyChats ? allHistorySessions.filter((session) => session.hasMessages !== false) : allHistorySessions;
+  const activeSummary = allHistorySessions.find((session) => session.id === activeSession);
 
   const bumpSummary = (sessionId: string, patch: Partial<ChatSessionSummary>) => {
     void queryClient.cancelQueries({ queryKey: summaryKey });
@@ -238,6 +241,12 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
           }
           return;
         }
+        if (noEmptyChats) {
+          const latest = historySessions[0]?.id ?? null;
+          setActiveSession(latest);
+          if (!latest) setEmptyNavigationIdentity(identity);
+          return;
+        }
         setActiveSession(historySessions[0]?.id ?? null);
         return;
       }
@@ -250,7 +259,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
           if (!page.data.success) throw new Error("Could not resolve task chat");
           const id = page.data.sessions.find((session) => session.taskId === initialTaskId)?.id;
           if (id) return id;
-          if (identityRef.current !== identity || activeRef.current || newChatRef.current) return;
+          if (noEmptyChats || identityRef.current !== identity || activeRef.current || newChatRef.current) return;
           const response = await AI_Chat_API.createSessionNext(initialTaskId, nameBoardRef.current);
           if (!response.data.success || !response.data.session?.id) throw new Error("Could not create task chat");
           return response.data.session;
@@ -263,7 +272,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
         if (typeof session !== "string") cacheCreatedSession(session);
         else void queryClient.invalidateQueries({ queryKey: transcriptKey(session), refetchType: "none" });
         setActiveSession(typeof session === "string" ? session : session.id);
-      }
+      } else if (noEmptyChats) setEmptyNavigationIdentity(identity);
     };
     void initialize().catch(() => {
       if (!cancelled && identityRef.current === identity && !activeRef.current) {
@@ -272,7 +281,15 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       }
     });
     return () => { cancelled = true; };
-  }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt, taskId, isTaskScoped, selectionScope.initialTaskId, navigationKey, navigationBoardId]);
+  }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt, taskId, isTaskScoped, selectionScope.initialTaskId, navigationKey, navigationBoardId, noEmptyChats]);
+
+  const showGeneralChat = useCallback(() => {
+    newChatRef.current = null;
+    setCreating(false);
+    setInitializationError(false);
+    setActiveSession(null);
+    setEmptyNavigationIdentity(identity);
+  }, [identity, setActiveSession]);
 
   const addMessageToSessionQuery = useCallback((sessionId: string, message: IChatMessage, queryOnly = false, updateLastMessage = false, projectId?: number) => {
     if (!ready || !queryClient.getQueryData<Transcript>(transcriptKey(sessionId))) return false;
@@ -355,9 +372,9 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
 
   }, [ready, queryClient, user?.uid, user?.id]);
 
-  const isSessionPending = ready && !currentSession && !initializationError && !(navigationKey && emptyNavigationIdentity === identity && !activeSession && !creating) && (summaryQuery.isLoading || transcriptQuery.isFetching || creating || (!activeSession && summaryQuery.isSuccess));
+  const isSessionPending = ready && !currentSession && !initializationError && !((navigationKey || noEmptyChats) && emptyNavigationIdentity === identity && !activeSession && !creating) && (summaryQuery.isLoading || transcriptQuery.isFetching || creating || (!activeSession && summaryQuery.isSuccess));
   return {
-    pagingUnavailable, activeSession, currentSession, setActiveSession, startNewSession, selectSession, addMessageToSessionQuery, updateSessionTitle, deleteSession,
+    pagingUnavailable, activeSession, currentSession, setActiveSession, startNewSession, showGeneralChat, selectSession, addMessageToSessionQuery, updateSessionTitle, deleteSession,
     updateLastMessageInSessionCache: (id: string, message: IChatMessage) => addMessageToSessionQuery(id, message, true, true),
     appendMessageToSessionCache: (id: string, message: IChatMessage) => addMessageToSessionQuery(id, message, true),
     getDisplayedSession,

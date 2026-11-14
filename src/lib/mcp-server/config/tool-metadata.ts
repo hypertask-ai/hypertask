@@ -39,6 +39,18 @@ const RAW_TOOL_METADATA = {
       'Shows live per-agent status (active, idle, or offline) and the current task for a team, derived from session heartbeats. Requires team_id; get it from hypertask_get_user_context or hypertask_hello.',
   },
 
+  CHAT_INBOX: {
+    name: buildToolName('chat_inbox'),
+    description:
+      'Lists up to 50 oldest unanswered sidebar chat messages for this agent token. Returns id, sessionId, text and userName. Does not claim the messages. Refreshes the online heartbeat at most every 30 seconds. Call at startup and again on the next run. No separate chat registration is needed.',
+  },
+
+  CHAT_REPLY: {
+    name: buildToolName('chat_reply'),
+    description:
+      'Replies in the same sidebar chat. Use sessionId and id from hypertask_chat_inbox as session_id and reply_to_message_id. Requires this agent token. A repeat of the same reply returns the existing reply.',
+  },
+
   LIST_AGENTS: {
     name: buildToolName('list_agents'),
     description:
@@ -207,6 +219,9 @@ const RAW_TOOL_METADATA = {
       "Gets a read-only board hygiene report (get_hygiene), or gets/sets a board's playbook or AI custom instructions. Hygiene reports untagged open tickets, possible duplicate tags, missing shared tag views and Title Case suggestions; it changes nothing.",
   },
 
+  LIST_BOARD_GITHUB_REPOS: { name: buildToolName('list_board_github_repos'), description: 'Lists the GitHub repositories connected to one board, the ones you can still connect from your GitHub App installation, and the settings version. Board admins only. Pass the version to set_board_github_repos.' },
+  SET_BOARD_GITHUB_REPOS: { name: buildToolName('set_board_github_repos'), description: 'Replaces the GitHub repositories connected to one board. Requires repository_ids and the version from list_board_github_repos; a stale version is refused. Board admins only.' },
+
   CREATE_BOARD: {
     name: buildToolName('create_board'),
     description: `Creates a new board under a team in one API call from a structured manifest (HTPR-3142). You build title, sections[], optional labels[], optional tasks[]; the backend does not run an LLM on a prompt.
@@ -278,7 +293,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   ADD_COMMENT: {
     name: buildToolName('add_comment_to_task'),
     description: DECISIONS_GUIDANCE + ' ' +
-      'Without a kind, agent text goes only to the hidden ticket agent log, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Add, update, or delete a comment. Set has_attachments: true when files will be attached after creation; agents must also choose an explicit kind. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only), pin (pin or unpin a comment at the top of its thread, requires comment_id), star (save or remove your own private star on a comment, requires comment_id). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
+      'An agent comment with no kind is refused and nothing is saved, even for replies or mentions. Resend with kind question, qa or done for people, or use hypertask activity add for the agent log. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Add, update, or delete a comment. Set has_attachments: true when files will be attached after creation; agents must also choose an explicit kind. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only), pin (pin or unpin a comment at the top of its thread, requires comment_id), star (save or remove your own private star on a comment, requires comment_id). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
   },
 
   UPDATE_COMMENT: {
@@ -348,13 +363,13 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   CREATE_VIEW: {
     name: buildToolName('create_view'),
     description:
-      'Creates a saved filtered tab on a board. Provide project_id and title; optional subtask_setting controls how subtasks appear. Filters is a nested object containing optional label_names, assignee_ids, and match. Use hypertask_list_views afterward to find saved view IDs.',
+      'Creates a saved filtered tab on a board. Provide project_id and title; optional subtask_setting controls how subtasks appear. Filters is a nested object containing optional label_names, assignee_ids, match, and label_match. label_match HIDE leaves out tickets that have any of those tags. Use hypertask_list_views afterward to find saved view IDs.',
   },
 
   UPDATE_VIEW: {
     name: buildToolName('update_view'),
     description:
-      'Updates a saved board view, including its subtask display setting. Filter fields are flat for updates: label_names, assignee_ids, and match. Find the ID with hypertask_list_views first.',
+      'Updates a saved board view, including its subtask display setting. Filter fields are flat for updates: label_names, assignee_ids, match, and label_match. label_match HIDE leaves out tickets that have any of those tags. Find the ID with hypertask_list_views first.',
   },
 
   DELETE_VIEW: {
@@ -426,7 +441,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   SET_TASK_WAITING_ON: {
     name: buildToolName('set_task_waiting_on'),
     description:
-      'Sets the person blocking a task, using the same write as the app Blocked by person modal. Requires taskId (database ID) and userId (board member ID) and/or blockerCommentId (a comment on this task). Send both to set the blocking person and reason atomically; pass both as null to clear both. Omitted fields stay unchanged. When you clear blockerCommentId on a task that has one, also send reason (why it is cleared): the ticket then leaves the Decisions list of the person asked and a note records who cleared it and why. Use list_project_members to resolve the person. Does not change task assignees or task-to-task blocking relations.',
+      'Sets the person or agent blocking a task, using the same write as the app Blocked by person modal. Requires taskId (database ID) and userId (board member ID), agentId (board member agent UUID), and/or blockerCommentId (a comment on this task). Send userId or agentId, not both. Pass userId null to clear the person and the agent. Omitted fields stay unchanged. When you clear blockerCommentId on a task that has one, also send reason (why it is cleared): the ticket then leaves the Decisions list of the person asked and a note records who cleared it and why. Use list_project_members to resolve the person or agent. Does not change task assignees or task-to-task blocking relations.',
   },
 
   FOLLOW_TASK: {

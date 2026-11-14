@@ -495,7 +495,7 @@ test("org member without owner role, pending membership and blocked membership a
   assert.equal(res.cookies.get(COOKIE).value, "");
   assert.deepEqual(world.writes, [{
     op: "create",
-    data: { id: INSTALLATION_ID, teamId: "team-a", accountId: "7001", accountLogin: "acme", accountType: "Organization", installedByUserId: 10 },
+    data: { id: INSTALLATION_ID, teamId: "team-a", accountId: "7001", accountLogin: "", accountType: "Organization", installedByUserId: 10 },
   }]);
   assert.ok(world.fetches.some((f) => f.url === "https://api.github.com/user/memberships/orgs/acme"));
 }));
@@ -585,7 +585,7 @@ test("an installation already bound to another team is refused; re-adopting by t
   assert.deepEqual(world.writes, [{
     op: "update",
     where: { id: INSTALLATION_ID },
-    data: { accountId: "7001", accountLogin: "acme", accountType: "Organization", installedByUserId: 10, revokedAt: null },
+    data: { accountId: "7001", accountType: "Organization", installedByUserId: 10, revokedAt: null },
   }]);
 }));
 

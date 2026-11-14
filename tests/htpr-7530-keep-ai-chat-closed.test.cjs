@@ -48,6 +48,36 @@ test("the shared veto ignores a saved value with flag off and waits only when a 
   }
 });
 
+test("the shared veto follows the per-user switches when they are on, so the header tick and the guards agree", () => {
+  const keys = ["aiChatOpenNewTickets", "aiChatOpenTickets", "aiChatOpenBoards"];
+  for (const values of [
+    { aiChatOpenNewTickets: false, aiChatOpenTickets: false, aiChatOpenBoards: false },
+    { aiChatOpenNewTickets: true, aiChatOpenTickets: false, aiChatOpenBoards: false },
+    { aiChatOpenNewTickets: false, aiChatOpenTickets: true, aiChatOpenBoards: true },
+  ]) {
+    for (const legacy of [false, true]) {
+      const { useKeepChatClosed } = load("src/hooks/General/useKeepChatClosed.ts", {
+        "@/hooks/useFlag": { useFlag: () => true, useFlagReady: () => true },
+        "@/lib/state": { useRecoilValue: () => legacy }, "@/store": { keepAiChatClosedAtom: "saved" },
+        "@/lib/flags/keys": flagModule,
+        "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: keys },
+        "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: true, ready: true, values }) },
+      });
+      assert.deepEqual(useKeepChatClosed(), { keepChatClosed: keys.every((key) => !values[key]), ready: true });
+    }
+  }
+  for (const legacy of [false, true]) {
+    const { useKeepChatClosed } = load("src/hooks/General/useKeepChatClosed.ts", {
+      "@/hooks/useFlag": { useFlag: () => true, useFlagReady: () => true },
+      "@/lib/state": { useRecoilValue: () => legacy }, "@/store": { keepAiChatClosedAtom: "saved" },
+      "@/lib/flags/keys": flagModule,
+      "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: keys },
+      "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, ready: true, values: {} }) },
+    });
+    assert.deepEqual(useKeepChatClosed(), { keepChatClosed: legacy, ready: true });
+  }
+});
+
 test("Task Page reuses the adjacent SettingsToggle row, preserves the other setting, and hides the new row with flag off", () => {
   const Toggle = () => null;
   const inert = { __esModule: true, default: () => null };

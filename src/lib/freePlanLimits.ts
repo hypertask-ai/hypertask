@@ -9,6 +9,7 @@ export type FreePlanLimitFlags = {
   unlimitedTickets: boolean;
   unlimitedBoards?: boolean;
   raisedFileLimit?: boolean;
+  storageCap?: boolean;
 };
 
 export type FreePlanLimitLine = {
@@ -53,6 +54,12 @@ export function freePlanLimitLines(flags: FreePlanLimitFlags): FreePlanLimitLine
     title: "Teams already over a limit",
     amount: "Keep everything; you just can't add more until you're under it or upgrade",
   });
+  if (flags.storageCap === true) {
+    lines.push({
+      title: "Storage",
+      amount: "Up to 2 GB attachment storage per team",
+    });
+  }
   return lines;
 }
 

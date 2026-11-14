@@ -1,4 +1,5 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
+import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 
 import { useRef } from "react";
 import { IAiCustomInstructions, IProject, IProjectsAll, IProjectView, ISection, ITask } from "@/models/model";
@@ -29,6 +30,7 @@ import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } 
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG } from "@/lib/flags/definitions/htpr-8039-archive-column-boundary";
+import { HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG } from "@/lib/flags/definitions/htpr-8928-bulk-archive-instant-hide";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
 type UpdateOptions = {
@@ -44,6 +46,7 @@ type RemoveFromListOptions = {
   undoRedirectPath?: string;
   suppressUndo?: boolean;
   focusSections?: ISection[];
+  optimisticOnly?: boolean;
 }
 
 const getSectionCacheKey = (section: ISection) => section.sectionId ?? section.id;
@@ -182,7 +185,11 @@ const UpdateKanban = () => {
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const queryClient = useQueryClient();
   const archiveColumnBoundary = useFlag(HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG);
+  const bulkArchiveInstantHide = useFlag(HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG);
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
+  const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG);
+  let tagHideOn = false;
+  if (tagHideFilterEnabled) tagHideOn = true;
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
   const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
@@ -264,6 +271,7 @@ const UpdateKanban = () => {
     const filterRuntimeContext = {
       legacyAgentAssigneeMatch: !assigneeFixEnabled,
       agentCreatorFilterEnabled,
+      tagHideFilterEnabled: tagHideOn,
       legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
       blockedByMeListEnabled,
       ...(Array.isArray(runningTimers)
@@ -546,6 +554,11 @@ const UpdateKanban = () => {
   
     try {
       await updateSections();
+
+      if (options.optimisticOnly) {
+        if (!bulkArchiveInstantHide) return hasUndo;
+        return false;
+      }
   
       console.time("refetchProject")
       await handleStatus();

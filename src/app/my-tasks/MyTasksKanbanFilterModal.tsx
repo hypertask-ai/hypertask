@@ -1,13 +1,11 @@
 "use client";
 
 import AllFilterHTC from "@/components/Modals/FilterModals/SelectFilters/FilterHTC";
-import { useFlag } from "@/hooks/useFlag";
 import type {
   CalendarLabelSummary,
   CalendarUserSummary,
 } from "@/lib/calendarSync/contract";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
-import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import type { MyTasksBoardMetadata, MyTasksViewConfig } from "@/models/MyTasksView";
 import { MyTasksFilterProvider } from "@/lib/myTasksFilterContext";
 import { CheckRow, Field } from "./MyTasksViewControls";
@@ -41,7 +39,6 @@ export default function MyTasksKanbanFilterModal({
   onViewChange,
   snoozeEnabled = false,
 }: Props) {
-  const snoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const updateScopeFilters = (filters: Partial<MyTasksViewConfig["filters"]>) => {
     if (config && onViewChange) onViewChange({ ...config, filters: { ...config.filters, ...filters } });
   };
@@ -64,7 +61,7 @@ export default function MyTasksKanbanFilterModal({
         <CheckRow label="Show done" checked={config.filters.showDone}
           onChange={() => updateScopeFilters({ showDone: !config.filters.showDone })} />
       </Field>
-      {snoozeFlag && snoozeEnabled ? (
+      {snoozeEnabled ? (
         <Field label="Snoozed tasks">
           <CheckRow label="Show snoozed" checked={config.filters.showSnoozed === true}
             onChange={() => updateScopeFilters({ showSnoozed: !config.filters.showSnoozed })} />

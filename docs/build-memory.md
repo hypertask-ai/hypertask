@@ -180,3 +180,120 @@ Both confirmed kills are the same signature as the 4 cap: `SIGKILL` with no "Rea
 The build script now sets `NEXT_WEBPACK_PARALLELISM=1`: one module build at a time, so the native side of the compile no longer adds a second SWC transform's AST on top of the first. `tests/build-memory-config.test.cjs` fails if the cap goes above 1 or is dropped. The expected cost is build wall-clock only. The margin is real but not unlimited: green builds measured 11 min 40 s to 17 min 42 s at the 2 cap, and if serialising the compile roughly doubles its share the build lands in the low thirties, still inside the 45 minute timeout. A build that does time out fails differently from these (a cancelled or timed-out deployment, not `SIGKILL` 117 s in), so the two are told apart from the deployment status.
 
 If one module build at a time still reports `out_of_memory`, the same ceiling is being reached from a single module and the remaining lever without money is the heap cap below. After that the compiler needs more than an 8 GB machine, which is the paid Enhanced Build Machine and Valentin's decision.
+
+## Heap cap 3072 MB (2026-11-07, HYCI-177)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/177
+
+Parallelism was already 1. Four production deployments in a row were still killed the same way. The last green deployment was `bfd983c551` (`dpl_47MRwndU1miPr2qUxUDRm8aPLo6h`, 8192 MiB, 6m 32s). The first red one was `62545b20f2`, the merge of pull request 3044 (`dpl_GLxbLvxn5sV2YiHX8CJoDWUw7z1x`). The same kill then hit `ad8563f804`, `c15c1aa1d7` and `4b88cc8821` (`dpl_6UGLqqvaf3r6FmYBanTMxF3RNrRC`).
+
+The failing log names the phase and rules out a V8 heap overflow:
+
+```
+✓ webpackBuildWorker
+✓ webpackMemoryOptimizations
+  Creating an optimized production build ...
+Next.js build worker exited with code: null and signal: SIGKILL
+• At least one "Out of Memory" ("OOM") event was detected during the build.
+```
+
+The kill lands about 130 seconds into the compile. There is no "Reached heap limit". The 4096 MB cap was still in the build script, so the worker could hold a 4 GB heap on an 8 GB machine while native SWC memory sat outside that cap. Pull request 3044 added no dependency and no build setting. It is the straw. The tree diff from the last green commit is about 1555 lines.
+
+The build script then set `--max-old-space-size=3072`. `NEXT_WEBPACK_PARALLELISM` stayed 1 and the builder stayed `--webpack`. The guard test rejected a cap above 3072. The written next step, if a build then said "Reached heap limit", was the paid Enhanced Build Machine. A silent SIGKILL at 3072 would have been the same decision.
+
+That heap-limit case arrived the same day. HYCI-184 measured it and raised the cap to 3584 MB instead of buying a larger machine. See the next section.
+
+## Heap cap 3584 MB (2026-11-07, HYCI-184)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/184
+
+The last green production deployment was `87a3b06a` (deployment 7627067597). The next production deployments failed while the build script still set `--max-old-space-size=3072`:
+
+| Commit | Deployment | Log |
+| --- | --- | --- |
+| `2d07cb81ac` (first bad, merge of pull request 3038) | 7627757510 | `dpl_3nFWTzD4yPtksDH8sEtT6HKY6wDe` |
+| `e41b16ad95` | 7627883408 | `dpl_J6DZH8eFqGiaSUdoKRuf5dr66TzA` |
+| `c33489117f` | 7627998823 | GitHub recorded failure |
+
+The first two logs die in "Creating an optimized production build" with:
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+```
+
+Mark-compact had reduced the live set to about 2783 MB, and the worker was still running when V8 aborted. That is the 3072 MB heap cap, not the SIGKILL from HYCI-177. The build machine is still the standard 8192 MiB machine. Pull request 3038 changed 177 lines of flag defaults and added no dependency. The tree was already on the ceiling.
+
+The build script then set `--max-old-space-size=3584`. That is 512 MB under the 4096 MB cap that SIGKILL'd the machine, and under half of 8192 MiB. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
+
+That cap was not enough. Deployment 7628217481 (`51fcc525`, `dpl_9tg62h9sytSJHF5iEJKQeftXk7o2`) died in the same phase:
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+```
+
+Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. HYCI-180 stepped the cap down from 4096 MiB for native headroom (below). If a heap abort lands at the chosen cap or another SIGKILL hits half the machine, the paid Enhanced Build Machine is Valentin's decision.
+
+## Live-within-10-min incident (2026-11-07, HYCI-180)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/180
+
+Fleet-watch opened this when only 87 percent of 31 Hypertask merges in the last 24 hours reached production within 10 minutes of merge. The miss count was four merges stuck on failed production builds, not slow checks. The live KPI is merge time to the earliest successful Production deployment on GitHub (`ci_perf.live_samples` in poteto-2-advisor).
+
+The stuck merges line up with the heap-cap regression in the HYCI-177 note above: `3072` MB aborted inside V8 on pull requests 3038, 3037 and 3051; `3584` MB still aborted on pull request 3063 (`dpl_9tg62h9sytSJHF5iEJKQeftXk7o2`). HYCI-184 restored `4096` MB in pull request 3065 (`76c0433c59`).
+
+Measured from the live cache at 2026-11-08 UTC, after the `76c0433` merge:
+
+| Fact | Value |
+| --- | --- |
+| Production deployments on the merge commit or later | 7 |
+| Failed or errored | 1 (`a8c78f2`, superseded before the fix landed) |
+| Merged app pull requests after the fix (excluding the fix commit) | 5 |
+| Live within 10 minutes | 5 of 5 (100 percent) |
+| Median merge to live | 6.6 minutes |
+| Slowest after the fix | 7.6 minutes (pull request 3062) |
+| Fix commit pull request 3065 | 10.1 minutes to live |
+
+The fix is live on `production`. The ticket closes when the CI performance page shows at least 90 percent live-within-10-min for three consecutive London days, not on this document alone.
+
+## Heap cap 3840 MB (2026-11-08, HYCI-180)
+
+After HYCI-184 restored the 4096 MB cap at webpack parallelism 1, Vercel production builds still intermittently died with container OOM while V8 stayed inside the cap:
+
+| Merge | Pull request | First deployment | Log |
+| --- | --- | --- | --- |
+| `0b9b7307e8` | 3045 | 7639529072 | `dpl_HrSLPn4mek9iMnGazP8HZLuiuaNq` |
+| `87ee509b32` | 3084 | 7639561805 | `dpl_CJ5ddoY2GBk6Unkn2o2G3XjZS3zk` |
+
+Both logs name the same signature as the parallelism 1 note above: about three minutes into "Creating an optimized production build", `Next.js build worker exited with code: null and signal: SIGKILL`, with no "Reached heap limit" line and Vercel's `At least one "Out of Memory" ("OOM") event` footer. Each merge went live on a later successful deployment at 19.5 and 16.2 minutes after merge, which keeps the KPI below the 10 minute bar even though the app recovers without code changes.
+
+That pattern is the free lever named in the parallelism 1 note: with parallelism already at 1, lowering `--max-old-space-size` from 4096 hands headroom to native memory. The measured V8 live set at 3584 MB was 3080.7 MB (HYCI-184), so 3840 MB keeps 759.3 MB above that peak while leaving 4352 MiB for everything outside the V8 heap on the 8192 MiB machine. If the next production build reports "Reached heap limit", the compiler genuinely needs more than 3840 MB and the next step is still the paid Enhanced Build Machine, which is Valentin's decision.
+
+The build script first set `--max-old-space-size=3840` in pull request 3087 (`0d635b84165`). Production deployment 7668278693 (`dpl_5G6Dae88e25UY24812esxUu2euVb`) failed on that merge while `bd6f21b8ec43` at 4096 MB still built, so 3840 was below the live compiler heap on the current tree.
+
+The cap was 4000 MB from 2026-11-09 through the HYCI-220 merge: 192 MiB above 3840 for V8 and 4192 MiB for native memory on the 8192 MiB machine. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
+
+## Production cache generations (2026-11-10, HYCI-220)
+
+Production deployments 7670721960 (`3d601a0`), 7670916742 (`81c3458`) and 7671062041 (`7b9b66af`) failed. The last success was 7670519182 (`a40cd74`). CI Tests was green on each failed SHA. The first red commit is a hover-card change, and the next two commits are unrelated, so the failure is not one feature's code.
+
+Next 16.3.6 sets `cache.maxMemoryGenerations` to `Infinity` for production and calls the project webpack hook after that (`node_modules/next/dist/build/webpack-config.js`). `webpackMemoryOptimizations` only toggles string interning. It does not change the cache. The production hook now sets `maxMemoryGenerations` to 0, so the filesystem cache stays and the worker does not keep every generation in RAM. At first merge the heap cap stayed 4000 MB and `NEXT_WEBPACK_PARALLELISM=1` stayed 1. Dev builds are left as the hook receives them.
+
+## Heap cap 3840 MB after disk cache (2026-11-10, HYCI-224)
+
+HYCI-220 stopped keeping webpack cache generations in RAM. The heap cap then stepped back from 4000 MB to 3840 MB so native memory on the 8192 MiB machine gets 4352 MiB instead of 4192 MiB.
+
+Production deployment `df912192` (pull request 3148) was the first green build with disk cache only, still at 4000 MB. Six earlier failures in 24 hours were container `out_of_memory` with no V8 "Reached heap limit" line, all on merges before that fix.
+
+`3840` MB failed on merge `0d635b84165` before HYCI-220 while the same tree still built at 4096 MB. That gap was the in-RAM cache peak, not the compile heap alone. With `maxMemoryGenerations=0` live, 3840 MB targets the headroom model from the HYCI-180 note without the RAM cache term that pushed 4000 MB merges into repeated container OOM.
+
+If the next production build reports "Reached heap limit", the compiler genuinely needs more than 3840 MB V8 heap on the current tree and the next step is the paid Enhanced Build Machine, which is Valentin's decision.
+
+## Server SDK compilation (2026-11-11, HYCI-245)
+
+Deployment `dpl_D9bBLCjW12Kc514j3d6AsUM5yL3g`, commit `0b5475a22b`, was killed about 127 seconds into compilation. The log reports `SIGKILL` and container `out_of_memory`, not a V8 heap abort. Next's worker order is server, edge, then client. No compiler completed before this failure. The old log contains no numeric heap peak, so elapsed time or the heap cap cannot establish a before/after memory saving.
+
+`serverExternalPackages` now also contains `stripe`, `posthog-node`, `@modelcontextprotocol/sdk`, and `mcp-handler`. Node loads their published server entry points instead of webpack compiling and minifying their dependency graphs. Next still traces their runtime files; no tracing exclusions, browser imports, SDK features, source maps, or type/style gates are removed. The 3840 MiB heap cap, single-module parallelism, compiler isolation, and filesystem cache policy remain unchanged. Hosted tests exercise Node exports with `require(esm)` disabled and trace the external entry points and SDK resource files.
+
+Every production webpack compiler emits `[build-memory]` JSON at start, module optimization, asset optimization, completion, and every 15 seconds while compiling. Each row identifies the compiler and process. `sampledHeapPeakMiB` is the largest V8 heap sample, taken every second and at those hooks; brief peaks between samples can be missed. `processMaxRssMiB` is the process-wide operating-system RSS high-water mark, not V8 heap or aggregate container memory. Samples cannot run while JavaScript blocks the event loop. A killed worker has periodic rows but no completion row. Development builds do not install the reporter.
+
+The change remains unproven until hosted checks and a successful production build supply measurements. HYCI-245 requires a production peak at least 500 MiB below 3840 MiB and a full 24-hour failure-free window after deployment. Neither a passing fixture nor a green PR check proves those production outcomes.

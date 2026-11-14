@@ -167,6 +167,7 @@ export function activationHarness() {
       };
     } },
     "@/utils/controllers/logs/createLog": { default: noop },
+    "@/utils/controllers/logs/quietPersonalLog": nativeRequire("./stub-map.cjs").quietPersonalLogStub(),
     "@/lib/projectPrefix": { normalizeProjectPrefix: (value: any) => value, suggestProjectPrefix: () => "BOARD" },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { buildDefaultTitle: () => "Board", getViewFromProject: () => undefined },
     "@/utils/helperFunctions/Views/FilterHelperFunctions": { defaultFilterSettings: {} },
@@ -174,6 +175,7 @@ export function activationHarness() {
     "@/utils/controllers/projects/getAll": { getProjectViewInclude: () => ({}) },
     "@/utils/controllers/notifications/sendNotification": { sendEmailNotification: async () => true },
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
+    "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed", accountNotificationsBlocked: async () => false },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 123 }) },
     "@/utils/controllers/getMemberAndOwnerForBoard": { default: async () => [123] },
     "@/lib/auth/session": { verifySession: () => ({ id: 50 }) },
@@ -194,6 +196,7 @@ export function activationHarness() {
     "@/lib/syncSeatBilling": {},
     "@/utils/controllers/members/updateTrial": { updateTrial: noop },
     "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 402, body: {} }), assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {} },
+    "@/lib/tickets/plainLanguageTicket.mjs": { PlainLanguageTicketError: class PlainLanguageTicketError extends Error {}, hasPlainLanguageTicketBlock: () => true, assertPlainLanguageTicketBlock: () => {}, isInternalAgentTicketBoard: () => false, plainLanguageTicketRefusalMessage: () => "" },
   };
   const cache = new Map<string, any>();
   function load(file: string, source?: string): any {
@@ -212,9 +215,10 @@ export function activationHarness() {
         return mocked;
       }
       if (key.startsWith("@/")) {
-        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/flags/approvalWords", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
+        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/flags/approvalWords", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/funnelProbe/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride", "@/lib/logging/", "@/lib/text/safeHtmlText.mjs"];
         if (!allowed.some((prefix) => key.startsWith(prefix))) throw Error(`Unmocked dependency ${key}`);
-        return load(`src/${key.slice(2)}.ts`);
+        const relative = key.slice(2);
+        return load(/\.(?:mjs|cjs|json)$/.test(relative) ? `src/${relative}` : `src/${relative}.ts`);
       }
       return nativeRequire(name);
     };

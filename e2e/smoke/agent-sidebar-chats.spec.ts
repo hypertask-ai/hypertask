@@ -27,14 +27,29 @@ test.beforeAll(() => {
 })
 
 test.beforeEach(async ({ page }) => {
-  page.on('request', async (request) => {
-    const url = new URL(request.url())
-    if (url.pathname === '/api/agent-sidebar-chats' || url.pathname.startsWith('/api/agent-chat/')) {
-      const headers = await request.allHeaders()
-      console.log(`[sidebar request] ${request.method()} ${url.pathname}${url.search} project=${headers['x-hypertask-sidebar-project'] ?? 'none'} urlOrigin=${url.origin} origin=${headers.origin ?? 'none'} host=${headers.host ?? 'none'}`)
+  page.on('request', (request) => {
+    try {
+      const url = new URL(request.url())
+      if (url.pathname === '/api/agent-sidebar-chats' || url.pathname.startsWith('/api/agent-chat/')) {
+        const headers = request.headers()
+        console.log(`[sidebar request] ${request.method()} ${url.pathname}${url.search} project=${headers['x-hypertask-sidebar-project'] ?? 'none'} urlOrigin=${url.origin} origin=${headers.origin ?? 'none'} host=${headers.host ?? 'none'}`)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes('Test ended')) throw error
     }
   })
-  page.on('response', async (response) => {
+  page.on('response', (response) => {
+    void readSidebarResponse(response)
+  })
+  page.on('pageerror', (error) => console.log(`[sidebar pageerror] ${error.message}`))
+  page.on('requestfailed', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/agent')) console.log(`[sidebar requestfailed] ${request.method()} ${new URL(request.url()).pathname} ${request.failure()?.errorText}`)
+  })
+})
+
+async function readSidebarResponse(response: Response) {
+  try {
     const url = new URL(response.url())
     if (url.pathname.startsWith('/api/') && response.status() >= 500) {
       console.log(`[sidebar apierror] ${response.request().method()} ${url.pathname} status=${response.status()}`)
@@ -46,12 +61,11 @@ test.beforeEach(async ({ page }) => {
       sidebarFlag: body?.flags?.[FLAG], agents: body?.agents?.map((agent: { id: string; sessionId: string }) => ({ id: agent.id, sessionId: agent.sessionId })),
       messages: body?.messages?.length,
     })}`)
-  })
-  page.on('pageerror', (error) => console.log(`[sidebar pageerror] ${error.message}`))
-  page.on('requestfailed', (request) => {
-    if (new URL(request.url()).pathname.startsWith('/api/agent')) console.log(`[sidebar requestfailed] ${request.method()} ${new URL(request.url()).pathname} ${request.failure()?.errorText}`)
-  })
-})
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes('Test ended')) console.log(`[sidebar response] unread ${message}`)
+  }
+}
 
 async function heartbeat(request: APIRequestContext, agent: Agent) {
   let sequence = Date.now()
@@ -67,7 +81,16 @@ async function heartbeat(request: APIRequestContext, agent: Agent) {
   expect(response.status()).toBe(200)
 }
 
+async function pinLegacyHeader(page: Page) {
+  await page.route('**/api/flags', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json()
+    await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8956-ai-chat-header-menus': false } } })
+  })
+}
+
 async function open(page: Page, lane: string) {
+  await pinLegacyHeader(page)
   const flags = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   const activity = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/activity/addLastActiveAt')
   await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board&agentSidebar=1`))
@@ -269,6 +292,7 @@ test('past chats are listed newest first above agents and reopen', async ({ page
 
 test('an unnamed personal conversation falls back to AI chat in the header', async ({ page }, info) => {
   const chat = fixture.personalChats.find(chat => chat.lane === info.project.name)!
+  await pinLegacyHeader(page)
   await page.route('**/api/ai-chat/all-sessions*', async (route) => {
     const response = await route.fetch()
     const body = await response.json()
@@ -501,6 +525,7 @@ test('flag-off client comparison restores the legacy title/history and never req
 })
 
 test('switching chats does not move the ticket, its comments or its comment composer', async ({ page }, info) => {
+  await pinLegacyHeader(page)
   await page.goto(withRealtime(`/detail/project-${fixture.projectId}/1?agentSidebar=1`))
   await expect(page.getByTestId('ai-sidebar')).toBeVisible()
   await expect(page.getByTestId('comment-composer')).toBeAttached()

@@ -3,9 +3,6 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
-import { isFeatureEnabled } from "@/lib/flags";
-import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import { IUser } from "@/models/model";
 import {
@@ -46,10 +43,6 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const snoozeEnabled = await isFeatureEnabled(
-    MY_TASKS_SNOOZE_FLAG,
-    sessionUser.userId,
-  );
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
   const requestedViewId = rawView && /^\d+$/.test(rawView) ? Number(rawView) : null;
   const views = await getMyTasksViews(sessionUser.userId);
@@ -65,12 +58,10 @@ export default async function Page({
   );
   const scopes = effectiveMyTasksScopes(activeViewConfig.scopes);
   const showSnoozed = activeViewConfig.filters.showSnoozed === true;
-  const myTasks = await getMyTasks(
-    sessionUser.userId,
-    true,
-    scopes,
-    snoozeEnabled ? { snoozeEnabled: true, showSnoozed } : {},
-  );
+  const myTasks = await getMyTasks(sessionUser.userId, true, scopes, {
+    snoozeEnabled: true,
+    showSnoozed,
+  });
 
   const { json: projects } = await getAllMinimal(
     sessionUser.userId,
@@ -81,9 +72,7 @@ export default async function Page({
 
   return (
     <Suspense fallback={<>Loading...</>}>
-      {snoozeEnabled ? (
-        <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
-      ) : null}
+      <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
       <span
         className="hidden"
         data-htpr-6459-my-tasks-overdue-badges
@@ -94,9 +83,7 @@ export default async function Page({
         tabs={myTasks.tabs}
         boards={myTasks.boards}
         accessibleProjectIds={accessibleProjectIds}
-        nearestSnoozeUntil={
-          snoozeEnabled ? (myTasks.nearestSnoozeUntil ?? null) : null
-        }
+        nearestSnoozeUntil={myTasks.nearestSnoozeUntil ?? null}
         currentUser={userObj}
         initialViews={views}
         initialViewId={initialViewId}

@@ -3,12 +3,12 @@ import {  CreateLogInput } from "@/models/model";
 import { LogType, PrismaClient, Status } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 
 const createLog = async (data: CreateLogInput): Promise<any> => {
     try {
 
-        console.log("🚀 ~ file: createLog.ts:12 ~ createLog ~ data.log:", data.log)
             const allLogs =await prisma.logs.create({
                 data:{
                     log:data.log,
@@ -18,6 +18,7 @@ const createLog = async (data: CreateLogInput): Promise<any> => {
 
                 }
             })
+            await logPersonal(data.LoggedById ?? null, "createLog", { logId: allLogs.id, type: String(data.type), status: String(data.status), }, data.log)
 
             if (data.LoggedById && (data.log === "cli_token_exchange" || data.log.startsWith("mcp_connected"))) {
                 const userId = data.LoggedById;

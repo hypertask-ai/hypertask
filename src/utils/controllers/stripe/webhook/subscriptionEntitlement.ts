@@ -11,6 +11,6 @@ const ACCESS_REVOKING_STATUSES = new Set<Stripe.Subscription.Status>(
 
 export function shouldClearTeamSubscriptionEntitlement(
   status: Stripe.Subscription.Status,
-): boolean {
+): status is (typeof ACCESS_REVOKING_SUBSCRIPTION_STATUSES)[number] {
   return ACCESS_REVOKING_STATUSES.has(status);
 }

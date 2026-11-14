@@ -36,10 +36,19 @@ look like a success.
 
 Usage:
   open-pr.sh <PREFIX-NNN> <TYPE> "<short title>" --body-file <absolute path>
-             [--lane ai-review|valentin-review]
+             [--lane ai-review|valentin-review] [--size-ok "<reason>"]
              [--remote <name>] [--base <branch>] [--dry-run] [--help]
 
 TYPE is BUGFIX, FEATURE or INFRA. The PR title becomes "<TICKET> [<TYPE>] <title>".
+
+Before it pushes, the script runs .github/scripts/pr-preflight.cjs: the title
+must have the shape (HTPR|HYFA|YPER4|HYCI)-<n> [TAG] <summary>, and the diff
+against the base must stay within the hand-written line cap in
+.github/scripts/pr-size-policy.json. Dry runs check both too. --size-ok records
+a reason and lets an over-cap diff through here; the GitHub size guard still
+decides with a human's size-ok label. A hand-made pull request gets the same
+check with:
+  node .github/scripts/pr-preflight.cjs --title "<title>"
 
 --body-file is required and must be an ABSOLUTE path. The PR body has to be
 written by hand (fix-bug step 8), so it cannot come from
@@ -88,6 +97,7 @@ BODY_FILE=""
 REMOTE="${HT_GIT_REMOTE:-origin}"
 BASE="${HT_BASE_BRANCH:-production}"
 DRY_RUN="no"
+SIZE_OK=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -97,6 +107,7 @@ while [ "$#" -gt 0 ]; do
     --remote) REMOTE="${2:?}"; shift 2 ;;
     --base) BASE="${2:?}"; shift 2 ;;
     --dry-run) DRY_RUN="yes"; shift ;;
+    --size-ok) SIZE_OK="${2:?}"; shift 2 ;;
     *) die "$SELF does not know the argument '$1'." "Run 'open-pr.sh --help' for the accepted flags. Unknown flags are rejected here on purpose, unlike the hypertask CLI, which ignores them." ;;
   esac
 done
@@ -142,6 +153,26 @@ fi
 
 PR_TITLE="${TICKET} [${TYPE}] ${TITLE_REST}"
 
+# Refuse a bad title or an over-cap diff here, before the push, so a runner never
+# pays a full round of checks for a title or size the GitHub guards refuse anyway.
+# The GitHub guards still run and still decide; this is the same rule, earlier.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PREFLIGHT="$REPO_ROOT/.github/scripts/pr-preflight.cjs"
+[ -f "$PREFLIGHT" ] \
+  || die "$PREFLIGHT is missing, so the title and size check cannot run." "Fetch and rebase onto $REMOTE/$BASE; the preflight script ships with the skill. Do not open the PR without it."
+command -v node >/dev/null 2>&1 \
+  || die "node is not on PATH, so the title and size check cannot run." "Install Node, or run the check from a shell that has it, then re-run this command."
+case "$SIZE_OK" in
+  '') ;;
+  -*) die "--size-ok needs a reason, got the flag-looking value '$SIZE_OK'." "Pass a short human reason, for example --size-ok 'one mechanical rename across 40 files'." ;;
+esac
+SIZE_OK_ARGS=()
+[ -n "$SIZE_OK" ] && SIZE_OK_ARGS=(--allow-over-cap "$SIZE_OK")
+preflight() {
+  node "$PREFLIGHT" --title "$PR_TITLE" --base "$REMOTE/$BASE" "${SIZE_OK_ARGS[@]}" \
+    || die "the pull request would be refused before opening (see the message above)." "Fix the title shape or split the diff, then re-run. Nothing was pushed."
+}
+
 run() {  # echoes a paste-able command in dry runs, runs it otherwise
   if [ "$DRY_RUN" = "yes" ]; then
     printf 'DRY RUN:'; shq "$@"; printf '\n'
@@ -152,6 +183,9 @@ run() {  # echoes a paste-able command in dry runs, runs it otherwise
 
 if [ "$DRY_RUN" = "yes" ]; then
   run git fetch "$REMOTE" "$BASE"
+  git fetch "$REMOTE" "$BASE" \
+    || die "git fetch $REMOTE $BASE failed, so the size check has no base to measure against." "Check 'git remote -v' and that the branch '$BASE' exists on '$REMOTE', or pass --base with the right branch."
+  preflight
   run git push -u "$REMOTE" HEAD
   run gh pr create --base "$BASE" --title "$PR_TITLE" --body-file "$BODY_FILE"
   run vcc task move "$TICKET" --section "$SECTION"
@@ -164,6 +198,7 @@ fi
 
 git fetch "$REMOTE" "$BASE" \
   || die "git fetch $REMOTE $BASE failed, so the base branch is unknown here." "Check 'git remote -v' and that the branch '$BASE' exists on '$REMOTE', or pass --base with the right branch."
+preflight
 git push -u "$REMOTE" HEAD \
   || die "git push to $REMOTE failed, so there is nothing for GitHub to open a PR against." "Run 'git status' to confirm the work is committed, then 'git push -u $REMOTE HEAD' by hand to read the real git error."
 

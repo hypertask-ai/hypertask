@@ -2,34 +2,9 @@ name: AI evals
 
 on:
   pull_request:
-    paths:
-      - "src/app/api/ai/**"
-      - "src/lib/mcp-server/config/**"
-      - "src/lib/mcp-server/validations/**"
-      - "src/lib/ai/**"
-      - "scripts/ai-eval.cjs"
-      - "scripts/task-writer-eval.cjs"
-      - "tests/task-writer-eval.test.cjs"
-      - "tests/fixtures/task-writer-eval/**"
-      - "tests/ai-eval.test.cjs"
-      - "tests/ai-prompt-registry.test.cjs"
-      - "tests/fixtures/ai/**"
-      - ".github/workflows/ai-evals.yml"
   push:
     branches: [production]
-    paths:
-      - "src/app/api/ai/**"
-      - "src/lib/mcp-server/config/**"
-      - "src/lib/mcp-server/validations/**"
-      - "src/lib/ai/**"
-      - "scripts/ai-eval.cjs"
-      - "scripts/task-writer-eval.cjs"
-      - "tests/task-writer-eval.test.cjs"
-      - "tests/fixtures/task-writer-eval/**"
-      - "tests/ai-eval.test.cjs"
-      - "tests/ai-prompt-registry.test.cjs"
-      - "tests/fixtures/ai/**"
-      - ".github/workflows/ai-evals.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -60,3 +35,15 @@ jobs:
         env:
           AI_EVAL_LIVE: "0"
           AI_EVAL_WRONG_TOOL_THRESHOLD: "0"
+      - run: node --test tests/rag-search-eval.test.cjs tests/htpr-9017-page-eval.test.cjs
+      - run: node scripts/rag-eval.cjs --check-set
+      - name: Report search scores (no score threshold)
+        run: |
+          node scripts/rag-eval.cjs --output rag-search-report.json | tee rag-search-report.txt
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat rag-search-report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rag-search-report
+          path: rag-search-report.*

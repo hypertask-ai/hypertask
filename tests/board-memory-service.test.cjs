@@ -113,6 +113,9 @@ stubModule("src/app/api/ai/_lib/boardMemoryGuards.ts", {
     });
   },
 });
+stubModule("src/lib/flags.ts", {
+  isFeatureEnabled: async () => false,
+});
 stubModule("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {
   buildCustomInstructionFileRows: (input) => [
     {

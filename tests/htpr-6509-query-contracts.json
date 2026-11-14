@@ -293,8 +293,10 @@
           "notificationMatrix": null,
           "dictationLanguage": null,
           "inboxAdvanceOnSend": null,
+          "inboxSplitsOverflowHidden": null,
           "emojiFrequency": null,
-          "calendarViews": null
+          "calendarViews": null,
+          "cardParts": null
         }
       }
     },
@@ -306,11 +308,6 @@
         "publicId": "fixture-page"
       },
       "include": {
-        "_count": {
-          "select": {
-            "links": true
-          }
-        },
         "task": {
           "where": {
             "status": {
@@ -506,6 +503,7 @@
             "staleNudgedAt": null,
             "blockerCommentId": null,
             "waitingOnUserId": null,
+            "waitingOnAgentId": null,
             "waitingOnSetById": null,
             "waitingOnSetAt": null,
             "dueDate": null,

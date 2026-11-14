@@ -2,7 +2,22 @@ import { useThemeVisibility } from "@/hooks/useThemeVisibility";
 import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
 import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
+import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
+import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs";
+import { HTPR_8945_CTRL_TAB_PALETTE_FLAG } from "@/lib/flags/definitions/htpr-8945-ctrl-tab-palette";
+import { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG } from "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top";
+import { HTPR_8947_CTRLK_NO_FOOTER_FLAG } from "@/lib/flags/definitions/htpr-8947-ctrlk-no-footer";
+import { HTPR_7871_CTRLK_ELLIPSIS_FLAG } from "@/lib/flags/definitions/htpr-7871-ctrlk-ellipsis";
+import { HTPR_8954_CTRLK_FILLED_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8954-ctrlk-filled-search";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
+import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import {
+  ADD_FIELD_COMMAND_PREFIX,
+  ADD_FIELD_EVENT,
+  type AddFieldEventDetail,
+  type AddFieldPalettePayload,
+} from "@/lib/taskDetail/rightColumnFields";
+import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import {
   useCallback,
   useContext,
@@ -33,7 +48,7 @@ import { HTPR_8241_PAGES_INTENT_HOLD_FLAG } from "@/lib/flags/definitions/htpr-8
 import { Search, Sparkles } from "lucide-react";
 import { ModalBody } from "reactstrap";
 import styles from "@/styles/linksModal.module.scss";
-import { ICommandList } from "./HTCTypes";
+import { CommandGroup, ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
 import type { CommandFocusProxy } from "@/components/commandTypes";
@@ -46,6 +61,7 @@ import {
   getBoardMenuCommands,
   getMobileCommandGroups,
 } from "./AllCommands";
+import { withCardSettingsCommand } from "./cardSettingsCommand";
 import { pinCommentGroupFirst } from "@/lib/htc/pinCommentGroupFirst";
 import {
   getActiveEmptySectionSettingFromProject,
@@ -64,6 +80,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
@@ -97,11 +114,16 @@ type Props = {
   contextOptions?: IAllCommands;
   showByokApiKeys?: boolean;
   appShellRailOn?: boolean;
-  scope?: "board";
+  scope?: "board" | "add-field";
   focusProxy?: CommandFocusProxy;
 };
 
 const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
+
+const useCardSettingsCommands = (
+  commandGroups: CommandGroup[],
+  context: IAllCommands["context"] | null,
+) => useMemo(() => withCardSettingsCommand(commandGroups, context), [commandGroups, context]);
 
 const Commands = (props: Props) => {
   const {
@@ -118,6 +140,14 @@ const Commands = (props: Props) => {
   } = props;
   const removeImageGeneration = useFlag(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG);
   const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
+  const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
+  const tabPaletteCycle = useFlag(HTPR_8945_CTRL_TAB_PALETTE_FLAG);
+  const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
+  const tabsOnTopFlag = useFlag(HTPR_8943_CTRLK_TABS_ON_TOP_FLAG);
+  const noFooterFlag = useFlag(HTPR_8947_CTRLK_NO_FOOTER_FLAG);
+  const ellipsisFlag = useFlag(HTPR_7871_CTRLK_ELLIPSIS_FLAG);
+  const filledSearchFlag = useFlag(HTPR_8954_CTRLK_FILLED_SEARCH_FLAG);
+  const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -159,6 +189,7 @@ const Commands = (props: Props) => {
   const pathname = usePathname();
   const router = useRouter();
   const refreshSearchOnCommandsChange = useFlag(HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG);
+  const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
   const amoledModeOutline = useFlag(HTPR_8015_AMOLED_MODE_OUTLINE_FLAG);
   const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
@@ -208,6 +239,9 @@ const Commands = (props: Props) => {
   const basetenByokEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
   let hiddenBasetenCommandKey: string | undefined;
   if (!basetenByokEnabled) hiddenBasetenCommandKey = "settingsApiKeysBasetenApiKey";
+  const alwaysUseThisKeyEnabled = useFlag(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG);
+  let hiddenAlwaysUseCommandKey: string | undefined;
+  if (!alwaysUseThisKeyEnabled) hiddenAlwaysUseCommandKey = "settingsApiKeysAlwaysUseThisKey";
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   let hiddenXaiCommandKeys = "";
   if (!grokGemini4Enabled) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai";
@@ -264,6 +298,7 @@ const Commands = (props: Props) => {
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
             command.key !== hiddenBasetenCommandKey &&
+            command.key !== hiddenAlwaysUseCommandKey &&
             !hiddenXaiCommandKeys.split(" ").includes(command.key) &&
             command.key !== hiddenGithubCommandKey &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
@@ -419,6 +454,7 @@ const Commands = (props: Props) => {
     hiddenGithubCommandKey,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
+    hiddenAlwaysUseCommandKey,
     hiddenXaiCommandKeys,
     autoTaskDescriptionsEnabled,
     currentProject,
@@ -432,10 +468,30 @@ const Commands = (props: Props) => {
     isTicketPrefixCommandVisible,
   ])
 
+  const addFieldPayload = showCommands.payload as AddFieldPalettePayload | undefined;
+  const addFieldCommands = useMemo<CommandGroup[]>(
+    () => [
+      {
+        group: "Add field",
+        commandLists: (addFieldPayload?.options ?? []).map((option) => ({
+          key: `${ADD_FIELD_COMMAND_PREFIX}${option.key}`,
+          name: option.label,
+          commandMode: CommandMode.Command,
+          keywords: `add field set ${option.label}`,
+        })),
+      },
+    ],
+    [addFieldPayload],
+  );
+
+  const paletteCommands = useCardSettingsCommands(
+    allCommands_,
+    cardSettings ? contextOptions?.context ?? "Others" : null,
+  );
   const emptyQueryCommands = useMemo(() => {
-    if (scope !== "board") return allCommands_;
-    return getBoardMenuCommands(allCommands_, boardLayout);
-  }, [allCommands_, scope, boardLayout]);
+    if (scope !== "board") return paletteCommands;
+    return getBoardMenuCommands(paletteCommands, boardLayout);
+  }, [paletteCommands, scope, boardLayout]);
 
   const {
     keyword,
@@ -444,7 +500,12 @@ const Commands = (props: Props) => {
     filterCommands,
     handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex,
     setSelectedCommand,
-  } = useHTC(allCommands_, emptyQueryCommands, !isMobile, refreshSearchOnCommandsChange);
+  } = useHTC(
+    rightColumnFlag && scope === "add-field" ? addFieldCommands : paletteCommands,
+    rightColumnFlag && scope === "add-field" ? addFieldCommands : emptyQueryCommands,
+    !isMobile,
+    refreshSearchOnCommandsChange,
+  );
   const hoveredCommand = useRef<CommandIdentity | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const commandRef = useRef<HTMLDivElement>(null);
@@ -609,6 +670,16 @@ const Commands = (props: Props) => {
       if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()
       if(isInteractive) return callback(command)
+      if (rightColumnFlag && scope === "add-field" && addFieldPayload &&
+          command.key.startsWith(ADD_FIELD_COMMAND_PREFIX)) {
+        resetShowCommands();
+        const detail: AddFieldEventDetail = {
+          taskId: addFieldPayload.taskId,
+          key: command.key.slice(ADD_FIELD_COMMAND_PREFIX.length),
+        };
+        setTimeout(() => window.dispatchEvent(new CustomEvent(ADD_FIELD_EVENT, { detail })), 1);
+        return;
+      }
       setFrequentlyUsed((previousUsage) =>
         recordHTCCommandUsage(previousUsage, command)
       );
@@ -722,30 +793,36 @@ const Commands = (props: Props) => {
       if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || writing) return;
       if (skillMenuOwnsKeys && document.querySelector("[data-compose-skill-menu-open]")) return;
       const target = event.target as HTMLElement;
-      if (isCompose && target.matches("[data-compose-task-writer] textarea") &&
+      if (!(tabPaletteCycle && !isMobile) && isCompose && target.matches("[data-compose-task-writer] textarea") &&
           document.querySelector("[data-compose-board-chip]")) return;
-      if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
+      const paletteTabOwnsTab = tabPaletteCycle && !isMobile && isCompose &&
+        Boolean(target.closest("[data-compose-task-writer]")) &&
+        !target.closest("details[open], [data-compose-board-picker-open]");
+      if (!paletteTabOwnsTab && !target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       setShowCommands((previous) => ({ ...previous, paletteTab: isCompose ? "search" : "compose" }));
     };
     document.addEventListener("keydown", switchTab, true);
     return () => document.removeEventListener("keydown", switchTab, true);
-  }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
+  }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys, plusComposerEnabled, tabPaletteCycle, isMobile]);
 
+  const integratedTabs = newTaskWindow && !isMobile && !isDemo && !isInteractive;
   const modeSwitch = !isDemo && !isInteractive ? (
-    <div className="absolute -top-12 left-0 flex w-full justify-center">
+    <div className={integratedTabsFlag && integratedTabs ? (filledSearchFlag && tabsOnTopFlag && !isCompose ? "flex w-full p-2" : "flex w-full border-b border-light-black-border-1 p-2") : "absolute -top-12 left-0 flex w-full justify-center"}>
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
           { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
-          { id: "compose", className: "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <><span className="flex items-center gap-2"><Sparkles size={18} strokeWidth={1.75} aria-hidden />New Task</span><Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> },
+          plusComposerEnabled
+            ? { id: "compose", label: <>New Task<Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> }
+            : { id: "compose", className: "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <><span className="flex items-center gap-2"><Sparkles size={18} strokeWidth={1.75} aria-hidden />New Task</span><Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> },
         ] : [{ id: "search", label: "Search" }, { id: "compose", label: "Compose" }]}
         activeId={isCompose ? "compose" : "search"}
         onSelect={(paletteTab) => setShowCommands((previous) => ({ ...previous, paletteTab: paletteTab as "search" | "compose" }))}
         ariaLabel="Commands mode"
         disabled={writing}
         buttonClassName="rounded-[4px]"
-        className={`flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
+        className={integratedTabsFlag && integratedTabs ? "flex-none" : `flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
       />
     </div>
   ) : null;
@@ -762,7 +839,7 @@ const Commands = (props: Props) => {
         ref={setInputRef}
         autoFocus={!isMobile}
         id="htc-mobile-search"
-        placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
+        placeholder={isDemo ? "Press Enter to select" : ellipsisFlag ? "Type a command or search…" : "Type a command or search..."}
         onChange={(event) => {
           if (focusProxy) delete focusProxy.pendingEnter;
           onKeyChange(event);
@@ -844,17 +921,18 @@ const Commands = (props: Props) => {
           />
         )}
 
-        {modeSwitch}
-        <ModalBody className="  p-0 rounded-[5px]">
+        {!(integratedTabsFlag && integratedTabs) && modeSwitch}
+        <ModalBody className="  p-0 rounded-[5px]" data-build={buildId}>
+          {integratedTabsFlag && integratedTabs && (isCompose || tabsOnTopFlag) && modeSwitch}
           {compose}
           {!isCompose && <>
-          <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
+          <div className={filledSearchFlag && integratedTabsFlag && tabsOnTopFlag && integratedTabs ? "mx-2 flex items-center gap-2.5 rounded-[4px] bg-ai-tiptap px-3" : "flex items-center gap-2.5 border-b border-light-black-border-1 px-4"}>
             <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" />
             <ModalInput
                ref={setInputRef}
                autoFocus
                id={newTaskWindow ? "htc-search" : "htc"}
-               placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
+               placeholder={isDemo ? "Press Enter to select" : ellipsisFlag ? "Type a command or search…" : "Type a command or search..."}
                onChange={(event) => {
                  if (focusProxy) delete focusProxy.pendingEnter;
                  onKeyChange(event);
@@ -870,11 +948,14 @@ const Commands = (props: Props) => {
                {...(composeEnabled ? { onBlur: undefined } : {})}
             />
           </div>
+          {integratedTabsFlag && integratedTabs && !tabsOnTopFlag && modeSwitch}
           {commandGroups}
-          <ModalHintBar />
-          <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
-            v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
-          </div>
+          {!noFooterFlag && <>
+            <ModalHintBar />
+            <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
+              v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
+            </div>
+          </>}
           </>}
         </ModalBody>
       </ModalContainerCustom>

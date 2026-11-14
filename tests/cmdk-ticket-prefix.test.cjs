@@ -64,17 +64,17 @@ function paletteGroups(enabled, frequent = {}, contextOptions, githubEnabled = f
     getHTCFrecencyScore: () => 0,
   };
   const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible", "hiddenBasetenCommandKey", "hiddenXaiCommandKeys", "hiddenGithubCommandKey"]);
+  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible", "hiddenBasetenCommandKey", "hiddenAlwaysUseCommandKey", "hiddenXaiCommandKeys", "hiddenGithubCommandKey"]);
   const statements = [];
   function visit(node) {
     if ((ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => names.has(declaration.name.getText(source)))) ||
-        (ts.isIfStatement(node) && ["ticketPrefixEnabled", "!basetenByokEnabled", "!grokGemini4Enabled", "githubConnectEnabled"].includes(node.expression.getText(source)))) {
+        (ts.isIfStatement(node) && ["ticketPrefixEnabled", "!basetenByokEnabled", "!alwaysUseThisKeyEnabled", "!grokGemini4Enabled", "githubConnectEnabled"].includes(node.expression.getText(source)))) {
       statements.push(node.getText(source));
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  Object.assign(bindings, evaluate(`(() => { ${statements.join("\n")} return { isTicketPrefixCommandVisible, hiddenBasetenCommandKey, hiddenXaiCommandKeys, hiddenGithubCommandKey }; })()`, {
+  Object.assign(bindings, evaluate(`(() => { ${statements.join("\n")} return { isTicketPrefixCommandVisible, hiddenBasetenCommandKey, hiddenAlwaysUseCommandKey, hiddenXaiCommandKeys, hiddenGithubCommandKey }; })()`, {
     ...bindings, useCallback: (callback) => callback,
   }));
   bindings.getCommands = registry.getAllCommands;

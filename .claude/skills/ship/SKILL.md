@@ -56,6 +56,14 @@ Nobody prompts a runner again after its turn ends. Ending the turn while CI, rev
 
 The done comment lists every decision you made on Valentin's behalf, one line each with its reason. Write "Decisions: none" when there were none.
 
+## Scripted chores
+
+Use `scripts/ship-chores rebase` in a clean ticket worktree. It honors `SHIP_BASE` and restores the original branch on conflicts. Use `scripts/ship-chores live --url https://app.hypertask.ai/login --expect 'Sign in'` for bounded HTTP health. No redirects or credentials; feature QA remains separate.
+
+`scripts/ship-chores sweep` discovers bound runner-App production PRs. It excludes protected files, drafts, human PRs and truncated inventories. One five-minute timer retries required workflows once per head, pins merges through the installed guard, then requires `ship-check deployed` and live HTTP health. Non-required reds never block. Changed heads HOLD; second failures stop RED. Inspect `~/.local/state/ship-chores/fleet/TICKET.json`. Review a changed head before removing its held job to re-enroll it. Feature QA and Done stay with the builder.
+
+Install the merged executable to `~/.local/lib/hypertask/ship-chores/ship-chores` and its unit templates to `~/.config/systemd/user/`. Validate both with `user-unit-check`, reload systemd, enable only your own `ship-chores@NUMBER.timer`, then verify `user-unit-check --first-run ship-chores@NUMBER.service`. Never choose another identity. Shared locking and durable head history prevent overlap. The sweep never touches `~/.local/state/fleet/one-run.on`; the picker hold belongs to the merger that already runs on this server. Do not enable the sweep timer while that merger runs, or two mergers race for the same PR. Protected work still needs its authorized merger.
+
 ## Helpers
 
 The runner itself runs Codex gpt-6.1-sol at medium effort and delegates by default, with helpers in the background. Code edits: `hax --provider=codex --model=gpt-6.1-terra --effort=medium --no-session -p "<task>"`. Lookups, logs and summaries: `hax --provider=codex --model=gpt-6-luna --effort=low --no-session -p "<task>"`. Sol high (`--model=gpt-6.1-sol --effort=high`) only for hard bugs, security and money.
@@ -105,9 +113,9 @@ For any flagged failure, a flag-owner write/admin agent holds the flag at Owner 
 
 Agent-to-agent session messaging is closed by default. Only Valentin's explicit request for that specific case permits it. A role, reason tag, ticket link or blocked state is not permission. Ordinary notes wait for scheduled board reads; they do not wake another session.
 
-Run each step yourself through its existing skill and tool. Keep routine progress and reflection findings in `vcc activity add`. Protected reviews still require HT Product Lead review and merge on the ticket; do not self-merge protected changes or wait for a session reply.
+Run each step yourself through its existing skill and tool. Keep routine progress and reflection findings in `vcc activity add`. Protected reviews still require Chief Of Staff review and merge on the ticket; do not self-merge protected changes or wait for a session reply.
 
-For a broken tool or server after two failed attempts, record the exact error and next step in agent activity. Move with `vcc task move T --section "Agent Blocked (Infra)"` on board 15 or `vcc task move T --section "Agent Blocked"` on board 4060. Keep the runner assigned as owner. Never put user 6 in the blocker field as a substitute for an agent. Skip blocked tickets when picking work. A real human decision goes directly to Valentin Review with one marked Question, not through a lead session.
+For a broken tool or server after two failed attempts, record the exact error and next step in agent activity. Move with `vcc task move T --section "Agent Blocked (Infra)"` on board 15 or `vcc task move T --section "Agent Blocked"` on board 11514. Keep the runner assigned as owner. Never put user 6 in the blocker field as a substitute for an agent. Skip blocked tickets when picking work. A real human decision goes directly to Valentin Review with one marked Question, not through a lead session.
 
 ## Handle exceptions without inventing completion
 
@@ -118,7 +126,7 @@ For a broken tool or server after two failed attempts, record the exact error an
 - **Decided against:** quote Valentin's dated decision in the required `Decided against: Valentin, YYYY-MM-DD:` comment, close the PR unmerged, and use `ship-check dropped`. Never claim it deployed.
 - **Archived:** read the archive state first. Done means verify the existing live result. Otherwise restore through the product surface before working. Search Normal, Archive, and Deleted before declaring a ticket missing; board moves can change its number.
 
-When the Agent Kit blocks work, search board 4060 before filing a fix. Never duplicate another active repair. Fix only the blocker through the normal ticket/PR path. Protected parts require HT Product Lead review and merge: `ship-gates`, the guard part of `ship-check`, `ship-identity`, the `vcc` wrapper, `.claude/skills/unlazy/`, `.claude/hooks/`, `.claude/settings.json`, `CLAUDE.md`, and `AGENTS.md`. Hand the PR over on its ticket; do not self-merge.
+When the Agent Kit blocks work, search board 11514 first and +1 the existing ticket with `vcc activity add`; file a new one only if none exists and the board is under its cap (`vcc` refuses otherwise). Never duplicate another active repair. Fix only the blocker through the normal ticket/PR path. Protected parts require Chief Of Staff review and merge: `ship-gates`, the guard part of `ship-check`, `ship-identity`, the `vcc` wrapper, `.claude/skills/unlazy/`, `.claude/hooks/`, `.claude/settings.json`, `CLAUDE.md`, and `AGENTS.md`. Hand the PR over on its ticket; do not self-merge.
 
 Runner timers, webhooks, pickup, and self-update have their own scripts. Read them only for an installation or dispatch task, not every ticket. New user timers require `user-unit-check` before enablement and one successful first real run afterward.
 

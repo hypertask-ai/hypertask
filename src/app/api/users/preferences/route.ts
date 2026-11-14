@@ -22,8 +22,10 @@ import {
   type TAiModelPreferences,
   type TAiModelPreferencesBySurface,
 } from "@/lib/aiModelPreferences";
+import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import {
   aiImageModelDefinitions,
+  AUTO_MODEL_OPTION_ID,
   getAiModelOptionById,
 } from "@/lib/aiModelOptions";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
@@ -33,6 +35,9 @@ import {
   type BoardSortMode,
 } from "@/lib/configs/boardSortMode.config";
 import { HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG } from "@/lib/flags/definitions/htpr-7649-sidebar-view-saved";
+import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
+import { isAiThinkingEffort } from "@/lib/aiThinkingPreference";
+import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import { isAllTasksDateRange } from "@/lib/configs/allTasks.config";
 import type { ISnippet } from "@/lib/snippets";
 import type { Prisma } from "@prisma/client";
@@ -103,6 +108,7 @@ export async function GET(request: NextRequest) {
           autoDescriptionSuggestions: true,
           dictationLanguage: "en",
           inboxAdvanceOnSend: true,
+          inboxSplitsOverflowHidden: false,
           emojiFrequency: null,
           calendarViews: null,
           aiChatOpenNewTickets: null,
@@ -168,12 +174,14 @@ export async function POST(request: NextRequest) {
       autoDescriptionSuggestions?: boolean;
       dictationLanguage?: string;
       inboxAdvanceOnSend?: boolean;
+      inboxSplitsOverflowHidden?: boolean;
       emojiFrequency?: Prisma.InputJsonValue;
       allTasksDateRange?: string;
       boardSortMode?: BoardSortMode;
       aiChatOpenNewTickets?: boolean;
       aiChatOpenTickets?: boolean;
       aiChatOpenBoards?: boolean;
+      cardParts?: Prisma.InputJsonValue;
     } = {};
 
     for (const key of AI_CHAT_AUTO_OPEN_KEYS) {
@@ -243,6 +251,17 @@ export async function POST(request: NextRequest) {
       }
       data.autoDescriptionSuggestions = body.autoDescriptionSuggestions;
     }
+    if (Object.hasOwn(body, "inboxSplitsOverflowHidden")) {
+      if (typeof body.inboxSplitsOverflowHidden !== "boolean") {
+        return NextResponse.json(
+          { success: false, error: "Invalid inbox split layout" },
+          { status: 400 },
+        );
+      }
+      if (await isFeatureEnabled("htpr-9080-split-overflow", user.id)) {
+        data.inboxSplitsOverflowHidden = body.inboxSplitsOverflowHidden;
+      }
+    }
     if (body.inboxAdvanceOnSend !== undefined) {
       data.inboxAdvanceOnSend = body.inboxAdvanceOnSend as boolean;
     }
@@ -278,6 +297,24 @@ export async function POST(request: NextRequest) {
       }
       data.allTasksDateRange = body.allTasksDateRange;
     }
+    if (body.cardParts !== undefined && (await isFeatureEnabled(HTPR_8971_CARD_SETTINGS_FLAG, user.id))) {
+      const parts = body.cardParts;
+      const valid =
+        !!parts &&
+        typeof parts === "object" &&
+        !Array.isArray(parts) &&
+        Object.keys(parts).length <= 20 &&
+        Object.entries(parts).every(
+          ([part, shown]) => part.length <= 40 && typeof shown === "boolean",
+        );
+      if (!valid) {
+        return NextResponse.json(
+          { success: false, error: "Invalid card parts" },
+          { status: 400 },
+        );
+      }
+      data.cardParts = parts as Prisma.InputJsonValue;
+    }
     if (body.dictationLanguage !== undefined) {
       if (!isDictationLanguage(body.dictationLanguage)) {
         return NextResponse.json(
@@ -305,14 +342,20 @@ export async function POST(request: NextRequest) {
       }
 
       const preferenceUpdates = Object.entries(body.aiModelPreferences);
-      const invalidPreference = preferenceUpdates.find(
-        ([surface, optionId]) =>
-          !isAiModelPreferenceSurface(surface) ||
-          typeof optionId !== "string" ||
-          (surface === "imageGeneration"
-            ? !aiImageModelDefinitions.some((model) => model.key === optionId)
-            : !getAiModelOptionById(optionId)),
-      );
+      let taskWriterAuto = false;
+      if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, user.id)) {
+        taskWriterAuto = true;
+      }
+      const invalidPreference = preferenceUpdates.find(([surface, optionId]) => {
+        if (!isAiModelPreferenceSurface(surface) || typeof optionId !== "string") return true;
+        if (surface === "imageGeneration") {
+          return !aiImageModelDefinitions.some((model) => model.key === optionId);
+        }
+        if (getAiModelOptionById(optionId)) return false;
+        if (surface === "aiChat" && optionId === AUTO_MODEL_OPTION_ID) return false;
+        if (surface === "taskWriter" && optionId === AUTO_MODEL_OPTION_ID && taskWriterAuto) return false;
+        return true;
+      });
 
       if (invalidPreference) {
         return NextResponse.json(
@@ -351,6 +394,31 @@ export async function POST(request: NextRequest) {
         ) as TAiModelPreferencesBySurface,
         teamId as string | number | undefined,
       ) as Prisma.InputJsonValue;
+    }
+
+    if (
+      body.aiThinkingPreference !== undefined &&
+      (await isFeatureEnabled(HTPR_9004_THINKING_EFFORT_FLAG, user.id))
+    ) {
+      const { enabled, effort } = (body.aiThinkingPreference ?? {}) as Record<string, unknown>;
+      if (typeof enabled !== "boolean" || !isAiThinkingEffort(effort)) {
+        return NextResponse.json(
+          { success: false, error: "Invalid AI thinking preference" },
+          { status: 400 },
+        );
+      }
+      const stored =
+        (data.aiModelPreferences as unknown as TAiModelPreferences | undefined) ??
+        ((
+          await prisma.userSetting.findUnique({
+            where: { userId: user.id },
+            select: { aiModelPreferences: true },
+          })
+        )?.aiModelPreferences as TAiModelPreferences | null | undefined);
+      data.aiModelPreferences = {
+        ...(stored ?? {}),
+        thinking: { enabled, effort },
+      } as Prisma.InputJsonValue;
     }
 
     if (body.snippets !== undefined) {
@@ -494,6 +562,7 @@ export async function POST(request: NextRequest) {
       autoDescriptionSuggestions: true,
       dictationLanguage: true,
       inboxAdvanceOnSend: true,
+      inboxSplitsOverflowHidden: true,
       emojiFrequency: true,
       calendarViews: true,
       allTasksDateRange: true,
@@ -501,6 +570,7 @@ export async function POST(request: NextRequest) {
       aiChatOpenNewTickets: true,
       aiChatOpenTickets: true,
       aiChatOpenBoards: true,
+      cardParts: true,
     } as const;
     const updateWithCalendarOperation = async () => {
       for (

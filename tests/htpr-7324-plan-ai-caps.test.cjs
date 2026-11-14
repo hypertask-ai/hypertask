@@ -795,6 +795,7 @@ test("settings displays the all-in committed snapshot including legacy pending; 
   const route = moduleWithStubs("src/app/api/settings/ai-usage/route.ts", {
     "next/server": { NextResponse: { json: Response.json } },
     "@/lib/auth/serverUser": { getServerCookieUser: async () => ({ id: 7324 }) },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/prisma": { __esModule: true, default: {
       team: { findUnique: async () => ({ googleAccount: { userId: 7324 } }) },
       aiUsage: { groupBy: async () => [] },
@@ -1113,6 +1114,7 @@ for (const entry of ["editor", "chat"]) {
           "@/lib/aiModelPreferences": { getAiModelPreferenceIds: () => ({}) },
           "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true, resolveUserFacingModelOption: () => fallback },
           "@/app/api/ai/chat/stream/modelFallback": { previousModelForFailedStream: () => null },
+          "@/app/api/ai/_lib/autoModel": { isAutoRequest: () => false },
           ai: { wrapLanguageModel: ({ model }) => model },
         };
         let result;

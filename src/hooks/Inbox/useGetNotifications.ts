@@ -30,6 +30,7 @@ import { filterInboxReadModelByProjectAccess } from "@/lib/inboxSync/contract";
 import { isStaleInboxHydration } from "@/lib/inboxSync/hydrationStaleness";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7690_INBOX_HYDRATION_FLOOR_FLAG } from "@/lib/flags/definitions/htpr-7690-inbox-hydration-floor";
+import { HTPR_9055_NEEDS_YOU_FLAG } from "@/lib/flags/definitions/htpr-9055-needs-you";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
@@ -462,6 +463,11 @@ export const useGetNotifications = (userId: number) => {
   }, [userId]);
   const queryKey = useMemo(() => inboxDataQueryKey(userId), [userId]);
   const keepHydrationFloor = useFlag(HTPR_7690_INBOX_HYDRATION_FLOOR_FLAG);
+  const needsYouEnabled = useFlag(HTPR_9055_NEEDS_YOU_FLAG);
+  const selectInbox = useCallback((payload: InboxQueryPayload) => {
+    if (needsYouEnabled || !payload.notifications.some((notice) => notice.needsYouEnabled)) return payload;
+    return { ...payload, ...buildInboxQueryCache(payload.notifications.map((notice) => ({ ...notice, needsYouEnabled: false })), payload.splitsNoImportant, payload.showImportantSplit) };
+  }, [needsYouEnabled]);
   useEffect(() => {
     if (hydrated || document) return;
     void queryClient.prefetchQuery({
@@ -487,6 +493,7 @@ export const useGetNotifications = (userId: number) => {
           queryKey: [...queryKey, "hydrating"] as const,
           enabled: false,
         }),
+    select: selectInbox,
     queryFn: () =>
       fetchInboxPayload(
         userId,

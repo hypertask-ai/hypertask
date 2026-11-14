@@ -5,10 +5,13 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { blockedByRelationsInclude, getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { attachOpenBlockingTasks, type TaskWithBlockingRelations } from '@/utils/controllers/tasks/attachOpenBlockingTasks'
+import { mapOpenBlockingTasksForRead } from '@/lib/blockingTasks'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { accessibleAgentWhere } from '@/lib/agents/visibility'
+import { scrubStoredTaskSummary } from '@/lib/tasks/redactWaitingActivities'
 import type { McpTaskAssignee } from '@/lib/mcp/tasks/types'
 import {
   mapMcpTaskLabel,
@@ -18,7 +21,7 @@ import {
   mcpTaskLabelSelect,
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers'
-import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
+import { userCommentCountsByTaskId } from '@/utils/controllers/tasks/userCommentCounts'
 import { refreshTaskPullRequests } from '@/lib/pullRequests/taskPullRequests'
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
@@ -109,6 +112,7 @@ export interface TaskListItem {
   agent?: McpAgentSummary
   uniqueIndex?: number
   url?: string
+  blockingTasks?: ReturnType<typeof mapOpenBlockingTasksForRead>
   link?: {
     url: string
     format: string
@@ -330,6 +334,7 @@ export async function GET(request: NextRequest) {
             take: 20,
           },
           ...taskMcpGetInclude(user.id, ctx.agentId, ctx.teamScope),
+          _count: undefined,
           ...(includeAiSummary ? {
             Task_Summary: {
               take: 1,
@@ -377,12 +382,13 @@ export async function GET(request: NextRequest) {
         }
 
         const attachmentDownloadHints = await isFeatureEnabled(HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG, user.id).catch(() => false)
+        const commentCounts = await userCommentCountsByTaskId(tasks.map(task => task.id))
         const mapTask = async (task: (typeof tasks)[number]) => {
           const pullRequests = task.pullRequests?.length
             ? await refreshTaskPullRequests(task.id, task.pullRequests)
             : task.pullRequests
           const detail = withAttachmentDownloadHints(mapTaskToMcpGetResponse(
-            { ...task, pullRequests },
+            { ...task, pullRequests, _count: { comments: commentCounts.get(task.id) ?? 0 } },
             user.id,
             ctx.agentId,
             ctx.teamScope,
@@ -398,7 +404,7 @@ export async function GET(request: NextRequest) {
           return {
             ...mapped,
             ai_summary: summary ? {
-              content: summary.content,
+              content: (await scrubStoredTaskSummary(summary.content, task.id, user.id, task.projectId)) ?? summary.content,
               updated_at: (summary.updatedAt ?? summary.createdAt).toISOString(),
             } : null,
           }
@@ -782,12 +788,6 @@ export async function GET(request: NextRequest) {
           where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' },
           select: { id: true, type: true },
         },
-        _count: {
-          select: {
-            taskLabels: true,
-            comments: mcpTaskUserCommentCount,
-          },
-        },
         subTasks: {
           where: {
             ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } : {}),
@@ -806,6 +806,7 @@ export async function GET(request: NextRequest) {
             createdAt: "asc",
           },
         },
+        relatedFromTasks: blockedByRelationsInclude(user.id, ctx.agentId, ctx.teamScope),
       },
       orderBy,
       take: limit,
@@ -819,11 +820,16 @@ export async function GET(request: NextRequest) {
       user.id,
     ).catch(() => false)
 
+    const commentCounts = await userCommentCountsByTaskId(tasks.map(task => task.id))
     const uniqueProjects = new Set(tasks.map(t => t.projectId))
     const doneTitlesByProject = await loadDoneTitlesByProject(uniqueProjects, mcpDoneNameFallback)
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
 
-    const taskList: TaskListItem[] = tasks.map(task => {
+    const tasksWithBlockers = await attachOpenBlockingTasks(
+      tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
+    )
+
+    const taskList: TaskListItem[] = tasksWithBlockers.map(task => {
       recordAgentBoardScopeMiss(task.projectId, "read");
       task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
@@ -858,6 +864,7 @@ export async function GET(request: NextRequest) {
           title: st.title,
           uniqueIndex: st.uniqueIndex
         })),
+        blockingTasks: mapOpenBlockingTasksForRead(task.blockingTasks),
         projectId: task.projectId,
         status: task.status,
         priority: task.priority?.Priority_Value || undefined,
@@ -865,8 +872,8 @@ export async function GET(request: NextRequest) {
         assignees,
         assigneeCount: assignees.length,
         labels: task.taskLabels.map(mapMcpTaskLabel),
-        labelCount: task._count.taskLabels,
-        commentCount: task._count.comments,
+        labelCount: task.taskLabels.length,
+        commentCount: commentCounts.get(task.id) ?? 0,
         savedContent: task.savedContent,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt?.toISOString() || undefined,

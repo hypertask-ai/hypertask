@@ -27,7 +27,7 @@ MOCK
 #!/usr/bin/env bash
 [[ $1 == tasks && $2 == get ]] || exit 1
 case "$3" in
-  MARK-173|HEFE-301|HTPR-6570) echo '{"success":true,"tasks":[{"section":"Approved"}]}' ;;
+  MARK-173|HEFE-301|HTPR-6570|SOFT-491|IGSH-266) echo '{"success":true,"tasks":[{"section":"Approved"}]}' ;;
   *) echo '{"success":false,"tasks":[]}' ;;
 esac
 MOCK
@@ -40,11 +40,43 @@ MOCK
   T 0 'MARK-173 [BUG] Help chat back to a floating icon'
   T 0 'HEFE-301 [BUG] Docs link answers the wrong page'
   T 0 'HTPR-6570 [BUGFIX] Keep the same AI chat after Settings'
+  T 0 'SOFT-491 [BUGFIX] Open the app in one tap'
+  T 0 'IGSH-266 [BUG] Approval key reaches the agent'
   T 1 'MARK-99999 [BUG] Made-up ticket number'
   T 1 'MARK-173 Lead ticket without a type tag'
   T 1 '[BUG] MARK-173 Type first, which only the duplicate path takes'
 }
 title_tests
+
+fresh_tests() {
+  local PATH=$PATH BEHIND_FIXTURE
+  mkdir -p "$E/fresh-bin"; PATH="$E/fresh-bin:$PATH"
+  cat > "$E/fresh-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+if [[ $1 == api && $2 == repos/hypertask-ai/hypertask/pulls/4242 ]]; then echo 0123456789abcdef0123456789abcdef01234567; exit 0; fi
+if [[ $1 == api && $2 == repos/hypertask-ai/hypertask/compare/production...0123456789abcdef0123456789abcdef01234567 ]]; then echo "$BEHIND_FIXTURE"; exit 0; fi
+exit 1
+MOCK
+  chmod +x "$E/fresh-bin/gh"
+  F() {
+    local want=$1; shift; out=$(BEHIND_FIXTURE="$1" ./ship-check fresh 4242 2>&1); got=$?
+    [ "$got" = "$want" ] && ok "fresh: behind_by $1" || bad "fresh: want $want got $got <- behind_by $1 ($out)"
+  }
+  F 0 0
+  F 1 3
+  F 1 ''
+  out=$(BEHIND_FIXTURE=3 ./ship-check fresh 4242 2>&1)
+  [[ $out == *'update the branch'* && $out == *'3 commit(s) behind production'* ]] \
+    && ok 'fresh: refusal names the update and the distance' || bad "fresh: refusal message <- $out"
+  local pin=$E/fresh-pin
+  SHIP_MERGE_PIN=$pin BEHIND_FIXTURE=0 ./ship-check fresh 4242 >/dev/null 2>&1
+  [ "$(cat "$pin" 2>/dev/null)" = 0123456789abcdef0123456789abcdef01234567 ] \
+    && ok 'fresh: the checked head is recorded for the merge pin' || bad "fresh: pin not recorded <- $(cat "$pin" 2>/dev/null)"
+  : > "$pin"
+  SHIP_MERGE_PIN=$pin BEHIND_FIXTURE=3 ./ship-check fresh 4242 >/dev/null 2>&1
+  [ -s "$pin" ] && bad 'fresh: a behind branch was pinned' || ok 'fresh: a behind branch is never pinned'
+}
+fresh_tests
 if [ "${1:-}" = --title-only ]; then
   [ "$fails" = 0 ] && echo 'title ok' || exit 1
   exit 0
@@ -105,6 +137,8 @@ gh() {
     echo 'Invalid PR title'
   elif [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 838 && "$*" == *'--json headRefOid,baseRefName,state'* ]]; then
     command gh pr view 838 -R hypertask-ai/hypertask --json headRefOid --jq .headRefOid # Pin the skills-only fixture as open.
+  elif [[ ${1:-} == api && ${2:-} == */compare/* ]]; then
+    echo 0
   elif [[ ${1:-} == api && ${2:-} == */check-runs\?* ]]; then
     echo '{"check_runs":[{"id":1,"name":"ci-tests","status":"completed","conclusion":"success"}]}'
   else command gh "$@"; fi
@@ -784,6 +818,8 @@ T fail "stale proof rejected"
 sed -i "s/deadbeef0/${sha:0:9}/" "$E/HTPR-6570/proof.md"
 T fail "empty screenshot rejected"
 printf 'png' > "$R/a.png"; T pass "fresh proof accepted"
+sed -i 's@feature-map/my-tasks.md@feature-map/public-sites.md@' "$E/HTPR-6570/proof.md"
+T pass "public-site proof accepted"
 echo '- PASS: y -> missing output.png' >> "$E/HTPR-6570/proof.md"; T fail "malformed PASS line rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; echo '- PASS: z -> old.png' >> "$E/HTPR-6570/proof.md"; printf 'png' > "$E/HTPR-6570/old.png"
 T fail "evidence outside the current run rejected"
@@ -921,6 +957,8 @@ elif args[:1] == ['api'] and '/statuses/' in args[1]:
         else:
             raise AssertionError('status post must hold publisher lock')
     sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
+elif args[:1] == ['api'] and '/compare/' in args[1]:
+    print('0')
 elif args[:1] == ['api'] and '/check-runs?' in args[1]:
     print(json.dumps({'check_runs': [{'id': 1, 'name': 'ci-tests', 'status': 'completed', 'conclusion': 'success'}]}))
 elif args[:1] == ['api'] and args[1].endswith('/pulls/999') and '--jq' in args:
@@ -1176,6 +1214,152 @@ echo OPEN > "$ELSE_DIR/state-902"
 SHIP_REPO=hypertask-ai/hypertask EL elsewhere YPER4-778 902 >/dev/null && bad "elsewhere replaced an open binding by number" || ok "elsewhere reads the old binding in its own repository"
 EL bind YPER4-778 902 >/dev/null && [ ! -e "$E/YPER4-778/elsewhere" ] && ok "bind clears elsewhere" || bad "bind did not clear elsewhere"
 
+export CI_FIXTURE_DIR="$PWD/fixtures/yper4-312" CI_CALL_LOG="$E/ci-calls"
+export CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG CI_BEHIND
+CI_HEAD=$(jq -r '.check_runs[0].head_sha' "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
+CI_PR_RUNS=$(cat "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
+CI_BASE_RUNS=$(jq '.check_runs[0].conclusion = "success"' "$CI_FIXTURE_DIR/production.check-runs.json")
+CI_LOG=$(cat "$CI_FIXTURE_DIR/pr-1392-failure.log")
+gh() {
+  printf '%s\n' "$*" >> "$CI_CALL_LOG"
+  [[ -z ${CI_GH_ERROR:-} || $* != *"$CI_GH_ERROR"* ]] || { printf '%s\n' "${CI_GH_STDERR:-GitHub HTTP 503}" >&2; return 1; }
+  case "$1:$2" in
+    pr:view)
+      if [[ $* == *'--json title'* ]]; then echo 'HTPR-6971 [FEATURE] Fixture'
+      else echo "$CI_HEAD"; fi ;;
+    api:*/pulls/1392)
+      [[ $* == *'--jq .head.sha'* ]] || return 1
+      echo "$CI_HEAD" ;;
+    api:*/commits/production/check-runs\?*) printf '%s\n' "$CI_BASE_RUNS" ;;
+    api:*/check-runs\?*)
+      [[ $2 == "repos/"*"/commits/$CI_HEAD/check-runs?per_page=100&filter=all" && $* == *--paginate* ]] || return 1
+      printf '%s\n' "$CI_PR_RUNS" ;;
+    api:*/actions/jobs/114565456089/logs) cat "$CI_FIXTURE_DIR/production.log" ;;
+    api:*/actions/jobs/*/logs) printf '%s\n' "$CI_LOG" ;;
+    api:*/pulls/1392/files\?*) echo '[]' ;;
+    api:*/compare/*) printf '%s\n' "${CI_BEHIND:-0}" ;;
+    api:*/pulls/1392\?*)
+      jq -n --arg sha "$CI_HEAD" '{head:{sha:$sha},base:{sha:$sha},title:"HTPR-6971 [FEATURE] Fixture",changed_files:0}' ;;
+    api:*/statuses/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+hypertask() { echo '{"success":true,"tasks":[{"id":6971}]}'; }
+export -f gh hypertask
+if [ "$(gh api repos/hypertask-ai/hypertask/pulls/1392 --jq .head.sha)" = "$CI_HEAD" ]; then ok 'CI stub returns recorded head'
+else bad 'CI stub head changed'; fi
+if hypertask tasks get HTPR-6971 --json | jq -e '.success' >/dev/null; then ok 'CI ticket stub passes'
+else bad 'CI ticket stub failed'; fi
+ci_test_path=$(printenv PATH)
+mkdir -p "$E/ci-bin"
+printf '#!/usr/bin/env bash\ngh "$@"\n' > "$E/ci-bin/gh"
+chmod +x "$E/ci-bin/gh"
+CI() {
+  local want=$1 expected=$2 out got; shift 2
+  : > "$CI_CALL_LOG"
+  out=$(echo '{"tool_input":{"command":"gh pr merge 1392"}}' | env PATH="$E/ci-bin:$ci_test_path" SHIP_GIT=/bin/true SHIP_GIT_CACHE="$E/ci-cache" "$@" ./ship-check guard 2>&1); got=$?
+  if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "ci-tests: $expected"
+  else bad "ci-tests: want $want $expected got $got $out"; fi
+  if [ "$want" = 0 ] && [[ $* != *SHIP_REPO=* ]]; then
+    if grep -q '/statuses/' "$CI_CALL_LOG"; then ok 'passing CI proceeds to premerge status'
+    else bad 'passing CI never reached premerge status'; fi
+  elif [ "$want" = 2 ]; then
+    if grep -q '/statuses/' "$CI_CALL_LOG"; then bad 'nonpassing CI reached premerge status'
+    else ok 'nonpassing CI stops before premerge status'; fi
+  fi
+  if [ "$expected" = 'tests/htpr-6971-chat-history-paging.test.cjs:774:1' ]; then
+    printf '1392 fixture block: %s\n' "$out"
+  fi
+}
+CI 2 'tests/htpr-6971-chat-history-paging.test.cjs:774:1'
+CI 2 'production ci-tests is green, so this PR broke it'
+CI 2 'production ci-tests is also red (Ctrl+J globally opens Compose' CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
+CI 0 '' CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")"
+CI 2 'is 3 commit(s) behind production' CI_BEHIND=3 CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")"
+for conclusion in neutral skipped; do
+  CI 2 "ci-tests $conclusion on head" CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0] |= (.id += 1 | .conclusion = $c)' <<<"$CI_PR_RUNS")
+$CI_PR_RUNS"
+done
+rerun=$(jq '.check_runs[0] |= (.id += 1 | .conclusion = "success")' <<<"$CI_PR_RUNS")
+CI 0 '' CI_PR_RUNS="$rerun
+$CI_PR_RUNS"
+CI 2 "passed before that on an older production; rerun ci-tests on head c587e4b" \
+  CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 \
+  CI_PR_RUNS="$(cat "$CI_FIXTURE_DIR/pr-1392-head.check-runs.json")" \
+  CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
+CI 0 '' CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 \
+  CI_PR_RUNS="$(jq '.check_runs[0].started_at = "2026-10-11T21:00:00Z"' "$CI_FIXTURE_DIR/pr-1392-head.check-runs.json")" \
+  CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
+for status in queued in_progress; do
+  CI 2 "ci-tests has not finished on head ${CI_HEAD:0:7}" CI_PR_RUNS="$(jq --arg s "$status" '.check_runs[0] |= (.status = $s | .conclusion = null)' <<<"$CI_PR_RUNS")"
+done
+for conclusion in failure cancelled timed_out action_required stale; do
+  CI 2 "ci-tests $conclusion on head" CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0].conclusion = $c' <<<"$CI_PR_RUNS")"
+done
+for endpoint in /pulls/1392 '/commits/'"$CI_HEAD" /commits/production; do
+  CI 2 'cannot read ci-tests for PR 1392; retry' CI_GH_ERROR="$endpoint"
+done
+CI 2 'cannot read ci-tests for PR 1392; retry' CI_PR_RUNS=invalid
+CI 2 'head PR: GitHub request failed (HTTP 503)' CI_GH_ERROR=/pulls/1392
+CI 2 'head check-runs: GitHub request failed (HTTP 503)' CI_GH_ERROR="/commits/$CI_HEAD"
+CI 2 'production check-runs: GitHub request failed (HTTP 503)' CI_GH_ERROR=/commits/production
+CI 2 'production check-runs: GitHub request failed (HTTP 503)' CI_GH_ERROR=/commits/production \
+  CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")"
+CI 2 'head PR: invalid head SHA' CI_HEAD='{broken'
+CI 2 'head PR: invalid head SHA' CI_HEAD=not-a-sha
+CI 2 'head check-runs: malformed JSON or invalid check-runs shape' CI_PR_RUNS=$'{"check_runs":[]}\n{broken'
+CI 2 'head check-runs: malformed JSON or invalid check-runs shape' CI_PR_RUNS=$'{"check_runs":[]}\n{"check_runs":{}}'
+CI 2 'production check-runs: malformed JSON or invalid check-runs shape' CI_BASE_RUNS=$'{"check_runs":[]}\n[]' \
+  CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")"
+
+while IFS='|' read -r detail expected; do
+  out=$(env CI_GH_ERROR=/pulls/1392 CI_GH_STDERR="$detail" ./ship-check ci-tests 1392 2>&1); got=$?
+  if [ "$got" = 1 ] && [[ $out == *"head PR: GitHub request failed ($expected)"* ]] \
+    && [[ $out != *secret-one* && $out != *Authorization* ]]; then ok "CI diagnostic: $expected"
+  else bad "CI diagnostic classification: $expected"; fi
+done <<'CASES'
+HTTP 401 unauthorized|HTTP 401
+HTTP 429 rate limit|HTTP 429
+request timed out|request timed out
+could not resolve host|DNS resolution failed
+connection refused|connection refused
+Authorization: Bearer secret-one|no safe error detail available
+CASES
+synthetic_token=$(printf ghp_%036d 0)
+out=$(env GH_TOKEN=secret-one GITHUB_TOKEN=secret-two CI_GH_ERROR=/pulls/1392 \
+  CI_GH_STDERR=$'HTTP 403 forbidden\nAuthorization: Bearer secret-one\nsecret-two '"$synthetic_token"$'\n'"$(printf '%05000d' 0)" \
+  ./ship-check ci-tests 1392 2>&1); got=$?
+if [ "$got" = 1 ] && [[ $out == *'head PR: GitHub request failed (HTTP 403)'* ]] \
+  && [[ $out != *secret-one* && $out != *secret-two* && $out != *"$synthetic_token"* && $out != *ghp_* && $out != *Authorization* ]] \
+  && [ "${#out}" -lt 300 ]; then ok 'CI diagnostics are bounded and redact credentials'
+else bad 'CI diagnostics leaked credentials or were unbounded'; fi
+out=$(env CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")" ./ship-check ci-tests 1392 2>&1); got=$?
+if [ "$got" = 0 ] && [ "$out" = 'ci-tests ok' ]; then ok 'CI success output unchanged'
+else bad "CI success output: $got $out"; fi
+CI 2 'ci-tests is missing on head c587e4b; wait for the current-head run, or retrigger it' CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 CI_PR_RUNS='{"check_runs":[]}'
+CI 0 '' SHIP_REPO=hypertask-ai/cli SHIP_BASE=main CI_PR_RUNS='{"check_runs":[]}'
+CI 0 '' SHIP_REPO=hypertask-ai/verify SHIP_BASE=app-suite CI_PR_RUNS='{"check_runs":[]}'
+: > "$CI_CALL_LOG"
+out=$(env SHIP_REPO=hypertask-ai/cli CI_GH_ERROR=check-runs ./ship-check ci-tests 1392); got=$?
+if [ "$got" = 0 ] && [ -z "$out" ] && ! grep -q 'check-runs\|/pulls/' "$CI_CALL_LOG"; then ok 'other repo skips ci-tests API reads'
+else bad "other repo API error: $got $out"; fi
+CI 2 'see https://github.com/hypertask-ai/hypertask/actions/runs/38176733942/job/114581508375' CI_GH_ERROR=/logs
+CI 2 'see https://github.com/hypertask-ai/hypertask/actions/runs/38176733942/job/114581508375' CI_LOG='no test identifiers'
+CI 2 'tests/tap-control.test.cjs:42:1' CI_LOG=$'2026-10-11T21:53:04Z not ok 1 - TAP control\n2026-10-11T21:53:04Z   location: /home/runner/tests/tap-control.test.cjs:42:1\n  error: AssertionError'
+CI 2 'named TAP failure' CI_LOG='not ok 1 - named TAP failure'
+CI 2 'tests/stack-control.test.cjs:12:4' CI_LOG=$'Error: assertion\n    at TestContext.<anonymous> (/home/runner/tests/stack-control.test.cjs:12:4)'
+CI 2 '(one; two; three)' CI_LOG=$'not ok 1 - one\nnot ok 2 - two\nnot ok 3 - three\nnot ok 4 - four'
+CI 0 '' CI_PR_RUNS="$(jq '.check_runs[0].name = "other-check"' <<<"$CI_PR_RUNS")
+$rerun"
+out=$(./ship-check ci-tests 1392); got=$?
+if [ "$got" = 1 ] && [[ $out == *tests/htpr-6971-chat-history-paging.test.cjs:774:1* ]]; then ok 'ci-tests subcommand rejects recorded failure'
+else bad "ci-tests subcommand: $got $out"; fi
+out=$(env SHIP_REPO=hypertask-ai/cli CI_PR_RUNS='{"check_runs":[]}' ./ship-check ci-tests 1392); got=$?
+if [ "$got" = 0 ] && [ -z "$out" ]; then ok 'no ci-tests in other repo passes silently'
+else bad "other repo: $got $out"; fi
+unset -f gh hypertask
+unset CI_FIXTURE_DIR CI_CALL_LOG CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
+
 if [ "${1:-}" = --premerge-only ]; then
   echo "$passes passed, $fails failed"
   [ "$fails" = 0 ] && echo 'premerge ship-check tests passed'
@@ -1284,7 +1468,7 @@ N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote bra
 DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/repo/.unlazy/s-abcd1234/gates"
 printf '#!/usr/bin/env bash\n[[ $1 == GET && $2 == /mcp/tasks/YPER4-902/agent-activity* ]] && cat "$DP/acts" || exit 1\n' > "$DP/bin/ht"
 chmod +x "$DP/bin/ht"; export DP
-DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
+DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID -u PI_SESSION_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
 act() { jq -nc --arg t "$1" '{success:true,activities:[{type:"thought",text:"Claimed.",createdAt:"2026-10-17T10:00:00Z"},{type:"thought",text:$t,createdAt:"2026-10-17T11:00:00Z"}]}' > "$DP/acts"; }
 full='Deeper: field: release engineering | raw source: ship-check source | method: stub tests | outside proof: CI run | breaks if: another suite turns red | proof gate: YPER4-902.deeper-ci'
 gate=$'- [ ] YPER4-902.deeper-ci: CI is green\n  CHECK: gh run list --limit 1\n  EXPECT: success\n'
@@ -1361,119 +1545,6 @@ N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange accepts a pre/code 
 echo 830 > "$E/YPER4-901/pr"
 N merged YPER4-901 >/dev/null && bad "nochange survived a bound PR" || ok "a bound PR ends the nochange pass"
 
-# Current-head ci-tests merge gate. The incident fixture retains its real production SHA.
-export CI_FIXTURE_DIR="$PWD/fixtures/yper4-312" CI_CALL_LOG="$E/ci-calls"
-export CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
-CI_HEAD=$(jq -r '.check_runs[0].head_sha' "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
-CI_PR_RUNS=$(cat "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
-CI_BASE_RUNS=$(jq '.check_runs[0].conclusion = "success"' "$CI_FIXTURE_DIR/production.check-runs.json")
-CI_LOG=$(cat "$CI_FIXTURE_DIR/pr-1392-failure.log")
-gh() {
-  printf '%s\n' "$*" >> "$CI_CALL_LOG"
-  [[ -z ${CI_GH_ERROR:-} || $* != *"$CI_GH_ERROR"* ]] || return 1
-  case "$1:$2" in
-    pr:view)
-      if [[ $* == *'--json title'* ]]; then echo 'HTPR-6971 [FEATURE] Fixture'
-      else echo "$CI_HEAD"; fi ;;
-    api:*/pulls/1392)
-      if [[ $* == *'--jq .head.sha'* ]]; then echo "$CI_HEAD"; else return 1; fi ;;
-    api:*/commits/production/check-runs\?*) printf '%s\n' "$CI_BASE_RUNS" ;;
-    api:*/check-runs\?*)
-      [[ $2 == "repos/"*"/commits/$CI_HEAD/check-runs?per_page=100&filter=all" && $* == *--paginate* ]] || return 1
-      printf '%s\n' "$CI_PR_RUNS" ;;
-    api:*/actions/jobs/114565456089/logs) cat "$CI_FIXTURE_DIR/production.log" ;;
-    api:*/actions/jobs/*/logs) printf '%s\n' "$CI_LOG" ;;
-    api:*/pulls/1392/files\?*) echo '[]' ;;
-    api:*/pulls/1392\?*)
-      jq -n --arg sha "$CI_HEAD" '{head:{sha:$sha},base:{sha:$sha},title:"HTPR-6971 [FEATURE] Fixture",changed_files:0}' ;;
-    api:*/statuses/*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-hypertask() { echo '{"success":true,"tasks":[{"id":6971}]}'; }
-export -f gh hypertask
-if [ "$(gh api repos/hypertask-ai/hypertask/pulls/1392 --jq .head.sha)" = "$CI_HEAD" ]; then ok 'CI stub returns recorded head'
-else bad 'CI stub head changed'; fi
-if hypertask tasks get HTPR-6971 --json | jq -e '.success' >/dev/null; then ok 'CI ticket stub passes'
-else bad 'CI ticket stub failed'; fi
-ci_test_path=$(printenv PATH)
-# Python premerge subprocesses also use the exported gh stub, never live APIs.
-mkdir -p "$E/ci-bin"
-printf '#!/usr/bin/env bash\ngh "$@"\n' > "$E/ci-bin/gh"
-chmod +x "$E/ci-bin/gh"
-CI() {
-  local want=$1 expected=$2 out got; shift 2
-  : > "$CI_CALL_LOG"
-  out=$(echo '{"tool_input":{"command":"gh pr merge 1392"}}' | env PATH="$E/ci-bin:$ci_test_path" SHIP_GIT=/bin/true SHIP_GIT_CACHE="$E/ci-cache" "$@" ./ship-check guard 2>&1); got=$?
-  if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "ci-tests: $expected"
-  else bad "ci-tests: want $want $expected got $got $out"; fi
-  if [ "$want" = 0 ] && [[ $* != *SHIP_REPO=* ]]; then
-    if grep -q '/statuses/' "$CI_CALL_LOG"; then ok 'passing CI proceeds to premerge status'
-    else bad 'passing CI never reached premerge status'; fi
-  elif [ "$want" = 2 ]; then
-    if grep -q '/statuses/' "$CI_CALL_LOG"; then bad 'nonpassing CI reached premerge status'
-    else ok 'nonpassing CI stops before premerge status'; fi
-  fi
-  if [ "$expected" = 'tests/htpr-6971-chat-history-paging.test.cjs:774:1' ]; then
-    printf '1392 fixture block: %s\n' "$out"
-  fi
-}
-CI 2 'tests/htpr-6971-chat-history-paging.test.cjs:774:1'
-CI 2 'production ci-tests is green, so this PR broke it'
-CI 2 'production ci-tests is also red (Ctrl+J globally opens Compose' CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
-CI 0 '' CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")"
-# A newer skipped or neutral run never hides the failed one (ci-tests.yml warns about this bypass).
-for conclusion in neutral skipped; do
-  CI 2 "ci-tests $conclusion on head" CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0] |= (.id += 1 | .conclusion = $c)' <<<"$CI_PR_RUNS")
-$CI_PR_RUNS"
-done
-# Deliberately reverse page order: the maximum id wins, not API array order.
-rerun=$(jq '.check_runs[0] |= (.id += 1 | .conclusion = "success")' <<<"$CI_PR_RUNS")
-CI 0 '' CI_PR_RUNS="$rerun
-$CI_PR_RUNS"
-# The real PR 1392 head: green at 19:22, then production went red at 20:19 before the merge.
-CI 2 "passed before that on an older production; rerun ci-tests on head c587e4b" \
-  CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 \
-  CI_PR_RUNS="$(cat "$CI_FIXTURE_DIR/pr-1392-head.check-runs.json")" \
-  CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
-# A rerun after production went red is current: the PR's own result decides.
-CI 0 '' CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 \
-  CI_PR_RUNS="$(jq '.check_runs[0].started_at = "2026-10-11T21:00:00Z"' "$CI_FIXTURE_DIR/pr-1392-head.check-runs.json")" \
-  CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
-for status in queued in_progress; do
-  CI 2 "ci-tests has not finished on head ${CI_HEAD:0:7}" CI_PR_RUNS="$(jq --arg s "$status" '.check_runs[0] |= (.status = $s | .conclusion = null)' <<<"$CI_PR_RUNS")"
-done
-for conclusion in failure cancelled timed_out action_required stale; do
-  CI 2 "ci-tests $conclusion on head" CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0].conclusion = $c' <<<"$CI_PR_RUNS")"
-done
-for endpoint in /pulls/1392 '/commits/'"$CI_HEAD" /commits/production; do
-  CI 2 'cannot read ci-tests for PR 1392; retry' CI_GH_ERROR="$endpoint"
-done
-CI 2 'cannot read ci-tests for PR 1392; retry' CI_PR_RUNS=invalid
-CI 2 'ci-tests is missing on head c587e4b; wait for the current-head run, or retrigger it' CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 CI_PR_RUNS='{"check_runs":[]}'
-CI 0 '' SHIP_REPO=hypertask-ai/cli SHIP_BASE=main CI_PR_RUNS='{"check_runs":[]}'
-CI 0 '' SHIP_REPO=hypertask-ai/verify SHIP_BASE=app-suite CI_PR_RUNS='{"check_runs":[]}'
-# Another repo never reads ci-tests, so a GitHub API error there cannot block its merge.
-: > "$CI_CALL_LOG"
-out=$(env SHIP_REPO=hypertask-ai/cli CI_GH_ERROR=check-runs ./ship-check ci-tests 1392); got=$?
-if [ "$got" = 0 ] && [ -z "$out" ] && ! grep -q 'check-runs\|/pulls/' "$CI_CALL_LOG"; then ok 'other repo skips ci-tests API reads'
-else bad "other repo API error: $got $out"; fi
-CI 2 'see https://github.com/hypertask-ai/hypertask/actions/runs/38176733942/job/114581508375' CI_GH_ERROR=/logs
-CI 2 'see https://github.com/hypertask-ai/hypertask/actions/runs/38176733942/job/114581508375' CI_LOG='no test identifiers'
-CI 2 'tests/tap-control.test.cjs:42:1' CI_LOG=$'2026-10-11T21:53:04Z not ok 1 - TAP control\n2026-10-11T21:53:04Z   location: /home/runner/tests/tap-control.test.cjs:42:1\n  error: AssertionError'
-CI 2 'named TAP failure' CI_LOG='not ok 1 - named TAP failure'
-CI 2 'tests/stack-control.test.cjs:12:4' CI_LOG=$'Error: assertion\n    at TestContext.<anonymous> (/home/runner/tests/stack-control.test.cjs:12:4)'
-CI 2 '(one; two; three)' CI_LOG=$'not ok 1 - one\nnot ok 2 - two\nnot ok 3 - three\nnot ok 4 - four'
-CI 0 '' CI_PR_RUNS="$(jq '.check_runs[0].name = "other-check"' <<<"$CI_PR_RUNS")
-$rerun"
-out=$(./ship-check ci-tests 1392); got=$?
-if [ "$got" = 1 ] && [[ $out == *tests/htpr-6971-chat-history-paging.test.cjs:774:1* ]]; then ok 'ci-tests subcommand rejects recorded failure'
-else bad "ci-tests subcommand: $got $out"; fi
-out=$(env SHIP_REPO=hypertask-ai/cli CI_PR_RUNS='{"check_runs":[]}' ./ship-check ci-tests 1392); got=$?
-if [ "$got" = 0 ] && [ -z "$out" ]; then ok 'no ci-tests in other repo passes silently'
-else bad "other repo: $got $out"; fi
-unset -f gh hypertask
-unset CI_FIXTURE_DIR CI_CALL_LOG CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
 
 
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'

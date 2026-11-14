@@ -1,7 +1,7 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import prisma from "@/lib/prisma";
 import NextCors from "nextjs-cors";
 import { requireAnnouncementAdmin } from "@/lib/admin/requireAnnouncementAdmin";
+import { createAnnouncement } from "@/utils/controllers/announcements/createAnnouncement";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -27,7 +27,7 @@ const handler: NextApiHandler = async (
     const { jsonBody } = req.body;
     console.log("🤔 ~ handler ~ jsonBody:", jsonBody);
 
-    const result = await getUsersInBatches(40, jsonBody);
+    const result = await createAnnouncement({ body: jsonBody });
     return res.status(200).json({ message: "Success", result });
   } catch (error) {
     console.log(error);
@@ -35,52 +35,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-async function getUsersInBatches(batchSize: number, jsonBody: any) {
-  let offset = 0;
-  let users: number[] = [];
-  let user_announcements = [];
-
-  const announcement = await prisma.announcments.create({
-    data: {
-      body: jsonBody,
-      isWelcome: jsonBody.newUserMark ?? false,
-    },
-  });
-  console.log("🚀 ~ getUsersInBatches ~ announcement:", announcement);
-
-  if (announcement.isWelcome) {
-    users = [1, 4, 6, 46, 193];
-    const user_announcement = await prisma.userAnnouncement.createMany({
-      data: users.map((user) => ({
-        userId: user,
-        announcementId: announcement.id,
-      })),
-    });
-    user_announcements.push(user_announcement);
-  } else {
-    do {
-      const currentBatchUsers = await prisma.user.findMany({
-        skip: offset,
-        take: batchSize,
-        select: { id: true },
-      });
-
-      users = currentBatchUsers.map((x) => x.id);
-
-      if (users.length > 0) {
-        const user_announcement = await prisma.userAnnouncement.createMany({
-          data: users.map((user) => ({
-            userId: user,
-            announcementId: announcement.id,
-          })),
-        });
-        user_announcements.push(user_announcement);
-      }
-
-      offset += batchSize;
-    } while (users.length === batchSize);
-  }
-
-  return { announcement, user_announcements };
-}
 export default handler;

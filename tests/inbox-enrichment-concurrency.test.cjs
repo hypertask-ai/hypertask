@@ -45,6 +45,7 @@ function fixture({ empty = false, hold = false } = {}) {
     return hold ? gates[name].promise.then(() => rows) : Promise.resolve(rows);
   };
   const prisma = {
+    featureFlag: { findUnique: async () => ({ mode: "OFF" }) },
     $queryRaw: async (query) => query.sql.includes("AS selected")
       ? representatives.map(({ id }) => ({ id }))
       : representatives.flatMap((row) => [

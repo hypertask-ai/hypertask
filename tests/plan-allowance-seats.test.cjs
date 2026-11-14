@@ -71,6 +71,23 @@ test("BYOK still counts distinct accepted users rather than Stripe quantity", as
   assert.equal((await policy.resolveTeamAllowancePolicy("byok-members", "shared")).monthlyUsd, 7.5);
 });
 
+test("a comped Pro team funded from the shared key gets the paid per-seat allowance", async () => {
+  seats = 1; plan = "Pro";
+  teamOverride = { compedUntil: new Date(Date.now() + 86400000) };
+  assert.equal((await policy.resolveTeamAllowancePolicy("comped-pro-shared", "shared")).monthlyUsd, 15);
+});
+
+test("a Pro team without a comp keeps the free allowance on the shared key", async () => {
+  plan = "Pro";
+  assert.equal((await policy.resolveTeamAllowancePolicy("pro-not-comped-shared", "shared")).monthlyUsd, 1);
+});
+
+test("a BYOK team on the shared key is not treated as a comped Pro team", async () => {
+  seats = 10; plan = "BYOK";
+  teamOverride = { compedUntil: new Date(Date.now() + 86400000), compedPlan: "BYOK" };
+  assert.equal((await policy.resolveTeamAllowancePolicy("byok-comped-shared", "shared")).monthlyUsd, 7.5);
+});
+
 test("flat deals never reduce a larger saved paid-seat quantity", async () => {
   teamOverride = { subscriptionPlan: [{ subscriptionId: "sub", subscriptionStatus: "active", subscriptionItemId: "item", subscriptionObject: {
     items: { data: [{ id: "item", quantity: 10, price: { id: "price_1U7MmqIhmcH60VccoCD7iFea" } }] },

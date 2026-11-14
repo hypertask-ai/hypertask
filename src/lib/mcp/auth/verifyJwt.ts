@@ -370,6 +370,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
           displayName: true,
           mcpTokenHash: true,
           mcpTokenJti: true,
+          devicePairingId: true,
           runtimeGeneration: true,
           credentialTeamId: true,
           credentialTeamAccessBinding: true,
@@ -410,6 +411,10 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
       ) {
         log('[MCP Auth] Agent token does not match the stored digest')
         return null
+      }
+      if (agent.devicePairingId) {
+        const { acknowledgeDevicePairing } = await import("@/lib/auth/devicePairing");
+        await acknowledgeDevicePairing(agent.id, storedGeneration);
       }
       agentId = agent.id
       agentDisplayName = agent.displayName

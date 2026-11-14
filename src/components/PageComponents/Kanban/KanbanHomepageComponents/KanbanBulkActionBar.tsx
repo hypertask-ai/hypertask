@@ -1,6 +1,7 @@
 import React, { useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7260_KANBAN_SELECT_ALL_FLAG } from "@/lib/flags/keys";
+import { HTPR_8961_SELECTION_BAR_BUTTON_FLAG } from "@/lib/flags/definitions/htpr-8961-selection-bar-button";
 import { BulkActionButtons } from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -20,6 +21,7 @@ const phoneBarStyle = { bottom: "calc(var(--mobile-dock-h, 0px) + 16px + env(saf
 const KanbanBulkActionBar = () => {
   const isMobile = useContext(MobileViewContext);
   const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
+  const neutralOpenActions = useFlag(HTPR_8961_SELECTION_BAR_BUTTON_FLAG);
   const {
     selectedCount,
     failedIds,
@@ -57,7 +59,9 @@ const KanbanBulkActionBar = () => {
       )}
       <button
         type="button"
-        className="rounded-[4px] bg-hypertasks-purple px-3 py-1.5 text-content text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+        className={neutralOpenActions
+          ? "rounded-[4px] bg-white-black px-3 py-1.5 text-content text-white-black-inverted transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+          : "rounded-[4px] bg-hypertasks-purple px-3 py-1.5 text-content text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"}
         onClick={() => openBulkCommand()}
         disabled={isProcessing}
       >

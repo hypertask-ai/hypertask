@@ -1,4 +1,4 @@
-import { parse } from "node-html-parser";
+import { parse, NodeType, type HTMLElement, type Node } from "node-html-parser";
 
 export const FLAG_CHAT_RECORD_AGENT_ID = "9b0f3a93-5e88-4093-b558-cad1c229bc51";
 export const FLAG_CHAT_RECORD = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):\s*"([^"]*)"(?:(?:[\s\p{P}]+switch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s+(?:only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-]))+[\s\p{P}]*|\.)?$/u;
@@ -8,6 +8,47 @@ export function normalizeVisibleText(html: string): string {
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+const CHAT_HEADER = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):$/u;
+const BLOCK_TAIL = /^(?:\.|[\s\p{P}]*(?:switch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s+(?:only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-]))(?:[\s\p{P}]+switch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s+(?:only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-]))*[\s\p{P}]*)?$/u;
+
+function collectChatParts(node: Node, parts: Array<{ kind: "text" | "quote"; text: string }>) {
+  if (node.nodeType === NodeType.TEXT_NODE) {
+    if (node.rawText.trim()) parts.push({ kind: "text", text: node.rawText });
+    return;
+  }
+  if (node.nodeType === NodeType.COMMENT_NODE) return;
+  const element = node as HTMLElement;
+  if (element.tagName === "BLOCKQUOTE") {
+    if (element.querySelectorAll("blockquote").length > 0) {
+      parts.push({ kind: "quote", text: "" }, { kind: "quote", text: "" });
+      return;
+    }
+    parts.push({ kind: "quote", text: normalizeVisibleText(element.innerHTML) });
+    return;
+  }
+  for (const child of node.childNodes) collectChatParts(child, parts);
+}
+
+export function parseFlagChatRecord(html: string): { date: string; quote: string; tail: string } | null {
+  const words = normalizeVisibleText(html);
+  const legacy = FLAG_CHAT_RECORD.exec(words);
+  if (legacy) {
+    if ((words.match(/"/g) ?? []).length !== 2) return null;
+    return { date: legacy[1], quote: legacy[2], tail: words.slice(words.lastIndexOf('"') + 1).trim() };
+  }
+  const parts: Array<{ kind: "text" | "quote"; text: string }> = [];
+  collectChatParts(parse(html), parts);
+  if (parts.filter((part) => part.kind === "quote").length !== 1) return null;
+  const quoteAt = parts.findIndex((part) => part.kind === "quote");
+  const quote = parts[quoteAt]?.text ?? "";
+  if (!quote) return null;
+  const header = CHAT_HEADER.exec(normalizeVisibleText(parts.slice(0, quoteAt).map((part) => part.text).join(" ")));
+  if (!header) return null;
+  const after = normalizeVisibleText(parts.slice(quoteAt + 1).map((part) => part.text).join(" "));
+  if (!BLOCK_TAIL.test(after)) return null;
+  return { date: header[1], quote, tail: after };
 }
 
 export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
@@ -26,13 +67,19 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
 }
 
 const OFF_VERB = /^(?:turn|turning|switch|toggle|flip|disable|kill)$/;
-const OFF_BLOCKER = /^(?:no|not|never|cannot|\p{L}+n't|dont|cant|wont|didnt|doesnt|isnt|wasnt|shouldnt|mustnt|neednt|couldnt|wouldnt|havent|hasnt|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until|on)$/u;
+const OFF_BLOCKER = /^(?:no|not|never|cannot|\p{L}+n't|dont|cant|wont|didnt|doesnt|isnt|wasnt|shouldnt|mustnt|neednt|couldnt|wouldnt|havent|hasnt|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until|on|but|only|after|when|once|before|while)$/u;
 const OFF_REACH = 4;
+
+const BARE_OFF = /^(?:please |just )?(?:turn|switch|toggle|flip|disable|kill)(?: it| the flag)? off$/;
 
 export function isOffOrder(text: string): boolean {
   const words = text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
   if (words.some((word) => OFF_BLOCKER.test(word))) return false;
   return words.some((word, index) => OFF_VERB.test(word) && words.slice(index + 1, index + 1 + OFF_REACH).includes("off"));
+}
+
+export function isBareOffOrder(quote: string): boolean {
+  return BARE_OFF.test(quote.trim().replace(/[^\p{L}\p{N}]+$/u, ""));
 }
 
 const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;

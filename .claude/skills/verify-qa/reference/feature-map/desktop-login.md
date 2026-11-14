@@ -1,10 +1,14 @@
 # Desktop human CLI login
 
-## How a customer reaches it
+## Sub-features
+
+- `desktop-human-cli-login` Desktop human CLI login.
+
+## How to get to it (user POV)
 
 The desktop pilot exchanges a sign-in code at `POST /api/cli/token-exchange`, then sends that human token in `Authorization: Bearer ...` to the same feature APIs as the web app. The existing `htpr-7699-desktop-cli-token` access flag controls these shared login paths; do not change its audience during QA.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Doctor: confirm the merge SHA's successful Production deployment and QA 985 via cookie-authenticated `POST /api/app-shell/bootstrap`. Capture signed-in `/my-tasks` using the designated QA storage state.
 2. Generate a code with the QA cookie at `POST /api/cli/generate-code`, exchange it without cookies, and retain the token in memory only. Never persist code, token, credential-bearing responses, HAR, trace or storage-state copies.
@@ -15,7 +19,7 @@ The desktop pilot exchanges a sign-in code at `POST /api/cli/token-exchange`, th
 7. Local entry-point tests cover signed-cookie revocation, token revocation, expired/agent/scoped tokens, flag failure, origin checks and foreign ownership without changing live credentials, permissions, billing, integrations or webhook destinations. Browser-origin requirements remain for selected cookie sessions; verified CLI transport is not a browser session. The agent-run authenticator retains its existing invalid-bearer refusal.
 8. Run the core live Inbox cycle after deployment. No paid AI generation is needed for an authentication change.
 
-## What usually breaks
+## Gotchas
 
 - GET defaults accepts desktop sign-in while POST save still returns 401.
 - A shared fallback skips a direct cookie reader or loses the authenticated actor at a legacy adapter.
@@ -23,10 +27,10 @@ The desktop pilot exchanges a sign-in code at `POST /api/cli/token-exchange`, th
 - Agent/scoped credentials gain human access, or revoked signed cookies borrow another token.
 - Full-login changes silently alter the agent-run authenticator's invalid-bearer refusal.
 
-## What proof to collect
+### What proof to collect
 
 Record request method/path, status, asserted actor/board IDs, fixture persistence and cleanup. Keep response projections sanitized; never save credentials or full account objects. Use desktop and phone doctor screenshots plus a short recording of the isolated fixture's real detail view. Mark live credential revocation, administrative actions, billing and external integrations UNREACHABLE when intentionally not mutated; cite their local boundary checks instead of claiming live coverage.
 
-## Cleanup
+### Cleanup
 
 Delete only the fixture IDs created by this run through the supported product task APIs. Confirm they are no longer normal tasks. Never delete real tasks, credentials, agents, integrations, teams or boards.

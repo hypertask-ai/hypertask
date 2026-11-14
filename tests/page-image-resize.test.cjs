@@ -13,6 +13,8 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") } });
 const source = "https://files.hypertask.app/picture.png";
 const imagePosition = 1 + "Saved text".length;
+const cornerFlag = { on: false };
+const CORNER_FLAG = "htpr-9028-inline-creation-screenshots";
 
 function load(relativePath, mocks = {}) {
   const target = { exports: {} };
@@ -33,6 +35,8 @@ const { ResizableMediaNodeView } = load("src/components/RTE/Extensions/resizable
   "@/utils/helperFunctions/normalizeImageSource": normalize,
   "@/utils/helperFunctions/getFileTypeFromUrl": jiti(path.join(root, "src/utils/helperFunctions/getFileTypeFromUrl.ts")),
   "@/lib/media/browserRenderableImage": jiti(path.join(root, "src/lib/media/browserRenderableImage.ts")),
+  "@/hooks/useFlag": { useFlag: (key) => key === CORNER_FLAG && cornerFlag.on },
+  "@/lib/flags/keys": { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG: CORNER_FLAG },
 });
 const { ResizableMedia } = load("src/components/RTE/Extensions/resizableMedia/resizableMedia.ts", {
   "./ResizableMediaNodeView": { ResizableMediaNodeView },
@@ -48,7 +52,8 @@ const { renderPageContent } = load("src/utils/controllers/pages/pageService.ts",
   "./htmlCanvas": {},
 });
 
-async function withMedia(context, html, run) {
+async function withMedia(context, html, run, options = {}) {
+  cornerFlag.on = options.corners === true;
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const dom = new JSDOM('<div class="ProseMirror"><div id="root"></div></div>');
   const names = ["window", "document", "navigator", "HTMLElement", "Element", "Node", "IS_REACT_ACT_ENVIRONMENT"];
@@ -83,6 +88,7 @@ async function withMedia(context, html, run) {
     await React.act(async () => reactRoot.unmount());
     editor.destroy();
     dom.window.close();
+    cornerFlag.on = false;
     context.mock.timers.reset();
     for (const [name, descriptor] of previous) {
       if (descriptor) Object.defineProperty(global, name, descriptor);
@@ -142,6 +148,60 @@ test("ticket description HTML uses the same node view and retains saved dimensio
     assert.equal(String(editor.state.doc.nodeAt(imagePosition).attrs.height), "286.6666666666667");
     assert.equal(updates.length, 0, "opening saved media should not dirty the document");
   });
+});
+
+async function setLoading(editor) {
+  await React.act(async () => {
+    editor.commands.command(({ tr }) => {
+      const node = editor.state.doc.nodeAt(imagePosition);
+      tr.setNodeMarkup(imagePosition, undefined, { ...node.attrs, isLoading: true });
+      return true;
+    });
+  });
+}
+
+test("HTPR-9028 image corners stay 8px while the flag is off", async (context) => {
+  await withMedia(context, imageHtml("430", "287"), async ({ editor }) => {
+    const image = document.querySelector("img");
+    assert.ok(image.classList.contains("rounded-lg"));
+    assert.equal(image.classList.contains("rounded-[4px]"), false);
+    await setLoading(editor);
+    const mask = document.querySelector(".bg-opacity-40");
+    assert.ok(document.querySelector("img").classList.contains("rounded-lg"));
+    assert.ok(document.querySelector("img").classList.contains("opacity-50"));
+    assert.ok(mask.classList.contains("rounded-lg"));
+    assert.equal(mask.classList.contains("rounded-[4px]"), false);
+    assert.equal(document.querySelector("img").getAttribute("src"), source);
+  });
+});
+
+test("HTPR-9028 image corners use 4px on the image and its loading mask while the flag is on", async (context) => {
+  await withMedia(context, imageHtml("430", "287"), async ({ editor, updates, loadImage }) => {
+    const image = document.querySelector("img");
+    assert.ok(image.classList.contains("rounded-[4px]"));
+    assert.equal(image.classList.contains("rounded-lg"), false);
+    await loadImage();
+    assert.ok(image.classList.contains("rounded-[4px]"));
+    assert.equal(image.style.width, "430px");
+    assert.equal(String(editor.state.doc.nodeAt(imagePosition).attrs.width), "430");
+    assert.equal(updates.length, 0, "opening saved media should not dirty the document");
+    await setLoading(editor);
+    const mask = document.querySelector(".bg-opacity-40");
+    assert.ok(document.querySelector("img").classList.contains("rounded-[4px]"));
+    assert.ok(document.querySelector("img").classList.contains("opacity-50"));
+    assert.ok(mask.classList.contains("rounded-[4px]"));
+    assert.equal(mask.classList.contains("rounded-lg"), false);
+    assert.equal(document.querySelector("img").getAttribute("src"), source);
+  }, { corners: true });
+});
+
+test("HTPR-9028 image corners leave videos at 8px while the flag is on", async (context) => {
+  await withMedia(context, `<p>Saved text<video src="${source}"></video></p>`, async () => {
+    const video = document.querySelector("video");
+    assert.ok(video, "the video node view must render");
+    assert.ok(video.classList.contains("rounded-lg"));
+    assert.equal(video.classList.contains("rounded-[4px]"), false);
+  }, { corners: true });
 });
 
 for (const width of [undefined, "100%", "0", "invalid"]) {

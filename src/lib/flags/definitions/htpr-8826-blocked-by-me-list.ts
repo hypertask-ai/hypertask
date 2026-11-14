@@ -5,7 +5,7 @@ export const HTPR_8826_BLOCKED_BY_ME_LIST_FLAG = "htpr-8826-blocked-by-me-list";
 export default {
   key: HTPR_8826_BLOCKED_BY_ME_LIST_FLAG,
   kind: "bugfix",
-  defaultMode: "OWNER_AND_QA",
+  defaultMode: "EVERYONE",
   shippedOn: "2026-11-05",
   description: "Keeps Blocked by me rows and counts together regardless of the previous saved view's hidden columns or subtasks.",
   releaseRisk: {

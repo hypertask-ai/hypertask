@@ -31,7 +31,7 @@ async function withRuntime(config, check) {
   let reactRoot
   try {
     source('src/hooks/MultiPages/AIChat/useAiChat.ts', { useAiChat: () => context })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => { if (key === 'htpr-8334-multi-chat-windows') return false; assert.equal(key, flag); return fullscreenEnabled } })
+    source('src/hooks/useFlag.tsx', { useFlag: (key) => { if (key === 'htpr-8334-multi-chat-windows' || key === 'htpr-8988-chat-window-layout') return false; assert.equal(key, flag); return fullscreenEnabled } })
     source('src/lib/state.tsx', { useRecoilState: () => {
       const pair = React.useState(config.prompt)
       pending = pair[0]

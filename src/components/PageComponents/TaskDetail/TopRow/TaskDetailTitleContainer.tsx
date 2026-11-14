@@ -9,6 +9,16 @@ import BaseTitleContainer from './BaseTitleContainer';
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
 import MobileTaskDueDate from "./MobileTaskDueDate";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import { HTPR_8997_ID_ROW_FLAG } from "@/lib/flags/definitions/htpr-8997-id-row";
+import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-sticky-title";
+import { HTPR_9054_REMOVE_AGENT_CHIP_FLAG } from "@/lib/flags/definitions/htpr-9054-remove-agent-chip-under-title";
+import TaskDetailAgentStatusChip from "@/lib/agentStatus/TaskDetailAgentStatusChip";
+import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
+import useCopyURL from "@/hooks/General/useCopyURL";
+import Tooltip from "@/components/Common/Tooltip";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
 
 interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
@@ -20,6 +30,14 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
   const { currentTask, parsedTask, cachedLayout } = useTaskContext();
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
+  const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
+  const idRowFlag = useFlag(HTPR_8997_ID_ROW_FLAG);
+  const stickyTitleLine = useFlag(HTPR_8992_STICKY_TITLE_FLAG);
+  const removeHeaderAgentChip = useFlag(HTPR_9054_REMOVE_AGENT_CHIP_FLAG);
+  const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG);
+  const { copyTicketNumber } = useCopyURL();
+  const isApple = useDeviceContext();
+  const ticketNumber = currentTask?.ticketNumber?.toUpperCase();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -50,15 +68,32 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
         dataAttribute="task-detail"
         containerRef={containerRef}
         clearDesktopNavigation={clearDesktopNavigation}
-        showScrollShadow={isScrolled}
+        showScrollDivider={stickyTitleLine && isScrolled}
         hasSummary={(_mbl && cachedLayout) || hasSummary}
         titleRowContent={
           <>
             <TaskTitle />
+            {rightColumnFlag && !idRowFlag && ticketNumber && (
+              <span
+                data-task-ticket-id
+                onClick={() => void copyTicketNumber(ticketNumber)}
+                className="relative group shrink-0 cursor-pointer whitespace-nowrap text-meta text-text-light-gray hover:text-white-black"
+              >
+                {ticketNumber}
+                <Tooltip
+                  portal
+                  left={0}
+                  bottom={-40}
+                  text="Copy task ID"
+                  keyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "I"]}
+                />
+              </span>
+            )}
             <TaskOptions />
           </>
         }
       >
+        {agentPulseDot && !removeHeaderAgentChip ? <TaskDetailAgentStatusChip /> : null}
         {cachedLayout && (_mbl || hasSummary) ? (
           <div data-task-summary-slot className={_mbl ? "h-10 w-full shrink-0" : "h-[21px] w-full shrink-0"}>
             {summary}

@@ -2,8 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
+import { autoDefaultForSurface, preferredPickerOption } from "@/lib/taskWriterPickerAuto";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import {
+  AUTO_MODEL_OPTION_ID,
+  toAutoModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
   isOpenAiOnlyPaidTeam,
@@ -17,6 +23,10 @@ import {
   teamAiFeatureModelsQueryKey,
   type TAiModelPreferenceSurface,
 } from "@/lib/aiModelPreferences";
+import {
+  parseAiThinkingPreference,
+  type TAiThinkingPreference,
+} from "@/lib/aiThinkingPreference";
 import type { TAiModal } from "@/models/AI_Task_writer_model";
 import { currentProjectAtom } from "@/store";
 import {
@@ -47,6 +57,8 @@ export function useAiModelPreference(
   const boardBilling = useCurrentBoardBilling();
   const billing = billingOverride === undefined ? boardBilling : billingOverride;
   const queryClient = useQueryClient();
+  const autoModelEnabled = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
+  const taskWriterAuto = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
   const { data: userPreferences } = useGetUserPreferences();
   const currentTeamId =
     teamId === undefined ? currentProject?.teamId : teamId;
@@ -98,6 +110,9 @@ export function useAiModelPreference(
     includeBoardFallback ? boardDefaultId : undefined,
   ];
   const usesPlanDefault = !chosenOptionIds.some((id) => getAiModelOptionById(id, haiku55Enabled));
+  const autoDefault = usesPlanDefault &&
+    !teamFeatureModels.isLoading &&
+    autoDefaultForSurface(surface, taskWriterAuto, autoModelEnabled);
   const openAiOnlyDefaultApplies = usesPlanDefault &&
     isOpenAiOnlyPaidTeam({ ...defaultContext, plan: scopedBilling?.storePlanId });
   const agentSessionAiOption = openAiOnlyDefaultApplies
@@ -105,17 +120,21 @@ export function useAiModelPreference(
     : null;
   const resolveOption = useCallback(
     () =>
-      resolveAiModelOption(
-        [
-          storedOptionIds.teamScoped,
-          storedOptionIds.global,
-          teamFeatureModels.data?.[surface]?.model,
-          includeBoardFallback ? boardDefaultId : undefined,
-        ],
-        planDefault,
-        haiku55Enabled,
+      preferredPickerOption(
+        resolveAiModelOption(
+          [
+            storedOptionIds.teamScoped,
+            storedOptionIds.global,
+            teamFeatureModels.data?.[surface]?.model,
+            includeBoardFallback ? boardDefaultId : undefined,
+          ],
+          planDefault,
+          haiku55Enabled,
+        ),
+        autoDefault,
       ),
     [
+      autoDefault,
       haiku55Enabled,
       boardDefaultId,
       includeBoardFallback,
@@ -134,7 +153,12 @@ export function useAiModelPreference(
 
   const setAiOption = useCallback(
     (option: TAiModal) => {
-      const validOption = getAiModelOptionById(option.id, haiku55Enabled);
+      let saveTaskWriterAuto = false;
+      if (taskWriterAuto && surface === "taskWriter" && option.id === AUTO_MODEL_OPTION_ID) {
+        saveTaskWriterAuto = true;
+      }
+      const autoPick = saveTaskWriterAuto || (autoModelEnabled && surface === "aiChat" && option.id === AUTO_MODEL_OPTION_ID);
+      const validOption = autoPick ? toAutoModelOption(resolveOption()) : getAiModelOptionById(option.id, haiku55Enabled);
       if (!validOption) return;
 
       setCurrentAiOption(validOption);
@@ -165,10 +189,17 @@ export function useAiModelPreference(
           if (response.status === 200 && response.data.settings) {
             queryClient.setQueryData<IUserPreferences>(
               USER_PREFERENCES_QUERY_KEY,
-              (previous) => ({
-                ...(previous ?? userPreferences),
-                ...response.data.settings,
-              }),
+              (previous) => {
+                const thinking = previous?.aiModelPreferences?.thinking;
+                const settings = response.data.settings;
+                return {
+                  ...(previous ?? userPreferences),
+                  ...settings,
+                  ...(thinking
+                    ? { aiModelPreferences: { ...settings.aiModelPreferences, thinking } }
+                    : {}),
+                };
+              },
             );
           }
         })
@@ -176,8 +207,48 @@ export function useAiModelPreference(
           console.log("useAiModelPreference update error:", error);
         });
     },
-    [currentTeamId, haiku55Enabled, queryClient, surface, userPreferences],
+    [autoModelEnabled, currentTeamId, haiku55Enabled, queryClient, resolveOption, surface, taskWriterAuto, userPreferences],
   );
 
-  return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption };
+  return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption, teamModelPending: teamFeatureModels.isLoading };
+}
+
+let pendingThinkingWrite: Promise<unknown> = Promise.resolve();
+
+export function useAiThinkingPreference() {
+  const queryClient = useQueryClient();
+  const { data: userPreferences } = useGetUserPreferences();
+  const preference = parseAiThinkingPreference(userPreferences.aiModelPreferences?.thinking);
+
+  const setPreference = useCallback(
+    (update: Partial<TAiThinkingPreference>) => {
+      const latest = queryClient.getQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY) ?? userPreferences;
+      const next = {
+        ...parseAiThinkingPreference(latest.aiModelPreferences?.thinking),
+        ...update,
+      };
+      void queryClient.cancelQueries(
+        { queryKey: USER_PREFERENCES_QUERY_KEY },
+        { revert: false },
+      );
+      queryClient.setQueryData<IUserPreferences>(
+        USER_PREFERENCES_QUERY_KEY,
+        (previous) => ({
+          ...(previous ?? userPreferences),
+          aiModelPreferences: {
+            ...(previous?.aiModelPreferences ?? userPreferences.aiModelPreferences),
+            thinking: next,
+          },
+        }),
+      );
+      pendingThinkingWrite = pendingThinkingWrite
+        .then(() => axios.post("/api/users/preferences", { aiThinkingPreference: next }))
+        .catch((error) => {
+          console.log("useAiThinkingPreference update error:", error);
+        });
+    },
+    [queryClient, userPreferences],
+  );
+
+  return { preference, setPreference };
 }

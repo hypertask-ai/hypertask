@@ -55,7 +55,7 @@ export interface IGlobalNotificationFocus {
 export interface IShowHypertaskHTC {
     mode: CommandMode,
     show: boolean,
-    scope?: "board",
+    scope?: "board" | "add-field",
     paletteTab?: "search" | "compose",
     composeProject?: IProject,
     composeOnCreated?: () => void | Promise<void>,
@@ -271,6 +271,21 @@ export const tableColumnWidthsAtom = atom<Record<string, number>>({
     default: {},
     effects_UNSTABLE: [persistAtom],
 });
+export const tableSortAccountAtom = atom<{
+    viewId: string;
+    sort: { column: string; direction: "asc" | "desc" }[];
+} | null>({
+    key: "tableSortAccountAtom",
+    default: null,
+});
+export const tableColumnsAccountAtom = atom<{
+    viewId: string;
+    keys: string[];
+    widths: Record<string, number>;
+} | null>({
+    key: "tableColumnsAccountAtom",
+    default: null,
+});
 export const tableTitleWrapAtom = atom<boolean>({
     key: "tableTitleWrap",
     default: true,
@@ -403,6 +418,12 @@ export const aiChatPinnedAtom = atom<boolean>({
 
 export const aiChatPinnedSessionIdsAtom = atom<string[]>({
     key: "aiChatPinnedSessionIds",
+    default: [],
+    effects_UNSTABLE: [persistAtom],
+});
+
+export const aiChatCollapsedRailSectionsAtom = atom<string[]>({
+    key: "aiChatCollapsedRailSections",
     default: [],
     effects_UNSTABLE: [persistAtom],
 });

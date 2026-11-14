@@ -3,12 +3,20 @@ import { taskWriteRoute } from "@/lib/api/task-writes/route";
 import { viewWriteJson } from "./response";
 
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { ISection } from "@/models/model";
 import { TCreate_view_body } from "@/models/Views/model";
 import getProjectView, { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { getBoardLayoutRequestUpdate, sanitizeBoardLayout, sanitizeTableSort } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
+import { tableViewSettingsForWrite, tableViewWriteData } from "./gate-table-view-settings";
+import {
+  getBoardLayoutRequestUpdate,
+  sanitizeBoardLayout,
+} from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { boardColumnsForProject } from "@/utils/controllers/section/viewHelpers";
+import { viewColumnsToWrite } from "@/utils/controllers/section/viewColumnVisibility";
 import {
   assertViewIsNotManagedSmartSplit,
   ManagedSmartSplitMutationError,
@@ -104,17 +112,17 @@ const route = taskWriteRoute({
             (orderById.get(b.id) ?? Number.MAX_SAFE_INTEGER)
         );
       }
-      const sanitizedTableSort = sanitizeTableSort(
-        view_settings.table_sort_column,
-        view_settings.table_sort_direction
-      );
+
+      const tableSettings = await tableViewSettingsForWrite(userId, view_settings as Record<string, unknown>, null);
+      const sanitizedTableGroupBy =
+        (await gatedTableGroupByForViewWrite(view_settings.table_group_by, userId)) ?? "column";
       const sanitizedBoardFilters = sanitizeBoardFilters(
         view_settings.board_filters
       );
 
       const currentDate = new Date();
       if (!view) {
-        view = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, (tx) => tx.view.create({
+        view = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, async (tx) => tx.view.create({
           data: {
             title,
             project_view_id: project_view.id,
@@ -123,13 +131,18 @@ const route = taskWriteRoute({
             board_sorting_order: view_settings.board_sorting_order,
             board_sorting_stack: view_settings.board_sorting_stack ?? [],
             board_filters: sanitizedBoardFilters,
-            board_columns_view: view_settings.board_columns_view,
+            board_columns_view: (viewColumnsToWrite(
+              view_settings.board_columns_view,
+              defaultColumns?.length
+                ? defaultColumns
+                : await boardColumnsForProject(projectId, tx)
+            ) ?? []) as unknown as Prisma.InputJsonValue,
             board_subtask_setting: view_settings.board_subtask_setting,
             board_empty_sections: view_settings.board_empty_sections,
             board_staleness: view_settings.board_staleness ?? null,
             board_show_archived: view_settings.board_show_archived ?? null,
-            table_sort_column: sanitizedTableSort.column,
-            table_sort_direction: sanitizedTableSort.direction,
+            ...tableViewWriteData(tableSettings),
+            table_group_by: sanitizedTableGroupBy,
             board_layout: sanitizeBoardLayout(view_settings.board_layout),
             visibility,
             lastUsedAt: currentDate,
@@ -156,8 +169,8 @@ const route = taskWriteRoute({
                 ...(view_settings.board_show_archived === undefined
                   ? {}
                   : { board_show_archived: view_settings.board_show_archived ?? null }),
-                table_sort_column: sanitizedTableSort.column,
-                table_sort_direction: sanitizedTableSort.direction,
+                ...tableViewWriteData(tableSettings),
+                table_group_by: sanitizedTableGroupBy,
                 ...getBoardLayoutRequestUpdate(view_settings),
                 visibility,
                 lastUsedAt: currentDate,

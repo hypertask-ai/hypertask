@@ -22,7 +22,13 @@ export function createUpdateViewTool(context: ToolContext) {
           .array(z.string())
           .optional()
           .describe(
-            "Replace the view's label filter with these labels. Pass [] to clear it."
+            "Replace the view's label filter with these labels. Pass [] to clear it. With label_match HIDE, these are the tags to leave out."
+          ),
+        label_match: z
+          .enum(["ALL", "ANY", "HIDE"])
+          .optional()
+          .describe(
+            "ANY: the ticket has at least one of these tags. ALL: it has every tag. HIDE: leave out tickets that have any of these tags. Use HIDE for without, except, everything but, or hide these tags."
           ),
         assignee_ids: z
           .array(z.union([z.coerce.number().int().positive(), z.string().uuid()]))
@@ -59,7 +65,8 @@ export function createUpdateViewTool(context: ToolContext) {
         const filtersProvided =
           input.label_names !== undefined ||
           input.assignee_ids !== undefined ||
-          input.match !== undefined;
+          input.match !== undefined ||
+          input.label_match !== undefined;
         const updated = await updateView({
           viewId: input.view_id,
           userId: user.id,
@@ -70,6 +77,7 @@ export function createUpdateViewTool(context: ToolContext) {
               label_names: input.label_names,
               assignee_ids: input.assignee_ids,
               match: input.match,
+              label_match: input.label_match,
             }
             : undefined,
           sorting_mode: input.sorting_mode,

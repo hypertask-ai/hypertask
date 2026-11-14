@@ -4,8 +4,10 @@ import prisma from "@/lib/prisma"
 import { generateInviteLink, setViewSlug } from "@/pages/api/invite/createInviteLink"
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll"
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
+import { unverifiedEmailAccount } from "@/lib/auth/unverifiedEmailAccount"
 
 export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
+        if ((await unverifiedEmailAccount(userId)) !== "allowed") return
         const project = await prisma.project.findUnique({
             where:{
                 id:projectId

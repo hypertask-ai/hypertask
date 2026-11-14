@@ -83,6 +83,12 @@ function loadViewServices() {
       project_View: {
         upsert: async () => ({ id: "project-view-1" }),
       },
+      section: {
+        findMany: async () => [
+          { id: 11, section_title: "Todo", projectId: 15, ranking: "A1", isDone: false, deleted: false },
+          { id: 12, section_title: "Done", projectId: 15, ranking: "A2", isDone: true, deleted: false },
+        ],
+      },
       label: { findMany: async () => [] },
       user: { findMany: async () => [] },
       agent: { findMany: async () => [] },
@@ -250,6 +256,20 @@ test("createView writes the sanitized board_sorting_stack", async () => {
   assert.deepEqual(createCalls[0].data.board_sorting_stack, [
     { mode: "DueDate", order: "Ascending" },
   ]);
+});
+
+test("createView gives an agent-made view the board's columns", async () => {
+  const { createView, createCalls } = loadViewServices();
+
+  await createView({ projectId: 15, userId: 6, title: "No column arguments" });
+
+  assert.deepEqual(
+    createCalls[0].data.board_columns_view.map((column) => [column.id, column.visibility]),
+    [
+      [11, true],
+      [12, true],
+    ],
+  );
 });
 
 test("updateView keeps an existing stack when sorting_stack is absent", async () => {

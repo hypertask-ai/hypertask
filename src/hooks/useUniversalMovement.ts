@@ -19,6 +19,7 @@ import {
 import { scrollBoardColumnIntoView } from "@/utils/helperFunctions/Views/scrollBoardColumnIntoView";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7537_FIRST_COLUMN_PADDING_FLAG } from "@/lib/flags/definitions/htpr-7537-first-column-padding";
+import { HTPR_9007_COLUMN_JK_SCROLL_FLAG } from "@/lib/flags/definitions/htpr-9007-column-jk-scroll";
 import toast from "react-hot-toast";
 import globalAPIHandlers from "@/utils/api/global";
 import generateRanking from "@/utils/generateRank";
@@ -52,6 +53,9 @@ export function useUniversalMovement(props: TProps) {
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
   const firstColumnPadding = useFlag(HTPR_7537_FIRST_COLUMN_PADDING_FLAG);
+  const scrollRealColumn = useFlag(HTPR_9007_COLUMN_JK_SCROLL_FLAG);
+  const focusCard = (card: HTMLElement | null) =>
+    focusKanbanCard(card, { scrollRealColumn });
   const getActiveSection = () => store.get(activeSectionAtom);
   const getActiveItem = () => store.get(activeItemAtom);
 
@@ -61,7 +65,7 @@ export function useUniversalMovement(props: TProps) {
 
   function refocus(itmId: number) {
     const element = document.getElementById("task-" + itmId);
-    if (props.type === "Kanban") focusKanbanCard(element);
+    if (props.type === "Kanban") focusCard(element);
     else element?.focus();
   }
 
@@ -400,7 +404,7 @@ export function useUniversalMovement(props: TProps) {
             if (props.type === "List") {
               focus.left(true);
             } else {
-              focusKanbanCard(document.getElementById(tasksList[0].id));
+              focusCard(document.getElementById(tasksList[0].id));
             }
           } else if (index === 0) {
             if (props.type === "List") focus.left(true);
@@ -409,7 +413,7 @@ export function useUniversalMovement(props: TProps) {
               tasksList[index - 1].id,
             );
             if (props.type === "Kanban") {
-              focusKanbanCard(activeElement_);
+              focusCard(activeElement_);
             } else {
               activeElement_ && scrollToCenterIfNearTop(activeElement_, 30);
               activeElement_?.focus();
@@ -435,7 +439,7 @@ export function useUniversalMovement(props: TProps) {
             if (props.type === "List") {
               focus.right(true);
             } else {
-              focusKanbanCard(document.getElementById(tasksList[0].id));
+              focusCard(document.getElementById(tasksList[0].id));
             }
           } else if (index === tasksList.length - 2) {
             if (props.type === "List") focus.right(true);
@@ -444,7 +448,7 @@ export function useUniversalMovement(props: TProps) {
               tasksList[index + 1].id,
             );
             if (props.type === "Kanban") {
-              focusKanbanCard(activeElement_);
+              focusCard(activeElement_);
             } else {
               activeElement_ && scrollToCenterIfNearBottom(activeElement_, 15);
               activeElement_?.focus();

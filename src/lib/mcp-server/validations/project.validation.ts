@@ -72,6 +72,24 @@ export function getBoardPlaybookInputSchema() {
 export const BoardPlaybookInputSchema = getBoardPlaybookInputSchema();
 export type BoardPlaybookInput = z.infer<typeof BoardPlaybookInputSchema>;
 
+export function getBoardGithubReposInputSchema() {
+  return z.object({ project_id: z.number().int().positive().max(2_147_483_647) }).strict();
+}
+
+export const BoardGithubReposInputSchema = getBoardGithubReposInputSchema();
+export type BoardGithubReposInput = z.infer<typeof BoardGithubReposInputSchema>;
+
+export function getSetBoardGithubReposInputSchema() {
+  return z.object({
+    project_id: z.number().int().positive().max(2_147_483_647),
+    repository_ids: z.array(z.string().min(1).max(20)).max(50),
+    version: z.string().min(1).max(256),
+  }).strict();
+}
+
+export const SetBoardGithubReposInputSchema = getSetBoardGithubReposInputSchema();
+export type SetBoardGithubReposInput = z.infer<typeof SetBoardGithubReposInputSchema>;
+
 export function getBoardConfigBaseSchema() {
   return z
     .object({

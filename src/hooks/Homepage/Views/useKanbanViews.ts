@@ -39,6 +39,8 @@ import {
   getActiveSortingStackFromProject,
   getActiveSubtaskSettingFromProject,
   getActiveTableSortFromProject,
+  getActiveTableSortStackFromProject,
+  getActiveTableColumnsFromProject,
   getViewFromProject,
   getProjectForViewMutation,
   enqueueBoardViewMutation,
@@ -52,6 +54,7 @@ import {
   TTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { isProjectViewResponseForBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
+import { applyTableGroupAction, effectiveTableGrouping, getActiveTableCollapsedSectionsFromProject, getActiveTableGroupByFromProject, serializeEffectiveTableGrouping, serializeTableCollapsedSections, serializeTableGrouping, type TableGroupAction } from "@/lib/table-view/tableGroupByTag";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -65,6 +68,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
+import type { TableColumnSettings, TableSortLevel } from "@/lib/table-view/tableViewSettings";
 import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 let emptySectionMutationId = 0
@@ -77,7 +81,10 @@ const useKanbanViews = (project: IProject | null) => {
     UpdateKanban();
   const queryClient = useQueryClient();
   const deletedViewLeavesTabs = useFlag(HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG);
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
   const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG);
+  const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
+  const tableGroupByTagEnabled = useFlag("htpr-8630-table-group-by-tag") || tableGroupModesEnabled;
   const router = useRouter();
   const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom);
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
@@ -242,6 +249,16 @@ const useKanbanViews = (project: IProject | null) => {
     board_show_archived: getActiveShowArchivedOverrideFromProject(queuedProject),
     table_sort_column: getActiveTableSortFromProject(queuedProject)?.column ?? null,
     table_sort_direction: getActiveTableSortFromProject(queuedProject)?.direction ?? null,
+    ...(tableSortColumnsEnabled ? {
+      table_sort_stack: getActiveTableSortStackFromProject(queuedProject),
+      table_columns: getActiveTableColumnsFromProject(queuedProject),
+    } : {}),
+    table_group_by: tableGroupByTagEnabled
+      ? serializeEffectiveTableGrouping(effectiveTableGrouping(queuedProject, tableGroupModesEnabled, tableGroupByTagEnabled))
+      : "column",
+    table_collapsed_sections: serializeTableCollapsedSections(
+      getActiveTableCollapsedSectionsFromProject(queuedProject),
+    ),
     board_layout: boardLayoutForRequest(queuedProject),
     ...overrides,
   });
@@ -401,14 +418,69 @@ const useKanbanViews = (project: IProject | null) => {
 
   const setTableSortViewAndReturn = async (
     project: IProject,
-    tableSort: TTableSort
+    tableSort: TTableSort,
+    stack?: TableSortLevel[] | null,
   ) => apiHandler(
     (queuedProject) => buildUnsavedBody(queuedProject, {
       table_sort_column: tableSort?.column ?? null,
       table_sort_direction: tableSort?.direction ?? null,
+      ...(stack === undefined ? {} : { table_sort_stack: stack ?? [] }),
     }),
     project,
   );
+
+  const setTableColumnsViewAndReturn = async (
+    project: IProject,
+    columns: TableColumnSettings | null,
+  ) => apiHandler(
+    (queuedProject) => buildUnsavedBody(queuedProject, {
+      table_columns: columns,
+    }),
+    project,
+  );
+
+  const setTableGroupByViewAndReturn = async (
+    project: IProject,
+    tableGroupBy: ReturnType<typeof getActiveTableGroupByFromProject>,
+    tagIds: string[] = [],
+  ) => {
+    if (tableGroupBy !== "column" && !tableGroupByTagEnabled) return;
+    const value = tableGroupBy === "tag" && !tableGroupModesEnabled ? "tag" : serializeTableGrouping(tableGroupBy, tagIds);
+    return apiHandler(
+      (queuedProject) => buildUnsavedBody(queuedProject, {
+        table_group_by: value,
+      }),
+      project,
+    );
+  };
+
+  const setTableGroupVisibilityViewAndReturn = async (
+    project: IProject,
+    action: TableGroupAction,
+    groupId: string,
+  ) => {
+    if (!tableGroupModesEnabled) return;
+    return apiHandler(
+      (queuedProject) => buildUnsavedBody(queuedProject, {
+        table_group_by: serializeEffectiveTableGrouping(applyTableGroupAction(
+          effectiveTableGrouping(queuedProject, true, tableGroupByTagEnabled), action, groupId,
+        )),
+      }),
+      project,
+    );
+  };
+
+  const setTableCollapsedSectionsViewAndReturn = async (
+    project: IProject,
+    collapsedSections: Set<string>,
+  ) =>
+    apiHandler(
+      (queuedProject) =>
+        buildUnsavedBody(queuedProject, {
+          table_collapsed_sections: serializeTableCollapsedSections(collapsedSections),
+        }),
+      project,
+    );
 
   const saveSubtaskSettingAPI = async (
     project: IProject,
@@ -529,7 +601,19 @@ const useKanbanViews = (project: IProject | null) => {
     return updatedProjectView;
   };
   const saveAsDefaultHandler = async (body: TCreate_view_body) => {
-    const response = await axios.post("/api/projects/views/create-view", body);
+    const requestBody =
+      tableGroupByTagEnabled &&
+      body.view_settings.table_group_by === undefined &&
+      project?.id === body.projectId
+        ? {
+            ...body,
+            view_settings: {
+              ...body.view_settings,
+              table_group_by: serializeEffectiveTableGrouping(effectiveTableGrouping(project, tableGroupModesEnabled, tableGroupByTagEnabled)),
+            },
+          }
+        : body;
+    const response = await axios.post("/api/projects/views/create-view", requestBody);
     console.log("🚀 ~ saveAsDefaultHandler ~ response:", response);
     const view: string | undefined = response.data.view;
     if (response.data.project_view_updated) {
@@ -577,6 +661,10 @@ const useKanbanViews = (project: IProject | null) => {
     hasUserSelectedView,
     setBoardSortingViewAndReturn,
     setTableSortViewAndReturn,
+    setTableColumnsViewAndReturn,
+    setTableGroupByViewAndReturn,
+    setTableGroupVisibilityViewAndReturn,
+    setTableCollapsedSectionsViewAndReturn,
     saveFilterAPI,
     setBoardColumnsViewAPI,
     switchViewHandler,

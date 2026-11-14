@@ -8,16 +8,26 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { correlate, incidentOf, redact, relatedTicket, taskIncident } from './incident.mjs';
+import { renderPlainLanguageTicketDescription } from './ticketDescription.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
-const CONTROL = 'YPER4-354';
+const CONTROL = 'HYCI-291';
+export const PRODUCT_BOARD = 15;
+export const INFRA_BOARD = 11514;
+const LIVE_BOARDS = [PRODUCT_BOARD, INFRA_BOARD];
+const PRODUCT_INTAKE = '4389';
+const RETIRED_BOARDS = new Map([[4060, INFRA_BOARD], [2060, INFRA_BOARD]]);
+const liveBoard = board => RETIRED_BOARDS.get(board) ?? board;
 const iso = time => new Date(time).toISOString();
 const day = time => iso(time).slice(0, 10);
 const html = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const diagnostic = text => console.error(`error-collector: ${text}`);
+const refusedCreate = text => /project not found or access denied|label not found|rate limit exceeded|exactly one brain label/i.test(text)
+  || /^vcc: (?:task create refused[: ]|Ticket description refused[: ]|not filed\. The same problem is already open)/im.test(text);
+const occurrencePosted = (text, id) => typeof text === 'string' && (text.includes(`[error-occurrence:${id}]`) || text.includes(`[error-detail:${id}]`));
 
 function noiseRule(event) {
   const text = `${event.message}\n${event.route}`;
@@ -95,11 +105,32 @@ async function save(state, root) {
   } finally { await fs.rm(temp, { force: true }); }
 }
 
+export function migrateBoards(state) {
+  const retired = new Set();
+  for (const group of Object.values(state.pending)) {
+    group.board = liveBoard(group.board);
+  }
+  for (const record of Object.values(state.stale ?? {})) {
+    record.board = liveBoard(record.board);
+  }
+  for (const events of Object.values(state.noiseWindows ?? {})) {
+    for (const event of events) event.board = liveBoard(event.board);
+  }
+  for (const [fp, record] of Object.entries(state.fingerprints)) {
+    if (!RETIRED_BOARDS.has(record.board)) continue;
+    retired.add(record.ticket);
+    delete state.fingerprints[fp];
+  }
+  for (const ticket of retired) delete state.activities?.[ticket];
+  for (const [id, occurrence] of Object.entries(state.occurrences ?? {})) if (retired.has(occurrence.ticket)) delete state.occurrences[id];
+  return state;
+}
+
 async function load(root) {
   try {
     const state = JSON.parse(await fs.readFile(join(root, 'state.json'), 'utf8'));
     if (state.version !== 1 || !state.sources || !state.fingerprints || !state.pending || !state.days || !state.summaries || !state.activities || !Array.isArray(state.created)) throw new Error('invalid state');
-    return state;
+    return migrateBoards(state);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
     return { version: 1, sources: {}, fingerprints: {}, pending: {}, days: {}, summaries: {}, activities: {}, created: [] };
@@ -120,8 +151,9 @@ export async function loadSources(names) {
 }
 
 function validate(event) {
-  if (!event || (event.ticket != null && typeof event.ticket !== 'boolean') || ![15, 4060].includes(event.board) || typeof event.service !== 'string' || !/^[A-Za-z][A-Za-z0-9 ._-]{0,79}$/.test(event.service) || ['__proto__', 'constructor', 'prototype'].includes(event.service) || typeof event.message !== 'string' || (event.route != null && typeof event.route !== 'string') || (event.stack != null && typeof event.stack !== 'string') || !Number.isFinite(Date.parse(event.ts)) || !Number.isSafeInteger(event.count ?? 1) || (event.count ?? 1) < 1) throw new Error('invalid event');
-  return { ...event, ts: iso(Date.parse(event.ts)), count: event.count ?? 1, route: event.route ?? '', stack: event.stack ?? '' };
+  const board = liveBoard(event?.board);
+  if (!event || (event.ticket != null && typeof event.ticket !== 'boolean') || !LIVE_BOARDS.includes(board) || typeof event.service !== 'string' || !/^[A-Za-z][A-Za-z0-9 ._-]{0,79}$/.test(event.service) || ['__proto__', 'constructor', 'prototype'].includes(event.service) || typeof event.message !== 'string' || (event.route != null && typeof event.route !== 'string') || (event.stack != null && typeof event.stack !== 'string') || !Number.isFinite(Date.parse(event.ts)) || !Number.isSafeInteger(event.count ?? 1) || (event.count ?? 1) < 1) throw new Error('invalid event');
+  return { ...event, board, ts: iso(Date.parse(event.ts)), count: event.count ?? 1, route: event.route ?? '', stack: event.stack ?? '' };
 }
 
 function merge(group, event) {
@@ -132,13 +164,52 @@ function merge(group, event) {
   group.routes = [...new Set([...group.routes, redact(event.route)])];
 }
 
-function description(group, fp) {
-  if (group.noiseRule) {
-    const fields = [ ['Service', group.service], ['Warning', group.normalized], ['Occurrences in one hour', group.hourlyCount], ['Hour ending', group.hourLastSeen], ['Routes', group.routes.join(', ')], ['Redacted sample', group.message] ];
-    return `<p><strong>${html(group.service)} emitted ${html(group.normalized)} ${group.hourlyCount} times within one hour.</strong></p><p>This is a warning on stderr, not a thrown product error. Fix it at the source rather than hiding the warning.</p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
+function ticketLabels(board) {
+  return `${board === PRODUCT_BOARD ? 'Error Log' : 'Infra'},brain-medium`;
+}
+
+function identityHref(group, fp) {
+  const count = group.noiseRule ? group.hourlyCount : group.count;
+  const params = new URLSearchParams();
+  params.set('routes', group.routes.join(', '));
+  params.set('count', String(count ?? ''));
+  params.set('first', group.firstSeen ?? '');
+  params.set('last', group.lastSeen ?? group.hourLastSeen ?? '');
+  if (group.incident?.root) {
+    params.set('root', group.incident.root);
+    params.set('route', group.incident.route ?? '');
+    params.set('routeKey', group.incident.routeKey ?? '');
   }
-  const fields = [ ['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message] ];
-  return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
+  const rest = params.toString().replace(/%2F/g, '/').replace(/%3A/g, ':').replace(/%2C/g, ',').replace(/%20/g, ' ').replace(/\+/g, ' ');
+  return `https://app.hypertask.ai/search?searchTerm=error-fingerprint:${fp}&${rest}`;
+}
+
+function description(group, fp) {
+  const block = group.noiseRule
+    ? renderPlainLanguageTicketDescription({
+        whatWrongOrWanted: "One warning repeats too often.",
+        whoItAffects: "Internal only.",
+        recommendedCourseAndWhy: "Quiet the warning. Why: it hides real errors.",
+        whatValentinMustDecide: "nothing",
+        howToUndo: "Revert the last change.",
+      })
+    : renderPlainLanguageTicketDescription({
+        whatWrongOrWanted: "A production error keeps happening.",
+        whoItAffects: "Internal. People using the app.",
+        recommendedCourseAndWhy: "Fix the cause. Why: it keeps happening.",
+        whatValentinMustDecide: "nothing",
+        howToUndo: "Revert the last change.",
+      });
+  const problem = group.noiseRule ? `${group.normalized}.` : "The same error keeps showing up.";
+  const countLine = group.noiseRule ? `Occurrences in one hour: ${group.hourlyCount}` : `Count in window: ${group.count}`;
+  const shape = [["Problem", problem], ["Fix", "Patch the cause."], ["Done when", "The error stops."], ["Risk", "Low."], ["Decision", "None."]];
+  return block + shape.map(([head, line]) => `<h2>${head}</h2><p>${html(line)}</p>`).join("") + `<p>${html(countLine)}</p><p>Redacted sample follows.</p><p><a href="${html(identityHref(group, fp))}">Same error</a></p>`;
+}
+
+function detailNote(group, fp) {
+  const stack = String(group.stack ?? "").split("\n").slice(0, 40).join("\n");
+  const id = createHash("sha256").update(`detail|${fp}`).digest("hex").slice(0, 24);
+  return { id, text: `Redacted sample: ${group.message}\nStack:\n${stack}\n[error-detail:${id}]\n[error-occurrence:${id}]` };
 }
 
 function search(fp, board, env, incident) {
@@ -154,7 +225,7 @@ function search(fp, board, env, incident) {
         if (typeof task.description === 'string' && new RegExp(`error-fingerprint:${fp}(?![a-f0-9])`).test(task.description)) {
           const identity = incident && taskIncident(task);
           if (incident && (identity?.routeKey !== incident.routeKey || identity?.root !== incident.root)) continue;
-          const match = { ticket: ticketRef(task), deleted: status === 'Deleted' };
+          const match = { ticket: ticketRef(task), deleted: status === 'Deleted', samplePromised: task.description.includes('Redacted sample follows') };
           if (!found || match.deleted) found = match;
         }
       }
@@ -196,10 +267,10 @@ export function findRelatedIncident(group, env) {
   return found;
 }
 
-function intake(env) {
-  const value = payload(command('ht', ['GET', '/mcp/projects/4060/sections'], env));
+function intake(env, board) {
+  const value = payload(command('ht', ['GET', `/mcp/projects/${board}/sections`], env));
   if (!Array.isArray(value.sections)) throw new Error('invalid sections');
-  const active = value.sections.filter(section => section.projectId === 4060 && !section.deleted && section.isDone !== true && Number.isSafeInteger(section.id));
+  const active = value.sections.filter(section => section.projectId === board && !section.deleted && section.isDone !== true && Number.isSafeInteger(section.id));
   const section = active.find(section => /^backlog$/i.test(section.section_title)) ?? active.find(section => /^(to[ -]?do|todo)$/i.test(section.section_title));
   if (!section) throw new Error('no intake section');
   return String(section.id);
@@ -217,6 +288,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     timeLeft(Infinity);
     if (dryRun) { console.log(`DRY-RUN ${JSON.stringify({ command: name, args, ...(input == null ? {} : { input }) })}`); return ''; }
     return command(name, args, { ...env, ...extraEnv }, input);
+  };
+  const createOutcome = args => {
+    timeLeft(Infinity);
+    const result = spawnSync('vcc', args, { env, encoding: 'utf8', timeout: timeLeft(30000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
+    const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    if (result.error || result.status !== 0) return refusedCreate(text) ? { kind: 'refused' } : { kind: 'ambiguous' };
+    try { return { kind: 'created', ticket: ticketRef(payload(result.stdout).task) }; }
+    catch { return { kind: 'ambiguous' }; }
   };
   state.coverage ??= {};
   state.stale ??= {};
@@ -273,9 +352,20 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const revived = new Map();
       const previous = Date.parse(state.sources[source.name]);
       const since = iso(Math.max(now - DAY, Math.min(now, Number.isFinite(previous) ? previous : now - DAY)));
-      const until = iso(now);
+      let until = iso(now);
       const fetched = await bounded(source.fetch({ since, until, env, signal, cursor: structuredClone(state.sourceCursors?.[source.name]) }));
       timeLeft(Infinity);
+      if (!Array.isArray(fetched) && fetched?.until != null) {
+        const end = Date.parse(fetched.until);
+        if (!Number.isFinite(end) || end <= Date.parse(since) || end > now) throw new Error('invalid source coverage end');
+        until = iso(end);
+      }
+      let retained = since;
+      if (!Array.isArray(fetched) && fetched?.since != null) {
+        const start = Date.parse(fetched.since);
+        if (!Number.isFinite(start) || start < Date.parse(since) || start > Date.parse(until)) throw new Error('invalid source coverage start');
+        retained = iso(start);
+      }
       const rows = Array.isArray(fetched) ? fetched : fetched?.events;
       let cursor;
       if (!Array.isArray(fetched)) {
@@ -349,14 +439,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const prior = state.coverage[source.name];
       const continuous = prior && prior.until === state.sources[source.name] && previous >= Date.parse(since);
       const coverage = {
-        since: continuous ? prior.since : since, until,
+        since: retained !== since ? retained : (continuous ? prior.since : since), until,
         services: [...new Set([...(prior?.services ?? []), source.name, ...events.map(event => event.service)])],
       };
       const start = Math.max(now - 13 * DAY, Number.isFinite(previous) ? Math.min(previous, Date.parse(since)) : Date.parse(since));
       for (let date = Date.parse(`${day(start)}T00:00:00Z`); date <= now; date += DAY) {
         for (const service of coverage.services) {
           const counts = stats(day(date), service);
-          counts.complete = Date.parse(coverage.since) <= date && now >= date + DAY;
+          counts.complete = Date.parse(coverage.since) <= date && Date.parse(until) >= date + DAY;
         }
       }
       state.coverage[source.name] = coverage;
@@ -401,11 +491,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   }
   await checkpoint();
   let held = 0;
-  let section;
-  for (const [fp, group] of Object.entries(state.pending)) {
+  let stopCreates = false;
+  const sections = new Map();
+  const filing = Object.entries(state.pending).sort(([, left], [, right]) => Number(right.board === PRODUCT_BOARD) - Number(left.board === PRODUCT_BOARD));
+  for (const [fp, group] of filing) {
     if (signal.aborted) break;
     try {
       let found = search(fp, group.board, env);
+      let createdNow = false;
       for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env, group.incident);
       if (!found && group.incident) {
         const allowWrapper = !Object.values(state.pending).some(other => other.incident?.routeKey === group.incident.routeKey && other.incident.root !== group.incident.root && Math.abs(Date.parse(other.firstSeen) - Date.parse(group.firstSeen)) <= 10 * 60_000);
@@ -431,28 +524,45 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           await checkpoint();
           continue;
         }
+        if (stopCreates) continue;
         if (state.created.length >= cap) { held++; continue; }
-        const column = group.board === 15 ? '4389' : (section ??= intake(env));
+        const column = group.board === PRODUCT_BOARD ? PRODUCT_INTAKE : (sections.get(group.board) ?? sections.set(group.board, intake(env, group.board)).get(group.board));
         const text = description(group, fp);
         let temp;
         const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);
         try {
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
-          state.created.push(iso(now));
-          await checkpoint();
-          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
-          if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
-          else found = { ticket: ticketRef(payload(output).task), deleted: false };
+          const createArgs = ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', ticketLabels(group.board), '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path];
+          if (dryRun) {
+            write('vcc', createArgs);
+            state.created.push(iso(now));
+            console.log(`DRY-RUN description ${JSON.stringify(text)}`);
+            found = { ticket: `DRYRUN-${state.created.length}`, deleted: false };
+          } else {
+            const outcome = createOutcome(createArgs);
+            if (outcome.kind === 'ambiguous') { stopCreates = true; throw new Error('ambiguous create'); }
+            if (outcome.kind !== 'created') throw new Error('refused create');
+            found = { ticket: outcome.ticket, deleted: false };
+            state.created.push(iso(now));
+            createdNow = true;
+          }
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };
         } finally { if (temp) await fs.rm(temp, { force: true }); }
       } else {
+        const samplePromised = Boolean(found.samplePromised);
+        delete found.samplePromised;
         state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: null };
+        if (!dryRun && samplePromised) createdNow = true;
         if (!found.deleted && !group.incident) {
           const activity = state.activities[found.ticket] ??= { count: 0, since: group.firstSeen, at: null };
           activity.routes = [...new Set([...(activity.routes ?? []), ...group.routes.filter(Boolean)])];
           activity.count += group.count;
           activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
         }
+      }
+      if (!dryRun && createdNow && !found.deleted) {
+        const note = detailNote(group, fp);
+        state.occurrences[note.id] ??= { ticket: found.ticket, queuedAt: iso(now), text: note.text };
       }
       if (group.incident && !found.deleted) {
         for (const [id, occurrence] of Object.entries(group.occurrences)) state.occurrences[id] ??= { ...occurrence, ticket: found.ticket, queuedAt: iso(now) };
@@ -470,7 +580,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     try {
       const page = payload(command('ht', ['GET', `/mcp/tasks/${occurrence.ticket}/agent-activity?limit=100`], env));
       if (!Array.isArray(page.activities)) throw new Error('invalid occurrence activity page');
-      if (!page.activities.some(activity => activity.text?.includes(`[error-occurrence:${id}]`))) {
+      if (!page.activities.some(activity => occurrencePosted(activity.text, id))) {
         if (page.activities.length === 100 && page.activities.every(activity => Date.parse(activity.createdAt) >= Date.parse(occurrence.queuedAt))) throw new Error('occurrence activity history truncated');
         write('vcc', ['activity', 'add', occurrence.ticket, occurrence.text]);
       }
@@ -548,7 +658,8 @@ async function install(env) {
   await fs.mkdir(units, { recursive: true });
   await fs.mkdir(join(home, '.local/state/error-collector'), { recursive: true, mode: 0o700 });
   if (HERE !== target) {
-    for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
+    for (const name of ['collector.mjs', 'io.mjs', 'noise.json', 'incident.mjs', 'vercel-hosted.mjs']) await fs.copyFile(join(HERE, name), join(target, name));
+    await fs.copyFile(join(HERE, 'ticketDescription.mjs'), join(target, 'ticketDescription.mjs'));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }
   const checker = join(HERE, HERE === target ? '' : '..', 'user-unit-check');

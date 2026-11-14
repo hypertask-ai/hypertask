@@ -32,3 +32,43 @@ test("the server build includes the route-local onboarding markdown", () => {
     assert.ok(fs.statSync(path.join(root, asset)).isFile());
   }
 });
+
+function renderedHtml() {
+  const load = require("jiti")(__filename, {
+    alias: { "@": path.join(root, "src") },
+    jsx: { runtime: "automatic" },
+  });
+  return load(path.join(root, "src/app/wiki/agents/page.tsx")).default().then(
+    (page) => page.props.children.props.dangerouslySetInnerHTML.__html,
+  );
+}
+
+function namedColumns(text) {
+  const named = new Set();
+  const flowLine = text.split("\n").find((line) => line.includes("\u2192"));
+  if (flowLine) {
+    for (const part of flowLine.split("\u2192")) {
+      for (const piece of part.split("/")) if (piece.trim()) named.add(piece.trim());
+    }
+  }
+  for (const match of text.matchAll(/moves? the ticket (?:back )?to ([A-Z][^.,]*)/g)) named.add(match[1].trim());
+  for (const match of text.matchAll(/Move the board 15 ticket to ([A-Z][^.,]*)/g)) named.add(match[1].trim());
+  return [...named];
+}
+
+test("the rendered onboarding page sends a ticket only to board 15 columns that exist", async () => {
+  const { sections } = JSON.parse(
+    fs.readFileSync(path.join(root, "tests/fixtures/board-15-sections.json"), "utf8"),
+  );
+  const columns = sections.map((section) => section.section_title);
+  const text = (await renderedHtml()).replace(/<[^>]+>/g, "").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const named = namedColumns(text);
+  assert.ok(named.length > 0, "the page names no board column at all");
+  for (const column of named) {
+    assert.ok(
+      columns.includes(column),
+      `the page sends a ticket to "${column}", which is not a board 15 column`,
+    );
+  }
+  assert.ok(!text.includes("DeepSeek PRs on Hold"), "the page still sends lower-trust work to a column that does not exist");
+});

@@ -119,6 +119,14 @@ function syncColumnsWithProject(
     };
   }
 
+export const columnListOrBoardColumns = (
+  columns: readonly ISection[] | null | undefined,
+  project?: IProject | null
+): ISection[] =>
+  columns && columns.length > 0
+    ? [...columns]
+    : (project?.section ?? []);
+
 export const getActiveColumnsViewFromProject = (
   project?: IProject | null
 ): ISection[] => {
@@ -127,7 +135,8 @@ export const getActiveColumnsViewFromProject = (
   const defaultView = project.project_view?.default_view?.board_columns_view as ISection[];
   const unsaved = view?.unsavedView?.board_columns_view as ISection[];
   const applied = view?.appliedView?.board_columns_view as ISection[];
-  const columnsView = unsaved ?? applied ?? defaultView ?? project.section ?? [];
+  const selectedColumns = unsaved ?? applied ?? defaultView;
+  const columnsView = columnListOrBoardColumns(selectedColumns, project);
   const sectionsById = new Map(
     (project.section ?? []).map((section) => [
       section.id ?? section.sectionId,
@@ -613,6 +622,25 @@ export const getActiveBoardLayoutPreferenceFromProject = (
     const activeView = row?.unsavedView ?? row?.appliedView ?? project?.project_view?.default_view;
     return sanitizeBoardLayout(activeView?.board_layout);
 };
+
+const activeTableView = (project?: IProject | null) => {
+    const view = project?.project_view?.user_project_views?.[0]
+    return view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view
+}
+
+export const getActiveTableSortStackFromProject = (project?: IProject | null): { column: string; direction: "asc" | "desc" }[] => {
+    const stored = activeTableView(project)?.table_sort_stack
+    if (Array.isArray(stored) && stored.length) return stored as { column: string; direction: "asc" | "desc" }[]
+    const single = getActiveTableSortFromProject(project)
+    if (!single?.column || (single.direction !== "asc" && single.direction !== "desc")) return []
+    return [{ column: single.column, direction: single.direction }]
+}
+
+export const getActiveTableColumnsFromProject = (project?: IProject | null) => {
+    const saved = activeTableView(project)?.table_columns
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return null
+    return saved
+}
 
 export const getActiveTableSortFromProject = (project?: IProject | null): TTableSort => {
     const view = project?.project_view?.user_project_views?.[0]

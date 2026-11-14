@@ -96,13 +96,13 @@ test("WriteWithAI keeps its exact instructions and does not read the short-write
   assert.doesNotMatch(on.run.instructions, /TASK-SPECIFIC STRUCTURE AND LENGTH/);
 });
 
-test("ticket flag is a small bugfix that stays Owner + QA", () => {
+test("ticket flag is a small bugfix that ships to Everyone", () => {
   const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7977-short-task-writer.ts")).default;
   const { FEATURE_FLAG_DEFINITIONS } = load(path.join(root, "src/lib/flags/definitions.ts"));
   assert.equal(keys.HTPR_7977_SHORT_TASK_WRITER_FLAG, flag);
   assert.equal(definition.key, flag);
   assert.equal(definition.kind, "bugfix");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.releaseRisk.risk, "small");
   assert.equal(definition.releaseRisk.highRisk, undefined);
   assert.deepEqual(FEATURE_FLAG_DEFINITIONS.filter((entry) => entry.key === flag), [definition]);

@@ -49,7 +49,11 @@ const nextConfig = {
   // The sanitizer's jsdom is pinned in npm overrides to avoid requiring ESM in
   // serverless runtimes where Node's optional require(esm) support is disabled.
   // Keep legacy URL parsers in node_modules, where Node 24 exempts them from DEP0169.
-  serverExternalPackages: ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk"],
+  serverExternalPackages: [
+    "isomorphic-dompurify", "jsdom", "pusher", "aws-sdk",
+    "stripe", "posthog-node", "@modelcontextprotocol/sdk", "mcp-handler",
+    "evlog",
+  ],
   // The public onboarding page reads this markdown relative to process.cwd().
   outputFileTracingIncludes: {
     "/wiki/agents": ["./src/app/wiki/agents/agents.md"],
@@ -187,7 +191,7 @@ const nextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
           {
             key: "Content-Security-Policy-Report-Only",
-            value: "script-src https://app.hypertask.ai/_next/static/ https://eu-assets.i.posthog.com; base-uri 'self'",
+            value: "script-src https://app.hypertask.ai/_next/static/ https://eu-assets.i.posthog.com https://cdn.usefathom.com; base-uri 'self'",
           },
         ],
       },
@@ -230,7 +234,14 @@ const nextConfig = {
       },
     ];
   },
-  webpack(config) {
+  webpack(config, options = {}) {
+    if (!options.dev) {
+      const { BuildMemoryPlugin } = require("./scripts/build-memory-plugin.cjs");
+      config.plugins = [...(config.plugins || []), new BuildMemoryPlugin()];
+    }
+    if (!options.dev && config.cache && typeof config.cache === "object") {
+      config.cache.maxMemoryGenerations = 0;
+    }
     // react-joyride's ESM build references ReactDOM.unmountComponentAtNode /
     // unstable_renderSubtreeIntoContainer in a dead `!isReact16` branch that
     // React 19 no longer exports, which trips webpack's strict ESM named-export

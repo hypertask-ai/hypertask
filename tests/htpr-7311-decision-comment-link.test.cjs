@@ -163,7 +163,7 @@ function createInboxHarness(enabled, split, rows = [notification()], disableInbo
   assert.ok(decisionGate);
   const environment = {
     inboxConfig, withDecisionCommentAnchor, buildInboxTasksPlaylist, selectedSplit: split,
-    inboxVisibleOrder, snapshot: null,
+    inboxVisibleOrder, snapshot: null, rankedSplit: false,
     decisionCommentLinks: evaluate(`(() => { let decisionCommentLinks = ${expression(inboxFile, "decisionCommentLinks")}; ${decisionGate.getText(tree)} return decisionCommentLinks; })()`, { decisionCommentLinkEnabled: enabled, selectedSplit: split, decisionsSplitName }),
     disableInboxFlow, disableNotificationSideEffects: true,
     _notifications: rows, selectedKeyboardRow: { item: { kind: "notification", notification: rows[0] } },

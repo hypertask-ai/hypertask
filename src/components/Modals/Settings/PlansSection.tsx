@@ -7,6 +7,8 @@ import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-76
 import { HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG } from "@/lib/flags/definitions/htpr-7922-unlimited-free-boards";
 import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7923-unlimited-free-tickets";
 import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
+import { HTPR_7924_FREE_STORAGE_2GB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-storage-2gb";
+import { HTPR_7919_ALLOWANCE_PERCENT_FLAG } from "@/lib/flags/definitions/htpr-7919-allowance-percent";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { visibleFreePlanCopy } from "@/lib/freePlanLimits";
 import { subscriptionPlansFor } from "@/lib/subscriptionPlans";
@@ -45,17 +47,21 @@ const PlansSection = () => {
   const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const showFreePlanCopy = useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG);
+  const percentageAllowance = useFlag(HTPR_7919_ALLOWANCE_PERCENT_FLAG);
   const unlimitedBoards = useFlag(HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG);
   const freePlanLimits = {
     planLimits: useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG),
     unlimitedTickets: useFlag(HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG),
     raisedFileLimit: useFlag(HTPR_7924_FREE_FILE_25MB_FLAG),
+    storageCap: useFlag(HTPR_7924_FREE_STORAGE_2GB_FLAG),
   };
-  const { planLimits, unlimitedTickets, raisedFileLimit } = freePlanLimits;
-  const freePlanCopy = visibleFreePlanCopy(
-    showFreePlanCopy,
-    unlimitedBoards ? { ...freePlanLimits, unlimitedBoards: true } : freePlanLimits,
-  );
+  const { planLimits, unlimitedTickets, raisedFileLimit, storageCap } = freePlanLimits;
+  const entitlementFlags = {
+    ...freePlanLimits,
+    unlimitedBoards: unlimitedBoards ? true : undefined,
+    storageCap: planLimits && storageCap ? true : undefined,
+  };
+  const freePlanCopy = visibleFreePlanCopy(showFreePlanCopy, entitlementFlags);
   const freePlanDescription = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : null}</>;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -75,10 +81,10 @@ const PlansSection = () => {
 
   const plans = useMemo(
     () =>
-      [...subscriptionPlansFor({ ...freePlanLimits, unlimitedBoards })].sort(
+      [...subscriptionPlansFor(entitlementFlags, percentageAllowance, showFreePlanCopy)].sort(
         (left, right) => STORE_PLAN_RANK[left.id] - STORE_PLAN_RANK[right.id],
       ),
-    [planLimits, unlimitedBoards, unlimitedTickets, raisedFileLimit],
+    [planLimits, unlimitedBoards, unlimitedTickets, raisedFileLimit, storageCap, percentageAllowance, showFreePlanCopy],
   );
 
   useEffect(() => {

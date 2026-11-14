@@ -2,7 +2,7 @@
 
 _Last updated: 2026-10-31._
 
-**Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), uses a provider-neutral AI review gate, and deploys production directly from the `production` branch.** The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
+**Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), gates merges on Codex's built-in GitHub code review, and deploys production directly from the `production` branch.** No self-hosted runners remain on the Contabo host; private fleet repos use GitHub-hosted `ubuntu-latest`. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
 
 Each section below is its own file in `docs/ci/`, one file per topic, so two CI changes never edit
 the same lines. This page is built from those files: edit the section file, then run
@@ -77,7 +77,7 @@ Small guards share scanner work and trusted metadata:
   The gate's `ghApi` retries HTTP 500, 502, 503, and 504 up to twice, after one and two seconds, including status posts. `GH_API_NO_WAIT` still skips rate-limit waits but does not disable these server-error retries. Read-token fallback remains separate and happens first.
 - `ux-signoff-gate.yml` evaluates only the event PR on `pull_request_target`; the hourly chain dispatches `workflow_dispatch` sweeps of all open PRs. Both share the same non-cancelling serialization group.
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
-- Push secret scans and manual outside-PR dry runs keep their workflows. Per-PR test and smoke guards cancel superseded runs, but the trusted guard no longer cancels: it publishes a required status, so it serializes per pull request with `queue: max` (HYCI-29). The Dependabot lane (label plus ticket in one run) shares one non-cancelling line across its PR events and its sweep, so two runs can never file a ticket each, and the shared auto-merge sweeper stays non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
+- Push secret scans and manual outside-PR dry runs keep their workflows. Per-PR smoke guards and most workflows cancel superseded runs. CI Tests and the trusted guard publish a required status, so they serialize per pull request with `queue: max` and `cancel-in-progress: false` instead of cancelling pending work (HYCI-29, HYCI-182). The Dependabot lane (label plus ticket in one run) shares one non-cancelling line across its PR events and its sweep, so two runs can never file a ticket each, and the shared auto-merge sweeper stays non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
 Static gates inside `ci-checks` share one job and run as concurrent lanes (HYCI-8):
 agent board scope, TypeScript, Oxlint, ESLint, the lint overlap guard, board
@@ -125,8 +125,9 @@ the count is 24 jobs per push: four shards plus the summary.
 
 ## PR size check (HYCI-29)
 
-- Trusted production code counts additions and deletions.
-- One config excludes generated and fixture files.
+- Trusted production code counts additions and deletions against the current production commit and PR head, not the cached PR file list.
+- The immutable comparison records its production SHA in the artifact. Missing files or the comparison API's 300-file truncation boundary produce measurement errors, never passing counts.
+- One config excludes generated and fixture files, including the ESLint-generated style-guide suppressions baseline.
 - Renames crossing exclusion boundaries still count.
 - Incomplete measurements produce errors, never passing counts.
 - An error warns and never blocks a merge.
@@ -140,6 +141,8 @@ the count is 24 jobs per push: four shards plus the summary.
 - The guard re-runs on `labeled` and `unlabeled`, so the label clears the block.
 - Post the `size-ok: <reason>` comment first, then add the label last.
 - The block publishes through the existing required `pr-title` context.
+- Runners also get the same rule before they push: `open-pr.sh` runs `.github/scripts/pr-preflight.cjs`, which refuses a bad title or an over-cap diff before anything opens. A hand-made pull request runs the same command by hand.
+- The trusted guard checks outside, size and title before it installs the workflow parser, so a badly titled or oversized PR fails the required context in seconds instead of after a full round of checks.
 - Artifacts preserve each head, count and verdict.
 - Artifact name: `pr-size-<PR>-<run>-<attempt>`; retention: 14 days.
 - `pr-size-observation.yml` runs twice a day and posts one comment to HYCI-29.
@@ -167,48 +170,24 @@ the count is 24 jobs per push: four shards plus the summary.
 
 ## Review gate
 
-- The private `valentinyeo/hypertask-reviewer` workflow fails over subscription-first between its configured backends (currently the ChatGPT/Codex subscription and the Claude Code subscription); the reviewer repository owns the provider order, models, and failover details, so they are not duplicated here.
-- The required review gate is GitHub AI Review (`ai-review`); the former `claude-review` context is accepted during the transition so queued PRs retain their gate. Every review comment identifies the backend that produced its verdict.
-- The private repository publishes that gate as a commit status because cross-repository user tokens cannot create GitHub Check Runs. Branch protection and auto-merge consume the GitHub AI Review (`ai-review`) context (or the legacy `claude-review` context during the transition).
-- After publishing a final status, the private workflow dispatches the application repository's auto-merge evaluator for that PR. It does this for approvals, concerns, and infrastructure failures, so completion cannot be missed when CI happened to finish first.
-- A five-minute application auto-merge sweep is the final availability fallback. It re-evaluates green PRs even if GitHub loses the cross-repository completion dispatch.
-- A root-installed systemd timer polls every 30 seconds as the isolated `reviewdispatch` account. It validates each open PR, exact head SHA, same-repository source, and `production` target before dispatching to the private reviewer repository. The private workflow checks out only the trusted `production` copy of `.github/scripts/ai-review.mjs`; it reads PR code as data and never checks it out or executes it.
-- The dispatcher records terminal GitHub AI Review (`ai-review` or legacy `claude-review`) results by commit SHA under `/var/lib/hypertask-ai-review/completed`. Each scan uses one GitHub API request to list open PRs, then rechecks only heads without a terminal marker. Keep this cache in place. With 24 or more open PRs, repeated checks of completed heads consumed the 5,000-request hourly quota and made the CI monitor report an unknown topology (HTPR-5548).
-- Generated dependency lockfiles are represented by file metadata instead of their full machine-generated contents. The reviewer inspects the package manifest and CI result without spending tens of thousands of tokens on a lockfile.
-- Every backend must return the same strict JSON-schema verdict. Quota, authentication, missing CLI, timeout, empty, or malformed responses advance to the next backend. A valid `APPROVE` or `CONCERNS` verdict stops the chain. If every backend fails, the required check fails closed.
-- The reviewer engine sends its own finding shape with every review request, and the subscription wrappers write that shape to a temp file and constrain the model with it; the copy of `review-schema.json` installed at `/etc/hypertask-ai-review/review-schema.json` is only the fallback for an engine that sends none (HYCI-113). A request without a shape therefore still runs, and an old wrapper ignores the extra field. The installed copy must still carry the whole finding shape: `severity`, `kind` (`code` or `policy`), file and line, title, details, suggestion, and `confidence`/`evidence`. A stale copy drops a field silently instead of failing, and a missing `kind` turns every finding into a code defect, which no recorded policy decision can settle (YPER4-1172). Re-run `.github/scripts/subscription-review/install-wrappers.sh` on the review host whenever a wrapper or the fallback shape changes.
-- Transient provider failures retry within the reviewer workflow's own failover policy; the reviewer repository owns those retry counts.
-- Existing queued PRs are discovered automatically by the local poller. The broker sends a `repository_dispatch` event, so GitHub always runs the credential-bearing workflow from the private repository's default branch. A trusted infrastructure retry uses the same event and exact PR head SHA; branch-selectable `workflow_dispatch` is forbidden.
-- Dispatch markers are reconciled against both the current GitHub AI Review (`ai-review` or legacy `claude-review`) status and the named private workflow run. Queued or running reviews remain protected for their full duration; the 30-second poller makes a cancelled, failed-before-status, or vanished run retryable after a five-minute GitHub propagation grace.
-- Automatic dispatch is capped at two attempts per head: the initial run and one recovery. Further infrastructure-only retries must use a trusted `repository_dispatch` request for the exact PR head, preventing an unhealthy provider from consuming quota indefinitely without making a credential-bearing workflow branch-selectable.
-- DeepSeek-produced PRs keep the `hold` label. The automated verdict is evidence, but a trusted release session must still remove the hold before merge.
-- Subscription credentials belong only to the isolated `aireviewer` OS account. Only the private repository's `htreviewrunner` identity may invoke the root-owned wrappers. The broker runs only as `reviewdispatch`; the general `ghrunner` identity used by application jobs can invoke neither boundary.
-- The broker's cross-repository credential is supplied through a `reviewdispatch`-only curl config file, never a command argument or application workflow environment.
-- The safe manual retry command below sends `repository_dispatch` with a numeric PR and exact 40-character head SHA. The private workflow and reviewer validate both before using credentials.
-
-### Trusted manual review retry
-
-Use this only for an infrastructure failure, not to rerun a valid negative verdict. Confirm the PR is open, targets `production`, comes from this repository, and still has the exact head SHA. This payload follows `.github/scripts/subscription-review/dispatch-review` and runs the private repository's default-branch workflow, never a PR-selected ref.
-
-```bash
-PR=1234
-HEAD_SHA=$(gh pr view "$PR" --repo hypertask-ai/hypertask --json headRefOid --jq .headRefOid)
-[[ "$PR" =~ ^[1-9][0-9]*$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
-jq -n --arg pr "$PR" --arg sha "$HEAD_SHA" \
-  '{event_type:"review_pr",client_payload:{pr:$pr,head_sha:$sha}}' \
-  | gh api --method POST repos/hypertask-ai/reviewer/dispatches --input -
-```
-
-Use a trusted identity with dispatch access to the private reviewer repository. The private workflow and reviewer revalidate the PR and head before using credentials.
+- AI review is Codex's built-in GitHub code review (the `chatgpt-codex-connector` bot), turned on for this repository with Automatic review, Review: All PRs, and Review trigger: On every push. It posts a standard pull request review with one inline comment per finding, each carrying a priority badge such as P1 or P2 ([OpenAI Codex GitHub integration](https://developers.openai.com/codex/integrations/github), which redirects to https://learn.chatgpt.com/docs/third-party/github).
+- The required review gate is GitHub AI Review (`ai-review`). The legacy `claude-review` context stays in the live ruleset, and the gate sets both to the same state.
+- [Codex review gate](../.github/workflows/codex-review-gate.yml) turns the bot's review into that commit status. It runs on GitHub-hosted `ubuntu-latest` with the built-in workflow token only, wakes on a Codex review, review comment or issue comment, and sweeps every open PR every ten minutes. It loads its script from the `production` branch and reads PR content only as data.
+- If a non-draft PR has no current-head review or running current-head summary, the sweep requests `@codex review` once per head, with a trusted workflow comment marker. It rechecks the head before requesting and leaves both required statuses pending; the request itself is never approval.
+- Codex also keeps one summary comment per PR with a hidden `codex-review-state:v1` JSON block naming the reviewed commit, a status (`running` or `completed`) and whether there were findings. Reactions and timestamps are never used, because they cannot say which commit they cover.
+- Rules for each open same-repository PR to `production`, using the current head commit only (a review of an older commit never counts by itself). Each inline comment is counted by its own commit as well as by the commit of the review that carries it. A comment whose own commit is older is not attributed to the head. Every comment inside a review of the head counts wherever it sits, so a P0 or P1 there still fails. A later clean head review clears only earlier submitted reviews; missing or equal timestamps fail closed. A P0 or P1 that GitHub has moved onto the head from an older review still fails until the head has been reviewed. The head has been reviewed when a Codex review is on that commit, or the summary for that commit is `completed` with no findings or no unresolved findings, or that summary is `completed` and a Codex pull-request comment says it found no major issues for that commit (the comment names the commit after "Reviewed commit"). After the head has been reviewed, those older comments no longer fail the gate. Success: the head has been reviewed and no comment that still counts has a P0 or P1 badge, or the summary block for that head says `completed` with no findings, or `completed` with no unresolved findings, or `completed` with unresolved findings when no comment that still counts carries a P0 or P1 badge (the summary alone cannot raise priority). P2 and lower findings do not fail the gate. Failure: a comment that still counts has a P0 or P1 badge, or no badge at all, or an older review left more comments unread than the gate could page through while the head had no review of its own. Pending: Codex has not answered for that head. A new push gets a fresh review, but on 2026-11-08 two pushes drew none in ten minutes and `@codex review` started one within seconds, so a PR still waiting needs that comment.
+- Owner + QA visual release: when the current head already has a successful `feature-flag-gate` for an Owner + QA default that gates the changed UI, `ai-review` ignores Codex P0/P1 findings that only demand `defaultMode: "EVERYONE"`. Everyone is still required after independent design QA widens the flag; that switch stays outside this gate.
+- On success it posts one `APPROVE` comment naming `reviewed-commit: <head sha>` and the review link. Auto-merge keeps its `REQUIRED` list, including `ai-review`, and still requires that exact-head `APPROVE` comment. DeepSeek-produced PRs keep the `hold` label until a trusted release session removes it.
+- Retired: the self-hosted reviewer (`hypertask-ai/reviewer` on `contabo-1`), its 30-second dispatch timer, the `reviewdispatch` and `aireviewer` accounts, and the manual `repository_dispatch` retry. Do not re-enable them: CI work on the shared server is forbidden.
 
 ## Release contract
 
-- App CI (CI Tests, App Smoke, Secret Guard, Gitleaks, Revert Guard, PR checks, Auto-merge, Production Health) runs on GitHub-hosted `ubuntu-latest` runners; review discovery is a local 30-second systemd timer and occupies no Actions runner. AI review runs from the private reviewer repository on that repo's own `[self-hosted, ai-review]` runner.
+- App CI (CI Tests, App Smoke, Secret Guard, Gitleaks, Revert Guard, PR checks, Auto-merge, Production Health) runs on GitHub-hosted `ubuntu-latest` runners; AI review is Codex's built-in GitHub review, and the Codex review gate workflow (also `ubuntu-latest`) turns it into the `ai-review` status.
 - Every CI Tests job that installs root dependencies restores the shared production-seeded `node_modules` cache and installs only on a miss. browser-smoke was the last job outside it, rebuilding dependencies on every pull request; a restored `node_modules` skips the npm postinstall, so both browser halves regenerate the feature-flag index before they seed the smoke database.
-- CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. ESLint still covers the full repository, but unchanged file results are restored through its content-validated cache; a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
-- CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. The lint stage is split (HTPR-8233): Oxlint lints the whole repository in under a second for the rule ids listed in `.oxlintrc.json`, and ESLint runs only the rules Oxlint lacks. `eslint.config.mjs` reads that same rule list and switches each id off, so no rule runs twice, and `tests/oxlint-overlap.test.cjs` fails when the two files drift or when Oxlint stops reporting a handed-over rule. On pull requests ESLint lints only the changed files, which is where the speed comes from; a changed lint configuration file widens it back to the full repository. Every `production` push still lints the full repository with the content-validated cache, and a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
+- CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. PR and production ESLint both cover the full repository through `npm run lint`, including unchanged files (HYCI-261). Before restoring dependencies or lint caches, PR static checks fetch and merge the current `production` tip into the checked-out PR merge result; conflicts fail the job. Unchanged file results are restored through the content-validated cache; a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
+- CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. The lint stage is split (HTPR-8233): Oxlint lints the whole repository in under a second for the rule ids listed in `.oxlintrc.json`, and ESLint runs only the rules Oxlint lacks. `eslint.config.mjs` reads that same rule list and switches each id off, so no rule runs twice, and `tests/oxlint-overlap.test.cjs` fails when the two files drift or when Oxlint stops reporting a handed-over rule. Both pull requests and `production` pushes lint the full repository with the content-validated cache; `lint:changed` remains a developer command, not a merge gate. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
 - TypeScript and the selected PR tests (full suite on production pushes) remain correctness checks on every non-docs CI Tests run. The Test step is `CI_TEST_SHARDS` pool lanes plus `CI_SERIAL_SHARDS` serial lanes, and they split that same file list by measured run time (see the shard balance note below). Shard count, not only balance, sets the wall: CI waits on the slowest lane, and a hosted runner's throughput moves up to a third between VMs. One aggregate job is still named `ci-tests`, and it is green only after every lane succeeds and the uploaded file lists union to the full set with no duplicate. Dependency installation and test selection stay in `ci-prepare`. `ci-checks` restores dependencies and runs the board-scope guard, typecheck and lint beside the test lanes, not before them. The required `ci-tests` aggregate waits for successful preparation, static checks, every lane and the exact-file execution proof. Docs-only runs require both heavy jobs to be skipped explicitly. Only production pushes save caches; each job uses its own workspace. The pool-lane count is the workflow env `CI_TEST_SHARDS`; the plan adds the serial lane on top of it.
-- Typecheck cache ([HTPR-8234](https://app.hypertask.ai/detail/project-15/8234)): the `ci-checks` Typecheck step keeps one cache holding the incremental `tsbuildinfo` and the generated route types (`.next/types`, `next-env.d.ts`). Pull requests write under their own `tsc-pr-<number>` namespace, so a branch that pushes again reuses its own state; `production` restores only `tsc-prod-` keys and can never read a pull-request cache, the same trust rule the ESLint cache follows. `next typegen` reruns unless the restored types came from an identical digest of the route inputs (tracked App and Pages router files, `next.config.js`, middleware, `package-lock.json`), computed by `.github/scripts/ts-route-surface.mjs`; a missing digest, a missing types directory or any git error regenerates. Because `next typegen` also writes the feature-flag index through `next.config.js`, the step builds that index with `scripts/generate-flag-index.mjs` first, so no check depends on the Next generator running. The `tsc --noEmit --incremental` command is unchanged, so the same diagnostics still fail the step.
+- Typecheck cache ([HTPR-8234](https://app.hypertask.ai/detail/project-15/8234)): the `ci-checks` Typecheck step keeps one cache holding the incremental `tsbuildinfo` and the generated route types (`.next/types`, `next-env.d.ts`). Pull requests write under their own `tsc-pr-<number>` namespace, so a branch that pushes again reuses its own state; `production` restores only `tsc-prod-` keys and can never read a pull-request cache, the same trust rule the ESLint cache follows. The cache fingerprint also includes `src/prisma/schema.prisma` and `prisma.config.ts`, and `ci-checks` runs `npx prisma generate` before restoring that cache, so a Prisma schema change never pairs fresh source with stale generated client types (HYCI-179). The shared `node_modules` cache key includes the same Prisma inputs, and `ci-prepare` regenerates the client before it saves a production cache. `next typegen` reruns unless the restored types came from an identical digest of the route inputs (tracked App and Pages router files, `next.config.js`, middleware, `package-lock.json`), computed by `.github/scripts/ts-route-surface.mjs`; a missing digest, a missing types directory or any git error regenerates. Because `next typegen` also writes the feature-flag index through `next.config.js`, the step builds that index with `scripts/generate-flag-index.mjs` first, so no check depends on the Next generator running. The `tsc --noEmit --incremental` command is unchanged, so the same diagnostics still fail the step.
 - Shard list download (HYCI-129): each test shard retries a failed artifact download once for reliability. A failed retry fails the job; test execution is not retried.
 - Test lanes (HYCI-7): `scripts/run-tests.mjs` sizes the pooled lane count from the machine (`os.availableParallelism()`), so a shard runs one lane per core - four on `ubuntu-latest` - and never oversubscribes a smaller runner. The shared VPS keeps a two-lane cap, `TEST_CONCURRENCY` overrides both, and a non-positive or non-integer override fails the run instead of guessing. Each shard prints `Test lanes: N of M cores.` and records `cores` in `test-durations.json`.
 - Shard balance (YPER4-777): the split is measured, not counted. `config/test-duration-weights.json` holds one work figure per test file, taken from the `test-durations` artifact of finished production runs; a file that runs in a serial lane costs its whole time and a pooled file costs 1/concurrency of it. `partition()` places files heaviest first onto the least-loaded shard, and the shard count is chosen from the slowest-VM case rather than the average one, and `--check`/`--prove` recompute that same plan, so the union and no-duplicate proof is unchanged. A file missing from the weights file costs `defaultWorkMs`, and with no weights file at all the split falls back to the old count split. Both shard job logs print `shard-plan … measured=…s,…s`; a balanced plan shows the two shards within a second of each other. Refresh the weights after a test-harness or dependency change: `gh run download <run-id> --repo hypertask-ai/hypertask -n test-durations -D runs/<run-id>` for ten or more finished production runs, then `node scripts/test-duration-weights.mjs --input runs --source "<what these runs are>"`. The generator takes the median across runs so one slow box cannot set the plan, and the file is generated, never hand-edited.
@@ -220,8 +199,9 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Coverage remains report-only (`continue-on-error` on reporting). The nightly keeps `npm run coverage:report`, the report job summary, `automated-test-coverage-<commit>`, the report/critical-domain paths, and 30-day retention; each lane uploads its `coverage/raw` dumps as `coverage-lane-<n>` for that merge. Download coverage from **Coverage Nightly**, not CI Tests. No required check or runtime script consumes the uploaded coverage; `scripts/coverage-summary.mjs` reads the nightly `coverage/report/coverage-summary.json` within that job. See [testing](testing.md#coverage-baseline).
 - Dependabot still applies informational `full-ci` and lane labels; neither starts nor changes CI Tests or test selection. `dependabot-lane.yml` writes both the lane label and, for a major bump, its board-15 ticket in the same run (HYCI-107), so no `labeled` event has to fire before a ticket can exist; until 2026-10-29 a second workflow waited on that event, and the labeller was disabled by hand for a month, which left two upgrades unlabelled and unticketed. The workflow only starts for a Dependabot pull request, so a human pull request pays no extra job, and its fifteen-minute sweep is a heal path: a cron on this repository is a best-effort tick. No job-level label skip is added: normal PR events continue reporting both `ci-tests` and `browser-smoke`, including the existing docs-only scope path. Adding approval text after a failed agent-scope approval guard now requires a new commit to produce a fresh PR event; editing the body alone does not rerun that guard, and rerunning the old event retains its old body.
 - CI Tests runs the launch-admission fixtures (`session-policy-guard.test.py`), runner dispatcher Python fixtures (`runner-dispatch.test.py`, `runner-dispatch.cache.test.py` and `runner-snapshot.test.py`) and `runner-selfupdate.test.sh` from `.claude/skills/ship/scripts/` on GitHub-hosted runners, even for `.claude/`-only PRs. These offline fixtures need no installed runner scripts or credentials.
-- `contabo-1` is registered only to the private reviewer repository, carries `ai-review`, and runs as `htreviewrunner`. Application PR workflows cannot schedule it, and its subscription wrappers are unreachable from hosted runner jobs.
+- No application or review workflow uses a self-hosted runner. The former `contabo-1` review runner is retired with the self-hosted reviewer.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
+- App Smoke validation quietly skips skipped request workflows and successful requests whose exact open production PR is still a draft (HYCI-316), including requests without a PR number in the event payload. It publishes no status and starts no build; `ready_for_review` requests validation again. Failed request workflows, ambiguous PR matches and invalid bases still fail.
 - The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. Both contexts run on every non-draft PR without a label gate; `browser-smoke` is a summary over its two halves (HYCI-32). CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request uses the same four events. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
@@ -416,8 +396,11 @@ copy was rejected ("Unauthorized") and the failure was hidden by
 The trusted `pr-title` guard links same-repository production PRs to the ticket
 in their current GitHub title through the existing MCP task-update API. It uses
 `HYPERTASK_MCP_TOKEN`, not a runner-local binding file. The app checks permission,
-verifies the GitHub PR and returns the saved link. Missing credentials, rejected
-updates or an unconfirmed link fail the guard. Forks, bot titles and generated
+verifies the GitHub PR and returns the saved link. The bind POST and ticket lookup
+retry HTTP 500, 502, 503 and 504 up to twice, after one and two seconds. After
+exhausted server errors, the guard still passes when the ticket already documents
+the pull request. Missing credentials, rejected updates or an unconfirmed link fail
+the guard. Forks, bot titles and generated
 revert titles retain their existing handling. Ticketed runner bots also bind.
 The production-only manual `pr_number` input executes the same trusted title
 entry for live QA and recovery. Delayed runs can link merged PRs.
@@ -427,6 +410,8 @@ entry for live QA and recovery. Delayed runs can link merged PRs.
 `premerge-evidence` passes every open `production` PR with the exact description `test click removed (Valentin 2026-10-21)`. No screen-path, flag-removal, live-mode, browser-click, `premerge.md` or recording evaluation remains. Valentin removed the test click on 2026-10-21 because it was not helping.
 
 New flag definitions that break the default-mode rules still block merge through the separate required `feature-flag-gate`, not `premerge-evidence`. Before any UI, title or label exemption, `.github/scripts/feature-flag-gate.mjs` requires explicit `defaultMode: "EVERYONE"` for new definitions unless their kind is `bugfix` or `internal`, they declare `releaseRisk.highRisk`, they use `OWNER_ONLY` with a valid `releaseRisk.ownerRequest`, or the definition explicitly uses `OWNER_AND_QA` and that same new flag controls at least one extant changed UI entry through the existing runtime coverage logic. Unrelated or deleted UI files do not qualify. Whole-PR runtime coverage rules still apply. The 2026-11-04 house rule requires visible UI to ship at Owner + QA until independent side-by-side Figma QA passes, before widening the flag to Everyone. The flag-switch API enforces a separate agent and evidence, not automatic validation of Figma screenshots. The gate's trusted registry parser rejects internal flags and high-risk flags whose effective default is Everyone, including bugfix flags with an implicit Everyone default. Eligible new flags defaulting to Everyone remain allowed; high-risk flags defaulting to Owner + QA remain allowed. GitHub reads, commit fetches and parsing failures fail closed in that gate.
+
+New or changed high-risk metadata also needs matching structured lasting-harm evidence and a concrete scenario, as described in [Feature flags](https://github.com/hypertask-ai/hypertask/blob/production/docs/feature-flags.md). Unchanged legacy metadata is not invalidated. The check validates the declaration, not whether the scenario is true; review remains necessary.
 
 The publisher still holds its shared lock from validation through the status post, requires a full 40-character head SHA, and re-reads the open PR's production base and head before posting. A closed PR, non-production base, unreadable or incomplete head, changed head/base, lock error or status-write error cannot publish success. The safety net is feature flags, revert, live QA after release, and screenshot comparison tracked in https://app.hypertask.ai/detail/project-4060/550.
 
@@ -470,27 +455,39 @@ processes are not restarted. Targeted offline recovery fixtures run as
 [AI model watch](../.github/workflows/ai-model-watch.yml) runs at 05:43 UTC daily,
 with production-only manual dispatch, on public-repo `ubuntu-latest` (free hosted
 compute). It is non-required, uses Node 24 built-ins with no app install, and
-runs `tests/model-diff.test.cjs` before discovery. `scripts/model-diff --json`
-compares the app catalog with the Vercel AI Gateway and authenticated OpenAI /
-Anthropic lists. Gateway failures warn and fall back; unknown pricing never
-authorizes unconditional automatic shipping. No usable sources fails the watch.
+runs `tests/model-diff.test.cjs` and `tests/model-watch-allowlist.test.cjs`
+before discovery. `scripts/model-diff --json` compares the app catalog with the
+Vercel AI Gateway and authenticated OpenAI / Anthropic lists. Gateway failures
+warn and fall back; unknown pricing never authorizes unconditional automatic
+shipping. No usable sources fails the watch.
+
+A new class files a ticket only when its family is in
+[model-watch.allowlist.json](https://github.com/hypertask-ai/hypertask/blob/production/.github/scripts/model-watch.allowlist.json)
+at or above the version recorded there. Another provider, a size, modality or
+coding side-line, or an older version stays in the run log. Watching a family is
+one line in that file. A newer version of a class we already ship, or a stale
+entry, is always filed. A day where everything watched is premium files nothing,
+so models held for
+[HTPR-7746](https://app.hypertask.ai/detail/project-15/7746) ride along with a
+cheaper finding instead of filing their own ticket.
 
 The existing CI `HYPERTASK_MCP_TOKEN` files board-15 tickets through the MCP
 search/create endpoints; optional `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` enable
 provider fallback. Stable exact-title searches, serialized runs, a stable
-idempotency key and fail-closed search validation prevent duplicate filings.
-Premium discoveries over $5/M input tokens wait for
-[HTPR-7746](https://app.hypertask.ai/detail/project-15/7746). The Action changes
-no app models and grants only `contents: read`; runners follow the indexed
-[update-ai-models skill](../.claude/skills/update-ai-models/SKILL.md) to ship an
-existing-class OpenAI/Anthropic bump or ask Valentin about a new class/provider.
-The saved discovery fixture is synthetic, not current upstream/pricing proof.
+idempotency key and fail-closed search validation prevent duplicate filings. A
+rollup is keyed by the sorted set of watched models it lists, not by the date, so
+the same pending set files once and only a changed set files again. The Action
+changes no app models and grants only `contents: read`; runners follow the
+indexed [update-ai-models skill](../.claude/skills/update-ai-models/SKILL.md) to
+ship an existing-class OpenAI/Anthropic bump or ask Valentin about a new
+class/provider. The saved discovery fixture is synthetic, not current
+upstream/pricing proof.
 
 ## Ship script regressions
 
 The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing the script/unit paths in `docs/ci-policy.yml`, including `.claude/skills/ship/scripts/**`, `.claude/skills/verify-qa/scripts/**`, `scripts/premerge-local.sh` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.
 
-- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only`, `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`, `python3 .claude/skills/ship/scripts/ci-why.test.py`, `bash .claude/skills/ship/scripts/board-check.test.sh`, `bash .claude/skills/ship/scripts/user-unit-check.test.sh`, `python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py` and `node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs`. The full shell suite also contains live authenticated checks and is deliberately excluded.
+- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only`, `bash .claude/skills/setup-runner/scripts/setup-runner.test.sh`, `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`, `python3 .claude/skills/ship/scripts/ci-why.test.py`, `bash .claude/skills/ship/scripts/board-check.test.sh`, `bash .claude/skills/ship/scripts/user-unit-check.test.sh`, `python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py` and `node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs`. The full shell suite also contains live authenticated checks and is deliberately excluded.
 - Runs `python3 .claude/skills/ship/scripts/ht-hax-runner.test.py` against isolated home folders and fake process/load tools. It checks load-only launches, pauses, active sessions, target bounds, setup failure and validation before enabling the keeper timer. Interactive lifecycle fixtures check brief delivery, final-line detection, saved output, idle cooldown, failed-start watcher cleanup and bounded timeout recovery; they start no real runners.
 - Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, and Git for repository-scope detection. Sets up Node 24 for the dependency-free QA identity tests, which use only temporary storage-state fixtures and a loopback HTTP server (YPER4-607). No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
 - Uses a temporary HOME and the harnesses' temporary state and local Git/GitHub/Hypertask fixtures. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
@@ -545,9 +542,16 @@ problems fail the job and appear in the step summary. It is not a required check
 and does not alter the ruleset. Existing stale pages are reported, not allowlisted.
 
 The separately installed user timer performs bounded source-only Codex reads and
-files at most one drift ticket per ISO week. It never drives the app. A runner
-ships documentation repairs through `/ship` and executes only the listed live
-recipes with `verify-qa`. See the
+files at most one drift ticket per ISO week on board 11514 (labels `CI` and
+`Hypertask CI`). It never drives the app. The Monday live run and board filing
+are documented in [docs/ci.md](../ci.md#feature-map-citation-check-yper4-610).
+The `File fleet-board weekly result` step uses `HYPERTASK_FLEET_BOARD_MCP_TOKEN`,
+the CI Boss board credential, because `HYPERTASK_MCP_TOKEN` is Error Alerts on
+board 15 only. CI Boss is already a member of board 11514.
+The same job files on a manual dispatch with `head=production` and
+`journey=inbox-cycle`, which is how a week's live proof is re-run on demand.
+A runner ships documentation repairs through `/ship` and executes only the listed
+live recipes with `verify-qa` after deploy. See the
 [maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
 installation, state, load holds, limits and offline tests.
 
@@ -618,8 +622,11 @@ HYCI-106 replaces the runner image version with a fingerprint of the fonts that 
 the screens: `scripts/visual-font-fingerprint.mjs` asks fontconfig which file backs each
 family the render can reach (`IBM Plex Sans`, `ui-sans-serif`, `system-ui`, `sans-serif`,
 `serif`, `monospace`, `emoji`), hashes those files and every file under `/etc/fonts`, and
-prints sixteen hex characters. It runs after the pinned Chromium and the three pinned
-font packages are installed, so that step now runs before the baseline is restored.
+prints sixteen hex characters. It runs after pinned Chromium and the cached browser
+fonts are registered, before the baseline is restored. HYCI-282 removes Ubuntu package
+downloads: the helper seeds its cache from the hosted image's Liberation and Noto Color Emoji
+fonts, requires both families, and fails if fontconfig cannot
+register them. The v2 cache key excludes earlier, potentially incomplete font caches.
 GitHub rolled `ubuntu-latest` twice inside one hour on 2026-11-03 and each image missed
 the other's saved screens: `visual-compare` rebuilt the base app for 316-325 s of build
 and 94-97 s of capture, against 90-107 s of head work alone when the screens are reused.
@@ -663,6 +670,8 @@ Before a PR exists, push a branch and run:
 
 ```bash
 scripts/verify-qa <branch> inbox-cycle
+# Or the hands-free AI chat and Ctrl+J drives with their broken-shortcut controls
+scripts/verify-qa <branch> hands-free-drives
 # Direct equivalent (helper resolves the pushed branch to an immutable SHA):
 token=$(gh-app-token) && test -n "$token" || exit 1
 GH_TOKEN="$token" gh workflow run visual-regression.yml -f head=<branch-or-sha> -f journey=inbox-cycle
@@ -691,10 +700,10 @@ secrets; checkout does not persist its read-only token. Services disappear with
 the runner, and an EXIT trap stops the app/search. AI/search/queue behavior is
 fixture-based, not proof of real model quality, ranking or delivery.
 
-Only `inbox-cycle` is supported initially. `inbox-cycle-broken` deliberately
-changes the expected reminder title after the doctor passes, proving that a real
-browser assertion fails and propagates a failed job. Unknown journeys fail
-closed, never silently fall back. Failures do not use report-only mode.
+Supported journeys are `inbox-cycle`, `inbox-cycle-broken` and
+`hands-free-drives`. The broken variants deliberately break a fixture or a
+shortcut and must fail a named step, so a drive cannot pass by doing nothing.
+Unknown journeys fail closed. Failures do not use report-only mode.
 
 The `verify-qa-<run-id>-<attempt>` artifact is uploaded on success and failure,
 with doctor results/screenshot, journey results/screenshots, sanitized build,
@@ -715,14 +724,12 @@ PR gates, flags or deployment behavior change.
 
 The manifest at [`.github/actions/action-archive-cache-manifest.txt`](../.github/actions/action-archive-cache-manifest.txt) is the single inventory of cached action commits. Workflow `uses:` entries carry the same 40-character SHAs; release tags remain comments for readability and never decide execution.
 
-- **Populate:** after changing the manifest, merge the pinned workflow change first or populate the new archive before dispatching jobs. On the runner host, update a trusted `production` checkout and run `sudo .github/scripts/install-action-archive-cache.sh`. The updater downloads by commit SHA, validates the gzip/tar structure, writes mode `0444`, and atomically publishes each archive. App CI runs on GitHub-hosted runners and downloads actions normally; the host-level cache only accelerates the self-hosted review and analytics lanes.
+- **Populate:** after changing the manifest, merge the pinned workflow change first or populate the new archive before dispatching jobs. On the runner host, update a trusted `production` checkout and run `sudo .github/scripts/install-action-archive-cache.sh`. The updater downloads by commit SHA, validates the gzip/tar structure, writes mode `0444`, and atomically publishes each archive. App CI runs on GitHub-hosted runners and downloads actions normally; the host-level cache only accelerates the analytics lane.
 - **Install:** first-time hosts run the same command with `--install-services`. It writes a root-owned systemd drop-in for every local `actions.runner.*.service`, reloads systemd, and restarts each service. Run this while the lanes are idle because restart interrupts an active job.
 - **Concurrency:** the updater holds `$CACHE/.populate.lock`. Parallel invocations serialize, and an already-valid immutable archive is not downloaded again. Runners only read archives; they never populate or mutate the cache.
 - **Invalidation:** a new action release gets a new manifest SHA and a new archive. Old commit archives stay available to queued jobs. A corrupt exact-SHA file is quarantined as `.invalid.<UTC timestamp>.<pid>` and replaced; remove quarantined files only after inspection.
 - **Upstream outage:** cached commits continue through archive preparation without a codeload request. A manifest miss still uses the runner's ordinary GitHub download path; do not weaken checks or move work to paid runners. If the needed commit is not cached, wait for codeload recovery or populate it from a trusted copy.
 - **Restart behavior:** cache content changes are visible immediately and need no service restart. Restart is required only when adding or changing the `ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE` drop-in. Verify with `systemctl is-active` and a worker log containing `Found action archive ... in cache directory` for every action used by the representative job.
-
-The private reviewer workflow is commit-pinned separately in `valentinyeo/hypertask-reviewer`; its checkout and setup-node SHAs must remain present in this shared manifest.
 
 ## Reviewer engine deployment proof
 
@@ -870,6 +877,21 @@ To refresh a baseline, run the live script with a QA storage-state file in
 outside the committed fixture folder. Review the full output, promote it to
 `recorded.json`, then run `node scripts/task-writer-eval.cjs --save-baseline`.
 The offline replay binds the complete corpus hash and recomputes every score.
+
+### Model-pinned quality eval
+
+The live workflow cannot choose a model, so it cannot compare Haiku with Sonnet. The
+`task-writer-pinned` job in the same workflow runs
+`node scripts/task-writer-eval.cjs --pinned` on manual dispatch from production only, with the
+`pinned` input set to true. It never runs on a schedule. It builds the real writer
+prompt from the product's own prompt builders, uses the approved $10-capped
+`OPENROUTER_EVAL_KEY` for Haiku 5.5 at low effort and Sonnet 5.5 thinking, and scores
+each draft against the real ticket: label F1, brain, priority and size exact match
+with always-blank baselines and abstain precision, plus a blind Sonnet judge that
+runs both orders and counts a win or loss only when both agree. It reports input
+tokens and p50 latency per model. It is report only: one trial on twenty-two cases
+is noisy, so nothing gates on it. Expected fields come from the frozen
+`tests/fixtures/task-writer-eval/gold.json`, taken from our own boards only.
 
 ## Incident correlation replay
 
@@ -1202,12 +1224,17 @@ it never replaces a required check and adds no required context.
 
 Both gates stay inside the time budget. ESLint and tsc are killed, with their
 process group, at 10 seconds for a normal change and 60 seconds for a full lint or
-full type check; a killed or skipped gate never blocks the push, because a killed
-process is not a verdict. `npm install` is
-required for the hook to run: without `node_modules` it reports the missing tool
-and passes. `HYPERTASK_SKIP_QUICK_CHECK=1` skips the hook for one push. The hook reads Git's
-ref updates and passes the push without checking when the pushed commit is not
-the checked-out one, because the tools read the working copy.
+full type check. A gate that overruns its budget reruns once with the longer
+limit; if it still cannot finish, the push stops and the message names the files
+and the command that reruns the check. Only a kill from outside the hook (a
+SIGKILL or exit 137 from the machine) still passes the push, and it prints
+`NOT TYPE CHECKED: <files>` so the gap is loud. Timeouts and a missing tool never
+pass: without `node_modules` the hook stops the push and asks for `npm install`.
+No environment variable switches the check off.
+
+The hook reads Git's ref updates and passes the push without checking when the
+pushed commit is not the checked-out one, because the tools read the working
+copy.
 
 `.github/workflows/quick-check-proof.yml` measures the real hook on hosted
 Ubuntu, is path-filtered to the hook files, and adds no job to ordinary pull
@@ -1804,3 +1831,34 @@ is never judged as a watch: it carries `current: false`, because a count that is
 younger than a week has no week to be judged on and must not read as a broken watch.
 The one gap it cannot close is a report that never runs again, which by definition
 cannot count itself: that is what the ticket recheck is for.
+
+## No comments in the GitHub scripts and workflows (HTPR-8937)
+
+The rule "no explanatory code comments" was enforced by ESLint's
+`local/no-comments` over `src`, `e2e`, `scripts`, `tests` and `.claude` only, so
+`.github/scripts` and `.github/workflows` drifted: 645 narrative comments in 31 of
+the 60 GitHub scripts and 976 comment lines in 30 of the 47 workflows, after a
+reviewer had already caught the same thing by hand in seven pull requests.
+
+The required `ci-tests` job now runs `scripts/check-no-comments.mjs` as its own
+static lane, launched beside the board boundary gate so it also runs on a
+workflow-only PR, where `ci-change-scope.cjs` deliberately keeps the build
+skipped. It reuses the same rule and the same allowed tool markers as ESLint
+(`eslint-local-rules/no-comments.mjs` via `scripts/strip-comments.mjs`), so a
+shebang, an `eslint-disable` directive, `@ts-expect-error <reason>` and the
+webpack/vite pragmas still pass. Every other file in scope is shell, Python,
+workflow YAML or an extensionless executable with a shebang, which ESLint cannot
+parse, so a line whose first non-space character is `#` is a comment there, with
+the tool markers those languages need allowed: `yaml-language-server`,
+`actionlint`, `yamllint`, `shellcheck`, `renovate:`, `zizmor:`, `gitleaks:`,
+`prettier-ignore`, `nosemgrep`, `noqa`, `type:`, `pylint:`, `fmt:`, `isort:`,
+`mypy:`, `pragma:` and `pyright:`.
+
+Existing debt is grandfathered by exact per-file counts in
+`.github/no-comments-baseline.json`, the same ratchet shape as the style-guide
+baseline; the file is generated and never hand-edited. A file may keep the comments it already has; one more fails with
+`Comment in <file>:<line>. Remove it and name the intent in code.` A new script or
+workflow gets no allowance and fails on its first comment. Unused allowances do not
+fail, so cleaning a file is safe, and `node scripts/check-no-comments.mjs
+--write-baseline` shrinks the baseline to the current counts when that cleanup
+lands. No new required check is added.

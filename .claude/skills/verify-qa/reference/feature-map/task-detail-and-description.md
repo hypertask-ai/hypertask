@@ -1,18 +1,32 @@
 # Task detail and description
 
-## How a customer reaches it
+## Sub-features
+
+- `ctrl-o-ticket-link-labels` Ctrl+O ticket link labels.
+- `background-smart-labels` Background smart labels.
+- `description-ai-draft-review` Description AI draft review.
+
+## How to get to it (user POV)
 
 `https://app.hypertask.ai/detail/project-<id>/<taskNumber>`, opened from a
 board card, an Inbox notification, or a deep link.
 
-## How to drive it
+## Driving it with agent-browser
 
 `agent-browser`, headless, `?realtime=on`. Open the task, edit the
 description, save, then leave and reopen the task (or reload) to confirm the
 edit stuck. If the ticket involves AI-edited descriptions, trigger that flow
 specifically rather than a manual edit.
 
-## What usually breaks
+**Hands-free drive:**
+`node .claude/skills/verify-qa/scripts/task-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+Checks the title and saved description, including bold.
+Prints PASS/FAIL per step and `task ok`. Loopback only.
+`--break title` must print `negative control ok`.
+Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+
+
+## Gotchas
 
 - Open task not refreshing its description when a realtime update drops
   ([HTPR-6281](https://app.hypertask.ai/detail/project-15/6281), fixed then reverted then re-landed as `#746`, the kind of bug
@@ -28,7 +42,7 @@ specifically rather than a manual edit.
   edge at 900, 1024 and 1100px, and the title must not move at 1180px and
   wider or on a phone.
 
-## What proof to collect
+### What proof to collect
 
 For a manual edit, screenshot the description before and after, then a
 **reload check**: close and reopen the task (or full page reload) and
@@ -49,7 +63,7 @@ capture it above the Send box, with no overlap or estimated-height gap. Check
 empty and one-comment threads, repeat with `htpr-6899-stable-layout` on and off in a disposable local build, and
 confirm the separate fixed mobile composer at 390x844 is unchanged.
 
-## Ctrl+O ticket link labels
+### Ctrl+O ticket link labels
 
 Open a QA Sandbox task containing absolute and relative ticket links in its
 saved description or comments. Wait for the composer, then press Ctrl+O.
@@ -63,13 +77,13 @@ attachments keep their labels and destinations. Check after reload and at
 The `htpr-8096-ctrl-o-ticket-titles` bugfix flag defaults to Everyone. Off
 preserves the old link labels; test Off only in an isolated route test.
 
-With `htpr-8804-visible-links-first` at Owner + QA, open Ctrl+O on a ticket
+With `htpr-8804-visible-links-first` on (Everyone by default), open Ctrl+O on a ticket
 with visible and offscreen saved links, including in an embedded ticket panel.
 Visible links come first; both groups retain their previous order. A draft
 comment must not promote a matching offscreen saved link. With the flag Off,
-all links retain their previous order. The flag defaults to Owner + QA.
+all links retain their previous order. The flag defaults to Everyone.
 
-## Background smart labels
+### Background smart labels
 
 Creating a task schedules `scheduleClassifyNewTaskAiLabels`; changing its title
 or description schedules `scheduleClassifyTaskAiLabels`. Use only disposable
@@ -101,13 +115,13 @@ refusal coverage as UNREACHABLE unless a QA team is already exhausted; local
 fixtures do not replace live proof. Read production task-route logs after the
 live create/edit to confirm their background jobs did not emit allowance errors.
 
-## Cleanup
+### Cleanup
 
 If you created a test task, hard-delete it via the product UI. Never leave a
 task you created (the smoke prefix is `QA_TASK_PREFIX` in
 `e2e/smoke/lib/boardSetup.ts`) past the run.
 
-## Description AI draft review
+### Description AI draft review
 
 With `htpr-8173-description-inline-drafts` on, open a disposable task's
 **Edit with AI** button. Also check Ctrl+J / Cmd+J from the focused description

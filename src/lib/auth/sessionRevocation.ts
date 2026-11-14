@@ -1,18 +1,25 @@
 import { createHash } from 'crypto'
 
-import { verifiedSessionExpiry } from '@/lib/auth/session'
+import { SESSION_TTL_SECONDS, sessionRevocationClaims } from '@/lib/auth/session'
 import { getRedis } from '@/lib/redis'
 
 const revokedTokens = new Map<string, number>()
 const READ_DEADLINE_MS = 300
 const WRITE_DEADLINE_MS = 500
 
+const userRevokedBeforeKey = (userId: number) => `ht_session:user-revoked-before:${userId}`
+
 function verifiedToken(token: string | undefined) {
-  const exp = verifiedSessionExpiry(token)
-  if (exp === null || !token) return null
+  const claims = sessionRevocationClaims(token)
+  if (!claims || !token) return null
 
   const fingerprint = createHash('sha256').update(token.split('.')[0]).digest('hex')
-  return { fingerprint, exp }
+  return {
+    fingerprint,
+    exp: claims.expiresAt,
+    userId: claims.userId,
+    issuedAt: claims.issuedAt,
+  }
 }
 
 export function sessionTokenFingerprint(token: string | undefined): string | null {
@@ -61,6 +68,24 @@ export async function revokeSessionToken(token: string | undefined): Promise<voi
   }
 }
 
+export async function revokeOtherUserSessions(userId: number): Promise<boolean> {
+  const revokedBefore = Math.floor(Date.now() / 1000)
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await withDeadline(async () => {
+        const redis = await getRedis()
+        await redis.set(userRevokedBeforeKey(userId), String(revokedBefore), 'EX', SESSION_TTL_SECONDS)
+      }, WRITE_DEADLINE_MS)
+      return true
+    } catch {
+      if (attempt === 1) console.error('Ending other sessions failed after retry')
+    }
+  }
+
+  return false
+}
+
 export async function isSessionTokenRevoked(
   token: string | undefined,
   { failClosed }: { failClosed: boolean },
@@ -75,10 +100,14 @@ export async function isSessionTokenRevoked(
   }
 
   try {
-    const revoked = await withDeadline(async () => {
+    const [revoked, revokedBefore] = await withDeadline(async () => {
       const redis = await getRedis()
-      return await redis.get(`ht_session:revoked:${verified.fingerprint}`)
+      return await Promise.all([
+        redis.get(`ht_session:revoked:${verified.fingerprint}`),
+        redis.get(userRevokedBeforeKey(verified.userId)),
+      ])
     }, READ_DEADLINE_MS)
+    if (revokedBefore !== null && verified.issuedAt < Number(revokedBefore)) return true
     if (revoked !== null) {
       cacheRevocation(verified.fingerprint, verified.exp)
       return true

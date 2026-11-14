@@ -44,6 +44,7 @@ const mocks = {
   "@/lib/agentStatus/minuteClock": { useMinuteClock: () => 0 },
   "@/lib/agentStatus/chip": { agentStatusIsFresh: () => false, agentStatusText: () => "", agentStepFor: () => "" },
   "@/lib/timeDuration": { formatElapsed: (seconds) => `${seconds}s` },
+  "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   "@/lib/boardTimeTotals": { displayedBoardTimeSeconds: (total) => total?.totalSeconds ?? 0 },
   "@/hooks/General/useGetUserDrafts": {
     useGetUserDrafts: (userId) => {
@@ -73,6 +74,7 @@ function load(relative) {
   compiledModules[relative] = moduleExports;
   new Function("require", "exports", compiled)((name) => {
     if (name === "./BoardCardData") return load("src/components/PageComponents/Kanban/KanbanTaskComponents/BoardCardData.tsx");
+    if (name === "@/lib/kanban/cardLabels") return load("src/lib/kanban/cardLabels.ts");
     if (name in mocks) return mocks[name];
     return stubModule(name);
   }, moduleExports);

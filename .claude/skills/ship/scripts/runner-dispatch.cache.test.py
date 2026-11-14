@@ -41,7 +41,7 @@ class CacheTests(unittest.TestCase):
                   "updatedAt": "v1", "commentCount": 1},
                  {"ticketNumber": "HTPR-2", "title": "second", "section": "Todo",
                   "updatedAt": "v1", "commentCount": 0}],
-            4060: [{"ticketNumber": "YPER4-1", "title": "third", "section": "Backlog",
+            11514: [{"ticketNumber": "YPER4-1", "title": "third", "section": "Backlog",
                     "updatedAt": "v1", "commentCount": 1}],
         }
         self.comments = {"HTPR-1": [comment()], "HTPR-2": [], "YPER4-1": [comment()]}
@@ -186,18 +186,18 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(self.summary, ("2", "0", "3", "false", "false", "0"))
         self.assertEqual(self.cache()["runs"], 2)
         self.assertEqual(set(self.cache()), {"schema", "runs", "entries"})
-        self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-1", "15:HTPR-2", "4060:YPER4-1"})
+        self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-1", "15:HTPR-2", "11514:YPER4-1"})
 
     def test_waiting_ticket_comments_are_fetched_and_cached_for_maintenance(self):
         self.boards[15][0]["section"] = "Valentin Review"
-        self.boards[4060][0]["section"] = "UX Sign-off"
+        self.boards[11514][0]["section"] = "UX Sign-off"
         self.run_dispatch()
         self.assertEqual(set(self.fetched()), set(self.comments))
-        self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-1", "15:HTPR-2", "4060:YPER4-1"})
+        self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-1", "15:HTPR-2", "11514:YPER4-1"})
         self.run_dispatch()
         self.assertEqual(self.fetched(), [])
         self.assertEqual(self.summary[2], "3")
-        self.boards[4060][0]["updatedAt"] = "v2"
+        self.boards[11514][0]["updatedAt"] = "v2"
         self.run_dispatch()
         self.assertEqual(self.fetched(), ["YPER4-1"])
 
@@ -546,7 +546,7 @@ class CacheTests(unittest.TestCase):
     def test_prunes_absent_and_irrelevant_entries_after_complete_board_read(self):
         self.run_dispatch()
         self.boards[15].pop(0)
-        self.boards[4060][0]["section"] = "Done"
+        self.boards[11514][0]["section"] = "Done"
         self.run_dispatch()
         self.assertEqual(set(self.cache()["entries"]), {"15:HTPR-2"})
         self.assertEqual(self.fetched(), [])
@@ -554,7 +554,7 @@ class CacheTests(unittest.TestCase):
     def test_task_pagination_failure_preserves_cache_and_skips_dispatch(self):
         self.run_dispatch()
         before = self.cache_path.read_bytes()
-        self.replies[("tasks", 4060, None)] = {"success": True, "tasks": [], "total": 1}
+        self.replies[("tasks", 11514, None)] = {"success": True, "tasks": [], "total": 1}
         with patch.object(m, "dispatch") as dispatch, self.assertRaises(ValueError):
             self.run_dispatch()
         dispatch.assert_not_called()
@@ -675,7 +675,7 @@ class CacheTests(unittest.TestCase):
 
     def test_cached_free_ticket_local_claim_prevents_second_runner(self):
         self.boards[15] = self.boards[15][:1]
-        self.boards[4060] = []
+        self.boards[11514] = []
         self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "done"}]
         self.run_dispatch()
         self.assertIn("sent=HTPR-1", self.stdout.getvalue())

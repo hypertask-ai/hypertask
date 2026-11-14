@@ -1,8 +1,12 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7856_SUMMARY_CONTEXT_FLAG } from "@/lib/flags/keys";
+import { HTPR_8987_CHAT_BLOCKER_READ_FLAG } from "@/lib/flags/definitions/htpr-8987-chat-blocker-read";
+import type { IBlockingTask } from "@/models/model";
 import prisma from "@/lib/prisma";
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { blockedByRelationsInclude, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { attachOpenBlockingTasks, type TaskWithBlockingRelations } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
+import { scrubStoredTaskSummary, withPublicWaitingActivities } from "@/lib/tasks/redactWaitingActivities";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 
 export async function loadCurrentTaskContext(
@@ -24,6 +28,10 @@ export async function loadCurrentTaskContext(
   if (await isFeatureEnabled(HTPR_7856_SUMMARY_CONTEXT_FLAG, userId)) {
     compact = !options?.fullTicketContext;
   }
+  const blockersEnabled = await isFeatureEnabled(
+    HTPR_8987_CHAT_BLOCKER_READ_FLAG,
+    userId,
+  );
 
   const tasks = await prisma.task.findMany({
     where: {
@@ -35,9 +43,13 @@ export async function loadCurrentTaskContext(
     },
     select: {
       id: true,
+      projectId: true,
       title: true,
       ticketNumber: true,
       description_: { select: { content: true } },
+      ...(blockersEnabled
+        ? { relatedFromTasks: blockedByRelationsInclude(userId, agentId, options?.teamScope) }
+        : {}),
       ...(compact ? { Task_Summary: { take: 1, select: { content: true } } } : {}),
       comments: {
         orderBy: { createdAt: "desc" },
@@ -55,9 +67,17 @@ export async function loadCurrentTaskContext(
   });
   if (tasks.length === 0) return "";
 
-  return tasks
-    .map((task) => formatTaskContext(task, options?.role ?? "primary", compact))
-    .join("\n\n");
+  const tasksWithBlockers = blockersEnabled
+    ? await attachOpenBlockingTasks(
+        tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
+      )
+    : tasks;
+
+  return (await Promise.all(tasksWithBlockers.map(async (task) => {
+    const summary = task.Task_Summary?.[0];
+    const content = summary?.content ? await scrubStoredTaskSummary(summary.content, task.id, userId, task.projectId) : summary?.content;
+    return { ...task, comments: await withPublicWaitingActivities(task.comments, userId, task.projectId), ...(summary ? { Task_Summary: [{ ...summary, content: content ?? null }] } : {}) };
+  }))).map((task) => formatTaskContext(task, options?.role ?? "primary", compact, blockersEnabled)).join("\n\n");
 }
 
 export async function resolveAiUsageTaskId(args: {
@@ -164,6 +184,7 @@ export function formatTaskContext(
     title: string;
     ticketNumber: string | null;
     description_: { content: string | null } | null;
+    blockingTasks?: IBlockingTask[];
     Task_Summary?: Array<{ content: string | null }>;
     comments: Array<{
       text: string | null;
@@ -175,7 +196,8 @@ export function formatTaskContext(
     }>;
   },
   role: "primary" | "related" = "primary",
-  compact = false
+  compact = false,
+  includeBlockers = false,
 ): string {
   const description = task.description_?.content?.trim() ?? "";
   const summary = task.Task_Summary?.[0]?.content?.replace(
@@ -202,6 +224,10 @@ export function formatTaskContext(
   const label = task.ticketNumber
     ? `${task.ticketNumber}: ${task.title}`
     : task.title;
+  const blockerLines = (task.blockingTasks ?? []).map((blocker) => {
+    const ticket = blocker.ticketNumber || `project-${blocker.projectId}/${blocker.uniqueIndex}`;
+    return `- ${ticket}: ${blocker.title} (${blocker.section})`;
+  });
   const heading =
     role === "primary"
       ? `=== THIS TICKET (${label}) — a ticket the user is asking about; use it as primary context ===`
@@ -212,6 +238,13 @@ export function formatTaskContext(
     compact
       ? `Ticket ${summary ? "summary" : "description"} (fetch full ticket before editing): ${summary || htmlToText(description) || "(empty)"}`
       : `Description HTML (preserve this block structure when editing): ${description || "(empty)"}`,
+    ...(includeBlockers
+      ? [
+          "",
+          "Open blockers (BlockedBy):",
+          blockerLines.length ? blockerLines.join("\n") : "(none)",
+        ]
+      : []),
     "",
     compact ? "Latest 20 comments (oldest first):" : "Comments (oldest first):",
     comments.length ? comments.join("\n") : "(no comments)",

@@ -25,8 +25,8 @@ const ACTIONS = [
   },
   {
     id: "task.move",
-    person: "Move a task to another column or board",
-    commands: /^(moveToColumn|bulkMoveToColumn|movetasktodifferentboard)$/,
+    person: "Move one or more tasks to another column or board",
+    commands: /^(moveToColumn|bulkMoveToColumn|movetasktodifferentboard|bulkMoveToBoard)$/,
     cli: "task move",
     mcp: "/mcp/tasks/move",
     ai: "move_task_between_boards",
@@ -262,7 +262,7 @@ const SECONDARY = [
   {
     id: "settings.pane",
     person: "Settings panes, AI model picks, API keys, notifications and plans",
-    commands: /^(settings|billing|manageSubscriptions|manageTeamAIAPIKeys|profilePicture|shortcuts|quickTips|helpCenter|latestUpdates|onboardingTour|startKanbanTutorial|startTaskWriterTutorial|goToWelcome|sendFeedback|logout|switchAccount|generateMcpToken|cliInstall|restApi|speechToText|undoLatest|reloadApp|subtaskSettings)/,
+    commands: /^(settings|billing|manageSubscriptions|manageTeamAIAPIKeys|profilePicture|shortcuts|quickTips|helpCenter|latestUpdates|onboardingTour|startKanbanTutorial|startTaskWriterTutorial|goToWelcome|sendFeedback|logout|switchAccount|generateMcpToken|cliInstall|restApi|speechToText|undoLatest|reloadApp|subtaskSettings|cardSettings)/,
   },
   {
     id: "navigate",

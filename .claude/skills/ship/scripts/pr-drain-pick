@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 REPO = "hypertask-ai/hypertask"
 CI_RUNNER_PREFIX = "ci-runner-"
@@ -45,7 +46,7 @@ def rank(pr, now):
     idle = now - parse(pr["updatedAt"])
     if pr["isDraft"]:
         return (1 if pr["headRefName"].startswith("dependabot/") else 0, pr["updatedAt"], pr["number"])
-    red = any(check.get("conclusion") in ("FAILURE", "TIMED_OUT") or
+    red = pr.get("red", False) or any(check.get("conclusion") in ("FAILURE", "TIMED_OUT") or
               check.get("state") in ("FAILURE", "ERROR")
               for check in pr.get("statusCheckRollup") or [])
     if red and idle > RED_IDLE:
@@ -65,6 +66,31 @@ def freeze_rank(pr, now, owner, mine):
     return (0, pr["updatedAt"], pr["number"])
 
 
+def shared_prs():
+    path = Path(os.environ.get("FLEET_PICK_STATE") or
+                Path.home() / ".local/state/fleet-pick") / "open-prs.json"
+    try:
+        snapshot = json.loads(path.read_text())
+        age = time.time() - snapshot["at"]
+        prs = snapshot["prs"]
+        if not 0 <= age < 120 or not isinstance(prs, list) or len(prs) >= 1000:
+            return None
+        if not all(isinstance(p, dict) and type(p.get("number")) is int and
+                   isinstance(p.get("title"), str) and isinstance(p.get("branch"), str) and
+                   isinstance(p.get("updated"), str) and type(p.get("draft")) is bool and
+                   type(p.get("red")) is bool for p in prs):
+            return None
+        if len({p["number"] for p in prs}) != len(prs):
+            return None
+        for p in prs:
+            parse(p["updated"])
+        return [{"number": p["number"], "title": p["title"], "headRefName": p["branch"],
+                 "updatedAt": p["updated"], "isDraft": p["draft"],
+                 "red": p["red"]} for p in prs]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def main():
     dry_run = sys.argv[1:] == ["--dry-run"]
     if sys.argv[1:] and not dry_run:
@@ -75,11 +101,13 @@ def main():
     token = subprocess.run(["gh-app-token"], capture_output=True, text=True, check=True).stdout.strip()
     if not token:
         sys.exit("pr-drain-pick: empty GitHub App token")
-    output = subprocess.run([
-        "gh", "pr", "list", "--repo", REPO, "--base", "production", "--state", "open",
-        "--limit", "1000", "--json", "number,title,isDraft,headRefName,updatedAt,statusCheckRollup",
-    ], env=dict(os.environ, GH_TOKEN=token), capture_output=True, text=True, check=True).stdout
-    prs = json.loads(output)
+    prs = shared_prs()
+    if prs is None:
+        output = subprocess.run([
+            "gh", "pr", "list", "--repo", REPO, "--base", "production", "--state", "open",
+            "--limit", "1000", "--json", "number,title,isDraft,headRefName,updatedAt,statusCheckRollup",
+        ], env=dict(os.environ, GH_TOKEN=token), capture_output=True, text=True, check=True).stdout
+        prs = json.loads(output)
     if not isinstance(prs, list) or len(prs) >= 1000:
         sys.exit("pr-drain-pick: incomplete PR list")
     now = dt.datetime.now(dt.timezone.utc)

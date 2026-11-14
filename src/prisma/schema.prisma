@@ -579,6 +579,18 @@ model ManagerLeaseGrant {
   @@index([agentId, expiresAt])
 }
 
+model ManagerLeaseOperation {
+  id          Int       @id @default(autoincrement())
+  agentId     String
+  operationId String    @db.VarChar(64)
+  action      String    @db.VarChar(20)
+  grantHash   String    @db.VarChar(64)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([agentId, operationId])
+}
+
 model FigmaConnection {
   userId                Int      @id
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -656,9 +668,11 @@ model UserSetting {
   // Inbox behaviour: sending a comment on a task that carries an inbox
   // notification archives that notification and moves on to the next task.
   inboxAdvanceOnSend       Boolean       @default(true)
+  inboxSplitsOverflowHidden Boolean      @default(false)
   // Mirror of emoji-mart's frequently-used {emojiId: count} map, so the picker's Frequently row persists across devices.
   emojiFrequency           Json?
   calendarViews            Json?
+  cardParts                Json?
 }
 
 // HTPR-7622: one row per setting change written to the database, created inside the same
@@ -759,6 +773,7 @@ model TeamByokApiKey {
   provider     String
   ciphertext   String?  @db.Text
   enabled      Boolean  @default(false)
+  alwaysUse    Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1113,6 +1128,10 @@ model View {
   // Table-view sort; app-level column keys (see TABLE_COLUMN_KEYS), not a DB enum.
   table_sort_column     String?
   table_sort_direction  String?
+  table_sort_stack      Json?
+  table_columns         Json?
+  table_group_by        String?
+  table_collapsed_sections String?
   // Optional saved surface preference. App-validated to Board/Table; null inherits
   // the user's persisted browser preference.
   board_layout          String?
@@ -1228,6 +1247,8 @@ model Task {
   blockerCommentId    Int?            @unique
   blockerComment      Comment?        @relation("TaskBlockerComment", fields: [blockerCommentId], references: [id], onDelete: SetNull)
   waitingOnUserId     Int?
+  waitingOnAgentId    String?
+  waitingOnAgent      Agent?          @relation("TaskWaitingOnAgent", fields: [waitingOnAgentId], references: [id], onDelete: SetNull)
   waitingOnSetById    Int?
   waitingOnSetAt      DateTime?
   dueDate             DateTime?
@@ -1321,10 +1342,12 @@ model Task {
   // MCP my-tasks orders undated work by updatedAt before applying its row cap.
   @@index([dueDate, updatedAt(sort: Desc)])
   @@index([waitingOnUserId])
+  @@index([waitingOnAgentId])
   @@index([agentTaskCreatedPendingAt, agentTaskCreatedReadyAt, agentTaskCreatedEmittedAt])
   // Backs the ticketNumber lookup in linkifyTicketRefs.ts (AI responses linkify
   // ticket refs on most turns); applied to prod Neon via CREATE INDEX CONCURRENTLY.
   @@index([ticketNumber])
+  @@index([ticketNumber(ops: raw("gin_trgm_ops"))], map: "Task_ticketNumber_trgm_idx", type: Gin)
   @@unique([projectId, uniqueIndex])
 }
 
@@ -2158,6 +2181,11 @@ model Notification {
   // its display text from a related entity (comment/task/reaction); a
   // proactive agent message has none of those, so it needs its own text.
   message String? @db.Text
+  needsYouScore Int?
+  needsYouReason String?
+  needsYouSource String?
+  needsYouCostUsd Float?
+  needsYouScoredAt DateTime?
 
   @@index([taskId, userId, status, createdAt])
   @@index([userId, status, agentId, createdAt])
@@ -2202,6 +2230,8 @@ model Logs {
   LoggedById Int?
   LoggedBy   User?    @relation(fields: [LoggedById], references: [id])
   status     Status
+
+  @@index([LoggedById, createdAt])
 }
 
 model Announcments {
@@ -2454,6 +2484,8 @@ model OAuthClientGrant {
 }
 
 model OAuthAuthorizationCode {
+  devicePairingId String?
+  devicePairing   DevicePairing? @relation(fields: [devicePairingId], references: [id], onDelete: Cascade)
   code          String   @id @db.VarChar(64)
   client_id     String   @db.VarChar(64)
   client        OAuthClient @relation(fields: [client_id], references: [client_id], onDelete: Cascade)
@@ -2744,6 +2776,9 @@ model Agent {
   // Monotonic credential/runtime generation. Heartbeats from a destroyed or
   // rotated token can never replace state from a newer generation.
   runtimeGeneration         Int       @default(1)
+  devicePairingId           String? @unique
+  devicePairing             DevicePairing? @relation("AgentPendingPairing", fields: [devicePairingId], references: [id], onDelete: SetNull)
+  issuedDevicePairing       DevicePairing? @relation("DevicePairingAgent")
 
   runtimeType               AgentRuntimeType @default(EXTERNAL)
   prompt                    String?   @db.Text
@@ -2758,6 +2793,7 @@ model Agent {
   user                      User @relation(fields: [userId], references: [id])
 
   tasks                     Task[]
+  waitingTasks              Task[]         @relation("TaskWaitingOnAgent")
   comments                  Comment[]
   pages                     Page[]
   reports                   Report[]
@@ -2939,6 +2975,30 @@ model AiUsage {
   @@index([userId, createdAt])
 }
 
+model AutoModelShadow {
+  id            BigInt   @id @default(autoincrement())
+  createdAt     DateTime @default(now())
+  userId        Int
+  teamId        String?
+  projectId     Int?
+  chatSessionId String?
+  feature       String
+  autoTier      Int
+  autoStepUp    Int      @default(0)
+  autoModelKey  String?
+  jevLevel      String?
+  jevTier       Int?
+  jevConfidence Float?
+  jevLatencyMs  Int
+  longThread    Boolean  @default(false)
+  resent        Boolean  @default(false)
+  codeFence     Boolean  @default(false)
+  comparison    String?
+  error         String?
+
+  @@index([createdAt])
+}
+
 // Typed proof-of-work attached to a ticket (HTPR-4443): a test run, screenshot,
 // deploy link, or diff — so evidence isn't buried in comment threads.
 model TaskEvidence {
@@ -3021,4 +3081,42 @@ model AiLabelClassification {
 
   @@id([taskId, labelId])
   @@index([labelId])
+}
+
+enum DevicePairingState {
+  PENDING
+  CLAIMED
+  APPROVED
+  DELIVERED
+  CONNECTED
+  DENIED
+}
+
+model DevicePairing {
+  id                 String @id @default(uuid())
+  ownerId            Int
+  codeHash           String @unique @db.VarChar(64)
+  browserHash        String @db.VarChar(64)
+  state              DevicePairingState @default(PENDING)
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+  challenge          String? @db.VarChar(43)
+  claimantHash       String? @db.VarChar(64)
+  clientName         String? @db.VarChar(60)
+  oauthClientId      String? @db.VarChar(64)
+  oauthRedirectUri   String? @db.VarChar(512)
+  oauthCodeHash      String? @db.VarChar(64)
+  agentId            String? @unique
+  agent              Agent? @relation("DevicePairingAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  pairedFromAgent    Agent? @relation("AgentPendingPairing")
+  teamId             String?
+  projectId          Int?
+  tokenGeneration    String?
+  credential         String? @db.Text
+  deliveryResult     String? @db.Text
+  deliveryRetryUntil DateTime?
+  authorizationCodes OAuthAuthorizationCode[]
+
+  @@index([ownerId, browserHash, expiresAt])
+  @@index([expiresAt])
 }

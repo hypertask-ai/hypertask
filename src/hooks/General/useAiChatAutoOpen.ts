@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG } from "@/lib/flags/definitions/htpr-8052-fullscreen-chat-return";
 import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
+import { HTPR_7983_FREE_MODE_SIGNUP_FLAG } from "@/lib/flags/definitions/htpr-7983-free-mode-signup";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatAutoOpenPageAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatExplicitOpenAtAtom, aiChatEmbeddedTicketPathAtom, aiChatNewTicketPathAtom, currentUserAtom, currentProjectAtom, showAIChatInterfaceAtom } from "@/store";
@@ -11,7 +12,9 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7783_REMEMBER_CHAT_FLAG } from "@/lib/flags/keys";
 import { chatNavigationKey, readChatNavigationState, writeChatNavigationState } from "@/lib/aiChat/chatNavigationState";
 import { aiChatAutoOpenPage } from "@/lib/aiChat/autoOpenPreferences";
+import { guestAutoOpenAllowed, signedInBoardAutoOpenAllowed } from "@/lib/aiChat/guestAutoOpen";
 import { useAiChatOpenPreferences, useSyncAiChatOpenPreferences } from "./useAiChatOpenPreferences";
+import { useKeepChatClosed } from "./useKeepChatClosed";
 
 function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | null, pageKey: string, stableDefaultView: boolean) {
   const neverRecorded = previous === null && lastSaved === null;
@@ -23,10 +26,13 @@ function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | 
 
 export function useAiChatAutoOpen(mobile: boolean) {
   const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
+  const guestAutoOpenEnabled = useFlag(HTPR_7983_FREE_MODE_SIGNUP_FLAG);
   const preserveFullScreenReturn = useFlag(HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG);
   const stableDefaultView = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
   useSyncAiChatOpenPreferences();
   const { enabled, ready, flagReady, values } = useAiChatOpenPreferences();
+  const { keepChatClosed } = useKeepChatClosed();
+  const chatAutoOpenAllowed = !keepChatClosed;
   const user = useRecoilValue(currentUserAtom);
   const board = useRecoilValue(currentProjectAtom);
   const rememberChat = useFlag(HTPR_7783_REMEMBER_CHAT_FLAG);
@@ -54,7 +60,10 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const navigationPageKey = `${navigationKey}:${pageKey}`;
   const fullScreenReturnPage = useRef<string | null>(null);
   const manualOpen = !embeddedTicketPath && (search?.get("newTaskAi") === "1" || search?.get("welcome_ai") === "1" || search?.has("agentSidebar") === true);
-  const allowed = !manualChat && page !== null && (values[page] || (pinned && !mobile));
+  const guestAutoOpen = chatAutoOpenAllowed && guestAutoOpenEnabled && guestAutoOpenAllowed({ user, page, mobile });
+  const allowed = chatAutoOpenAllowed && (guestAutoOpen || signedInBoardAutoOpenAllowed({
+    manualChat, page, mobile, savedPreference: page ? values[page] : false, pinned,
+  }));
 
   useEffect(() => {
     if (!enabled || !ready || !pathname || !user?.id) {
@@ -67,7 +76,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       attemptedRestore.current = null;
     } else if (previousPage.current !== pageKey) restoreVisit.current = null;
     const savedOpen = readChatNavigationState(navigationKey).open;
-    const restorePanel = navigationKey && page && page !== "aiChatOpenNewTickets" && !manualOpen && typeof savedOpen === "boolean" &&
+    const restorePanel = chatAutoOpenAllowed && navigationKey && page && page !== "aiChatOpenNewTickets" && !manualOpen && typeof savedOpen === "boolean" &&
       restoreVisit.current === pageKey && attemptedRestore.current !== navigationPageKey;
     if (navigationKey && page && restoreVisit.current === pageKey) attemptedRestore.current = navigationPageKey;
     previousRoute.current = route;
@@ -104,7 +113,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
     autoOpenedPage.current = pageKey;
     setExplicitOpenAt(null);
     setOpen(true);
-  }, [navigationKey, navigationPageKey, route, enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, manualChat, stableDefaultView, preserveFullScreenReturn, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
+  }, [navigationKey, navigationPageKey, route, enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, chatAutoOpenAllowed, mobile, user?.id, manualChat, guestAutoOpen, stableDefaultView, preserveFullScreenReturn, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
 
   useEffect(() => {
     if (!enabled || !ready || !navigationKey || !page || manualOpen) return;
@@ -115,13 +124,13 @@ export function useAiChatAutoOpen(mobile: boolean) {
     writeChatNavigationState(navigationKey, { open });
   }, [enabled, ready, navigationKey, page, pageKey, manualOpen, open]);
 
-  if (manualChat) return { reserve: false };
+  if (manualChat && !guestAutoOpen) return { reserve: false };
   const active = enabled || !flagReady;
   const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);
   const savedOpen = readChatNavigationState(navigationKey).open;
   const restorationPending = previousRoute.current === null || previousRoute.current.startsWith("/settings") ||
     (restoreVisit.current === pageKey && attemptedRestore.current !== navigationPageKey);
-  const restoringPanel = navigationKey && page && page !== "aiChatOpenNewTickets" && typeof savedOpen === "boolean" &&
+  const restoringPanel = chatAutoOpenAllowed && navigationKey && page && page !== "aiChatOpenNewTickets" && typeof savedOpen === "boolean" &&
     (restoredPage.current === navigationPageKey || restorationPending);
   const rememberedOpen = restorationPending ? savedOpen === true : open;
   const reserve = active && !mobile && (restoringPanel ? rememberedOpen : allowed && !(suppressed && !pageChanged));

@@ -1,6 +1,10 @@
 # Agent run lifecycle
 
-## How a customer reaches it
+## Sub-features
+
+- `scheduled-manager-chat-activity` Scheduled manager chat activity.
+
+## How to get to it (user POV)
 
 Agents use `GET /api/mcp/agents/runs/<runId>` and bodyless
 `POST /api/mcp/agents/runs/<runId>/stop`. Owners can use the same
@@ -8,7 +12,7 @@ routes with their browser session. Webhook subscriptions expose
 `run.created`, `run.prompted`, and `run.stopped` through the agent's
 webhook settings.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Sign in as QA 985. Require authenticated bootstrap user 985.
 2. Read `/api/agent-sidebar-chats?projectId=7049` to discover the
@@ -29,14 +33,14 @@ webhook settings.
 6. Stop only a disposable run this QA run created. Never stop a
    pre-existing run or replay its webhook during read-only verification.
 
-## What usually breaks
+## Gotchas
 
 - An obsolete flag check hides lifecycle events or cancels queued runs.
 - Removing the parent rollout accidentally removes the independent
   runtime-title flag.
 - A read exposes another owner's run or webhook payload.
 
-## What proof to collect
+### What proof to collect
 
 Record deployment SHA, signed-in doctor screenshot, bootstrap identity,
 HTTP statuses, lifecycle event names, and run/agent IDs only. Capture
@@ -45,13 +49,13 @@ Targeted tests cover lifecycle creation, reuse, delivery, stop, ownership,
 replay payloads, activity feeds without rollout flags, and the independent
 runtime-title flag.
 
-## Cleanup
+### Cleanup
 
 Read-only checks create nothing. Remove only recorded disposable fixtures
 created by this run, through approved product routes. Never revoke shared
 QA credentials or change existing subscriptions.
 
-## Scheduled manager chat activity
+### Scheduled manager chat activity
 
 `POST /api/mcp/chat/activity` records a manager's cycle in its owner's
 Agent Chat. This route has no rollout flag. Use an isolated QA-owned

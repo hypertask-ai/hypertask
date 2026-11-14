@@ -23,7 +23,8 @@ function inboxController() {
 
       isFeatureEnabled: async (key, userId) => {
         calls.flags.push([key, userId]);
-        throw new Error("Inbox must not read a feature flag");
+        assert.equal(key, "htpr-9055-needs-you");
+        return false;
       },
     },
     "@/utils/helperFunctions/helperFunctions": { getInboxTabs: () => ({}) },
@@ -53,7 +54,7 @@ test("notificationGetAll forwards the cached-description option to the real inbo
     const { controller, calls } = inboxController();
     const result = await controller.default("985", options);
     assert.equal(result.status, 200);
-    assert.deepEqual(calls.flags, []);
+    assert.deepEqual(calls.flags, [["htpr-9055-needs-you", 985]]);
     assert.equal(Object.hasOwn(calls.queries.find((query) => query.include).include.task.select, "description_"), !options);
   }
 });

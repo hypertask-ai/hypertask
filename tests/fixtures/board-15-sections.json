@@ -1,0 +1,19 @@
+{
+  "project": 15,
+  "source": "hypertask project sections --project 15",
+  "note": "Board 15 column titles. Refresh this snapshot in the same PR whenever the board's columns change.",
+  "sections": [
+    { "section_title": "Backlog" },
+    { "section_title": "UX needed" },
+    { "section_title": "UX Sign-off" },
+    { "section_title": "In Progress" },
+    { "section_title": "Agent Blocked (Infra)" },
+    { "section_title": "Valentin Review" },
+    { "section_title": "AI Review" },
+    { "section_title": "QA" },
+    { "section_title": "Flag: Only Me + QA" },
+    { "section_title": "Flag: Everyone" },
+    { "section_title": "Flag: Off" },
+    { "section_title": "No Flag" }
+  ]
+}

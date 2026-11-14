@@ -9,6 +9,7 @@ export type ConsentRequest = {
   redirectUri: string
   codeChallenge: string
   agentId?: string | null
+  devicePairingId?: string | null
 }
 
 function getSecret(): string {
@@ -20,7 +21,7 @@ function getSecret(): string {
 }
 
 function canonical(request: ConsentRequest, expiresAt: number): string {
-  return JSON.stringify([
+  const fields = [
     'v1',
     request.userId,
     request.clientId,
@@ -28,7 +29,9 @@ function canonical(request: ConsentRequest, expiresAt: number): string {
     request.codeChallenge,
     request.agentId ?? null,
     expiresAt,
-  ])
+  ];
+  if (request.devicePairingId) fields.push(request.devicePairingId);
+  return JSON.stringify(fields);
 }
 
 function sign(payload: string): string {

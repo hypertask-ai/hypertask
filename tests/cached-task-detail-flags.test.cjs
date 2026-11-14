@@ -94,8 +94,8 @@ test("board and table handlers always use cached data without changing productio
       const navigations = [];
       const selected = [];
       const playlist = [];
-      const openTask = new Function("useCallback", "navigateToTask", "setTasksPlayList", "tasksPlayList", "setSelectedIndex", "updateActiveItemAndItemInView", "rows", "isTaskRow", js)(
-        (callback) => callback, (...args) => navigations.push(args), (value) => playlist.push(value), [{ projectId: 15, uniqueIndex: 43 }], (index) => selected.push(index), () => {}, [{ task }], () => true,
+      const openTask = new Function("useCallback", "navigateToTask", "setTasksPlayList", "tasksPlayList", "setSelectedIndex", "updateActiveItemAndItemInView", "rows", "isTaskRow", "tableGroupByTagEnabled", js)(
+        (callback) => callback, (...args) => navigations.push(args), (value) => playlist.push(value), [{ projectId: 15, uniqueIndex: 43 }], (index) => selected.push(index), () => {}, [{ task }], () => true, false,
       );
       await openTask(task, 2);
       assert.deepEqual(navigations, [[15, 43, "push", undefined, task]]);

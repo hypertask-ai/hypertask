@@ -15,8 +15,7 @@ if ! visibility=$(gh repo view "$origin" --json visibility --jq '.visibility' 2>
   exit 1
 fi
 case "$visibility" in
-  PUBLIC) runner=ubuntu-latest ;;
-  PRIVATE|INTERNAL) runner='[self-hosted, ci-fast]' ;;
+  PUBLIC|PRIVATE|INTERNAL) runner=ubuntu-latest ;;
   *)
     echo "install-workflow: unknown repository visibility; refusing to install." >&2
     exit 1

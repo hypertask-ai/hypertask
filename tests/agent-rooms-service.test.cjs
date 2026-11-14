@@ -107,13 +107,48 @@ const tx = {
 
 const prisma = {
   $transaction: async (operation) => operation(tx),
+  agentRoom: {
+    findUnique: async () => ({
+      id: "room-1",
+      projectId: 15,
+      dailyTurnBudget: 50,
+      project: { id: 15, name: "QA board", title: "QA board" },
+    }),
+  },
+  agentRoomMessage: {
+    findMany: async ({ where }) =>
+      createdMessages.filter((entry) => entry.roomId === where.roomId),
+    count: async ({ where }) =>
+      createdMessages.filter(
+        (entry) => entry.roomId === where.roomId && entry.authorAgentId,
+      ).length,
+  },
   agentRoomDelivery: {
     updateMany: async () => {
       handledDeliveries += 1;
       return { count: 1 };
     },
+    findMany: async () => [],
+  },
+  member: {
+    findMany: async () => agents.map((agent) => ({ agent })),
   },
 };
+
+async function waitForStoredReply(match, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { messages } = await service.listAgentRoom("room-1");
+    const stored = messages.find(match);
+    if (stored) return stored;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `reply was not stored in the room transcript within ${timeoutMs}ms`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 stubModule("src/lib/prisma.ts", { default: prisma });
 
 const service = createJiti(path.join(root, "tests/agent-rooms-service-entry.cjs"), {
@@ -162,6 +197,25 @@ test("an agent reply becomes a ticket run note and routes named bots", async () 
     createdRuns[0].activities.create.text,
     "Dev 2, please finish HTPR-6557.",
   );
+});
+
+test("a stored agent reply appears in the room transcript", async () => {
+  await service.createAgentRoomReply({
+    roomId: "room-1",
+    agentId: "product",
+    text: "Dev 2, please finish HTPR-6557.",
+    replyToMessageId: "human-1",
+    now: new Date("2026-09-18T12:00:00.000Z"),
+  });
+
+  const stored = await waitForStoredReply(
+    (entry) => entry.author?.id === "product",
+  );
+
+  assert.equal(stored.content, "Dev 2, please finish HTPR-6557.");
+  assert.equal(stored.botTurnDepth, 1);
+  assert.equal(stored.author.displayName, "Product Bot");
+  assert.equal(stored.task.ticketNumber, "HTPR-6557");
 });
 
 test("the third bot turn records the reply but does not route a fourth", async () => {

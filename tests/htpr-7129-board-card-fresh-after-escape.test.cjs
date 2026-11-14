@@ -225,7 +225,7 @@ test("board drag writes are counted while in flight", async () => {
   let finish;
   const { default: moveTaskHandler, pendingBoardMoves } = load(
     "src/utils/api/global/apiHelpers/moveTaskHandler.ts",
-    { axios: { __esModule: true, default: { put: () => new Promise((resolve) => { finish = resolve; }) } } },
+    { axios: { __esModule: true, default: { put: () => new Promise((resolve) => { finish = resolve; }) } }, "react-hot-toast": { __esModule: true, default: { error: () => {} } } },
   );
   assert.equal(pendingBoardMoves(), 0);
   const move = moveTaskHandler("Doing", 9, 77, "0", 5);

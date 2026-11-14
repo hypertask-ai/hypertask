@@ -3,7 +3,7 @@
   "does": "List accessible boards, read their column manifests and playbooks, create or rename boards, and manage board settings and members.",
   "use_when": "Use to discover project_id or section_id before ticket changes, or to build a board from a brief using the create action.",
   "do_not_use_when": "Do not use to move individual tickets or change a column; use hypertask_tasks or hypertask_sections instead.",
-  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. A project is a board and a section is a column; manifest returns ordered columns and their semantic roles. Creating a board accepts nested tasks and section names, and archive changes visibility without deleting it.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation\u2019s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. A project is a board and a section is a column; manifest returns ordered columns and their semantic roles. Creating a board accepts nested tasks and section names, and archive changes visibility without deleting it.",
   "actions": {
     "list": {
       "tool": "hypertask_list_projects",
@@ -75,6 +75,16 @@
       "tool": "hypertask_board_config",
       "legacy_action": "get_hygiene",
       "read_only": true,
+      "permission": "data"
+    },
+    "github_repos": {
+      "tool": "hypertask_list_board_github_repos",
+      "read_only": true,
+      "permission": "data"
+    },
+    "set_github_repos": {
+      "tool": "hypertask_set_board_github_repos",
+      "read_only": false,
       "permission": "data"
     }
   },

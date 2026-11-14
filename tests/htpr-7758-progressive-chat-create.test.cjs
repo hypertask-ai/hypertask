@@ -76,6 +76,7 @@ test("the tool saves one usable title and emits its link before the writer compl
   assert.equal(h.saved[0].description, "");
   assert.equal(h.saved[0].initializeWriterDefaults, true);
   assert.equal(h.updates.length, 0);
+  assert.deepEqual(h.events[0], { event: "open_task", data: { projectId: 7049, uniqueIndex: 1 } });
   assert.match(h.events.find((event) => event.event === "task_created").data.content, /href="http:\/\/localhost:3000\/detail\/project-7049\/1"/);
   h.release();
   const result = await resultPromise;

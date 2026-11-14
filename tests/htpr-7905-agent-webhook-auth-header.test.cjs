@@ -133,11 +133,11 @@ function delivery({ enabled, header, corrupt }) {
   const update = async ({ data }) => { Object.assign(row, data); return row; };
   const db = {
     agentWebhookDelivery: {
-      updateMany: async () => ({ count: 1 }),
+      updateMany: async (input) => { await update(input); return { count: 1 }; },
       findUnique: async () => row,
       update,
     },
-    agentWebhookSubscription: { update: async () => ({}) },
+    agentWebhookSubscription: { updateMany: async () => ({ count: 1 }) },
     $transaction: async ops => Promise.all(ops),
   };
   const mocks = {

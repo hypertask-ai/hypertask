@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
 import { setMyTasksSnooze } from "@/utils/controllers/tasks/myTasksSnooze";
 
 export const runtime = "nodejs";
@@ -17,12 +16,6 @@ export async function POST(request: NextRequest) {
     const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (!(await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId))) {
-      return NextResponse.json(
-        { error: "My Tasks snooze is not enabled" },
-        { status: 403 },
-      );
     }
 
     const body = (await request.json().catch(() => null)) as {

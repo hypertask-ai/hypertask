@@ -72,6 +72,7 @@ function labelValues(node, file) {
     return labels;
   }
   if (text === "label" && file.endsWith("NotificationMatrix.tsx")) return labelsFrom(file, "notificationRows");
+  if (text === "part.label" && file.endsWith("CardSettingsSection.tsx")) return labelsFrom("src/lib/kanban/cardParts.ts", "CARD_PARTS");
   if (ts.isTemplateExpression(node)) {
     let values = [node.head.text];
     for (const span of node.templateSpans) {
@@ -261,6 +262,7 @@ test("unresolved shared row labels fail rather than silently dropping a setting"
 });
 
 const gatedCommands = [
+  { keys: ["settingsApiKeysAlwaysUseThisKey"], flag: "alwaysUseThisKeyEnabled", dependency: "hiddenAlwaysUseCommandKey", file: "ApiKeysSection.tsx", uiFlag: "alwaysUseThisKey" },
   { keys: ["settingsApiKeysBasetenApiKey"], flag: "basetenByokEnabled", dependency: "hiddenBasetenCommandKey", file: "ApiKeysSection.tsx", uiFlag: "basetenEnabled" },
   { keys: ["settingsApiKeysXaiApiKey", "settingsAiModelsXai"], flag: "grokGemini4Enabled", dependency: "hiddenXaiCommandKeys", file: "ApiKeysSection.tsx", uiFlag: "grokGemini4Enabled" },
   { keys: ["settingsGithub"], flag: "githubConnectEnabled", dependency: "hiddenGithubCommandKey", file: "GitHubSection.tsx", uiFlag: "enabled" },

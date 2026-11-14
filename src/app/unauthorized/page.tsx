@@ -1,17 +1,22 @@
 "use client"
-import { showBoardManagerAtom } from '@/store';
+import { currentUserAtom, showAccountSwitcherAtom, showBoardManagerAtom } from '@/store';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_7799_PROJECT_ENTRY_FLAG } from '@/lib/flags/keys';
 import { getFirstProject } from '@/utils/api/Homepage';
 import { returnToFirstBoard } from '@/lib/firstScreen/returnToFirstBoard';
 import { useSignout } from '@/hooks/MultiPages/HTC/useSignout';
 import Head from 'next/head'
 import { useRouter } from 'next/navigation';
 import { CircleAlert } from 'lucide-react';
-import { useRecoilState } from '@/lib/state';
+import { useRecoilState, useRecoilValue, useSetRecoilState } from '@/lib/state';
 import { useEffect } from 'react';
   
 
 const Unauthorized = () => {
     const [, setShowBoardManager] = useRecoilState(showBoardManagerAtom);
+    const currentUser = useRecoilValue(currentUserAtom);
+    const setShowAccountSwitcher = useSetRecoilState(showAccountSwitcherAtom);
+    const projectEntryEnabled = useFlag(HTPR_7799_PROJECT_ENTRY_FLAG);
     useEffect(() => {
         setShowBoardManager(false)
     }, [setShowBoardManager])
@@ -54,6 +59,20 @@ const Unauthorized = () => {
                     <p className="mt-2 max-w-[420px] text-[14px] text-text-light-gray">
                         If you should have access, ask a board member to invite you.
                     </p>
+                    {projectEntryEnabled && currentUser?.email && (
+                        <>
+                            <p className="mt-4 max-w-full break-all text-content text-text-light-gray">
+                                Signed in as {currentUser.email}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setShowAccountSwitcher(true)}
+                                className="mt-2 inline-flex min-h-11 items-center justify-center rounded-[4px] px-4 py-2 text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selected-item-border"
+                            >
+                                Switch account
+                            </button>
+                        </>
+                    )}
                     <button
                         type="button"
                         onClick={goBacktoPrevious}

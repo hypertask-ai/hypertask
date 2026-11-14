@@ -1,13 +1,17 @@
 # CI runner placement policy
 
-## How a customer reaches it
+## Sub-features
+
+- `ci-runner-placement-policy` CI runner placement policy.
+
+## How to get to it (user POV)
 
 Production pull requests run PR Guards Trusted.
 Its runner-policy step contributes to the required pr-title result.
 The separate title step still binds the ticket.
 No application screen changes.
 
-## How to drive it
+## Driving it with agent-browser
 
 1. Confirm the merge's production deployment succeeded.
 2. Fetch production and run the merged checker with `--repo hypertask-ai/hypertask --ref <production SHA>`.
@@ -18,7 +22,7 @@ No application screen changes.
 7. Run `~/projects/token-ladder/bin/token-ladder hook-prompt`.
 8. Require the public app and free-hosted fact before closing the ticket.
 
-## What usually breaks
+## Gotchas
 
 - Candidate policy or checker controls its own approval.
 - Missing or stale runner validation publishes a green title status.
@@ -27,14 +31,14 @@ No application screen changes.
 - A private hosted approval survives changed workflows.
 - The separate reminder still teaches only the private-repository case.
 
-## What proof to collect
+### What proof to collect
 
 Save merge/deployment metadata, hosted fixture output, and the live lookup.
 The fixtures execute the actual workflow scripts and status publisher.
 Save reminder output; missing wording is an unfinished outcome.
 No flag or app account is needed for the policy command.
 
-## Cleanup
+### Cleanup
 
 No app fixtures or production settings change.
 Keep sanitized proof outside the worktree.

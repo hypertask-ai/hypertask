@@ -20,6 +20,18 @@ fi
 if [ "${1:-} ${2:-}" = 'tasks get' ] && [ -n "${VCC_TEST_TASK:-}" ]; then
   exec /bin/cat "$VCC_TEST_TASK"
 fi
+if [ "${1:-} ${2:-}" = 'labels list' ]; then
+  label_project=''
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) label_project=${2:-}; shift ;;
+      --project=*) label_project=${1#--project=} ;;
+    esac
+    shift
+  done
+  [ -n "${VCC_TEST_LABELS:-}" ] && [ -f "$VCC_TEST_LABELS/$label_project.json" ] && exec /bin/cat "$VCC_TEST_LABELS/$label_project.json"
+  exit 93
+fi
 printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
 STUB
 cat > "$T/bin/cat" <<'STUB'
@@ -36,7 +48,7 @@ mkdir -p "$HOME/.agents/skills/ship/scripts"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'STUB'
 #!/usr/bin/env bash
 printf 'identity lookup\n' >> "$VCC_TEST_TRACE"
-printf 'Fixture\t%s\n' "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+printf '%s\t%s\n' "${VCC_TEST_IDENTITY:-Fixture}" "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 STUB
 chmod +x "$T/bin/"* "$HOME/.agents/skills/ship/scripts/ship-identity"
 printf '%s\n' 'vcc: helpers never write to the board; report to your runner' > "$T/refusal"
@@ -52,6 +64,37 @@ if /bin/cat | grep -q LINTFAIL; then printf 'ticket-lint: rejected.\n  - LINTFAI
 STUB
 chmod +x "$T/bin/ticket-lint"
 export VCC_TICKET_LINT="$T/bin/ticket-lint"
+cat > "$T/bin/blocker-review" <<'STUB'
+#!/usr/bin/env bash
+# Stand-in for the shared gate: runners are refused, Chief Of Staff and leads pass.
+[ "${1:-}" = --gate ] || exit 64
+who=''; board=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in --who) who=$2; shift ;; --board) board=$2; shift ;; esac
+  shift
+done
+printf 'gate who=%s board=%s\n' "$who" "$board" >> "$VCC_TEST_TRACE"
+case "$who" in
+  Runner*) printf 'blocker-review gate: %s may not make Valentin the blocker.\n' "$who" >&2; exit 3 ;;
+esac
+STUB
+chmod +x "$T/bin/blocker-review"
+export VCC_BLOCKER_REVIEW="$T/bin/blocker-review"
+cat > "$T/bin/filing-gate" <<'STUB'
+#!/usr/bin/env bash
+printf 'filing-gate %s\n' "$*" >> "$VCC_TEST_TRACE"
+case " $* " in
+  *FULLBOARD*) printf 'vcc: not filed. Fleet Infra (4060) is full\n' >&2; exit 5 ;;
+  *SAMETITLE*) printf 'vcc: not filed. The same problem is already open\n' >&2; exit 6 ;;
+esac
+STUB
+chmod +x "$T/bin/filing-gate"
+export VCC_FILING_GATE="$T/bin/filing-gate"
+mkdir -p "$T/labels"
+printf '%s\n' '{"success":true,"labels":[{"id":"l1","name":"Infra"},{"id":"l2","name":"Agent Feedback"},{"id":"l3","name":"brain-medium"}]}' > "$T/labels/12057.json"
+printf '%s\n' '{"success":true,"labels":[{"id":"l4","name":"Bug"}]}' > "$T/labels/2101.json"
+printf '%s\n' '{"success":false}' > "$T/labels/12058.json"
+export VCC_TEST_LABELS="$T/labels"
 
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -154,6 +197,38 @@ export VCC_TEST_NESTED=1
 refused launch_hax -p activity add X-1 x
 unset VCC_TEST_NESTED
 printf 'ok hax grandparent blocks activity writes\n'
+
+mkdir -p "$T/fleet"
+cat > "$T/fleet/runner" <<'STUB'
+#!/usr/bin/env bash
+ln -s "/proc/$$" "$VCC_HELPER_PROC_ROOT/$$"
+"$@"
+status=$?
+rm "$VCC_HELPER_PROC_ROOT/$$"
+exit "$status"
+STUB
+cat > "$T/haxbody" <<'STUB'
+IFS= read -r comm < "/proc/$$/comm"
+[ "$comm" = hax ] || exit 93
+ln -s "/proc/$$" "$VCC_HELPER_PROC_ROOT/$$"
+[ "${VCC_TEST_LINK_PARENT:-}" = 1 ] && ln -s "/proc/$PPID" "$VCC_HELPER_PROC_ROOT/$PPID"
+if [ "${VCC_TEST_INNER_HAX:-}" = 1 ]; then
+  VCC_TEST_INNER_HAX=0 VCC_TEST_LINK_PARENT=0 hax -p "$BASH_SOURCE" "$@"
+else
+  /bin/bash "$VCC_TEST_BIN" "$@"
+fi
+status=$?
+rm -f "$VCC_HELPER_PROC_ROOT/$$"
+[ "${VCC_TEST_LINK_PARENT:-}" = 1 ] && rm -f "$VCC_HELPER_PROC_ROOT/$PPID"
+exit "$status"
+STUB
+chmod +x "$T/fleet/runner"
+allowed env VCC_TEST_LINK_PARENT=1 "$T/fleet/runner" timeout 60 "$T/bin/hax" -p "$T/haxbody" comment add X-1 --text hi
+allowed "$T/fleet/runner" "$T/bin/hax" -p "$T/haxbody" comment add X-1 --text hi
+printf 'ok pool runner hax under fleet/runner writes\n'
+refused env VCC_TEST_LINK_PARENT=1 VCC_TEST_INNER_HAX=1 "$T/fleet/runner" timeout 60 "$T/bin/hax" -p "$T/haxbody" comment add X-1 --text hi
+refused env VCC_TEST_LINK_PARENT=1 timeout 60 "$T/bin/hax" -p "$T/haxbody" comment add X-1 --text hi
+printf 'ok helper hax under a runner or outside fleet/runner stays blocked\n'
 
 # Prompt text containing -p is not a separate helper argument.
 allowed launch_hax 'prompt containing -p' comment add X-1 --text hi
@@ -279,8 +354,8 @@ question_refused() {
   [[ $(< "$T/err") == *'rewrite it for a product owner (pospeak)'* ]] || fail 'missing product-owner guidance'
   [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'refused Question reached CLI'
 }
-plain='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
-inline_why='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
+plain='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+inline_why='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes. Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
 for text in "$plain" "$inline_why" "$question"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
@@ -345,8 +420,11 @@ for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.
 done
 question_refused CI comment add X-1 --kind question --text "$plain<p>CI and OAuth</p>"
 [[ $(< "$T/err") == *OAuth* ]] || fail 'did not name every developer word'
-for text in   "$plain<p>We can decide in Circle, with ci and circles.</p>"   "$plain<p><a href="https://example.test/src/app/page.tsx/api/OAuth/CI#123">Details</a></p>"   "$plain<p><a href="https://example.test/123">PR #123</a></p>"   "$plain<p><a href="https://example.test/123"><strong>#123</strong></a></p>"; do
-  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+allowed bash "$vcc" comment add X-1 --kind question --text "$plain<p>We can decide in Circle, with ci and circles.</p>"
+for link in '<a href="https://example.test">Details</a>' 'https://example.test' 'www.example.test' '<a href="/detail/project-15/1">Details</a>'; do
+  question_refused 'no outside links' comment add X-1 --kind question --text "$plain<p>$link</p>"
+  fixture "$plain<p>$link</p>"
+  review_refused 'no outside links' task move X-1 --section 'Valentin Review'
 done
 question_refused '#456' comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">PR #123</a> #456</p>"
 question_refused OAuth comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">OAuth</a></p>"
@@ -378,23 +456,22 @@ markdown='What this is: the setting that keeps the board tidy.
 
 Question: **Keep it?**
 
+My recommendation: yes. Why: less work.
 Yes: keep it.
-No: remove it.
-My recommendation: yes. Why: less work.'
+No: remove it.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
 for context in $'\u200b' $'\u00a0\u200b\u3000\ufeff' '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)' '*' '_' '**' '* _ **' '`' '```' '* _ ` **' '[*](https://example.test)' '<em>_</em>'; do
   text="${markdown/the setting that keeps the board tidy./"$context"}"
   question_refused 'What this is:' comment add X-1 --kind question --markdown --text "$text"
 done
-for context in $'\u200b**設定を確認。**' $'\u00a0*the setting* stays.' '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' '`the setting` keeps the board tidy.' 'See [*the setting*](https://example.test).' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
+for context in $'\u200b**設定を確認。**' $'\u00a0*the setting* stays.' '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' '`the setting` keeps the board tidy.' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
   text="${markdown/the setting that keeps the board tidy./"$context"}"
   allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
 done
 context='&#9;See [the setting](https://example.test)&#x20;here.'
 text="${markdown/the setting that keeps the board tidy./"$context"}"
-allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
-[[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$text>" ]] || fail 'Markdown context arguments changed'
+question_refused 'no outside links' comment add X-1 --kind question --markdown --text "$text"
 question_refused '#123' comment add X-1 --kind question --markdown --text "$text #123"
 question_refused '#35' comment add X-1 --kind question --markdown --text "$text &#35;123"
 printf '%s\n' "$markdown" > "$T/question.md"
@@ -404,8 +481,43 @@ question_refused 'My recommendation:' comment add X-1 --kind question --markdown
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
 question_refused OAuth comment add X-1 --kind question --markdown --text "$markdown
 OAuth"
-allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown
+question_refused 'no outside links' comment add X-1 --kind question --markdown --text "$markdown
 [PR #123](https://example.test/api/OAuth/CI)"
+for suffix in '<p>Extra.</p>' '<div>Extra.</div>' '<li><p>Extra.</p></li>' '<br>Extra.<br>'; do
+  context='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p>'
+  for ((n=1; n<8; n++)); do context+="$suffix"; done
+  text="${plain/$label/$context}"
+  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+  text="${plain/$label/$context$suffix}"
+  question_refused 'at most 8 context lines' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'at most 8 context lines' task move X-1 --section 'Valentin Review'
+done
+context='What this is: the setting that keeps the board tidy.'
+for ((n=1; n<8; n++)); do context+=$'\nExtra.'; done
+text="${markdown/What this is: the setting that keeps the board tidy./$context}"
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
+question_refused 'at most 8 context lines' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./$context$'\nExtra.'}"
+for text in "${plain/<p>My recommendation: yes.<\/p>/}<p>My recommendation: yes.</p>" "${plain/<p>My recommendation: yes.<\/p>/<p>Extra.</p><p>My recommendation: yes.</p>}"; do
+  question_refused 'must be right under' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'must be right under' task move X-1 --section 'Valentin Review'
+done
+text="${plain/<p>Question:/<p>Question: note.</p><p>Question:}"
+question_refused 'only one Question:' comment add X-1 --kind question --text "$text"
+fixture "$text"
+review_refused 'only one Question:' task move X-1 --section 'Valentin Review'
+text="${plain/Keep it?/Keep it?<\/strong> Question: <strong>Remove it?}"
+question_refused 'only one Question:' comment add X-1 --kind question --text "$text"
+fixture "$text"
+review_refused 'only one Question:' task move X-1 --section 'Valentin Review'
+question_refused 'only one Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it?** Question: **Remove it?}"
+question_refused 'only one Question:' comment add X-1 --kind question --markdown --text "${markdown/Question: **Keep it?**/Question: summary$'\n'Question: **Keep it?**}"
+question_refused 'must be right under' comment add X-1 --kind question --markdown --text "${markdown/My recommendation: yes. Why: less work./Extra.$'\n'My recommendation: yes. Why: less work.}"
+for context in '<ul><li><p>What this is: the setting that keeps the board tidy.</p></li></ul>' '<blockquote>What this is: the setting that keeps the board tidy.</blockquote>'; do
+  allowed bash "$vcc" comment add X-1 --kind question --text "${plain/$label/$context}"
+done
+printf 'ok short context, immediate recommendation, one question and no links enforced with allowed controls\n'
 printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n'
 
 for kind in qa done ''; do
@@ -444,7 +556,7 @@ for detail in 'tmux attach -t runner-8' 'claude --resume session' 'codex resume 
 done
 allowed bash "$vcc" comment add X-1 --kind question --text "$plain"
 allowed bash "$vcc" task update X-1 --description '<p>Settings now works.</p>'
-allowed bash "$vcc" task create --title 'Clearer settings' --description '<p>Nothing to decide.</p>'
+allowed bash "$vcc" task create --labels brain-medium --title 'Clearer settings' --description '<p>Nothing to decide.</p>'
 agent_detail_refused comment add X-1 --kind qa --text '<p><strong>Helpers</strong>: none</p>'
 agent_detail_refused --json comment add X-1 --kind qa --text 'tmux attach -t runner-8'
 agent_detail_refused --project 15 task update X-1 --description 'Outputs: private'
@@ -495,7 +607,7 @@ lint_refused 'Ticket description' task create --project 4060 --title T --descrip
 printf '<p>LINTFAIL</p>' > "$T/desc.md"
 lint_refused 'Ticket description' task create --project 4060 --title T --description-file "$T/desc.md"
 lint_refused 'Ticket description' task update YPER4-1 '--description=LINTFAIL'
-allowed bash "$vcc" task create --project 4060 --title T --description '<p>Problem</p>'
+allowed bash "$vcc" task create --project 4060 --labels Bug,brain-light --title T --description '<p>Problem</p>'
 [[ $(< "$VCC_TEST_TRACE") == *'ticket-lint --shape -'* ]] || fail 'description skipped shape lint'
 allowed bash "$vcc" task update YPER4-1 --title 'New title'
 [[ $(< "$VCC_TEST_TRACE") != *'ticket-lint'* ]] || fail 'title-only update ran description lint'
@@ -671,4 +783,156 @@ run bash "$vcc" activity list HTPR-8740 --text 'not a filter'
 [ "$status" = 1 ] || fail "activity list accepted a text option"
 grep -q 'list needs only a ticket number' "$T/err" || fail "list extra-arg error changed: $(cat "$T/err")"
 printf 'ok activity add accepts --text and --body in either order\n'
+(
+  set -euo pipefail
+  home="$T/local-shell"
+  mkdir -p "$home/.local/bin" "$home/.config/hypertask-agents/credentials" "$home/.agents/skills/ship/scripts" "$T/decoy"
+  printf 'fixture-token\n' > "$home/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+  cat > "$home/.agents/skills/ship/scripts/ship-identity" <<'STUB'
+#!/bin/sh
+printf 'Fixture\t%s/.config/hypertask-agents/credentials/valentins-claude-code-agent-token\n' "$HOME"
+STUB
+  chmod +x "$home/.agents/skills/ship/scripts/ship-identity"
+  cat > "$home/.local/bin/hypertask" <<'STUB'
+#!/bin/sh
+[ "${HT_TOKEN:-}" = fixture-token ] || exit 91
+printf 'local %s\n' "$*"
+STUB
+  chmod +x "$home/.local/bin/hypertask"
+  cat > "$T/decoy/hypertask" <<'STUB'
+#!/bin/sh
+printf 'decoy %s\n' "$*"
+exit 9
+STUB
+  chmod +x "$T/decoy/hypertask"
+  out=$(env -u SHIP_SESSION_NAME HOME="$home" PATH="$T/decoy:/usr/bin:/bin" bash "$vcc" projects list)
+  [ "$out" = 'local projects list' ]
+)
+printf 'ok board wrapper finds hypertask in the local command folder\n'
+# Only Chief Of Staff and the board lead may make Valentin the blocker (YPER4-1376).
+export VCC_TEST_COMMENTS="$T/comments.json" VCC_TEST_TASK="$T/task.json"
+rm -f "$HOME/.agents/skills/ship/scripts/ship-check"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$HOME/.agents/skills/ship/scripts/ship-check"
+chmod +x "$HOME/.agents/skills/ship/scripts/ship-check"
+cat > "$T/bin/hypertask" <<'STUB'
+#!/usr/bin/env bash
+[ "${HT_TOKEN:-}" = fixture-token ] || exit 91
+printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
+case "${1:-} ${2:-}" in
+  'section list') printf '{"sections":[{"id":31019,"section_title":"Agent Blocked"},{"id":10412,"section_title":"Valentin Review"}]}\n'; exit 0 ;;
+  'comments list') exec /bin/cat "$VCC_TEST_COMMENTS" ;;
+  'tasks get') exec /bin/cat "$VCC_TEST_TASK" ;;
+  'labels list')
+    label_project=''
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --project) label_project=${2:-}; shift ;;
+        --project=*) label_project=${1#--project=} ;;
+      esac
+      shift
+    done
+    [ -n "${VCC_TEST_LABELS:-}" ] && [ -f "$VCC_TEST_LABELS/$label_project.json" ] && exec /bin/cat "$VCC_TEST_LABELS/$label_project.json"
+    exit 93 ;;
+esac
+printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
+STUB
+gate_refused() {
+  run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" "$@"
+  [ "$status" = 5 ] || fail "runner was not refused (status $status): $*"
+  [[ $(< "$T/err") == 'vcc: '*' refused'* ]] || fail "wrong gate refusal: $*: $(cat "$T/err")"
+  [[ $(< "$T/err") == *'may not make Valentin the blocker'* ]] || fail "gate reason missing: $*"
+  [[ $(< "$VCC_TEST_TRACE") != *waiting-on* && $(< "$VCC_TEST_TRACE") != *' add'* && $(< "$VCC_TEST_TRACE") != *' move'* && $(< "$VCC_TEST_TRACE") != *' update'* && $(< "$VCC_TEST_TRACE") != *' create'* ]] || fail "refused gate reached the write: $*"
+}
+gate_allowed() {
+  run env VCC_TEST_IDENTITY="$1" bash "$vcc" "${@:2}"
+  [ "$status" = 0 ] || fail "$1 refused ($status): ${*:2}: $(cat "$T/err")"
+  [[ $(< "$VCC_TEST_TRACE") == *"gate who=$1"* ]] || fail "gate not asked for $1: ${*:2}"
+}
+fixture "$question"
+task_fixture '<p>Problem</p><p>Fix</p><p>Done when</p><p>Risk: low.</p><p>Decision: none.</p>'
+jq '.tasks[0].boardId = 15' "$VCC_TEST_TASK" > "$T/task15.json"
+mv "$T/task15.json" "$VCC_TEST_TASK"
+gate_refused comment add X-1 --kind question --text "$question"
+gate_refused --project 15 --json comment add X-1 --kind=question --text="$question"
+gate_refused tasks waiting-on X-1 --user 6
+gate_refused task waiting-on X-1 --user me
+gate_refused task move X-1 --section 'Valentin Review'
+gate_refused task move X-1 'valentin review'
+gate_refused task update X-1 --section='Valentin Review'
+gate_refused task create --project 15 --labels brain-medium --title 'x' --section 'Valentin Review'
+for who in 'Chief Of Staff' 'HT Product Lead'; do
+  gate_allowed "$who" comment add X-1 --kind question --text "$question"
+  gate_allowed "$who" task waiting-on X-1 --user 6
+  gate_allowed "$who" task move X-1 --section 'Valentin Review'
+  [[ $(< "$VCC_TEST_TRACE") == *'board=15'* ]] || fail 'gate did not look up the ticket board'
+done
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task waiting-on X-1 --user none --reason 'not his'
+[ "$status" = 0 ] || fail 'a runner clearing the blocker was refused'
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" comment add X-1 --text 'agent lane note'
+[ "$status" = 0 ] || fail 'a plain note was refused'
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task move X-1 --section 'In Progress'
+[ "$status" = 0 ] || fail 'a normal move was refused'
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task waiting-on X-1 --user 123
+[ "$status" = 0 ] || fail 'handing a ticket to another person was refused'
+# A section id is looked up by name first.
+gate_refused task update X-1 --section 10412
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task update X-1 --section 31019
+[ "$status" = 0 ] || fail 'a move by section id to another column was refused'
+gate_allowed 'Chief Of Staff' task update X-1 --section 10412
+printf 'ok only Chief Of Staff and the board lead make Valentin the blocker\n'
+brain_refused() {
+  run bash "$vcc" "$@"
+  [ "$status" = 5 ] || fail "expected brain refusal (5), got $status: $*"
+  [[ $(< "$T/err") == 'vcc: task create refused: set exactly one of brain-light'*'brain-rules.md'* ]] || fail "wrong brain refusal: $(< "$T/err")"
+  [[ $(< "$VCC_TEST_TRACE") != *'task create'* ]] || fail "brain refusal reached the CLI: $*"
+}
+brain_refused task create --project 4060 --title T --description '<p>Problem</p>'
+brain_refused tasks create --project 4060 --labels Bug --title T --description '<p>Problem</p>'
+brain_refused --project 15 task create --labels brain-light,brain-hard --title T --description '<p>Problem</p>'
+brain_refused task create --project 4060 --labels brain-tiny --title T --description '<p>Problem</p>'
+brain_refused task create --project 4060 --labels=Bug --labels brain-light --labels brain-hard --title T --description '<p>Problem</p>'
+allowed bash "$vcc" task create --project 4060 --labels=Bug,brain-hard --title T --description '<p>Problem</p>'
+allowed bash "$vcc" task create --project 4060 --labels Bug --labels ' Brain-Medium ' --title T --description '<p>Problem</p>'
+allowed bash "$vcc" --project 15 --json tasks create --labels brain-extra-hard --title T --description '<p>Problem</p>'
+allowed bash "$vcc" task create --help
+allowed bash "$vcc" task update X-1 --title 'No brain label needed on update'
+printf 'ok task create needs exactly one brain label\n'
+filing_refused() {
+  local code=$1 message=$2
+  shift 2
+  run bash "$vcc" "$@"
+  [ "$status" = "$code" ] || fail "expected filing-gate exit $code, got $status: $*"
+  [[ $(< "$T/err") == *"$message"* ]] || fail "wrong filing-gate message: $(< "$T/err")"
+  ! grep -qE '^hypertask (task|tasks) ' "$VCC_TEST_TRACE" && [[ $(< "$T/out") != stub:* ]] || fail "filing-gate refusal reached the CLI: $*"
+}
+filing_refused 5 'is full' task create --project 4060 --labels Infra,brain-light --title FULLBOARD
+filing_refused 6 'already open' --json tasks create --project=11514 --labels CI,brain-light --title SAMETITLE
+allowed bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
+[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- task create --project 4060'* ]] || fail "filing-gate not asked on 4060: $(< "$VCC_TEST_TRACE")"
+allowed bash "$vcc" task create --project 15 --labels brain-light --title FULLBOARD
+[[ $(< "$VCC_TEST_TRACE") != *filing-gate* ]] || fail 'filing-gate asked for board 15'
+run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
+[ "$status" = 5 ] && [[ $(< "$T/err") == *'filing-gate missing'*'house-rules-sync'* ]] || fail "missing filing-gate did not refuse: $status $(< "$T/err")"
+allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title T
+allowed env VCC_FILING_GATE=/missing bash "$vcc" task update X-1 --project 4060 --description 'please create this'
+allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title 'Board 4060 create note'
+printf 'ok Fleet CI and Fleet Infra creates go through filing-gate\n'
+run bash "$vcc" task create --project 12057 --labels 'Infra,Agent Feedback,brain-light' --title T
+[ "$status" = 0 ] || fail "a board label swap did not reach the CLI: $(< "$T/err")"
+[[ $(< "$T/err") == *'offers no brain-light; using brain-medium'* ]] || fail "no board label swap warning: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Infra,Agent Feedback,brain-medium>'* ]] || fail "brain-light was not swapped: $(< "$T/out")"
+run bash "$vcc" task create --project 12057 --labels=Infra,brain-hard --title T
+[ "$status" = 0 ] || fail "an equals-form board label swap did not reach the CLI: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels=Infra,brain-medium>'* ]] || fail "brain-hard was not swapped: $(< "$T/out")"
+run bash "$vcc" task create --project 2101 --labels 'Bug,brain-medium' --title T
+[ "$status" = 0 ] || fail "a board without brain labels refused a create: $(< "$T/err")"
+[[ $(< "$T/err") == *'has no brain labels; filing without one'* ]] || fail "no drop warning: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Bug>'* ]] || fail "brain label not dropped: $(< "$T/out")"
+run bash "$vcc" task create --project 2101 --labels brain-medium --title T
+[ "$status" = 0 ] || fail "a brain label alone was refused on a board without any: $(< "$T/err")"
+[[ $(< "$T/out") != *'--labels'* ]] || fail "an empty label list still reached the CLI: $(< "$T/out")"
+run bash "$vcc" task create --project 12058 --labels 'Infra,brain-light' --title T
+[ "$status" = 0 ] || fail "an unreadable label response blocked the create: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--labels> <Infra,brain-light>'* ]] || fail "an unreadable label response changed the create: $(< "$T/out")"
+printf 'ok brain labels follow the board labels\n'
 printf 'vcc helper guard tests passed\n'

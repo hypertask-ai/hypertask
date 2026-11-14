@@ -74,7 +74,6 @@ function fixture({ enabled = true, access = true, muted = false, existing = fals
   stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 7 }) });
   stub("src/lib/flags.ts", {
     HTPR_7061_REMIND_WITHOUT_INBOX_FLAG: flagKey,
-    MY_TASKS_SNOOZE_FLAG: "htpr-6461-my-tasks-snooze",
     isFeatureEnabled: async (key, userId) => {
       calls.flags.push({ key, userId });
       return key === flagKey && enabled;

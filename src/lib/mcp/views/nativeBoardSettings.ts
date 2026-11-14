@@ -122,7 +122,7 @@ export function normalizeNativeBoardFilters(value: unknown) {
     ) {
       throw new Error(`board_filters.${entry.type} contains an invalid value`);
     }
-    if (entry.match !== undefined && entry.match !== 'ALL' && entry.match !== 'ANY') {
+    if (entry.match !== undefined && entry.match !== 'ALL' && entry.match !== 'ANY' && !(entry.type === 'Labels' && entry.match === 'HIDE')) {
       throw new Error("Each board filter match must be 'ALL' or 'ANY'");
     }
     if (
@@ -163,4 +163,12 @@ export async function canonicalBoardColumns(projectId: number, visibleSectionIds
     title: section.section_title,
     visibility: visible.has(section.id),
   }));
+}
+
+export async function allBoardColumns(projectId: number) {
+  const sections = await prisma.section.findMany({
+    where: { projectId, deleted: false },
+    select: { id: true },
+  });
+  return canonicalBoardColumns(projectId, sections.map((section) => section.id));
 }

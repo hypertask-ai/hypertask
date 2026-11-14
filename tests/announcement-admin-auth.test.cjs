@@ -256,6 +256,35 @@ function loadPostRoute(
 ) {
   const writes = [];
   const corsOptions = [];
+  const prismaStub = {
+    __esModule: true,
+    default: {
+      announcments: {
+        create: async (write) => {
+          writes.push(["create", write]);
+          return createdAnnouncement;
+        },
+      },
+      user: {
+        findMany: async () => [],
+      },
+      userAnnouncement: {
+        createMany: async (write) => {
+          writes.push(["recipients", write]);
+          return { count: write.data.length };
+        },
+      },
+    },
+  };
+  const { createAnnouncement } = loadTypeScript(
+    "src/utils/controllers/announcements/createAnnouncement.ts",
+    {
+      "@/lib/prisma": prismaStub,
+      "@/lib/announcements/fanout": loadTypeScript(
+        "src/lib/announcements/fanout.ts",
+      ),
+    },
+  );
   const handler = loadTypeScript("src/pages/api/admin/postAnnouncement.ts", {
     "@/lib/admin/requireAnnouncementAdmin": {
       requireAnnouncementAdmin: authorizeAdmin,
@@ -264,25 +293,9 @@ function loadPostRoute(
       __esModule: true,
       default: async (_req, _res, options) => corsOptions.push(options),
     },
-    "@/lib/prisma": {
-      __esModule: true,
-      default: {
-        announcments: {
-          create: async (write) => {
-            writes.push(["create", write]);
-            return createdAnnouncement;
-          },
-        },
-        user: {
-          findMany: async () => [],
-        },
-        userAnnouncement: {
-          createMany: async (write) => {
-            writes.push(["recipients", write]);
-            return { count: write.data.length };
-          },
-        },
-      },
+    "@/lib/prisma": prismaStub,
+    "@/utils/controllers/announcements/createAnnouncement": {
+      createAnnouncement,
     },
   }).default;
   return { handler, writes, corsOptions };

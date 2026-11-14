@@ -1,6 +1,7 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import timers from "node:timers/promises";
+import { renderPlainLanguageTicketDescription } from "../../src/lib/tickets/plainLanguageTicket.mjs";
 
 const VARIABLE_NAME = "PROD_SMOKE_STREAK";
 const INCIDENT_TITLE = "[INCIDENT] Production smoke red on consecutive deploys";
@@ -107,7 +108,14 @@ async function findOrCreateIncident(fetchImpl, config) {
   const runUrl = escapeHtml(config.runUrl);
   const sha = escapeHtml(config.sha);
   const description =
-    `<p><strong>Production smoke failed on two consecutive deploys.</strong></p>` +
+    renderPlainLanguageTicketDescription({
+      whatWrongOrWanted: "Production smoke failed on two consecutive deploys.",
+      whoItAffects: "everyone on the live app until the deploy is healthy again",
+      recommendedCourseAndWhy:
+        "Inspect the smoke run, fix the failing view or revert the deploy. Why: two reds in a row mean users may hit a broken surface.",
+      whatValentinMustDecide: "nothing; on-call fixes or reverts",
+      howToUndo: "green smoke on the next deploy, or rollback the production SHA",
+    }) +
     `<ul>` +
     `<li><strong>Run:</strong> <a href="${runUrl}">${runUrl}</a></li>` +
     `<li><strong>Failing views:</strong> <code>${views}</code></li>` +

@@ -142,6 +142,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
     activities,
     messages,
     sessionUpdates,
+    $executeRaw: async () => 0,
     featureFlag: { findUnique: async () => ({ mode: "OWNER_ONLY" }) },
     agentRun: {
       findFirst: async ({ where, select }) => {
@@ -1156,6 +1157,7 @@ function atomicCommentHarness() {
   });
 
   const tx = {
+    $executeRaw: async () => 0,
     $queryRaw: async () => [{ id: task.id }],
     task: {
       findFirst: async () => task,

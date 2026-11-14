@@ -1,0 +1,2519 @@
+{
+  "boardId": 15,
+  "generatedAt": "2026-11-10T21:31:39.695Z",
+  "cutoff": "2026-10-01T00:00:00Z",
+  "boardLabels": [
+    {
+      "id": "f5dfa5b2-a498-4b41-a8a6-8f3386a5b4fe",
+      "name": "AI"
+    },
+    {
+      "id": "ee8f14db-6988-4eb5-960e-71b1903fa1c6",
+      "name": "AI CHAT 💬"
+    },
+    {
+      "id": "2a4eb246-8cc1-4f54-a672-cea315a967f8",
+      "name": "AI Cost"
+    },
+    {
+      "id": "6f90e56a-41d4-472e-90aa-62cbb4d07ae8",
+      "name": "ANNOYING 🤬💥"
+    },
+    {
+      "id": "58032b80-4ee0-41d9-ad1c-1cc246d182dd",
+      "name": "Agent Features"
+    },
+    {
+      "id": "50d15c0d-b5fc-497f-bf53-2b58fa543854",
+      "name": "Agent-first 🤖"
+    },
+    {
+      "id": "556d0e42-1318-45b1-954d-a8f6ad5c6e9a",
+      "name": "Ai ✨"
+    },
+    {
+      "id": "047dcd66-2729-46cd-8bee-44b3d6d19a43",
+      "name": "Android Native"
+    },
+    {
+      "id": "637feb95-d91a-4da4-be08-b8236fb93449",
+      "name": "Bug"
+    },
+    {
+      "id": "cbca278f-fbd6-41a4-947d-cb2a375bf5ad",
+      "name": "CI"
+    },
+    {
+      "id": "732bfa28-26e7-4d06-b9db-b4ee839dde96",
+      "name": "CLI"
+    },
+    {
+      "id": "40a1b843-e532-4a89-aceb-ee87f818da43",
+      "name": "Calendar 📅"
+    },
+    {
+      "id": "24a27d8c-9a55-4ab0-af40-99385e46d287",
+      "name": "Cursor Cloud 7 Nov"
+    },
+    {
+      "id": "13725b4e-9f00-4497-aeb0-a5ee18b9831f",
+      "name": "Cursor bugs 7 Nov"
+    },
+    {
+      "id": "bf1ab962-4e1c-4630-b7a3-25c763984923",
+      "name": "Cursor runners 6 Nov"
+    },
+    {
+      "id": "82aa421d-b58c-4952-a747-6d3d03b29993",
+      "name": "DESIGN🎨"
+    },
+    {
+      "id": "b3fde543-de61-4e13-98e3-c55ebf52f79a",
+      "name": "Error Log"
+    },
+    {
+      "id": "0b75c899-98a6-43fd-a2dc-b046eb4a6585",
+      "name": "FEATURE 💎"
+    },
+    {
+      "id": "9162c96c-0f3f-437f-b9c3-9004ec23a447",
+      "name": "HyperAI"
+    },
+    {
+      "id": "a00ffd87-756d-4fbe-9bff-dd5376dfc9ef",
+      "name": "IMPROVEMENT ⚒️"
+    },
+    {
+      "id": "f26ef434-c2ab-477f-877e-1f5501c6b1f2",
+      "name": "INBOX📩"
+    },
+    {
+      "id": "ff65d1a5-0aa5-4fa9-8eab-4d5fa7833f1b",
+      "name": "Infra"
+    },
+    {
+      "id": "32019cd1-e585-4327-9f14-8a63defc5212",
+      "name": "Interactive Tutorial"
+    },
+    {
+      "id": "77f96601-7457-4778-8f3e-f194f6154e8b",
+      "name": "Keyboard"
+    },
+    {
+      "id": "987d06b5-ef55-496c-889a-17d7d8690902",
+      "name": "MARKETING FUNNEL 🎯"
+    },
+    {
+      "id": "7fc584a5-bad0-498d-a256-7397f1a47e8d",
+      "name": "MCP"
+    },
+    {
+      "id": "7930c2d6-ac66-4e02-9d2a-6fcda87dcc0e",
+      "name": "Missing implementation"
+    },
+    {
+      "id": "7dc037cc-e641-4033-b589-3c81444470b8",
+      "name": "NEW USER ONBOARDING ❇️"
+    },
+    {
+      "id": "2e369fea-d000-4a1a-a5c4-bdc991841e0b",
+      "name": "Needs Upgrade"
+    },
+    {
+      "id": "1d08bfcd-728c-4853-b493-0ba2b06b68de",
+      "name": "P1"
+    },
+    {
+      "id": "9310a47a-ca3c-4030-8f8d-876641acb5fb",
+      "name": "P2"
+    },
+    {
+      "id": "44d6d725-16fa-49e8-9dda-6110ea39e36c",
+      "name": "P3"
+    },
+    {
+      "id": "a99962c5-1c52-4b36-8cce-29a8740f58ea",
+      "name": "Performance"
+    },
+    {
+      "id": "a4c9c4ee-3c36-4ce9-a10a-d41800147742",
+      "name": "QA ✅"
+    },
+    {
+      "id": "9e7ecf6d-6c2a-4231-adaa-d6c294511d3f",
+      "name": "QA7098 broken"
+    },
+    {
+      "id": "94c82b0c-3757-4444-b967-5d8c061dbc15",
+      "name": "QA7098 run2 broken"
+    },
+    {
+      "id": "b3ea2050-c4ca-4450-b851-248d3c909ffe",
+      "name": "QA7098 run3 broken"
+    },
+    {
+      "id": "623c0618-2371-4e1f-b674-3a5e02f62fdc",
+      "name": "Quick wins"
+    },
+    {
+      "id": "5a895a42-7d5b-42aa-8054-9b78ff7f63fb",
+      "name": "SPEED OPTIMIZATION ⏩"
+    },
+    {
+      "id": "63ce6044-fc80-461f-bb59-a36f34ad3e9a",
+      "name": "Screen Responsiveness"
+    },
+    {
+      "id": "098dbf4d-7221-40e0-b5bf-06acf193c4c4",
+      "name": "Security"
+    },
+    {
+      "id": "fd198dd9-26f8-4de1-bfed-70ab9b731465",
+      "name": "Speech-to-Text (Voice)"
+    },
+    {
+      "id": "969c8fc4-1ca4-4c14-866c-6067d07e6296",
+      "name": "Stripe"
+    },
+    {
+      "id": "d4cfe43d-c649-4303-9cbc-38794677af57",
+      "name": "Task Detail Page"
+    },
+    {
+      "id": "f7d71a65-2832-4ee7-9353-b93a684d1319",
+      "name": "Task Writer"
+    },
+    {
+      "id": "fbc019fc-981c-4640-b43d-1740495c8ea2",
+      "name": "Themes"
+    },
+    {
+      "id": "482846cf-61f3-4793-acad-ae5c0f82906d",
+      "name": "Used Daily ⬆️"
+    },
+    {
+      "id": "b9cffc45-7438-4105-8766-97bba5ae9111",
+      "name": "Viral Features"
+    },
+    {
+      "id": "dac1e54d-7775-4cc5-ac71-61480ff0f8b8",
+      "name": "Write with AI"
+    },
+    {
+      "id": "0979349f-a2db-4031-b22a-341b4d980adc",
+      "name": "__probe_delete_me"
+    },
+    {
+      "id": "7d8b0cf2-954c-4e96-85f8-e43e700c9d21",
+      "name": "agent-fleet"
+    },
+    {
+      "id": "5b953c68-8092-40a7-965c-05d596e4c15b",
+      "name": "ai-feedback"
+    },
+    {
+      "id": "2fbda544-9e7f-4e26-8280-7e59d68226bf",
+      "name": "announced-rocket"
+    },
+    {
+      "id": "ffd4e4bb-f40c-420f-9c8d-eb48ae8a77ee",
+      "name": "announced-x"
+    },
+    {
+      "id": "9195864e-325b-4dd1-b2ca-ca6b275bd031",
+      "name": "announced-youtube"
+    },
+    {
+      "id": "49f32835-5a8f-4ff5-92fc-e357c4d738e7",
+      "name": "anthropic-standards"
+    },
+    {
+      "id": "53ce91cd-644c-4e89-a168-7ce66a7c9d3a",
+      "name": "api"
+    },
+    {
+      "id": "96bf126f-a764-42f9-abb1-4a1c16fc0891",
+      "name": "auto-error"
+    },
+    {
+      "id": "cb3744e6-d861-497b-95ef-d9092fff1dfa",
+      "name": "brain-extra-hard"
+    },
+    {
+      "id": "8ab3def4-0801-4ba1-ae9e-b6e419463531",
+      "name": "brain-hard"
+    },
+    {
+      "id": "1ca2ceeb-cfdb-42c2-8666-562d8349750a",
+      "name": "brain-light"
+    },
+    {
+      "id": "bc10c71c-e6a8-4918-be8f-5f6580fda1e1",
+      "name": "brain-medium"
+    },
+    {
+      "id": "f53eab4f-8263-4006-9e53-d2b8604e0660",
+      "name": "cli-mcp-ai"
+    },
+    {
+      "id": "f2fe3edf-735a-44de-a0b5-e40845b4839d",
+      "name": "design-pass"
+    },
+    {
+      "id": "acb45582-441b-409e-a890-d79900088ce6",
+      "name": "e2b"
+    },
+    {
+      "id": "440ecd27-8e2a-4a38-89e6-8304d7d2907e",
+      "name": "easy"
+    },
+    {
+      "id": "f8b699f3-deb1-4668-8000-24e5e59ea12b",
+      "name": "emergency"
+    },
+    {
+      "id": "491e2550-a10f-415a-b74e-188e2a8e7a16",
+      "name": "flag:everyone"
+    },
+    {
+      "id": "2c634fcc-eefb-4197-9824-fe4e01e37e7a",
+      "name": "flag:internal"
+    },
+    {
+      "id": "d5c81958-a835-4c11-ae11-8634e20f05e6",
+      "name": "flag:off"
+    },
+    {
+      "id": "c8c91db4-9e23-4d54-9de8-14023ca2eb3b",
+      "name": "flag:owner-only"
+    },
+    {
+      "id": "ef15648b-60f1-4b63-86ed-2ba91ff34e13",
+      "name": "flag:qa-only"
+    },
+    {
+      "id": "0ab66b83-7125-4d21-a1de-b686a1ff1858",
+      "name": "hard"
+    },
+    {
+      "id": "6be72a6a-bedb-4693-95f6-097a724ba584",
+      "name": "iOS App"
+    },
+    {
+      "id": "e9b5cda7-80ed-4881-9a13-700f64576a62",
+      "name": "incident"
+    },
+    {
+      "id": "44ad1612-730c-4aa5-9451-02a62e4f3865",
+      "name": "initiative"
+    },
+    {
+      "id": "f4ec682c-6040-4dd7-a4ca-b623edfcee9a",
+      "name": "intensity:easy"
+    },
+    {
+      "id": "42e4c20a-fbee-4715-9f20-31e5bf8ce943",
+      "name": "intensity:hard"
+    },
+    {
+      "id": "78928c61-485c-4eff-8a18-9160d3467f87",
+      "name": "intensity:medium"
+    },
+    {
+      "id": "8950a355-6a45-4a52-867b-c486a168c2c9",
+      "name": "linear-features"
+    },
+    {
+      "id": "aa02be71-b232-4650-b3b5-cb4ce0eb5379",
+      "name": "llm:claude-opus-5"
+    },
+    {
+      "id": "bb230e99-305b-4174-b2c6-2c3b4534367d",
+      "name": "llm:claude-sonnet-5"
+    },
+    {
+      "id": "57b38310-b633-4933-858d-1fb4e6db0fc2",
+      "name": "llm:cursor-auto"
+    },
+    {
+      "id": "51dad5d9-220a-4d1b-a30a-731937673167",
+      "name": "llm:glm-5.3"
+    },
+    {
+      "id": "e8682183-e151-4235-be87-54fcc29adf36",
+      "name": "llm:glm-5.3-flash"
+    },
+    {
+      "id": "3196bb54-b7dd-467e-914b-67922617a731",
+      "name": "llm:gpt-5.6-luna"
+    },
+    {
+      "id": "9b65a0e8-c224-49ef-a0b1-49da6f79c9d9",
+      "name": "llm:gpt-5.6-sol"
+    },
+    {
+      "id": "2cbc221d-e702-4600-b881-0d6a2b9d8091",
+      "name": "my-tasks"
+    },
+    {
+      "id": "a079d150-afc9-46a6-a25b-48eb8176e716",
+      "name": "my-tasks-view"
+    },
+    {
+      "id": "326a8757-baab-4be2-953d-3692629c815a",
+      "name": "needs-human"
+    },
+    {
+      "id": "4250aab0-33f9-455b-9588-f856dbcdda86",
+      "name": "needs-info"
+    },
+    {
+      "id": "1eb3d7e6-60b5-4af5-a4f3-f18db3369456",
+      "name": "onboarding"
+    },
+    {
+      "id": "288a4603-d809-448a-b5ff-16ca82363991",
+      "name": "planner"
+    },
+    {
+      "id": "9b3f390d-53b4-46bb-a81e-81b89c9d2761",
+      "name": "prod-error"
+    },
+    {
+      "id": "1c3fa0bb-88a8-4b2f-9876-263f76ef8b32",
+      "name": "qa-fixture"
+    },
+    {
+      "id": "896e179f-fd2e-4495-b309-c5a5bd242758",
+      "name": "qa-runner"
+    },
+    {
+      "id": "89c46966-0052-4327-8be9-1e716575dd02",
+      "name": "reports"
+    },
+    {
+      "id": "f4f93032-07cf-44d8-b880-2231ede942fe",
+      "name": "skills-pilot"
+    },
+    {
+      "id": "e6b1b64e-e9d9-4f6c-9a66-98eefe0dd721",
+      "name": "sol"
+    },
+    {
+      "id": "4d88e574-e299-4346-a113-8ec16f73da9d",
+      "name": "stale"
+    },
+    {
+      "id": "e195f9be-53d1-4792-b180-35af9a3f53a5",
+      "name": "tes"
+    },
+    {
+      "id": "dd9ac1cc-ca6a-4f18-9358-2fe5ab494525",
+      "name": "time-tracking"
+    },
+    {
+      "id": "bdc7b121-1b79-49c3-9063-46cf098d9a15",
+      "name": "urgent"
+    },
+    {
+      "id": "1ac90c54-b82d-438b-98ad-446020335015",
+      "name": "user-feedback"
+    },
+    {
+      "id": "1ece9dd6-06bd-457e-ae2a-8acce670e795",
+      "name": "ux-affected"
+    },
+    {
+      "id": "f961e946-14f4-4a98-8df4-3cbb4c633d0c",
+      "name": "verify-fleet"
+    },
+    {
+      "id": "9f29b13f-c079-4d7e-a51f-b070c6f6911c",
+      "name": "wayfinder"
+    },
+    {
+      "id": "265edec5-0cda-41a9-9345-b29101f20e7c",
+      "name": "📲MOBILE"
+    },
+    {
+      "id": "4de59901-3efd-4053-9220-dfd154d73638",
+      "name": "🖥️DESKTOP"
+    }
+  ],
+  "labels": [
+    {
+      "id": "f5dfa5b2-a498-4b41-a8a6-8f3386a5b4fe",
+      "name": "AI"
+    },
+    {
+      "id": "ee8f14db-6988-4eb5-960e-71b1903fa1c6",
+      "name": "AI CHAT 💬"
+    },
+    {
+      "id": "2a4eb246-8cc1-4f54-a672-cea315a967f8",
+      "name": "AI Cost"
+    },
+    {
+      "id": "6f90e56a-41d4-472e-90aa-62cbb4d07ae8",
+      "name": "ANNOYING 🤬💥"
+    },
+    {
+      "id": "58032b80-4ee0-41d9-ad1c-1cc246d182dd",
+      "name": "Agent Features"
+    },
+    {
+      "id": "50d15c0d-b5fc-497f-bf53-2b58fa543854",
+      "name": "Agent-first 🤖"
+    },
+    {
+      "id": "556d0e42-1318-45b1-954d-a8f6ad5c6e9a",
+      "name": "Ai ✨"
+    },
+    {
+      "id": "047dcd66-2729-46cd-8bee-44b3d6d19a43",
+      "name": "Android Native"
+    },
+    {
+      "id": "637feb95-d91a-4da4-be08-b8236fb93449",
+      "name": "Bug"
+    },
+    {
+      "id": "cbca278f-fbd6-41a4-947d-cb2a375bf5ad",
+      "name": "CI"
+    },
+    {
+      "id": "732bfa28-26e7-4d06-b9db-b4ee839dde96",
+      "name": "CLI"
+    },
+    {
+      "id": "40a1b843-e532-4a89-aceb-ee87f818da43",
+      "name": "Calendar 📅"
+    },
+    {
+      "id": "24a27d8c-9a55-4ab0-af40-99385e46d287",
+      "name": "Cursor Cloud 7 Nov"
+    },
+    {
+      "id": "13725b4e-9f00-4497-aeb0-a5ee18b9831f",
+      "name": "Cursor bugs 7 Nov"
+    },
+    {
+      "id": "bf1ab962-4e1c-4630-b7a3-25c763984923",
+      "name": "Cursor runners 6 Nov"
+    },
+    {
+      "id": "82aa421d-b58c-4952-a747-6d3d03b29993",
+      "name": "DESIGN🎨"
+    },
+    {
+      "id": "b3fde543-de61-4e13-98e3-c55ebf52f79a",
+      "name": "Error Log"
+    },
+    {
+      "id": "0b75c899-98a6-43fd-a2dc-b046eb4a6585",
+      "name": "FEATURE 💎"
+    },
+    {
+      "id": "9162c96c-0f3f-437f-b9c3-9004ec23a447",
+      "name": "HyperAI"
+    },
+    {
+      "id": "a00ffd87-756d-4fbe-9bff-dd5376dfc9ef",
+      "name": "IMPROVEMENT ⚒️"
+    },
+    {
+      "id": "f26ef434-c2ab-477f-877e-1f5501c6b1f2",
+      "name": "INBOX📩"
+    },
+    {
+      "id": "ff65d1a5-0aa5-4fa9-8eab-4d5fa7833f1b",
+      "name": "Infra"
+    },
+    {
+      "id": "32019cd1-e585-4327-9f14-8a63defc5212",
+      "name": "Interactive Tutorial"
+    },
+    {
+      "id": "77f96601-7457-4778-8f3e-f194f6154e8b",
+      "name": "Keyboard"
+    },
+    {
+      "id": "987d06b5-ef55-496c-889a-17d7d8690902",
+      "name": "MARKETING FUNNEL 🎯"
+    },
+    {
+      "id": "7fc584a5-bad0-498d-a256-7397f1a47e8d",
+      "name": "MCP"
+    },
+    {
+      "id": "7930c2d6-ac66-4e02-9d2a-6fcda87dcc0e",
+      "name": "Missing implementation"
+    },
+    {
+      "id": "7dc037cc-e641-4033-b589-3c81444470b8",
+      "name": "NEW USER ONBOARDING ❇️"
+    },
+    {
+      "id": "2e369fea-d000-4a1a-a5c4-bdc991841e0b",
+      "name": "Needs Upgrade"
+    },
+    {
+      "id": "a99962c5-1c52-4b36-8cce-29a8740f58ea",
+      "name": "Performance"
+    },
+    {
+      "id": "a4c9c4ee-3c36-4ce9-a10a-d41800147742",
+      "name": "QA ✅"
+    },
+    {
+      "id": "9e7ecf6d-6c2a-4231-adaa-d6c294511d3f",
+      "name": "QA7098 broken"
+    },
+    {
+      "id": "94c82b0c-3757-4444-b967-5d8c061dbc15",
+      "name": "QA7098 run2 broken"
+    },
+    {
+      "id": "b3ea2050-c4ca-4450-b851-248d3c909ffe",
+      "name": "QA7098 run3 broken"
+    },
+    {
+      "id": "623c0618-2371-4e1f-b674-3a5e02f62fdc",
+      "name": "Quick wins"
+    },
+    {
+      "id": "5a895a42-7d5b-42aa-8054-9b78ff7f63fb",
+      "name": "SPEED OPTIMIZATION ⏩"
+    },
+    {
+      "id": "63ce6044-fc80-461f-bb59-a36f34ad3e9a",
+      "name": "Screen Responsiveness"
+    },
+    {
+      "id": "098dbf4d-7221-40e0-b5bf-06acf193c4c4",
+      "name": "Security"
+    },
+    {
+      "id": "fd198dd9-26f8-4de1-bfed-70ab9b731465",
+      "name": "Speech-to-Text (Voice)"
+    },
+    {
+      "id": "969c8fc4-1ca4-4c14-866c-6067d07e6296",
+      "name": "Stripe"
+    },
+    {
+      "id": "d4cfe43d-c649-4303-9cbc-38794677af57",
+      "name": "Task Detail Page"
+    },
+    {
+      "id": "f7d71a65-2832-4ee7-9353-b93a684d1319",
+      "name": "Task Writer"
+    },
+    {
+      "id": "fbc019fc-981c-4640-b43d-1740495c8ea2",
+      "name": "Themes"
+    },
+    {
+      "id": "482846cf-61f3-4793-acad-ae5c0f82906d",
+      "name": "Used Daily ⬆️"
+    },
+    {
+      "id": "b9cffc45-7438-4105-8766-97bba5ae9111",
+      "name": "Viral Features"
+    },
+    {
+      "id": "dac1e54d-7775-4cc5-ac71-61480ff0f8b8",
+      "name": "Write with AI"
+    },
+    {
+      "id": "f8b699f3-deb1-4668-8000-24e5e59ea12b",
+      "name": "emergency"
+    },
+    {
+      "id": "6be72a6a-bedb-4693-95f6-097a724ba584",
+      "name": "iOS App"
+    },
+    {
+      "id": "1eb3d7e6-60b5-4af5-a4f3-f18db3369456",
+      "name": "onboarding"
+    },
+    {
+      "id": "dd9ac1cc-ca6a-4f18-9358-2fe5ab494525",
+      "name": "time-tracking"
+    },
+    {
+      "id": "265edec5-0cda-41a9-9345-b29101f20e7c",
+      "name": "📲MOBILE"
+    },
+    {
+      "id": "4de59901-3efd-4053-9220-dfd154d73638",
+      "name": "🖥️DESKTOP"
+    }
+  ],
+  "cases": [
+    {
+      "id": "51717",
+      "ticket": "HTPR-6759",
+      "title": "[RULE] HR-12 Agents are running is broken",
+      "text": "Investigate why Dev-2 is not running because its timer is off, fix the cause or send it on, and close this ticket once the Rules box shows HR-12 green. Problem Hard rule HR-12, Agents are running, is broken. Dev-2 is not running because its timer is off. The hourly hard-rules watch, rules-watch, files one ticket per broken rule and checks again every hour. Affected screen The Rules box on https://hypertask.app/agents shows the live state of the rule. Acceptance criteria Proposed: The supervisor fixes the cause or sends it on. Proposed: This ticket can close once the Rules box shows HR-12 green. Out of scope Proposed: Changes unrelated to resolving the HR-12 violation. Related tickets Builds on HTPR-6733 . It calls for hourly checks of every hard rule and a Rules box on the agents page. Related to HTPR-6749 . It tracks an HR-13 violation involving Dev-2 starting nine tickets without opening a pull request. Open questions Why is Dev-2's timer off? What should confirm that Dev-2 is...",
+      "gold": [
+        "Infra"
+      ]
+    },
+    {
+      "id": "51354",
+      "ticket": "HTPR-6724",
+      "title": "Possible duplicate",
+      "text": "Matches HTPR-6723, Possible duplicate , which records the same run time, build, and missing .kanban-column-title columns. No difference provided.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "51098",
+      "ticket": "HTPR-6712",
+      "title": "Possible duplicate",
+      "text": "This matches HTPR-6709 . This brief is split out of HTPR-6644 . The brief focuses on the silent worker exit; HTPR-6709 also covers missing production QA failure details.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "50657",
+      "ticket": "HTPR-6699",
+      "title": "Possible duplicate",
+      "text": "Matches HTPR-6686 , which describes the Dev hand-off parking a ticket in Agent Blocked instead of review/QA after opening a pull request. This ticket identifies the affected pull request as 768.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "50311",
+      "ticket": "HTPR-6692",
+      "title": "Possible duplicate",
+      "text": "Matches HTPR-6648, QA runner: switch boards failing on production , which reports board columns disappearing during the production switch-boards journey. This report records a different run at 2026-09-29T08:00:41.834Z, on build 62dad5f105d4a54405e5682243b95e945a68f892, with no \".kanban-column-title\" columns present.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "49733",
+      "ticket": "HTPR-6678",
+      "title": "Possible duplicate",
+      "text": "Matches HTPR-6659, QA runner: open board failing on production , which reports board columns becoming hidden during the production open-board journey. This report records a different run at 2026-09-28T20:54:34.343Z, build 178a3ad0766ee0cce0caf78eaf16809aeea1ff07, base URL https://app.hypertask.ai; requested by Valentin in a Claude session on 2026-09-23.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "49136",
+      "ticket": "HTPR-6667",
+      "title": "[auto] Uncaught TransformError: Inserted content deeper than insertion position",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/project?id=339&surface=board&view=default Source: client First seen: 2026-09-28T05:36:31.044Z Stack: TransformError: Inserted content deeper than insertion position at new t (node_modules/prosemirror-transform/dist/index.js:1909:1) at k.step (node_modules/prosemirror-transform/dist/index.js:1958:1) at node_modules/prosemirror-transform/dist/index.js:1189:1 at k.split (node_modules/prosemirror-transform/dist/index.js:1190:1) at node_modules/@tiptap/core/dist/index.js:2700:1 at Object.splitBlock (node_modules/@tiptap/core/dist/index.js:164:1) at Array.<anonymous> (node_modules/@tiptap/core/dist/index.js:5716:1) at node_modules/@tiptap/core/dist/index.js:437:36 at Object.first (node_modules/@tiptap/core/dist/index.js:66:1) at Enter (node_modules/@tiptap/core/dist/index.js:5712:1) Extra: { \"origin\": \"window.onerror\", \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like...",
+      "gold": [
+        "Error Log",
+        "Infra"
+      ]
+    },
+    {
+      "id": "48572",
+      "ticket": "HTPR-6653",
+      "title": "[FEATURE] Admin can comp a team as Pro or BYOK",
+      "text": "Let admins comp a team on a chosen plan, Pro or BYOK, inside the app without editing the database. Problem Today, comping uses Team.compedUntil . It always means Pro and can only be set directly in the database. Affected screen The owner-only admin action is inside the app. The specific screen is not provided. Acceptance criteria Add a comped-plan field for Pro or BYOK. Default the field to Pro so existing comped teams stay the same. Make plan checks read the comped-plan field. Add an owner-only admin action to set or clear a comp. Out of scope Not provided. Related tickets Builds on HTPR-6636 . The live-site QA runner needs a BYOK test account and a Pro test account. Open questions Which screen should contain the owner-only admin action? Should setting a comp include choosing its end date? References Requested by Valentin in a Claude session, 2026-09-27: Claude session .",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "44939",
+      "ticket": "HTPR-6644",
+      "title": "[BUGFIX] Board columns blink empty right after the board loads",
+      "text": "Stop the board columns from disappearing briefly after the board opens. Problem Right after a board opens, its columns disappear for a moment, then come back. Found by the live-site QA runner on a plain customer account. On project 6370, column counts sampled every 100ms go 3, 0, 3 . Affected screen The project board at https://app.hypertask.ai/project?id=6370 . Reproduction Open the project board. Count the visible columns every 100ms during the initial load. Observe the count change from 3 to 0 , then back to 3 . Likely cause The likely cause is the same hydration problem as the React #418 bug. Acceptance criteria Proposed: The board keeps its columns rendered during the initial load. Proposed: The column count does not transition from 3 to 0 to 3. Proposed: Verify the fix on a plain customer account using project 6370. Out of scope Not provided. Related tickets HTPR-6615 builds on the same board-load instability. The board renders, blanks out, and rebuilds without user action....",
+      "gold": [
+        "Bug",
+        "Infra",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "44380",
+      "ticket": "HTPR-6633",
+      "title": "[BUG] Open task does not update live after the AI chat edits its description",
+      "text": "When the in-app AI chat edits a task's description, the open task keeps showing the old description until the page is reloaded. Seen: 2026-09-22 evening by Valentin on app.hypertask.ai, while verifying HTPR-6561 (AI chat keeps description formatting, now on for everyone). Steps: open a task, open the AI chat on it, ask it to add one line to the description. Expected: the new description appears on screen within a second or two, through live updates (Pusher), like any other edit. Actual: the description is saved correctly, but the screen only shows it after a reload. Regression: the same symptom for manual edits was fixed in HTPR-3980 (Done, July). This ticket may be the AI chat path only, or 3980 broke again. Root cause investigation is running; findings will follow in a comment.",
+      "gold": [
+        "Bug",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "43876",
+      "ticket": "HTPR-6625",
+      "title": "HTPR-6565 fallback reloaded the whole board every 10 s (reverted #685); re-land without flashing",
+      "text": "Reverted on production (3149da1, 2026-09-21 16:0x) because clients saw the board flash to loading every 10 s. PR 685 added a 10 s fallback timer in useBoardRealtime when the live connection is unavailable or failed. Each tick called the account-wide reconcileActiveBoardQuery , which flips dataFetching and drops LandingPage to its loading state. Users whose realtime connection failed (connection cap, headless, ?realtime=off ) saw the board rebuild every 10 s. Repro (old build): open /project?id=339&realtime=off , console shows the Project data fetched cycle every 10 s. Fix to re-land: fallback ticks must use the scoped reconcile (patch tasks, keep generation ), and LandingPage.tsx around line 620 should keep the last payload during a background refetch (drop !dataFetching && ) so no reconcile flashes. Verify: same repro shows one fetch, no cycle, and a dropped Pusher connection still catches up. Related: HTPR-6565 . Flag htpr-6166-scoped-board-refetch was set to Everyone today.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "43661",
+      "ticket": "HTPR-6614",
+      "title": "Stack upgrade: raw-body 2.5.3 -> 4.0.0 [dep-pr-727]",
+      "text": "Upgrade raw-body from 2.5.3 to 4.0.0 and get it merged within a week. Dependabot opened this as a major version bump, so it is deliberately NOT auto-merged. A dev takes it, reads the upstream changelog, fixes whatever breaks, and lands the PR. Pull request: https://github.com/hypertask-ai/hypertask/pull/727 Gate: ci-tests green on the PR, then the post-deploy GLM QA pass once it is live. The dev drives that pass; CI does not block on it. Do not enable auto-merge on this PR.",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "43434",
+      "ticket": "HTPR-6607",
+      "title": "Reply contract miss: dev-2 HTPR-5815",
+      "text": "Check acknowledgement, answer, and estimate timestamps in the agent reply ledger for HTPR-5815 . Problem The reply contract was missed for dev-2 on HTPR-5815. The agent reply ledger needs a timestamp check. Affected screen Agent reply ledger for dev-2 on HTPR-5815. Acceptance criteria Check the acknowledgement timestamp. Check the answer timestamp. Check the estimate timestamp. Out of scope Not provided. Related tickets Builds on HTPR-6582 . Checks acknowledgement, answer, and estimate timestamps in the product-bot agent reply ledger. Builds on HTPR-6583 . Checks the same three timestamps for dev-1 on HTPR-6554. Builds on HTPR-6600 . Checks acknowledgement, answer, and estimate timestamps for product-bot on HTPR-4842. Builds on HTPR-6601 . Checks the same three timestamps for product-bot on HTPR-6116. Builds on HTPR-6602 . Checks the same three timestamps for product-bot on HTPR-6595. Open questions What timestamp result should count as passing for each ledger entry? Should this check...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "42835",
+      "ticket": "HTPR-6599",
+      "title": "Enable GitHub auto-merge for hypertask-ai/analytics",
+      "text": "Enable GitHub auto-merge for the hypertask-ai/analytics repository so agents can land green pull requests. Problem GitHub auto-merge is not enabled on the repository, so agents cannot land green PRs there. This was split out of HTPR-6592 , which was blocked by the same issue. Affected area The hypertask-ai/analytics GitHub repository and its pull request merge flow. Acceptance criteria Proposed: GitHub auto-merge is enabled for the hypertask-ai/analytics repository. Proposed: Green pull requests can use auto-merge in that repository. Out of scope Changes to the analytics pull request code. Changes to repositories other than hypertask-ai/analytics. Related tickets Blocked by this issue: HTPR-6592 . The shipping page work is live, but its analytics PR requires manual merging because GitHub auto-merge is unavailable. Open questions Which repository setting or permission currently prevents auto-merge? Should the setting apply to all analytics pull requests or only pull requests that pass...",
+      "gold": [
+        "FEATURE 💎",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "42682",
+      "ticket": "HTPR-6591",
+      "title": "Agents page: per-agent activity modules for board 15 with a working-now headline",
+      "text": "Add per-agent activity modules below the agents module on https://hypertask.app/agents for Product Bot, Dev 1, Dev 2, and QA 1. Problem Valentin cannot see whether each agent is productive in each time window or busy right now without reading logs. Affected screen Build in the analytics app. Deploy the analytics app after the change. Show the modules below the existing agents module on https://hypertask.app/agents . Rename the existing top block to Shipped by the whole fleet . Use board 15 only, from the hypertask-ai/hypertask repository and production merges. Acceptance criteria Show one module for each board-15 agent: Product Bot , Dev 1 , Dev 2 , and QA 1 . Show Working on HTPR-nnnn right now with the ticket link and start time when the agent is working. Show Idle since HH:MM when the agent is not working. Show six windows under each module: 1h, 3h, 6h, 12h, 24h, and 48h . Show bugs and features shipped by each development agent for every window. Count work as shipped when its PR...",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "42662",
+      "ticket": "HTPR-6582",
+      "title": "Reply contract miss for product-bot on HTPR-5815",
+      "text": "Check the acknowledgement, answer, and estimate timestamps in the product-bot agent reply ledger for HTPR-5815 . Problem The product-bot reply contract was missed on HTPR-5815. The agent reply ledger needs a timestamp check. Affected screen Agent reply ledger for product-bot on HTPR-5815. Acceptance criteria Proposed: Check the acknowledgement timestamp. Proposed: Check the answer timestamp. Proposed: Check the estimate timestamp. Out of scope Not provided. Related tickets Builds on HTPR-3739 : tightened HyperAI replies to answer first, stay short, and remain scannable. Open questions What timestamp result should count as passing for each ledger entry? Should this check cover only HTPR-5815 or other product-bot replies?",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "42334",
+      "ticket": "HTPR-6569",
+      "title": "g then m -> saving view buttons are NEW instead of resuing what we have on kanban",
+      "text": "https://screencast2.com/0Pebn.png we already have functions and buttons for this on the kanban why invent something new? Product Bot You need to prevent using new patterns if the pattern already exists. We keep having this problem that agents invent new shit, which I don't want, which we already have rules and patterns for.",
+      "gold": [
+        "IMPROVEMENT ⚒️",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "42128",
+      "ticket": "HTPR-6561",
+      "title": "[BUG] The in-app AI chat flattens a task description into one text blob when it edits it",
+      "text": "When the AI chat edits a description, it must keep and produce proper structure: headings, paragraphs, lists, bold. Today it rewrites the whole description as one unbroken block of text. Seen on 18 September, ticket a client-1705: Valentin asked the chat to add one line (\"Add to cart is also restricted, please amend the description\"). The chat added the line and returned the description as a single paragraph. Sections that used to be separate (\"Problem Context\", \"Hypothesis\", \"What we would do\", \"How we read it\", \"Evidence\") are now run together with no line breaks. Screenshot: https://screencast2.com/jwKp7.png Expected An edit changes only the part asked for and keeps every existing heading, paragraph and list. A new description or comment written by the chat uses the same block structure the editor uses (paragraphs, headings, bullet lists, bold key words), never bare text. The same rule holds for the CLI and the API: bare text is normalised into paragraphs on save, so no client can...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "41746",
+      "ticket": "HTPR-6554",
+      "title": "Light theme comments lack visual separation on mobile",
+      "text": "On the light theme, there are no outlines around comments. If you look at the AMOLED theme and all the other themes, they have outlines around the comments. Why are there no outlines on mobile? I guess desktop too. I haven't looked on desktop, but there should be outlines or, like, a different type of background for the comments so that I can separate them more easily. No?",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "41607",
+      "ticket": "HTPR-6547",
+      "title": "Stack upgrade: tailwind-merge 2.6.1 -> 3.7.0 [dep-pr-636]",
+      "text": "Upgrade tailwind-merge from 2.6.1 to 3.7.0 and get it merged within a week. Dependabot opened this as a major version bump, so it is deliberately NOT auto-merged. A dev takes it, reads the upstream changelog, fixes whatever breaks, and lands the PR. Pull request: https://github.com/hypertask-ai/hypertask/pull/636 Gate: ci-tests green on the PR, then the post-deploy GLM QA pass once it is live. The dev drives that pass; CI does not block on it. Do not enable auto-merge on this PR.",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "41330",
+      "ticket": "HTPR-6540",
+      "title": "qa-fixture HTPR-6376 r3 direct-done-guard",
+      "text": "QA fixture for HTPR-6376. Safe to archive.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "41213",
+      "ticket": "HTPR-6531",
+      "title": "MCP: deferred tools and progressive disclosure, short descriptions first, full schemas on demand",
+      "text": "Make the Hypertask MCP server cheap to connect: a client should load one short line per tool at start and fetch a tool's full schema only when it is about to call it. Why now. The old objection to MCP was context bloat. Claude Code now defers tools (names first, schema on demand) and Anthropic calls that \"progressive disclosure for MCPs, the same way a CLI is\". Our server sends every tool's full schema and long descriptions on connect. Descriptions: first sentence under 100 characters, states what the tool returns; detail moves below a blank line so clients that truncate keep the useful part. Schemas: lean input schemas, no duplicated enums, shared $defs , output schemas declared (structured content) so clients skip parsing. Meta tools: search_tools and describe_tool for clients without native deferral (Cursor, Codex), so they can start with the meta tools only. Measure: tokens sent on connect before and after, target under 1,500 tokens for the full tool list. Parent: HTPR-6478 .",
+      "gold": [
+        "IMPROVEMENT ⚒️",
+        "MCP"
+      ]
+    },
+    {
+      "id": "40869",
+      "ticket": "HTPR-6518",
+      "title": "Stack upgrade: ioredis 5.11.1 -> 6.0.0 [dep-pr-596]",
+      "text": "Upgrade ioredis from 5.11.1 to 6.0.0 and get it merged within a week. Dependabot opened this as a major version bump, so it is deliberately NOT auto-merged. A dev takes it, reads the upstream changelog, fixes whatever breaks, and lands the PR. Pull request: https://github.com/hypertask-ai/hypertask/pull/596 Gate: ci-tests green on the PR, then the post-deploy GLM QA pass once it is live. The dev drives that pass; CI does not block on it. Do not enable auto-merge on this PR.",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "40827",
+      "ticket": "HTPR-6511",
+      "title": "Infra: Production deploy did not ship merged commit 95f3471 - /api/version still reports 058a6cf.",
+      "text": "Production deploy did not ship merged commit 95f3471 - /api/version still reports 058a6cf. Split out of HTPR-6461 , which was blocked by it.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "40801",
+      "ticket": "HTPR-6504",
+      "title": "Enforced conventions: withAuth wrapper, middleware, auth contract test, typed env, one logger, coverage gate",
+      "text": "Add mechanical enforcement, a withAuth wrapper, middleware, a CI auth contract test, typed env, one logger, and a coverage gate, so conventions stop depending on memory. Audit rating: poor . The only conventions enforced today are the feature-flag removal cron in src/lib/flags/removal.ts , the new eslint-local-rules/style-guide.mjs , and Prisma funnelled through @/lib/prisma . Everything else relies on memory. No middleware.ts exists. In the App Router, getSessionUser is called by hand in 129 of 157 routes and Zod is used in 19 of 157; the error envelope splits between {error} (414 sites) and {message} (54). In the Pages Router (228 files), 108 have some auth signal, 0 use Zod, and {message} (171) outnumbers {error} (26). any appears 1,269 times, @ts-ignore 27 times, eslint-disable 135 times. 745 test files run on a custom runner, but tests/auth has one file covering 385 API routes, and .c8rc.json sets no coverage threshold so CI never fails on coverage. process.env is read directly...",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "40685",
+      "ticket": "HTPR-6495",
+      "title": "Fix settings opening when the sidebar is expanded",
+      "text": "Settings do not open when the sidebar is expanded on a project page. Reported via feedback item DBAC-14 .",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "40647",
+      "ticket": "HTPR-6484",
+      "title": "Retire Midscene nightly: port its flows into the E2B fleet and remove the cron",
+      "text": "Retire the Midscene nightly QA job: port any flow the E2B fleet doesn't already cover, then delete the Midscene cron and its dashboard. Valentin decided (2026-09-15) the E2B verification fleet is now the one nightly QA suite. Midscene stays retired rather than repaired. What to port. The legacy Midscene pack has 16 flows; comparing names against the E2B fleet's 42 flows in ~/projects/hypertask-verify-app/flows-app/ , six have no clear E2B equivalent: landing and login-screen — unauthenticated marketing/login pages, a screen class the E2B fleet doesn't test at all (it only runs logged-in flows). starred-loads and all-tasks-loads — no E2B flow named for the Starred view or the All Tasks list view specifically. board-move-task (drag a task between columns) and board-count-consistency (column/task count stays correct after mutation) — the closest E2B flows cover priority, rename, and comments, not a column-to-column move or a count check. Port whichever of these still matter as new E2B...",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "40622",
+      "ticket": "HTPR-6805",
+      "title": "Zig CLI: dedupe JSON accessors, HTTP checks, and per-request connections",
+      "text": "Refactor the Zig CLI ( ~/projects/hypertask-cli-zig ) to remove copy-paste and wasted network calls. No behaviour change. A four-angle review (reuse, simplification, efficiency, architecture) rated the codebase good on architecture and reuse, fair on simplicity and efficiency. Module layout is sound. The debt is concentrated in a few places below. 1. Shared JSON accessors (highest value) Field accessors ( stringField / integerField / objectField / jsonInteger ) are reimplemented in resolve.zig:126 , commands/agent.zig:912 , commands/ai.zig:107 , commands/agent_dev.zig:68 , commands/time.zig:121 . They drift : ai.zig skips the object guard, only two handle string-encoded integers. Move one guarded, string-fallback-aware set into json_util.zig . Delete the five copies. Also fold json_util.appendRawField into Object.raw , which already tracks the comma state. 2. One HTTP success check code < 200 or code >= 300 is hand-rolled 15+ times across 9 command files (task, comment, messages,...",
+      "gold": [
+        "CLI",
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "40527",
+      "ticket": "HTPR-6470",
+      "title": "CLI bug: no projects delete command (only archive)",
+      "text": "The hypertask CLI has projects archive but no way to delete a board with its tasks; the web UI can. Command tried: hypertask projects delete (does not exist); ht DELETE /mcp/projects/ returns not found.Expected: hypertask projects delete [--yes] performing the same hard delete as the UI. Also found: the MCP projects/archive route is deliberately owner-only and delete-free by design (HTPR-4780). The human UI's own Delete board button (BoardLifecycleSettings.tsx) did not render for 13 boards actually owned by userId 6 per the API, only Leave board showed, likely a canManageBoardLifecycle ownerId mismatch bug worth a separate look.",
+      "gold": [
+        "CLI",
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "40505",
+      "ticket": "HTPR-6457",
+      "title": "My Tasks: scope switch (assigned to me / created by me / mentioned / watching)",
+      "text": "Add a scope switch to My Tasks so I can see tasks I created, was mentioned in, or watch, not only tasks assigned to me. Today: the query only returns tasks where I am an assignee, so anything I am waiting on is invisible. Scopes: assigned to me (default), created by me, mentioned, watching. Multi-select allowed. Saved in the view ( HTPR-6422 ). Server: extend the My Tasks query with the chosen scopes; keep it one query. Valentin, 2026-09-14.",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "40465",
+      "ticket": "HTPR-6434",
+      "title": "[INCIDENT] Core-action smoke: capture unassignment activity",
+      "text": "Core-action smoke unrunnable. capture unassignment activity returned server response 200. activity ownership was ambiguous. Rollback not requested for this result. Workflow run",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "40388",
+      "ticket": "HTPR-6423",
+      "title": "[auto] TypeError: b is null",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-339/1677 Source: client First seen: 2026-09-14T11:37:17.301Z Stack: $RS@https://app.hypertask.ai/detail/project-339/1677:40:137275 @https://app.hypertask.ai/detail/project-339/1677:40:137349 Extra: { \"origin\": \"window.onerror\", \"userAgent\": \"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0\" }",
+      "gold": [
+        "Error Log",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "39975",
+      "ticket": "HTPR-6416",
+      "title": "[auto] Sorry, an error occurred while processing your request.",
+      "text": "An automated production error needs investigation. URL: /api/ai/chat/stream Source: handled First seen: 2026-09-12T11:37:08.205Z Stack: Error: Sorry, an error occurred while processing your request. at bq (/var/task/.next/server/app/api/ai/chat/stream/route.js:169:1811) at onError (/var/task/.next/server/app/api/ai/chat/stream/route.js:194:134004) at Object.pull (/var/task/.next/server/chunks/62939.js:38:35063) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) Extra: { \"stage\": \"model-stream\", \"model\": \"xai/grok-4.1-fast-non-reasoning\", \"provider\": \"gateway\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "39745",
+      "ticket": "HTPR-6406",
+      "title": "QA r2 live 1789120053167",
+      "text": "Disposable QA fixture for HTPR-6281 r2 on #519. Safe to archive.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "39634",
+      "ticket": "HTPR-6395",
+      "title": "[auto] Prisma schema mismatch Missing tables User, BetterAuthSession, BetterAuthAccount, BetterAu",
+      "text": "An automated production error needs investigation. URL: /api/auth/bridge-session Source: server First seen: 2026-09-11T03:52:37.214Z Stack: Not provided Extra: { \"route\": \"/api/auth/[...all]\", \"method\": \"POST\", \"router\": \"App Router\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "39593",
+      "ticket": "HTPR-6385",
+      "title": "QA HTPR-6362 probe 2026-09-11T00-42-36-177Z delete me",
+      "text": "QA probe for agent creator attribution. Safe to archive.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "39346",
+      "ticket": "HTPR-6370",
+      "title": "Search bar chips plus the @ people picker and # board picker, with value autocomplete",
+      "text": "Turn the search bar into a Slack-style chip input: @ opens the people picker and inserts a coloured from:@Name chip, # opens a board picker, and typing an operator value autocompletes it into a chip. Parent: HTPR-6368 . Depends on the parser and value lookup in HTPR-6369 . Estimate: 20 to 24 hours . Behaviour Typing @ in the search bar opens a people picker that looks like the editor's mention tool. Choosing someone inserts the chip from:@Name : light blue background, person icon, and a name. Click the chip or press Backspace next to it to remove it. Typing # opens a board picker and inserts in:#Board the same way. Typing an operator value autocompletes. from:ka opens the people picker filtered to names matching \"ka\" with the most likely person preselected (a recent collaborator, or a member of the board in view). Enter or Tab completes it to the chip from:@Kamil Grzegorzewicz . The same applies to in:pro completing to a board, label:bu to a label, and assignee: to a person. Matching...",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "39313",
+      "ticket": "HTPR-6363",
+      "title": "Task writer only rephrases the pasted text: restore board research, related-ticket links and brainstorm",
+      "text": "The task writer has stopped researching the board. It rephrases whatever the user pastes, adds no detail, links no older tickets and no longer allows a back-and-forth. Reported by Muhammad Aalian on 2026-09-10 (Slack), confirmed by Valentin. What Aalian sees on his G->A board tickets: descriptions are a restatement of his input; it used to research, fill in detail, reference older tickets, and he could brainstorm with it. Target behaviour (Valentin, 2026-09-10): the writer has two jobs, structure and historical context, and the second is what the search index exists for. Retrieve before writing: search the same board, Done tickets included, for the 5 to 8 closest tickets to the title plus pasted text. Classify each hit: duplicate, builds on, blocked by, or unrelated. A duplicate stops the flow and says so; a builds-on is linked with its outcome in one line. Learn the house style from Done tickets: two or three of the board's best finished tickets as examples. Use the board's...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "39194",
+      "ticket": "HTPR-6355",
+      "title": "Stack upgrade: Tiptap core 3.30.4 to 3.30.5, finish existing PR 467",
+      "text": "Finish the existing PR 467 as the next stack upgrade after js-yaml. Repair any current conflicts and failed checks, verify the patch against the installed editor packages, merge after required checks pass, and obtain independent Cursor QA on production. Use an unlazy ledger with focused acceptance checks for editor loading, typing, formatting and persistence. Keep ownership through QA PASS. Do not expand into other upgrades, Slack Marketplace or Google Calendar. Reuse the existing PR and preserve its work.",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "39073",
+      "ticket": "HTPR-6345",
+      "title": "QA fixture HTPR-5906 archive #6",
+      "text": "Temporary QA fixture for HTPR-5906.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "39055",
+      "ticket": "HTPR-6336",
+      "title": "[auto] HTPR-6238 deliberate error tracking verification",
+      "text": "An automated production error needs investigation. URL: /api/integrations/posthog/error-test Source: server First seen: 2026-09-09T11:04:12.484Z Stack: Error: HTPR-6238 deliberate error tracking verification at i (/var/task/.next/server/app/api/integrations/posthog/error-test/route.js:1:1154) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async rW.do (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:5:23405) at async rW.handle (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:5:28909) at async Y (/var/task/.next/server/app/api/integrations/posthog/error-test/route.js:1:11207) at async rW.handleResponse (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:1:129338) at async Z (/var/task/.next/server/app/api/integrations/posthog/error-test/route.js:1:12274) at async Module.z (/var/task/.next/server/app/api/integrations/posthog/error-test/route.js:1:14309) at async...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "38928",
+      "ticket": "HTPR-6322",
+      "title": "Hy4 agent does not answer in chat",
+      "text": "The agent must answer every chat message or say it is parked. Evidence: the screenshot shows Hy4 Dev 1 receiving “are you there?” while the UI reports “Agent did not answer, try again” and says its runtime has not enabled chat. Root cause: dev-hy4 is parked and its worker is stopped because its OpenRouter key file is missing. The notifier and webhook units are also inactive. Expected: a parked agent still replies in chat with one line explaining it is parked and why.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "38879",
+      "ticket": "HTPR-6312",
+      "title": "Allow filtering across all views (My Tasks, cross-board)",
+      "text": "Follow-up split from HTPR-6215: \"Also allow filtering across all views pls\" was not built there on purpose. My Tasks has no filters today. The board filter system (FilterHTC, useFilters hook) is entirely project-scoped: every mutating function bails out with no current project, and results save to that one board's saved view. My Tasks spans many boards and needs filters that reset on reload instead, so this needs its own state, not a reuse of the board one. Decide the filter set for v1 (Priority is the obvious first one since it is already flag-gated for cross-board sort in HTPR-6215; Labels/Assignees/Status are the next likely asks). Decide the entry point: a lightweight My Tasks-only filter dropdown, or plugging into the existing command-palette filter menu (FilterCommandMode) used on boards. Reuse the pure `applyFilters`/per-type filter condition functions in `src/utils/helperFunctions/Views/FilterHelperFunctions.ts` (board-agnostic already) instead of building new filter logic....",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "38844",
+      "ticket": "HTPR-6301",
+      "title": "[INFRA] CI policy says Contabo-only runner but zero self-hosted runners are registered",
+      "text": "Reconcile the CI contract with reality: docs/ci-policy.yml and the deployment wiki say substantive jobs run on the self-hosted Contabo runner, but the hypertask-ai/hypertask repo has zero registered runners and every check runs on GitHub-hosted ubuntu-latest. Found while adding the feature-flag gate ( PR 449 ). The repo is public, so hosted minutes are free today. The risk is a stale contract: any new job written for the Contabo label would queue forever. Manager decides: either re-register the Contabo runner and move jobs back, or rewrite the policy to hosted-runners-for-public-repo. Record the decision on this ticket and update docs/ci-policy.yml and the wiki.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "38823",
+      "ticket": "HTPR-6292",
+      "title": "Agent Chat: mic icon tooltip renders below the fold, unreadable",
+      "text": "Mic icon tooltip in Agent Chat becomes readable by opening upward instead of being clipped below the fold. Confirmed by the user in Agent Chat with Manager .",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "38810",
+      "ticket": "HTPR-6283",
+      "title": "Agent Chat: sort the chat list by most recent activity",
+      "text": "On /agents/chat , order the left-hand list of chats and agents by most recent activity, newest first, and keep that order live as messages arrive. Today the list is in a fixed order, so the chat Valentin just used sits somewhere in the middle and he has to hunt for it (Valentin, 2026-09-08). Most recent message (sent or received) moves a chat to the top, live via the existing realtime events. Unread chats keep their unread marker; no other ordering options needed. Ship behind a feature flag on Owner + QA per the UI rule, then everyone. Done when: sending a message in any chat moves it to the top of the list without reload, and reopening the page keeps that order.",
+      "gold": [
+        "Bug",
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "38791",
+      "ticket": "HTPR-6275",
+      "title": "CLI bug: tasks list --labels filter is a no-op",
+      "text": "Command: hypertask tasks list --project 15 --labels auto-error --limit 20 --json Command: hypertask tasks list --project 15 --labels incident --limit 20 --json Error/unexpected output: Both commands returned the identical 20-ticket list (looked like the full unfiltered board), including HTPR-6272 which actually carries no labels at all (confirmed via tasks get). The --labels flag is silently ignored. Expected behavior: --labels should filter results to only tickets carrying that label.",
+      "gold": [
+        "CLI",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "38714",
+      "ticket": "HTPR-6262",
+      "title": "Add move-to-column to the core-actions production smoke",
+      "text": "The core-actions smoke would have caught HTPR-6259 in minutes; today it missed it because it only exercises the MCP surface. The move dialog is fed by POST /api/section/getProjectSections , which is a pages API route, not MCP. src/lib/productionSmoke/coreActions.ts never calls it, so a board whose columns list crashed sat broken until Valentin hit it by hand. Add one step: fetch the columns for the smoke board and assert a non-empty array. Cheap, and it covers the whole move-to-column path. From HTPR-6259 .",
+      "gold": [
+        "IMPROVEMENT ⚒️",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "38687",
+      "ticket": "HTPR-6255",
+      "title": "Core-actions smoke job fails every run: reports to non-existent section 228",
+      "text": "The new core-actions job in \"Prod Health Check + Auto-Rollback\" fails on every run and will stay red until its report destination is fixed. Shipped by PR 401 ( https://github.com/hypertask-ai/hypertask/pull/401 ) for HTPR-6236 , merged 2026-09-08T08:14Z. Failure (run https://github.com/hypertask-ai/hypertask/actions/runs/34203426139 , step \"Report a failed or unrunnable check\"): 1 core-smoke report destination(s) failed: /api/mcp/tasks/create failed: Section with ID 228 not found in project 15 Section 228 does not exist on board 15. The real ids are 4389 Bugs, 9190 Features, 6106 UX needed, 4309 In Progress, 6297 Agent Blocked (Infra), 13182 HT Manager Review, 4311 Valentin Review, 4310 AI Review, 5511 QA, 4312 Done. Not an outage: the health and smoke jobs passed and CORE_SMOKE_ROLLBACK was \"not requested for this result\". The site is fine; the monitor is not. Fix: point the report destination at a real section (Bugs, 4389) and make the reporter fail loudly with the section id it...",
+      "gold": [
+        "Bug",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "38578",
+      "ticket": "HTPR-6236",
+      "title": "[STABILITY] Core-actions smoke test after every deploy with auto-rollback",
+      "text": "After every production deploy, a script logs in as a test user and performs the eight core actions; any failure rolls production back to the previous build within 2 minutes. Why: on 2026-09-07 PR 386 added import \"server-only\" to a helper used by pages/api routes. Every /api/tasks/single and /api/comments/getByTask call returned HTTP 500 for two hours; task detail and comment posting were dead for all users. The existing \"Prod Health Check + Auto-Rollback\" only loads pages, so it stayed green. Fixed by revert PR 390. Core actions (all through the same HTTP routes the web UI calls, as a logged-in user): open board (boardTasks), open task (tasks/single), load comments (comments/getByTask), post comment (comments/create), @mention a user and an agent, move ticket between columns, assign and unassign, search. Each must return 2xx with a sane body; the comment and move must be visible on re-read, then cleaned up on a dedicated test ticket. Build it into the existing \"Prod Health Check +...",
+      "gold": [
+        "Bug",
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "38554",
+      "ticket": "HTPR-6228",
+      "title": "[auto] Invalid `prisma.assignees.updateMany()` invocation: Transaction API error: A query cannot",
+      "text": "An automated production error needs investigation. URL: /api/mcp/agents/33832850-a941-4a7e-922a-8751ce80197e Source: server First seen: 2026-09-07T21:54:14.712Z Stack: PrismaClientKnownRequestError: Invalid `prisma.assignees.updateMany()` invocation: Transaction API error: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 7349 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction. at Jr.handleRequestError (/var/task/node_modules/@prisma/client/runtime/client.js:65:8286) at Jr.handleAndLogRequestError (/var/task/node_modules/@prisma/client/runtime/client.js:65:7581) at Jr.request (/var/task/node_modules/@prisma/client/runtime/client.js:65:7288) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async a (/var/task/node_modules/@prisma/client/runtime/client.js:99:6862) at async a.$transaction.isolationLevel...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "38439",
+      "ticket": "HTPR-6215",
+      "title": "Allow sorting across all projects by priority on the my tasks view. So that i can see all tasks from every board and which has the highest prio across everyting. Also allow filtering across all views pls",
+      "text": "https://screencast2.com/IU2MW.png",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "38379",
+      "ticket": "HTPR-6205",
+      "title": "[BUGFIX] Bare URLs in descriptions and comments are not clickable",
+      "text": "A plain URL typed in a description or comment, or posted by an agent through the CLI/API, stays dead text. It must become a clickable link. Why it broke: the editor's automatic linking was switched off in HTPR-3236 because text typed after an @mention kept extending the mention link. That fix also stopped every typed URL from linking. Pasting still links (linkOnPaste is on), typing and API-posted HTML do not. Fix (Valentin, 2026-09-07): Turn automatic linking back on in the editor and fix the @mention bleed properly (end the mention mark after the mention node, so following text is plain). Link bare URLs on render too, so agent comments and descriptions posted as HTML through the CLI/API show clickable links without re-saving. The manual link tool keeps priority: a URL the user has linked to different text stays as the user set it; auto-linking never overwrites an existing link. Acceptance: type https://example.com plus a space in a comment: it is a link. Post a comment via the CLI...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "38157",
+      "ticket": "HTPR-6197",
+      "title": "[BUGFIX] Agent Chat: confirmed proposal card still says 'nothing done yet'",
+      "text": "After you press Create ticket, the card still says \"Ticket proposed, nothing done yet\" even though the ticket now exists. What you see: the confirmed card shows the new ticket number, but the heading above it still claims nothing was done. Why it matters: the heading is the line people read first, so a created ticket reads as not created. Fix, about 10 minutes: swap the heading to a confirmed wording once the proposal has a ticket. Found while verifying HTPR-6006 on production. Screenshot on that ticket shows both states side by side.",
+      "gold": [
+        "Bug",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "37962",
+      "ticket": "HTPR-6187",
+      "title": "[BUGFIX] Production typecheck is red: assignees/assign passes a null agent id",
+      "text": "Production CI has failed its typecheck on every commit since HTPR-6185 merged, so no pull request can reach a green gate. The assign route hands a possibly-empty agent id to a function that does not accept empty, so the type check stops with one error at src/app/api/mcp/assignees/assign/route.ts(281,13) . Two other calls in the same file already do it the right way, so the fix copies that one-line pattern in two places. Nothing users see is broken; only the safety check that must pass before anything ships. Red on production since PR #338 , three commits ago.",
+      "gold": [
+        "Bug",
+        "Infra"
+      ]
+    },
+    {
+      "id": "37892",
+      "ticket": "HTPR-6176",
+      "title": "On the feature flags view show the actual ticket title too and make the flag name the secondary title",
+      "text": "https://screencast2.com/yXkBQ.png its still hard to understand which is which",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "37828",
+      "ticket": "HTPR-6169",
+      "title": "[INFRA] Dev fleet paused: ChatGPT/Codex usage limit reached at 04:43Z, no fallback provider",
+      "text": "The five dev workers stopped producing at 04:43Z: every hax call returns HTTP 429 \"The usage limit has been reached\" on the ChatGPT subscription. I paused the dev units so tickets stop churning between agents. What still works: the QA Agent (no 429s), the HT Manager chat worker, the board itself. What I did: stopped hypertask-agent-worker for Dev 1 to Dev 5, cleared their queues, released their tickets back to Bugs / Features / AI Review unassigned. I probe the provider every 15 minutes and restart the fleet the moment calls succeed again. Decision needed: Wait for the subscription window to reset (no reset time is exposed; ChatGPT limits are rolling, usually hours). Nothing for you to do. Approve a fallback provider for the fleet. The zai and cursor ladder rungs were deleted in the HTPR-6031 wipe; restoring them needs a key from you. HTPR-5996 (model tiering) is the ticket for a permanent answer. Second ChatGPT seat for the fleet, if the limit is per account. Reply here with the...",
+      "gold": [
+        "Infra"
+      ]
+    },
+    {
+      "id": "37746",
+      "ticket": "HTPR-6159",
+      "title": "J/K shortcuts do not open drafts in the inbox",
+      "text": "When a draft is present in the inbox, the j/k keyboard shortcuts do not open it. Users must use the mouse instead. Reference Screenshot https://screencast2.com/OphxK.png",
+      "gold": [
+        "Bug",
+        "Keyboard",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "37719",
+      "ticket": "HTPR-6152",
+      "title": "[auto] Request failed with status code 400",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/project?id=4808 Source: client First seen: 2026-09-04T19:24:14.656Z Stack: AxiosError: Request failed with status code 400 at eK (node_modules/axios/lib/core/settle.js:19:1) at XMLHttpRequest.y (node_modules/axios/lib/adapters/xhr.js:63:9) Extra: { \"axiosCode\": \"ERR_BAD_REQUEST\", \"requestMethod\": \"GET\", \"requestPath\": \"/api/projects/getFirst\", \"responseStatus\": 400, \"responseMessage\": \"User id is required\", \"origin\": \"unhandledrejection\", \"userAgent\": \"Mozilla/5.0 (Linux; Android 16; SM-S948B Build/BP4A.251205.006; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/140.0.7339.207 Mobile Safari/537.36 HypertaskApp\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "37661",
+      "ticket": "HTPR-6139",
+      "title": "[INFRA] auto-revert-production cannot open its revert PR and would revert the wrong commit when production was already red",
+      "text": "Make the auto-revert job actually work, and make it revert only the commit that turned production red. Today every red ci-tests run on production pushes a branch auto-revert/<sha> and then fails with: pull request create failed: GraphQL: GitHub Actions is not permitted to create or approve pull requests (createPullRequest) 21 such branches now sit on origin with no PR. The job uses secrets.AUTOMERGE_TOKEN || github.token ; AUTOMERGE_TOKEN does not exist in the repo secrets, and the repo setting Allow GitHub Actions to create and approve pull requests is off. Second problem: the job reverts github.sha (the newest commit) even when the suite was already red on the parent. Right now the culprit is PR 270 (see the brittle-test ticket ); simply enabling PR creation would have reverted three innocent commits after it. Before reverting, check whether the parent commit's ci-tests on production already failed; if so, skip the revert and only alert. Give the job a token that can open PRs:...",
+      "gold": [
+        "Infra"
+      ]
+    },
+    {
+      "id": "37643",
+      "ticket": "HTPR-6130",
+      "title": "Mobile deferral time selector is cut off and misaligned",
+      "text": "This arrangement for the model to select the time when this, you know, the deferral time is not properly aligned on mobile. The bottom part is cut off and not very well accessible. The part where you select if it comes back, if somebody answers the ticket or not.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "37617",
+      "ticket": "HTPR-6122",
+      "title": "[FEATURE] Agent SDK 2/4: typed run activities endpoint (thought, action, response, error, elicitation)",
+      "text": "Let an agent report what it is doing in typed steps, stored on its run, so the thread can show them as muted rows. Part of the Agent SDK epic HTPR-6115 (approved by Valentin 2026-09-04). Everything ships behind the flag htpr-6115-agent-sdk , default Only me. Copy the Linear / Plane agent model documented on the epic. POST /api/mcp/agents/runs/[id]/activities with agent bearer: { type: thought | action | response | error | elicitation, text, link?, options? } . Stores the row, bumps lastActivityAt , marks the run active. response also posts the text as a normal comment (ticket run) or chat message (chat run), so replies keep working the old way. elicitation with options[] renders as buttons; a click emits run.prompted with the chosen option (signal select , copied from Plane). GET /api/mcp/agents/runs/[id]/activities for the UI and for the SDK. Rendering in the ticket thread and Agent Chat reuses the passive rows from HTPR-6094 ; if 6094 lands first, feed it from this table, do not...",
+      "gold": [
+        "Agent Features",
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "37602",
+      "ticket": "HTPR-6115",
+      "title": "[FEATURE] Hypertask Agent SDK: one run model and a TypeScript library so clients build agents the Linear/Plane way",
+      "text": "Build a Hypertask Agent SDK: one small library plus one run model, so a client can stand up a working agent in an afternoon, the same way Linear and Plane do it, and so every agent (ours or a client's) speaks the same protocol. Why now. The a client agents ( a client-1672 ) each hand-roll webhook verification, token handling and replies, and three of eight have no webhook at all. Our own fleet runs on a private worker nobody else can reuse. Linear and Plane both solved this with the same shape; we copy that shape. What Linear and Plane do (and we copy): Agent = app with a bot identity. Installed once, gets its own token, shows up in the @mention picker, can be assigned work, does not count as a seat. Linear: OAuth actor=app , scopes app:mentionable / app:assignable . Plane: OAuth app with \"Enable App Mentions\", bot user. A run (session) per interaction. Created automatically when the agent is @mentioned, assigned a ticket, or messaged in chat. Linear: AgentSession. Plane: Agent Run....",
+      "gold": [
+        "Agent Features",
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "37487",
+      "ticket": "HTPR-6107",
+      "title": "Feature flag client polls /api/flags every 5s per tab; raise to 60s",
+      "text": "Change the feature-flag refresh interval in useFlag from 5 seconds to 60 seconds. Shipped in HTPR-6091 (PR 244 ): every open tab calls /api/flags every 5 seconds, even in the background. Flag changes already arrive instantly over the realtime channel private-feature-flags , so polling is only a safety net. 60 seconds is plenty. Where: src/hooks/useFlag.tsx , the refetchInterval on the flags query. One-line change plus the existing test if it asserts the interval.",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "37455",
+      "ticket": "HTPR-6099",
+      "title": "Keep agent chat scrolled to the bottom after page reload",
+      "text": "When I reload the page, keep the agent chat automatically scrolled to the newest message at the bottom. I currently have to scroll down manually after every reload, which interrupts the conversation.",
+      "gold": [
+        "AI CHAT 💬",
+        "Bug"
+      ]
+    },
+    {
+      "id": "37439",
+      "ticket": "HTPR-6090",
+      "title": "[INFRA] Renew HYPERTASK_MCP_TOKEN repo secret before 2026-10-01 (prod health check)",
+      "text": "The post-merge production health check uses the HYPERTASK_MCP_TOKEN GitHub secret, currently Valentin's CLI token, which expires 2026-10-01. When it expires every merge to production auto-reverts after a 401. Replace it with a long-lived service token ( gh secret set HYPERTASK_MCP_TOKEN --repo hypertask-ai/hypertask ). Background: HTPR-6031 .",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "37419",
+      "ticket": "HTPR-6082",
+      "title": "realtime probe 2, delete me",
+      "text": "Realtime probe 2, delete me. Link: HTPR-1 rt4-1788466500",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "37395",
+      "ticket": "HTPR-6074",
+      "title": "[INFRA] board-hygiene fails every run: missing INSTRUCTIONS.md",
+      "text": "The service that labels unlabelled tickets refuses to run, so tickets created since 1 September may be missing labels and dropping out of filtered board views. Product Owner summary (plain English) A helper normally goes through the board adding missing labels, which is what keeps filtered views complete. It will not start because its instructions file was lost in the wipe. Refusing rather than guessing is the right behaviour, but it means the labelling has been off since then. The error , on every run: board-hygiene: missing /home/valentin/.config/board-hygiene/INSTRUCTIONS.md, refusing to guess Fix: write ~/.config/board-hygiene/INSTRUCTIONS.md setting out which labels to apply and when, then run it once across tickets created since 1 September to clear the backlog. Acceptance: the service completes a clean run, and no ticket created since 1 September is missing a type label. Split out of HTPR-6058 .",
+      "gold": [
+        "Infra",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "37371",
+      "ticket": "HTPR-6062",
+      "title": "CLI bug: tasks move on an archived task says \"Task not found or access denied\"",
+      "text": "hypertask tasks move HTPR-5453 --section Done returns {\"success\":false,\"error\":\"Task not found or access denied\"} for a task that exists and is readable; the real reason is that the task has status Archive. hypertask tasks get HTPR-5453 returns it fine (status Archive, section Done). Expected: either the move succeeds on an archived task, or the error says \"task is archived\" so the caller can tell it apart from a wrong id or a permission problem.",
+      "gold": [
+        "Bug",
+        "CLI"
+      ]
+    },
+    {
+      "id": "37302",
+      "ticket": "HTPR-6052",
+      "title": "Agent claims never expire, so one agent silently starves the rest",
+      "text": "An agent assignment is additive and nothing removes it when the agent moves on. Claims pile up, and because a claimed ticket is invisible to every other agent, one busy agent can freeze the whole fleet. This happened five separate times today. Product Owner summary (plain English) When an automated developer picks up a ticket it stamps its name on it, which tells the others to keep off. Nothing ever takes that stamp off. So an agent that looked at three tickets and is now working on one is still holding all three, and the other agents see no available work and sit idle. From the board it looks like there is nothing to do. There is; it is just all spoken for. Concrete case from this afternoon: Dev 1 was running HTPR-6048 while also holding HTPR-6047 and HTPR-6039 . Five agents were idle. Releasing the two extra claims put Dev 3 to work within seconds and handed HTPR-6047 to its correct owner, Speed Scout. Races make it worse: four agents once claimed the same ticket at once, the three...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "37239",
+      "ticket": "HTPR-6041",
+      "title": "Agent Chat mobile: composer hidden under the tab bar, must sit on top of the keyboard",
+      "text": "On mobile the Agent Chat input is not visible: the pane is sized to the full screen, so the composer ends up under the bottom tab bar, and the keyboard would cover it. Size the chat pane to the mobile shell content area (between top bar and tab bar), not the full screen. Composer sticks to the bottom of that area and rises with the keyboard (dynamic viewport / visualViewport), same as AI Chat on mobile. Message list scrolls above it, safe-area insets respected. Screenshot: https://screencast2.com/ptkOn.png (Android app v1.18.2)",
+      "gold": [
+        "AI CHAT 💬",
+        "Bug"
+      ]
+    },
+    {
+      "id": "37211",
+      "ticket": "HTPR-6034",
+      "title": "Agents: generated avatar icons instead of initials",
+      "text": "Give every agent a distinct generated avatar instead of initials. Deterministic from the agent id or name (DiceBear, rendered locally, no runtime network calls). Used everywhere the agent avatar shows: Agent Chat roster, agent details, comments, assignee chips. Custom upload overrides the generated one (later). Three style options on the attached page. Follow-up to HTPR-6033 .",
+      "gold": [
+        "AI CHAT 💬"
+      ]
+    },
+    {
+      "id": "37128",
+      "ticket": "HTPR-6024",
+      "title": "[auto] Cannot read properties of undefined (reading 'updateMany')",
+      "text": "An automated production error needs investigation. URL: /api/mcp/agents/edf51d7f-3330-4dcc-b0f0-eed6378621b6 Source: server First seen: 2026-09-03T03:11:48.596Z Stack: TypeError: Cannot read properties of undefined (reading 'updateMany') at a.$transaction.isolationLevel (/var/task/.next/server/app/api/mcp/admin/agents/route.js:1:10661) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async Proxy._transactionWithCallback (/var/task/node_modules/@prisma/client/runtime/client.js:99:4800) at async e (/var/task/.next/server/app/api/mcp/admin/agents/route.js:1:9038) at async m (/var/task/.next/server/app/api/mcp/agents/[agentId]/route.js:1:4870) at async rW.do (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:5:23405) at async rW.handle (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:5:28909) at async Y (/var/task/.next/server/app/api/mcp/agents/[agentId]/route.js:1:8869) at async...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "36904",
+      "ticket": "HTPR-6014",
+      "title": "[QA fixture] HTPR-5990 undo action",
+      "text": "Temporary production fixture for mobile undo toast verification; archive after QA.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "36860",
+      "ticket": "HTPR-6005",
+      "title": "[FEATURE] Agents page: three-pane chat workspace",
+      "text": "Product Owner summary Replace the Agents card grid with the approved chat workspace: agent roster on the left, conversation in the center, and current agent details on the right. Concept: https://app.hypertask.ai/page/cmtkjlwca00000agm4bypm69c Wireframe: https://app.hypertask.ai/page/cmtkks6po00000ajgabhrvet6 Depends on: durable conversation data. External-agent live behavior depends on the app protocol and worker tickets. Acceptance criteria Desktop matches the approved wireframe: searchable and filterable roster, selected and unread rows, inline chat, and the existing detail and statistics content in a collapsible right pane. Enabled, connectivity, and work state are displayed separately. Native and compatible external agents can chat; incompatible and disabled agents keep readable details with a clear unavailable state. Messages show sending, queued, delivered, failed, waiting, started, completed, and stopped truthfully. Queue position, age, cancel, retry, check status, and Send...",
+      "gold": [
+        "AI CHAT 💬",
+        "Agent Features",
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "36844",
+      "ticket": "HTPR-5997",
+      "title": "QA verify automatic planning draft 1788387872952",
+      "text": "Verify that the automatic planning draft generated for this task matches the task content. Verification Review the automatic planning draft. Confirm that the draft matches the task content. Proposed properties: Priority Urgent , Size XS",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "36829",
+      "ticket": "HTPR-5990",
+      "title": "Make undo toasts smaller and more compact",
+      "text": "The undo models or toasts are too big. They cover too much of the relevant text. Can we make them smaller somehow? Also, they have quite a lot of white space for some reason, they're really annoying. Superhuman has them smaller and, yeah, just overall more compact.",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "36807",
+      "ticket": "HTPR-5980",
+      "title": "[FEATURE] Workspace webhooks in Settings > Integrations: endpoints, events, signing secret, delivery log with retry",
+      "text": "Product Owner summary (plain English) Problem: Hypertask can notify outside systems the moment something happens (a webhook), but the only place to set one up is hidden inside an agent's Manage modal. A customer who never creates an agent cannot discover the feature, and nobody can see whether a delivery succeeded. Solution: a Webhooks tab under Settings > Integrations for the whole workspace, the way Stripe, GitHub and Linear do it: add an endpoint URL, tick the events, get a signing secret, and see a delivery log with status and a Retry button. The agent webhook panel becomes one entry in that list. What you will see: Settings > Integrations > Webhooks with your endpoints, recent deliveries (green or red), and a link to the How webhooks work page. Technical: reuse the existing signed delivery path (src/app/api/mcp/webhooks, per-agent webhook route) behind a workspace-level Webhook model: url, secret, events[], enabled, createdBy; deliveries table with status code, latency, payload...",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "36788",
+      "ticket": "HTPR-5970",
+      "title": "[auto] Uncaught TypeError: Cannot read properties of undefined (reading 'commandLists')",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-339/1605 Source: client First seen: 2026-09-02T19:24:14.912Z Stack: TypeError: Cannot read properties of undefined (reading 'commandLists') at eA (src/components/Modals/commands/HTC/commands.tsx:393:11) at s4 (node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js:13717:1) at node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js:14240:1 at n$ (node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js:1634:1) at ce (node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js:13855:1) at fV (node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js:17675:1) at fU (node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js:17660:1) Extra: { \"origin\": \"window.onerror\", \"userAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "36769",
+      "ticket": "HTPR-5963",
+      "title": "[IMPROVEMENT] Let a user delete an OAuth client registration from Settings",
+      "text": "Product Owner summary (plain English) Problem: when an AI app (Claude, ChatGPT) registers itself with Hypertask to connect, that registration can never be removed. Test runs and abandoned connections pile up forever. Solution: add a delete action for a registration the current user owns, in the same place connected AIs are listed under Settings, plus the matching API route. What you will see: a Remove option next to each registered client; after confirming, it disappears and can no longer be used to connect. Technical: OAuth DCR (dynamic client registration) rows have no deletion path on production. QA left two test registrations behind on HTPR-4636 : d59ffe13-0cf3-4c7d-98fa-1fce36cac4df and 038d2496-2cbc-4719-93a7-a503e44151a5. Add an authenticated DELETE for a client the caller owns, revoke its tokens, wire the Remove control in Settings, and remove those two rows as the first real use. Tests for cross-user access denied.",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "36588",
+      "ticket": "HTPR-5950",
+      "title": "QA5890 manual fixture 1788313859669",
+      "text": "Manual QA description must remain editable.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "36376",
+      "ticket": "HTPR-5937",
+      "title": "[FEATURE] Column position and visibility follow the board in every view (\"show this column in all views\")",
+      "text": "Ask: when a column is added or moved on the board, it should land at the same position in every view, without editing ten views by hand. What already works today: column order is global. Each column has one ranking on the board, and every view sorts its columns by that ranking (the view only stores which columns are visible). Moving a column on the board therefore moves it in all views automatically. What does not work: column visibility is per view. A new column starts hidden in every existing view, and un-hiding it means opening each view and toggling it. Tonight the new QA column had to be switched on in 10 views one by one (done by script). Feature: New columns are visible by default in every existing view of the board (a view that deliberately hides columns keeps hiding only what it hid). Column menu gets \"Show in all views\" and \"Hide in all views\" . Renaming a column already propagates (views reference the column id). Acceptance: create a column on a board with 3 saved views; it...",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "36330",
+      "ticket": "HTPR-5930",
+      "title": "Task page: 'Scroll to bottom' setting intermittently does not scroll on open",
+      "text": "With Task scroll = \"Scroll to bottom\" enabled, opening a task sometimes lands at the top instead of the latest comment. Reported by Valentin on 2026-09-01 22:30 (desktop, dark theme); a later open of the same setting worked, so it is intermittent, not a dead switch. Prime suspect: PR #89 (HTPR-5874, \"preserve task scroll during delayed loading\") added an initial-scroll guard in src/app/detail/[...slug]/TaskDetailComp.tsx and src/lib/taskDetailInitialScroll.ts . It cancels the initial bottom scroll on a viewport change or scroll gesture. A keyboard/viewport resize, a late layout shift or a wheel event during load likely invalidates the generation before the bottom scroll runs. Acceptance: with the setting on, 20 consecutive opens (fresh navigation, inbox navigation, swipe between tasks on mobile) all end at the last comment. Add a test in tests/task-detail-initial-scroll.test.cjs for the case where a viewport change happens before the delayed scroll fires. Do not remove the...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "36314",
+      "ticket": "HTPR-5922",
+      "title": "[MOBILE] New task, AI-first: writer → classic form pre-save with property pills; classic form ↔ writer both ways; retire the AI Task Writer sheet (prototype 4)",
+      "text": "Part of HTPR-5902 (one dictation paradigm on mobile). Build exactly what the prototype shows; HT Manager verifies every PR against it with real phone screenshots on production and hands it back if it deviates. Prototype: https://hypertask.app/explorations/4xup7a3 (walk every path: writer → send; writer → Classic form; classic → pen → writer with carry-over). Replaces the HTPR-5860 flow's frame 4. Plus opens the AI writer full screen. Header: purple pen-sparkle “AI task writer” headline left, bordered “Classic form” button + ✕ right. “What is this task about?” + hint, Board/Priority/Assignee chips, unified composer (white mic) at the bottom. Send lands in the classic new-task form, PRE-SAVE , with title, description and every property filled by the writer (board, section, priority, assignee, labels, due date, size, start). Purple line “✦ Filled in by the AI task writer · edit anything before saving”. White full-width Create task button. No finished-task screen, no separate AI result...",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "36259",
+      "ticket": "HTPR-5915",
+      "title": "AI chat must always link referenced tickets in comments",
+      "text": "When AI chat writes or drafts a task comment, every referenced Hypertask ticket must be rendered as a clickable relative task link using the exact task URL returned by the task tool. Never leave a resolved ticket number as plain text when a valid task URL is available. Acceptance criteria: Resolved ticket references in generated comments use an anchor with the exact returned task URL. The ticket title is used as the link text when available. The AI validates comment links before publishing. This applies consistently to comments created from task detail, Inbox, and other task-related flows.",
+      "gold": [
+        "AI CHAT 💬",
+        "Bug"
+      ]
+    },
+    {
+      "id": "36236",
+      "ticket": "HTPR-5908",
+      "title": "More agressive and automatic spell fixing and auto complete",
+      "text": "superhuman ahs really agressive aut spelling and grammar fixinga nd i want to also udnerstand wehats available in terms of auto completing sentences for example i pasted the above sentence with all these mistakes in a new suyperhuman email and it auto crrected it to this https://screencast2.com/aj9qp.png https://screencast2.com/vNM4P.png are there ready made modules? what is the most progressive function in this regard? Flag: htpr-5908-retype-lowercase",
+      "gold": [
+        "Write with AI"
+      ]
+    },
+    {
+      "id": "36208",
+      "ticket": "HTPR-5901",
+      "title": "[BUGFIX] Ctrl+Enter on a task opened outside the Inbox must not jump to the next task; remove Ctrl+Shift+Enter there entirely",
+      "text": "Outside the Inbox, commenting with Ctrl+Enter must stay on the task, and Ctrl+Shift+Enter must do nothing. Bug: opening a task from the Kanban board, calendar, table, or a view (a task also present in the Inbox) and pressing Ctrl+Shift+Enter after writing a comment moves to the next task. In the Inbox that same shortcut PREVENTS auto-advance, so the meaning is reversed and muscle memory silently forwards the user to the next task. Fix: auto-advance to next task exists ONLY in the Inbox. On a task page outside the Inbox: Ctrl+Enter submits and stays; Ctrl+Shift+Enter is removed completely (no binding). Verify: from board and Inbox both: comment + Ctrl+Enter and Ctrl+Shift+Enter, confirm Inbox behavior unchanged and non-Inbox never navigates away. Reported by Valentin 2026-09-01, prioritized for today.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "36192",
+      "ticket": "HTPR-5894",
+      "title": "[SPEED] Review elastic concurrency after 48h: API tail + Vercel usage cost (HTPR-5820 follow-up)",
+      "text": "On 2026-09-03, judge whether Vercel elastic concurrency (enabled 2026-09-01, per Valentin's approval on HTPR-5820 ) reduced the API cold-start tail without cost or latency regressions. Baseline (pre-toggle): ~22% of API requests carried a multi-second pre-handler cold-start tail (~1.7-1.8s); server phases themselves ≤360ms (HTPR-5820 trace). Check 1 — tail: re-run the HTPR-5820 probe methodology (authenticated API timing, ≥50 samples) and compare tail incidence + p95 against the pre-toggle baseline AND the immediate post-toggle measurement posted on HTPR-5820. Check 2 — cost: Vercel usage dashboard, function GB-hours + active CPU for the 48h after the toggle vs the 48h before. Expect neutral-to-lower. Check 3 — no neighbor slowdown: field readiness p75s (v2 rows) must not regress on board/inbox. Decision: keep on if tail improves and cost is neutral-or-better; otherwise flip resourceConfig.elasticConcurrencyEnabled back to false (one PATCH + redeploy, recipe on HTPR-5820).",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "36164",
+      "ticket": "HTPR-5885",
+      "title": "Write with ai on desktop has a minor bug",
+      "text": "where buy if i tyhpe a comment then activate write with ai i cna't move the cursor between comment typing and the input box of write with ai. the write with ai box does not accept it",
+      "gold": [
+        "Bug",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "35844",
+      "ticket": "HTPR-5877",
+      "title": "[IMPROVE] New-task modal: mini dictation icon on the description field + mobile layout polish",
+      "text": "Add a small dictation (mic) icon to the new-task modal's description editor on mobile, plus general mobile-fit polish for the modal (spacing, keyboard behaviour, no clipped controls). Reuse the same dictation pipeline as the mobile comment composer. Title-field mic is HTPR-5861 's other split half. Split from HTPR-5861 after two 100-turn blowups.",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "35817",
+      "ticket": "HTPR-5870",
+      "title": "Improve mobile task pages with pinch zoom and no side padding",
+      "text": "Make task pages easier to view on mobile by supporting pinch zoom and removing left and right padding. Problem Task pages look squished in the current mobile view, making it hard to understand how the page would appear on desktop. Requirements Allow pinch zooming on task pages so users can zoom in and out on mobile. Let users view the page at an almost desktop-sized scale from a mobile browser. Remove the left and right padding from task pages. Use the page as a blank canvas for AI-generated content. Acceptance criteria Users can pinch-zoom task pages in and out on mobile. Users can zoom out far enough to view the page closer to its desktop appearance. Task pages have no left or right padding. The page content is not constrained by unnecessary horizontal insets.",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "35797",
+      "ticket": "HTPR-5862",
+      "title": "[BUGFIX] Mobile table view: horizontal scroll broken by frozen ticket/title columns — remove sticky columns on mobile",
+      "text": "On mobile the table view's sideways scroll is unusable: the frozen TICKET and TITLE columns cover most of the viewport, so scrolled-in columns (priority, size, ...) render clipped underneath them and their content is unreadable. Valentin's screenshot attached: \"High\" chips half-hidden behind the title column, header showing torn \"ORITY\"/\"SIZE\" fragments. Valentin's decision: NO sticky columns in tables on mobile. None. Cause: src/components/PageComponents/Kanban/TableView/TableView.tsx freezes ticket + title horizontally ( position: sticky; left: frozenColumnOffset(...) , rows at lines ~1012/1023, header at ~1234, introduced with HTPR-4643 ). Fine on desktop; on a 720px viewport the frozen pair eats nearly the full width. Fix: on mobile viewports render every column unfrozen — the whole row scrolls sideways as one unit, ticket and title scroll away like everything else. Keep the vertically sticky header row. Desktop keeps the frozen pair as-is. Check the sticky-background classes...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "35781",
+      "ticket": "HTPR-5854",
+      "title": "[auto] Uncaught TypeError: Cannot read properties of null (reading 'getBoundingClientRect')",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-15/5723 Source: client First seen: 2026-08-31T20:47:10.148Z Stack: TypeError: Cannot read properties of null (reading 'getBoundingClientRect') at node_modules/react-modal-sheet/dist/index.mjs:659:1 at node_modules/react-modal-sheet/dist/index.mjs:158:1 at node_modules/framer-motion/dist/es/gestures/drag/VisualElementDragControls.mjs:165:18 at a (node_modules/framer-motion/dist/es/frameloop/render-step.mjs:28:1) at Set.forEach (<anonymous>) at Object.process (node_modules/framer-motion/dist/es/frameloop/render-step.mjs:67:1) at p (node_modules/framer-motion/dist/es/frameloop/batcher.mjs:43:1) Extra: { \"origin\": \"window.onerror\", \"userAgent\": \"Mozilla/5.0 (Linux; Android 16; SM-S938B Build/BP4A.251205.006; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/152.0.7977.64 Mobile Safari/537.36 HypertaskApp\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "35743",
+      "ticket": "HTPR-5847",
+      "title": "Mobile Inbox readiness regressed to 2.39s p75 while Board stays below 700ms",
+      "text": "Baseline: Authenticated production telemetry for the exact 7-day window ending 2026-08-31 shows mobile Inbox network readiness at 2,392 ms p75 / 1,957 ms p50 (n=21 valid, 0 excluded), versus mobile Board at 684 ms p75 / 379 ms p50 (n=42). The slowdown is sustained across four snapshots since 2026-08-26: mobile Inbox network p75 is 2,302-2,392 ms (n=21-25), up from 1,297 ms on 2026-08-24. IndexedDB Inbox readiness rose from 346 ms p75 to 1,856 ms, but its current n=10 is below the 20-sample readiness threshold. Desktop controlled signed-in measurements remain much faster: Inbox network is 480 ms p75 and local is 167 ms p75 (5 samples each). No controlled mobile Inbox run exists yet. Table and Calendar have no controlled mobile evidence and insufficient mobile field samples; mobile Board is healthy in field telemetry despite a separate cold-start lab ticket. Hypothesis: Because both network and IndexedDB mobile Inbox paths slowed at the same boundary while mobile Board stayed stable,...",
+      "gold": [
+        "IMPROVEMENT ⚒️",
+        "INBOX📩",
+        "SPEED OPTIMIZATION ⏩",
+        "📲MOBILE"
+      ]
+    },
+    {
+      "id": "35650",
+      "ticket": "HTPR-5825",
+      "title": "[BUGFIX] Installed PWA top bar turned white: SSR resolves 'system' to light and the manifest disagrees",
+      "text": "The installed PWA window title bar went from dark to white yesterday. Before, it was always dark because src/app/layout.tsx hardcoded <meta name=\"theme-color\" content=\"#232326\"> . Commit 36faa92 ( HTPR-5653 , sync Android status bar theme) made the color follow the resolved theme, which is right in principle and wrong in two specifics. Fault 1, the SSR fallback. The server cannot read prefers-color-scheme , so resolveThemePreference(themeValue, \"light\") resolves every system user to light and emits #ffffff . The boot script corrects the meta before first paint, but an installed PWA takes its title bar color from the initial document, so a dark-mode user keeps a white bar for the life of the window. Fault 2, the manifest disagrees. public/manifest.json still declares \"theme_color\": \"#232327\" and \"background_color\": \"#232327\" , which no longer matches anything the app emits. Wanted: the SSR fallback for system resolves dark , not light, so the installed window opens dark and only...",
+      "gold": [
+        "Bug",
+        "Themes"
+      ]
+    },
+    {
+      "id": "35353",
+      "ticket": "HTPR-5818",
+      "title": "[auto] Uncaught TypeError: Cannot redefine property: message",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/login Source: client First seen: 2026-08-30T23:11:31.232Z Stack: TypeError: Cannot redefine property: message at Function.defineProperty (<anonymous>) at new ey (node_modules/axios/lib/core/AxiosError.js:150:1) at eK (node_modules/axios/lib/core/settle.js:19:1) at XMLHttpRequest.y (node_modules/axios/lib/adapters/xhr.js:63:9) Extra: { \"origin\": \"window.onerror\", \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "35291",
+      "ticket": "HTPR-5810",
+      "title": "Security (high): Unauthenticated Arbitrary Team Member Removal and Billing Mutation",
+      "text": "Strix found this: An unauthenticated attacker who knows or obtains a team identifier and user identifier can remove arbitrary users from teams and their associated projects, delete their task assignee and follower relationships, and disrupt access to collaborative work. Each request also decrements `Team.totalSeats` The **`POST /api/members/removeTeamMember`** endpoint accepts attacker-controlled `teamId` and `userId` values without authenticating the caller or checking team ownership. The endpoint passes those identifiers directly into a destructive controller that removes the selected user's team/project relationships and changes the team's paid seat quantity. Severity: high · Found: 2026-08-30 14:15:33 UTC Technical detail The API handler extracts both authorization-sensitive identifiers entirely from the request body and invokes `leaveTeam` without inspecting an authenticated server-side identity: ```typescript title=pages/api/members/removeTeamMember.ts startLineNumber=8...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "35284",
+      "ticket": "HTPR-5803",
+      "title": "Security (high): Missing authentication and admin authorization on global announcement management APIs",
+      "text": "Strix found this: An unauthenticated attacker can control the application's global announcement channel. The attacker can publish arbitrary notices to the entire user base, modify trusted application messaging, force previously read announcements to appear unread, and remove legitimate announcements. This enable The global announcement creation, update, and deletion handlers perform privileged database mutations without authenticating the caller or verifying an administrative privilege. Any unauthenticated caller can publish content to all users, overwrite existing announcements, reset their read state, or delete announcements. Severity: high · Found: 2026-08-30 14:13:32 UTC Technical detail Both handlers invoke privileged Prisma mutations directly from caller-controlled request data. `pages/api/admin/postAnnouncement.ts` passes `req.body.jsonBody` to `prisma.announcments.create` and then creates a `UserAnnouncement` record for every user....",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "35034",
+      "ticket": "HTPR-5795",
+      "title": "[QA CLI] scratch ticket for old-vs-new CLI parity run",
+      "text": "Temporary. Archived at the end of the QA run.",
+      "gold": [
+        "Infra"
+      ]
+    },
+    {
+      "id": "35008",
+      "ticket": "HTPR-5788",
+      "title": "CLI: auto-install hypertask to ~/.local/bin after merge so the VPS fleet actually runs it",
+      "text": "The binary agents run is ~/.local/bin/hypertask . Merging to hypertask-ai/cli main does not update it. Fixes ship to GitHub and nobody on this VPS picks them up until someone remembers zig build && cp zig-out/bin/hypertask ~/.local/bin/hypertask . Do After merge to main: ReleaseFast build and install to ~/.local/bin/hypertask (and keep the hypertask symlink). A check that the installed binary matches the build artifact (GATES G5). This is the VPS/agent fleet path, not customer distribution. Customer binaries/npm shim is https://app.hypertask.ai/detail/project-15/5762 — do not duplicate that work here. Parent: https://app.hypertask.ai/detail/project-15/5726 .",
+      "gold": [
+        "CLI",
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "34946",
+      "ticket": "HTPR-5780",
+      "title": "QA: logged-in Midscene flows for inbox, search, calendar (read-only)",
+      "text": "Extend Midscene beyond the demo board: authenticated read-only flows for inbox, search, calendar and other logged-in areas. Reuse the verification fleet's production auth approach (~/projects/hypertask-verify) for cookie injection in the runner. Strictly read-only assertions on the real account; writes stay on /demo.",
+      "gold": [
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "34895",
+      "ticket": "HTPR-5771",
+      "title": "[QA][env] hypertask binary is a symlink to htz — Node CLI no longer a separate surface on VPS",
+      "text": "Repro: readlink -f $(which hypertask) → /home/valentin/.local/bin/htz; hypertask --version prints \"htz 0.2.0-zig\". Impact: AGENTS.md treats Node hypertask and Zig htz as two live CLIs (\"a fix in one CLI only is half a fix\"); on this machine the Node CLI no longer exists, so Node-only regressions are untestable here. Update AGENTS.md or restore a real Node shim. Evidence: qa/qa-runs/2026-08-30-exploratory/EVIDENCE/g1_parity.json (S3, confirmed 2026-08-30)",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "34783",
+      "ticket": "HTPR-5761",
+      "title": "[verify] 33-inbox-keyboard-archive-undo: Ctrl+Z does not undo an inbox archive after E",
+      "text": "Archiving the last notification with E jumps the inbox to the All view, and Ctrl+Z does nothing there; only clicking the toast's own Undo button brings the notification back. Summary for non-engineers What happens. After removing a notification from the inbox with the E key, pressing Ctrl+Z (the usual undo shortcut) does not bring it back. Who hits it. Anyone who archives their last inbox notification with the E shortcut and then tries to undo it with Ctrl+Z. Why it matters. People expect Ctrl+Z to undo their last action everywhere; here it silently does nothing, so they may think the notification is gone for good, even though a manual Undo button on the popup still works. Check after the fix. Archive the last notification in a view with E, then press Ctrl+Z and confirm the notification reappears without needing to click anything. How to see it Have exactly one notification in an inbox view Focus that notification row and press E to archive it (view auto-switches to the All split...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "34167",
+      "ticket": "HTPR-5754",
+      "title": "Cold mobile board is main-thread-bound: 3.8-4.7s of long tasks before the local read can run",
+      "text": "On throttled mobile the board’s local IndexedDB read cannot start until ~3.5 s of main-thread JS parse/hydration clears, no matter how early the state logic allows it. The bottleneck is JS execution weight, not scheduling. Proven by elimination on HTPR-5669 : both state-gating fixes (pilot flag, surfaceInitializedFor) shipped and verified live, yet the bootstrap→local-read gap stayed 3.4–3.7 s. Total Blocking Time in the same runs: 3.8–4.7 s (4x CPU throttle). 542 KB of pre-readiness JS across 50 chunks; tiptap/emoji-mart/posthog/axios already verified absent ( HTPR-5751 ). Start with the two largest unidentified vendor chunks (63–64 KB gz each, ~200–240 KB decompressed) : identify their contents, then evaluate route-level splitting or dropping what the board boot path does not need. Measurement standard: interleaved A/B against the prior deployment on the throttled mobile profile; cross-day comparisons are invalid (drift is larger than most levers). Acceptance: cold mobile board...",
+      "gold": [
+        "IMPROVEMENT ⚒️",
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "34089",
+      "ticket": "HTPR-6817",
+      "title": "One official Slack app: port /ht chat + commands into the product, retire the Worker",
+      "text": "One official Hypertask Slack app that does everything the Cloudflare Worker bot does today, plus the new ambient features, ready to submit to the Slack Marketplace. Then the Worker gets retired. In plain English: we currently have two bots. The old one (Cloudflare Worker, /ht commands and chat) answers when you talk to it. The new one (in the product) watches channels and posts summaries. Valentin wants a single app that talks back AND watches, good enough to list publicly. Parity to port from the Worker into the app (repo ~/projects/ht-slack ): Slash commands : create, search, list, view, comment, assign, move, update, inbox, projects, help, connect, disconnect Natural-language chat on @mention and DM, with the same 14 tool actions (create/get/list/search/move/comment/assign/followers/update/projects/sections/inbox) Assistant mode : assistant_thread_started welcome, thread context Block Kit output : task cards, task lists, project lists, inbox lists Identity, the part the Worker got...",
+      "gold": [
+        "Agent Features",
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "33458",
+      "ticket": "HTPR-5740",
+      "title": "API bug: POST /mcp/tasks/move renumbers the ticket (HTPR-5731 became HTPR-5737)",
+      "text": "Moving a task through the REST route changes its ticket number, which silently breaks every existing reference to that ticket. Repro: POST /mcp/tasks/move with project_id 15, unique_index 5731, target_project_id 15, section Bugs. Response returns the same database id (33439) but ticketNumber HTPR-5736, and a second move produced HTPR-5737. The original index 5731 now resolves to nothing. Impact: pull request titles, commit messages, comments and links that name the old number become dead. PR #3081 references HTPR-5731, a ticket number that no longer exists. Expected: a same-board move must never touch ticketNumber or uniqueIndex. The CLI move path preserves them correctly, so only the REST route is wrong. Renumbering may only be acceptable on a genuine cross-project move, and even then it should be explicit. Workaround in place: the agent runtime now performs same-board moves via POST /mcp/tasks/update with sectionId instead.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "33370",
+      "ticket": "HTPR-5718",
+      "title": "[BUGFIX] Agent worker posts ticket comments as Valentin instead of the agent identity",
+      "text": "Comments written by dev agents during ticket work show creator 'Valentin Yeo' instead of the agent (seen on HTPR-5712 : all three Dev 2 status comments read as the owner). The worker turn uses the owner-authenticated hypertask CLI for comments instead of the agent's own token, so attribution is lost and tickets read like the owner talking to himself. Fix: worker turns must post comments through the agent token (ht-agent comment path) so the agent name shows as author. Runtime-side; manager owns the fix.",
+      "gold": [
+        "Bug",
+        "Infra"
+      ]
+    },
+    {
+      "id": "33244",
+      "ticket": "HTPR-5710",
+      "title": "[BUGFIX] Mobile: tapping a column name does nothing, should open Manage columns",
+      "text": "On mobile, tapping a board column name has no effect. It should open the Manage board columns modal. Requested and approved by the owner (Valentin, 2026-08-26), so the UX gate does not park this: ship it without a wireframe. Scope: tap on the column header name on the mobile board opens the existing Manage columns modal, nothing else changes.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "33194",
+      "ticket": "HTPR-5701",
+      "title": "[DASH] Agent step timelines: last 3 runs on cards, full log on agent pages",
+      "text": "Make time-per-step visible on the agents dashboard. Runner card: last 3 pipeline runs as an expandable element; finished runs render as compact timelines showing how long each step took. Agent page: ongoing log of all runs, collapsed after the newest 20. Steps over 1 hour get a warning color.",
+      "gold": [
+        "Infra"
+      ]
+    },
+    {
+      "id": "32986",
+      "ticket": "HTPR-5685",
+      "title": "Worker return-to-Bugs cleanup restores the previous agent assignee, recreating double assignment",
+      "text": "When a delivery aborts before provider launch, the worker returns the ticket to Bugs and re-adds the PREVIOUS agent from its snapshot, recreating the double assignment that stalls both agents. Observed on HTPR-5683 on 2026-08-25: the ticket was re-handed from Dev 1 to Dev 2, Dev 2 aborted with PermissionError: ticket ownership changed before provider launch (section check: manual requeue left the ticket in Bugs, not In Progress), and the cleanup then wrote an Assignees row adding Dev 1 back (agentAssignerId = Dev 2, 17:09:12 UTC). Every retry then failed the assigned_to_other_agent check. Fix: the return-to-Bugs path must not restore agent assignees from the pre-claim snapshot; leave the current (single) agent owner as-is. Also worth a guard: a manually requeued committed pickup should re-claim (move to In Progress) instead of failing the section fence.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "32892",
+      "ticket": "HTPR-5675",
+      "title": "Agent request via ai failed -> pls fix",
+      "text": "https://screencast2.com/lhIB4.png",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "32542",
+      "ticket": "HTPR-5667",
+      "title": "CLI bug: no command to add an existing agent to another project/board",
+      "text": "hypertask agents (v1.13.24) offers only list/create/revoke/rotate-token. There is no way to add an existing managed agent to an additional project. Needed: hypertask agents update --id <uuid> --add-project <id> (and --remove-project). Use case: the a client Dashboard Agent (f95165ad) lives on board 2312 and must also be mentionable/assignable on board 339; today that requires the web UI. Expected: CLI parity with agent creation's repeatable --project flag.",
+      "gold": [
+        "Bug",
+        "FEATURE 💎"
+      ]
+    },
+    {
+      "id": "32507",
+      "ticket": "HTPR-5658",
+      "title": "Modal design drift: white borders, plain-text tag pickers, Tags picker under the mobile status bar",
+      "text": "Eight modal inconsistencies, all verified in code. Four break a hard design rule, one is a real mobile bug, and tags never look like tags inside any picker. In plain English: the app has one shared modal system that about 30 modals use correctly. A handful ignore it, so they look like a different product. Separately, every picker that lists tags, priorities or sizes shows them as plain words, while the same values render as coloured pills everywhere else. Hard-rule violations (no white outlines, popovers are shadow-only) Agent modal uses a white border as the selected state. Modals/Agent/agent.modal.tsx:350,366 : border-white-black bg-active-modal-element . This is the exact pattern banned after HTPR-4232. Favourites popover is bordered. Modals/ManageFavorites/index.tsx:261 : border border-border on the dropdown, plus border-b-[1px] border-black on a row. It also skips the shared shell entirely. Manage custom fields hardcodes a hex divider. ManageCustomFieldsModal.tsx uses...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "32131",
+      "ticket": "HTPR-5650",
+      "title": "CI: realtime + reload regression guard (two-session Playwright, navigation counts)",
+      "text": "Add a required CI check that fails any PR where a screen reloads by itself, a view loads twice, or a change from one user does not reach another user without a manual reload. Why: the 2026-08-21 incident (boards reloading for no reason, realtime updates dead until refresh, repair in PR #2902 ) reached production with green CI. We now have 20+ people on the product; this class of regression must be impossible to merge. What to build (Playwright, runs on the self-hosted runner against the PR build, logged in via the minted email-link JWT the existing smoke job already uses): Two authenticated sessions (user A, user B) on the same board. B moves a card, edits a title, adds a comment; assert A sees each within 5s with zero navigations and zero reloads. Navigation counter: one click on a view, a card, Inbox, Table, Calendar = exactly one navigation, no full document reload (count performance.getEntriesByType(\"navigation\") and a beforeunload hook). Tab sleep/wake and reconnect: no reload...",
+      "gold": [
+        "IMPROVEMENT ⚒️",
+        "Infra"
+      ]
+    },
+    {
+      "id": "32115",
+      "ticket": "HTPR-5643",
+      "title": "Bug: on the table view 'turning on stalness data' does nothing",
+      "text": "User feedback, moved from the feedback board (DBAC-18, https://app.hypertask.ai/detail/project-2101/18).",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "31745",
+      "ticket": "HTPR-5634",
+      "title": "Task templates: edit before save, task writer uses them, CLI/MCP access (so 15 and 339 can drop custom instructions)",
+      "text": "Make task templates the place where \"what a good A/B test / bug ticket looks like\" lives, so boards 15 and 339 can drop most of their custom instructions. In plain English: today \"New task from template\" silently creates a finished copy on the board, and the AI task writer has never heard of templates. After this, picking a template opens the new-task editor prefilled and unsaved so you edit first, and the task writer reads the board's templates and uses the matching one when your brief is, say, an A/B test. Part A: new task from template opens the editor, unsaved Ctrl+K \"New task from template\" fetches the template and opens the create-task modal prefilled with title, description, priority, size, labels , nothing saved until the user hits create. Reuse the existing createTaskModal.duplicate payload (Duplicate already does exactly this). No new modal, no new state. Keep POST /api/task-templates/apply for API and agent use; the palette stops calling it. Part B: the AI task writer knows...",
+      "gold": [
+        "IMPROVEMENT ⚒️"
+      ]
+    },
+    {
+      "id": "31520",
+      "ticket": "HTPR-5620",
+      "title": "[auto] Seat billing failed for team 24ab0139-9c27-483d-b567-dab0277e3cbd: Invalid subscription_it",
+      "text": "An automated production error needs investigation. URL: Unknown Source: handled First seen: 2026-08-22T03:17:32.526Z Stack: Error: Invalid subscription_item id: si_P8DVTnALQC8gjp at g (/var/task/.next/server/chunks/94723.js:1:2421) at /var/task/.next/server/chunks/94723.js:2:1620 at process.processTicksAndRejections (node:internal/process/task_queues:104:5) Originating from: at cI._makeRequest (/var/task/.next/server/chunks/94723.js:2:19660) at cI.retrieve (/var/task/.next/server/chunks/94723.js:2:173938) at Object.retrieveSubscriptionItem (/var/task/.next/server/chunks/28276.js:11:2515) at o (/var/task/.next/server/chunks/28276.js:11:4178) at p (/var/task/.next/server/chunks/28276.js:11:5291) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async j (/var/task/.next/server/chunks/28276.js:11:763) at async q (/var/task/.next/server/chunks/28276.js:11:5898) at async /var/task/.next/server/app/api/cron/reconcile-seat-billing/route.js:1:8962 at async...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "31129",
+      "ticket": "HTPR-5609",
+      "title": "[auto] A dedicated team AI Gateway key or direct BYOK key is required for openai text inference.",
+      "text": "An automated production error needs investigation. URL: /api/ai/chat/stream Source: handled First seen: 2026-08-21T22:14:36.499Z Stack: Error: A dedicated team AI Gateway key or direct BYOK key is required for openai text inference. at v (/var/task/.next/server/chunks/7335.js:1:3439) at /var/task/.next/server/app/api/ai/chat/stream/route.js:168:19275 at bO (/var/task/.next/server/app/api/ai/chat/stream/route.js:168:20027) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async rW.do (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:5:23405) at async rW.handle (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:5:28909) at async Y (/var/task/.next/server/app/api/ai/chat/stream/route.js:285:25968) at async rW.handleResponse (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:1:129338) at async Z (/var/task/.next/server/app/api/ai/chat/stream/route.js:285:27035) at...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "31110",
+      "ticket": "HTPR-5598",
+      "title": "Returning journeys: replace stale spot checks with repeatable runs",
+      "text": "Proposal for evaluation. The Speed Engineer remains stopped; this ticket does not authorize implementation. Evidence reviewed 21 August 2026. Baseline The returning-user report has one Board, Table, and Calendar sample and four Inbox samples, last captured on 9–10 August 2026. Hypothesis Repeatable runs tied to a commit will make before-and-after comparisons credible. Acceptance Capture at least five desktop runs for Board, Table, Inbox, and Calendar, plus five mobile Board runs. Store raw samples, median, p75, device profile, commit, and timestamp. Cover both local-cache and network paths. Do not clear realistic account data or delay realtime behavior to improve the score. Risk A fixture that is too warm or too clean will not represent normal use. ICE Impact 6 + Confidence 10 + Ease 7 = 23.",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "30943",
+      "ticket": "HTPR-5590",
+      "title": "AI chat from Inbox treats premium users as Free (no project context = Free in planGate)",
+      "text": "In plain English: open AI chat from the Inbox (or My Tasks) as a paying user, pick a premium model, and you get \"This model needs a paid plan or your own API key\". The app forgets you are premium the moment no board is on screen. Why it happens (root cause already located): chat sends default_context.project_id only when a board or task is on screen. Inbox and My Tasks send none. assertModelAllowedForPlan in src/app/api/ai/_lib/planGate.ts then hits the \"no team/project context is explicitly Free\" branch and throws, without ever looking at who the user is or which teams they belong to. Reproduce: Log in as a premium user (hit as Valentin, userId 6, screenshot below) Go to Inbox, open AI chat, select a $$ model (5.6 Luna) Ask anything: the plan error comes back instead of an answer Expected: plan resolution falls back to the requesting user's team memberships when the request carries no project/team. If any of their teams is entitled (paid or comped), premium models work. Boardless...",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "30454",
+      "ticket": "HTPR-5581",
+      "title": "Feedback modal: selecting IDEA/Question/Praise loses the cursor, cannot type",
+      "text": "In the send-feedback modal, choosing the IDEA, Question, or Praise category drops focus: the cursor disappears and typing is impossible. Reported on /project?id=339. Source: user feedback DBAC-19 from Valentin (userId 6). High-visibility bug: it breaks the feedback form itself.",
+      "gold": [
+        "Bug",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "29636",
+      "ticket": "HTPR-5572",
+      "title": "[auto] Seat billing failed for team 514b85fb-40e3-41d8-911d-ca59f94d8031: Invalid subscription_it",
+      "text": "An automated production error needs investigation. URL: Unknown Source: handled First seen: 2026-08-21T03:17:24.559Z Stack: Error: Invalid subscription_item id: si_P9J8BizWsFrcUF at g (/var/task/.next/server/chunks/94723.js:1:2421) at /var/task/.next/server/chunks/94723.js:2:1620 at process.processTicksAndRejections (node:internal/process/task_queues:104:5) Originating from: at cI._makeRequest (/var/task/.next/server/chunks/94723.js:2:19660) at cI.retrieve (/var/task/.next/server/chunks/94723.js:2:173938) at Object.retrieveSubscriptionItem (/var/task/.next/server/app/api/ai/chat/stream/route.js:322:15664) at n (/var/task/.next/server/app/api/ai/chat/stream/route.js:322:16902) at o (/var/task/.next/server/app/api/ai/chat/stream/route.js:322:18069) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async j (/var/task/.next/server/app/api/ai/chat/stream/route.js:204:763) at async p (/var/task/.next/server/app/api/ai/chat/stream/route.js:322:18550) at async...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "29140",
+      "ticket": "HTPR-5563",
+      "title": "CLI bug: ht-agent move fails with [object Object] on a valid section",
+      "text": "ht-agent move returns an unreadable error and does not move the ticket, while the equivalent hypertask CLI call succeeds. Command: ht-agent move speed-engineer HTPR-5453 \"Valentin Review\" Error: Failed to update 1 task(s). [object Object] (correlationId 1787263593261-0c538345) Expected: the ticket moves, same as hypertask tasks move HTPR-5453 --section \"Valentin Review\" , which worked immediately afterwards on the same ticket and section. Two problems: the move fails at all, and the error serialises an object into [object Object] so the real cause is invisible. Found while shipping HTPR-5453 .",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "28950",
+      "ticket": "HTPR-5552",
+      "title": "Reviewer convergence contract: no new majors on unchanged code after round 2",
+      "text": "Reviews must converge: 7 rounds on one PR today. Verdict policy changes in ai-review.mjs, see PR.",
+      "gold": [
+        "Infra"
+      ]
+    },
+    {
+      "id": "28706",
+      "ticket": "HTPR-5536",
+      "title": "Ai Chat super dumb and cumbersome requesting weird confirmations to simply change a label. This shoudl not require a extra confirmation step at all. Also it doesn't work",
+      "text": "https://screencast2.com/tfmqT.png https://screencast2.com/uvVTy.png",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "28182",
+      "ticket": "HTPR-5526",
+      "title": "[auto] m is not a function",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-339/1390 Source: client First seen: 2026-08-19T13:31:20.375Z Stack: TypeError: m is not a function at N (https://app.hypertask.ai/_next/static/chunks/53646-b1e14824ca9996fb.js?dpl=dpl_ALDZ4omSFca2VFkkztEqfsHjg4cP:30:15179) at A (https://app.hypertask.ai/_next/static/chunks/50419.6c4e7c0fffd18e04.js?dpl=dpl_ALDZ4omSFca2VFkkztEqfsHjg4cP:1:4699) Extra: { \"origin\": \"unhandledrejection\", \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "28152",
+      "ticket": "HTPR-5519",
+      "title": "[auto] m is not a function",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-339/1569 Source: client First seen: 2026-08-19T11:06:20.709Z Stack: TypeError: m is not a function at N (https://app.hypertask.ai/_next/static/chunks/53646-b1e14824ca9996fb.js?dpl=dpl_EnGbNDxovHPTP3PwvwyjpJ94SpQm:30:15179) at A (https://app.hypertask.ai/_next/static/chunks/50419.6c4e7c0fffd18e04.js?dpl=dpl_EnGbNDxovHPTP3PwvwyjpJ94SpQm:1:4699) Extra: { \"origin\": \"unhandledrejection\", \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "28063",
+      "ticket": "HTPR-5511",
+      "title": "[auto] Seat billing failed for team 24ab0139-9c27-483d-b567-dab0277e3cbd: Invalid subscription_it",
+      "text": "An automated production error needs investigation. URL: Unknown Source: handled First seen: 2026-08-19T03:17:32.335Z Stack: Error: Invalid subscription_item id: si_P8DVTnALQC8gjp at g (/var/task/.next/server/chunks/94723.js:1:2421) at /var/task/.next/server/chunks/94723.js:2:1620 at process.processTicksAndRejections (node:internal/process/task_queues:104:5) Originating from: at cI._makeRequest (/var/task/.next/server/chunks/94723.js:2:19660) at cI.retrieve (/var/task/.next/server/chunks/94723.js:2:173938) at Object.retrieveSubscriptionItem (/var/task/.next/server/chunks/28276.js:11:6580) at n (/var/task/.next/server/chunks/28276.js:11:7818) at o (/var/task/.next/server/chunks/28276.js:11:8985) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async j (/var/task/.next/server/chunks/28276.js:11:763) at async p (/var/task/.next/server/chunks/28276.js:11:9466) at async /var/task/.next/server/app/api/cron/reconcile-seat-billing/route.js:1:8962 at async...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "27909",
+      "ticket": "HTPR-5487",
+      "title": "Why do we have different font sizes in the same sidebar?",
+      "text": "https://screencast2.com/fyUep.png",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "27859",
+      "ticket": "HTPR-5478",
+      "title": "CLI bug: tasks move/update error renders '[object Object]', hiding the real API error",
+      "text": "hypertask --token <agent-jwt> tasks move INAI-18 --section Doing (managed agent token, role write, board 2099) fails with: Error: API error: Failed to update 1 task(s). [object Object] Two issues: (1) the real API error body is swallowed and rendered as [object Object], so the caller cannot tell whether it is a permission problem or a validation problem; (2) if managed agents with role write are not allowed to move tasks between sections, the error should say so explicitly. Expected: the actual API error message printed. Same command works under the owner JWT.",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "27786",
+      "ticket": "HTPR-5458",
+      "title": "[auto] Seat billing failed for team 24ab0139-9c27-483d-b567-dab0277e3cbd: Invalid subscription_it",
+      "text": "An automated production error needs investigation. URL: Unknown Source: handled First seen: 2026-08-18T03:17:22.954Z Stack: Error: Invalid subscription_item id: si_P8DVTnALQC8gjp at g (/var/task/.next/server/chunks/94723.js:1:2421) at /var/task/.next/server/chunks/94723.js:2:1620 at process.processTicksAndRejections (node:internal/process/task_queues:104:5) Originating from: at cI._makeRequest (/var/task/.next/server/chunks/94723.js:2:19660) at cI.retrieve (/var/task/.next/server/chunks/94723.js:2:173938) at Object.retrieveSubscriptionItem (/var/task/.next/server/chunks/28276.js:11:6580) at n (/var/task/.next/server/chunks/28276.js:11:7818) at o (/var/task/.next/server/chunks/28276.js:11:8985) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async j (/var/task/.next/server/chunks/28276.js:11:763) at async p (/var/task/.next/server/chunks/28276.js:11:9466) at async /var/task/.next/server/app/api/cron/reconcile-seat-billing/route.js:1:2368 at async...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "27772",
+      "ticket": "HTPR-5450",
+      "title": "App shell: reuse a fresh cached user profile during startup",
+      "text": "Avoid an immediate user-profile refetch when the account-scoped persisted cache is still fresh. Baseline: a signed-in production Board load issued /api/users/getById during startup and the request took 513 ms. AuthProvider mounts inside the account-scoped persisted query boundary, but the fetchUser query has the default zero stale time, so a restored profile is refetched immediately. The fetch also rewrites the user cookie and Recoil state. Hypothesis: treating a restored profile as fresh for five minutes removes one startup request and its state churn on repeat visits, especially helping mobile network and CPU contention, while explicit invalidations still refresh profile changes. Acceptance: Do not run the query until a valid cookie user ID exists. Reuse account-scoped persisted fetchUser data for at most five minutes. Keep explicit invalidation/refetch paths working for profile and tour changes. Retain background refresh after the freshness window. Add regression coverage for the...",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩",
+        "📲MOBILE",
+        "🖥️DESKTOP"
+      ]
+    },
+    {
+      "id": "27750",
+      "ticket": "HTPR-5443",
+      "title": "Board: publish IndexedDB snapshot after project-scoped authorization",
+      "text": "Let the authenticated returning board render from IndexedDB as soon as the project-specific board request proves access. Baseline: a signed-in production Board 15 returning-visit trace on 2026-08-17 had cached tasks ready at 556 ms, but the first board commit waited until 1,080 ms. The shared /api/projects/getAll request completed at 1,027 ms; the project-scoped /api/projects/boardTasks request completed at 513 ms. Hypothesis: use the successful project-scoped request as the exact-board authorization proof, publish the prepared local snapshot without waiting for the all-project metadata response, then retain /getAll as the complete revocation and sidebar reconciliation boundary. Acceptance: controlled signed-in returning-visit samples report mobile and desktop separately; IndexedDB Board readiness p75 improves by at least 300 ms or publishes within 100 ms of both the local read and project-scoped authorization finishing; account switches, route changes, denied/revoked access, stale...",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "27732",
+      "ticket": "HTPR-5433",
+      "title": "Task Detail Archive Icon: Incorrect Green State Appears During Archiving",
+      "text": "Reproduction steps Open a task detail page. Inspect the archive control before making any changes. Archive the task. Inspect the icon during and after the archive action. Expected The archive control should use the correct icon and state for each action. The unarchive icon appears only for archived tasks. The archive icon appears only for active tasks. Colors match the approved design system and theme. Actual A large green icon appears unexpectedly for unarchiving and remains visible while archiving. Its size, color, and treatment are inconsistent with the interface. Environment Browser: Chrome OS: Not provided Entry point: Task detail page Severity Medium . The issue does not prevent archiving, but it creates incorrect status feedback and breaks visual consistency. Done when Archive and unarchive states use distinct, correct icons. The icon does not show the unarchive state while archiving. Icon size and color match the design system across supported themes. Visual QA covers active...",
+      "gold": [
+        "Bug",
+        "Quick wins",
+        "Task Detail Page"
+      ]
+    },
+    {
+      "id": "27541",
+      "ticket": "HTPR-5424",
+      "title": "Deactivate the broken keyboard-shortcuts tutorial",
+      "text": "Completely deactivate the keyboard-shortcuts tutorial until it can be rebuilt safely. Prevent automatic and manual tutorial launches. Ignore persisted tutorial state that could reopen it. Keep the keyboard shortcuts and the ? shortcut reference working. Acceptance: the tutorial cannot appear on desktop or mobile, including for returning users with saved state.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "27478",
+      "ticket": "HTPR-5407",
+      "title": "Web mobile: cut Board startup JavaScript and long tasks",
+      "text": "Reduce the JavaScript and main-thread work blocking the authenticated mobile Board. Measured baseline: three production runs on /project?id=15&view=speed at 390×844 and 4× CPU. Median usable Board: 3,851 ms (3,226–4,852 ms). 55 startup scripts; 549 KB transferred; 1.58 MB decoded. 2,372 ms median total long-task time; 492 ms median largest task. Scope: Attribute critical-route chunks to their source modules. Remove or defer secondary UI from the pre-Board dependency graph. Split expensive initialization that is not required for first Board interaction. Preserve desktop, PWA, and Android WebView behavior. Acceptance: Startup decoded JavaScript and main-thread long-task time both fall in the same production mobile harness. Authenticated Board navigation and first interactions remain correct on mobile and desktop. Focused tests, type-check, lint, exact reviewer, and deployment checks pass. Three post-deploy 4× CPU runs are compared against the 3,851 ms baseline before the next item...",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "27407",
+      "ticket": "HTPR-5395",
+      "title": "Labels in ticket properties are cut off. Make sure they all overlap instead of underlap",
+      "text": "https://screencast2.com/iieqZ.png make sure none of the lables inside the ticket properties are cut off and produce this scrollbar",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "27372",
+      "ticket": "HTPR-5383",
+      "title": "[auto] Uncaught TypeError: Cannot assign to read only property 'pushState' of object '# '",
+      "text": "An automated production error needs investigation. URL: https://origin.hypertask.ai/demo Source: client First seen: 2026-08-13T02:10:14.692Z Stack: TypeError: Cannot assign to read only property 'pushState' of object '#<History>' at https://origin.hypertask.ai/_next/static/chunks/93794-b8de2e4a021107e5.js?dpl=dpl_GUNirCm1y6ub3ikMVBKHNeBX2fqD:1:171382 at iE (https://origin.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_GUNirCm1y6ub3ikMVBKHNeBX2fqD:1:93238) at ub (https://origin.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_GUNirCm1y6ub3ikMVBKHNeBX2fqD:1:117380) at uy (https://origin.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_GUNirCm1y6ub3ikMVBKHNeBX2fqD:1:117042) at ub (https://origin.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_GUNirCm1y6ub3ikMVBKHNeBX2fqD:1:117425) at uy...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "27105",
+      "ticket": "HTPR-5369",
+      "title": "PWA DeploySkewGuard can reload during a newer visibility cycle",
+      "text": "Prevent an installed PWA from reloading on stale reachability evidence after a visibility-cycle change. Failure: PR #2096 preflights before reload, but an in-flight preflight can survive visible → hidden and immediately reload during the newer hide cycle, bypassing its grace period. Fix: invalidate preflights whenever visibility changes, require the captured cycle to remain current before reload, and add behavioral timer/visibility regression coverage.",
+      "gold": [
+        "Bug"
+      ]
+    },
+    {
+      "id": "27016",
+      "ticket": "HTPR-5356",
+      "title": "Speed dashboard: separate authenticated web from shared-board lab data",
+      "text": "Make /speed reflect the web app people actually use while preserving every existing measurement. Add a primary authenticated-web layer with separate desktop and mobile evidence. Label API probes, authenticated interaction timings, and public shared-board PageSpeed as distinct sources. Use a rolling median instead of the latest noisy Lighthouse run for the headline. Keep all historical charts and data; treat shared-board PageSpeed as a secondary regression monitor. Ship the analytics change through review, production deployment, and live desktop/mobile verification.",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "26979",
+      "ticket": "HTPR-5348",
+      "title": "Move Mobile Inbox Splits to the Bottom Navigation Area",
+      "text": "Evaluate moving mobile inbox splits from the top to the bottom , either above or instead of the bottom navigation bar. Priority: Medium Size: S Tags: Inbox, mobile, design Why now The mobile inbox currently places splits at the top, unlike Superhuman’s bottom-oriented navigation. Moving them lower may improve reachability and create a clearer inbox-specific workflow. User story As a mobile inbox user, I want splits near the bottom of the screen, so I can switch inbox views without reaching to the top. Proposed behavior Move the mobile inbox split selector from the top to the bottom. Evaluate two layouts: Splits positioned above the existing bottom navigation. Splits replacing the bottom navigation while the inbox is open. Show the regular bottom navigation again when leaving the inbox for the board or another surface. Keep split switching usable with touch and existing mobile navigation patterns. Non-goals Do not change inbox split behavior or filtering logic. Do not redesign the...",
+      "gold": [
+        "DESIGN🎨",
+        "INBOX📩",
+        "📲MOBILE"
+      ]
+    },
+    {
+      "id": "26967",
+      "ticket": "HTPR-5339",
+      "title": "CLI bug: tasks list emits invalid ticket prefix",
+      "text": "Command: hypertask tasks list --project 2462 --limit 100 then hypertask tasks get YPER1-9\\n\\nError: Error: Invalid ticket number \"YPER1-9\". Expected format: PREFIX-NNN (e.g. HTPR-42).\\n\\nExpected behavior: tasks list must emit a valid ticket reference accepted by tasks get and tasks update. The project 2462 row links to numeric task 9 but prints YPER1-9.",
+      "gold": [
+        "CLI",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "26922",
+      "ticket": "HTPR-5331",
+      "title": "Mobile Task Writer: Enlarge Dictation Control and Keep Input in Thumb Zone",
+      "text": "Why now The mobile Task Writer’s initial view is difficult to use. Controls are too small, poorly positioned, and require unnecessary cursor placement. This extends the mobile usability work in HTPR-1952, HTPR-5040, HTPR-5098, and HTPR-5147. User story As a mobile user, I want a prominent dictation control and an immediately focused input so I can start writing comfortably. Proposed behavior Use a large dictation icon comparable to the mobile comment field. Place the primary controls within a comfortable thumb-zone position. Start with the text input focused and the cursor visibly blinking. Align controls consistently instead of placing them awkwardly at the left edge. Allow the Task Writer area to expand as generated output grows. Keep primary actions accessible when the mobile keyboard is open. Non-goals Do not change Task Writer generation or transcription behavior. Do not redesign the desktop Task Writer. Do not change the shared dictation component beyond required sizing or...",
+      "gold": [
+        "Speech-to-Text (Voice)",
+        "📲MOBILE"
+      ]
+    },
+    {
+      "id": "26913",
+      "ticket": "HTPR-5323",
+      "title": "CLI bug: pages update cannot change a page title",
+      "text": "Command: hypertask pages update 47 --title \"...\" Error: error: unknown option '--title' Expected: pages create accepts --title, but pages update offers no way to rename an existing page (only content/mode/note). Renaming requires delete+recreate, which loses page id and history. Please add --title to pages update.",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "26905",
+      "ticket": "HTPR-5316",
+      "title": "[auto] Uncaught TypeError: Cannot read properties of null (reading 'parentNode')",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-339/562 Source: client First seen: 2026-08-11T09:44:14.115Z Stack: TypeError: Cannot read properties of null (reading 'parentNode') at $RS (https://app.hypertask.ai/detail/project-339/562:13:329981) at https://app.hypertask.ai/detail/project-339/562:13:330050 Extra: { \"origin\": \"window.onerror\", \"userAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0\" }",
+      "gold": [
+        "Error Log",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "26880",
+      "ticket": "HTPR-5309",
+      "title": "CLI bug: ht GET /mcp/tasks ignores project= filter param, returns mixed-board results",
+      "text": "Command: ht GET \"/mcp/tasks?project=2108&limit=30\" Error: Returns 30 tasks from 5 different boards (projectId 15, 2125, 1215, 2313, 339) — none from board 2108. The project= query param is silently ignored. Expected: Should filter to only board 2108 tasks, matching hypertask CLI's `tasks list --project 2108` behavior. Workaround found: boardId= param works correctly (ht GET \"/mcp/tasks?boardId=2108&limit=30\" returns only board 2108 tasks). Also hypertask CLI --project flag works fine.",
+      "gold": [
+        "CLI",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "26872",
+      "ticket": "HTPR-5302",
+      "title": "[auto] Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/share?id=92ebf8e8-3883-468e-a00a-9e69bb9af1b9 Source: client First seen: 2026-08-10T13:34:44.575Z Stack: Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings. at r1 (https://app.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_12XYwetd1gGSRasYL67s8XrZ1puW:1:37066) at ih (https://app.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_12XYwetd1gGSRasYL67s8XrZ1puW:1:88494) at sy (https://app.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_12XYwetd1gGSRasYL67s8XrZ1puW:1:129323) at https://app.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_12XYwetd1gGSRasYL67s8XrZ1puW:1:129168 at sv...",
+      "gold": [
+        "Error Log",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "26860",
+      "ticket": "HTPR-5295",
+      "title": "[auto] Request failed with status code 500",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-2313/4 Source: client First seen: 2026-08-10T12:19:59.965Z Stack: AxiosError: Request failed with status code 500 at eK (https://app.hypertask.ai/_next/static/chunks/99551-4486baad49c525c9.js?dpl=dpl_ZS4Ait66uVdVXm62sodaVH268Q2T:1:21774) at XMLHttpRequest.y (https://app.hypertask.ai/_next/static/chunks/99551-4486baad49c525c9.js?dpl=dpl_ZS4Ait66uVdVXm62sodaVH268Q2T:1:28326) Extra: { \"axiosCode\": \"ERR_BAD_RESPONSE\", \"requestMethod\": \"POST\", \"requestPath\": \"/api/drafts/updateDraft\", \"responseStatus\": 500, \"origin\": \"unhandledrejection\", \"userAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "26841",
+      "ticket": "HTPR-5286",
+      "title": "[auto] Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/share?id=92ebf8e8-3883-468e-a00a-9e69bb9af1b9 Source: client First seen: 2026-08-10T09:43:26.918Z Stack: Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings. at r1 (https://app.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_Gr3BPJ2wAkB1DExeTjVdWhqjqqdD:1:37066) at ih (https://app.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_Gr3BPJ2wAkB1DExeTjVdWhqjqqdD:1:88494) at sy (https://app.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_Gr3BPJ2wAkB1DExeTjVdWhqjqqdD:1:129323) at https://app.hypertask.ai/_next/static/chunks/4bd1b696-f98826e3ee970624.js?dpl=dpl_Gr3BPJ2wAkB1DExeTjVdWhqjqqdD:1:129168 at sv...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "26812",
+      "ticket": "HTPR-5277",
+      "title": "QA description persistence post-fix 2026-08-09 23:15",
+      "text": "LIVE-POSTFIX-DESC-5266: saved description remains visible after create, reload, and reopen.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "26765",
+      "ticket": "HTPR-5253",
+      "title": "[auto] Loading chunk 20833 failed. (timeout: https://app.hypertask.ai/_next/static/chunks/20833.8",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/project?id=15&view=android-native Source: client First seen: 2026-08-09T11:55:37.444Z Stack: ChunkLoadError at u.f.j (https://app.hypertask.ai/_next/static/chunks/webpack-c753c505039f1491.js?dpl=dpl_3Bm1KPgmuMyc58pso4ZaDCpJbCyL:1:12626) at https://app.hypertask.ai/_next/static/chunks/webpack-c753c505039f1491.js?dpl=dpl_3Bm1KPgmuMyc58pso4ZaDCpJbCyL:1:1214 at Array.reduce (<anonymous>) at u.e (https://app.hypertask.ai/_next/static/chunks/webpack-c753c505039f1491.js?dpl=dpl_3Bm1KPgmuMyc58pso4ZaDCpJbCyL:1:1193) at eK.loadableGenerated.webpack [as loader] (https://app.hypertask.ai/_next/static/chunks/app/layout-338b246783ace6cc.js?dpl=dpl_3Bm1KPgmuMyc58pso4ZaDCpJbCyL:1:14275) at https://app.hypertask.ai/_next/static/chunks/33138-c5399c08e49a563e.js?dpl=dpl_3Bm1KPgmuMyc58pso4ZaDCpJbCyL:1:6221 at I...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "26747",
+      "ticket": "HTPR-5240",
+      "title": "[auto] This model needs a paid plan or your own API key.",
+      "text": "An automated production error needs investigation. URL: /api/ai/chat/stream Source: handled First seen: 2026-08-09T10:00:07.436Z Stack: Error: This model needs a paid plan or your own API key. at l (/var/task/.next/server/chunks/7335.js:31:10644) at bv (/var/task/.next/server/app/api/ai/chat/stream/route.js:157:15418) at process.processTicksAndRejections (node:internal/process/task_queues:104:5) at async rW.do (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:5:23405) at async rW.handle (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:5:28909) at async Y (/var/task/.next/server/app/api/ai/chat/stream/route.js:183:128960) at async rW.handleResponse (/var/task/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:1:129338) at async Z (/var/task/.next/server/app/api/ai/chat/stream/route.js:183:130027) at async Module.z (/var/task/.next/server/app/api/ai/chat/stream/route.js:183:132062) at async handler...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "26719",
+      "ticket": "HTPR-5213",
+      "title": "Mobile: prioritize visible board data over secondary startup requests",
+      "text": "Make the active board win every startup request race on mobile. Secondary account, integration, preference, and navigation data should not delay visible tasks. Scope: Classify startup requests as critical, intent-driven, idle, or feature-only. Defer or cancel secondary work during board navigation and rapid board switching. Keep lightweight counts eager only when they affect the visible shell. Acceptance: The active board request starts before all secondary feature requests in a cache-disabled trace. Closed chat, unopened inbox, integrations, and settings add no competing payload. Request count and decoded bytes fall without slowing intentional inbox, chat, or board switching at p75.",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "26685",
+      "ticket": "HTPR-5193",
+      "title": "Agent token invalidated when session restarts (\"Session invalidation requested\")",
+      "text": "Gap: Managed agent tokens (JWT with agentId claim) get invalidated when the session restarts — the server returns reason: unauthorized / Session invalidation requested . The token itself has no expiry claim ( exp ), so it should outlive a session restart. Repro: Create agent token via hypertask auth login --token --agent-id <agentId> Use token in hypertask --token \"$TOKEN\" ... — works fine Exit session + restart Same token now returns: Session invalidation requested / reason: unauthorized Expected: A persisted agent token survives session restarts (it has no expiry). Root cause guess: Server may bind agent-session validity to a server-side session that is cleared on restart or re-auth, even though the JWT itself is still valid.",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "26652",
+      "ticket": "HTPR-5181",
+      "title": "Support HT_TOKEN env var in ht script",
+      "text": "Modify the ht script to check a HT_TOKEN environment variable before falling back to ~/.hypertask/config.json . This lets agents switch between user identity and agent identity per session without mutating the config file. Gap Currently ht always reads ~/.hypertask/config.json . To use an agent bearer token (e.g. one with an agentId claim), you must either edit the config file or use the slower hypertask --token CLI — ht has no token override mechanism. Fix Add an HT_TOKEN env var check at the top of ~/.local/bin/ht , before reading config. If set, use it instead of the saved token. The ht script is a ~4x faster alternative to the full CLI (skips Node startup), so it's the natural path for agent token use. Usage HT_TOKEN=$AGENT_TOKEN ht GET /mcp/tasks?ticket_number=HTPR-3976",
+      "gold": [
+        "CLI",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "26633",
+      "ticket": "HTPR-5172",
+      "title": "Board sidebar shows only Favorites: the seeded empty list is treated as fresh data, so the request is never made",
+      "text": "The board switcher can render Favorites and nothing else, permanently, while the server is healthy and the session is valid. Proven: the app never issues the request at all. In plain English: the sidebar starts with a placeholder empty list of boards. React Query was told that placeholder counts as data that was just fetched, and separately told to trust fresh data for a minute. So it concludes it already has an up-to-date board list, and never asks the server. You get an empty sidebar that looks exactly like your boards were deleted. Evidence (headless, live production, userId 6). Instrumented XHR and fetch before opening the switcher, then opened it: calls: [] , groups: 1 . Zero network requests to /api/teams/getAllSidebar . The endpoint itself is fine: called by hand from the same page it returns 200 with 12 teams and 30 boards . The persisted cache held {status: \"success\", data: [], dataUpdatedAt: 2 hours old} and was still never refetched. Cause: in useGetAllTeamsMinimal ,...",
+      "gold": [
+        "Quick wins",
+        "🖥️DESKTOP"
+      ]
+    },
+    {
+      "id": "26586",
+      "ticket": "HTPR-5162",
+      "title": "CLI can create a task relation but cannot list or remove one",
+      "text": "The CLI can link two tasks but gives you no way to see existing links or undo one, so a wrong link is unfixable from the terminal. hypertask tasks link <source> <target> --type RelatedTo creates a relation. There is no list and no unlink . The REST API has had all three for months: GET , POST and DELETE on /mcp/tasks/relations . Now unblocked. Those routes previously demanded an internal database id or a ticket number and refused unique_index + project_id . HTPR-5159 fixed that, so the CLI can pass whatever identifier the user typed. Proposed: hypertask tasks relations <ticket> lists relations both directions, showing type and the other ticket hypertask tasks unlink <source> <target> [--type] removes one Correcting the parity matrix while I am here: HTPR-4834 lists \"task relations entirely\" and \"related and next-task suggestions\" as missing from the CLI. That is out of date: tasks link , tasks related and tasks next all exist and work. List and unlink are the only real gaps.",
+      "gold": [
+        "AI CHAT 💬",
+        "CLI",
+        "MCP"
+      ]
+    },
+    {
+      "id": "26530",
+      "ticket": "HTPR-5155",
+      "title": "Agent assignees are invisible on every read path (tasks list agent=null, /mcp/tasks reports them as userId 6)",
+      "text": "No read endpoint tells you which agents own a ticket, so agent ownership cannot be audited or corrected. This blocks the Board Maintainer's job of resolving ownership conflicts. In plain English: you can assign an agent to a ticket, but you cannot then ask the API who owns it. The answer comes back either empty or as Valentin's user id. hypertask tasks list --project 15 --json returns agent: null for tickets that provably have agent assignees. GET /mcp/tasks?project_id=15&unique_index=4461 returns those agents as bare assignees: [{userId: 6}] with no agent object and no agentId . The only place the real list appears is the response body of POST /api/mcp/assignees/assign , which means you have to mutate the ticket to find out who owns it. Expected: both tasks list and /mcp/tasks return agent assignees with their id and displayName, distinct from human assignees. Reproduced 2026-08-07 while wiring the HT Board Maintainer. Workaround in use: POST assign and read the echoed list, which is...",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "26474",
+      "ticket": "HTPR-5147",
+      "title": "Task writer mobile improvements",
+      "text": "So one thing to improve is that the the on the new task page, when I use the dictation function to the right of the new AI task writer button, it's super small, like I can't actually see the waveform, and the way this is usually handled is that the waveform occupies the whole horizontal space and essentially allows me to see the whole waveform. And then I press enter and then it reveals the stuff underneath. The other thing to fix is that the save button is kind of out of in the task writer, once I've dictated, the save button is out of the the viewport. Once I've dictated my stuff and I'm very likely to send off what I've dictated, the save button must be visible right after dictation, basically. So we need to change the position of the save button in the task writer. And then also, you see how we can remove the back button completely from new task and task writer. We don't need that anymore. And then also, there's also another view that I'm showing you where the keyboard is expanded...",
+      "gold": [
+        "📲MOBILE"
+      ]
+    },
+    {
+      "id": "26457",
+      "ticket": "HTPR-5139",
+      "title": "Clicking outside due date modal doesn't close it but should",
+      "text": "https://screencast2.com/yeKt7.png clicking here outside user expectation is to close the modal",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "26433",
+      "ticket": "HTPR-5122",
+      "title": "[auto] Uncaught TypeError: Cannot read properties of undefined (reading 'projectId')",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-15/3617 Source: client First seen: 2026-08-07T07:10:45.469Z Stack: TypeError: Cannot read properties of undefined (reading 'projectId') at https://app.hypertask.ai/_next/static/chunks/58831-5cbe801cae50e909.js?dpl=dpl_DdcyL9BuYEk2LaSwrQVryr6wpswA:30:17409 at onClick (https://app.hypertask.ai/_next/static/chunks/27009.ee21ce49b6832f90.js?dpl=dpl_DdcyL9BuYEk2LaSwrQVryr6wpswA:1:754) at s1 (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_DdcyL9BuYEk2LaSwrQVryr6wpswA:1:152466) at https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_DdcyL9BuYEk2LaSwrQVryr6wpswA:1:158362 at nU (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_DdcyL9BuYEk2LaSwrQVryr6wpswA:1:20234) at s5 (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_DdcyL9BuYEk2LaSwrQVryr6wpswA:1:153699) at fD...",
+      "gold": [
+        "Error Log",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "26418",
+      "ticket": "HTPR-5115",
+      "title": "AI chat: add project_admin so the chat can archive, restore and invite to boards",
+      "text": "The chat cannot archive a board, restore one, or invite a person or agent, though MCP callers can. So board administration is only reachable from the surface most users never touch. What to build: a chat tool mirroring the MCP project_admin tool, which archives or restores an owned board and invites a human or agent to an accessible board. Read and write the same rows the MCP route writes, behind the same access checks: archiving is owner-only, inviting requires board access. Do not call the mcp-server service layer from the chat route. Those services are HTTP clients that request this same app, which makes the chat mint a credential and call itself. Use the underlying controllers directly, as the other chat tools do. Fourth item from the surface parity audit on HTPR-4834 .",
+      "gold": [
+        "AI CHAT 💬"
+      ]
+    },
+    {
+      "id": "26405",
+      "ticket": "HTPR-5108",
+      "title": "setTaskLabels deletes labels without recording removal activity, so data loss is silent",
+      "text": "setTaskLabels wipes a task’s labels with a bare deleteMany and records nothing, so a destructive label write leaves no trace in history. In src/lib/mcp/tasks/services.ts : it calls prisma.taskLabel.deleteMany({ where: { taskId } }) , then creates the new labels and fires createLabelActivity only for those. Every removed label vanishes with no activity row. Real damage, tonight. A bulk update through --labels replaced rather than added, destroying every other label on ~90 tickets. Nothing in the UI or the history showed it had happened. I recovered 75 labels across 36 tickets by replaying the original additions , which is only possible because those were logged. Had any of those labels been removed by this same path earlier, they would be unrecoverable. Two asks: Log removals. Emit a TaskLabel activity with a removed status for each label deleteMany drops, so the feed tells the truth and a bad write is recoverable. Consider making the additive path the default. mutateTaskLabels already...",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "26246",
+      "ticket": "HTPR-5097",
+      "title": "Mobile Board View Selector Hides the Active View After Loading",
+      "text": "Fix the mobile board header so users can immediately see which saved view is active. Priority: Medium Size: S Tags: BUG 🪲, 📲MOBILE Reproduction steps Open a board on a mobile viewport. Select a saved view. Reload the board or open it with that view already selected. Check the view selector at the top of the board. Expected The view selector should automatically scroll to the active view, keeping its name visible in the mobile header. Actual The selected view can be outside the visible scroll position, making the active view unclear after loading. Environment Mobile board view Responsive viewport Applies when a saved view is selected before or during board loading Severity Medium . Users can continue working, but the board context is unclear. Done when The active view scrolls into the visible position after the board loads. The behavior works after reloads and direct navigation to a saved view. The selected view remains clearly identifiable across supported mobile widths. Desktop...",
+      "gold": [
+        "Quick wins",
+        "📲MOBILE"
+      ]
+    },
+    {
+      "id": "25953",
+      "ticket": "HTPR-5085",
+      "title": "tasks list --label silently drops a task that carries the label",
+      "text": "A task with the filtered label does not appear in the filtered list, so anything driving work off that filter silently misses tickets. Reproduced on production, 2026-08-06, twice in a row with identical output: hypertask tasks list --project 15 --label \"📲MOBILE\" --limit 100 returns 9 rows . HTPR-4116 is not among them, yet tasks get HTPR-4116 shows Labels 📲MOBILE, Calendar 📅 . It was present in the same query earlier today, before it gained a second label and a second assignee entry. Two things to check: whether the label filter breaks on tasks carrying more than one label, and whether the duplicated assignee row on that task (it lists Valentin Yeo, Valentin Yeo ) is joining the query into dropping it. Why it matters beyond one ticket: agent tooling uses this filter as its work queue, so a dropped row is invisible work, not a cosmetic gap.",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "25937",
+      "ticket": "HTPR-5075",
+      "title": "Comment composer has no in-flight guard, so two fast sends post two comments",
+      "text": "Pressing send twice before the first request lands posts the comment twice. Nothing blocks the second press. No flag: sendComment and the Ctrl+Enter branch in TipTapTaskDetail.tsx call handleCallback with no isPending check. No disabled state: the send button in TiptapMainContainer.tsx is never disabled while a send is in flight. Each press queues its own upload with a fresh Date.now() id, so the per-upload guard in UploadingCommentContainer does not catch it. That guard only stops one upload posting twice. Fix: a single in-flight flag that both the keyboard path and the button respect, cleared when the comment lands or fails. Split out of HTPR-3175 , whose wrong-task half is fixed in PR #2337 .",
+      "gold": [
+        "Quick wins",
+        "🖥️DESKTOP"
+      ]
+    },
+    {
+      "id": "25927",
+      "ticket": "HTPR-5066",
+      "title": "No way to read a project's labels: GET /mcp/labels 404s and the CLI has no list command",
+      "text": "Labels can be created and applied, but never listed. The only way an agent discovers what labels exist is by deliberately applying a wrong one and reading the error message. What fails: ht GET \"/mcp/labels?project_id=15\" returns {\"error\":\"not found\"} . The route does not exist. hypertask labels list --project 15 and hypertask label list --project 15 both return unknown command . There is no read subcommand, only project label create . The workaround that actually works , which is the tell: hypertask tasks update HTPR-5015 --labels \"does not exist\" fails with a message listing all 48 labels in the project. So the data is there, it is just only reachable through a failure path. Expected: a GET /mcp/labels?project_id=<id> that returns the label list, and a hypertask labels list --project <id> that wraps it. Why it matters: every agent that tags its own tickets has to either hardcode label names or trigger an error on purpose to read them.",
+      "gold": [
+        "CLI",
+        "iOS App"
+      ]
+    },
+    {
+      "id": "25905",
+      "ticket": "HTPR-5054",
+      "title": "Separate Agent assignees from human Assignees (own field on the task)",
+      "text": "Split the Assignees property in two: humans stay in Assignees, agents get their own Agents row on the task. In plain English: right now a person and an AI agent land in the same pile. You look at a ticket and you cannot tell at a glance whether a human owns it or a bot is grinding on it. Both show as round avatars in one list. That matters more every week, because agents now take tickets on their own. Why it is worth doing Ownership reads instantly. Human accountable, agent working. Two rows, no squinting. Filters and views get sane. \"Assigned to me\" stops meaning \"assigned to me or one of my bots\". A view can say Agent = Mobile Developer without touching the human filter (see HTPR-5043 ). Board cards can show it. Agent chip separate from human avatar. How it should behave Task detail right column gains an Agents row directly under Assignees . Keep one shortcut: a . The same popover opens, but it is split into People and Agents sections. Pick a human, it lands in Assignees. Pick an...",
+      "gold": [
+        "🖥️DESKTOP"
+      ]
+    },
+    {
+      "id": "25896",
+      "ticket": "HTPR-5046",
+      "title": "[auto] Cannot read properties of undefined (reading 'uniqueIndex')",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/project?id=15 Source: client First seen: 2026-08-06T10:20:18.533Z Stack: TypeError: Cannot read properties of undefined (reading 'uniqueIndex') at https://app.hypertask.ai/_next/static/chunks/61103-357d1f60d5da6658.js?dpl=dpl_BdndrkbajwKTKEiJeWLBvYyTJJ6y:16:44546 at async eP (https://app.hypertask.ai/_next/static/chunks/31294.9ef52c17c124213d.js?dpl=dpl_BdndrkbajwKTKEiJeWLBvYyTJJ6y:1:7744) Extra: { \"origin\": \"unhandledrejection\", \"userAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0\" }",
+      "gold": [
+        "Error Log",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "25887",
+      "ticket": "HTPR-5039",
+      "title": "CLI bug: tasks assign/unassign cannot target an agent, and task_id silently hits the wrong task",
+      "text": "Two gaps found while wiring an agent identity to board 15 tickets. The CLI cannot assign an agent. hypertask tasks assign HTPR-5037 --assignee <agent-uuid> fails with Either user_id, (user_ids + mode: 'multiple'), or assign_self must be provided . The API supports assign_self and the agent token carries the agentId, but the CLI exposes no way to reach it. Same for tasks unassign . Workaround is a raw POST to /api/mcp/assignees/assign . /api/mcp/assignees/assign accepts task_id as an internal id with no board check. Passing task_id: 3127 while intending ticket HTPR-3127 (internal id 21769) assigned the agent to an unrelated task on a different board, and returned success. The agent token is scoped to project 15 only, so that write should have been refused. Prefer project_id + unique_index , but the access check is the real fix. Wrong assignment was reverted with intent: \"unassign\" .",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "25776",
+      "ticket": "HTPR-5028",
+      "title": "[auto] Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/share?id=31470932-a146-44c5-a0bc-09094b02f7ea Source: client First seen: 2026-08-05T15:49:26.553Z Stack: Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings. at rZ (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_FTkTBTasEqnXP2hwb3nrCsMMVF2q:1:36744) at id (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_FTkTBTasEqnXP2hwb3nrCsMMVF2q:1:87965) at sh (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_FTkTBTasEqnXP2hwb3nrCsMMVF2q:1:128655) at https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_FTkTBTasEqnXP2hwb3nrCsMMVF2q:1:128500 at sm...",
+      "gold": [
+        "Error Log",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "25576",
+      "ticket": "HTPR-5021",
+      "title": "Board views serve stale tasks until a refresh",
+      "text": "Switching to a saved view can show the previous view's tasks until the page is refreshed. Seen on the a client board: \"My Tasks\" rendered a set of tasks that were not Valentin's; after a reload the same view showed the correct tasks. Cache, not filtering. The view's own query is right. What renders first is a stale cached task list from the view that was open before. Likely related to today's view work : https://app.hypertask.ai/detail/project-15/5016 and https://app.hypertask.ai/detail/project-15/5011 both changed how the board rebuilds its task set on a view switch. Next step : confirm whether the react-query key for the board task list includes the active view id, so switching views cannot hit the previous view's cache entry. Screenshot from the report: https://screencast2.com/NvJDB.png",
+      "gold": [
+        "🖥️DESKTOP"
+      ]
+    },
+    {
+      "id": "25549",
+      "ticket": "HTPR-5013",
+      "title": "[auto] Uncaught TypeError: Cannot read properties of undefined (reading 'projectId')",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-339/1487 Source: client First seen: 2026-08-05T09:56:33.363Z Stack: TypeError: Cannot read properties of undefined (reading 'projectId') at https://app.hypertask.ai/_next/static/chunks/58831-d97b62d8d2279d60.js?dpl=dpl_BVfVRwqaM7wo2X1gF1o1Yk8tZNkp:30:17409 at HTMLDocument.nQ (https://app.hypertask.ai/_next/static/chunks/58831-d97b62d8d2279d60.js?dpl=dpl_BVfVRwqaM7wo2X1gF1o1Yk8tZNkp:26:32361) Extra: { \"origin\": \"window.onerror\", \"userAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "25511",
+      "ticket": "HTPR-5004",
+      "title": "AI chat input: remove button backdrops (model, board scope, mic) + de-purple send",
+      "text": "Kill the pill backdrops in the AI chat input bar; plain text + chevron like Claude's composer. Model selector and board scope : no bg/shadow, white text (equal weight), muted chevron, subtle hover fill. Same dropdowns. Mic : remove the pill fill, bare icon + chevron like the other right-side icons. Send : white (button-arrow token), not purple; highlight color is no longer purple. Wireframe (approved by Valentin): https://hypertask.app/explorations/ai-input-dechrome.html",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "25374",
+      "ticket": "HTPR-4984",
+      "title": "CLI bug: config apiUrl app.hypertask.ai is silently remapped to api.hypertask.ai, no opt-out except env var",
+      "text": "The CLI hard-remaps a configured apiUrl of https://app.hypertask.ai/api (LEGACY_API_URL) back to https://api.hypertask.ai/api , so config cannot route around an api-host outage. Seen today during the api.hypertask.ai 403 burst ( HTPR-4983 ): the CLI stayed down even though the app host worked and this VPS is IP-bypassed there ( HTPR-3881 ). hypertask status misleads: it prints the raw config URL, not the resolved one actually used. Expected : an explicitly configured apiUrl is respected as-is, or at least a documented config flag to opt out of the remap. HYPERTASKS_API_URL env works and is the current workaround.",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "25333",
+      "ticket": "HTPR-4975",
+      "title": "[auto] Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/share?id=92ebf8e8-3883-468e-a00a-9e69bb9af1b9 Source: client First seen: 2026-08-04T14:29:10.931Z Stack: Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings. at rZ (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_4KN6UP6vVwak7LmCTbcsxBYodBwT:1:36744) at id (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_4KN6UP6vVwak7LmCTbcsxBYodBwT:1:87965) at sh (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_4KN6UP6vVwak7LmCTbcsxBYodBwT:1:128655) at https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_4KN6UP6vVwak7LmCTbcsxBYodBwT:1:128500 at sm...",
+      "gold": [
+        "Error Log",
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "25316",
+      "ticket": "HTPR-4968",
+      "title": "[auto] Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/share?id=c4d225af-aeae-4e5f-8097-9a84d6913065 Source: client First seen: 2026-08-04T12:09:27.420Z Stack: Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings. at rZ (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_3eLiQm2Q6uKGHAryuhmf7UgKWk3g:1:36744) at id (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_3eLiQm2Q6uKGHAryuhmf7UgKWk3g:1:87965) at sh (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_3eLiQm2Q6uKGHAryuhmf7UgKWk3g:1:128655) at https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_3eLiQm2Q6uKGHAryuhmf7UgKWk3g:1:128500 at sm...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "25231",
+      "ticket": "HTPR-4955",
+      "title": "Inbox: show per-ticket UNREAD count instead of total comment count",
+      "text": "The count on an inbox row should be the unread count, not the ticket's total comment count. Aalian (Slack DM 2026-08-03): the row shows (27) = total comments, which is not helpful in an inbox; (2) unread is what you scan for. Inboxes naturally show the unread count right against the name. The small \"2 unread\" indicator and blue dot are not prominent enough. Replace the bracket count on inbox rows with the unread count for that ticket. Keep the blue dot; the number carries the signal. Thread: https://innebyferal.slack.com/archives/D08DTBXAKNK/p1785765563348179",
+      "gold": [
+        "Quick wins",
+        "🖥️DESKTOP"
+      ]
+    },
+    {
+      "id": "25191",
+      "ticket": "HTPR-4946",
+      "title": "CLI bug: draft create reports success but draft never appears (list shows only older draft, web composer empty) — regression after HTPR-4654",
+      "text": "Command: hypertask draft create a client-1405 --comment --text \"<p>...</p>\" (CLI v1.11.x, 2026-08-03 15:25 UTC) Result: success logged, draftId 98937 , taskId 23030. But: hypertask draft list a client-1405 ~2 min later returns draftCount 1, showing ONLY an older draft (id 96822, different text) — draft 98937 is absent. Web UI comment composer on the ticket stays empty for the same user (id 6), even after reload. Expected: a comment draft created via CLI appears in draft list and pre-fills the web composer for the same user. Context: HTPR-4654 covered the same symptom and is archived as fixed. This reproduces post-fix, so either a regression or a new path: create succeeds but the draft is orphaned (never listed, never shown). Possibly related to the ticket already having an existing older draft (96822) from another author/flow.",
+      "gold": [
+        "CLI"
+      ]
+    },
+    {
+      "id": "25167",
+      "ticket": "HTPR-4936",
+      "title": "AMOLED: bold text pops pure white like ChatGPT dark",
+      "text": "Mirror ChatGPT dark fully: body text stays #ececec, bold/emphasis text goes pure #ffffff so unread rows and headings pop. Measured from https://screencast2.com/aBfik.png vs https://screencast2.com/qnON2.png: ChatGPT bold samples at 255, ours capped at #ececec. Ships with HTPR-4931 .",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "25136",
+      "ticket": "HTPR-4927",
+      "title": "@mention dropdown: focus highlight indistinguishable from panel background",
+      "text": "In AMOLED (and the other core themes) the @mention dropdown panel and its selected row are nearly the same tinted tone, so keyboard focus is invisible. Screenshot: https://screencast2.com/QTwEd.png Fix: panel uses the theme's normal dropdown surface ( --bg-mention ), selected row uses the hover tone ( --active-mentionList ), giving a clear step. Ships with HTPR-4926 .",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "25108",
+      "ticket": "HTPR-4917",
+      "title": "Inbox row ticket ID rides higher than the title text",
+      "text": "The 11px ticket ID in inbox rows top-aligns against the 14px title, so it sits visibly higher (all themes). Screenshot: https://screencast2.com/he5AV.png Fix: items-baseline on the flex wrapper in TaskRowComponents/TaskTitle.tsx so ID and title share a text baseline.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "25093",
+      "ticket": "HTPR-4908",
+      "title": "Expanded sidebar covers the task-detail up/down nav and other fixed buttons",
+      "text": "Fixed controls sat under the expanded sidebar because their left offset was hardcoded to the collapsed width. On the task view the prev/next arrows and the counter were half-buried behind the rail. Every fixed control now tracks the rail's live width via --app-shell-rail-w instead of a hardcoded 48/56px. Same bug fixed on the back buttons for All tasks, Reports, Velocity, Starred, Archived , the Time page padding, and the notification banner.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "25068",
+      "ticket": "HTPR-4898",
+      "title": "Inbox: dead 36px gap under the card when quick tips are off",
+      "text": "The inbox card should reach down to a 12px bottom gutter when quick tips are off, and float 12px above the quick-tips bar when they are on. In plain English: with quick tips hidden, the inbox list card stops 36px above the window bottom and shows an empty black strip. The 36px padding was sized for the quick-tips bar, but it is applied always, even when the bar is not there. Cause: hardcoded pb-9 on search_inbox_container in src/app/inbox/Inbox.tsx Fix: in rail mode, pad by calc(var(--quick-tips-h, 0px) + 12px) . The bar already publishes its height in --quick-tips-h and removes it on unmount, same mechanism the board uses. Screenshot: https://screencast2.com/Q6gZY.png",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "24979",
+      "ticket": "HTPR-4875",
+      "title": "Demo lands on the board; purpose wizard moves to Ctrl+K as Board creation assistant",
+      "text": "Guests hitting /demo land directly on a provisioned board; the \"What do you want to manage?\" wizard stops blocking entry and becomes a Ctrl+K command. /demo auto-provisions the guest board on load, no modal in the way; onboarding elements trigger after landing. Ctrl+K > \"Board creation assistant\" opens the same purpose wizard (AI builds a board from a described project), preserved for guests and logged-in users. Follows HTPR-4866 free-tier first-run work.",
+      "gold": [
+        "NEW USER ONBOARDING ❇️"
+      ]
+    },
+    {
+      "id": "24943",
+      "ticket": "HTPR-4863",
+      "title": "A team whose card fails keeps full premium access indefinitely",
+      "text": "In plain English: you said a team whose card is blocked should lose premium. Right now they do not. They keep everything, forever, while paying nothing. Found while shipping HTPR-4216 . You described the intended model as: anyone can join a team, and if the payer's card fails the team drops off premium. The first half is now true. The second half was never implemented. What the code actually does : the plan gate treats only Expired , ended and canceled as dead ( src/app/api/ai/_lib/planGate.ts:11 , mirrored in src/lib/deriveCurrentBoardBilling.ts ). Stripe's past_due and unpaid are not in that list, so a failed-payment team still resolves to Pro and keeps every premium feature. This is not hypothetical : a client sat on a past_due subscription with full access, which is part of what HTPR-4153 untangled. Why it matters more now : seat billing no longer blocks anyone at the door, deliberately, because the joiner is not the payer. That is the right call, but it means the payment gate has...",
+      "gold": [
+        "Stripe"
+      ]
+    },
+    {
+      "id": "24929",
+      "ticket": "HTPR-4851",
+      "title": "Two people joining a team at the same time can lose a paid seat",
+      "text": "In plain English: if two people accept invites to the same team within a second of each other, Stripe can end up billing for one seat fewer than the team actually has. We keep serving the extra person for free until someone else joins. Not urgent, and not caused by the seat-billing fix in HTPR-4216 . It predates it. Surfaced by the review on PR #2181 . Why it happens : seat sync reads the current Stripe quantity, works out the new one, then writes it. Those are three separate steps with no lock. Two joins landing together both read the same starting number, and the write that lands last wins, even if it was calculated from the staler read. What makes it worse : the Member_Team table has no unique constraint on user plus team, so the same person joining twice concurrently can create two membership rows and double-count the seats. It partly self-heals : the next person to join recalculates from real membership and charges the whole gap. So the loss is temporary on an active team, and...",
+      "gold": [
+        "Stripe"
+      ]
+    },
+    {
+      "id": "24917",
+      "ticket": "HTPR-4842",
+      "title": "Free tier follow-up: guest boards live 30 days, CLI-key overlay, chat auto-open for all free users",
+      "text": "Make the anonymous/free experience sticky: longer-lived guest boards, agent onboarding via CLI key, and the AI chat open by default with board-filling prompts. Guest TTL 24h to 30d (GUEST_SESSION_TTL_SECONDS + cleanup-guests cron window). CLI key overlay : show free users their CLI/MCP key so they can add the board to Claude/ChatGPT and play immediately. AI chat auto-open + prompt chips for ALL free users , not just guests (the demo prompts + auto-open already exist for guests in LandingPage). Reuses the existing AI chat instead of the old board-filling assistants.",
+      "gold": [
+        "FEATURE 💎",
+        "NEW USER ONBOARDING ❇️"
+      ]
+    },
+    {
+      "id": "24850",
+      "ticket": "HTPR-4822",
+      "title": "[auto] Uncaught TypeError: Cannot read properties of undefined (reading 'activity')",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-2093/27 Source: client First seen: 2026-08-01T17:46:32.100Z Stack: TypeError: Cannot read properties of undefined (reading 'activity') at e9 (https://app.hypertask.ai/_next/static/chunks/71820-3f0c3fff8c6465b3.js?dpl=dpl_CLEDoE15PhcrMop1YzA4bzsMFNnu:14:23246) at HTMLDocument.eV (https://app.hypertask.ai/_next/static/chunks/71820-3f0c3fff8c6465b3.js?dpl=dpl_CLEDoE15PhcrMop1YzA4bzsMFNnu:14:20938) Extra: { \"origin\": \"window.onerror\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "24826",
+      "ticket": "HTPR-4812",
+      "title": "Inbox mention rows: mention-first order (sender, @name + snippet, ticket id, title, tags, date)",
+      "text": "Mention rows restructure so the ask leads: sender, then the @name mention pill + message snippet, then ticket ID, dim task title, tags, date. Fixes long titles pushing the mention out of view to the right. Drops the Mentioned in: prefix on these rows; the snippet starts directly (keeps any leading words like FYI). Due chip travels with the trailing tag cluster on mention rows. Unread dot stays blue; amber variant parked for a later test. Approved wireframe: https://hypertask.app/explorations/9k0py7r . Applies only to Mentioned rows with a comment snippet.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "24786",
+      "ticket": "HTPR-4792",
+      "title": "Turn on real-user speed tracking (PostHog web vitals) - we're flying blind on how fast the app feels",
+      "text": "We have no data on how fast the app actually feels to real users. PostHog can tell us, but the setting is off. In plain English: all our speed numbers today come from a robot loading one page on a test connection. That tells us nothing about what real people on real phones experience. PostHog already runs on the site and can measure it from actual visits, but the performance setting was never switched on. PostHog itself flags it: \"Performance monitoring setup: 0/1 passed.\" Why it matters: one of the four measurements, INP (how quickly the app responds when you click or type), cannot be measured by a robot at all . It only exists from real usage. So right now we are completely blind to how responsive the app feels, which is exactly the thing people notice most. The fix: add capture_performance: { web_vitals: true } to the PostHog setup in PostHogAnalytics.tsx . Three lines. It then reports LCP, CLS, FCP and INP from real sessions. What we get: real numbers to replace guesswork, so...",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "24765",
+      "ticket": "HTPR-4773",
+      "title": "[auto] Network Error",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-339/1382 Source: client First seen: 2026-08-01T10:34:23.661Z Stack: AxiosError: Network Error at m.onerror (https://app.hypertask.ai/_next/static/chunks/61766-acf72cc8586aea35.js?dpl=dpl_ATK9NUN7sB7smgYXu13TFwFxtKMV:1:47634) Extra: { \"origin\": \"unhandledrejection\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "24733",
+      "ticket": "HTPR-4755",
+      "title": "[auto] Messaging: This browser doesn't support the API's required to use the Firebase SDK. (messa",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/detail/project-2125/18?inboxFlow=true Source: client First seen: 2026-07-31T10:43:53.832Z Stack: FirebaseError: Messaging: This browser doesn't support the API's required to use the Firebase SDK. (messaging/unsupported-browser). at https://app.hypertask.ai/_next/static/chunks/99505.128b7049432b590a.js?dpl=dpl_4FZZS3kafvvEiapkLovG2Nr5CBjm:1:25459 Extra: { \"origin\": \"unhandledrejection\" }",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "24715",
+      "ticket": "HTPR-4748",
+      "title": "[auto] Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/share?id=b86278bc-e6c4-4a7f-bac1-d00757282b62 Source: client First seen: 2026-07-31T07:16:08.798Z Stack: Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings. at rZ (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_2ZworzFeQvyPZaMhNhuo6o41aydS:1:36744) at id (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_2ZworzFeQvyPZaMhNhuo6o41aydS:1:87965) at sh (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_2ZworzFeQvyPZaMhNhuo6o41aydS:1:128655) at https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_2ZworzFeQvyPZaMhNhuo6o41aydS:1:128500 at sm...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "24685",
+      "ticket": "HTPR-4736",
+      "title": "Error catcher: instrument remaining AI-route fallbacks (Task Writer showed 'An error occurred' with no ticket filed)",
+      "text": "The AI Task Writer failed for Valentin with its polite fallback and the self-healing pipeline never saw it. Screenshot: https://screencast2.com/L9nof.png Why it is worth building: the error catcher ( HTPR-4703 ) reports unhandled crashes everywhere, but handled catch-blocks only report in the AI chat stream route. Every other AI route that swallows an error into a friendly message ('An error occurred while processing your request') is invisible. Grep src/app/api/ai/ for catch blocks returning fallback copy; call the existing reportError(..., source:'handled') in each, like the chat stream route does Task Writer / 'Improve with AI' route is the known offender, fix that one first Coordination: another session is actively fixing the underlying Task Writer bug; land this after or alongside their PR, not against it",
+      "gold": [
+        "Infra"
+      ]
+    },
+    {
+      "id": "24667",
+      "ticket": "HTPR-4726",
+      "title": "[auto] Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=text&",
+      "text": "An automated production error needs investigation. URL: https://app.hypertask.ai/share?id=dd098e1f-6125-4fb1-a3ff-48b13c9029f6 Source: client First seen: 2026-07-29T15:00:33.270Z Stack: Error: Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings. at rZ (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_Gng87mctYhD7StKu5357DKzFNVBN:1:36744) at https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_Gng87mctYhD7StKu5357DKzFNVBN:1:133903 at sy (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_Gng87mctYhD7StKu5357DKzFNVBN:1:137468) at sh (https://app.hypertask.ai/_next/static/chunks/4bd1b696-7281820e82fc5615.js?dpl=dpl_Gng87mctYhD7StKu5357DKzFNVBN:1:128716) at...",
+      "gold": [
+        "Error Log"
+      ]
+    },
+    {
+      "id": "24651",
+      "ticket": "HTPR-4717",
+      "title": "Let a saved view filter on running timers",
+      "text": "Make \"has a running timer\" a filter a saved view can hold, so a permanent What is running now view is possible. Today the running-timer filter is a temporary board toggle. It cannot be saved into a view, so the state is lost every time. Views already filter by label and assignee; running timer should join them.",
+      "gold": [
+        "🖥️DESKTOP"
+      ]
+    },
+    {
+      "id": "24632",
+      "ticket": "HTPR-4706",
+      "title": "N+1 detector: log requests that issue too many Prisma queries",
+      "text": "Add a ~20-line Prisma middleware that logs any request issuing more than ~10 queries, so N+1 fan-outs surface in logs before users hit pool exhaustion. In plain English The HTPR-4033 bug (opening a task fired one database write per comment) ran in production for weeks and was only noticed when Sentry caught users hitting errors. A tiny counter inside the app would have flagged that route on day one, before any user felt it. Why it is worth building Catches this whole bug class proactively - any future route that loops database calls per item gets named in the logs immediately. Nearly free - ~20 lines, no new dependency, negligible overhead. Technical sketch Extend the Prisma client in src/lib/prisma.ts with $extends : count queries per request (AsyncLocalStorage keyed per invocation), and console.warn route + count when a request exceeds a threshold (~10). Warnings land in Vercel function logs; optionally also Sentry as a non-error event. Keep it log-only - no blocking, no throwing.",
+      "gold": [
+        "SPEED OPTIMIZATION ⏩"
+      ]
+    },
+    {
+      "id": "24607",
+      "ticket": "HTPR-4691",
+      "title": "CLI bug: tasks create silently exits with no output when --labels value does not match an existing label",
+      "text": "The CLI exits successfully with zero output when --labels is given a non-matching label, so the ticket is never created and the caller believes it worked. Command that failed silently: hypertask tasks create --project 15 --title \"...\" --labels \"BUG woodlouse-emoji\" --assignee 6 --description \"...\" Result: no stdout, no stderr, exit status looked fine, and no task existed afterwards (confirmed by searching). Re-running the identical command without --labels created the ticket immediately ( HTPR-4690 ). Expected: either create the task and ignore or create the unknown label, or fail loudly with a non-zero exit and a message naming the invalid label and listing valid ones. Silent success is the worst outcome because automation cannot detect it.",
+      "gold": [
+        "Quick wins"
+      ]
+    },
+    {
+      "id": "24575",
+      "ticket": "HTPR-4669",
+      "title": "CLI bug: draft create wraps text in a full HTML document and always says 'Created'",
+      "text": "Two small fixes in the CLI's draft create , both surfaced while fixing HTPR-4654 . 1. It wraps the text in a full HTML document. hypertask draft create X --comment --text \"<p>hi</p>\" stores <html><head></head><body><p>hi</p></body></html> . The editor survives it (browsers drop the stray tags), but the stored draft and anything reading it are wrong. Send the text as given. 2. It always prints \"Created\", even when it updates. A second create on the same ticket overwrites the existing draft. The API now returns Draft updated successfully for that case, but the CLI prints its own hardcoded line. Print what the API returns. Repo: aalian66loop/hypertask-mcp, CLI subdir. Seen on v1.10.4.",
+      "gold": [
+        "CLI"
+      ]
+    }
+  ]
+}

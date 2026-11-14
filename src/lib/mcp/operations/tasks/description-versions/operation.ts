@@ -3,6 +3,7 @@ import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
     }
 
     const task = await prisma.task.findUnique({
-      where: { id: taskId },
+      where: { id: taskId, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { projectId: true },
     })
     if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId, ctx.teamScope)).error) {

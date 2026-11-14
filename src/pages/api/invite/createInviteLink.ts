@@ -8,12 +8,14 @@ import { CreateLogInput, IMember, IViewType } from "@/models/model";
 import createLog from "@/utils/controllers/logs/createLog";
 
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { sendEmailNotification } from "@/utils/controllers/notifications/sendNotification";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
+import { unverifiedEmailAccount } from "@/lib/auth/unverifiedEmailAccount";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -67,6 +69,7 @@ export const addMemberController = async (
   emails: string[],
   actingAgentId?: string | null,
 ) => {
+  if ((await unverifiedEmailAccount(userId)) !== "allowed") return { status: 403, json: { message: "Please confirm your email before inviting people." } };
   try {
     const currentProject = await prisma.project.findFirst({
       where: {
@@ -239,7 +242,7 @@ export const createNotification = async (
   const invitedUser = await prisma.user.findFirst({
     where: { email: email },
   });
-  console.log("🚀 ~ createNotification ~ invitedUser:", invitedUser);
+  await logPersonal(invitedUser?.id ?? null, "createNotification invitedUser", { userId: invitedUser?.id ?? null, email: invitedUser?.email ?? null, }, invitedUser);
   if (!invitedUser) return false;
 
   const notification = await prisma.notification.create({

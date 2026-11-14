@@ -7,6 +7,7 @@ import { subscribeAiSettingsEvents } from "@/lib/ai/settings/client";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7472_TASK_TEMPLATES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
+import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -74,6 +75,10 @@ const InboxSection = dynamic(() => import("./InboxSection"), {
   loading: () => <SettingsSectionLoading />,
 });
 const TaskPageSection = dynamic(() => import("./TaskPageSection"), {
+  ssr: false,
+  loading: () => <SettingsSectionLoading />,
+});
+const CardSettingsSection = dynamic(() => import("./CardSettingsSection"), {
   ssr: false,
   loading: () => <SettingsSectionLoading />,
 });
@@ -279,6 +284,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
   notifications: NotificationsSection,
   shortcuts: ShortcutsSection,
   "task-page": TaskPageSection,
+  "card-settings": CardSettingsSection,
   inbox: InboxSection,
 };
 
@@ -288,11 +294,14 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const taskTemplatesEnabled = useFlag(HTPR_7472_TASK_TEMPLATES_FLAG);
   const githubConnectEnabled = useFlag(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
   const githubConnectReady = useFlagReady(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
+  const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
+  const cardSettingsReady = useFlagReady(HTPR_8971_CARD_SETTINGS_FLAG);
   const searchParams = useSearchParams();
   const normalizedSection = normalizeSettingsSection(section);
   let activeSection = normalizedSection;
   if (!githubConnectEnabled && normalizedSection === "github") activeSection = "mcp";
   if (!taskTemplatesEnabled && normalizedSection === "board-task-templates") activeSection = "board-ai";
+  if (!cardSettings && normalizedSection === "card-settings") activeSection = "general";
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
   const { open: openAiChat, close: closeAiChat } = useUIStateManager("aiChatInterface");
@@ -355,10 +364,11 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
 
   useEffect(() => {
     if (normalizedSection === "github" && !githubConnectReady) return;
+    if (normalizedSection === "card-settings" && !cardSettingsReady) return;
     if (section && section !== activeSection) {
       router.replace(getSettingsPath(activeSection));
     }
-  }, [activeSection, githubConnectReady, normalizedSection, router, section]);
+  }, [activeSection, cardSettingsReady, githubConnectReady, normalizedSection, router, section]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -398,6 +408,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
             (item) =>
               (isSettingsNavLink(item) || item.id !== "board-task-templates" || taskTemplatesEnabled) &&
               (isSettingsNavLink(item) || item.id !== "github" || githubConnectEnabled) &&
+              (isSettingsNavLink(item) || item.id !== "card-settings" || cardSettings) &&
               (isSettingsNavLink(item) ||
                 item.id !== "apiKeys" ||
                 Boolean(billing && billing.storePlanId !== "Free")) &&
@@ -418,7 +429,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
       bottomGroups: filterGroups(SETTINGS_CROSS_TAB_GROUPS),
       primaryGroups: filterGroups(navigationTab.groups),
     };
-  }, [billing, githubConnectEnabled, navigationTab.groups, searchTerm, taskTemplatesEnabled]);
+  }, [billing, cardSettings, githubConnectEnabled, navigationTab.groups, searchTerm, taskTemplatesEnabled]);
 
   const isSearching = searchTerm.trim().length > 0;
   const hasVisibleGroups = primaryGroups.length > 0 || bottomGroups.length > 0;

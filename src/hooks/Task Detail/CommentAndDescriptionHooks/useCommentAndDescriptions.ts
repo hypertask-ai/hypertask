@@ -116,6 +116,8 @@ const useDescriptionAndCommentsStates = () => {
     setDescription,
     stacked,
     setStacked,
+    agentLaneFold,
+    setAgentLaneFold,
     CTRL_J_ENTER_Handler,
     comments,
     setComments,
@@ -179,6 +181,9 @@ const useDescriptionAndCommentsStates = () => {
     request: null,
   });
   const [allStacked, setAllStacked] = useState<boolean>(true);
+  const collapseAgentLaneFlag = useFlag("htpr-8262-agent-lane-collapse");
+  let collapseAgentLane = false;
+  if (collapseAgentLaneFlag) collapseAgentLane = true;
   const [allCommentsSignal] = useRecoilState(toggleAllCommentsSignalAtom);
   const allCommentsSignalRef = useRef(allCommentsSignal);
   const [showCommentOptions, setShowCommentOptions] = useState<IShow>();
@@ -462,18 +467,21 @@ const useDescriptionAndCommentsStates = () => {
     if (commentsListFromQuery) {
       setComments(commentsListFromQuery);
       setAgentRunActivities(agentRunActivitiesFromQuery);
-      setStacked((prev) =>
-        ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev)
-      );
+      if (!collapseAgentLane) {
+        setStacked((prev) => ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev));
+      }
     }
     void updateSeen();
-  }, [
-    agentRunActivitiesFromQuery,
-    commentsListFromQuery,
-    isShareView,
-    setAgentRunActivities,
-    updateSeen,
-  ]);
+  }, [agentRunActivitiesFromQuery, commentsListFromQuery, collapseAgentLane, isShareView, setAgentRunActivities, updateSeen]);
+
+  useLayoutEffect(() => {
+    if (!collapseAgentLane || isShareView || !commentsListFromQuery) return;
+    setStacked((prev) =>
+      agentLaneFold.taskId === currentTask?.id && agentLaneFold.collapsed
+        ? { ...Object.fromEntries(commentsListFromQuery.map((_, index) => [index, true])), ...prev }
+        : ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev)
+    );
+  }, [commentsListFromQuery, collapseAgentLane, agentLaneFold, currentTask?.id, isShareView, setStacked]);
 
   useLayoutEffect(() => {
     updateStackFromSidebar();
@@ -620,13 +628,19 @@ const useDescriptionAndCommentsStates = () => {
   };
 
   const toggleAllComments = () => {
-    const initialMap: any = {};
-    comments &&
-      comments.map((item, index) => {
-        initialMap[index] = !allStacked;
-      });
-    setStacked(ensureAtLeastOneCommentIsOpen(comments, initialMap));
-    setAllStacked((prev) => !prev);
+    const collapsed = collapseAgentLane
+      ? !(agentLaneFold.taskId === currentTask?.id && agentLaneFold.collapsed)
+      : !allStacked;
+    const initialMap: Record<number, boolean> = {};
+    comments.forEach((_, index) => {
+      initialMap[index] = collapsed;
+    });
+    setStacked(collapseAgentLane ? initialMap : ensureAtLeastOneCommentIsOpen(comments, initialMap));
+    if (collapseAgentLane) {
+      setAgentLaneFold((prev) => ({ taskId: currentTask?.id, collapsed, version: prev.version + 1 }));
+    } else {
+      setAllStacked((prev) => !prev);
+    }
   };
 
   useEffect(() => {

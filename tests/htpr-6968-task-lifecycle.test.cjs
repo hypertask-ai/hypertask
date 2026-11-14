@@ -109,7 +109,7 @@ function fixture(kind, scenario) {
     "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date", HTPR_7740_CREATE_RESPONSE_FLAG: "htpr-7740-create-response" },
     "@/lib/flags": {
       isFeatureEnabled: async (key, userId) => {
-        if (key === "htpr-7740-create-response") return false;
+        if (key === "htpr-7740-create-response" || key === "htpr-8905-shared-ticket-writing") return false;
         effects.push(["product-flag", key, userId]); return true;
       },
     },

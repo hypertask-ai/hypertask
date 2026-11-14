@@ -11,6 +11,8 @@ type OperationDefinition = {
 }
 
 const operations: OperationDefinition[] = [
+  { pattern: /^\/mcp\/chat\/pending$/, params: [], methods: ["GET"], load: () => import('@/app/api/mcp/chat/pending/route') },
+  { pattern: /^\/mcp\/chat\/sessions\/([^\/]+)\/messages$/, params: ["sessionId"], methods: ["GET","POST"], load: () => import('@/app/api/mcp/chat/sessions/[sessionId]/messages/route') },
   { pattern: /^\/mcp\/agents\/board-access-requests$/, params: [], methods: ["POST"], load: () => import('./agents/board-access-requests/operation') },
   { pattern: /^\/mcp\/agents\/board-access-requests\/([^\/]+)$/, params: ["requestId"], methods: ["GET"], load: () => import('./agents/board-access-requests/[requestId]/operation') },
   { pattern: /^\/mcp\/features$/, params: [], methods: ["GET"], load: () => import('./features/operation') },
@@ -83,6 +85,7 @@ const operations: OperationDefinition[] = [
   { pattern: /^\/mcp\/projects\/([^\/]+)\/sections\/([^\/]+)$/, params: ["projectId","sectionId"], methods: ["PATCH","DELETE"], load: () => import('./projects/[projectId]/sections/[sectionId]/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/instructions$/, params: ["projectId"], methods: ["GET","PUT"], load: () => import('./projects/[projectId]/instructions/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/manifest$/, params: ["projectId"], methods: ["GET"], load: () => import('./projects/[projectId]/manifest/operation') },
+  { pattern: /^\/mcp\/projects\/([^\/]+)\/github$/, params: ["projectId"], methods: ["GET","PUT"], load: () => import('./projects/[projectId]/github/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/playbook$/, params: ["projectId"], methods: ["GET","PUT"], load: () => import('./projects/[projectId]/playbook/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/sections$/, params: ["projectId"], methods: ["POST","GET"], load: () => import('./projects/[projectId]/sections/operation') },
   { pattern: /^\/mcp\/projects\/([^\/]+)\/members$/, params: ["projectId"], methods: ["GET","POST"], load: () => import('./projects/[projectId]/members/operation') },

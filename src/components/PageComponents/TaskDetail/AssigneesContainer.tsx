@@ -2,7 +2,7 @@
 
 import { IAgent, IAssignees, ITask, IUser } from "@/models/model";
 import { taskBaseUri } from "@/utils";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   AssigneeCard,
   ClickableSpan,
@@ -14,6 +14,12 @@ import Tooltip from "@/components/Common/Tooltip";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import dynamic from "next/dynamic";
 import { splitAssignees } from "@/lib/assignees";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
+import {
+  ADD_FIELD_EVENT,
+  type AddFieldEventDetail,
+} from "@/lib/taskDetail/rightColumnFields";
 
 const AssignModal = dynamic(
   () => import("@/components/Modals/AssignToUser/AssignToUser")
@@ -46,6 +52,21 @@ const AssigneesContainer = ({
     setPickerMode(mode);
     toggleAssigneeModal();
   };
+  const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
+  useEffect(
+    rightColumnFlag
+      ? () => {
+          const onAddField = (event: Event) => {
+            const { taskId, key } = (event as CustomEvent<AddFieldEventDetail>).detail;
+            if (taskId !== currentTask.id) return;
+            if (key === "assignees" || key === "agents") openPicker(key);
+          };
+          window.addEventListener(ADD_FIELD_EVENT, onAddField);
+          return () => window.removeEventListener(ADD_FIELD_EVENT, onAddField);
+        }
+      : () => {},
+    [rightColumnFlag, currentTask.id, toggleAssigneeModal],
+  );
   const closePicker = (
     nextAssignees?: IAssignees[],
     keepOpen?: boolean,
@@ -130,8 +151,10 @@ const AssigneesContainer = ({
 
   return (
     <>
-      {renderAssigneeGroup("Assignees", humanAssignees)}
-      {renderAssigneeGroup("Agents", agentAssignees)}
+      {(!rightColumnFlag || humanAssignees.length > 0) &&
+        renderAssigneeGroup("Assignees", humanAssignees)}
+      {(!rightColumnFlag || agentAssignees.length > 0) &&
+        renderAssigneeGroup("Agents", agentAssignees)}
 
       {showAssigneeModal && (
         <AssignModal

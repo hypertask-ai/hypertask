@@ -35,6 +35,7 @@ const dependencies = {
   "@/lib/flags/keys": { ...definition, HTPR_7857_HEARTBEAT_STEP_CAP_FLAG: "htpr-7857-heartbeat-step-cap" },
   "@/lib/ai/chatStream/models": {},
   "@/lib/ai/chatStream/content": { withHigherEffort: (options) => options },
+  "@/lib/ai/chatStream/thinkingChoice": { userThinkingChoice: async () => null },
   "@/lib/ai/tools/metadata": { writeToolNames: new Set() },
 };
 const compiled = ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/ai/chatStream/modelReply.ts"), "utf8"), {

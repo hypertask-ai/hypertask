@@ -23,8 +23,8 @@ def read(*args):
 
 def validate(task, project=None):
     if (not isinstance(task, dict) or not isinstance(task.get('ticketNumber'), str)
-            or not re.fullmatch(r'(HTPR|HYFA|YPER4)-[0-9]+', task['ticketNumber'])
-            or type(task.get('projectId')) is not int or task['projectId'] not in (15, 4060)
+            or not re.fullmatch(r'(HTPR|HYFA|YPER4|HYCI)-[0-9]+', task['ticketNumber'])
+            or type(task.get('projectId')) is not int or task['projectId'] not in (15, 11514)
             or (project is not None and task['projectId'] != project)
             or not isinstance(task.get('section'), str) or not task['section']
             or not isinstance(task.get('labels'), list) or not isinstance(task.get('assignees'), list)
@@ -59,7 +59,7 @@ def idle_runner(task, runner):
 
 
 def main():
-    if len(sys.argv) != 3 or not re.fullmatch(r'[1-9][0-9]*', sys.argv[1]) or not re.fullmatch(r'(HTPR|HYFA|YPER4)-[0-9]+', sys.argv[2]):
+    if len(sys.argv) != 3 or not re.fullmatch(r'[1-9][0-9]*', sys.argv[1]) or not re.fullmatch(r'(HTPR|HYFA|YPER4|HYCI)-[0-9]+', sys.argv[2]):
         raise ValueError('usage: runner-domain-admit.py RUNNER TICKET')
     runner, ticket = sys.argv[1:]
     state = Path(os.environ.get('RUNNER_INBOX_DIR', str(Path.home() / '.local/state/runner-inbox')))
@@ -67,7 +67,7 @@ def main():
     with (state / 'domain-ownership.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         tasks = {}
-        for project in (15, 4060):
+        for project in (15, 11514):
             offset, expected = 0, None
             while True:
                 page = read('tasks', 'list', '--project', str(project), '--limit', '100', '--offset', str(offset), '--json')

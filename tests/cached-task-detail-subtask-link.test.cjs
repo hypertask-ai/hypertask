@@ -82,7 +82,7 @@ function fixture(t, { direct = false } = {}) {
     "@/lib/state": { useRecoilValue: () => ({ id: account }), useRecoilState: () => [[], value => playlists.push(value)] },
     "@/store": { currentUserAtom: {}, tasksPlayListAtom: {} },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: authenticated }) },
-    "@/hooks/useFlag": { useFlag: () => instant },
+    "@/hooks/useFlag": { useFlag: key => key !== "htpr-8991-right-column" && instant },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache, "@/lib/taskDetailInboxFlow": inbox,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -95,6 +95,8 @@ function fixture(t, { direct = false } = {}) {
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.join(" ") },
     "lucide-react": { Check: () => null, Plus: () => null, Unlink: () => null },
     "@/hooks/Task Detail/useUpdateSubtask": { __esModule: true, default: () => ({}) },
+    "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
+    "@/components/PageComponents/TaskDetail/MainPageComponents": { QuietAddLink: () => null },
   };
   const Description = load(descriptionFile, mocks);
   const ParentLink = load(parentFile, mocks);

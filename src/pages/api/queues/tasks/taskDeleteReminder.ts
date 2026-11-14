@@ -152,7 +152,8 @@ async function updateTaskTreeStatus(
   actingUserId: number | null,
   actingAgentId: string | null
 ) {
-  return prisma.$transaction(async (tx) => {
+  const trashedTaskIds: number[] = []
+  const task = await prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<TaskTreeRow[]>`
       WITH RECURSIVE task_tree AS (
         -- HTPR-7187: stay on the root's board; legacy cross-board sub-tasks
@@ -193,6 +194,7 @@ async function updateTaskTreeStatus(
     const targetAlreadyApplied = lockedRows.every(({ status: currentStatus }) =>
       status === "Normal" ? currentStatus === "Normal" : currentStatus === "Deleted"
     )
+    trashedTaskIds.push(...taskIds)
     if (targetAlreadyApplied) {
       return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
         where: { id: rootTaskId },
@@ -260,4 +262,21 @@ async function updateTaskTreeStatus(
       },
     }))
   }, { timeout: 30_000 })
+
+  await syncSearchIndex(trashedTaskIds, status)
+  return task
+}
+
+async function syncSearchIndex(
+  taskIds: number[],
+  status: "Deleted" | "Normal",
+) {
+  try {
+    const { syncTaskTreeSearchIndex } = await import(
+      "@/utils/controllers/turbopuffer/syncTaskTreeSearchIndex"
+    )
+    await syncTaskTreeSearchIndex(taskIds, status)
+  } catch (error) {
+    console.log("search index sync after trash or restore failed:", error)
+  }
 }

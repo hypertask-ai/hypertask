@@ -1,4 +1,4 @@
-import { lockTaskTeamScope } from "@/lib/mcp/tasks/agentMutationFence";
+import { lockAgentMutationFence, lockTaskTeamScope } from "@/lib/mcp/tasks/agentMutationFence";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
@@ -145,6 +145,7 @@ export async function createRuntimeAgentRun(
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    await lockAgentMutationFence(tx, input.taskId);
     await lockTaskTeamScope(tx, input.taskId, principal.userId, principal.agentId, principal.teamScope);
     const task = await tx.task.findFirst({
       where: {

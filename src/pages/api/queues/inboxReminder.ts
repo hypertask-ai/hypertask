@@ -15,7 +15,7 @@ import checkReminderAndCreateNotification from "@/utils/controllers/notification
 import { nextReminderRevision } from "@/utils/controllers/reminders/revision";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
-import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 const REMINDER_LOCK_CLASS = 1_446_420_610
 
@@ -23,11 +23,13 @@ export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  console.log("🚀 ~ inboxReminder", req.body)
   const session = await getSessionUser(
     new Headers(req.headers as Record<string, string>)
   );
   if (!session) return res.status(401).json({ message: "Unauthorized" });
+
+  const reminderBody = req.body ?? {}
+  await logPersonal(session.userId, "inboxReminder", { taskId: reminderBody.taskId ?? null, userId: session.userId, outcome: "received", }, reminderBody)
 
   const {taskId, userId: bodyUserId, projectId, remindAt, reminderOption, remindTask } = req.body;
   if (!taskId || !projectId || !remindAt) return res.status(400).json({message:"Missing Required Information"})
@@ -42,7 +44,7 @@ export default  async function handler(
   const remindAtDate = new Date(remindAt);
   const defaultInvoke = reminderOption ?? "DurationComplete"
   try {
-      const hideOnMyTasks = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId)
+      const hideOnMyTasks = true
       const reminder = await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REMINDER_LOCK_CLASS}::int, ${Number(taskId)}::int)`
         const existing = await tx.reminder.findMany({

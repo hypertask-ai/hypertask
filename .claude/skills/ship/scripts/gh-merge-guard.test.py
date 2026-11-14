@@ -5,7 +5,14 @@ import subprocess
 import tempfile
 import unittest
 
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+
 HERE = Path(__file__).resolve().parent
+CHECKED = 'b' * 40
+PIN_WRITE = 'pin = os.environ.get("SHIP_MERGE_PIN")\nif pin:\n    open(pin, "w").write("' + CHECKED + '" + "\\n")\n'
 
 
 class MergeGuardTest(unittest.TestCase):
@@ -37,18 +44,28 @@ class MergeGuardTest(unittest.TestCase):
 
     def fake_checker(self, code):
         checker = self.installed / 'ship-check'
-        checker.write_text('#!/usr/bin/env python3\nimport json, os, sys\np = json.load(sys.stdin)\nopen(os.path.join(os.environ["HOME"], "input"), "w").write(json.dumps(p))\nopen(os.path.join(os.environ["HOME"], "env"), "w").write(json.dumps({k: os.environ[k] for k in ("SHIP_REPO", "SHIP_BASE") if k in os.environ}))\nsys.exit(' + str(code) + ')\n')
+        checker.write_text('#!/usr/bin/env python3\nimport json, os, sys\np = json.load(sys.stdin)\nopen(os.path.join(os.environ["HOME"], "input"), "w").write(json.dumps(p))\nopen(os.path.join(os.environ["HOME"], "env"), "w").write(json.dumps({k: os.environ[k] for k in ("SHIP_REPO", "SHIP_BASE") if k in os.environ}))\n' + PIN_WRITE + 'sys.exit(' + str(code) + ')\n')
 
     def test_install_idempotent_and_original_preserved(self):
         self.assertEqual(self.install().returncode, 0)
         installed = self.wrapper.read_text()
         self.assertEqual(self.install().returncode, 0)
         self.assertEqual(self.wrapper.read_text(), installed)
-        line = '"$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$@" || exit $?\n'
-        self.assertEqual(installed.replace(line, ''), self.original)
+        line = 'exec "$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$REAL" "$@"\n'
+        self.assertEqual(installed, self.original.replace('exec $REAL "$@"\n', line))
+        self.assertNotIn('exec $REAL "$@"\n', installed)
         for marker in ('GH_NO_APP_TOKEN', 'export GH_REAL=', 'export HT_GH_CACHE_DIR=',
                        'FLEET_INFRA_FIRST_FILE', 'fleet-gh/infra-first-guard'):
             self.assertIn(marker, installed)
+
+    def test_install_upgrades_the_retired_precheck_line(self):
+        retired = '"$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$@" || exit $?\n'
+        self.wrapper.write_text(self.original.replace('exec $REAL "$@"', retired + 'exec $REAL "$@"'))
+        self.assertEqual(self.install().returncode, 0)
+        upgraded = self.wrapper.read_text()
+        self.assertNotIn(retired, upgraded)
+        self.assertEqual(upgraded, self.original.replace(
+            'exec $REAL "$@"\n', 'exec "$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$REAL" "$@"\n'))
 
     def test_refused_semicolon_and_exact_allowed_arguments(self):
         self.assertEqual(self.install().returncode, 0)
@@ -59,7 +76,7 @@ class MergeGuardTest(unittest.TestCase):
         self.fake_checker(0)
         args = ['pr', 'merge', '42', '--squash', '--subject', 'hello; world', '-R', 'hypertask-ai/hypertask']
         self.assertEqual(self.call(*args).returncode, 0)
-        self.assertEqual(json.loads(self.log.read_text()), args)
+        self.assertEqual(json.loads(self.log.read_text()), [*args, '--match-head-commit', CHECKED])
         payload = json.loads((self.home / 'input').read_text())
         self.assertEqual(payload['tool_input']['command'], 'gh pr merge 42 -R hypertask-ai/hypertask')
         self.assertEqual(payload['cwd'], str(self.home))
@@ -169,6 +186,8 @@ elif args[0] == 'api':
                'started_at': '2026-01-02T00:00:00Z' if production else os.environ.get('HEAD_TIME', '2026-01-01T00:00:00Z'),
                'html_url': 'https://example.invalid/run'}
         print(json.dumps({'check_runs': [] if missing else [run]}))
+    elif '/compare/' in endpoint:
+        print(os.environ.get('BEHIND', '0'))
     elif '/statuses/' in endpoint:
         print('{}')
     elif '/actions/jobs/' in endpoint:
@@ -216,7 +235,8 @@ else:
             self.assertIn('passed before that on an older production', result.stderr.decode())
         self.env['SHIP_BASE'] = 'production'
         for config, message in (({'MISSING_HEAD': '1'}, 'ci-tests is missing on head'),
-                                ({'READ_ERROR': '/commits/production/'}, 'cannot read ci-tests')):
+                                ({'READ_ERROR': '/commits/production/'}, 'cannot read ci-tests'),
+                                ({'BEHIND': '2', 'PRODUCTION': 'success'}, 'is 2 commit(s) behind production')):
             self.env.update(config)
             result = self.call(*args)
             self.assertNotEqual(result.returncode, 0)
@@ -228,14 +248,130 @@ else:
             self.env.update(config)
             result = self.call(*args)
             self.assertEqual(result.returncode, 0, result.stderr.decode())
-            self.assertEqual([json.loads(line) for line in merges.read_text().splitlines()], [args])
+            self.assertEqual([json.loads(line) for line in merges.read_text().splitlines()],
+                             [[*args, '--match-head-commit', 'a' * 40]])
             calls = [json.loads(line) for line in self.log.read_text().splitlines()]
             self.assertTrue(any(call[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]
                                 and 'state=success' in call for call in calls))
+            posted = next(i for i, call in enumerate(calls)
+                          if call[0] == 'api' and '/statuses/' in call[1] and 'state=success' in call)
+            compared = [i for i, call in enumerate(calls) if call[0] == 'api' and '/compare/' in call[1]]
+            self.assertTrue(any(i > posted for i in compared), 'freshness must be read again after the premerge status waits on its lock')
             merges.unlink()
             self.log.unlink()
             for key in config:
                 self.env.pop(key)
+
+    def pinned_checker(self, head):
+        self.fake_checker(0)
+        checker = self.installed / 'ship-check'
+        checker.write_text(checker.read_text().replace(PIN_WRITE, PIN_WRITE.replace(CHECKED, head)))
+
+    def test_merge_is_pinned_to_the_head_the_guard_read(self):
+        self.assertEqual(self.install().returncode, 0)
+        self.pinned_checker('c' * 40)
+        result = self.call('pr', 'merge', '42', '-R', 'hypertask-ai/hypertask')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(self.log.read_text()),
+                         ['pr', 'merge', '42', '-R', 'hypertask-ai/hypertask', '--match-head-commit', 'c' * 40])
+
+    def test_caller_pin_must_match_the_checked_head(self):
+        self.assertEqual(self.install().returncode, 0)
+        self.pinned_checker('c' * 40)
+        refused = self.call('pr', 'merge', '42', '-R', 'hypertask-ai/hypertask', '--match-head-commit', 'd' * 40)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn('is not the head the guard read', refused.stderr.decode())
+        self.assertFalse(self.log.exists())
+        accepted = self.call('pr', 'merge', '42', '-R', 'hypertask-ai/hypertask', '--match-head-commit=' + 'c' * 40)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertEqual(json.loads(self.log.read_text()),
+                         ['pr', 'merge', '42', '-R', 'hypertask-ai/hypertask', '--match-head-commit=' + 'c' * 40])
+
+    def test_unpinned_guard_refuses_a_hypertask_merge(self):
+        self.assertEqual(self.install().returncode, 0)
+        (self.installed / 'ship-check').write_text('#!/usr/bin/env python3\nimport sys\nsys.stdin.read()\n')
+        refused = self.call('pr', 'merge', '42', '-R', 'hypertask-ai/hypertask')
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn('recorded no head to merge', refused.stderr.decode())
+        self.assertFalse(self.log.exists())
+        foreign = self.call('pr', 'merge', '42', '-R', 'example/project')
+        self.assertEqual(foreign.returncode, 0, foreign.stderr)
+        self.assertEqual(json.loads(self.log.read_text()), ['pr', 'merge', '42', '-R', 'example/project'])
+
+    def test_auto_merge_refused(self):
+        self.assertEqual(self.install().returncode, 0)
+        self.fake_checker(0)
+        result = self.call('pr', 'merge', '42', '--auto', '-R', 'hypertask-ai/hypertask')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('--auto is refused', result.stderr.decode())
+        self.assertFalse((self.home / 'input').exists())
+        self.assertFalse(self.log.exists())
+        self.assertEqual(self.call('pr', 'merge', '42', '--disable-auto', '-R', 'hypertask-ai/hypertask').returncode, 0)
+        self.assertEqual(json.loads(self.log.read_text()),
+                         ['pr', 'merge', '42', '--disable-auto', '-R', 'hypertask-ai/hypertask', '--match-head-commit', CHECKED])
+
+    def test_concurrent_merges_serialize_on_the_merge_lock(self):
+        self.assertEqual(self.install().returncode, 0)
+        window = self.home / 'windows'
+        (self.installed / 'ship-check').write_text(
+            '#!/usr/bin/env python3\nimport os, sys, time\nsys.stdin.read()\n' + PIN_WRITE +
+            'open(os.environ["WINDOW_LOG"], "a").write("start\\n")\n'
+            'time.sleep(0.6)\nopen(os.environ["WINDOW_LOG"], "a").write("end\\n")\n')
+        self.env['WINDOW_LOG'] = str(window)
+        first = subprocess.Popen([str(self.wrapper), 'pr', 'merge', '41', '-R', 'hypertask-ai/hypertask'],
+                                 env=self.env, cwd=self.home)
+        second = subprocess.Popen([str(self.wrapper), 'pr', 'merge', '42', '-R', 'hypertask-ai/hypertask'],
+                                  env=self.env, cwd=self.home)
+        self.assertEqual(first.wait(), 0)
+        self.assertEqual(second.wait(), 0)
+        self.assertEqual(window.read_text().split(), ['start', 'end', 'start', 'end'])
+        self.assertEqual(len(self.log.read_text().splitlines()), 2)
+
+    def test_merge_lock_is_held_while_the_real_merge_runs(self):
+        if fcntl is None:
+            self.skipTest('no file locking on this platform')
+        self.assertEqual(self.install().returncode, 0)
+        self.fake_checker(0)
+        probe = self.home / 'lock-during-merge'
+        real = self.home / 'real-gh'
+        real.write_text('''#!/usr/bin/env python3
+import os, sys, time
+import fcntl
+lock = os.path.join(os.environ['HOME'], '.local/state/hypertask-merge/hypertask-ai-hypertask.lock')
+with open(os.environ['HOME'] + '/lock-during-merge', 'a') as f:
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o644)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        f.write('free\\n')
+        os.close(fd)
+    except OSError:
+        f.write('held\\n')
+    time.sleep(0.3)
+    f.write('merged\\n')
+''')
+        real.chmod(0o755)
+        result = self.call('pr', 'merge', '42', '-R', 'hypertask-ai/hypertask')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(probe.read_text().split(), ['held', 'merged'])
+
+    def test_merge_lock_timeout_refuses(self):
+        if fcntl is None:
+            self.skipTest('no file locking on this platform')
+        self.assertEqual(self.install().returncode, 0)
+        self.fake_checker(0)
+        locks = self.home / '.local/state/hypertask-merge'
+        locks.mkdir(parents=True)
+        held = os.open(locks / 'hypertask-ai-hypertask.lock', os.O_CREAT | os.O_RDWR, 0o644)
+        fcntl.flock(held, fcntl.LOCK_EX)
+        self.env['SHIP_MERGE_LOCK_TIMEOUT'] = '1'
+        try:
+            result = self.call('pr', 'merge', '42', '-R', 'hypertask-ai/hypertask')
+        finally:
+            os.close(held)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'merge lock', result.stderr)
+        self.assertFalse((self.home / 'input').exists())
+        self.assertFalse(self.log.exists())
 
     def test_invalid_install_shape_unchanged(self):
         self.wrapper.write_text(self.original.replace('exec $REAL "$@"', 'exec "$REAL" "$@"'))

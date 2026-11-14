@@ -58,6 +58,7 @@ stub("src/components/Modals/commands/HTC/ComposeTaskWriter.tsx", { default: () =
 stub("src/components/Modals/commands/HTC/AllCommands.ts", {
   getAllCommands: () => [], getMobileCommandGroups: (groups) => groups, getBoardMenuCommands: (groups) => groups,
 });
+stub("src/components/Modals/commands/HTC/cardSettingsCommand.ts", { withCardSettingsCommand: (groups) => groups });
 stub("src/hooks/MultiPages/HTC/useHTC.tsx", { default: (groups) => {
   return {
     keyword: "", filterCommands: groups, hoveredGroup: 0, selectedCommand: null,

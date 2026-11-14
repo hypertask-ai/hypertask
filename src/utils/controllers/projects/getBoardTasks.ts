@@ -73,9 +73,15 @@ const getBoardTasks = async (
     const tasksWithOpenBlockers = await attachOpenBlockingTasks(
       tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
     );
-    const tasksWithWaitingOnUsers = await attachWaitingOnUsers(tasksWithOpenBlockers);
+    const tasksWithWaitingOnUsers = await attachWaitingOnUsers(
+      tasksWithOpenBlockers,
+      currentUserId ?? userId,
+    );
 
-    const tasksWithAgentStatus = await attachAgentStatus(tasksWithWaitingOnUsers);
+    const tasksWithAgentStatus = await attachAgentStatus(tasksWithWaitingOnUsers, Date.now(), {
+      userId,
+      projectId,
+    });
 
     const sanitizedProject = sanitizeProjectBoardFilters(project, currentUserId ?? userId);
     const { allViews = [], ...projectView } =

@@ -4,6 +4,7 @@ import { AgentBoardAccessDecision } from "../NotificationRow";
 
 import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
+import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
 import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
 import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-8083-inbox-boundaries";
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
@@ -13,6 +14,8 @@ import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from "@/lib/flags/keys";
 
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { groupInboxItemsByDate } from "@/lib/inbox/inboxDateGroups";
+import { NEEDS_YOU_SPLIT } from "@/lib/inbox/needsYou";
+import { HTPR_9055_NEEDS_YOU_FLAG } from "@/lib/flags/definitions/htpr-9055-needs-you";
 import { HTPR_7801_INBOX_VISIBLE_ORDER_FLAG } from "@/lib/flags/definitions/htpr-7801-inbox-visible-order";
 import type { INotification, TRemoveFromInboxMode } from "@/models/model";
 import { useRouter } from "next/navigation";
@@ -94,6 +97,7 @@ interface Props {
   ) => Promise<boolean | void>;
   starTaskUpdateInCache: (notification: INotification) => Promise<void>;
   initialFocus: number;
+  resumesPosition?: boolean;
   updateNotification: (notificationIndex: string) => void;
   originProject: string;
   selectedSplit: string;
@@ -157,6 +161,7 @@ const InboxSplit = ({
   markAsDone,
   index,
   initialFocus,
+  resumesPosition = false,
   starTaskUpdateInCache,
   selectedSplit,
   disableRowButtons = false,
@@ -178,6 +183,7 @@ const InboxSplit = ({
   const [activeKeyboardRowKey, setActiveKeyboardRowKey] = useState<
     string | null
   >(null);
+  const keyboardNavigationStarted = useRef(resumesPosition);
   const { goToProjectShortcut } = useProjectQuery();
   const { updateInView } = useUpdateInView({
     value,
@@ -193,6 +199,7 @@ const InboxSplit = ({
   const boardAccessDecisions = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
   const boardAccessDecisionCard = boardAccessDecisions ? <AgentBoardAccessDecision /> : null;
   const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
+  const inboxFirstRow = useFlag(HTPR_8868_INBOX_FIRST_ROW_FLAG);
   const tabScopedSelection = useFlag(HTPR_8148_INBOX_TAB_SELECTION_FLAG);
   const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
@@ -203,6 +210,11 @@ const InboxSplit = ({
   const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
   const inboxVisibleOrder = useFlag(HTPR_7801_INBOX_VISIBLE_ORDER_FLAG);
+  const needsYouEnabled = useFlag(HTPR_9055_NEEDS_YOU_FLAG);
+  let rankedSplit = false;
+  if (needsYouEnabled) {
+    rankedSplit = selectedSplit === NEEDS_YOU_SPLIT;
+  }
   let decisionCommentLinks = false;
   if (decisionCommentLinkEnabled) {
     decisionCommentLinks = selectedSplit === decisionsSplitName;
@@ -276,11 +288,12 @@ const InboxSplit = ({
     ];
 
     return groupInboxItemsByDate(
-      timelineItems,
+      rankedSplit ? timelineItems.filter((item) => item.kind === "notification") : timelineItems,
       selectedSplit === "Blocked by you",
       snapshot,
+      rankedSplit,
     );
-  }, [_notifications, activeDrafts, selectedSplit, snapshot, boardAccessDecisions]);
+  }, [_notifications, activeDrafts, selectedSplit, snapshot, boardAccessDecisions, rankedSplit]);
   const groupedInboxEntries = Object.entries(groupedInboxItems);
   const keyboardRows = useMemo<InboxKeyboardTimelineRow[]>(
     () =>
@@ -307,11 +320,14 @@ const InboxSplit = ({
         row.item.kind === "notification" &&
         row.item.notificationIndex === globalFocus.currIdx,
     )?.key ?? null;
-  const selectedKeyboardRow = reconcileInboxKeyboardRow(
-    keyboardRows,
-    activeKeyboardRowKey,
-    fallbackKeyboardRowKey,
-  );
+  const selectedKeyboardRow =
+    inboxFirstRow && activeKeyboardRowKey === null && !resumesPosition
+      ? keyboardRows[0] ?? null
+      : reconcileInboxKeyboardRow(
+          keyboardRows,
+          activeKeyboardRowKey,
+          fallbackKeyboardRowKey,
+        );
   const selectedKeyboardNotificationIndex =
     selectedKeyboardRow?.item.kind === "notification"
       ? selectedKeyboardRow.item.notificationIndex
@@ -325,6 +341,7 @@ const InboxSplit = ({
     direction?: -1 | 1 | "boundary",
   ) => {
     setActiveKeyboardRowKey(row.key);
+    keyboardNavigationStarted.current = true;
     if (row.item.kind === "notification") {
       const notificationIndex = row.item.notificationIndex;
       setGlobalFocus((previous) => ({
@@ -629,12 +646,17 @@ const InboxSplit = ({
       openTask("audio");
     else if (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN) {
       e.preventDefault();
-      const targetRow = getAdjacentInboxKeyboardRow(
-        keyboardRows,
-        selectedKeyboardRow?.key ?? null,
-        1,
-      );
-      if (targetRow) focusKeyboardRow(targetRow, 1);
+      if (keyboardNavigationStarted.current || !inboxFirstRow) {
+        const targetRow = getAdjacentInboxKeyboardRow(
+          keyboardRows,
+          selectedKeyboardRow?.key ?? null,
+          1,
+        );
+        if (targetRow) focusKeyboardRow(targetRow, 1);
+        return;
+      }
+      const firstRow = keyboardRows[0];
+      if (firstRow) focusKeyboardRow(firstRow, "boundary");
       return;
     }
     else if (
@@ -642,12 +664,17 @@ const InboxSplit = ({
       !cmdControl
     ) {
       e.preventDefault();
-      const targetRow = getAdjacentInboxKeyboardRow(
-        keyboardRows,
-        selectedKeyboardRow?.key ?? null,
-        -1,
-      );
-      if (targetRow) focusKeyboardRow(targetRow, -1);
+      if (keyboardNavigationStarted.current || !inboxFirstRow) {
+        const targetRow = getAdjacentInboxKeyboardRow(
+          keyboardRows,
+          selectedKeyboardRow?.key ?? null,
+          -1,
+        );
+        if (targetRow) focusKeyboardRow(targetRow, -1);
+        return;
+      }
+      const firstRow = keyboardRows[0];
+      if (firstRow) focusKeyboardRow(firstRow, "boundary");
       return;
     }
 
@@ -736,7 +763,10 @@ const InboxSplit = ({
         row.item.kind === "notification" &&
         row.item.notificationIndex === index,
     );
-    if (hoveredRow) setActiveKeyboardRowKey(hoveredRow.key);
+    if (hoveredRow) {
+      keyboardNavigationStarted.current = true;
+      setActiveKeyboardRowKey(hoveredRow.key);
+    }
     clearPrefetchHoverTimeout();
     prefetchHoverTimeout.current = setTimeout(() => {
       prefetchInboxTaskDetail(index);
@@ -890,7 +920,7 @@ const InboxSplit = ({
     buildInboxTasksPlaylist(
       notifications,
       decisionCommentLinks,
-      inboxVisibleOrder ? { oldestFirst: selectedSplit === "Blocked by you", snapshot } : undefined,
+      inboxVisibleOrder && !rankedSplit ? { oldestFirst: selectedSplit === "Blocked by you", snapshot } : undefined,
     );
 
   const buildQueryParams = (mode: string): string => {
@@ -943,6 +973,7 @@ const InboxSplit = ({
     return () => clearPrefetchHoverTimeout();
   }, [clearPrefetchHoverTimeout]);
 
+  if (selectedSplit === NEEDS_YOU_SPLIT && !needsYouEnabled) return null;
   return (
     <>
       <div

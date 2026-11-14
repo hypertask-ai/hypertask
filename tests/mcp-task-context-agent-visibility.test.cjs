@@ -89,6 +89,9 @@ function loadRoute(comments) {
 
       isFeatureEnabled: async () => false,
     },
+    "@/lib/flags/definitions/htpr-8896-skip-taken-work": {
+      HTPR_8896_SKIP_TAKEN_WORK_FLAG: "htpr-8896-skip-taken-work",
+    },
     "@/utils/controllers/projects/getAllIncludes": {
       getProjectWhere: () => ({}),
     },

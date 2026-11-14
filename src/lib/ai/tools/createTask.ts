@@ -1,5 +1,7 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
-import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { hostInlineScreenshots, inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
+import { HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
@@ -101,6 +103,8 @@ export function createCreateTaskTool(context: ToolContext) {
           }
         }
 
+        const openCreatedTaskInApp = !bulkTasks?.length;
+        const guaranteeScreenshots = await isFeatureEnabled(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG, user.id);
         const createOneTask = async (taskInput: TaskInput) => {
           const creationStartedAt = Date.now();
           const parsed = itemSchema.safeParse(
@@ -148,7 +152,7 @@ export function createCreateTaskTool(context: ToolContext) {
             }
             sectionId = found.id;
           }
-          const sectionCheck = await getSectionForTask(input.project_id, sectionId);
+          const sectionCheck = await getSectionForTask(input.project_id, sectionId, user.id);
           if (sectionCheck.error) {
             return { success: false, error: sectionCheck.error.message };
           }
@@ -233,6 +237,7 @@ export function createCreateTaskTool(context: ToolContext) {
                 initialTitle = briefTitle;
                 earlyTask = await save(initialTitle, undefined, true);
                 context.provisionalTickets?.set(earlyTask.id, { title: initialTitle, description: "", projectId: input.project_id });
+                if (openCreatedTaskInApp) send("open_task", { projectId: earlyTask.projectId, uniqueIndex: earlyTask.uniqueIndex });
                 send("task_created", { content: savedLink(earlyTask) });
                 earlyTaskPublished = true;
                 send("status", { content: "Ticket created. Writing its description…" });
@@ -249,6 +254,9 @@ export function createCreateTaskTool(context: ToolContext) {
               if (!labels.length && draft.labelIds?.length &&
                   await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, user.id)) {
                 labels = draft.labelIds;
+              } else if (input.labels?.length && draft.brainLabelIds?.length && !input.labels.some((id) => draft.brainLabelIds!.includes(id))) {
+                const writerBrainLabel = draft.labelIds?.find((id) => draft.brainLabelIds!.includes(id));
+                if (writerBrainLabel) labels = [...labels, writerBrainLabel];
               }
               customFields = draft.customFields;
               title = draft.title;
@@ -256,6 +264,18 @@ export function createCreateTaskTool(context: ToolContext) {
               priorityIndex = draft.priority ?? 0;
               estimateIndex = draft.estimate ?? 0;
               abortSignal?.throwIfAborted();
+            }
+            if (guaranteeScreenshots && requestedTasks.length === 1 && input.inline_images !== false) {
+              const note = [body?.message, "brief" in input ? input.brief : ""].filter(Boolean).join("\n");
+              const requested = creationScreenshotCandidates([...(body?.images64 ?? []), ...(body?.attachments ?? [])], note)
+                .filter((shot) => !context.creationScreenshotsUsed.has(shot.url));
+              const shots = await hostInlineScreenshots(requested, abortSignal);
+              abortSignal?.throwIfAborted();
+              if (shots.length) {
+                description = guaranteeCreationScreenshots(description ?? "", { instructions: note, attachments: shots });
+                for (const shot of requested) context.creationScreenshotsUsed.add(shot.url);
+                for (const shot of shots) context.creationScreenshotsUsed.add(shot.url);
+              }
             }
             const saveStartedAt = Date.now();
             let task;
@@ -266,7 +286,7 @@ export function createCreateTaskTool(context: ToolContext) {
                 description,
                 priority: z.enum(["No Priority", "Urgent", "High", "Medium", "Low"]).parse(PriorityConstants.find((p) => p.priority_index === priorityIndex)?.Priority_Value ?? "No Priority"),
                 estimate: estimateIndex,
-                ...(!input.labels?.length && labels.length ? { add_labels: labels } : {}),
+                ...(labels.some((id) => !input.labels?.includes(id)) ? { add_labels: labels.filter((id) => !input.labels?.includes(id)) } : {}),
                 image_urls: input.image_urls,
                 inline_images: input.inline_images,
               }, {

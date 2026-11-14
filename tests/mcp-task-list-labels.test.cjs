@@ -46,6 +46,9 @@ function loadMappers() {
             ? "checks_red"
             : "open",
     },
+    "@/lib/blockingTasks": {
+      mapOpenBlockingTasksForRead: (tasks) => tasks,
+    },
   };
   const loaded = new Module(mapperPath);
   loaded.filename = mapperPath;

@@ -7,6 +7,7 @@ import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { parseAndValidateAttachmentsBody } from '@/lib/mcp/attachments/validateBody';
@@ -140,7 +141,11 @@ export async function POST(request: NextRequest) {
 
   if (parsed.comment_id !== undefined) {
     const comment = await prisma.comment.findFirst({
-      where: { id: parsed.comment_id, taskId: task.id },
+      where: {
+        id: parsed.comment_id,
+        taskId: task.id,
+        task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) },
+      },
       select: { id: true, creatorId: true },
     });
     if (!comment) {

@@ -26,12 +26,14 @@ export interface IUserPreferences {
   autoDescriptionSuggestions: boolean;
   dictationLanguage: string;
   inboxAdvanceOnSend: boolean;
+  inboxSplitsOverflowHidden?: boolean;
   emojiFrequency?: Record<string, number> | null;
   calendarViews: CalendarViewsPreference | null;
   boardSortMode?: BoardSortMode | null;
   aiChatOpenNewTickets?: boolean | null;
   aiChatOpenTickets?: boolean | null;
   aiChatOpenBoards?: boolean | null;
+  cardParts?: unknown;
 }
 
 export const DEFAULT_USER_PREFERENCES: IUserPreferences = {
@@ -48,6 +50,7 @@ export const DEFAULT_USER_PREFERENCES: IUserPreferences = {
   autoDescriptionSuggestions: true,
   dictationLanguage: "en",
   inboxAdvanceOnSend: true,
+  inboxSplitsOverflowHidden: false,
   emojiFrequency: null,
   calendarViews: null,
   boardSortMode: null,

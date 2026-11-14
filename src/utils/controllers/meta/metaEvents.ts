@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 export async function sendMetaCAPIEvent(
   user_email: string,
@@ -41,7 +42,7 @@ export async function sendMetaCAPIEvent(
       },
     },
   ];
-  console.log("🤔 ~ sendMetaCAPIEvent ~ eventsData:", eventsData);
+  await logPersonal(null, "sendMetaCAPIEvent", { eventId: eventsData[0]?.event_id ?? null, eventType: eventsData[0]?.event_name ?? null, count: eventsData.length, }, eventsData);
 
   const options = {
     method: "POST",

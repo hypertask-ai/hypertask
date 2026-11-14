@@ -447,7 +447,7 @@ test("native switching snapshots the latest draft and attachments after open, tr
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     react: { ...react, default: react },
     "react-hot-toast": { default: { error: assert.fail } },
-    "@/hooks/useFlag": { useFlag: key => key !== "htpr-8048-agent-sessions" && key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
+    "@/hooks/useFlag": { useFlag: key => key !== "htpr-8048-agent-sessions" && key !== "htpr-9021-no-empty-chats" && key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
     "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },

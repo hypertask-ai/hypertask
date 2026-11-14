@@ -8,7 +8,7 @@ import UserAvatar from "@/components/Common/UserAvatar";
 import { type TaskShortcutAction } from "@/lib/keyboard/taskShortcuts";
 import { CommandMode } from "@/models/enums";
 import { daysSince } from "@/lib/staleness";
-import { getActiveTableSortFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getActiveTableSortFromProject, getActiveTableSortStackFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { displayedBoardTimeSeconds } from "@/lib/boardTimeTotals";
 
 
@@ -21,7 +21,7 @@ export const LABEL_CLASS = "border-border-labelComponent text-label-component";
 
 export const MIN_COLUMN_WIDTH_PX = 60;
 
-export type TaskRow = { type: "task"; task: ITask; sid: string | number };
+export type TaskRow = { type: "task"; task: ITask; sid: string | number; rowKey: string };
 
 export type Row = TaskRow | { type: "more"; sid: string | number; hidden: number };
 
@@ -119,7 +119,14 @@ export const baseColumnWidthPx = (width: string): number => {
 };
 
 
-export const resolveSortState = (project?: IProject | null): SortState => {
+export const resolveSortState = (project?: IProject | null, useStack = false): SortState => {
+  if (useStack) {
+    return getActiveTableSortStackFromProject(project).flatMap((level) => {
+      if (level.column === "time" && !project?.showTimeTotals) return [];
+      if (!tableColumnByKey.has(level.column as SortColumn) && !isCustomFieldSortColumn(level.column)) return [];
+      return [{ column: level.column as SortColumn, direction: level.direction }];
+    });
+  }
   const active = getActiveTableSortFromProject(project);
   if (!active) return [];
   if (active.column === "time" && !project?.showTimeTotals) return [];

@@ -134,7 +134,7 @@ function schedulePostCreateWork({
     ),
     import("@/pages/api/queues/FAST/generateSummary").then(
       ({ default: scheduleTaskSummaryGeneration }) =>
-        scheduleTaskSummaryGeneration({ taskId: task.id, agentId: agentId ?? null }),
+        scheduleTaskSummaryGeneration({ taskId: task.id, agentId: agentId ?? null, ownerUserId: task.userId ?? userId }),
     ),
     import("@/lib/ai/labelClassifier").then(({ classifyNewTaskAiLabels }) =>
       classifyNewTaskAiLabels(task.id, task.projectId),
@@ -409,6 +409,7 @@ async function createNewTaskFromComment(
           scheduleTaskSummaryGeneration({
             taskId: createTaskFromComment.task.id,
             agentId: agentId ?? null,
+            ownerUserId: creatorId,
           }),
       ),
     ]);

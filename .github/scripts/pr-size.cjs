@@ -33,17 +33,6 @@ function countChangedFiles(files) {
   return { counted, ignored, overCap: counted > policy.cap };
 }
 
-function countFiles(pr, files) {
-  if (!Number.isSafeInteger(pr.changed_files) || pr.changed_files < 0 || files.length !== pr.changed_files) {
-    throw new Error('Incomplete PR file list; no trustworthy size count.');
-  }
-  const { counted, ignored, overCap } = countChangedFiles(files);
-  if (counted + ignored !== pr.additions + pr.deletions) {
-    throw new Error('PR totals disagree with file counts; retry on a stable head.');
-  }
-  return { counted, ignored, total: counted + ignored, cap: policy.cap, overCap };
-}
-
 function exceptionFor(pr, comments) {
   if (!(pr.labels ?? []).some(label => label.name === policy.exceptionLabel)) {
     return { allowed: false, missing: 'label' };
@@ -74,10 +63,19 @@ async function reportSize({ github, context, core, pr, prMetadata, reportDirecto
       core.info(report.reason);
       return report;
     }
-    const files = await github.paginate(github.rest.pulls.listFiles, {
-      ...context.repo, pull_number: pr.number, per_page: 100,
+    const { data: base } = await github.rest.repos.getCommit({
+      ...context.repo, ref: pr.base.ref,
     });
-    Object.assign(report, countFiles(pr, files));
+    const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+      ...context.repo, basehead: `${base.sha}...${pr.head.sha}`, per_page: 1,
+    });
+    if (!Array.isArray(comparison.files) || comparison.files.length >= 300) {
+      throw new Error('Incomplete comparison file list; no trustworthy size count.');
+    }
+    const size = countChangedFiles(comparison.files);
+    Object.assign(report, size, {
+      base: base.sha, total: size.counted + size.ignored, cap: policy.cap,
+    });
     report.agent = agent(pr);
     const { data: current } = await github.rest.pulls.get({ ...context.repo, pull_number: pr.number });
     if (current.state !== 'open' || current.head.sha !== pr.head.sha) {
@@ -142,7 +140,6 @@ async function reportSize({ github, context, core, pr, prMetadata, reportDirecto
 }
 
 module.exports = reportSize;
-module.exports.countFiles = countFiles;
 module.exports.countChangedFiles = countChangedFiles;
 module.exports.exceptionFor = exceptionFor;
 module.exports.isAgent = agent;

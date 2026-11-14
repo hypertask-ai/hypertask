@@ -4,6 +4,7 @@ import { reportError } from "@/lib/errors/reportError";
 export async function checkDailyAiSpend() {
   const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
   let recordedUsd = 0;
+  let byFeature: Record<string, number> = {};
   for (const start of [new Date(today.getTime() - 86_400_000), today]) {
     const day = start.toISOString().slice(0, 10);
     const usage = await prisma.aiUsage.aggregate({
@@ -23,7 +24,24 @@ export async function checkDailyAiSpend() {
       message: `Recorded AI usage estimate exceeded $5 on ${day}: $${spentUsd.toFixed(2)}. Based on saved token usage, not provider invoices.`,
       extra: { route: "/api/cron/ai-spend", stage: "daily-spend", spentUsd },
     });
-    if (start === today) recordedUsd = spentUsd;
+    if (start === today) {
+      recordedUsd = spentUsd;
+      const rows = await prisma.aiUsage.groupBy({
+        by: ["feature"],
+        where: {
+          createdAt: { gte: start, lt: new Date(start.getTime() + 86_400_000) },
+          provider: { not: { startsWith: "byok:" } },
+          costUsd: { gte: 0 },
+        },
+        _sum: { costUsd: true },
+      });
+      byFeature = {};
+      for (const row of rows) {
+        const featureUsd = row._sum.costUsd ?? 0;
+        if (!Number.isFinite(featureUsd) || featureUsd < 0) throw new Error("Invalid recorded AI usage cost");
+        if (featureUsd > 0) byFeature[row.feature] = featureUsd;
+      }
+    }
   }
-  return { recordedUsd };
+  return { recordedUsd, byFeature };
 }

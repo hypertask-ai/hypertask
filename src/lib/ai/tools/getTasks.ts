@@ -1,10 +1,16 @@
 import { tool } from "ai";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8987_CHAT_BLOCKER_READ_FLAG } from "@/lib/flags/definitions/htpr-8987-chat-blocker-read";
 import { HTPR_7756_CHAT_OPENS_TASK_FLAG } from "@/lib/flags/keys";
+import { mapOpenBlockingTasksForRead } from "@/lib/blockingTasks";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { blockedByRelationsInclude, getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import {
+  attachOpenBlockingTasks,
+  type TaskWithBlockingRelations,
+} from "@/utils/controllers/tasks/attachOpenBlockingTasks";
 import { taskMcpGetInclude } from "@/lib/mcp/tasks/mappers";
 import { sanitizeForJson, mapTaskToMcpGetResponse } from "@/lib/ai/tools/helpers";
 
@@ -25,6 +31,10 @@ export function createGetTasksTool(context: ToolContext) {
       }),
       execute: async (input) => {
         sendStatus("hypertask_get_tasks");
+        const blockersEnabled = await isFeatureEnabled(
+          HTPR_8987_CHAT_BLOCKER_READ_FLAG,
+          user.id,
+        );
         if (input.unique_index && !input.project_id) {
           return { success: false, error: "project_id is required with unique_index" };
         }
@@ -59,24 +69,35 @@ export function createGetTasksTool(context: ToolContext) {
             OR: orConditions,
             project: getProjectWhere(user.id),
           },
-          include: taskMcpGetInclude(user.id),
+          include: {
+            ...taskMcpGetInclude(user.id),
+            ...(blockersEnabled
+              ? { relatedFromTasks: blockedByRelationsInclude(user.id) }
+              : {}),
+          },
         });
+
+        const tasksWithBlockers = blockersEnabled
+          ? await attachOpenBlockingTasks(
+              tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
+            )
+          : tasks;
 
         const notFound = [
           ...(input.task_ids ?? [])
-            .filter((taskId) => !tasks.some((task) => task.id === taskId))
+            .filter((taskId) => !tasksWithBlockers.some((task) => task.id === taskId))
             .map((task_id) => ({ task_id })),
           ...(input.ticket_numbers ?? [])
             .filter(
               (ticketNumber) =>
-                !tasks.some((task) => task.ticketNumber === ticketNumber)
+                !tasksWithBlockers.some((task) => task.ticketNumber === ticketNumber)
             )
             .map((ticket_number) => ({
               ticket_number,
               ...(input.project_id ? { project_id: input.project_id } : {}),
             })),
           ...(input.unique_index && input.project_id &&
-            !tasks.some(
+            !tasksWithBlockers.some(
               (task) =>
                 task.uniqueIndex === input.unique_index &&
                 task.projectId === input.project_id
@@ -85,7 +106,7 @@ export function createGetTasksTool(context: ToolContext) {
             : []),
         ];
 
-        if (tasks.length === 0) {
+        if (tasksWithBlockers.length === 0) {
           return {
             success: false,
             error: "Task not found or access denied",
@@ -99,11 +120,11 @@ export function createGetTasksTool(context: ToolContext) {
           if (!await isFeatureEnabled(HTPR_7756_CHAT_OPENS_TASK_FLAG, user.id)) {
             return { success: false, error: "Opening tasks from chat is unavailable", navigation_emitted: false };
           }
-          if (tasks.length !== 1 || notFound.length > 0) {
+          if (tasksWithBlockers.length !== 1 || notFound.length > 0) {
             return { success: false, error: "Choose exactly one task to open", navigation_emitted: false };
           }
           try {
-            navigationEmitted = send("open_task", { projectId: tasks[0].projectId, uniqueIndex: tasks[0].uniqueIndex }) === true;
+            navigationEmitted = send("open_task", { projectId: tasksWithBlockers[0].projectId, uniqueIndex: tasksWithBlockers[0].uniqueIndex }) === true;
           } catch {
             navigationEmitted = false;
           }
@@ -115,7 +136,16 @@ export function createGetTasksTool(context: ToolContext) {
         return sanitizeForJson({
           success: true,
           ...(navigationEmitted === undefined ? {} : { navigation_emitted: navigationEmitted }),
-          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id)),
+          tasks: tasksWithBlockers.map((task) => {
+            const mapped = mapTaskToMcpGetResponse(task, user.id);
+            if (!blockersEnabled) return mapped;
+            return {
+              ...mapped,
+              blockingTasks: mapOpenBlockingTasksForRead(
+                "blockingTasks" in task ? (task.blockingTasks ?? []) : [],
+              ),
+            };
+          }),
           not_found: notFound,
         });
       },

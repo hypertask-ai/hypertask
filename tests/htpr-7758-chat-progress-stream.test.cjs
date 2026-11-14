@@ -32,9 +32,9 @@ async function consume(events, enabled = true) {
   return { messages, changes, navigations };
 }
 
-test("the early link is visible before completion, persists in the reply, and never auto-opens", async () => {
+test("open_task navigates as soon as the title exists while the early link stays in the reply", async () => {
   const result = await consume([
-    ["task_created", { content: link }], ["task_updated", { taskId: 123 }],
+    ["open_task", { projectId: 7049, uniqueIndex: 1 }], ["task_created", { content: link }], ["task_updated", { taskId: 123 }],
     ["content", { content: "Finished." }], ["done", { status: "complete", assistant_persisted: true }],
   ]);
   assert.equal(result.messages[0].content, link);
@@ -42,6 +42,14 @@ test("the early link is visible before completion, persists in the reply, and ne
   assert.equal(result.messages.at(-1).content, link + "Finished.");
   assert.equal(result.messages.at(-1).isDelivered, true);
   assert.deepEqual(result.changes, [{ type: "task:changed", detail: { taskId: 123 } }]);
+  assert.deepEqual(result.navigations, [[7049, 1]]);
+});
+
+test("the early link alone does not auto-open without open_task", async () => {
+  const result = await consume([
+    ["task_created", { content: link }], ["task_updated", { taskId: 123 }],
+    ["content", { content: "Finished." }], ["done", { status: "complete", assistant_persisted: true }],
+  ]);
   assert.deepEqual(result.navigations, []);
 });
 

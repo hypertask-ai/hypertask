@@ -12,14 +12,19 @@ import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, typ
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getTeamGatewayFunding, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
 import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveAiModelOption, isGrokGemini4ModelKey, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
+import { taskWriterPickerOption } from "@/lib/taskWriterPickerAuto";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
-import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
+import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
+import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { getAiFeatureModelOverride, resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
 import { assertModelAllowedForPlan, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
@@ -27,6 +32,19 @@ import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardR
 
 import prisma from "@/lib/prisma";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
+
+async function nativeSearchForSelection(provider: string, apiKey: unknown, teamId?: unknown) {
+  const key = typeof apiKey === "string" ? apiKey.trim() : "";
+  const team = typeof teamId === "string" ? teamId : "";
+  let on = false;
+  try { if (team) { const { remainingSpendPathEnabled } = await import("@/app/api/ai/_lib/planAllowancePolicy"); on = typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(team); } } catch { on = false; }
+  let ours = typeof isOurGatewayKey === "function" && isOurGatewayKey(key);
+  if (on && !ours && key && team && typeof getTeamGatewayFunding === "function") {
+    const funding = await getTeamGatewayFunding({ trustedTeamId: team }).catch(() => undefined);
+    ours = Boolean(funding && funding.apiKey === key && funding.source !== "customer");
+  }
+  return (provider === "claude" || provider === "openai") && !(on && !(Boolean(key) && !ours));
+}
 
 export const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -692,7 +710,30 @@ export async function selectTaskWriterModel(args: {
         args.aiFeature
       )
     : null;
-  let selection = taskWriterSonnet
+  let pickerSelection = null;
+  if (args.aiFeature === "taskWriter" && typeof args.userId === "number") {
+    if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, args.userId)) {
+      pickerSelection = taskWriterPickerOption(args.modelOptionId, args.modelSelected, haiku55Enabled);
+    }
+  }
+  const namedPickerOption = pickerSelection && pickerSelection !== "auto" ? pickerSelection : null;
+  const requestAuto = pickerSelection === "auto";
+  const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))
+    ? pickAutoModelOption({
+        feature: args.aiFeature,
+        settings: teamContext.settings,
+        plan: storePlanId,
+        byokProviderFlags: args.byokProviderFlags,
+        grokGemini4Enabled,
+        planDefault: requestDefaultModelOption,
+        forcedProvider: await autoForcedProvider(keyLookup),
+      })
+    : null;
+  let selection = namedPickerOption
+    ? selectionFromModelOption(namedPickerOption)
+    : autoPick
+    ? selectionFromModelOption(autoPick)
+    : taskWriterSonnet
     ? selectionFromModelOption(getAiModelOptionById("claude-sonnet-5-5-thinking")!)
     : args.aiFeature
     ? defaultModelSelection(
@@ -810,7 +851,8 @@ export async function selectTaskWriterModel(args: {
     selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
   }
 
-  const pinnedSonnet = taskWriterSonnet && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  const sonnetSelection = taskWriterSonnet && !autoPick && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  const pinnedSonnet = sonnetSelection && !namedPickerOption;
   if (pinnedSonnet && selection.modelOption) {
     selection.modelOption = {
       ...selection.modelOption,
@@ -820,7 +862,7 @@ export async function selectTaskWriterModel(args: {
       },
     };
   }
-  if (!(pinnedSonnet && (storePlanId === "Free" || storePlanId === "BYOK"))) {
+  if (!(sonnetSelection && (storePlanId === "Free" || storePlanId === "BYOK"))) {
     await assertModelAllowedForPlan(
       args.projectId,
       selection.modelOption,
@@ -842,8 +884,7 @@ export async function selectTaskWriterModel(args: {
       feature: args.feature ?? "task-writer",
       tags,
       modelOption: selection.modelOption,
-      includeNativeWebSearch:
-        selection.provider === "claude" || selection.provider === "openai",
+      includeNativeWebSearch: await nativeSearchForSelection(selection.provider, byokApiKey, teamContext.teamId ?? args.teamId),
     }
   );
   const selected = {
@@ -1118,6 +1159,7 @@ export async function retrieveTaskWriterContext(args: {
   aiMode?: string | null;
   taskIds?: number[];
   reserveCommentBudget?: boolean;
+  taskSearch?: Promise<TurbopufferTaskRow[]>;
 }) {
   if (args.principal?.teamScope != null) {
     await (await import("./customInstructions")).assertProjectAccess(args.principal.userId, args.projectId, args.principal.agentId, args.principal.teamScope);
@@ -1129,14 +1171,17 @@ export async function retrieveTaskWriterContext(args: {
 
   const [taskRowsRaw, commentRowsRaw, customInstructionFileContext] =
     await Promise.all([
+      args.taskSearch ??
       searchTasks({
         searchQuery: args.prompt,
         projectIds,
+        excludeStatuses: ["Deleted", "Archive"],
         topK: 50,
       }),
       searchComments({
         searchQuery: args.prompt,
         projectIds,
+        excludeStatuses: ["Deleted", "Archive"],
         topK: 60,
         limit: 50,
       }),

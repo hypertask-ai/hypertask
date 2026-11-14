@@ -370,6 +370,89 @@ test("a transport timeout that happens twice stays failed and files the incident
   }
 });
 
+const contextRequest = () => {
+  const request = { calls: 0 };
+  request.overrides = {
+    "/api/mcp/user/context": async () => {
+      request.calls += 1;
+      return request.respond(request.calls);
+    },
+  };
+  return request;
+};
+
+test("a fixture request that times out once is confirmed before it fails the tick", async () => {
+  const originalFetch = global.fetch;
+  const request = contextRequest();
+  request.respond = (calls) => {
+    if (calls === 1) throw new Error("The operation was aborted due to timeout");
+    return Response.json({
+      user: { id: 6 },
+      teams: [{ id: "team-1", title: "Hypertask" }],
+      projects: [{ id: PROJECT_ID, title: BOARD_TITLE, ownerId: 6 }],
+    });
+  };
+  global.fetch = fixtureFetch({ overrides: request.overrides });
+
+  try {
+    const { run, shouldRollback } = await import(scriptUrl);
+    const result = await run({ sleep: async () => undefined });
+    assert.equal(result.ok, true);
+    assert.match(
+      result.detail,
+      /passed confirmation retry after start core-actions probe/,
+    );
+    assert.equal(request.calls, 2);
+    assert.equal(shouldRollback(result, "push"), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a fixture request that times out twice stays failed", async () => {
+  const originalFetch = global.fetch;
+  const request = contextRequest();
+  request.respond = () => {
+    throw new Error("The operation was aborted due to timeout");
+  };
+  global.fetch = fixtureFetch({ overrides: request.overrides });
+
+  try {
+    const { run, shouldRollback } = await import(scriptUrl);
+    const result = await run({ sleep: async () => undefined });
+    assert.equal(result.ok, false);
+    assert.equal(result.kind, "unrunnable");
+    assert.equal(result.action, "start core-actions probe");
+    assert.match(
+      result.detail,
+      /confirmed twice: The operation was aborted due to timeout/,
+    );
+    assert.equal(request.calls, 2);
+    assert.equal(shouldRollback(result, "push"), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a fixture request that fails with a server response is not retried", async () => {
+  const originalFetch = global.fetch;
+  const request = contextRequest();
+  request.respond = () =>
+    Response.json({ message: "fetch failed upstream" }, { status: 500 });
+  global.fetch = fixtureFetch({ overrides: request.overrides });
+
+  try {
+    const { run } = await import(scriptUrl);
+    await assert.rejects(
+      run({ sleep: async () => undefined }),
+      /\/api\/mcp\/user\/context failed: fetch failed upstream/,
+    );
+    assert.equal(request.calls, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("an unrunnable result that is not a transport failure is not retried", async () => {
   const originalFetch = global.fetch;
   const probe = probeSequence([
@@ -707,6 +790,74 @@ test("a failed parent-ticket report does not suppress the incident report", asyn
     global.fetch = originalFetch;
   }
 
+  assert.ok(
+    requests.some((request) => request.path === "/api/mcp/tasks/create"),
+  );
+  assert.ok(
+    requests.some(
+      (request) =>
+        request.path === "/api/mcp/comments" && request.body?.task_id === 777,
+    ),
+  );
+});
+
+test("a deleted parent ticket is logged as skipped, not as a failed destination", async () => {
+  const requests = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    const body = init.body ? JSON.parse(String(init.body)) : null;
+    requests.push({ method: init.method || "GET", path: url.pathname, body });
+
+    if (
+      url.pathname === "/api/mcp/comments" &&
+      body?.ticket_number === "HTPR-6225"
+    ) {
+      return Response.json(
+        { message: "Task not found or access denied" },
+        { status: 404 },
+      );
+    }
+    if (url.pathname === "/api/mcp/tasks") return Response.json({ tasks: [] });
+    if (url.pathname === "/api/mcp/projects") {
+      return Response.json({
+        projects: [
+          {
+            id: 15,
+            sections: [{ id: 4389, section_title: "Renamed Bugs" }],
+          },
+        ],
+      });
+    }
+    if (url.pathname === "/api/mcp/tasks/create") {
+      return Response.json({ task: { id: 777 } });
+    }
+    if (url.pathname === "/api/mcp/comments" && body?.task_id === 777) {
+      return Response.json({ success: true });
+    }
+    return Response.json({ message: "unhandled request" }, { status: 500 });
+  };
+
+  let output = "";
+  try {
+    const { report } = await import(scriptUrl);
+    await report(
+      {
+        kind: "application",
+        action: "open task",
+        status: 500,
+        detail: "response details omitted",
+      },
+      (text) => {
+        output += text;
+      },
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.match(output, /HTPR-6225 is gone; destination skipped/);
+  assert.doesNotMatch(output, /destination\(s\) failed/);
   assert.ok(
     requests.some((request) => request.path === "/api/mcp/tasks/create"),
   );

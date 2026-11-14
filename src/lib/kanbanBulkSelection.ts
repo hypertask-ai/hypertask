@@ -1,3 +1,5 @@
+export const BULK_MOVE_BOARD_LIMIT = 500;
+
 export const getInclusiveRange = <T>(
   items: readonly T[],
   anchor: T,

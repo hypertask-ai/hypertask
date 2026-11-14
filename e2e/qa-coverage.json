@@ -3,6 +3,7 @@
   "repository": "hypertask-ai/hypertask",
   "branch": "production",
   "checks": [
+    { "id": "hands-free-drives", "label": "On-demand seeded drives (not live coverage)", "kind": "per-ticket", "ticket": 8940, "source": { "file": "scripts/verify-qa-run.mjs", "token": "HANDS_FREE_DRIVES" } },
     {
       "id": "pre-merge-app",
       "label": "Before merge: build, start, and core actions",
@@ -115,6 +116,10 @@
     }
   ],
   "functions": [
+    { "id": "board-drive", "label": "Seeded board drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-qa/scripts/board-drive-live.mjs", "token": "await driveMain" }] },
+    { "id": "task-drive", "label": "Seeded task drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-qa/scripts/task-drive-live.mjs", "token": "await driveMain" }] },
+    { "id": "comments-drive", "label": "Seeded comments drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-qa/scripts/comments-drive-live.mjs", "token": "await driveMain" }] },
+    { "id": "flags-drive", "label": "Seeded flags drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-qa/scripts/flags-drive-live.mjs", "token": "await driveMain" }] },
     {
       "id": "build-start",
       "label": "Build and start the app",

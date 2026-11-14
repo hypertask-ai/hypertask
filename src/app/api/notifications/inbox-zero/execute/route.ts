@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_8046_ARCHIVE_SAFE_FLAG } from "@/lib/flags/definitions/htpr-8046-archive-safe";
+import { HTPR_9045_JEV_INBOX_TRIAGE_FLAG } from "@/lib/flags/definitions/htpr-9045-jev-inbox-triage";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import {
@@ -15,6 +16,7 @@ import {
   loadActiveInboxZeroNotifications, // trufflehog:ignore
   loadInboxZeroDoneTitlesByProject,
   parseInboxZeroRules,
+  withoutJevTriage,
 } from "@/utils/controllers/notifications/inboxZero";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +28,8 @@ const loadPreview = async (
   db: Pick<Prisma.TransactionClient, "notification" | "section">,
   now: Date
 ) => {
-  const notifications = await loadActiveInboxZeroNotifications(userId, db, undefined, Boolean(rules.safeUpdates));
+  const jevOn = await isFeatureEnabled(HTPR_9045_JEV_INBOX_TRIAGE_FLAG, userId);
+  const notifications = await loadActiveInboxZeroNotifications(userId, db, undefined, Boolean(rules.safeUpdates) || jevOn);
   const doneTitlesByProject = await loadInboxZeroDoneTitlesByProject(
     notifications,
     db
@@ -34,7 +37,7 @@ const loadPreview = async (
   return evaluateInboxZero(
     notifications,
     userId,
-    rules,
+    jevOn ? rules : withoutJevTriage(rules),
     now,
     doneTitlesByProject,
     await isFeatureEnabled(HTPR_8047_INBOX_ZERO_AGENT_ACTIONS_FLAG, userId)

@@ -8,9 +8,7 @@ import MyTasksGroupPicker from "./MyTasksGroupPicker";
 import MyTasksSortPicker from "./MyTasksSortPicker";
 import AssignModal from "@/components/Modals/AssignToUser/AssignToUser";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
-import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import {
   MY_TASKS_SCOPE_VALUES,
   normalizeMyTasksScopes,
@@ -85,10 +83,8 @@ const MyTasksViewControls = ({
   onOpenKanbanFilters,
   tableColumnsEnabled = false,
   onOpenTableColumns,
-  snoozeEnabled: snoozeEnabledProp = false,
+  snoozeEnabled = true,
 }: Props) => {
-  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
   const myTasksScopesEnabled = true;
   const [scopeOpen, setScopeOpen] = useState(false);
   const [involvementOpen, setInvolvementOpen] = useState(false);

@@ -47,7 +47,7 @@ function loadPage(relativePath, user, isFeatureEnabled) {
 const supportPath = "src/app/slack/support/page.tsx";
 const installPath = "src/app/add-to-slack/page.tsx";
 
-test("Marketplace flag exists and defaults to Owner + QA, not anonymous or other members", async () => {
+test("Marketplace flag defaults to Everyone and Off hides the public support page", async () => {
   assert.equal(marketplaceKey, "htpr-6921-slack-marketplace");
   assert.ok(flags.FEATURE_FLAG_KEYS.includes(marketplaceKey));
   const db = {
@@ -55,8 +55,8 @@ test("Marketplace flag exists and defaults to Owner + QA, not anonymous or other
     user: { findUnique: async ({ where }) => ({ email: where.id === 6 ? "valentin.yeo@gmail.com" : "valentin@hypertask.ai" }) },
   };
   const entry = (await flags.listFeatureFlagModes()).find(({ key }) => key === marketplaceKey);
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.deepEqual(await Promise.all([6, 985, 7, -1].map(id => flags.isFeatureEnabled(marketplaceKey, id, db))), [true, true, false, false]);
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7, -1].map(id => flags.isFeatureEnabled(marketplaceKey, id, db))), [true, true, true, true]);
   db.featureFlag.findUnique = async () => ({ mode: "OFF" });
   assert.equal(await flags.isFeatureEnabled(marketplaceKey, 6, db), false);
 });

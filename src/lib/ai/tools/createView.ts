@@ -22,7 +22,13 @@ export function createCreateViewTool(context: ToolContext) {
         label_names: z
           .array(z.string())
           .optional()
-          .describe("Only show tasks carrying these labels."),
+          .describe("Tags to match. With label_match HIDE, these are the tags to leave out."),
+        label_match: z
+          .enum(["ALL", "ANY", "HIDE"])
+          .optional()
+          .describe(
+            "ANY: the ticket has at least one of these tags. ALL: it has every tag. HIDE: leave out tickets that have any of these tags. Use HIDE for without, except, everything but, or hide these tags."
+          ),
         assignee_ids: z
           .array(z.union([z.coerce.number().int().positive(), z.string().uuid()]))
           .optional()
@@ -66,6 +72,7 @@ export function createCreateViewTool(context: ToolContext) {
             label_names: input.label_names,
             assignee_ids: input.assignee_ids,
             match: input.match,
+            label_match: input.label_match,
           },
           sorting_mode: input.sorting_mode,
           sorting_order: input.sorting_order,

@@ -1,5 +1,6 @@
 import type { Prisma, SubscriptionPlanStatus } from "@prisma/client";
 
+import { clearStoredSubscriptionEntitlement } from "@/lib/clearStoredSubscriptionEntitlement";
 import { completePendingStripeCancellation } from "@/lib/pendingStripeSubscriptionCancellation";
 import prisma from "@/lib/prisma";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
@@ -74,24 +75,11 @@ export const applySubscriptionUpdatedWithTeamLockHeld = async (
 
   if (shouldClearTeamSubscriptionEntitlement(subscription.status)) {
     assertHeld();
-    await prisma.$transaction(async (tx) => {
-      await tx.subscriptionPlan.updateMany({
-        where: { subscriptionId: subscription.id },
-        data: {
-          subscriptionStatus: subscription.status as SubscriptionPlanStatus,
-        },
-      });
-      await tx.team.updateMany({
-        where: {
-          id: teamToPayFor.id,
-          activeSubscriptionPlanId: subscription.id,
-        },
-        data: {
-          activeSubscriptionPlanId: null,
-          activeSubscriptionPlanItemId: null,
-        },
-      });
-    });
+    await clearStoredSubscriptionEntitlement(
+      teamToPayFor.id,
+      subscription.id,
+      subscription.status,
+    );
     return;
   }
 

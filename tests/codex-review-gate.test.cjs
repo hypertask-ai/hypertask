@@ -1,0 +1,198 @@
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { evaluate, priorityOf, blocks, isCodex } = require('../.github/scripts/codex-review-gate.cjs');
+
+const head = 'a'.repeat(40);
+const bot = 'chatgpt-codex-connector[bot]';
+const badge = level => `![P${level} Badge](https://img.shields.io/badge/P${level}-orange) Title`;
+const pr = extra => ({ headOid: head, reviews: [], comments: [], ...extra });
+const review = (comments, extra) => ({ author: bot, commit: head, body: 'Codex Review', url: 'https://example.test/r/1', comments, submittedAt: extra?.commit ? '2026-11-11T10:00:00Z' : '2026-11-11T11:00:00Z', ...extra });
+const older = 'b'.repeat(40);
+const inline = (body, commit) => ({ body, commit });
+const stateComment = (code_review, extra) => ({
+  author: bot, url: 'https://example.test/c/1', updatedAt: '2026-11-11T11:00:00Z', ...extra,
+  body: `<!-- codex-review-state:v1 ${JSON.stringify({ code_review })} -->`,
+});
+const stateOf = extra => evaluate(pr(extra)).state;
+const receipt = sha => ({
+  author: bot,
+  url: 'https://example.test/c/receipt',
+  createdAt: '2026-11-11T11:00:00Z',
+  body: `Codex Review: Didn't find any major issues. Hooray!\n\n**Reviewed commit:** \`${sha}\`\n`,
+});
+const unresolvedHead = {
+  status: 'completed', commit_sha: head, has_any_findings: true, has_unresolved_findings: true,
+};
+
+test('P1 finding on the head fails and P0 is named as worst', () => {
+  assert.equal(stateOf({ reviews: [review([badge(1)])] }), 'failure');
+  assert.match(evaluate(pr({ reviews: [review([badge(1), badge(0)])] })).description, /worst P0/);
+});
+
+test('a finding with no badge fails closed', () => {
+  assert.match(evaluate(pr({ reviews: [review(['Rename this.'])] })).description, /unrated/);
+});
+
+test('P2-only findings and findingless reviews pass', () => {
+  assert.equal(stateOf({ reviews: [review([badge(2)])] }), 'success');
+  assert.equal(stateOf({ reviews: [review([])] }), 'success');
+});
+
+test('reviews of an older commit or by someone else are ignored', () => {
+  assert.equal(stateOf({ reviews: [review([badge(1)], { commit: older })] }), 'pending');
+  assert.equal(stateOf({ reviews: [review([], { author: 'someone' })] }), 'pending');
+});
+
+test('a P1 inline comment on the head fails even when its review is on an older commit', () => {
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), head)], { commit: older })] }), 'failure');
+});
+
+test('HYCI-269 a stale P1 with no head review still fails', () => {
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), head)], { commit: older })] }), 'failure');
+});
+
+test('HYCI-269 an unresolved summary alone does not clear a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  assert.equal(stateOf({ reviews: [stale], comments: [stateComment(unresolvedHead)] }), 'failure');
+});
+
+test('HYCI-269 a clean receipt for another commit does not clear a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  assert.equal(stateOf({
+    reviews: [stale],
+    comments: [stateComment(unresolvedHead), receipt(older.slice(0, 10))],
+  }), 'failure');
+});
+
+test('HYCI-269 clean receipt clears a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  const result = evaluate(pr({
+    reviews: [stale],
+    comments: [stateComment(unresolvedHead), receipt(head.slice(0, 10))],
+  }));
+  assert.equal(result.state, 'success');
+  assert.match(result.description, /no P0 or P1/);
+  const curly = receipt(head.slice(0, 10));
+  curly.body = curly.body.replace("Didn't", 'Didn’t');
+  assert.equal(stateOf({ reviews: [stale], comments: [stateComment(unresolvedHead), curly] }), 'success');
+});
+
+test('HYCI-269 a completed summary with no findings clears a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  const clean = { status: 'completed', commit_sha: head, has_any_findings: false, has_unresolved_findings: false };
+  assert.equal(stateOf({ reviews: [stale], comments: [stateComment(clean)] }), 'success');
+});
+
+test('HYCI-269 an empty review of the head clears a stale P1', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  assert.equal(stateOf({ reviews: [stale, review([])] }), 'success');
+});
+
+test('HYCI-269 a P1 on the head review still fails', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  const fresh = review([badge(1)]);
+  const clean = { status: 'completed', commit_sha: head, has_any_findings: false, has_unresolved_findings: false };
+  assert.equal(stateOf({
+    reviews: [stale, fresh],
+    comments: [stateComment(clean), receipt(head.slice(0, 10))],
+  }), 'failure');
+});
+
+test('a P2-only inline comment from an older review on the head passes', () => {
+  assert.equal(stateOf({ reviews: [review([inline(badge(2), head)], { commit: older })] }), 'success');
+});
+
+test('an inline comment on an older commit is not attributed to the head', () => {
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), older)], { commit: older })] }), 'pending');
+  assert.equal(stateOf({ reviews: [review([inline(badge(2), head), inline(badge(1), older)], { commit: older })] }), 'success');
+  assert.equal(stateOf({ reviews: [review([inline(badge(1), head), inline(badge(2), older)], { commit: older })] }), 'failure');
+});
+
+test('unread comments on an older review fail closed instead of passing', () => {
+  const unread = review(['Further comments were not read.'], { commit: older });
+  assert.match(evaluate(pr({ reviews: [unread] })).description, /unrated/);
+  assert.equal(stateOf({ reviews: [unread, review([])] }), 'success');
+});
+
+test('a completed Codex summary with no findings passes only for the exact head', () => {
+  const clean = { status: 'completed', has_any_findings: false, has_unresolved_findings: false };
+  assert.equal(stateOf({ comments: [stateComment({ ...clean, commit_sha: head })] }), 'success');
+  assert.equal(stateOf({ comments: [stateComment({ ...clean, commit_sha: 'b'.repeat(40) })] }), 'pending');
+  assert.equal(stateOf({ comments: [stateComment({ ...clean, commit_sha: head }, { author: 'someone' })] }), 'pending');
+});
+
+test('a completed summary with resolved or P2-only unresolved findings passes', () => {
+  const resolved = { status: 'completed', has_any_findings: true, has_unresolved_findings: false };
+  assert.equal(stateOf({ comments: [stateComment({ ...resolved, commit_sha: head })] }), 'success');
+  const p2Only = { status: 'completed', has_any_findings: true, has_unresolved_findings: true };
+  assert.equal(stateOf({ comments: [stateComment({ ...p2Only, commit_sha: head })] }), 'success');
+});
+
+test('a running or findings summary stays pending without a review', () => {
+  assert.equal(stateOf({ comments: [stateComment({ commit_sha: head, status: 'running', has_any_findings: null })] }), 'pending');
+  assert.equal(stateOf({ comments: [stateComment({ commit_sha: head, status: 'completed', has_any_findings: true })] }), 'pending');
+  assert.equal(stateOf({}), 'pending');
+});
+
+const flagGatePass = [{ context: 'feature-flag-gate', state: 'success' }];
+
+test('P1 flag-default complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode should be "EVERYONE" for new UI, not Owner + QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
+test('imperative widen-to-Everyone complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) Default this visible UI flag to Everyone while defaultMode stays OWNER_AND_QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
+test('direct defaultMode should be EVERYONE complaints are waived when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode should be EVERYONE for this visible UI.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'success');
+});
+
+test('security findings that mention Everyone rollout context stay blocking when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) The authorization fix must happen before exposing this route to Everyone; defaultMode: OWNER_AND_QA is not protection.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'failure');
+});
+
+test('P1 flag-default complaints still fail without feature-flag-gate success', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode must be "EVERYONE" for this visible change.';
+  assert.equal(stateOf({ reviews: [review([finding])] }), 'failure');
+});
+
+test('P1 findings that demand OWNER_AND_QA stay blocking when feature-flag-gate passed', () => {
+  const finding = '![P1 Badge](https://example.test/p1) defaultMode is "EVERYONE", but this customer-email flag should be OWNER_AND_QA.';
+  assert.equal(stateOf({ reviews: [review([finding])], statusContexts: flagGatePass }), 'failure');
+});
+
+test('badge parsing and bot login matching', () => {
+  assert.equal(priorityOf(badge(2)), 2);
+  assert.equal(priorityOf('plain'), null);
+  assert.deepEqual([badge(2), badge(1), 'plain'].map(blocks), [false, true, true]);
+  assert.ok(isCodex('chatgpt-codex-connector') && isCodex(bot) && !isCodex('hypertask-ai-review'));
+});
+
+for (const evidence of ['review', 'summary', 'receipt']) {
+  for (const submittedAt of ['2026-11-11T12:00:00Z', '2026-11-11T11:00:00Z', undefined]) {
+    test(`HYCI-269 ${evidence} preserves later or undated remapped findings (${submittedAt})`, () => {
+      const stale = review([inline(badge(1), head)], { commit: older, submittedAt });
+      const clean = { ...unresolvedHead, has_any_findings: false, has_unresolved_findings: false };
+      assert.equal(stateOf({
+        reviews: evidence === 'review' ? [review([]), stale] : [stale],
+        comments: evidence === 'summary' ? [stateComment(clean)]
+          : evidence === 'receipt' ? [stateComment(unresolvedHead), receipt(head.slice(0, 10))] : [],
+      }), 'failure');
+    });
+  }
+}
+
+test('HYCI-269 undated clean evidence cannot clear a remapped finding', () => {
+  const stale = review([inline(badge(1), head)], { commit: older });
+  assert.equal(stateOf({ reviews: [stale, review([], { submittedAt: undefined })] }), 'failure');
+  const clean = { ...unresolvedHead, has_any_findings: false, has_unresolved_findings: false };
+  assert.equal(stateOf({ reviews: [stale], comments: [stateComment(clean, { updatedAt: undefined })] }), 'failure');
+  assert.equal(stateOf({
+    reviews: [stale], comments: [stateComment(unresolvedHead), { ...receipt(head.slice(0, 10)), createdAt: undefined }],
+  }), 'failure');
+});

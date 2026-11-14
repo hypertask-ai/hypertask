@@ -6,6 +6,7 @@ const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const { resolveListImport, mergeGetAllIncludesStub } = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
   stubs = withStubs({ "@/lib/agents/writing": require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}) }, stubs);
@@ -18,8 +19,16 @@ function load(file, stubs = {}) {
   new Function("module", "exports", "require", javascript)(mod, mod.exports, (request) => {
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
-    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
-    return stubs[request];
+    const listImport = resolveListImport(request);
+    if (listImport !== undefined) return listImport;
+    if (request in stubs) {
+      const value = stubs[request];
+      if (request === "@/utils/controllers/projects/getAllIncludes") {
+        return mergeGetAllIncludesStub(value);
+      }
+      return value;
+    }
+    assert.ok(false, `Unexpected dependency: ${request}`);
   });
   return mod.exports;
 }
@@ -51,7 +60,7 @@ function updateHarness(initial = {}, parents = []) {
     task: { findUnique: async () => ({ ...state }) }, project: { findFirst: async () => ({ id: 10 }) },
     $transaction: async (callback) => { calls.transactions++; return callback(tx); },
   };
-  const stubs = {
+  let stubs = {
     "@/lib/tasks/sameBoardRelations": relations,
     "@/utils/controllers/tasks/parentTaskAccess": parentAccess,
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -79,6 +88,7 @@ function updateHarness(initial = {}, parents = []) {
     "@/lib/mcp/tasks/agentDoneLifecycle": { assertAgentMayLeaveDone: noop, AgentDoneLifecycleDeniedError: class extends Error {} },
     "@/lib/cycleService": { assertCycleAssignable: noop, CycleAssignmentError: class extends Error {} },
   };
+  stubs = withStubs({}, stubs);
   const controller = load("src/utils/controllers/tasks/single.ts", stubs);
   return { calls, controller, update: (patch, options = {}, agentId = null) => controller.updateTaskSingle({ id: 101, ...patch }, { id: 7 }, agentId, { skipAutoAssign: true, skipRecurrence: true, ...options }) };
 }
@@ -235,10 +245,10 @@ const readerWiring = [
   ["src/utils/controllers/taskDetail/load.ts", /\.\.\.stripForeignTaskRelations\(task\)/],
   ["src/utils/controllers/projects/getBoardTasks.ts", /tasks: tasksWithAgentStatus\.map\(stripForeignTaskRelations\)/],
   ["src/utils/controllers/tasks/getAll.ts", /json:tasks\.map\(stripForeignTaskRelations\)/],
-  ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\)\)/],
+  ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\), parsedUserId\)/],
   ["src/lib/mcp/tasks/mappers.ts", /mapTaskToMcpGetResponse[\s\S]*task = stripForeignTaskRelations\(task\)/],
-  ["src/lib/mcp/operations/tasks/operation.ts", /tasks\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
-  ["src/lib/ai/tools/listTasks.ts", /tasks\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
+  ["src/lib/mcp/operations/tasks/operation.ts", /tasksWithBlockers\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
+  ["src/lib/ai/tools/listTasks.ts", /tasksWithBlockers\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
   ["src/utils/controllers/tasks/getSharedTask.ts", /shared\.task = stripForeignTaskRelations\(shared\.task\)/],
   ["src/utils/controllers/share/getProject.ts", /project\.tasks = project\.tasks\.map\(stripForeignTaskRelations\)/],
 ];
@@ -273,10 +283,11 @@ function readerStubs(prisma) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@prisma/client": client,
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags": { isFeatureEnabled: async () => false, featureFlagsForUser: async () => ({}) },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}), getProjectWhere: () => ({}) },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), isAgentVisibleToUser: () => false, accessibleAgentWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/lib/agents/publicAgent": { projectPublicAgent: () => null, redactAgentIdentitiesForPublicShare: (value) => value },
+    "@/lib/tasks/waitingOnActivitySql": { visibleWaitingOnActivity: () => ({}) },
     "@/lib/mcp/agents": { mapVisibleMcpAgent: () => null, mcpVisibleAgentSelect: () => ({}) },
   };
 }
@@ -367,6 +378,7 @@ for (const foreignParent of [false, true]) {
       "@/utils/helperFunctions/Views/SubtaskHelperFunction": {},
       "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": {},
       "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeProjectBoardFilters: (project) => project },
+      "@/lib/flags/definitions/htpr-8171-hide-tags": { HTPR_8171_HIDE_TAGS_FLAG: "htpr-8171-hide-tags" },
       "../projects/getAllIncludes": { getProjectViewBaseInclude: () => ({}) },
     });
     const output = await getProject("share-id");

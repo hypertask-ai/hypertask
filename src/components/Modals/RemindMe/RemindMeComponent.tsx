@@ -16,8 +16,6 @@ import { ChevronDown, CircleCheck, Clock, Search } from "lucide-react";
 
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useQueryState from "@/hooks/MultiPages/useQueryState";
-import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 
 export interface BulkActionInbox {
@@ -58,8 +56,7 @@ const RemindMeComponent = (props: Props) => {
   const [modal, ___] = useState<boolean>(true);
   const [filteredOptions, setFilteredOptions] = useState<(DisplayDate | undefined)[]>(defaultOptions);
   const _mbl = useContext(MobileViewContext);
-  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const hideOnMyTasks = myTasksSnoozeEnabled && returnsToMyTasks;
+  const hideOnMyTasks = returnsToMyTasks;
   const returnCopy = hideOnMyTasks
     ? "inbox and My Tasks at "
     : "inbox at ";
@@ -246,7 +243,7 @@ const RemindMeComponent = (props: Props) => {
         bottomSafeAreaFloor
         bottomSlot={mobileSearchInput}
       >
-        {myTasksSnoozeEnabled ? <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden /> : null}
+        <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
         <h3 className="px-4 pb-1 pt-2 text-micro font-semibold uppercase tracking-wider text-text-light-gray">
           {getHeaderText()}
         </h3>
@@ -293,7 +290,7 @@ const RemindMeComponent = (props: Props) => {
       contentClassName="rounded-[5px] overflow-hidden"
     >
       <ModalBody className="p-0 rounded-[5px]">
-        {myTasksSnoozeEnabled ? <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden /> : null}
+        <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
         <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
           <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" />
           <ModalInput

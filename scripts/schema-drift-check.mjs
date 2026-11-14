@@ -84,6 +84,7 @@ export async function catalogSchema(client, { includeLegacy = false, log = conso
     ddl.push(`CREATE TABLE ${quote(r.relname)} (${cols.join(", ")});`);
   }
   for (const c of constraints.filter((c) => c.contype !== "f" && !ignoredTable(c.relname))) ddl.push(`ALTER TABLE ${quote(c.relname)} ADD CONSTRAINT ${quote(c.conname)} ${c.definition};`);
+  if (indexes.some((i) => i.definition.includes("gin_trgm_ops"))) ddl.push("CREATE EXTENSION IF NOT EXISTS pg_trgm;");
   for (const i of indexes.filter((i) => !ignoredTable(i.relname))) ddl.push(`${i.definition};`);
   for (const c of constraints.filter((c) => c.contype === "f" && !ignoredTable(c.relname))) ddl.push(`ALTER TABLE ${quote(c.relname)} ADD CONSTRAINT ${quote(c.conname)} ${c.definition};`);
   return ddl.join("\n");

@@ -118,9 +118,8 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
           npx prisma generate
           npm ci --prefix e2e/ai-pilot --no-audit --no-fund
-          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
-          npx playwright install --with-deps chromium
-          (cd e2e/ai-pilot && npx @e2e-dev/web install chromium --with-deps)
+          bash .github/scripts/install-chromium.sh
+          (cd e2e/ai-pilot && npx @e2e-dev/web install chromium)
       - name: Prepare disposable local credentials
         shell: bash
         run: |

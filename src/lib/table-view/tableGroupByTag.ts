@@ -1,0 +1,267 @@
+import { z } from "zod";
+import type { IProject, ISection, ITask, ITaskLabel } from "@/models/model";
+import { tableSectionKey, type TableCreateTaskSection } from "@/components/PageComponents/Kanban/TableView/tableCreateTask";
+
+export type TableGroupBy = "column" | "tag" | "assignee" | "priority" | "size";
+export type TableGrouping = {
+  mode: TableGroupBy;
+  tagIds: string[];
+  allTags: boolean;
+  hiddenGroupIds?: string[];
+  onlyGroupId?: string;
+};
+export type TableGroupAction = "hide" | "filter" | "reset";
+export type TableTagGroupedSection = TableCreateTaskSection & { items: ITask[] };
+export const TABLE_GROUP_BY_TAG_NONE = "tag:none" as const;
+export const NO_TAG_SECTION_TITLE = "No tag";
+export const OTHER_GROUP_TITLE = "Other";
+export const UNASSIGNED_GROUP_TITLE = "Unassigned";
+export const NO_PRIORITY_GROUP_TITLE = "No priority";
+export const NO_SIZE_GROUP_TITLE = "No size";
+const TABLE_GROUP_BY_VALUES = new Set<TableGroupBy>(["column", "tag", "assignee", "priority", "size"]);
+const TAG_PREFIX = "tag:";
+const TAG_ID = /^[A-Za-z0-9_-]+$/;
+const MAX_SELECTED_TAGS = 100;
+const LAST = Number.MAX_SAFE_INTEGER;
+const isTableGroupBy = (value: unknown): value is TableGroupBy => typeof value === "string" && TABLE_GROUP_BY_VALUES.has(value as TableGroupBy);
+const cleanTagIds = (value: unknown): string[] => {
+  const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  const valid = list.filter((entry): entry is string => typeof entry === "string" && TAG_ID.test(entry));
+  return [...new Set(valid)].slice(0, MAX_SELECTED_TAGS);
+};
+
+export const serializeTableGrouping = (mode: TableGroupBy, tagIds: unknown = []): string => {
+  if (mode !== "tag") return mode;
+  const ids = cleanTagIds(tagIds);
+  return ids.length > 0 ? `${TAG_PREFIX}${ids.join(",")}` : TABLE_GROUP_BY_TAG_NONE;
+};
+
+const sanitizeBaseTableGrouping = (value: unknown): string | null => {
+  if (isTableGroupBy(value) || value === TABLE_GROUP_BY_TAG_NONE) return value as string;
+  if (typeof value !== "string" || !value.startsWith(TAG_PREFIX)) return null;
+  const ids = cleanTagIds(value.slice(TAG_PREFIX.length));
+  return ids.length > 0 ? `${TAG_PREFIX}${ids.join(",")}` : null;
+};
+
+const groupVisibilitySchema = z.object({
+  groupBy: z.string(),
+  hiddenGroupIds: z.array(z.string().min(1).max(200)).max(500).optional(),
+  onlyGroupId: z.string().min(1).max(200).optional(),
+});
+
+const parseGroupVisibility = (value: unknown) => {
+  if (typeof value !== "string" || !value.startsWith("{")) return null;
+  try {
+    const result = groupVisibilitySchema.safeParse(JSON.parse(value));
+    if (!result.success) return null;
+    const groupBy = sanitizeBaseTableGrouping(result.data.groupBy);
+    if (!groupBy) return null;
+    return { ...result.data, groupBy };
+  } catch {
+    return null;
+  }
+};
+
+export const sanitizeTableGrouping = (value: unknown): string | null => {
+  const visibility = parseGroupVisibility(value);
+  if (!visibility) return sanitizeBaseTableGrouping(value);
+  return serializeEffectiveTableGrouping({
+    ...parseTableGrouping(visibility.groupBy),
+    hiddenGroupIds: visibility.hiddenGroupIds,
+    onlyGroupId: visibility.onlyGroupId,
+  });
+};
+
+export const parseTableGrouping = (value: unknown): TableGrouping => {
+  const visibility = parseGroupVisibility(value);
+  if (visibility) return {
+    ...parseTableGrouping(visibility.groupBy),
+    hiddenGroupIds: visibility.hiddenGroupIds,
+    onlyGroupId: visibility.onlyGroupId,
+  };
+  const sanitized = sanitizeBaseTableGrouping(value);
+  if (!sanitized) return { mode: "column", tagIds: [], allTags: false };
+  if (sanitized === "tag") return { mode: "tag", tagIds: [], allTags: true };
+  if (sanitized === TABLE_GROUP_BY_TAG_NONE) return { mode: "tag", tagIds: [], allTags: false };
+  if (sanitized.startsWith(TAG_PREFIX)) return { mode: "tag", tagIds: cleanTagIds(sanitized.slice(TAG_PREFIX.length)), allTags: false };
+  return { mode: sanitized as TableGroupBy, tagIds: [], allTags: false };
+};
+
+export const sanitizeTableGroupBy = (value: unknown): TableGroupBy | null => {
+  const sanitized = sanitizeTableGrouping(value);
+  return sanitized ? parseTableGrouping(sanitized).mode : null;
+};
+export const effectiveTableGroupBy = (value: unknown): TableGroupBy =>
+  sanitizeTableGroupBy(value) ?? "column";
+
+export const getActiveTableGroupingValueFromProject = (project?: IProject | null): string => {
+  const view = project?.project_view?.user_project_views?.[0];
+  const activeView = view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
+  return sanitizeTableGrouping(activeView?.table_group_by) ?? "column";
+};
+export const getActiveTableGroupingFromProject = (project?: IProject | null): TableGrouping =>
+  parseTableGrouping(getActiveTableGroupingValueFromProject(project));
+export const getActiveTableGroupByFromProject = (project?: IProject | null): TableGroupBy =>
+  getActiveTableGroupingFromProject(project).mode;
+export const effectiveTableGrouping = (project: IProject | null | undefined, modesEnabled: boolean, legacyTagEnabled: boolean): TableGrouping => {
+  const grouping = getActiveTableGroupingFromProject(project);
+  if (modesEnabled) return grouping;
+  if (legacyTagEnabled && grouping.mode === "tag") return { mode: "tag", tagIds: [], allTags: true };
+  return { mode: "column", tagIds: [], allTags: false };
+};
+export const serializeEffectiveTableGrouping = (grouping: TableGrouping): string => {
+  const groupBy = grouping.mode === "tag" && grouping.allTags ? "tag" : serializeTableGrouping(grouping.mode, grouping.tagIds);
+  const hiddenGroupIds = [...new Set(grouping.hiddenGroupIds ?? [])].sort();
+  if (!hiddenGroupIds.length && !grouping.onlyGroupId) return groupBy;
+  return JSON.stringify({
+    groupBy,
+    ...(hiddenGroupIds.length ? { hiddenGroupIds } : {}),
+    ...(grouping.onlyGroupId ? { onlyGroupId: grouping.onlyGroupId } : {}),
+  });
+};
+
+export const applyTableGroupAction = (grouping: TableGrouping, action: TableGroupAction, groupId: string): TableGrouping => {
+  if (action === "reset") return { mode: grouping.mode, tagIds: grouping.tagIds, allTags: grouping.allTags };
+  if (action === "filter") return { ...grouping, hiddenGroupIds: [], onlyGroupId: groupId };
+  return { ...grouping, hiddenGroupIds: [...new Set([...(grouping.hiddenGroupIds ?? []), groupId])] };
+};
+
+type GroupSpec = { key: string; title: string; order: number };
+const byTitle = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
+const buildGroups = (sections: ISection[], specOf: (task: ITask) => GroupSpec): TableTagGroupedSection[] => {
+  const groups = new Map<string, { title: string; order: number; items: ITask[] }>();
+  for (const section of sections) {
+    for (const task of section.items ?? []) {
+      const spec = specOf(task);
+      const group = groups.get(spec.key);
+      if (group) group.items.push(task);
+      else groups.set(spec.key, { title: spec.title, order: spec.order, items: [task] });
+    }
+  }
+  return [...groups.entries()]
+    .sort(([, a], [, b]) => a.order - b.order || byTitle(a.title, b.title))
+    .map(([key, group]) => ({ section_title: group.title, sectionId: key, id: key, items: group.items }));
+};
+
+const labelId = (taskLabel: ITaskLabel) => taskLabel.label?.id ?? taskLabel.labelId;
+export function buildTableSectionsGroupedByTag(sections: ISection[], selectedTagIds: string[] = [], allTags = false): TableTagGroupedSection[] {
+  if (allTags) {
+    const groups = new Map<string, { title: string; items: ITask[] }>();
+    const push = (key: string, title: string, task: ITask) => {
+      const group = groups.get(key);
+      if (group) group.items.push(task);
+      else groups.set(key, { title, items: [task] });
+    };
+    for (const section of sections) for (const task of section.items ?? []) {
+      const seen = new Set<string>();
+      for (const taskLabel of task.taskLabels ?? []) {
+        const id = labelId(taskLabel);
+        if (id && !seen.has(id)) { seen.add(id); push(`tag:${id}`, taskLabel.label?.value?.trim() || id, task); }
+      }
+      if (seen.size === 0) push(TABLE_GROUP_BY_TAG_NONE, NO_TAG_SECTION_TITLE, task);
+    }
+    return [...groups.entries()]
+      .sort(([, a], [, b]) => (a.title === NO_TAG_SECTION_TITLE ? 1 : b.title === NO_TAG_SECTION_TITLE ? -1 : byTitle(a.title, b.title)))
+      .map(([key, group]) => ({ section_title: group.title, sectionId: key, id: key, items: group.items }));
+  }
+  const selected = cleanTagIds(selectedTagIds);
+  return buildGroups(sections, (task) => {
+    const labels = task.taskLabels ?? [];
+    const index = selected.findIndex((id) => labels.some((taskLabel) => labelId(taskLabel) === id));
+    if (index === -1) return { key: "tag:other", title: OTHER_GROUP_TITLE, order: LAST };
+    const id = selected[index];
+    const label = labels.find((taskLabel) => labelId(taskLabel) === id)?.label;
+    return { key: `tag:${id}`, title: label?.value?.trim() || id, order: index };
+  });
+}
+export function countTableTags(sections: ISection[]): { id: string; title: string; count: number }[] {
+  const counts = new Map<string, { id: string; title: string; count: number }>();
+  for (const section of sections) {
+    for (const task of section.items ?? []) {
+      const seen = new Set<string>();
+      for (const taskLabel of task.taskLabels ?? []) {
+        const id = labelId(taskLabel);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const existing = counts.get(id);
+        if (existing) existing.count += 1;
+        else counts.set(id, { id, title: taskLabel.label?.value?.trim() || id, count: 1 });
+      }
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || byTitle(a.title, b.title));
+}
+const assigneeKeys = (task: ITask): { key: string; title: string }[] =>
+  (task.assignees ?? [])
+    .map((assignee) => typeof assignee.agentId === "string"
+      ? { key: `assignee:agent:${assignee.agentId}`, title: assignee.agent?.displayName || "Agent" }
+      : { key: `assignee:user:${assignee.userId}`, title: assignee.user?.displayName || "Member" })
+    .sort((a, b) => a.key.localeCompare(b.key));
+export const buildTableSectionsGroupedByAssignee = (sections: ISection[]) =>
+  buildGroups(sections, (task) => {
+    const first = assigneeKeys(task)[0];
+    return first ? { ...first, order: 0 } : { key: "assignee:none", title: UNASSIGNED_GROUP_TITLE, order: LAST };
+  });
+export const buildTableSectionsGroupedByPriority = (sections: ISection[]) =>
+  buildGroups(sections, (task) => {
+    const index = task.priority?.priority_index ?? 0;
+    return { key: `priority:${index}`, title: task.priority?.Priority_Value?.trim() || NO_PRIORITY_GROUP_TITLE, order: index === 0 ? LAST : index };
+  });
+export const buildTableSectionsGroupedBySize = (sections: ISection[]) =>
+  buildGroups(sections, (task) => {
+    const index = task.estimate?.estimate_index ?? 0;
+    return { key: `size:${index}`, title: task.estimate?.estimate_value?.trim() || NO_SIZE_GROUP_TITLE, order: index === 0 ? LAST : index };
+  });
+export function buildTableSectionsForGrouping(sections: ISection[], grouping: TableGrouping): TableTagGroupedSection[] {
+  let groups: TableTagGroupedSection[];
+  switch (grouping.mode) {
+    case "assignee": groups = buildTableSectionsGroupedByAssignee(sections); break;
+    case "priority": groups = buildTableSectionsGroupedByPriority(sections); break;
+    case "size": groups = buildTableSectionsGroupedBySize(sections); break;
+    case "tag": groups = buildTableSectionsGroupedByTag(sections, grouping.tagIds, grouping.allTags); break;
+    case "column": groups = sections as TableTagGroupedSection[]; break;
+  }
+  if (!grouping.hiddenGroupIds?.length && !grouping.onlyGroupId) return groups;
+  const hidden = new Set(grouping.hiddenGroupIds);
+  return groups.filter((section, index) => {
+    const key = String(tableSectionKey(section) ?? `i${index}`);
+    return !hidden.has(key) && (!grouping.onlyGroupId || grouping.onlyGroupId === key);
+  });
+}
+
+export function parseTableCollapsedSections(value: unknown): Set<string> {
+  if (typeof value !== "string" || !value.trim()) return new Set();
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+export function serializeTableCollapsedSections(collapsed: Set<string>): string | null {
+  if (collapsed.size === 0) return null;
+  return JSON.stringify([...collapsed].sort());
+}
+
+export function sanitizeTableCollapsedSectionsForWrite(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return serializeTableCollapsedSections(parseTableCollapsedSections(value));
+  if (Array.isArray(value)) {
+    const keys = value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+    return serializeTableCollapsedSections(new Set(keys));
+  }
+  return null;
+}
+
+export function getActiveTableCollapsedSectionsFromProject(project?: IProject | null): Set<string> {
+  const view = project?.project_view?.user_project_views?.[0];
+  const activeView =
+    view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view;
+  return parseTableCollapsedSections(activeView?.table_collapsed_sections);
+}
+
+export const tableTaskRowKey = (taskId: number, sid: string | number) => `${taskId}:${sid}`;

@@ -2,7 +2,9 @@ import {
   ModalContainerCustom,
   ModalHeaderComp,
 } from "@/components/Common/CommonModalComponents";
-import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { useFlag } from "@/hooks/useFlag";
+import { getActiveTableColumnsFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   DEFAULT_TABLE_COLUMNS,
   normalizeTableVisibleColumns,
@@ -10,6 +12,7 @@ import {
   TABLE_COLUMN_KEYS,
   tableVisibleColumnsAtom,
   tableColumnWidthsAtom,
+  tableColumnsAccountAtom,
   TableColumnKey,
   customFieldColumnKey,
   isCustomFieldColumnKey,
@@ -76,14 +79,41 @@ const TableColumnsPicker = ({
       currentProject?.id === projectId &&
       currentProject?.showTimeTotals,
   );
+  const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
+  const perViewColumns = tableSortColumnsEnabled && !controlled;
   const [atomColumns, setAtomColumns] = useRecoilState(tableVisibleColumnsAtom);
-  const [columnWidths, setColumnWidths] = useRecoilState(tableColumnWidthsAtom);
+  const setColumnWidths = useSetRecoilState(tableColumnWidthsAtom);
+  const [accountColumns, setAccountColumns] = useRecoilState(tableColumnsAccountAtom);
+  const viewId =
+    currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
+    currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
+    currentProject?.project_view?.default_view?.id;
+  const savedColumns = tableSortColumnsEnabled && !controlled
+    ? getActiveTableColumnsFromProject(currentProject)
+    : null;
+  const accountForView = perViewColumns && accountColumns?.viewId === viewId ? accountColumns : null;
   const normalizeColumns = normalize ?? normalizeTableVisibleColumns;
-  const storedColumns = controlled ? (value ?? []) : atomColumns;
+  const storedColumns = controlled
+    ? (value ?? [])
+    : accountForView
+      ? accountForView.keys
+      : perViewColumns
+        ? (savedColumns?.keys ?? normalizeTableVisibleColumns(undefined))
+        : atomColumns;
   const setStoredColumns = (next: string[] | ((current: string[]) => string[])) => {
     if (controlled && onChange) {
       const current = normalizeColumns(storedColumns);
       onChange(typeof next === "function" ? next(current) : next);
+      return;
+    }
+    if (perViewColumns && viewId) {
+      const current = accountForView?.keys ?? savedColumns?.keys ?? normalizeTableVisibleColumns(undefined);
+      const keys = typeof next === "function" ? next(current) : next;
+      setAccountColumns({
+        viewId,
+        keys,
+        widths: accountForView?.widths ?? savedColumns?.widths ?? {},
+      });
       return;
     }
     setAtomColumns(next);
@@ -158,7 +188,17 @@ const TableColumnsPicker = ({
       controlled ? base : seedMissingCustomFieldColumns(base, customFieldKeys),
     );
   };
-  const resetWidths = () => setColumnWidths({});
+  const resetWidths = () => {
+    if (perViewColumns && viewId) {
+      setAccountColumns({
+        viewId,
+        keys: storedColumns,
+        widths: {},
+      });
+      return;
+    }
+    setColumnWidths({});
+  };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {

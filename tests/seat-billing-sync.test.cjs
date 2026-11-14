@@ -18,16 +18,17 @@ const loadTs = (rel) => {
 
 const prisma = loadTs("src/lib/prisma.ts");
 const subscriptionModule = jiti(path.join(root, "src/lib/subscription.ts"));
-const { syncSeatBillingOnJoin } = jiti(path.join(root, "src/lib/syncSeatBilling.ts"));
+const { syncSeatBillingOnJoin, reconcileSeatBillingForTeam } = jiti(path.join(root, "src/lib/syncSeatBilling.ts"));
 const passthrough = async (_teamId, run) => run(() => {});
 const sync = (teamId) => syncSeatBillingOnJoin(teamId, undefined, passthrough);
+const reconcile = (teamId) => reconcileSeatBillingForTeam(teamId, undefined, passthrough);
 
 let updates = [];
 let teamRow = null;
 let stripeQuantity = 0;
 let updateThrows = false;
 
-function stub({ team, quantity, throws = false }) {
+function stub({ team, quantity, throws = false, stripeStatus, stripeCustomer = "cus_test" }) {
   updates = [];
   teamRow = team;
   stripeQuantity = quantity;
@@ -41,7 +42,9 @@ function stub({ team, quantity, throws = false }) {
   });
   prisma.subscriptionPlan.updateMany = async () => ({ count: 1 });
   subscriptionModule.stripe.subscriptions.retrieve = async () => ({
-    id: "sub_test", customer: "cus_test", status: teamRow.subscriptionPlan[0].subscriptionStatus,
+    id: "sub_test",
+    customer: stripeCustomer,
+    status: stripeStatus ?? teamRow.subscriptionPlan[0].subscriptionStatus,
     items: { data: [{ id: "si_test", quantity: stripeQuantity, price: { id: "price_test" } }] },
   });
   prisma.user.findUnique = async () => ({ email: "owner@example.com" });
@@ -160,6 +163,48 @@ test("a team with no subscription is skipped", async () => {
   });
   assert.equal(await sync("team_1"), "SKIPPED");
   assert.deepEqual(updates, []);
+});
+
+test("a canceled Stripe subscription is saved as canceled and is not charged", async () => {
+  stub({
+    team: paidTeam({ members: 6, stripe_customer_id: "cus_test" }),
+    quantity: 1,
+    stripeStatus: "canceled",
+  });
+  const writes = [];
+  prisma.$transaction = async (fn) => fn(prisma);
+  prisma.subscriptionPlan.updateMany = async (args) => {
+    writes.push(args);
+    return { count: 1 };
+  };
+  prisma.team.updateMany = async (args) => {
+    writes.push(args);
+    return { count: 1 };
+  };
+  assert.equal(await reconcile("team_1"), "SKIPPED");
+  assert.deepEqual(updates, []);
+  assert.equal(writes[0].data.subscriptionStatus, "canceled");
+  assert.equal(writes[0].where.subscriptionId, "sub_test");
+  assert.equal(writes[1].where.id, "team_1");
+  assert.equal(writes[1].where.activeSubscriptionPlanId, "sub_test");
+  assert.equal(writes[1].data.activeSubscriptionPlanId, null);
+  assert.equal(writes[1].data.activeSubscriptionPlanItemId, null);
+});
+
+test("a canceled subscription for a different customer is not cleared or charged", async () => {
+  stub({
+    team: paidTeam({ members: 6, stripe_customer_id: "cus_test" }),
+    quantity: 1,
+    stripeStatus: "canceled",
+    stripeCustomer: "cus_other",
+  });
+  let writes = 0;
+  prisma.$transaction = async () => {
+    writes += 1;
+  };
+  assert.equal(await reconcile("team_1"), "Error");
+  assert.deepEqual(updates, []);
+  assert.equal(writes, 0);
 });
 
 test("a Stripe failure is reported, never thrown into the join flow", async () => {

@@ -1,6 +1,14 @@
 import { HTPR_8629_KANBAN_HOVER_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8629-kanban-hover-layout";
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
+import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-8927-board-card-overflow";
+import { HTPR_8960_BORDER_ONLY_SELECT_FLAG } from "@/lib/flags/definitions/htpr-8960-border-only-select";
+import { HTPR_8970_CALM_CARDS_FLAG } from "@/lib/flags/definitions/htpr-8970-calm-cards";
+import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
+import { HTPR_9026_CARD_PEOPLE_FLAG } from "@/lib/flags/definitions/htpr-9026-card-people";
+import { HTPR_9075_CARD_PROPERTY_ROW_FLAG } from "@/lib/flags/definitions/htpr-9075-card-property-row";
+import { ALL_CARD_PARTS, EMPTY_CARD_PARTS, cardPartsView } from "@/lib/kanban/cardParts";
+import { useCardParts } from "@/hooks/General/useCardParts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React, { useContext } from "react";
@@ -14,7 +22,9 @@ import {
   daysSince,
   formatKanbanStalenessLine,
   stalenessLevel,
+  taskStaleness,
 } from "@/lib/staleness";
+import { Clock } from "lucide-react";
 import { getActiveStalenessFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
 import CardSubTasks from "./CardSubTasks";
@@ -62,7 +72,7 @@ interface KanbanTaskCardProps {
   onSubtaskClick: (uniqueIndex: number) => void;
   onSelectionClick?: (
     id: number,
-    event?: React.MouseEvent<HTMLButtonElement>,
+    event?: React.MouseEvent<HTMLElement>,
   ) => void;
   selectionMode?: boolean;
   phoneHoldSelect?: boolean;
@@ -109,12 +119,35 @@ const KanbanTaskCard = ({
   const isMobile = useContext(MobileViewContext);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   const stableHoverLayout = useFlag(HTPR_8629_KANBAN_HOVER_LAYOUT_FLAG);
+  const borderOnlySelect = useFlag(HTPR_8960_BORDER_ONLY_SELECT_FLAG);
+  const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
+  const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG);
+  const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
+  const cardPeople = useFlag(HTPR_9026_CARD_PEOPLE_FLAG);
+  const collapseEmptyRow = useFlag(HTPR_9075_CARD_PROPERTY_ROW_FLAG);
+  const savedParts = useCardParts();
+  const parts = savedParts ?? EMPTY_CARD_PARTS;
+  const card = cardPartsView(task, blockingUser, cardSettings ? parts : ALL_CARD_PARTS);
+  const staleSnapshot = useFirstScreenSurface();
+  const staleLevel = calm && card.staleness && getActiveStalenessFromProject(project)
+    ? taskStaleness(
+        task,
+        { warnDays: project?.staleWarnDays, hotDays: project?.staleHotDays },
+        staleSnapshot ? Date.parse(staleSnapshot.now) : undefined,
+      ).level
+    : "none";
+  const showsStaleClock = collapseEmptyRow ? staleLevel !== "none" : Boolean(calm && card.staleness);
+  const subTasks = <CardSubTasks subTasks={card.subTasks} currentSetting={currentSetting} onClick={onSubtaskClick} />;
   return (
   <div
     ref={cardRef}
     tabIndex={0}
     id={`task-${task.id}`}
-    className="outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1"
+    className={cn(
+      "outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1",
+      cardOverflowClamp && "min-w-0 max-w-full w-full",
+      calm && "rounded-[4px]",
+    )}
     onFocusCapture={onFocusCapture}
     onBlurCapture={onBlurCapture}
     onMouseEnter={onMouseEnter}
@@ -125,8 +158,14 @@ const KanbanTaskCard = ({
       provided={provided}
       snapshot={snapshot}
       selected={selected}
+      selectionMode={selectionMode}
+      onSelectToggle={
+        borderOnlySelect && onSelectionClick
+          ? (event) => onSelectionClick(task.id, event)
+          : undefined
+      }
       selectionControl={
-        onSelectionClick ? (
+        onSelectionClick && !borderOnlySelect ? (
           <SelectionCheckbox
             id={task.id}
             isChecked={selected}
@@ -150,15 +189,13 @@ const KanbanTaskCard = ({
       _currentProject={project}
       openDetail={openDetail}
       active={active}
-      blocked={
-        (task.waitingOnUserId !== null && task.waitingOnUserId !== undefined) ||
-        (task.blockingTasks?.length ?? 0) > 0
-      }
+      blocked={card.blocked}
       linkClassName={cn(
-        !stableHoverLayout && "group-hover/kanban-selection:pl-7",
-        (selectionMode || selected) && "pl-7",
+        calm && "px-3 py-2 gap-2",
+        !stableHoverLayout && !borderOnlySelect && "group-hover/kanban-selection:pl-7",
+        !borderOnlySelect && (selectionMode || selected) && "pl-7",
       )}
-      parentClassName={isArchivedOnBoard ? "opacity-50" : undefined}
+      parentClassName={cn(isArchivedOnBoard && "opacity-50", calm && "rounded-[4px]") || undefined}
     >
       <FlattenedParentTask
         parentTask={task.parentTask}
@@ -167,16 +204,17 @@ const KanbanTaskCard = ({
       />
       <TaskTopRow
         task={task}
+        project={project}
         updateActiveItemAndItemInView={updateActiveItemAndItemInView}
         setShowAssignModal={setShowAssignModal}
         eHandler={eHandler}
-        _count={task.totalComments ?? task._count?.comments}
-        notifications={task.notifications}
-        ticketNumber={task.ticketNumber ?? ""}
-        assignees={assignedUsers}
-        agentAssignees={agentAssignees}
-        countNotifications={task._count?.notifications}
-        countSubtasks={task.subTasks?.length ?? 0}
+        _count={card.commentCount}
+        notifications={card.notifications}
+        ticketNumber={card.ticketNumber}
+        assignees={cardSettings && cardPeople && !parts.people ? [] : assignedUsers}
+        agentAssignees={cardSettings && cardPeople && !parts.people ? [] : agentAssignees}
+        countNotifications={card.notificationCount}
+        countSubtasks={card.subTaskCount}
         subTaskSetting={currentSetting}
         toggleDelete={toggleDelete}
         markTaskAsDone={markTaskAsDone}
@@ -184,10 +222,17 @@ const KanbanTaskCard = ({
         hover={hover}
         handleStarTask={handleStarTask}
         avatarSize={cleanup ? (isMobile ? 18 : 20) : undefined}
+        staleClock={showsStaleClock ? (
+          <TaskStaleClock
+            enabled={getActiveStalenessFromProject(project)}
+            project={project}
+            task={task}
+          />
+        ) : undefined}
       />
-      <TaskTitle title={task.title} />
+      <TaskTitle title={task.title} cardOverflowClamp={cardOverflowClamp} />
       <TaskTagsRow
-        task={task}
+        task={card.task}
         project={project}
         setShowEstimateModal={setShowEstimateModal}
         setShowPriorityModal={setShowPriorityModal}
@@ -195,24 +240,24 @@ const KanbanTaskCard = ({
         setShowAssignModal={setShowAssignModal}
         toggleDueDate={toggleDueDate}
         updateActiveItemAndItemInView={updateActiveItemAndItemInView}
-        dueDate={task.dueDate}
-        estimate={task.estimate!}
-        priority={task.priority!}
-        taskLabels={task.taskLabels}
+        dueDate={card.dueDate}
+        estimate={card.estimate!}
+        priority={card.priority!}
+        taskLabels={card.taskLabels}
         hasDraft={hasDraft}
-        blockingUser={blockingUser}
-        agents={agentAssignees}
+        blockingUser={card.blockingUser}
+        agents={cardSettings && cardPeople && !parts.people ? [] : agentAssignees}
+        cardOverflowClamp={cardOverflowClamp}
       />
-      <CardSubTasks
-        subTasks={task.subTasks}
-        currentSetting={currentSetting}
-        onClick={onSubtaskClick}
-      />
-      <TaskStalenessLine
-        enabled={getActiveStalenessFromProject(project)}
-        project={project}
-        task={task}
-      />
+      {calm ? <div className="contents [&>div]:gap-1 [&>div>div]:gap-1 [&_span]:!text-micro [&_span]:leading-4">{subTasks}</div> : subTasks}
+      {!calm && card.staleness && (
+        <TaskStalenessLine
+          enabled={getActiveStalenessFromProject(project)}
+          project={project}
+          task={task}
+          cardOverflowClamp={cardOverflowClamp}
+        />
+      )}
     </TaskDraggableContainer>
   </div>
   );
@@ -222,10 +267,12 @@ const TaskStalenessLine = ({
   enabled,
   project,
   task,
+  cardOverflowClamp,
 }: {
   enabled: boolean;
   project?: IProject;
   task: ITask;
+  cardOverflowClamp: boolean;
 }) => {
   const snapshot = useFirstScreenSurface();
   const showFresh = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
@@ -260,24 +307,81 @@ const TaskStalenessLine = ({
 
   return showFresh || level !== "none" ? (
     <p
-      className={`basis-full text-micro leading-none ${
+      className={cn(
+        "basis-full text-micro leading-none",
+        cardOverflowClamp && "min-w-0 max-w-full truncate",
         level === "hot"
           ? "text-[var(--color-card-age-hot)]"
           : level === "warn"
             ? "text-[var(--color-card-age-warn)]"
-            : "text-text-light-gray"
-      }`}
+            : "text-text-light-gray",
+      )}
     >
       {ageLine}
     </p>
   ) : null;
 };
 
-export const TaskTitle = ({ title }: { title: string }) => {
-  const wrapBetweenWords = useFlag(HTPR_7350_CARD_TITLE_WRAP_FLAG);
+const TaskStaleClock = ({
+  enabled,
+  project,
+  task,
+}: {
+  enabled: boolean;
+  project?: IProject;
+  task: ITask;
+}) => {
+  const snapshot = useFirstScreenSurface();
+  if (!enabled) return null;
+  const staleness = taskStaleness(
+    task,
+    { warnDays: project?.staleWarnDays, hotDays: project?.staleHotDays },
+    snapshot ? Date.parse(snapshot.now) : undefined,
+  );
+  if (staleness.level === "none") return null;
+  const days = Math.max(staleness.daysInColumn ?? 0, staleness.daysSinceLastComment ?? 0);
+  const detail = `On board ${staleness.daysOnBoard ?? 0}d\nIn this column ${staleness.daysInColumn ?? 0}d\nLast comment ${staleness.daysSinceLastComment ?? 0}d ago`;
   return (
-    <div className="flex flex-1 text-white-black">
-      <p className={`${wrapBetweenWords ? "wrap-anywhere" : "break-all"} whitespace-pre-line text-left text-dense`}>
+    <span
+      data-testid="card-stale-clock"
+      data-level={staleness.level}
+      title={detail}
+      aria-label={detail}
+      className={cn(
+        "flex h-4 items-center gap-[3px] text-micro leading-4",
+        staleness.level === "hot" ? "text-[var(--color-card-age-hot)]" : "text-[var(--color-card-age-warn)]",
+      )}
+    >
+      <Clock size={12} strokeWidth={1.75} />
+      {`${days}d`}
+    </span>
+  );
+};
+
+export const TaskTitle = ({
+  title,
+  cardOverflowClamp = false,
+}: {
+  title: string;
+  cardOverflowClamp?: boolean;
+}) => {
+  const wrapBetweenWords = useFlag(HTPR_7350_CARD_TITLE_WRAP_FLAG);
+  const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG);
+  return (
+    <div
+      className={cn(
+        "flex flex-1 text-white-black",
+        cardOverflowClamp && "min-w-0 max-w-full overflow-hidden",
+      )}
+    >
+      <p
+        className={cn(
+          wrapBetweenWords ? "wrap-anywhere" : "break-all",
+          "whitespace-pre-line text-left text-dense",
+          cardOverflowClamp && "min-w-0 max-w-full",
+          calm && "font-medium leading-snug",
+        )}
+      >
         {title}
       </p>
     </div>

@@ -1,17 +1,33 @@
 # Comments and mentions
 
-## How a customer reaches it
+## Sub-features
+
+- `local-writing-corrections` Local writing corrections.
+- `comment-dictation-shortcuts` Comment dictation shortcuts.
+- `durable-agent-attribution` Durable agent attribution.
+- `retired-image-generation` Retired image generation.
+- `agent-writing-rules` Agent writing rules.
+
+## How to get to it (user POV)
 
 The comment box at the bottom of a task detail view. `@` opens the mention
 picker.
 
-## How to drive it
+## Driving it with agent-browser
 
 `agent-browser`, headless, `?realtime=on` on the task. Post a comment, edit
 your own comment, and if the ticket touches mentions, `@` a user and confirm
 the picker resolves and the mention renders as a link/chip, not plain text.
 
-## What usually breaks
+**Hands-free drive:**
+`node .claude/skills/verify-qa/scripts/comments-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
+Posts, reloads and deletes a comment.
+Prints PASS/FAIL per step and `comments ok`. Loopback only.
+`--break post` must print `negative control ok`.
+Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+
+
+## Gotchas
 
 - Edit control ordering on your own comment ([HTPR-6514](https://app.hypertask.ai/detail/project-15/6514), "keep Edit first on
   your own comment").
@@ -21,7 +37,7 @@ the picker resolves and the mention renders as a link/chip, not plain text.
 - Direct task closing after posting a comment when it should stay open
   ([HTPR-6559](https://app.hypertask.ai/detail/project-15/6559)).
 
-## What proof to collect
+### What proof to collect
 
 Screenshot the comment thread after posting, showing the new comment and any
 attachment rendered correctly (border, background, light and dark theme if
@@ -33,12 +49,13 @@ persisted with the same formatting.
 `node --test tests/comment-attachment-background.test.cjs` checks comment attachment surface, border and theme-token source rules; screenshots still prove the rendered appearance.
 `node --test tests/linkable-mention.test.cjs` round-trips task and page mentions as links and person mentions as spans in the rich-text extension; it does not drive the picker or save a comment.
 
-## Cleanup
+### Cleanup
 
-Delete any test comment you posted on the account's own board. Comments
-don't currently have a bulk-cleanup script, so do it by hand through the UI.
+`comments-drive-live.mjs` deletes the comment it posted, then deletes the
+sandbox task. A comment you posted outside that script still needs deleting
+on the account's own board.
 
-## Local writing corrections
+### Local writing corrections
 
 When local sentence capitalization is enabled, type `hello` in an empty
 comment draft. It becomes `Hello`; the brief correction underline covers
@@ -52,7 +69,7 @@ Run the same draft checks in the AI chat composer, which uses the shared
 writing extension. Clear drafts without sending them. For flag-off checks,
 use the plain QA account and confirm typing remains unchanged.
 
-## Comment dictation shortcuts
+### Comment dictation shortcuts
 
 On a long QA Sandbox ticket, scroll to the top and blur any text field.
 Press Ctrl+Shift+D (Cmd+Shift+D on macOS): the existing comment box and
@@ -68,7 +85,7 @@ exercise flag Off with the component test instead.
 
 Targeted regression: `npm run test:file -- tests/htpr-8139-comment-dictation-scroll.test.cjs`.
 
-## Durable agent attribution
+### Durable agent attribution
 
 Agent comments keep the name stored when written. Removing the acting agent
 must not replace that name with "Private agent". Living private agents remain
@@ -86,7 +103,7 @@ Never save credentials, credential-bearing responses, traces, or token screens.
 Targeted dispatch and privacy coverage:
 `npm run test:file -- tests/htpr-8114-agent-attribution-removal.test.cjs tests/mcp-comments-cross-team-agent-visibility.test.cjs tests/mcp-task-context-agent-visibility.test.cjs tests/mcp-comment-reactions.test.cjs`.
 
-## Retired image generation
+### Retired image generation
 
 With `htpr-7859-remove-image-generation` enabled, Settings > Team > Default
 models and AI features have no Image generation row. Ctrl+K has no image
@@ -104,7 +121,7 @@ tests prove flag Off restores creation and its attachment/comment writes,
 while the removal path performs none. Record absent attachment fixtures as
 UNREACHABLE rather than claiming rendering proof.
 
-## Agent writing rules
+### Agent writing rules
 
 Agent comments need `kind: question`, `qa` or `done` to appear in the
 people thread. Untyped text goes to the agent log, including mentions and
@@ -121,9 +138,12 @@ return 400 naming `text`; a short typed summary must remain valid. Untyped
 technical text must report `would.routedTo: log`, including a person mention
 or reply target. Read the real comment list after posting a hidden note and
 confirm its unique marker is absent. Reload the thread and confirm the
-short typed summary remains. Agent task create/update must also reject long
-new titles and descriptions before any mutation. Edits may preserve existing
-lines, but new lines are checked. Repeat with a human QA credential: the same
-long text must remain valid. Delete only the temporary QA fixtures.
+short typed summary remains. A people comment edit is refused when any line
+breaks a rule, including a line that was already stored. An agent run reply
+on the ticket is checked the same way. Agent task create/update must also
+reject long new titles and descriptions before any mutation. A task
+description edit may still keep lines that were already there, while new
+lines are checked. Repeat with a human QA credential: the same long text
+must remain valid. Delete only the temporary QA fixtures.
 
-Targeted regression: `npm run test:file -- tests/yper4-910-agent-writing.test.cjs tests/mcp-comments-agent-chatter-routing.test.cjs tests/htpr-7512-comment-attachments-routing.test.cjs`.
+Targeted regression: `npm run test:file -- tests/yper4-910-agent-writing.test.cjs tests/htpr-8889-comment-writing.test.cjs tests/mcp-comments-agent-chatter-routing.test.cjs tests/htpr-7512-comment-attachments-routing.test.cjs`.

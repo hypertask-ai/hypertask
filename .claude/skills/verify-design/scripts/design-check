@@ -9,6 +9,7 @@ Usage:
   design-check checklist TICKET
   design-check shoot URL OUTDIR [--themes porcelain,amoled,graphite-2] [--viewport 1920x1032] [--state PATH] [--allow-redirect] [--press KEYS]
   design-check compare FRAME.png LIVE.png SIDE.png
+  design-check fail-column SECTION...
   design-check run TICKET URL --frame NAME.png [--themes ...] [--viewport ...] [--state PATH] [--allow-redirect] [--press KEYS]
   KEYS: Playwright key presses, space separated, sent after load, e.g. "Control+j" or "Shift+O"
 Examples:
@@ -48,6 +49,7 @@ case "$cmd" in
  frames) [ "$#" = 2 ] || die 'Usage: design-check frames TICKET OUTDIR'; frames "$@" ;;
  checklist) [ "$#" = 1 ] || die 'Usage: design-check checklist TICKET'; checklist "$1" ;;
  compare) [ "$#" = 3 ] || die 'Usage: design-check compare FRAME LIVE SIDE'; compare_images "$@" ;;
+ fail-column) [ "$#" -ge 1 ] || die 'Usage: design-check fail-column SECTION...'; node "$DIR/design-fail-column.mjs" "$@" ;;
  doctor|shoot|run)
   state="$("$QA/qa-login" flags --state)"; themes='porcelain,amoled,graphite-2'; viewport='1920x1032'; allow=no; frame=''; press=''
   if [ "$cmd" = shoot ] || [ "$cmd" = run ]; then [ "$#" -ge 2 ] || die 'Missing arguments; run --help.'; first="$1"; second="$2"; shift 2; fi

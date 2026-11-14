@@ -20,7 +20,7 @@ import {
   toggleMatchFilters,
   toIFilterSettings,
 } from "@/lib/filterSettingsMutations";
-import type { IFilterSettings, TFilter, TMatchFilters } from "@/models/Filters/model";
+import type { IFilterSettings, TFilter, TFilterMatch } from "@/models/Filters/model";
 import type { CalendarLabelSummary, CalendarUserSummary } from "@/lib/calendarSync/contract";
 
 type MyTasksFilterContextValue = {
@@ -33,7 +33,7 @@ type MyTasksFilterContextValue = {
   removeFilter: (type: TFilter) => void;
   resetFilters: () => void;
   toggleFilterMatchOptions: () => void;
-  toggleFilterValueMatch: (type: TFilter, next?: TMatchFilters) => void;
+  toggleFilterValueMatch: (type: TFilter, next?: TFilterMatch) => void;
 };
 
 const MyTasksFilterContext = createContext<MyTasksFilterContextValue | null>(

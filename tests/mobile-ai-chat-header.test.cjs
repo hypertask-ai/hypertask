@@ -44,6 +44,7 @@ stubSourceModule("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
 stubSourceModule("src/lib/flags/definitions/htpr-7773-chat-header-name.ts", {
   HTPR_7773_CHAT_HEADER_NAME_FLAG: "htpr-7773-chat-header-name",
 });
+stubSourceModule("src/hooks/General/useAiChatOpenPreferences.ts", { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) });
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: () => false,
 });

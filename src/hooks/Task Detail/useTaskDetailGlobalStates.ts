@@ -31,7 +31,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type RefObject,
+  type SetStateAction,
 } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
@@ -140,6 +142,17 @@ const useTaskDetailGlobalStates = (
     }));
   }, []);
   const [stacked, setStacked] = useState<StackedType>(_initialStacked ?? {});
+  const collapseAgentLaneFlag = useFlag("htpr-8262-agent-lane-collapse");
+  const [agentLaneFoldState, setAgentLaneFoldState] = useState({ taskId: _parsedTask?.id, collapsed: false, version: 0 });
+  const readAgentLaneFold = () => {
+    if (!collapseAgentLaneFlag) return { taskId: _parsedTask?.id, collapsed: false, version: 0 };
+    return agentLaneFoldState;
+  };
+  const agentLaneFold = readAgentLaneFold();
+  const setAgentLaneFold = useCallback<Dispatch<SetStateAction<typeof agentLaneFoldState>>>((update) => {
+    if (!collapseAgentLaneFlag) return;
+    setAgentLaneFoldState(update);
+  }, [collapseAgentLaneFlag]);
 
   const [tasksPlayList, setTasksPlaylist] = useRecoilState(tasksPlayListAtom);
   const [__, setInboxTaskIndexAtom] = useRecoilState(InboxTaskIndexAtom);
@@ -800,6 +813,8 @@ const useTaskDetailGlobalStates = (
     requestDescriptionFocus,
     stacked,
     setStacked,
+    agentLaneFold,
+    setAgentLaneFold,
     returnCurrentFocusedType,
     CTRL_J_ENTER_Handler,
     comments,

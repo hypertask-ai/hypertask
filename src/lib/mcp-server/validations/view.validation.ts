@@ -71,6 +71,7 @@ export type GetViewInput = z.infer<typeof ListViewsInputSchema>;
 
 const viewVisibilitySchema = z.enum(['Public', 'Private']);
 const viewMatchSchema = z.enum(['ALL', 'ANY']);
+const labelMatchSchema = z.enum(['ALL', 'ANY', 'HIDE']);
 const viewSortingModeSchema = z.enum(SORTING_MODES);
 const viewSortingOrderSchema = z.enum(['Ascending', 'Descending']);
 const viewSubtaskSettingSchema = z.enum(SUBTASK_SETTINGS).describe(
@@ -105,6 +106,7 @@ export function getCreateViewInputSchema() {
           label_names: z.array(z.string().min(1)).optional(),
           assignee_ids: z.array(viewAssigneeIdSchema).optional(),
           match: viewMatchSchema.optional(),
+          label_match: labelMatchSchema.optional(),
         })
         .strict()
         .optional(),
@@ -131,6 +133,7 @@ export function getUpdateViewBaseSchema() {
       label_names: z.array(z.string().min(1)).optional(),
       assignee_ids: z.array(viewAssigneeIdSchema).optional(),
       match: viewMatchSchema.optional(),
+      label_match: labelMatchSchema.optional(),
       board_filters: nativeBoardFiltersSchema.optional(),
       visible_section_ids: visibleSectionIdsSchema.optional(),
       sorting_mode: viewSortingModeSchema.optional(),
@@ -150,6 +153,7 @@ export function getUpdateViewInputSchema() {
       data.label_names !== undefined ||
       data.assignee_ids !== undefined ||
       data.match !== undefined ||
+      data.label_match !== undefined ||
       data.board_filters !== undefined ||
       data.visible_section_ids !== undefined ||
       data.sorting_mode !== undefined ||
@@ -165,6 +169,7 @@ export function getUpdateViewInputSchema() {
         'label_names',
         'assignee_ids',
         'match',
+        'label_match',
         'board_filters',
         'visible_section_ids',
         'sorting_mode',

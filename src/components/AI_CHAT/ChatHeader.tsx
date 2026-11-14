@@ -1,12 +1,14 @@
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
-import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
+import type { SidebarChatAgent, SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   Bot,
+  type LucideIcon,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Ellipsis,
   History,
@@ -14,16 +16,20 @@ import {
   Maximize2,
   Minus,
   PanelRight,
+  PanelRightClose,
   Pencil,
   PictureInPicture2,
   Pin,
   PinOff,
+  Search,
   SquarePen,
   Trash2,
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
+import { useAiChatOpenPreferences } from "@/hooks/General/useAiChatOpenPreferences";
+import { AI_CHAT_AUTO_OPEN_DEFAULTS, AI_CHAT_AUTO_OPEN_KEYS } from "@/lib/aiChat/autoOpenPreferences";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7575_PHONE_CHAT_DELETE_FLAG } from "@/lib/flags/definitions/htpr-7575-phone-chat-delete";
 import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-7773-chat-header-name";
@@ -46,6 +52,7 @@ import {
   aiChatAutoOpenSuppressedAtom,
   aiChatExplicitOpenAtAtom,
   aiChatPinnedAtom,
+  keepAiChatClosedAtom,
   showAIChatInterfaceAtom,
 } from "@/store";
 
@@ -58,17 +65,56 @@ function getSessionUpdatedTime(session: HistorySession): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
-function partitionSessionsByRecency(sessions: HistorySession[]): {
+function partitionSessionsByRecency(sessions: HistorySession[], withToday = false): {
+  today: HistorySession[];
   previous7Days: HistorySession[];
   older: HistorySession[];
 } {
   const cutoff = Date.now() - 7 * MS_PER_DAY;
+  const startOfToday = new Date().setHours(0, 0, 0, 0);
+  const today: HistorySession[] = [];
   const previous7Days: HistorySession[] = [];
   const older: HistorySession[] = [];
   for (const s of sessions) {
-    (getSessionUpdatedTime(s) >= cutoff ? previous7Days : older).push(s);
+    const updated = getSessionUpdatedTime(s);
+    (withToday && updated >= startOfToday ? today : updated >= cutoff ? previous7Days : older).push(s);
   }
-  return { previous7Days, older };
+  return { today, previous7Days, older };
+}
+
+function ActiveCheck({ className }: { className?: string }) {
+  return <Check size={16} className={className} aria-hidden strokeWidth={1.75} />;
+}
+
+const MENU_ROW_CLASS = "flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2 text-left text-content font-medium text-white-black transition-colors hover:bg-hover-active";
+const RECENT_AGENT_COUNT = 3;
+
+const latestAgentSessionTime = (agent: SidebarChatAgent): number =>
+  Math.max(0, ...(agent.sessions ?? []).map((session) => {
+    const time = new Date(session.updatedAt).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  }));
+
+const filterAgentsByQuery = (agents: SidebarChatAgent[], query: string): SidebarChatAgent[] => {
+  const needle = query.trim().toLowerCase();
+  return needle ? agents.filter((agent) => agent.displayName.toLowerCase().includes(needle)) : agents;
+};
+
+const visibleDropdownAgents = (agents: SidebarChatAgent[], query: string, showAll: boolean): SidebarChatAgent[] => {
+  const sorted = [...agents].sort((a, b) => latestAgentSessionTime(b) - latestAgentSessionTime(a) || a.displayName.localeCompare(b.displayName));
+  const matches = filterAgentsByQuery(sorted, query);
+  return showAll || query.trim() ? matches : matches.slice(0, RECENT_AGENT_COUNT);
+};
+
+
+function MenuRow({ icon: Icon, label, onClick, checked }: { icon: LucideIcon; label: string; onClick: () => void; checked?: boolean }) {
+  return (
+    <button type="button" role={checked === undefined ? "menuitem" : "menuitemradio"} aria-checked={checked} className={MENU_ROW_CLASS} onClick={onClick}>
+      <Icon size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {checked && <ActiveCheck className="shrink-0 text-white-black" />}
+    </button>
+  );
 }
 
 function ChatSessionRow({
@@ -76,12 +122,14 @@ function ChatSessionRow({
   isActive,
   isRunning,
   onSelect,
+  compact = false,
   children,
 }: {
   chat: HistorySession;
   isActive: boolean;
   isRunning: boolean;
   onSelect: () => void;
+  compact?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -90,29 +138,21 @@ function ChatSessionRow({
         type="button"
         data-chat-session-id={chat.id}
         onClick={onSelect}
-        className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors", children && "min-w-0 flex-1")}
+        className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors", children && "min-w-0 flex-1", compact && "h-[30px] rounded-[4px] px-2 py-0", compact && isActive && "bg-active-modal-element")}
       >
         <span className="min-w-0 flex-1 truncate font-normal">
           {chat.title}
         </span>
         {chat.agentName && <span className="max-w-24 truncate text-micro text-icon-dark-gray">{chat.agentName}</span>}
         {isRunning && <Loader2 size={16} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />}
-        {isActive && (
-          <Check
-            size={16}
-            className="shrink-0 text-white-black"
-            aria-hidden
-            strokeWidth={1.75}
-          />
-        )}
+        {isActive && !compact && <ActiveCheck className="shrink-0 text-white-black" />}
       </button>
       {children}
     </li>
   );
 }
 
-export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean } = {}) => {
-  const hasAgentSessions = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !windowDrag }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean; allowDocking?: boolean } = {}) => {
   const [agentsOpen, setAgentsOpen] = useState(false);
   const agentButtonRef = useRef<HTMLButtonElement>(null);
   const closeAgents = useCallback(() => setAgentsOpen(false), []);
@@ -138,6 +178,8 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
   const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
   const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
+  const headerMenus = useFlag("htpr-8956-ai-chat-header-menus");
+  const keepClosedSwitch = useFlag("htpr-7530-keep-ai-chat-closed");
   const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
     togglePopover,
@@ -169,6 +211,22 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const [isStartingNewSession, setIsStartingNewSession] = useState(false);
   const isStartingNewSessionRef = useRef(false);
   const [aiChatPinned, setAiChatPinned] = useRecoilState(aiChatPinnedAtom);
+  const [keepAiChatClosedLegacy, setKeepAiChatClosedLegacy] = useRecoilState(keepAiChatClosedAtom);
+  const openPrefs = useAiChatOpenPreferences();
+  const keepAiChatClosed = openPrefs.enabled ? AI_CHAT_AUTO_OPEN_KEYS.every((key) => !openPrefs.values[key]) : keepAiChatClosedLegacy;
+  const setKeepAiChatClosed = (closed: boolean) => {
+    if (!openPrefs.enabled) setKeepAiChatClosedLegacy(closed);
+    else AI_CHAT_AUTO_OPEN_KEYS.forEach((key) => openPrefs.setPreference(key, closed ? false : AI_CHAT_AUTO_OPEN_DEFAULTS[key]));
+  };
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [agentViewId, setAgentViewId] = useState<string | null>(null);
+  const [showAllAgents, setShowAllAgents] = useState(false);
+  const [agentOptionIndex, setAgentOptionIndex] = useState(-1);
+  const agentViewRef = useRef<HTMLDivElement>(null);
+  const hasAgentSessions = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+  const agentsInDropdown = hasAgentSessions && headerMenus && !isMbl && !!sidebarChats;
+  const [historyMaxHeight, setHistoryMaxHeight] = useState<number | undefined>(undefined);
+  const headerRef = useRef<HTMLDivElement>(null);
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   const [, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(
@@ -177,6 +235,15 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const dropdownRef = useRef<HTMLDivElement>(null);
   const overflowRef = useRef<HTMLDivElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const chatHeight = headerRef.current?.parentElement?.clientHeight;
+    setHistoryMaxHeight(isDropdownOpen && chatHeight ? Math.round(chatHeight * 0.75) : undefined);
+    if (!isDropdownOpen) { setHistoryQuery(""); setAgentViewId(null); setShowAllAgents(false); setAgentOptionIndex(-1); }
+  }, [isDropdownOpen]);
+  useEffect(() => { setAgentOptionIndex(-1); }, [historyQuery, showAllAgents]);
+  useEffect(() => {
+    if (agentViewId) agentViewRef.current?.focus({ preventScroll: true });
+  }, [agentViewId]);
   useEffect(() => {
     if (sessionPagingEnabled && isDropdownOpen) {
       void refreshHistorySessions();
@@ -192,12 +259,20 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   }, [sessionPagingEnabled, isDropdownOpen, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
 
   const filterAgentSessions = Boolean(sidebarChats);
-  const { previous7Days, older } = useMemo(() => {
-    const personal = ((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId);
+  const { today, previous7Days, older } = useMemo(() => {
+    const query = headerMenus ? historyQuery.trim().toLowerCase() : "";
+    const matchesQuery = (session: HistorySession) => !query || `${session.title ?? ""} ${session.agentName ?? ""}`.toLowerCase().includes(query);
+    const personal = ((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId).filter(matchesQuery);
     const agentChats: HistorySession[] = hasAgentSessions ? (sidebarChats?.agents ?? []).flatMap((agent) =>
-      (agent.sessions ?? []).map((session) => ({ ...session, agentId: agent.id, agentName: agent.displayName }))) : [];
-    return partitionSessionsByRecency(hasAgentSessions ? [...personal, ...agentChats].sort((a, b) => getSessionUpdatedTime(b) - getSessionUpdatedTime(a)) : personal);
-  }, [sessions, historySessions, sessionPagingEnabled, filterAgentSessions, hasAgentSessions, sidebarChats?.agents]);
+      (agent.sessions ?? []).map((session) => ({ ...session, agentId: agent.id, agentName: agent.displayName }))).filter(matchesQuery) : [];
+    return partitionSessionsByRecency(hasAgentSessions ? [...personal, ...agentChats].sort((a, b) => getSessionUpdatedTime(b) - getSessionUpdatedTime(a)) : personal, headerMenus);
+  }, [sessions, historySessions, sessionPagingEnabled, filterAgentSessions, hasAgentSessions, sidebarChats?.agents, headerMenus, historyQuery]);
+
+  const talkingAgent = agentsInDropdown && sidebarChats?.target.kind !== "ai" ? sidebarChats?.target.agent : undefined;
+  const talkingAgentSessionId = sidebarChats?.target.kind === "native-agent" ? currentSession?.id : talkingAgent?.sessionId;
+  const talkingAgentSessionTitle = talkingAgent
+    ? sidebarChats?.agents.find((agent) => agent.id === talkingAgent.id)?.sessions?.find((session) => session.id === talkingAgentSessionId)?.title
+    : undefined;
 
   const resolvedSessionId = hasAgentSessions && sidebarChats?.target.kind === "external-agent" ? sidebarChats.target.agent.sessionId : currentSession?.id;
 
@@ -222,13 +297,17 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (agentViewId) {
+        setAgentViewId(null);
+        return;
+      }
       setIsDropdownOpen(false);
       setIsOverflowOpen(false);
     };
 
     document.addEventListener("keydown", closeOnEscape, true);
     return () => document.removeEventListener("keydown", closeOnEscape, true);
-  }, [isDropdownOpen, isOverflowOpen]);
+  }, [isDropdownOpen, isOverflowOpen, agentViewId]);
 
   const handleStartNewSession = async () => {
     if (isStartingNewSessionRef.current) return;
@@ -273,6 +352,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             chat={chat}
             isActive={chat.id === resolvedSessionId}
             isRunning={chatRunningEnabled && runningSessionIds.includes(chat.id)}
+            compact={headerMenus}
             onSelect={() => {
               setIsDropdownOpen(false);
               const agent = hasAgentSessions && chat.agentId ? sidebarChats?.agents.find((item) => item.id === chat.agentId) : undefined;
@@ -306,25 +386,126 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
       }
       return rows;
     };
+    const agentView = agentsInDropdown ? sidebarChats?.agents.find((agent) => agent.id === agentViewId) : undefined;
+    const dropdownAgents = agentsInDropdown && !agentView ? visibleDropdownAgents(sidebarChats?.agents ?? [], historyQuery, showAllAgents) : [];
+    const matchingAgentCount = agentsInDropdown ? filterAgentsByQuery(sidebarChats?.agents ?? [], historyQuery).length : 0;
+    const totalAgentCount = sidebarChats?.agents.length ?? 0;
+    const startAgentSession = () => {
+      if (!agentView) return;
+      setIsDropdownOpen(false);
+      sidebarChats?.onStartAgentSession?.(agentView);
+    };
     return (
       <div
         id="ai-chat-session-history"
-        className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-popup ${alignmentClass}`}
+        className={cn("absolute mt-2 w-64 max-w-[calc(100vw-1rem)] overflow-y-auto bg-modalBackground scrollbar-none z-popup", headerMenus ? "max-h-[75svh] rounded-[4px] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]" : "max-h-[min(60svh,15rem)] rounded-md shadow-lg", alignmentClass)}
+        style={headerMenus && historyMaxHeight ? { maxHeight: historyMaxHeight } : undefined}
         onScroll={(event) => {
           const menu = event.currentTarget;
           if (sessionPagingEnabled && hasMoreSessions && !isLoadingMoreSessions && menu.scrollTop + menu.clientHeight >= menu.scrollHeight - 40) {
             void loadMoreSessions();
           }
         }}
+        onKeyDown={(event) => {
+          if (agentViewId || (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter")) return;
+          const options = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-testid="ai-chat-agents-section"] button')];
+          if (!options.length) return;
+          if (event.key === "Enter") {
+            if (agentOptionIndex < 0) return;
+            event.preventDefault();
+            options[Math.min(agentOptionIndex, options.length - 1)]?.click();
+            return;
+          }
+          event.preventDefault();
+          const next = Math.max(0, Math.min(options.length - 1, (agentOptionIndex < 0 ? -1 : agentOptionIndex) + (event.key === "ArrowDown" ? 1 : -1)));
+          setAgentOptionIndex(next);
+          options[next]?.scrollIntoView?.({ block: "nearest" });
+        }}
       >
-        {sessionPagingEnabled && pagingError && (
+        {agentView && sidebarChats && (
+          <div
+            ref={agentViewRef}
+            tabIndex={-1}
+            data-testid="ai-chat-agent-view"
+            className="outline-none"
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                setAgentViewId(null);
+              }
+              if (event.key === "Enter" && event.target === event.currentTarget) {
+                event.preventDefault();
+                startAgentSession();
+              }
+            }}
+          >
+            <button type="button" className={cn(MENU_ROW_CLASS, "font-semibold")} aria-label="Back to all chats" onClick={() => setAgentViewId(null)}>
+              <ChevronLeft size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+              <Bot size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{agentView.displayName}</span>
+            </button>
+            <button type="button" className={MENU_ROW_CLASS} onClick={startAgentSession}>
+              <SquarePen size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+              <span className="min-w-0 flex-1 truncate">New session</span>
+              <kbd className="text-micro text-icon-dark-gray">Enter</kbd>
+            </button>
+            {(agentView.sessions ?? []).length > 0 && <div className="px-2 pb-1 pt-2 text-micro font-medium text-icon-dark-gray">Past sessions</div>}
+            <ul>
+              {sessionRows((agentView.sessions ?? []).map((session) => ({ ...session, agentId: agentView.id })))}
+            </ul>
+            {agentView.hasMoreSessions && (
+              <button type="button" className={cn(MENU_ROW_CLASS, "text-icon-dark-gray")} onClick={() => sidebarChats.onLoadMoreAgentSessions?.(agentView)}>
+                Show more
+              </button>
+            )}
+          </div>
+        )}
+        {headerMenus && !agentView && (
+          <div className="sticky top-0 z-10 -mx-1 -mt-1 bg-modalBackground px-1 pb-1 pt-1">
+            <label className="flex h-[30px] items-center gap-2 rounded-[4px] bg-ai-tiptap px-2">
+              <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" aria-hidden />
+              <input autoFocus type="text" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search chats" aria-label="Search chats"
+                className="min-w-0 flex-1 bg-transparent text-content text-white-black outline-none placeholder:text-text-light-gray" />
+            </label>
+          </div>
+        )}
+        {!agentView && dropdownAgents.length > 0 && (
+          <div className="pt-1" data-testid="ai-chat-agents-section">
+            <div className="px-2 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">Agents</div>
+            <ul className="pb-1">
+              {dropdownAgents.map((agent, index) => (
+                <li key={agent.id}>
+                  <button type="button" data-agent-id={agent.id} aria-selected={agentOptionIndex === index} className={cn(MENU_ROW_CLASS, agentOptionIndex === index && "bg-active-modal-element")} onMouseEnter={() => setAgentOptionIndex(index)} onClick={() => setAgentViewId(agent.id)}>
+                    <Bot size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">{agent.displayName}</span>
+                    <ChevronRight size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />
+                  </button>
+                </li>
+              ))}
+              {!historyQuery.trim() && totalAgentCount > RECENT_AGENT_COUNT && (
+                <li>
+                  <button type="button" aria-expanded={showAllAgents} aria-selected={agentOptionIndex === dropdownAgents.length} className={cn(MENU_ROW_CLASS, "text-icon-dark-gray", agentOptionIndex === dropdownAgents.length && "bg-active-modal-element")} onMouseEnter={() => setAgentOptionIndex(dropdownAgents.length)} onClick={() => setShowAllAgents((open) => !open)}>
+                    <span className="min-w-0 flex-1 truncate">{showAllAgents ? "Fewer agents" : `All ${totalAgentCount} agents`}</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+        {!agentView && sessionPagingEnabled && pagingError && (
           <p role="alert" className="px-3 py-2 text-content">
             Couldn’t load older chats. Scroll to try again.
           </p>
         )}
-        {previous7Days.length > 0 && (
+        {!agentView && today.length > 0 && (
           <div className="pt-1">
-            <div className="px-3 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">
+            <div className="px-2 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">Today</div>
+            <ul className="pb-1">{sessionRows(today)}</ul>
+          </div>
+        )}
+        {!agentView && previous7Days.length > 0 && (
+          <div className="pt-1">
+            <div className={cn("px-3 pb-1 pt-1 text-micro font-medium text-icon-dark-gray", headerMenus && "px-2")}>
               Previous 7 days
             </div>
             <ul className="pb-1">
@@ -332,12 +513,12 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             </ul>
           </div>
         )}
-        {previous7Days.length > 0 && older.length > 0 && (
+        {!headerMenus && previous7Days.length > 0 && older.length > 0 && (
           <div className="mx-2 h-px bg-gray-600/60" role="separator" />
         )}
-        {older.length > 0 && (
+        {!agentView && older.length > 0 && (
           <div className="pb-1">
-            <div className="px-3 pb-1 pt-2 text-micro font-medium text-icon-dark-gray">
+            <div className={cn("px-3 pb-1 pt-2 text-micro font-medium text-icon-dark-gray", headerMenus && "px-2")}>
               Older
             </div>
             <ul>
@@ -345,13 +526,16 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             </ul>
           </div>
         )}
-        {hasAgentSessions && sidebarChats?.agents.some((agent) => agent.hasMoreSessions) && (
+        {!agentView && hasAgentSessions && sidebarChats?.agents.some((agent) => agent.hasMoreSessions) && (
           <button type="button" className="w-full px-3 py-2 text-left text-content text-icon-dark-gray hover:bg-active-modal-element"
             onClick={() => sidebarChats.agents.filter((agent) => agent.hasMoreSessions).forEach((agent) => sidebarChats.onLoadMoreAgentSessions?.(agent))}>
             Show older agent sessions
           </button>
         )}
-        {sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
+        {!agentView && headerMenus && historyQuery.trim() && !today.length && !previous7Days.length && !older.length && !matchingAgentCount && (
+          <p className="px-2 py-2 text-content text-icon-dark-gray">No chats found</p>
+        )}
+        {!agentView && sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
     );
   };
@@ -367,11 +551,16 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
     </button>
   );
 
-  const agentsButton = hasAgentSessions && sidebarChats ? (
+  const agentsButton = !agentsInDropdown && (hasAgentSessions || (headerMenus && !isMbl && !!sidebarChats?.agents.length)) && sidebarChats ? (
     <div className="relative shrink-0">
-      <button ref={agentButtonRef} type="button" aria-label="Agent sessions" aria-expanded={agentsOpen}
-        aria-controls="agent-sidebar-agents" onClick={() => { closeConversations(); setIsDropdownOpen(false); setAgentsOpen((open) => !open); }}
-        className={isMbl ? `flex h-11 w-11 touch-manipulation items-center justify-center ${chatCleanup ? "rounded-[4px]" : "rounded-full"} text-icon-dark-gray hover:bg-hover-active hover:text-white-black` : "text-icon-dark-gray hover:text-white-black"}>
+      <button ref={agentButtonRef} type="button" aria-label="Agent sessions" aria-expanded={hasAgentSessions ? agentsOpen : conversationsOpen}
+        aria-controls={hasAgentSessions ? "agent-sidebar-agents" : "agent-sidebar-conversations"}
+        onClick={() => {
+          setIsDropdownOpen(false);
+          if (hasAgentSessions) { closeConversations(); setAgentsOpen((open) => !open); return; }
+          setConversationsOpen((open) => !open);
+        }}
+        className={isMbl ? `flex h-11 w-11 touch-manipulation items-center justify-center ${chatCleanup ? "rounded-[4px]" : "rounded-full"} text-icon-dark-gray hover:bg-hover-active hover:text-white-black` : "block text-icon-dark-gray hover:text-white-black"}>
         <Bot size={isMbl ? 20 : 16} strokeWidth={1.75} />
       </button>
     </div>
@@ -441,28 +630,42 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
 
   return (
     <div
+      ref={headerRef}
       data-chat-window-drag={windowDrag ? "" : undefined}
-      className={`z-10 text-content font-bold px-2 gap-4 flex items-center justify-between border-gray-700 text-white-black ${
+      className={cn(
+        "z-10 text-content px-2 gap-4 flex items-center justify-between text-white-black",
+        !headerMenus && "font-bold",
         isSidebarMode ? "h-[48px] pt-4 pb-0" : "py-2"
-      }`}
+      )}
     >
       <div className="relative min-w-0 flex-1" ref={dropdownRef}>
         <button
           type="button"
           ref={titleRef}
           title={sidebarTitle ?? currentSession?.title ?? undefined}
-          aria-label={sidebarChats ? "Switch conversation" : undefined}
-          aria-expanded={sidebarChats ? conversationsOpen : isDropdownOpen}
-          aria-controls={sidebarChats ? "agent-sidebar-conversations" : "ai-chat-session-history"}
+          aria-label={sidebarChats ? (headerMenus ? "Chat history" : "Switch conversation") : undefined}
+          aria-expanded={sidebarChats && !headerMenus ? conversationsOpen : isDropdownOpen}
+          aria-controls={sidebarChats && !headerMenus ? "agent-sidebar-conversations" : "ai-chat-session-history"}
           onClick={() => {
-            if (sidebarChats) { closeAgents(); setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
-            else setIsDropdownOpen((prev) => !prev);
+            if (sidebarChats && !headerMenus) { closeAgents(); setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
+            else {
+              if (sidebarChats) { closeConversations(); closeAgents(); }
+              setIsOverflowOpen(false);
+              setIsDropdownOpen((prev) => !prev);
+            }
           }}
-          className={`flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors ${chatCleanup ? "rounded-[4px]" : "rounded"} px-1 py-0.5`}
+          className={cn(
+            "flex min-w-0 max-w-full items-center gap-1 transition-colors px-1 py-0.5",
+            chatCleanup ? "rounded-[4px]" : "rounded",
+            headerMenus ? "bg-ai-tiptap px-2 py-1 rounded-[4px] hover:bg-active-modal-element" : "hover:bg-active-modal-element",
+            headerMenus && isDropdownOpen && "bg-active-modal-element"
+          )}
         >
+          {talkingAgent && <Bot size={16} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} aria-hidden />}
           <span className="min-w-0 truncate font-medium">
             {sidebarTitle ?? currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
           </span>
+          {talkingAgentSessionTitle && <span className="min-w-0 truncate text-icon-dark-gray" data-testid="ai-chat-agent-session-title">{talkingAgentSessionTitle}</span>}
           {runningIndicator}
           <span
             style={{
@@ -477,22 +680,20 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           >
             <ChevronDown
               size={18}
-              className={`text-icon-dark-gray transition-transform ${
-                (sidebarChats ? conversationsOpen : isDropdownOpen) ? "rotate-180" : ""
-              }`}
+              className={cn("text-icon-dark-gray transition-transform", (sidebarChats && !headerMenus ? conversationsOpen : isDropdownOpen) && "rotate-180")}
               strokeWidth={1.75}
             />
           </span>
         </button>
 
-        {sidebarChats && conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
+        {sidebarChats && conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={headerMenus ? agentButtonRef : titleRef} onClose={closeConversations} />}
         {hasAgentSessions && sidebarChats && agentsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={agentButtonRef} onClose={closeAgents} agentsOnly />}
         {renderSessionMenu("left-0")}
       </div>
 
       <div className="flex shrink-0 items-center space-x-2">
         {agentsButton}
-        {sidebarChats && historyButton}
+        {sidebarChats && !headerMenus && historyButton}
         <button
           onClick={handleStartNewSession}
           disabled={isStartingNewSession}
@@ -511,7 +712,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             aria-haspopup="menu"
             aria-expanded={isOverflowOpen}
             onClick={() => setIsOverflowOpen((prev) => !prev)}
-            className="text-icon-dark-gray hover:text-white-black relative group"
+            className="block text-icon-dark-gray hover:text-white-black relative group"
           >
             <Ellipsis size={16} strokeWidth={1.75} />
           </button>
@@ -519,8 +720,102 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           {isOverflowOpen && (
             <div
               role="menu"
-              className="absolute right-0 mt-1 w-40 overflow-hidden bg-modalBackground rounded-md shadow-lg z-20"
+              className={cn("absolute right-0 z-20", headerMenus ? "mt-1 w-[184px] rounded-[4px] bg-modalBackground p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]" : "mt-1 w-40 overflow-hidden rounded-md bg-modalBackground shadow-lg")}
             >
+              {headerMenus ? (
+                <>
+                  <MenuRow
+                    icon={Pin}
+                    label="Pin chat open"
+                    checked={aiChatPinned}
+                    onClick={() => {
+                      setAiChatPinned(!aiChatPinned);
+                      if (!aiChatPinned) {
+                        if (keepAiChatClosed) setKeepAiChatClosed(false);
+                        setAiChatExplicitOpenAt(Date.now());
+                        setShowAiChatInterface(true);
+                        setAiChatAutoOpenSuppressed(false);
+                      }
+                      setIsOverflowOpen(false);
+                    }}
+                  />
+                  {keepClosedSwitch && (
+                    <MenuRow
+                      icon={PanelRightClose}
+                      label="Keep chat closed"
+                      checked={keepAiChatClosed}
+                      onClick={() => {
+                        const nextKeepClosed = !keepAiChatClosed;
+                        setKeepAiChatClosed(nextKeepClosed);
+                        setIsOverflowOpen(false);
+                        if (!nextKeepClosed) return;
+                        setAiChatPinned(false);
+                        if (!isFullScreenChat) {
+                          if (!isSidebarMode && !isMbl) minimizeChat();
+                          else togglePopover();
+                        }
+                      }}
+                    />
+                  )}
+                  {!isMbl && aiSessionActionsAvailable && allowDocking && (
+                    <MenuRow
+                      icon={isSidebarMode ? PictureInPicture2 : PanelRight}
+                      label={isSidebarMode ? "Floating window" : "Sidebar"}
+                      onClick={() => {
+                        toggleSidebarMode();
+                        setIsOverflowOpen(false);
+                      }}
+                    />
+                  )}
+                  {!isMbl && aiSessionActionsAvailable && (
+                    <MenuRow
+                      icon={Maximize2}
+                      label="Full screen"
+                      onClick={() => {
+                        setIsOverflowOpen(false);
+                        router.push(buildFullScreenChatPath(`${window.location.pathname}${window.location.search}${window.location.hash}`));
+                      }}
+                    />
+                  )}
+                  {aiSessionActionsAvailable && (
+                    <MenuRow
+                      icon={Pencil}
+                      label="Rename chat"
+                      onClick={() => {
+                        toggleRenameChatModal();
+                        setIsOverflowOpen(false);
+                      }}
+                    />
+                  )}
+                  {aiSessionActionsAvailable && (
+                    <MenuRow
+                      icon={Trash2}
+                      label="Delete chat"
+                      onClick={async () => {
+                        setIsOverflowOpen(false);
+                        if (!resolvedSessionId) {
+                          toast.error("No chat selected yet. Please try again in a moment.");
+                          return;
+                        }
+                        try {
+                          await deleteSession(resolvedSessionId);
+                        } catch {
+                          toast.error("Couldn't delete this chat. Please try again.");
+                        }
+                      }}
+                    />
+                  )}
+                  {currentSession && aiSessionActionsAvailable && (
+                    <>
+                      <div className="mx-1 my-1 border-t border-border-light-gray-thin" role="separator" />
+                      <div className="px-2 py-1 text-micro text-icon-dark-gray">
+                        Created {format(new Date(currentSession.createdAt), "d MMM")}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
               <button
                 type="button"
                 role="menuitem"
@@ -543,7 +838,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                 )}
                 <span>{aiChatPinned ? "Unpin AI chat" : "Pin AI chat open"}</span>
               </button>
-              {!isMbl && aiSessionActionsAvailable && !windowDrag && (
+              {!isMbl && aiSessionActionsAvailable && allowDocking && (
                 <button
                   type="button"
                   role="menuitem"
@@ -643,6 +938,8 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                     Created{" "}
                     {format(new Date(currentSession.createdAt), "MMM d, yyyy")}
                   </div>
+                </>
+              )}
                 </>
               )}
             </div>

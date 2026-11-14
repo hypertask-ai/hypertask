@@ -11,6 +11,7 @@ import autoJoinByEmailDomain from '@/utils/controllers/users/autoJoinByEmailDoma
 import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
 import prisma from '@/lib/prisma'
+import { logPersonal } from '@/utils/controllers/logs/quietPersonalLog'
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, clearBetterAuthSessionCookies, sessionCookieOptions, signSession } from '@/lib/auth/session'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
@@ -19,6 +20,7 @@ import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { consumeEmailLinkToken } from '@/lib/auth/emailLinkToken'
+import { revokeOtherUserSessions } from '@/lib/auth/sessionRevocation'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
@@ -144,6 +146,10 @@ export async function POST(request: NextRequest) {
 
     if (isVerificationToken && userData.UserSetting) {
       console.log('📧 Email verification token - setting isVerified to true')
+      const wasUnverified = !existingUser?.emailVerified && !existingUser?.UserSetting?.isVerified
+      if (wasUnverified && !(await revokeOtherUserSessions(userData.id))) {
+        console.error('Email verification could not end the earlier sessions for user', userData.id)
+      }
       await prisma.userSetting.update({
         where: { id: userData.UserSetting.id },
         data: { isVerified: true },
@@ -168,14 +174,7 @@ export async function POST(request: NextRequest) {
       console.log('🔐 Login token - preserving existing verification status')
     }
 
-    console.log('✅ User updated successfully (email link):', {
-      id: userData!.id,
-      email: userData!.email,
-      displayName: userData!.displayName,
-      onboardingTutorialStatus: (userData as any).UserSetting?.onboardingTutorialStatus,
-      onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus,
-      trialStatus: (userData as any).UserSetting?.trialStatus
-    })
+    await logPersonal(userData!.id, '✅ User updated successfully (email link):', { id: userData!.id, email: userData!.email, outcome: 'signed-in', }, { id: userData!.id, email: userData!.email, onboardingTutorialStatus: (userData as any).UserSetting?.onboardingTutorialStatus, onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus, trialStatus: (userData as any).UserSetting?.trialStatus, displayName: userData!.displayName, })
 
     let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
