@@ -141,7 +141,8 @@ export async function jsonRequest(fetchImpl, url, options = {}) {
     body = {};
   }
   if (!response.ok) {
-    throw new Error(`${url} returned HTTP ${response.status}`);
+    const refusal = typeof body?.message === "string" ? body.message : typeof body?.error === "string" ? body.error : "";
+    throw new Error(`${url} returned HTTP ${response.status}${refusal ? `: ${refusal.replace(/\s+/g, " ").slice(0, 300)}` : ""}`);
   }
   return body;
 }
@@ -179,18 +180,32 @@ export function incidentDescription(alert) {
   const block = renderPlainLanguageTicketDescription(plainLanguageIncidentFields(alert));
   return (
     block +
+    `<h2>Problem</h2>` +
     `<p><strong>${escapeHtml(alert.user_impact || plainSummary({ url: alert.url, message: alert.message, source: alert.source }))}</strong></p>` +
     `<ul>` +
     `<li>Severity: ${escapeHtml(alert.severity)}. ${escapeHtml(alert.severity_reason)}</li>` +
-    `<li>Production hits: ${alert.count ?? "unknown"}. Known users: ${alert.users ?? "unknown"}; ${alert.unidentified_hits ?? "unknown"} hits without a user identity.</li>` +
-    `<li>First seen: ${escapeHtml(alert.timestamp)}. Last seen: ${escapeHtml(alert.last_seen ?? "unknown")}.</li>` +
+    `<li>Production hits: ${alert.count ?? "unknown"}. Known users: ${alert.users ?? "unknown"}. Hits without a user identity: ${alert.unidentified_hits ?? "unknown"}.</li>` +
+    (alert.alert_kind === "issue_spiking" ? `<li>PostHog saw a spike. ${escapeHtml(alert.spike_count)} hits, baseline ${escapeHtml(alert.spike_baseline)}.</li>` : "") +
+    (alert.feature_flag ? "" : "<li>No confirmed feature flag.</li>") +
+    `</ul>` +
+    `<h2>Fix</h2>` +
+    `<p>Find the cause in the agent log below and patch it.</p>` +
+    `<h2>Done when</h2>` +
+    `<p>PostHog stops reporting this error.</p>` +
+    `<h2>Risk</h2>` +
+    `<p>Low. The patch is small and can be reverted.</p>` +
+    `<h2>Decision</h2>` +
+    `<p>None needed.</p>` +
+    `<blockquote>` +
+    `<p><strong>Agent log</strong></p>` +
+    `<ul>` +
     `<li>PostHog issue ID: <code>${escapeHtml(alert.issue_id)}</code></li>` +
     `<li>Error: <code>${escapeHtml(alert.name)}</code>. ${escapeHtml(alert.message)}</li>` +
+    `<li>First seen: ${escapeHtml(alert.timestamp)}. Last seen: ${escapeHtml(alert.last_seen ?? "unknown")}.</li>` +
     `<li><a href="${escapeHtml(alert.issue_url)}">Open the issue in PostHog</a></li>` +
+    (alert.event_id ? `<li>posthog-alert:${escapeHtml(`${alert.alert_kind}:${alert.event_id}`)}</li>` : "") +
     `</ul>` +
-    (alert.feature_flag ? "" : "<p>No confirmed feature flag.</p>") +
-    (alert.alert_kind === "issue_spiking" ? `<p>PostHog detected a spike: ${alert.spike_count} hits in its detection window, baseline ${alert.spike_baseline}.</p>` : "") +
-    (alert.event_id ? `<p>posthog-alert:${escapeHtml(`${alert.alert_kind}:${alert.event_id}`)}</p>` : "")
+    `</blockquote>`
   );
 }
 

@@ -21,7 +21,7 @@ test("app, API, OAuth and files-private routes deny framing and stage script res
     assert.equal(headers["referrer-policy"], "strict-origin-when-cross-origin", path);
     assert.equal(
       headers["content-security-policy-report-only"],
-      "script-src https://app.hypertask.ai/_next/static/ https://eu-assets.i.posthog.com; base-uri 'self'",
+      "script-src https://app.hypertask.ai/_next/static/ https://eu-assets.i.posthog.com https://cdn.usefathom.com; base-uri 'self'",
       path,
     );
   }

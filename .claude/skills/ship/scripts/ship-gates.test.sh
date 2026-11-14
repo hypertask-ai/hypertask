@@ -33,7 +33,7 @@ print(markers[sys.argv[1]])
     approval = p / 'approvals'
     approval.mkdir(mode=0o700)
     env = dict(os.environ, HOME=str(home), UNLAZY_APPROVAL_DIR=str(approval), CALLS=str(p/'calls'))
-    for key in ['CLAUDE_CODE_SESSION_ID', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CURSOR_CONVERSATION_ID', 'UNLAZY_SCOPE']:
+    for key in ['CLAUDE_CODE_SESSION_ID', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CURSOR_CONVERSATION_ID', 'PI_SESSION_ID', 'UNLAZY_SCOPE']:
         env.pop(key, None)
     repo = p / 'repo with spaces'
     repo.mkdir()
@@ -95,6 +95,14 @@ print(markers[sys.argv[1]])
     r = run('HYFA-15', CURSOR_CONVERSATION_ID=cursor, CLAUDE_CODE_SESSION_ID='ignoredA-full')
     assert r.returncode == 0 and len(ids(ledger('ignoredA-full'))) == 8, r.stderr
     print('ok Cursor conversation id fallback and precedence')
+
+    pi = 'pi9077abc-1111-2222'
+    r = run('HYFA-16', PI_SESSION_ID=pi)
+    assert r.returncode == 0 and len(ids(ledger(pi))) == 8, r.stderr
+    assert (ledger(pi).parent/'session').read_text() == pi+'\n'
+    r = run('HYFA-17', PI_SESSION_ID=pi, CURSOR_CONVERSATION_ID='ignoredD-full')
+    assert r.returncode == 0 and len(ids(ledger('ignoredD-full'))) == 8, r.stderr
+    print('ok Pi session id fallback and precedence')
 
     before = file.read_text()
     count = len(calls())

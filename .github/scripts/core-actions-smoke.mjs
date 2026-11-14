@@ -193,47 +193,61 @@ export async function provision() {
   };
 }
 
+const needsConfirmation = (result) =>
+  result.kind === "application"
+    ? !result.action.startsWith("inbox ") &&
+      !result.steps.some((step) => step.startsWith("inbox "))
+    : isTransportFailure(result);
+
+const isProbeResult = (value) =>
+  value !== null &&
+  typeof value === "object" &&
+  typeof value.ok === "boolean" &&
+  (value.ok
+    ? value.kind === "pass"
+    : value.kind === "application" || value.kind === "unrunnable") &&
+  typeof value.action === "string" &&
+  value.action.length > 0 &&
+  typeof value.detail === "string" &&
+  Array.isArray(value.steps) &&
+  value.steps.every((step) => typeof step === "string") &&
+  Array.isArray(value.cleanup) &&
+  value.cleanup.every((step) => typeof step === "string") &&
+  (value.status === undefined || Number.isInteger(value.status));
+
+async function probeRequest(fixture, deadline) {
+  const response = await api("/api/ops/core-actions-smoke", {
+    method: "POST",
+    body: JSON.stringify(fixture),
+    // The route waits for the 30s lock, 90s action budget, and fixture cleanup.
+    signal: deadline,
+  });
+  const result = response?.result;
+  if (!isProbeResult(result)) {
+    throw new Error("The probe returned a malformed result");
+  }
+  return result;
+}
+
+async function attempt() {
+  let deadline;
+  try {
+    const fixture = {
+      ...(await provision()),
+      runId: process.env.GITHUB_RUN_ID || `local-${Date.now()}`,
+    };
+    deadline = AbortSignal.timeout(180_000);
+    return await probeRequest(fixture, deadline);
+  } catch (error) {
+    if (deadline?.aborted) throw error;
+    const failure = classifyProbeStartFailure(error);
+    if (!isTransportFailure(failure)) throw error;
+    return failure;
+  }
+}
+
 export async function run(options = {}) {
-  const fixture = {
-    ...(await provision()),
-    runId: process.env.GITHUB_RUN_ID || `local-${Date.now()}`,
-  };
-
-  const isProbeResult = (value) =>
-    value !== null &&
-    typeof value === "object" &&
-    typeof value.ok === "boolean" &&
-    (value.ok
-      ? value.kind === "pass"
-      : value.kind === "application" || value.kind === "unrunnable") &&
-    typeof value.action === "string" &&
-    value.action.length > 0 &&
-    typeof value.detail === "string" &&
-    Array.isArray(value.steps) &&
-    value.steps.every((step) => typeof step === "string") &&
-    Array.isArray(value.cleanup) &&
-    value.cleanup.every((step) => typeof step === "string") &&
-    (value.status === undefined || Number.isInteger(value.status));
-
-  const invoke = async () => {
-    const response = await api("/api/ops/core-actions-smoke", {
-      method: "POST",
-      body: JSON.stringify(fixture),
-      // The route waits for the 30s lock, 90s action budget, and fixture cleanup.
-      signal: AbortSignal.timeout(180_000),
-    });
-    const result = response?.result;
-    if (!isProbeResult(result)) throw new Error("The probe returned a malformed result");
-    return result;
-  };
-
-  const needsConfirmation = (result) =>
-    result.kind === "application"
-      ? !result.action.startsWith("inbox ") &&
-        !result.steps.some((step) => step.startsWith("inbox "))
-      : isTransportFailure(result);
-
-  const first = await invoke();
+  const first = await attempt();
   if (first.ok || !needsConfirmation(first)) return first;
 
   await (
@@ -241,7 +255,7 @@ export async function run(options = {}) {
     ((milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)))
   )(1_000);
-  const confirmation = await invoke();
+  const confirmation = await attempt();
   if (confirmation.ok) {
     return {
       ...confirmation,
@@ -282,6 +296,7 @@ export function isTransportFailure(result) {
   return (
     result?.ok === false &&
     result.kind === "unrunnable" &&
+    result.status === undefined &&
     TRANSPORT_FAILURE.test(`${result.action} ${result.detail}`)
   );
 }
@@ -365,19 +380,28 @@ export async function report(
   const sentence = `Core-action smoke ${result.kind}. ${result.action} returned ${status}. ${result.detail}. Rollback ${rollback}.`;
   const html = `<p><strong>${escapeHtml(sentence)}</strong></p><p><a href="${escapeHtml(runUrl)}">Workflow run</a></p>`;
 
-  const postTicket = () =>
-    api("/api/mcp/comments", {
-      method: "POST",
-      headers: {
-        "Idempotency-Key": `core-smoke-6225-${process.env.GITHUB_RUN_ID || Date.now()}`,
-      },
-      body: JSON.stringify({
-        ticket_number: PARENT_TICKET,
-        project_id: ALERT_PROJECT_ID,
-        text: html,
-        content_type: "html",
-      }),
-    });
+  const postTicket = async () => {
+    try {
+      await api("/api/mcp/comments", {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": `core-smoke-6225-${process.env.GITHUB_RUN_ID || Date.now()}`,
+        },
+        body: JSON.stringify({
+          ticket_number: PARENT_TICKET,
+          project_id: ALERT_PROJECT_ID,
+          text: html,
+          content_type: "html",
+        }),
+      });
+      return { destination: PARENT_TICKET, skipped: false };
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 404) {
+        return { destination: PARENT_TICKET, skipped: true };
+      }
+      throw error;
+    }
+  };
 
   const postIncident = async () => {
     const incidentTitle = `[INCIDENT] Core-action smoke: ${String(result.action).slice(0, 100)}`;
@@ -439,6 +463,13 @@ export async function report(
   };
 
   const reports = await Promise.allSettled([postTicket(), postIncident()]);
+  for (const item of reports) {
+    if (item.status === "fulfilled" && item.value?.skipped) {
+      write(
+        `Core-smoke parent ${item.value.destination} is gone; destination skipped.\n`,
+      );
+    }
+  }
   const failures = reports.filter((item) => item.status === "rejected");
   if (failures.length > 0) {
     const reasons = failures
