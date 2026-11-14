@@ -23,8 +23,11 @@ export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string
           LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
         `
       : await prisma.$queryRaw<{ id: number }[]>`
-          SELECT id FROM "Task"
-          WHERE lower("ticketNumber") = lower(${ticketNumber})
+          WITH indexed_matches AS MATERIALIZED (
+            SELECT id, "projectId" FROM "Task"
+            WHERE lower("ticketNumber") = lower(${ticketNumber})
+          )
+          SELECT id FROM indexed_matches
           ORDER BY "projectId" ASC, id ASC
           LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
         `;
