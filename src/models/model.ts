@@ -365,6 +365,7 @@ export interface IView {
   board_filters?: object;
   board_columns_view?: object;
   board_subtask_setting?: SubtaskSetting;
+  board_subtask_explicit?: boolean;
   board_empty_sections?: EmptySections;
   board_staleness?: boolean | null;
   board_show_archived?: boolean | null;
@@ -399,6 +400,7 @@ export interface IProjectView {
   default_view_order?: string[] | null;
   default_view_id?: string;
   default_view?: IView;
+  board_subtask_setting_for_default_view?: SubtaskSetting;
 }
 
 export interface IUserProjectView {

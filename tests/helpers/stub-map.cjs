@@ -94,6 +94,9 @@ function withStubs(base = {}, extra = {}) {
   if (!(USER_COMMENT_COUNTS in base) && !(USER_COMMENT_COUNTS in extra)) {
     defaults[USER_COMMENT_COUNTS] = { userCommentCountsByTaskId: async () => new Map() }
   }
+  if (!("@/lib/savedViews/boardDefaultSubtasks" in base) && !("@/lib/savedViews/boardDefaultSubtasks" in extra)) {
+    defaults["@/lib/savedViews/boardDefaultSubtasks"] = { boardDefaultShowsSubtasks: async () => false }
+  }
   return new Proxy(Object.create(null), {
     has: (_target, request) => request === TASK_SAVE_LIMIT || request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,
     get: (_target, request) =>

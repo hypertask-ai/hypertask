@@ -103,6 +103,20 @@ test('HYCI-442 a review that failed does not clear an old Codex P1', () => {
   assert.equal(evaluate(pr({ reviews: [staleP1Review()], comments })).state, 'failure');
 });
 
+test('HYCI-442 a review finding on the head is the finding the check reports', () => {
+  const comments = [claudeComment({ verdict: 'CONCERNS', blocking: 1 })];
+  const result = evaluate(pr({ reviews: [staleP1Review()], comments }));
+  assert.equal(result.state, 'failure');
+  assert.match(result.description, /^Claude Sonnet reviewed ccccccc: 1 blocker\/major finding\(s\)/);
+  assert.equal(result.evidence, 'https://example.test/c/claude-review');
+});
+
+test('HYCI-442 a same-head Codex P1 is still reported as the Codex review', () => {
+  const sameHead = staleP1Review({ commit: head, submittedAt: '2026-11-14T11:00:00Z' });
+  const comments = [claudeComment({ verdict: 'CONCERNS', blocking: 1 })];
+  assert.match(evaluate(pr({ reviews: [sameHead], comments })).description, /^Codex review/);
+});
+
 test('HYCI-442 the reviewer script posts as the same account the gate trusts', () => {
   assert.equal(claudeReview.AUTHOR, 'github-actions');
   const body = claudeReview.buildComment(head, claudeReview.parseClaudeOutput(envelope({ verdict: 'APPROVE', summary: 's', findings: [] })));
