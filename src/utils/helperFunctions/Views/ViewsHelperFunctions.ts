@@ -236,6 +236,21 @@ export const getActiveSubtaskSettingFromProject = (project?:IProject|null):TBoar
   return deepCopy(boardDefault)
 }
 
+export const subtaskSettingToStore = (project?: IProject | null): TBoardSubtaskSetting => {
+  const active = getActiveSubtaskSettingFromProject(project)
+  const view = project?.project_view?.user_project_views?.[0]
+  const boardDefault = project?.project_view?.board_subtask_setting_for_default_view
+  const defaultView = project?.project_view?.default_view?.board_subtask_setting
+  const unsaved = view?.unsavedView?.board_subtask_setting
+  const applied = view?.appliedView
+  const defaultViewId = project?.project_view?.default_view_id
+  const onFilteredView = !!applied?.id && applied.id !== defaultViewId
+  if (!boardDefault || onFilteredView) return active
+  if (view?.unsavedView?.board_subtask_explicit && unsaved) return active
+  if (unsaved && unsaved !== defaultView) return active
+  return deepCopy(defaultView ?? active)
+}
+
 const personalEmptySectionSetting = (
   view?: IView,
 ): TBoardEmptySections | undefined => {

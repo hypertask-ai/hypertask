@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { taskWriteRoute } from "@/lib/api/task-writes/route";
+import { boardDefaultShowsSubtasks } from "@/lib/savedViews/boardDefaultSubtasks";
+import { persistExplicitSubtaskDraft } from "@/lib/savedViews/explicitSubtaskDraft";
 import { viewWriteJson } from "./response";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import prisma from "@/lib/prisma";
@@ -148,9 +150,11 @@ const route = taskWriteRoute({
         user_project_views: loadedUserProjectView ? [loadedUserProjectView] : [],
       }, userId);
       const user_project_view = projectView.user_project_views[0] ?? null;
-      const markExplicitSubtask =
-        req.body.board_subtask_explicit === true &&
-        (!hasBaseViewId || baseViewId == null || baseViewId === projectView.default_view_id);
+      const markExplicitSubtask = persistExplicitSubtaskDraft(
+        await boardDefaultShowsSubtasks(userId),
+        req.body.board_subtask_explicit,
+        !hasBaseViewId || baseViewId == null || baseViewId === projectView.default_view_id,
+      );
       console.log("🚀 ~ 55: ~ user_project_view:", user_project_view);
 
       const baseView = hasBaseViewId

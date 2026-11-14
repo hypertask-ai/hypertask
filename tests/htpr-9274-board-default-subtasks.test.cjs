@@ -5,8 +5,11 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 const { sanitizeProjectBoardFilters } = loadModule(
   "src/utils/helperFunctions/Views/BoardFilterSanitizer.ts",
 );
-const { getActiveSubtaskSettingFromProject } = loadModule(
+const { getActiveSubtaskSettingFromProject, subtaskSettingToStore } = loadModule(
   "src/utils/helperFunctions/Views/ViewsHelperFunctions.ts",
+);
+const { persistExplicitSubtaskDraft } = loadModule(
+  "src/lib/savedViews/explicitSubtaskDraft.ts",
 );
 
 const view = (id, setting, extra = {}) => ({
@@ -183,6 +186,20 @@ test("a payload with no default view does not invent a sub-ticket setting", () =
   const sanitized = payload(base, true).project_view;
 
   assert.equal(sanitized.board_subtask_setting_for_default_view, undefined);
+});
+
+test("an explicit hide is stored only while the switch is on and only on the main tab", () => {
+  assert.equal(persistExplicitSubtaskDraft(false, true, true), false);
+  assert.equal(persistExplicitSubtaskDraft(true, true, true), true);
+  assert.equal(persistExplicitSubtaskDraft(true, true, false), false);
+  assert.equal(persistExplicitSubtaskDraft(true, false, true), false);
+});
+
+test("a view save stores the board's own sub-ticket setting, not the display override", () => {
+  const project = payload(projectWith({ defaultSetting: "None" }), true);
+
+  assert.equal(getActiveSubtaskSettingFromProject(project), "Flattened_Card");
+  assert.equal(subtaskSettingToStore(project), "None");
 });
 
 test("with the switch off the main board keeps the stored resolution", () => {

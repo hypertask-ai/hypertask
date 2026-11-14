@@ -37,7 +37,7 @@ import {
   getActiveSortingModeFromProject,
   getActiveSortingOrderFromProject,
   getActiveSortingStackFromProject,
-  getActiveSubtaskSettingFromProject,
+  subtaskSettingToStore,
   getActiveTableSortFromProject,
   getActiveTableSortStackFromProject,
   getActiveTableColumnsFromProject,
@@ -67,6 +67,7 @@ import {
 } from "@/lib/constants/builtinViews";
 import { useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9274_BOARD_DEFAULT_SUBTASKS_FLAG } from "@/lib/flags/definitions/htpr-9274-board-default-subtasks";
 import { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import type { TableColumnSettings, TableSortLevel } from "@/lib/table-view/tableViewSettings";
 import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
@@ -81,6 +82,7 @@ const useKanbanViews = (project: IProject | null) => {
     UpdateKanban();
   const queryClient = useQueryClient();
   const deletedViewLeavesTabs = useFlag(HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG);
+  const boardDefaultSubtasks = useFlag(HTPR_9274_BOARD_DEFAULT_SUBTASKS_FLAG);
   const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
   const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG);
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
@@ -243,7 +245,7 @@ const useKanbanViews = (project: IProject | null) => {
     board_sorting_order: getActiveSortingOrderFromProject(queuedProject),
     board_sorting_stack: getActiveSortingStackFromProject(queuedProject),
     board_filters: getActiveFiltersFromProject(queuedProject),
-    board_subtask_setting: getActiveSubtaskSettingFromProject(queuedProject),
+    board_subtask_setting: subtaskSettingToStore(queuedProject),
     board_empty_sections: getActiveEmptySectionSettingFromProject(queuedProject),
     board_staleness: getActiveStalenessOverrideFromProject(queuedProject),
     board_show_archived: getActiveShowArchivedOverrideFromProject(queuedProject),
@@ -488,7 +490,7 @@ const useKanbanViews = (project: IProject | null) => {
   ) => apiHandler(
     (queuedProject) => buildUnsavedBody(queuedProject, {
       board_subtask_setting: subTaskSetting,
-      board_subtask_explicit: true,
+      ...(boardDefaultSubtasks ? { board_subtask_explicit: true } : {}),
     }),
     project,
   );
