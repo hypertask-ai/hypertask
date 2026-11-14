@@ -34,7 +34,6 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -65,6 +64,8 @@ jobs:
             if (!ok) core.notice(`skipped: reviewer=${reviewer} state=${pr.state} draft=${pr.draft}`);
       - name: Require the Claude subscription token
         if: steps.target.outputs.go == 'yes'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
             echo "::error::The repo secret CLAUDE_CODE_OAUTH_TOKEN is empty or missing. No paid API key is used as a fallback."
@@ -81,6 +82,7 @@ jobs:
       - name: Review the diff
         if: steps.target.outputs.go == 'yes'
         env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           REVIEW_REPO: ${{ github.repository }}
           REVIEW_PR: ${{ steps.target.outputs.number }}
           REVIEW_SHA: ${{ steps.target.outputs.sha }}

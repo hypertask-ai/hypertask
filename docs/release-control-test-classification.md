@@ -11,7 +11,6 @@ These suites import a release module or run the real workflow shell block agains
 - `tests/automerge-workflow.test.cjs` executes auto-merge decisions, failure handling, risky-path parking, speed gates, and cleanup.
 - `tests/prod-health-workflow.test.cjs` executes health classification and rollback decisions with fake Vercel, app, and Telegram responses.
 - `tests/emergency-rollback.test.cjs` calls the rollback module with a fake Vercel client.
-- `tests/review-dispatch-cache.test.cjs` runs the review broker and scanner with fake GitHub responses.
 - `tests/action-archive-cache.test.cjs` runs the cache installer against fake downloads and concurrent writers.
 
 ### Release support
