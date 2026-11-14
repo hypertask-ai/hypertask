@@ -2,6 +2,7 @@ import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8207_QWEN_MAX_BYOK_FLAG } from "@/lib/flags/definitions/htpr-8207-qwen-max-byok";
 import { forcedByokProvider, modelOptionMatchesForcedKey } from "@/lib/ai/forcedTeamKey";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
@@ -977,6 +978,7 @@ type AIModelDropDownButtonProps = Omit<
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
+  const htpr8207ModelsEnabled = useFlag(HTPR_8207_QWEN_MAX_BYOK_FLAG);
   const flagModelOptions = deepseekFlashFastEnabled
     ? aiModelOptions
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
@@ -986,8 +988,8 @@ const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
     ? flagModelOptions
     : flagModelOptions.filter((option) => !isGrokGemini4ModelKey(option.modelKey));
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
-    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
+    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true, htpr8207ModelsEnabled))
+    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true, htpr8207ModelsEnabled));
   return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} />;
 };
 

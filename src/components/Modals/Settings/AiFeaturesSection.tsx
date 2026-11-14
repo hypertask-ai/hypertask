@@ -7,6 +7,7 @@ import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8207_QWEN_MAX_BYOK_FLAG } from "@/lib/flags/definitions/htpr-8207-qwen-max-byok";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
@@ -317,6 +318,7 @@ const AiFeaturesSection = () => {
   const removeImageGeneration = useFlag(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG);
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
+  const htpr8207ModelsEnabled = useFlag(HTPR_8207_QWEN_MAX_BYOK_FLAG);
   const flagModelOptions = deepseekFlashFastEnabled
     ? aiModelOptions
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
@@ -326,8 +328,8 @@ const AiFeaturesSection = () => {
     ? flagModelOptions
     : flagModelOptions.filter((option) => !isGrokGemini4ModelKey(option.modelKey));
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
-    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
+    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true, htpr8207ModelsEnabled))
+    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true, htpr8207ModelsEnabled));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();

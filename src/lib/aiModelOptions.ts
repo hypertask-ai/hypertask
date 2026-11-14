@@ -23,10 +23,12 @@ export type TAiModelKey =
   | "kimi-k3.1-pro"
   | "qwen3.8-max"
   | "qwen3.8-max-prime"
+  | "glm-5.3"
   | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
   | "gemini-4-argon"
+  | "gemini-3.1-pro-preview"
   | "grok-4.7"
   | "claude-haiku-5-5"
   | "custom";
@@ -54,10 +56,12 @@ export type TAiModelOptionId =
   | "kimi-k3.1-pro"
   | "qwen3.8-max"
   | "qwen3.8-max-prime"
+  | "glm-5.3"
   | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
   | "gemini-4-argon"
+  | "gemini-3.1-pro-preview"
   | "grok-4.7"
   | "claude-haiku-5-5"
   | "custom";
@@ -192,6 +196,13 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 2,
   },
   {
+    key: "glm-5.3",
+    modelClass: "glm",
+    label: "GLM-5.3",
+    provider: "zhipu",
+    priceTier: 2,
+  },
+  {
     key: "glm-5.3-flash",
     modelClass: "glm-flash",
     label: "GLM-5.3 Flash",
@@ -216,6 +227,13 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     key: "gemini-4-argon",
     modelClass: "gemini-argon",
     label: "Gemini 4 Argon",
+    provider: "google",
+    priceTier: 2,
+  },
+  {
+    key: "gemini-3.1-pro-preview",
+    modelClass: "gemini-pro",
+    label: "Gemini 3.1 Pro Preview",
     provider: "google",
     priceTier: 2,
   },
@@ -520,6 +538,15 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "qwen3.8-max-prime",
   },
   {
+    id: "glm-5.3",
+    source: "gateway",
+    title: "GLM-5.3",
+    model: "zai/glm-5.3",
+    desc: "GLM flagship, 1M context",
+    reasoning: "thinking",
+    modelKey: "glm-5.3",
+  },
+  {
     id: "glm-5.3-flash",
     source: "gateway",
     title: "GLM-5.3 Flash",
@@ -554,6 +581,15 @@ export const aiModelOptions: TAiModelOption[] = [
     desc: "Newest Gemini",
     reasoning: "instant",
     modelKey: "gemini-4-argon",
+  },
+  {
+    id: "gemini-3.1-pro-preview",
+    source: "gateway",
+    title: "Gemini 3.1 Pro Preview",
+    model: "google/gemini-3.1-pro-preview",
+    desc: "Gemini Pro reasoning, 1M context",
+    reasoning: "thinking",
+    modelKey: "gemini-3.1-pro-preview",
   },
   {
     id: "grok-4.7",
@@ -887,13 +923,19 @@ export function isGrokGemini4ModelKey(modelKey: string | null | undefined): bool
   return modelKey === "grok-4.7" || modelKey === "gemini-4-argon";
 }
 
+export function isHtpr8207ModelKey(modelKey: string | null | undefined): boolean {
+  return modelKey === "glm-5.3" || modelKey === "gemini-3.1-pro-preview";
+}
+
 export function isAiModelOptionVisible(
   option: TAiModelOption,
   _haiku55Enabled: boolean,
   deepseekFlashFastEnabled = false,
   grokGemini4Enabled = false,
+  htpr8207ModelsEnabled = true,
 ): boolean {
   if (isGrokGemini4ModelKey(option.modelKey) && !grokGemini4Enabled) return false;
+  if (isHtpr8207ModelKey(option.modelKey) && !htpr8207ModelsEnabled) return false;
   return option.modelKey !== "deepseek-v4.1-flash-fast" || deepseekFlashFastEnabled;
 }
 
