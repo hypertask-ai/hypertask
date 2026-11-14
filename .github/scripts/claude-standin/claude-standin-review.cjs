@@ -135,24 +135,21 @@ const FAILED_STATES = ['failure', 'error'];
 const FAILED_CONCLUSIONS = ['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure'];
 const PENDING_STATUSES = ['in_progress', 'queued', 'requested', 'waiting', 'pending'];
 
-const contextsOf = pr => pr.commits?.nodes?.[0]?.commit?.status?.contexts ?? [];
+const legacyStatusChecksOf = pr =>
+  (pr.commits?.nodes?.[0]?.commit?.status?.contexts ?? [])
+    .map(c => ({ name: c.context ?? '', state: String(c.state ?? '').toLowerCase() }));
 
-const rollupOf = pr => (pr.statusCheckRollup?.contexts?.nodes ?? []).filter(Boolean);
+const rollupCheckRunsOf = pr => (pr.statusCheckRollup?.contexts?.nodes ?? []).filter(Boolean);
 
-// Actions check runs carry a conclusion, legacy statuses carry a state. Reading only
-// commits.status.contexts missed every check run, so a head with red workflows ranked
-// green. The rollup is asked for first, and the legacy statuses stay as the fallback.
+const checkRunStateOf = c => c.conclusion
+  ? String(c.conclusion).toLowerCase()
+  : PENDING_STATUSES.includes(String(c.status ?? '').toLowerCase()) ? 'pending' : String(c.state ?? '').toLowerCase();
+
 const checksOf = pr => {
-  const rollup = rollupOf(pr);
-  if (rollup.length) {
-    return rollup.map(c => ({
-      name: c.name ?? c.context ?? '',
-      state: c.conclusion
-        ? String(c.conclusion).toLowerCase()
-        : PENDING_STATUSES.includes(String(c.status ?? '').toLowerCase()) ? 'pending' : String(c.state ?? '').toLowerCase(),
-    }));
-  }
-  return contextsOf(pr).map(c => ({ name: c.context ?? '', state: String(c.state ?? '').toLowerCase() }));
+  const rollup = rollupCheckRunsOf(pr);
+  return rollup.length
+    ? rollup.map(c => ({ name: c.name ?? c.context ?? '', state: checkRunStateOf(c) }))
+    : legacyStatusChecksOf(pr);
 };
 
 const isGreen = pr => !checksOf(pr).some(c => FAILED_CONCLUSIONS.includes(c.state) || FAILED_STATES.includes(c.state));
