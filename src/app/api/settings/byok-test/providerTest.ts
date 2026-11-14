@@ -23,7 +23,7 @@ const TEST_MODEL_KEYS: Partial<Record<TByokProviderKey, TAiModelKey>> = {
   deepseek: "deepseek-v4.1-flash",
   moonshot: "kimi-k2.5",
   zhipu: "glm-5.3-flash",
-  alibaba: "qwen3.7-plus",
+  alibaba: "qwen3.8-max",
 };
 
 type TestRequest = {
@@ -33,7 +33,19 @@ type TestRequest = {
   url: string;
 };
 
-function testModel(provider: TByokProviderKey, _haiku55Enabled: boolean) {
+const RETIRED_ALIBABA_TEST_MODEL = {
+  id: "qwen3.7-plus",
+  label: "Qwen3.7 Plus",
+};
+
+function testModel(
+  provider: TByokProviderKey,
+  _haiku55Enabled: boolean,
+  qwenMaxEnabled: boolean,
+) {
+  if (provider === "alibaba" && !qwenMaxEnabled) {
+    return RETIRED_ALIBABA_TEST_MODEL;
+  }
   const modelKey = TEST_MODEL_KEYS[provider];
   if (!modelKey) return null;
   const option = aiModelOptions.find(
@@ -86,6 +98,7 @@ export function buildByokTestRequest(
   apiKey: string,
   customEndpoint?: Pick<CustomEndpointConfig, "baseUrl" | "modelId">,
   haiku55Enabled = false,
+  qwenMaxEnabled = true,
 ): TestRequest | null {
   if (provider === "custom") {
     if (!customEndpoint) return null;
@@ -124,7 +137,7 @@ export function buildByokTestRequest(
     );
   }
 
-  const model = testModel(provider, haiku55Enabled);
+  const model = testModel(provider, haiku55Enabled, qwenMaxEnabled);
   if (!model) return null;
 
   if (provider === "openai") {

@@ -6,7 +6,7 @@ export const GUEST_MODEL_KEYS: readonly TAiModelKey[] = [
   "kimi-k2.5",
   "glm-5.3-flash",
   "deepseek-v4-pro",
-  "qwen3.7-plus",
+  "qwen3.8-max",
 ];
 
 export const GUEST_DEFAULT_MODEL_KEY: TAiModelKey = "gemini-3.5-flash-lite";
@@ -17,7 +17,7 @@ export const GUEST_ALLOWED_GATEWAY_MODELS: ReadonlySet<string> = new Set([
   "moonshotai/kimi-k2.5",
   "zai/glm-5.3-flash",
   "deepseek/deepseek-v4-pro",
-  "alibaba/qwen3.7-plus",
+  "alibaba/qwen3.8-max",
 ]);
 export const GUEST_DEFAULT_GATEWAY_MODEL = "google/gemini-3.5-flash-lite";
 
