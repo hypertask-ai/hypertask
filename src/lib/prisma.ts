@@ -7,6 +7,7 @@ import { isApiKeyAuthLookup, withApiKeyExpiryGuard } from '@/lib/apiKeyExpiry'
 import { trackPrismaQuery } from '@/lib/queryCountTracker'
 import { createMcpTimingPool, mcpDbTimings } from '@/lib/mcp/dbTiming'
 import { normalizeDbConnectionString } from '@/lib/dbConnectionString'
+import { TASK_SAVE_LIMIT_MS } from '@/lib/tasks/saveLimit'
 
 const RELATION_OPS = new Set([
   "findMany",
@@ -25,6 +26,7 @@ const prismaClientSingleton = () => {
     connectionString: normalizeDbConnectionString(process.env.DATABASE_URL),
     idleTimeoutMillis: 5 * 60_000,
     keepAlive: true,
+    connectionTimeoutMillis: TASK_SAVE_LIMIT_MS,
   }), { disposeExternalPool: true })
   const client = new PrismaClient({ adapter }).$extends({
     query: {
