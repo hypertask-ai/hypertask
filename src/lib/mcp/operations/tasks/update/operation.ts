@@ -15,6 +15,7 @@ import {
 import prisma from '@/lib/prisma'
 import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog"
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import {
   executeTaskUpdate,
   type UpdateTaskBody,
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
         })
     )
 
+    if (result.cause !== undefined) reportMcpOperationCrash(request, result.cause)
     return result.response
   } catch (error) {
     if (isPlanLimitReachedError(error)) {

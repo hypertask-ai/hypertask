@@ -114,7 +114,9 @@ export async function executeTaskUpdate(options: ExecuteTaskUpdateOptions): Prom
     const result = options.persist ? await options.persist(persist) : await persist()
     return receipt(NextResponse.json(result, { status: 200 }))
   } catch (error) {
-    if (error instanceof UpdateTaskPersistenceError) return receipt(NextResponse.json(error.response, { status: error.status }))
+    if (error instanceof UpdateTaskPersistenceError) {
+      return { response: NextResponse.json(error.response, { status: error.status }), outcome: 'error', cause: error.cause }
+    }
     throw error
   }
 }

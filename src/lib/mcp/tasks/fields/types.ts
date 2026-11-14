@@ -27,12 +27,15 @@ export interface UpdateTaskErrorResponse {
 }
 
 export class UpdateTaskPersistenceError extends Error {
+    readonly cause?: unknown
     constructor(
         readonly response: UpdateTaskErrorResponse,
         readonly status: number = 500,
+        cause?: unknown,
     ) {
         super(response.error)
         this.name = 'UpdateTaskPersistenceError'
+        this.cause = cause
     }
 }
 
@@ -45,6 +48,7 @@ export type TaskUpdateResult =
           status?: number
           code?: string
           field?: string
+          cause?: unknown
       }
 
 export const VALID_STATUSES = ['Normal', 'Archive', 'Deleted'] as const;
@@ -81,6 +85,7 @@ export interface UpdateTaskBody {
 export interface TaskUpdateExecutionResult {
     response: NextResponse;
     outcome: 'success' | 'not_found' | 'error';
+    cause?: unknown;
 }
 
 export type TaskUpdateAssigneeHandler = (input: {

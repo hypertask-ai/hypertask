@@ -80,7 +80,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 error: toErrorMessage(error, 'Unknown error'),
                 ...(codedError
                     ? { status: codedError.status, code: codedError.code, ...(typeof refusalField === 'string' ? { field: refusalField } : {}) }
-                    : {}),
+                    : { cause: error }),
             }
         }
     })
@@ -105,6 +105,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
             const refusal = planLimitResponse(planFailure)
             throw new UpdateTaskPersistenceError({ ...refusal.body, tasks: [] }, refusal.status)
         }
+        const causeFailure = failedTasks.find((failure) => failure.cause !== undefined)
         throw new UpdateTaskPersistenceError(
             {
                 success: false,
@@ -114,6 +115,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 ...(linkFailure?.field ? { field: linkFailure.field } : {}),
             },
             linkFailure?.status ?? 500,
+            causeFailure?.cause,
         )
     }
 

@@ -57,7 +57,10 @@ const redis = {
   },
   del: async (key) => { state.cache.delete(key); return 1 },
 }
+const crashReports = []
 const load = loader({
+  '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: (_request, error) => { crashReports.push(error) } },
+  '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler },
   '@/lib/prisma': { __esModule: true, default: prisma },
   '@/lib/redis': { getRedis: async () => redis },
   '@/lib/auth/session': { SESSION_COOKIE: 'fixture_session', signSession: (claims) => {
@@ -180,6 +183,26 @@ for (const [name, body, extra] of cases) {
     ])
   })
 }
+
+test('a 500 update reports its real cause instead of a bare server error', async () => {
+  crashReports.length = 0
+  reset({ failTaskId: 101 })
+  const response = await withFetch(() => operation(request({ task_id: 101, title: 'After' })))
+  assert.equal(response.status, 500)
+  assert.equal(crashReports.length, 1)
+  assert.match(crashReports[0].message, /Fixture write failed/)
+})
+
+test('a caller refusal is not reported as a server crash', async () => {
+  crashReports.length = 0
+  reset({ tasks: [{ id: 101, projectId: 15, status: 'Archive' }] })
+  const archived = await withFetch(() => operation(request({ task_id: 101, sectionId: 20 })))
+  assert.equal(archived.status, 409)
+  reset({ tasks: [] })
+  const missing = await withFetch(() => operation(request({ task_id: 101, title: 'After' })))
+  assert.equal(missing.status, 404)
+  assert.deepEqual(crashReports, [])
+})
 
 test('direct, single and batch updates normalize descriptions without consulting flags', async () => {
   const body = { task_id: 101, description: '## Heading', content_type: 'markdown' }
