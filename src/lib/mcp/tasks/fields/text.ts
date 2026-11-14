@@ -30,6 +30,7 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
         if (requestBody.parent_task_id !== undefined) newTask.parentTaskId = requestBody.parent_task_id
 
         const singleUrl = `${baseUrl}/api/tasks/single`
+        const saveDeadline = budget.deadline
         const singleResponse = await fetchTaskSave(singleUrl, {
             method: 'PUT',
             redirect: 'manual',
@@ -37,9 +38,9 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
             body: JSON.stringify({
                 newTask,
                 agentId: ctx.agentId || undefined,
-                saveDeadline: budget.deadline,
+                saveDeadline,
             })
-        }, budget.remaining())
+        }, saveDeadline)
         if (!singleResponse.ok) {
             throw new Error(
                 toErrorMessage(

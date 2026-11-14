@@ -76,6 +76,9 @@ test("HTPR-9106 real agent saves, stalled HTTP bodies and pool connections share
     const reason = new Error("Caller cancelled");
     cancelled.abort(reason);
     await assert.rejects(save.fetchTaskSave(`${baseUrl}/ok`, { signal: cancelled.signal }), (error) => error === reason);
+    const expiredAt = Date.now();
+    await assert.rejects(save.fetchTaskSave(`${baseUrl}/ok`, {}, expiredAt - 50), { message: save.TASK_SAVE_TOO_LONG });
+    assert.ok(Date.now() - expiredAt < 1_000, `expired save waited ${Date.now() - expiredAt}ms`);
     console.log(`save limit ok: stalled HTTP, response body and pg connection rejected in ${elapsed}ms`);
   } finally {
     for (const socket of sockets) socket.destroy();

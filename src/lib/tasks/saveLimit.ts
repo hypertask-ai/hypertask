@@ -49,7 +49,9 @@ export function taskSaveBudget(deadline = Date.now() + TASK_SAVE_LIMIT_MS) {
   }
 }
 
-export async function fetchTaskSave(url: string, init: RequestInit = {}, timeoutMs = TASK_SAVE_LIMIT_MS): Promise<{ ok: boolean; status: number; data: unknown }> {
+export async function fetchTaskSave(url: string, init: RequestInit = {}, deadline = Date.now() + TASK_SAVE_LIMIT_MS): Promise<{ ok: boolean; status: number; data: unknown }> {
+  const timeoutMs = deadline - Date.now()
+  if (timeoutMs <= 0) throw saveTooLong()
   const timeout = AbortSignal.timeout(timeoutMs)
   const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout
   try {
