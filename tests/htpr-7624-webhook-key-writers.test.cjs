@@ -14,7 +14,7 @@ afterEach(() => {
   else process.env.BYOK_CIPHER_SECRET = original;
 });
 
-function fixture(enabled) {
+function fixture() {
   const writes = [], flags = [];
   const base = {
     id: 'subscription', agentId: 'agent', projectId: null, teamId: 'team',
@@ -51,7 +51,7 @@ function fixture(enabled) {
     '@prisma/client': { Prisma: { sql: () => ({}) } },
     '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
       flags.push({ key, userId });
-      return key === flagKey && enabled;
+      return false;
     } },
     './ssrfGuard': { assertSafeWebhookTarget: async () => ({ ok: true }) },
     '@/lib/mcp/webhooks/ssrfGuard': { assertSafeWebhookTarget: async () => ({ ok: true }) },
@@ -75,84 +75,82 @@ function fixture(enabled) {
     mcp: () => load('src/lib/mcp/operations/webhooks/operation.ts', mocks),
   };
 }
-function assertSecret(result, stored, enabled) {
+function assertSecret(result, stored) {
   assert.match(result.secret, /^whsec_[a-f0-9]{48}$/);
-  assert.equal(store.isSealedWebhookSigningKey(stored), enabled);
+  assert.equal(store.isSealedWebhookSigningKey(stored), true);
   assert.equal(store.openWebhookSigningKey(stored), result.secret);
-  if (enabled) assert.notEqual(stored, result.secret);
+  assert.notEqual(stored, result.secret);
   assert.equal(JSON.stringify(result).split(result.secret).length - 1, 1);
-  if (enabled) assert.equal(JSON.stringify(result).includes(stored), false);
+  assert.equal(JSON.stringify(result).includes(stored), false);
 }
-function assertFlag(h) {
-  assert.deepEqual(h.flags.filter(({ key }) => key === flagKey), [{ key: flagKey, userId: 42 }]);
+function assertFlagIgnored(h) {
+  assert.equal(h.flags.some(({ key }) => key === flagKey), false);
 }
 
-for (const enabled of [false, true]) {
-  test(`board MCP create persists ${enabled ? 'sealed' : 'legacy'} and returns plaintext once for the acting user`, async () => {
-    const h = fixture(enabled);
-    const response = await h.mcp().POST(new NextRequest('https://app.example.invalid/api/mcp/webhooks', {
-      method: 'POST', body: JSON.stringify({ project_id: 17, url: h.base.url, events: ['task.created'] }),
-    }));
-    assert.equal(response.status, 201);
-    const result = await response.json();
-    assertSecret(result, h.current().secret, enabled);
-    assert.equal(result.subscription.secretHint, 'whsec_…' + result.secret.slice(-4));
+test('board MCP create persists a sealed key and returns plaintext once even if the old switch is off', async () => {
+  const h = fixture();
+  const response = await h.mcp().POST(new NextRequest('https://app.example.invalid/api/mcp/webhooks', {
+    method: 'POST', body: JSON.stringify({ project_id: 17, url: h.base.url, events: ['task.created'] }),
+  }));
+  assert.equal(response.status, 201);
+  const result = await response.json();
+  assertSecret(result, h.current().secret);
+  assert.equal(result.subscription.secretHint, 'whsec_…' + result.secret.slice(-4));
+  assert.equal('secret' in result.subscription, false);
+  assertFlagIgnored(h);
+});
+
+test('workspace create and rotate persist sealed values with one-time plaintext even if the old switch is off', async () => {
+  const h = fixture();
+  const service = h.workspace();
+  const created = await service.createWorkspaceWebhook({ userId: 42, teamId: 'team', projectId: null, url: h.base.url, events: ['task.created'] });
+  assertSecret(created, h.current().secret);
+  assert.equal(created.endpoint.secretHint, 'whsec_…' + created.secret.slice(-4));
+  assert.equal('secret' in created.endpoint, false);
+  assertFlagIgnored(h);
+  h.flags.length = 0;
+  const rotated = await service.rotateWorkspaceWebhookSecret({ userId: 42, teamId: 'team', id: 'subscription' });
+  assertSecret(rotated, h.current().secret);
+  assert.notEqual(rotated.secret, created.secret);
+  assert.equal(rotated.secretHint, 'whsec_…' + rotated.secret.slice(-4));
+  assertFlagIgnored(h);
+});
+
+test('agent create and rotate persist sealed values with one-time plaintext even if the old switch is off', async () => {
+  const h = fixture();
+  const service = h.agent();
+  const created = await service.upsertAgentWebhook({ userId: 42, agentId: 'agent', body: { url: h.base.url, events: ['task.created'] } });
+  assertSecret(created, h.current().secret);
+  assert.equal(created.subscription.secretHint, 'whsec_…' + created.secret.slice(-4));
+  assertFlagIgnored(h);
+  h.flags.length = 0;
+  const rotated = await service.upsertAgentWebhook({ userId: 42, agentId: 'agent', body: { rotateSecret: true } });
+  assertSecret(rotated, h.current().secret);
+  assert.notEqual(rotated.secret, created.secret);
+  assert.equal(rotated.subscription.secretHint, 'whsec_…' + rotated.secret.slice(-4));
+  assertFlagIgnored(h);
+});
+
+for (const format of ['legacy', 'sealed', 'corrupt']) {
+  test(`agent non-rotate update preserves exact ${format} bytes`, async () => {
+    const h = fixture();
+    const stored = format === 'legacy' ? 'whsec_original-1234' : format === 'sealed' ? store.sealWebhookSigningKey('whsec_original-1234') : 'enc:v1:corrupt';
+    h.set({ ...h.base, secret: stored });
+    delete process.env.BYOK_CIPHER_SECRET;
+    const result = await h.agent().upsertAgentWebhook({ userId: 42, agentId: 'agent', body: { active: false } });
+    assert.equal(h.current().secret, stored);
+    assert.equal(h.current().active, false);
+    assert.equal('secret' in h.writes[0].update, false);
+    assert.equal('secret' in result, false);
     assert.equal('secret' in result.subscription, false);
-    assertFlag(h);
+    assert.equal(result.subscription.secretHint, format === 'legacy' ? 'whsec_…1234' : 'unavailable');
+    assertFlagIgnored(h);
   });
-
-  test(`workspace create and rotate persist ${enabled ? 'sealed' : 'legacy'} values with one-time plaintext`, async () => {
-    const h = fixture(enabled);
-    const service = h.workspace();
-    const created = await service.createWorkspaceWebhook({ userId: 42, teamId: 'team', projectId: null, url: h.base.url, events: ['task.created'] });
-    assertSecret(created, h.current().secret, enabled);
-    assert.equal(created.endpoint.secretHint, 'whsec_…' + created.secret.slice(-4));
-    assert.equal('secret' in created.endpoint, false);
-    assertFlag(h);
-    h.flags.length = 0;
-    const rotated = await service.rotateWorkspaceWebhookSecret({ userId: 42, teamId: 'team', id: 'subscription' });
-    assertSecret(rotated, h.current().secret, enabled);
-    assert.notEqual(rotated.secret, created.secret);
-    assert.equal(rotated.secretHint, 'whsec_…' + rotated.secret.slice(-4));
-    assertFlag(h);
-  });
-
-  test(`agent create and rotate persist ${enabled ? 'sealed' : 'legacy'} values with one-time plaintext`, async () => {
-    const h = fixture(enabled);
-    const service = h.agent();
-    const created = await service.upsertAgentWebhook({ userId: 42, agentId: 'agent', body: { url: h.base.url, events: ['task.created'] } });
-    assertSecret(created, h.current().secret, enabled);
-    assert.equal(created.subscription.secretHint, 'whsec_…' + created.secret.slice(-4));
-    assertFlag(h);
-    h.flags.length = 0;
-    const rotated = await service.upsertAgentWebhook({ userId: 42, agentId: 'agent', body: { rotateSecret: true } });
-    assertSecret(rotated, h.current().secret, enabled);
-    assert.notEqual(rotated.secret, created.secret);
-    assert.equal(rotated.subscription.secretHint, 'whsec_…' + rotated.secret.slice(-4));
-    assertFlag(h);
-  });
-
-  for (const format of ['legacy', 'sealed', 'corrupt']) {
-    test(`agent non-rotate update preserves exact ${format} bytes with sealed-write flag ${enabled ? 'on' : 'off'}`, async () => {
-      const h = fixture(enabled);
-      const stored = format === 'legacy' ? 'whsec_original-1234' : format === 'sealed' ? store.sealWebhookSigningKey('whsec_original-1234') : 'enc:v1:corrupt';
-      h.set({ ...h.base, secret: stored });
-      delete process.env.BYOK_CIPHER_SECRET;
-      const result = await h.agent().upsertAgentWebhook({ userId: 42, agentId: 'agent', body: { active: false } });
-      assert.equal(h.current().secret, stored);
-      assert.equal(h.current().active, false);
-      assert.equal('secret' in h.writes[0].update, false);
-      assert.equal('secret' in result, false);
-      assert.equal('secret' in result.subscription, false);
-      assert.equal(result.subscription.secretHint, format === 'legacy' ? 'whsec_…1234' : 'unavailable');
-      assert.equal(h.flags.some(({ key }) => key === flagKey), false);
-    });
-  }
 }
 
 for (const writer of ['workspace-create', 'workspace-rotate', 'agent-create', 'agent-rotate']) {
   test(`missing cipher root aborts ${writer} without partial persistence`, async () => {
-    const h = fixture(true);
+    const h = fixture();
     if (writer.endsWith('rotate')) h.set({ ...h.base, secret: 'enc:v1:corrupt' });
     delete process.env.BYOK_CIPHER_SECRET;
     const operation = writer === 'workspace-create'
@@ -166,7 +164,7 @@ for (const writer of ['workspace-create', 'workspace-rotate', 'agent-create', 'a
 }
 
 test('all hint serializers tolerate corrupt rows and agent management still rotates and deletes them', async () => {
-  const h = fixture(true);
+  const h = fixture();
   h.set({ ...h.base, projectId: 17, secret: 'enc:v1:corrupt' });
   const mcp = h.mcp();
   const list = await mcp.GET(new NextRequest('https://app.example.invalid/api/mcp/webhooks?project_id=17'));
@@ -179,14 +177,14 @@ test('all hint serializers tolerate corrupt rows and agent management still rota
   const get = await agent.manageAgentWebhook({ userId: 42, agentId: 'agent', action: 'get' });
   assert.equal(get.subscription.secretHint, 'unavailable');
   const rotated = await agent.manageAgentWebhook({ userId: 42, agentId: 'agent', action: 'rotate' });
-  assertSecret(rotated, h.current().secret, true);
+  assertSecret(rotated, h.current().secret);
   h.set({ ...h.base, secret: 'enc:v1:corrupt' });
   assert.equal((await agent.manageAgentWebhook({ userId: 42, agentId: 'agent', action: 'delete' })).success, true);
 });
 
 
 test('missing cipher root returns a sanitized MCP failure without any persistence', async t => {
-  const h = fixture(true);
+  const h = fixture();
   const logs = [];
   t.mock.method(console, 'error', (...args) => logs.push(args.map(value => value instanceof Error ? value.message : value)));
   delete process.env.BYOK_CIPHER_SECRET;

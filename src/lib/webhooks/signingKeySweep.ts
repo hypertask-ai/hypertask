@@ -1,5 +1,3 @@
-import type { PrismaClient } from '@prisma/client'
-import { SEALED_WEBHOOK_KEYS_FLAG } from '@/lib/flags/definitions/htpr-7624-sealed-webhook-keys'
 import { openWebhookSigningKey, sealWebhookSigningKey } from './signingKeyStore'
 
 const pending = { NOT: { secret: { startsWith: 'enc:' } } }
@@ -10,7 +8,7 @@ type SigningKeyModel = {
   updateMany(input: { where: { id: string; secret: string }; data: { secret: string } }): Promise<{ count: number }>
   count(input: { where: typeof pending }): Promise<number>
 }
-type SigningKeyDatabase = Pick<PrismaClient, 'featureFlag'> & {
+type SigningKeyDatabase = {
   webhookSubscription: SigningKeyModel
   agentWebhookSubscription: SigningKeyModel
 }
@@ -32,11 +30,6 @@ function verifiedSeal(plain: string): string | null {
 export async function sweepWebhookSigningKeys(db: SigningKeyDatabase, deadline = Date.now() + 20_000) {
   const counts = { scanned: 0, encrypted: 0, conflicts: 0, failed: 0, remaining: 0 }
   try {
-    const flag = await db.featureFlag.findUnique({
-      where: { key: SEALED_WEBHOOK_KEYS_FLAG },
-      select: { mode: true },
-    })
-    if (flag?.mode !== 'EVERYONE') return counts
     assertSealingWorks()
 
     for (const model of [db.webhookSubscription, db.agentWebhookSubscription]) {

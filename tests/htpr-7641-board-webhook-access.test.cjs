@@ -137,8 +137,10 @@ function harness({ agent = false, workspace = false } = {}) {
     },
     "./queue": { queueBoardWebhookDelivery: async () => {} },
     "@/lib/flags": { isFeatureEnabled: async () => false },
-    "@/lib/flags/definitions/htpr-7624-sealed-webhook-keys": { SEALED_WEBHOOK_KEYS_FLAG: "fixture" },
-    "@/lib/webhooks/signingKeyStore": { webhookSigningKeyHint: () => "fixture" },
+    "@/lib/webhooks/signingKeyStore": {
+      webhookSigningKeyHint: () => "fixture",
+      sealWebhookSigningKey: (secret) => secret,
+    },
     "./ssrfGuard": { assertSafeWebhookTarget: async () => ({ ok: true }) },
   };
   const sender = load("src/lib/mcp/webhooks/outboxDelivery.ts", mocks);

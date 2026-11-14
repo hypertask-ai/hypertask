@@ -18,15 +18,11 @@ afterEach(() => {
   }
 });
 
-function fixture(mode = 'EVERYONE') {
+function fixture() {
   const tables = { webhookSubscription: [], agentWebhookSubscription: [] };
   const calls = [];
   let beforeUpdate;
-  const db = { featureFlag: { findUnique: async ({ where, select }) => {
-    assert.deepEqual(where, { key: 'htpr-7624-sealed-webhook-keys' });
-    assert.deepEqual(select, { mode: true });
-    return mode === null ? null : { mode };
-  } } };
+  const db = {};
   for (const model of Object.keys(tables)) {
     const rows = tables[model];
     const pending = query => {
@@ -56,14 +52,14 @@ function fixture(mode = 'EVERYONE') {
   return { db, tables, calls, beforeUpdate: fn => { beforeUpdate = fn; } };
 }
 
-for (const mode of ['OFF', 'OWNER_ONLY', 'OWNER_AND_QA', null]) {
-  test(`no-op before either subscription model is read unless mode is EVERYONE (${mode ?? 'unset'})`, async () => {
-    const h = fixture(mode);
-    delete process.env.BYOK_CIPHER_SECRET;
-    assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 0, encrypted: 0, conflicts: 0, failed: 0, remaining: 0 });
-    assert.deepEqual(h.calls, []);
-  });
-}
+test('sweep seals plaintext rows without reading a feature flag', async () => {
+  const h = fixture();
+  assert.equal(h.db.featureFlag, undefined);
+  h.tables.webhookSubscription.push({ id: '1', secret: 'whsec_plain', active: true });
+  assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 1, encrypted: 1, conflicts: 0, failed: 0, remaining: 0 });
+  assert.equal(store.openWebhookSigningKey(h.tables.webhookSubscription[0].secret), 'whsec_plain');
+  assert.equal(h.calls.some(call => call.operation === 'findUnique'), false);
+});
 
 test('sweep includes active and inactive rows in both models, preserves sealed/reserved values and reruns as a no-op', async () => {
   const h = fixture();
@@ -194,7 +190,7 @@ test('authorized cron returns counts only, and failures return a fixed error wit
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.deepEqual(await response.json(), { scanned: 1, encrypted: 1, conflicts: 0, failed: 0, remaining: 0 });
-  h.db.featureFlag.findUnique = async () => { throw new Error(h.tables.agentWebhookSubscription[0].secret); };
+  h.db.webhookSubscription.findMany = async () => { throw new Error(h.tables.agentWebhookSubscription[0].secret); };
   const failure = await GET(request(`Bearer ${process.env.CRON_SECRET}`));
   assert.equal(failure.status, 500);
   assert.equal(failure.headers.get('cache-control'), 'no-store');

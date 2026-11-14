@@ -1,5 +1,4 @@
 import { sealWebhookSigningKey, webhookSigningKeyHint } from "@/lib/webhooks/signingKeyStore";
-import { SEALED_WEBHOOK_KEYS_FLAG } from "@/lib/flags/definitions/htpr-7624-sealed-webhook-keys";
 import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
 import { agentWithinTeamWhere } from "@/lib/mcp/managementKeyTeamScope";
 import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
@@ -7,7 +6,6 @@ import { AuthHeaderInputError, authHeaderColumns, parseAuthHeaderChange } from "
 import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -230,9 +228,7 @@ export async function upsertAgentWebhook(input: {
       const secret = rotateSecret
         ? `whsec_${crypto.randomBytes(24).toString("hex")}`
         : existing.secret;
-      const storedSecret = rotateSecret && await isFeatureEnabled(SEALED_WEBHOOK_KEYS_FLAG, input.userId)
-        ? sealWebhookSigningKey(secret)
-        : secret;
+      const storedSecret = rotateSecret ? sealWebhookSigningKey(secret) : secret;
       const subscription = await tx.agentWebhookSubscription.upsert({
         where: { agentId: input.agentId },
         create: {

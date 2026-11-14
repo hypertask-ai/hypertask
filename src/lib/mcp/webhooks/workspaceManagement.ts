@@ -1,6 +1,4 @@
 import { sealWebhookSigningKey, webhookSigningKeyHint } from '@/lib/webhooks/signingKeyStore'
-import { isFeatureEnabled } from '@/lib/flags'
-import { SEALED_WEBHOOK_KEYS_FLAG } from '@/lib/flags/definitions/htpr-7624-sealed-webhook-keys'
 import crypto from 'crypto'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
@@ -431,9 +429,7 @@ export async function createWorkspaceWebhook(input: {
           : { projectId }),
         url,
         events,
-        secret: await isFeatureEnabled(SEALED_WEBHOOK_KEYS_FLAG, input.userId)
-          ? sealWebhookSigningKey(secret)
-          : secret,
+        secret: sealWebhookSigningKey(secret),
         supportsUnassignedEvent: true,
         createdById: input.userId,
       },
@@ -497,9 +493,7 @@ export async function rotateWorkspaceWebhookSecret(input: {
   await prisma.webhookSubscription.update({
     where: { id: subscription.id },
     data: {
-      secret: await isFeatureEnabled(SEALED_WEBHOOK_KEYS_FLAG, input.userId)
-        ? sealWebhookSigningKey(secret)
-        : secret,
+      secret: sealWebhookSigningKey(secret),
     },
   })
   return { success: true, secret, secretHint: secretHint(secret) }

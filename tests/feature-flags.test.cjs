@@ -756,6 +756,30 @@ test("My Tasks quick-add flag is retired and default-board patches stay enabled 
   listedRows = [];
 });
 
+test("the retired sealed webhook keys flag stays hidden, immutable and on for old tabs", async () => {
+  const key = "htpr-7624-sealed-webhook-keys";
+  assert.equal(flags.SEALED_WEBHOOK_KEYS_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261115120000_drop_htpr_7624_sealed_webhook_keys_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [{ key, mode, updatedAt: new Date() }];
+    row = { mode, updatedAt: new Date() };
+    assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+    for (const userId of [6, 985, 42]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(42))[key], true);
+});
+
 test("the retired My Tasks snooze flag is hidden, immutable and enabled for old tabs", async () => {
   const key = "htpr-6461-my-tasks-snooze";
   assert.equal(flags.MY_TASKS_SNOOZE_FLAG, undefined);

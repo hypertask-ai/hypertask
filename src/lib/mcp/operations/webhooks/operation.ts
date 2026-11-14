@@ -1,7 +1,5 @@
 import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { sealWebhookSigningKey, webhookSigningKeyHint } from '@/lib/webhooks/signingKeyStore'
-import { isFeatureEnabled } from '@/lib/flags'
-import { SEALED_WEBHOOK_KEYS_FLAG } from '@/lib/flags/definitions/htpr-7624-sealed-webhook-keys'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -289,9 +287,7 @@ export async function POST(request: NextRequest) {
       data: {
         projectId,
         url,
-        secret: await isFeatureEnabled(SEALED_WEBHOOK_KEYS_FLAG, ctx.user.id)
-          ? sealWebhookSigningKey(secret)
-          : secret,
+        secret: sealWebhookSigningKey(secret),
         events,
         supportsUnassignedEvent: true,
         createdById: ctx.user.id,
