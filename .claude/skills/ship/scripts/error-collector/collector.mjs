@@ -303,6 +303,8 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     timeLeft(Infinity);
     const result = spawnSync('vcc', args, { env, encoding: 'utf8', timeout: timeLeft(30000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
     const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    const duplicate = /^vcc: not filed\. The same problem is already open on [^\n]*?\b([A-Za-z][A-Za-z0-9_]*-\d+)\b/im.exec(text);
+    if (duplicate && !result.error) return { kind: 'duplicate', ticket: duplicate[1] };
     if (result.error || result.status !== 0) return refusedCreate(text) ? { kind: 'refused' } : { kind: 'ambiguous' };
     try { return { kind: 'created', ticket: ticketRef(payload(result.stdout).task) }; }
     catch { return { kind: 'ambiguous' }; }
@@ -551,10 +553,12 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           } else {
             const outcome = createOutcome(createArgs);
             if (outcome.kind === 'ambiguous') { stopCreates = true; throw new Error('ambiguous create'); }
-            if (outcome.kind !== 'created') throw new Error('refused create');
+            if (outcome.kind !== 'created' && outcome.kind !== 'duplicate') throw new Error('refused create');
             found = { ticket: outcome.ticket, deleted: false };
-            state.created.push(iso(now));
-            createdNow = true;
+            if (outcome.kind === 'created') {
+              state.created.push(iso(now));
+              createdNow = true;
+            }
           }
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };
         } finally { if (temp) await fs.rm(temp, { force: true }); }
