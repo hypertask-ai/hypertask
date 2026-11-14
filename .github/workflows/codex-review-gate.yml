@@ -25,7 +25,9 @@ jobs:
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
-        github.event.comment.user.login == 'chatgpt-codex-connector[bot]') ||
+        (github.event.comment.user.login == 'chatgpt-codex-connector[bot]' ||
+         (github.event.comment.user.login == 'hypertask-runners[bot]' &&
+          contains(github.event.comment.body, 'claude-standin-review:v1')))) ||
       (github.event_name != 'issue_comment' &&
         (github.event.review.user.login == 'chatgpt-codex-connector[bot]' ||
          github.event.comment.user.login == 'chatgpt-codex-connector[bot]'))

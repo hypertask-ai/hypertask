@@ -8,6 +8,41 @@ const BADGES = [/\bP([0-9]) Badge/g, /badge\/P([0-9])-/g, /\[P([0-9])\]/g, /\bP(
 
 const isCodex = login => String(login ?? '').replace(/\[bot\]$/, '') === CODEX_LOGIN;
 
+// HYCI-416: Codex ran out of review credit on 13 Nov 23:33 UTC and stays out until
+// 15 Nov 21:35 UTC. Until then a Claude Sonnet review, posted by the review box as
+// one comment per head, stands in for it. This is a dated switch, not a fallback
+// chain: at STANDIN_END the stand-in is ignored by the date alone, and a real
+// Codex result for the head always wins over it. Remove this block and its tests
+// after the date.
+const STANDIN_END = Date.parse('2026-11-15T21:35:00Z');
+const STANDIN_AUTHOR = 'hypertask-runners';
+const STANDIN_STATE = /<!-- claude-standin-review:v1 (\{.*?\}) -->/s;
+const STANDIN_MODEL = /^claude-sonnet/;
+
+function standinResultFor(comments, headOid, now) {
+  if (!(now < STANDIN_END)) return null;
+  const short = headOid.slice(0, 7);
+  for (const comment of [...(comments ?? [])].reverse()) {
+    if (String(comment.author ?? '').replace(/\[bot\]$/, '') !== STANDIN_AUTHOR) continue;
+    // The last marker in the body is the reviewer's own; any earlier one is model text.
+    const raw = [...String(comment.body ?? '').matchAll(new RegExp(STANDIN_STATE.source, 'gs'))].at(-1)?.[1];
+    if (!raw) continue;
+    let state;
+    try {
+      state = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (state?.sha !== headOid || !STANDIN_MODEL.test(String(state.model ?? ''))) continue;
+    if (!['APPROVE', 'CONCERNS'].includes(state.verdict) || !Number.isInteger(state.blocking) || state.blocking < 0) continue;
+    const evidence = comment.url ?? '';
+    return state.blocking > 0
+      ? { state: 'failure', description: `Claude Sonnet reviewed ${short}: ${state.blocking} blocker/major finding(s)`, evidence }
+      : { state: 'success', description: `Claude Sonnet reviewed ${short}: no blocker/major findings`, evidence };
+  }
+  return null;
+}
+
 function priorityOf(body) {
   for (const pattern of BADGES) {
     const levels = [...String(body ?? '').matchAll(pattern)].map(match => Number(match[1]));
@@ -152,6 +187,8 @@ function evaluate(pr) {
       };
     }
   }
+  const standin = standinResultFor(pr.comments, pr.headOid, pr.now ?? Date.now());
+  if (standin) return standin;
   return { state: 'pending', description: `Waiting for the Codex review of ${short}`, evidence: '' };
 }
 
@@ -253,7 +290,7 @@ async function run({ github, context, core }) {
     if (result.state === 'success' && !alreadyApproved) {
       await github.rest.issues.createComment({
         owner, repo, issue_number: node.number,
-        body: `APPROVE\n\n${result.description}.${result.evidence ? ` Codex review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
+        body: `APPROVE\n\n${result.description}.${result.evidence ? ` ${result.description.startsWith('Claude Sonnet') ? 'Claude Sonnet stand-in' : 'Codex'} review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
       });
     }
     core.info(`PR #${node.number} ${node.headRefOid.slice(0, 7)}: ${result.state}. ${result.description}`);
@@ -262,6 +299,8 @@ async function run({ github, context, core }) {
 
 module.exports = {
   evaluate,
+  standinResultFor,
+  STANDIN_END,
   priorityOf,
   blocks,
   isCodex,
