@@ -877,10 +877,21 @@ function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = 
       }
     }
     for (const fn of functions) {
-      if (live.has(fn) || fn.asteriskToken || !typescript.isCallExpression(fn.parent) ||
-          fn.parent.arguments.length !== 1 || fn.parent.arguments[0] !== fn ||
-          !typescript.isIdentifier(fn.parent.expression)) continue;
-      const call = fn.parent;
+      if (live.has(fn) || fn.asteriskToken) continue;
+      let callback = fn;
+      while (callback.parent &&
+             ((typescript.isParenthesizedExpression(callback.parent) ||
+               typescript.isAsExpression(callback.parent) ||
+               typescript.isTypeAssertionExpression(callback.parent) ||
+               typescript.isNonNullExpression(callback.parent) ||
+               typescript.isSatisfiesExpression(callback.parent)) &&
+              callback.parent.expression === callback)) {
+        callback = callback.parent;
+      }
+      const call = callback.parent;
+      if (!typescript.isCallExpression(call) || call.arguments.length !== 1 ||
+          unwrapArgumentExpression(call.arguments[0]) !== fn ||
+          !typescript.isIdentifier(call.expression)) continue;
       const binding = checker.getSymbolAtLocation(call.expression)?.declarations?.[0];
       if (!binding || !typescript.isImportSpecifier(binding) ||
           (binding.propertyName ?? binding.name).text !== "wrapMcpRoute") continue;
