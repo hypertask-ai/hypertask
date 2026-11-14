@@ -115,6 +115,7 @@ export type TBodyAPIUnsaved = {
     board_sorting_stack?: TBoardSortingLevel[] | null;
     board_filters: IFilterSettings;
     board_subtask_setting: SubtaskSetting;
+    board_subtask_explicit?: boolean;
     board_empty_sections: EmptySections;
     board_staleness?: boolean | null;
     board_show_archived?: boolean | null;

@@ -18,7 +18,7 @@ const view = (id, setting, extra = {}) => ({
   ...extra,
 });
 
-const projectWith = ({ defaultSetting, applied, draft, allViews }) => ({
+const projectWith = ({ defaultSetting, applied, draft, allViews, draftExtra }) => ({
   id: 2060,
   tasks: [],
   section: [],
@@ -37,7 +37,7 @@ const projectWith = ({ defaultSetting, applied, draft, allViews }) => ({
       appliedViewId: applied?.id ?? null,
       appliedView: applied ? view(applied.id, applied.setting) : null,
       unsavedViewId: draft ? "draft" : null,
-      unsavedView: draft ? view("draft", draft, { visibility: "Private" }) : null,
+      unsavedView: draft ? view("draft", draft, { visibility: "Private", ...draftExtra }) : null,
     }],
   },
 });
@@ -87,6 +87,27 @@ test("a draft inherited from that board default stops hiding sub-tickets", () =>
   const project = payload(projectWith({ defaultSetting: "None", draft: "None" }), true);
 
   assert.equal(getActiveSubtaskSettingFromProject(project), "Flattened_Card");
+});
+
+test("an explicit hide on the main tab stays a hide", () => {
+  const seen = [];
+  const { countTasksInSavedView } = loadModule("src/lib/savedViews/savedViewTaskCounts.ts", {
+    "@/utils/helperFunctions/Views/SubtaskHelperFunction": {
+      applySubTaskSetting: (sections, setting) => {
+        seen.push(setting);
+        return sections;
+      },
+    },
+  });
+  const project = payload(projectWith({
+    defaultSetting: "None",
+    draft: "None",
+    draftExtra: { board_subtask_explicit: true },
+  }), true);
+
+  assert.equal(getActiveSubtaskSettingFromProject(project), "None");
+  countTasksInSavedView(project.project_view.allViews[0], project, undefined, { legacyAgentAssigneeMatch: false });
+  assert.deepEqual(seen, ["None"]);
 });
 
 test("a draft someone picked on purpose is kept", () => {

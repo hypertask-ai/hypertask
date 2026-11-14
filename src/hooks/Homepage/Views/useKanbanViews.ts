@@ -488,6 +488,7 @@ const useKanbanViews = (project: IProject | null) => {
   ) => apiHandler(
     (queuedProject) => buildUnsavedBody(queuedProject, {
       board_subtask_setting: subTaskSetting,
+      board_subtask_explicit: true,
     }),
     project,
   );

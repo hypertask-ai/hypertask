@@ -148,6 +148,9 @@ const route = taskWriteRoute({
         user_project_views: loadedUserProjectView ? [loadedUserProjectView] : [],
       }, userId);
       const user_project_view = projectView.user_project_views[0] ?? null;
+      const markExplicitSubtask =
+        req.body.board_subtask_explicit === true &&
+        (!hasBaseViewId || baseViewId == null || baseViewId === projectView.default_view_id);
       console.log("🚀 ~ 55: ~ user_project_view:", user_project_view);
 
       const baseView = hasBaseViewId
@@ -271,6 +274,7 @@ const route = taskWriteRoute({
             board_sorting_order,
             board_sorting_stack: board_sorting_stack ?? [],
             board_subtask_setting,
+            ...(markExplicitSubtask ? { board_subtask_explicit: true } : {}),
             board_filters: sanitizedBoardFilters,
             board_empty_sections,
             board_staleness: board_staleness ?? null,
@@ -380,7 +384,10 @@ const route = taskWriteRoute({
               board_layout: sanitizeBoardLayout(comparisonView.board_layout),
             };
 
-            if (isDeepEqual(settingsFromReqBody, settingsFromDB))
+            if (
+              isDeepEqual(settingsFromReqBody, settingsFromDB) &&
+              !(markExplicitSubtask && board_subtask_setting === "None")
+            )
               shouldDeleteUnsaved = true;
           } else {
             console.log(
@@ -407,6 +414,7 @@ const route = taskWriteRoute({
                 board_subtask_setting,
                 board_sorting_order,
                 board_sorting_stack: board_sorting_stack ?? [],
+                ...(markExplicitSubtask ? { board_subtask_explicit: true } : {}),
                 board_empty_sections,
                 board_staleness: board_staleness ?? null,
                 board_show_archived: resolvedShowArchived,

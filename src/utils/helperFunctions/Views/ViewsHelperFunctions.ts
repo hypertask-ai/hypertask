@@ -231,6 +231,7 @@ export const getActiveSubtaskSettingFromProject = (project?:IProject|null):TBoar
   if (!boardDefault) return deepCopy(resolved)
   const onFilteredView = !!applied?.id && applied.id !== defaultViewId
   if (onFilteredView) return deepCopy(resolved)
+  if (view.unsavedView?.board_subtask_explicit && unsaved) return deepCopy(unsaved)
   if (unsaved && unsaved !== defaultView) return deepCopy(unsaved)
   return deepCopy(boardDefault)
 }
