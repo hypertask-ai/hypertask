@@ -13,7 +13,9 @@ const MARKER_PREFIX = 'claude-standin-review:v1';
 const MODEL_ALIAS = 'sonnet';
 const MAX_DIFF_CHARS = 180_000;
 const PER_RUN = 3;
-const PER_DAY = 40;
+const PER_DAY = Number(process.env.STANDIN_PER_DAY) > 0 ? Number(process.env.STANDIN_PER_DAY) : 40;
+const MAX_CAP_NOTICES = 25;
+const CAP_NOTICE_MARKER = 'claude-standin-cap:v1';
 const ATTEMPTS_PER_HEAD = 2;
 const REVIEW_TIMEOUT_MS = 12 * 60 * 1000;
 
@@ -129,31 +131,71 @@ function buildComment(sha, review) {
   return lines.join('\n');
 }
 
+const FAILED_STATES = ['failure', 'error'];
+
+const contextsOf = pr => pr.commits?.nodes?.[0]?.commit?.status?.contexts ?? [];
+
+const isGreen = pr => !contextsOf(pr).some(c => FAILED_STATES.includes(String(c.state).toLowerCase()));
+
+const createdAtOf = pr => Date.parse(pr.createdAt ?? '') || 0;
+
+function waitingForReview(pr, attemptsFor) {
+  if (pr.isDraft || pr.isCrossRepository || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '')) return false;
+  const gate = contextsOf(pr).find(c => c.context === 'ai-review');
+  if (gate && String(gate.state).toLowerCase() !== 'pending') return false;
+  const done = (pr.comments?.nodes ?? []).some(c =>
+    String(c.author?.login ?? '').replace(/\[bot\]$/, '') === AUTHOR
+    && String(c.body ?? '').includes(`${MARKER_PREFIX} {`) && String(c.body).includes(`"sha":"${pr.headRefOid}"`));
+  if (done) return false;
+  return attemptsFor(pr.headRefOid) < ATTEMPTS_PER_HEAD;
+}
+
+// The cap is spent on the PRs closest to merging: a head whose checks still pass
+// first, then the one that has waited longest. Newest-first spent a whole day of
+// reviews on the last pushes and left old green heads waiting (HYCI-437).
+function waitingCandidates(prs, { attemptsFor }) {
+  return [...prs.filter(pr => waitingForReview(pr, attemptsFor))].sort((a, b) =>
+    (isGreen(a) ? 0 : 1) - (isGreen(b) ? 0 : 1)
+    || createdAtOf(a) - createdAtOf(b)
+    || a.number - b.number);
+}
+
 function selectCandidates(prs, { now, attemptsFor, reviewedToday }) {
   const room = Math.max(0, Math.min(PER_RUN, PER_DAY - reviewedToday));
-  const picked = [];
-  for (const pr of prs) {
-    if (picked.length >= room) break;
-    if (pr.isDraft || pr.isCrossRepository || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '')) continue;
-    const contexts = pr.commits?.nodes?.[0]?.commit?.status?.contexts ?? [];
-    const gate = contexts.find(c => c.context === 'ai-review');
-    if (gate && String(gate.state).toLowerCase() !== 'pending') continue;
-    const done = (pr.comments?.nodes ?? []).some(c =>
-      String(c.author?.login ?? '').replace(/\[bot\]$/, '') === AUTHOR
-      && String(c.body ?? '').includes(`${MARKER_PREFIX} {`) && String(c.body).includes(`"sha":"${pr.headRefOid}"`));
-    if (done) continue;
-    if (attemptsFor(pr.headRefOid) >= ATTEMPTS_PER_HEAD) continue;
-    picked.push(pr);
-  }
-  return picked;
+  return waitingCandidates(prs, { attemptsFor }).slice(0, room);
+}
+
+const capNoticeMarker = day => `<!-- ${CAP_NOTICE_MARKER} ${JSON.stringify({ day })} -->`;
+
+const refillAt = now => new Date(Math.ceil((now + 1) / 86_400_000) * 86_400_000);
+
+function capNoticeBody({ sha, day, now }) {
+  const refill = refillAt(now);
+  const hours = Math.max(1, Math.round((refill - now) / 3_600_000));
+  return [
+    `**Claude Sonnet stand-in review: waiting for today's cap.**`,
+    '',
+    `The stand-in reviews ${PER_DAY} heads per UTC day and all ${PER_DAY} are used.`,
+    `This head (${sha.slice(0, 7)}) is reviewed after ${refill.toISOString().slice(0, 16).replace('T', ' ')} UTC, about ${hours} hour(s) from now.`,
+    'Heads whose checks still pass, oldest first, are reviewed before the rest.',
+    '',
+    capNoticeMarker(day),
+  ].join('\n');
+}
+
+function capNotices(prs, { attemptsFor, day, now, notified }) {
+  return waitingCandidates(prs, { attemptsFor })
+    .filter(pr => !notified(pr.number))
+    .slice(0, MAX_CAP_NOTICES)
+    .map(pr => ({ pr, body: capNoticeBody({ sha: pr.headRefOid, day, now }) }));
 }
 
 const LIST = `
 query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: 50, baseRefName: "production", orderBy: {field: UPDATED_AT, direction: DESC}) {
+    pullRequests(states: OPEN, first: 100, baseRefName: "production", orderBy: {field: UPDATED_AT, direction: DESC}) {
       nodes {
-        number title body isDraft isCrossRepository headRefOid
+        number title body isDraft isCrossRepository headRefOid createdAt
         commits(last: 1) { nodes { commit { status { contexts { context state } } } } }
         comments(last: 100) { nodes { author { login } body } }
       }
@@ -199,8 +241,9 @@ function reviewRepo(REPO) {
 
   const listing = JSON.parse(gh(['api', 'graphql', '-f', `query=${LIST}`, '-F', `owner=${REPO.split('/')[0]}`, '-F', `name=${REPO.split('/')[1]}`]));
   const prs = listing.data.repository.pullRequests.nodes;
-  const picked = selectCandidates(prs, { now, attemptsFor, reviewedToday: reviewedToday() });
-  console.log(`standin: ${prs.length} open, ${picked.length} to review, ${reviewedToday()} reviewed today`);
+  const reviewed = reviewedToday();
+  const picked = selectCandidates(prs, { now, attemptsFor, reviewedToday: reviewed });
+  console.log(`standin: ${prs.length} open, ${picked.length} to review, ${reviewed} reviewed today`);
 
   for (const pr of picked) {
     const sha = pr.headRefOid;
@@ -248,11 +291,38 @@ function reviewRepo(REPO) {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }
+  if (reviewedToday() >= PER_DAY) {
+    noticeCap(prs, { REPO, dir, day, now, attemptsFor });
+  }
+}
+
+function noticeCap(prs, { REPO, dir, day, now, attemptsFor }) {
+  const noticeDir = path.join(dir, 'notices', day);
+  fs.mkdirSync(noticeDir, { recursive: true });
+  const notified = number => fs.existsSync(path.join(noticeDir, String(number)));
+  const notices = capNotices(prs, { attemptsFor, day, now, notified });
+  for (const { pr, body } of notices) {
+    try {
+      if (!process.env.STANDIN_DRY) {
+        execFileSync('gh', ['api', '-X', 'POST', `repos/${REPO}/issues/${pr.number}/comments`, '-F', 'body=@-'], {
+          input: body, encoding: 'utf8', env: { ...process.env, HT_GH_CACHE_DIR: FRESH_CACHE },
+        });
+      } else {
+        console.log(`standin: DRY RUN, would post on PR #${pr.number}:\n${body}`);
+      }
+      fs.writeFileSync(path.join(noticeDir, String(pr.number)), String(now));
+      console.log(`standin: PR #${pr.number} cap notice posted`);
+    } catch (error) {
+      console.log(`standin: PR #${pr.number} cap notice failed: ${String(error.message).split('\n')[0]}`);
+    }
+  }
+  return notices.length;
 }
 
 module.exports = {
-  AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS, PER_RUN, PER_DAY,
+  AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS, PER_RUN, PER_DAY, CAP_NOTICE_MARKER,
   isBlocking, hasPatch, parseClaudeOutput, buildComment, selectCandidates,
+  isGreen, waitingCandidates, capNotices, capNoticeBody, refillAt,
 };
 
 if (require.main === module) main();
