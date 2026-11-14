@@ -1,5 +1,6 @@
 import { savedViewBoardAccessWhere } from "../projects/getAllIncludes";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { boardDefaultShowsSubtasks } from "@/lib/savedViews/boardDefaultSubtasks";
 import prisma from "@/lib/prisma";
 import { ISection } from "@/models/model";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -38,7 +39,8 @@ const sectionGetProjectSections = async (
     });
 
     if (!loadedProject) return { status: 404, json: { message: "Project not found" } };
-    const project = sanitizeProjectBoardFilters(loadedProject, currentUserId);
+    const showsSubtasks = await boardDefaultShowsSubtasks(currentUserId);
+    const project = sanitizeProjectBoardFilters(loadedProject, currentUserId, false, showsSubtasks);
     const defaultColumns =
       project?.project_view?.default_view?.board_columns_view;
     const activeView = getViewFromProject(project);

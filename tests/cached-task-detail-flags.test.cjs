@@ -33,6 +33,7 @@ test("server board and My Tasks always include cached bodies after their authori
     "./getAllIncludes": includes,
     "@/utils/controllers/tasks/attachOpenBlockingTasks": { attachOpenBlockingTasks: async (tasks) => tasks },
     "@/utils/controllers/tasks/attachWaitingOnUsers": { attachWaitingOnUsers: async (tasks) => tasks },
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
   }).default;
   const boardResult = board(15, 985, 985);
   assert.equal(boardArgs, undefined, "board authorization must finish before reading tasks");

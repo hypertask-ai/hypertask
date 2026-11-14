@@ -1,4 +1,5 @@
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { boardDefaultShowsSubtasks } from "@/lib/savedViews/boardDefaultSubtasks";
 import { getProjectWhere, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { createProvisionedProjectWithStableName } from "./createProjectWithStableName";
 import prisma from "@/lib/prisma";
@@ -78,9 +79,10 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
                     include: projectInclude,
                 });
             }
+            const showsSubtasks = await boardDefaultShowsSubtasks(userId);
             return({
                 status:200,
-                json:sanitizeProjectBoardFilters(project, userId)
+                json:sanitizeProjectBoardFilters(project, userId, false, showsSubtasks)
             })
         } catch (error) {
             console.log(error);

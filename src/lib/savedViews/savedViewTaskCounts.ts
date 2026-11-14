@@ -1,8 +1,9 @@
 import type { IFilterRuntimeContext, IFilterSettings } from "@/models/Filters/model";
 import type { IProject, ISection, IView } from "@/models/model";
-import { DEFAULT_SUBTASK_SETTING } from "@/models/Views/model";
+import { DEFAULT_SUBTASK_SETTING, TBoardSubtaskSetting } from "@/models/Views/model";
 import { applyFilters, defaultFilterSettings } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { applySubTaskSetting } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
+import { getActiveSubtaskSettingFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
 export const savedViewCountSections = (
   view: IView,
@@ -34,8 +35,19 @@ export const savedViewCountSections = (
       project,
       filterRuntimeContext,
     ),
-    view.board_subtask_setting ?? DEFAULT_SUBTASK_SETTING,
+    subtaskSettingForCount(view, project),
   );
+};
+
+const subtaskSettingForCount = (view: IView, project: IProject): TBoardSubtaskSetting => {
+  const stored = view.board_subtask_setting ?? DEFAULT_SUBTASK_SETTING;
+  const boardDefault = project.project_view?.board_subtask_setting_for_default_view;
+  const defaultId = project.project_view?.default_view_id;
+  if (!boardDefault || view.id !== defaultId) return stored;
+  const appliedId = project.project_view?.user_project_views?.[0]?.appliedViewId;
+  return !appliedId || appliedId === defaultId
+    ? getActiveSubtaskSettingFromProject(project)
+    : boardDefault;
 };
 
 export const countTasksInSavedView = (
