@@ -1,17 +1,6 @@
 #!/usr/bin/env node
 'use strict';
 
-// HYCI-416: Claude Sonnet stand-in reviewer while Codex is out of review credit
-// (13 Nov 23:33 UTC to 15 Nov 21:35 UTC). Runs from a five minute timer on the
-// review box, not as a build or test job. For each open production pull request
-// whose head has no review result it asks Claude Sonnet on the box's own Claude
-// subscription login for one review, with every tool switched off, and posts one
-// comment that carries the verdict in a marker. The Codex review gate workflow
-// (GitHub-hosted, production code) reads that marker and sets ai-review and
-// claude-review; this script never sets a status itself.
-//
-// Switch: it only reviews a repo that ~/.local/state/review/active.json (written by the
-// review-switch timer) names claude for. The gate reads the same choice from the repo.
 
 const fs = require('node:fs');
 const os = require('node:os');
@@ -42,8 +31,6 @@ Set confidence to low when you cannot prove the defect from the diff alone. Quot
 
 Verdict APPROVE when you find no blocker and no high confidence major. Otherwise CONCERNS. If the diff is cut off, say so in the summary and review what you can see. Answer only in the required JSON.`;
 
-// The finding shape is the repo's own review-schema.json, embedded so this file
-// runs on its own from any directory.
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -76,9 +63,6 @@ const hasPatch = text => /^diff --git /m.test(String(text ?? ''));
 
 const isBlocking = finding => finding.severity === 'blocker' || (finding.severity === 'major' && finding.confidence === 'high');
 
-// Turns the stdout of `claude -p --output-format json --json-schema` into a result.
-// Anything short of a schema-shaped answer is not a review: the caller posts
-// nothing, so the head stays pending and is never turned green by silence.
 function parseClaudeOutput(stdout) {
   let envelope;
   try {
@@ -117,7 +101,6 @@ function parseClaudeOutput(stdout) {
   };
 }
 
-// Model text can quote the untrusted diff, so it never carries a comment marker.
 const plain = text => String(text ?? '').replace(/<!--|-->/g, '');
 
 function buildComment(sha, review) {
@@ -146,7 +129,6 @@ function buildComment(sha, review) {
   return lines.join('\n');
 }
 
-// Pure choice of which pull requests need a stand-in review right now.
 function selectCandidates(prs, { now, attemptsFor, reviewedToday }) {
   const room = Math.max(0, Math.min(PER_RUN, PER_DAY - reviewedToday));
   const picked = [];
@@ -179,7 +161,6 @@ query($owner: String!, $name: String!) {
   }
 }`;
 
-// A fresh cache dir per run: the shared gh read cache lives 5 minutes and would hand back a stale head.
 const FRESH_CACHE = fs.mkdtempSync(path.join(os.tmpdir(), 'standin-gh-'));
 const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, HT_GH_CACHE_DIR: FRESH_CACHE } });
 
@@ -227,7 +208,6 @@ function reviewRepo(REPO) {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'standin-'));
     try {
       let diff = gh(['pr', 'diff', String(pr.number), '-R', REPO]);
-      // A review of anything but a real patch is worthless, so it posts nothing.
       if (!hasPatch(diff)) {
         console.log(`standin: PR #${pr.number} ${sha.slice(0, 7)} no patch text came back, skipping`);
         continue;
@@ -252,7 +232,6 @@ function reviewRepo(REPO) {
         console.log(`standin: PR #${pr.number} ${sha.slice(0, 7)} no review: ${review.reason}`);
         continue;
       }
-      // The head must still be the one reviewed before anything is posted.
       const current = JSON.parse(gh(['api', `repos/${REPO}/pulls/${pr.number}`])).head.sha;
       if (current !== sha) {
         console.log(`standin: PR #${pr.number} head moved, dropping the review of ${sha.slice(0, 7)}`);

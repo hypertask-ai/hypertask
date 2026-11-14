@@ -8,12 +8,6 @@ const BADGES = [/\bP([0-9]) Badge/g, /badge\/P([0-9])-/g, /\[P([0-9])\]/g, /\bP(
 
 const isCodex = login => String(login ?? '').replace(/\[bot\]$/, '') === CODEX_LOGIN;
 
-// HYCI-416: which reviewer counts is one explicit switch, set by the review-switch
-// timer on the review box (Codex while it has room, else Claude, DeepSeek once its
-// review test passes). It lives in the body of one open issue labelled review-switch
-// that the runner app opened, because the app cannot write repo variables. This is a
-// logged selector, not a fallback chain: a real Codex result for the head always
-// wins, and anything unreadable means codex.
 const REVIEWER_MODELS = { claude: /^claude-sonnet/, deepseek: /^deepseek/ };
 const REVIEWER_NAMES = { claude: 'Claude Sonnet', deepseek: 'DeepSeek' };
 const STANDIN_AUTHOR = 'hypertask-runners';
@@ -40,7 +34,6 @@ function standinResultFor(comments, headOid, reviewer) {
   const short = headOid.slice(0, 7);
   for (const comment of [...(comments ?? [])].reverse()) {
     if (!isApp(comment.author)) continue;
-    // The last marker in the body is the reviewer's own; any earlier one is model text.
     const raw = [...String(comment.body ?? '').matchAll(new RegExp(STANDIN_STATE.source, 'gs'))].at(-1)?.[1];
     if (!raw) continue;
     let state;
