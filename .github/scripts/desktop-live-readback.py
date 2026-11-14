@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 
 APP = "https://app.hypertask.ai"
-DESKTOP_SHA = "a3939eff04312d962a7837a422aef07c7142fdc1"
+DESKTOP_SHA = "a1e881b9211c8b2e453b49a349497a19f8a902d1"
 SANDBOX_BOARD_ID = 7049
 SANDBOX_TITLE = "QA Sandbox"
 FORBIDDEN_BOARDS = {15, 4060}
