@@ -50,6 +50,7 @@ export interface ITaskGlobalStates{
       descriptionOverride?: string,
       titleOverride?: string,
       formValuesOverride?: IForm,
+      titleGenerationMs?: number | null,
     ) => Promise<string | undefined>;
     applyTaskWriterTitle: (title: string) => void;
     recordTaskWriterDraft: (note: string, draft: TaskWriterSnapshotSource) => void;
