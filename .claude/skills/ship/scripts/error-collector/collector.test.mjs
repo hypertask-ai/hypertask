@@ -525,7 +525,6 @@ check('tickets', 'HYCI-271 local wrapper refusals allow the next group to file',
   for (const refusal of [
     'vcc: task create refused: filing-gate missing',
     'vcc: Ticket description refused by the house ticket rules (skills/tickets).',
-    'vcc: not filed. The same problem is already open on Fleet CI & Infra: HYCI-100',
   ]) await withHarness(async h => {
     h.events([event(), event({ message: 'Payment failed for user 456' })]);
     h.config({ firstCreateRefusal: refusal });
@@ -536,6 +535,17 @@ check('tickets', 'HYCI-271 local wrapper refusals allow the next group to file',
     assert.equal(details(h).length, 1);
   });
 });
+
+check('tickets', 'HYCI-271 a group the filing gate calls a duplicate links to the open ticket and leaves pending', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ firstCreateRefusal: 'vcc: not filed. The same problem is already open on Fleet CI & Infra (11514): HYCI-100 "x: the same error happened 3 times." https://app.hypertask.ai/detail/project-11514/100' });
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().created.length, 1);
+  assert.equal(Object.keys(h.state().pending).length, 0);
+  assert.ok(Object.values(h.state().fingerprints).some(f => f.ticket === 'HYCI-100'));
+  assert.equal(details(h).length, 1);
+}));
 
 check('tickets', 'HYCI-271 an ambiguous detail note is not posted twice', () => withHarness(async h => {
   h.events([event()]);

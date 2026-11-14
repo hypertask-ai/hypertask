@@ -1,7 +1,8 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 
 
@@ -20,7 +21,7 @@ export default  async function handler(
     if (!projectId || !email) return res.status(400).json({message:"Missing required information"})
     const parsedProjectId = Number(projectId)
     if (!Number.isInteger(parsedProjectId)) return res.status(400).json({message:"Missing required information"})
-    const access = await sessionCanManageProjectInvites(session.userId, parsedProjectId)
+    const access = await sessionCanManageProjectInvites(session, parsedProjectId)
     if (access === "missing") return res.status(404).json({message:"Invite not found"})
     if (access !== "ok") return res.status(403).json({message:"Forbidden"})
 
@@ -52,14 +53,14 @@ export default  async function handler(
 }
 
 
-async function sessionCanManageProjectInvites(userId: number, projectId: number) {
+async function sessionCanManageProjectInvites(session: SessionUser, projectId: number) {
   const project = await prisma.project.findFirst({
-    where: { id: projectId },
+    where: { id: projectId, ...((session.agentId || session.teamScope) ? projectContentAccessWhere(session.userId, session.agentId, session.teamScope) : {}) },
     select: { id: true },
   })
   if (!project) return "missing"
   const allowed = await getMemberAndOwner(projectId)
-  return Array.isArray(allowed) && allowed.includes(userId) ? "ok" : "forbidden"
+  return Array.isArray(allowed) && allowed.includes(session.userId) ? "ok" : "forbidden"
 }
 
 export const cancelInvite = async (inviteId:string, email:string, projectId:number)=>{

@@ -176,7 +176,7 @@ export const getInboxTabs = (
 
   for (let i = 0; i < notifications.length; i++) {
     const notification = notifications[i];
-    if (!notification) continue;
+    if (!notification || notification.needsYouOnly) continue;
     if (notification.type === "AgentBoardAccessRequest") {
       notificationsByStatus[decisionsSplitName] ??= [];
       notificationsByStatus[decisionsSplitName].push(i);
