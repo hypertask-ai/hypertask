@@ -1,4 +1,9 @@
 {
+  "src/lib/tasks/saveLimit.ts:d44d22b4e94d8c5b09c9115bd9fbcfb1b92b2c7de0012e19257ad1c403c20d5d": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-9106 moves the existing same-origin ticket save fetch into a helper with an eight-second deadline. No extra requests, retries or paid provider calls.",
+    "source": "https://app.hypertask.ai/detail/project-15/9106"
+  },
   "src/app/api/ai/task-questions/route.ts:c660e44a83f0584190f23325cef412c7534f34c5a06cc74da414e62810524554": {
     "maxUsdPerDay": 1,
     "reason": "HTPR-7979 keeps the existing one chip request per new ticket on the existing Haiku model. Only the prompt text changes: it adds the original note and board rules, each clipped to 2000 characters, and the flag is on for everyone with a switch to turn it off. About 3000 input tokens at 0.1 USD per million is far under 1 USD a day even at 1000 new tickets.",
