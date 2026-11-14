@@ -29,7 +29,7 @@ export const SYSTEM_MODEL_LADDERS = {
     { provider: "anthropic", model: "anthropic/claude-haiku-5.5" },
     { provider: "deepseek", model: "deepseek/deepseek-v4.1-flash-1017" },
     { provider: "moonshot", model: "moonshotai/kimi-k2.5" },
-    { provider: "alibaba", model: "alibaba/qwen3.7-plus" },
+    { provider: "alibaba", model: "alibaba/qwen3.8-max" },
     { provider: "zhipu", model: "zai/glm-5.3-flash" },
   ],
 } as const satisfies Record<string, readonly SystemModel[]>;
@@ -40,6 +40,7 @@ const RETIRED_SYSTEM_MODEL_SLUGS: Record<string, string> = {
   "deepseek/deepseek-v4.1-flash": "deepseek/deepseek-v4.1-flash-1017",
   "zai/glm-5.2": "zai/glm-5.3-flash",
   "anthropic/claude-haiku-4.5": "anthropic/claude-haiku-5.5",
+  "alibaba/qwen3.7-plus": "alibaba/qwen3.8-max",
 };
 
 export type SystemModelRole = keyof typeof SYSTEM_MODEL_LADDERS;

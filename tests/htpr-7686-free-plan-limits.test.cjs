@@ -1111,7 +1111,7 @@ test("archived-board writes and positive transitions serialize with board restor
 test("split compose preserves saved tickets and surfaces the refusal for unsaved drafts", () => {
   const compose = read("src/lib/ai/composeTask.ts");
   const branch = compose.slice(compose.indexOf('if ((error as { code?: string })?.code === "PLAN_LIMIT_REACHED")'));
-  assert.match(branch, /if \(!tasks.length\) throw error/);
+  assert.match(branch, /if \(!tasks.length\) (?:throw error|failCreate\(error\));/);
   assert.match(branch, /failedTitles.push\(\.\.\.drafts.slice\(index\)/);
   assert.match(branch, /toErrorMessage\(error/);
   assert.match(branch, /break;/);

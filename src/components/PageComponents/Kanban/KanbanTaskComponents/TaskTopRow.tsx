@@ -17,6 +17,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { HTPR_8970_CALM_CARDS_FLAG } from "@/lib/flags/definitions/htpr-8970-calm-cards";
 import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
+import { HTPR_9075_CARD_PROPERTY_ROW_FLAG } from "@/lib/flags/definitions/htpr-9075-card-property-row";
 import { stackFaces, useCardAgentStatus, type CardAgentStatus } from "@/lib/agentStatus/cardStatus";
 import AgentStatusDot from "@/lib/agentStatus/AgentStatusDot";
 import { agentStatusDotMode, type AgentStatusDotMode } from "@/lib/agentStatus/dot";
@@ -94,6 +95,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
 
   const htcButtonCallback = () => updateTaskFocus(task);
   const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG);
+  const collapseEmptyRow = useFlag(HTPR_9075_CARD_PROPERTY_ROW_FLAG);
   const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG);
   const agentStatus = useCardAgentStatus(task, project);
   const agentMinute = useMinuteClock(Boolean(task.agentStatus));
@@ -127,6 +129,24 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
       <UserAvatar alt={agentStatus.text} name={agentStatus.agentName} size={20} title={agentStatus.text} />)
     );
   }
+
+  const showsUnreadDot = !calm && notifications?.length > 0 && notifications[0]?.seen === false;
+  const showsSavedDot = !showsUnreadDot && taskSaved && !(calm && hasNotifications);
+  const showsSubtaskCount = subTaskSetting !== "None" && countSubtasks > 0;
+  const showsCommentCount = Boolean(_count && _count > 0);
+  const showsAvatars = calm ? stackAvatars.length > 0 : assignees.length > 0 || agentAssignees.length > 0;
+  const hasVisibleContent = Boolean(
+    showsUnreadDot ||
+      showsSavedDot ||
+      ticketNumber ||
+      hasNotifications ||
+      showsSubtaskCount ||
+      showsCommentCount ||
+      staleClock ||
+      showsAvatars,
+  );
+
+  if (collapseEmptyRow && !hasVisibleContent) return null;
 
   return (
     <>

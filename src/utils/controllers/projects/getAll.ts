@@ -6,6 +6,7 @@ import {
   projectBootstrapSelect,
 } from "./getAllIncludes";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { boardDefaultShowsSubtasks } from "@/lib/savedViews/boardDefaultSubtasks";
 
 const getAll = async (
   user_id: any,
@@ -56,9 +57,10 @@ const getAll = async (
       };
     }
 
+    const showsSubtasks = await boardDefaultShowsSubtasks(currentUserId ?? userId);
     return {
       status: 200,
-      json: projects.map((project) => sanitizeProjectBoardFilters(project, currentUserId ?? userId)),
+      json: projects.map((project) => sanitizeProjectBoardFilters(project, currentUserId ?? userId, false, showsSubtasks)),
     };
   } catch (error) {
     console.log(error);

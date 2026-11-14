@@ -27,10 +27,11 @@ const prisma = {
     update: async ({ where, data }) => Object.assign(rows.find((row) => row.id === where.id), data),
   },
   agentWebhookSubscription: {
-    findUnique: async () => ({ active }), update: async () => null,
+    findUnique: async () => ({ active }), updateMany: async () => ({ count: 1 }),
   },
   agentWebhookDelivery: {
-    updateMany: async () => {
+    updateMany: async ({ data }) => {
+      if (data.status !== "processing") { Object.assign(delivery, data); return { count: 1 }; }
       if (!["pending", "retrying"].includes(delivery.status) || delivery.nextAttemptAt > new Date()) return { count: 0 };
       delivery.status = "processing"; return { count: 1 };
     },

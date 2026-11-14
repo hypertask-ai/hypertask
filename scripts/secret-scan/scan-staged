@@ -42,11 +42,61 @@ if ! xargs -0 git checkout-index --prefix="$tmp/staged/" -- < "$tmp/list"; then
 fi
 "$truffle" filesystem "$tmp/staged" --fail --no-update --json >"$tmp/found" 2>/dev/null
 code=$?
+# A finding whose value is a git commit SHA is not a key: trufflehog's Cloudflare detectors read
+# any 40-character hex run as a key, and a GitHub URL or a commit note carries one (HYCI-405).
+# A package lockfile repeats the same package's 32-character peer hash per peer set, which its
+# Alchemy detector reads as a key. Both pass only in those proven places; the same shape
+# anywhere else still blocks.
+proven() {
+  hit=$1
+  det=$(printf '%s' "$hit" | sed -n 's/.*"DetectorName":"\([^"]*\)".*/\1/p')
+  file=$(printf '%s' "$hit" | sed -n 's/.*"file":"\([^"]*\)".*/\1/p')
+  line=$(printf '%s' "$hit" | sed -n 's/.*"line":\([0-9]*\).*/\1/p')
+  raw=$(printf '%s' "$hit" | sed -n 's/.*"Raw":"\([^"]*\)".*/\1/p')
+  case $det in
+    Alchemy)
+      # Only the package's 32-character peer-dependency hash, repeated per peer set.
+      case $raw in '' | *[!0-9a-f]*) return 1 ;; esac
+      [ ${#raw} -eq 32 ] || return 1
+      case $file in
+        */pnpm-lock.yaml | */package-lock.json | */yarn.lock | */npm-shrinkwrap.json) return 0 ;;
+      esac
+      return 1 ;;
+  esac
+  # A 40-character lowercase hex commit SHA, on a line that quotes it as a commit.
+  case $raw in '' | *[!0-9a-f]*) return 1 ;; esac
+  [ ${#raw} -eq 40 ] || return 1
+  case $line in '' | *[!0-9]*) return 1 ;; esac
+  [ -f "$file" ] || return 1
+  text=$(sed -n "${line}p" "$file" 2>/dev/null) || return 1
+  case $text in *"$raw"*) ;; *) return 1 ;; esac
+  masked=$(printf '%s' "$text" | sed "s/$raw/<sha>/g")
+  printf '%s\n' "$masked" | grep -Eq '/(tree|commits?|blob)/<sha>|(^|[^A-Za-z0-9_-])(commit|sha)([[:space:]]+sha)?:? `<sha>`|(^|[^A-Za-z0-9_-])at (commit|sha) `<sha>`|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#<sha>`|"(sha|commit|commits|previousCommit|previousSha|sourceCommit|provenanceCommit|pinnedCommit|mergeCommit|headCommit)"[[:space:]]*:[[:space:]]*"<sha>"'
+}
+
 if [ "$code" = 183 ]; then
-  echo "secret-scan: commit blocked, trufflehog found a key (working or not, it blocks either way):" >&2
-  grep -o '"DetectorName":"[^"]*"' "$tmp/found" | sort -u >&2
-  echo "secret-scan: remove it (roll it if it was ever real), keep keys in the key safe (stack-key)." >&2
-  exit 1
+  : > "$tmp/blocking"
+  hits=0
+  while IFS= read -r hit || [ -n "$hit" ]; do
+    [ -n "$hit" ] || continue
+    hits=$((hits + 1))
+    proven "$hit" || printf '%s\n' "$hit" >> "$tmp/blocking"
+  done < "$tmp/found"
+  # Trufflehog exits 183 only when it found something. An unreadable report is a finding we
+  # cannot clear, so it blocks instead of passing.
+  if [ "$hits" -eq 0 ]; then
+    echo "secret-scan: commit blocked, trufflehog reported a finding but its report could not be read." >&2
+    echo "secret-scan: remove anything key-shaped, or commit with --no-verify if you are sure." >&2
+    exit 1
+  fi
+  if [ -s "$tmp/blocking" ]; then
+    echo "secret-scan: commit blocked, trufflehog found a key (working or not, it blocks either way):" >&2
+    grep -o '"DetectorName":"[^"]*"' "$tmp/blocking" | sort -u >&2
+    echo "secret-scan: remove it (roll it if it was ever real), keep keys in the key safe (stack-key)." >&2
+    exit 1
+  fi
+  echo "secret-scan: trufflehog matched only quoted commit SHAs and package-lockfile peer hashes, which are not keys." >&2
+  code=0
 fi
 if [ "$code" != 0 ]; then
   echo "secret-scan: trufflehog failed (exit $code); commit blocked. Retry, or --no-verify if you are sure." >&2

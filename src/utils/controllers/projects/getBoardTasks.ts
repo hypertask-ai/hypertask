@@ -12,6 +12,7 @@ import {
   taskBoardOmit,
 } from "./getAllIncludes";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { boardDefaultShowsSubtasks } from "@/lib/savedViews/boardDefaultSubtasks";
 import { attachWaitingOnUsers } from "@/utils/controllers/tasks/attachWaitingOnUsers";
 import {
   attachOpenBlockingTasks,
@@ -83,7 +84,8 @@ const getBoardTasks = async (
       projectId,
     });
 
-    const sanitizedProject = sanitizeProjectBoardFilters(project, currentUserId ?? userId);
+    const showsSubtasks = await boardDefaultShowsSubtasks(currentUserId ?? userId);
+    const sanitizedProject = sanitizeProjectBoardFilters(project, currentUserId ?? userId, false, showsSubtasks);
     const { allViews = [], ...projectView } =
       sanitizedProject.project_view ?? {};
     const projectPayload = sanitizedProject.project_view

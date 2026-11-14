@@ -277,6 +277,8 @@ test("server flags in invoked MCP route wrappers count, but discarded and shadow
   for (const [source, expected] of [
     ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async (request) => { if (!(await isFeatureEnabled("htpr-1-other", request.userId))) return "off"; return "on"; })(request); }\n', true],
     ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; }); return "ungated"; }\n', false],
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap((async (request) => { if (!(await isFeatureEnabled("htpr-1-other", request.userId))) return "off"; return "on"; }) as McpRequestHandler)(request); }\n', true],
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { wrap((async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; }) as McpRequestHandler); return "ungated"; }\n', false],
     ['function wrap(callback) { return () => "ungated"; }\nexport async function POST(request) { return wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; })(request); }\n', false],
     ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async function* () { if (await isFeatureEnabled("htpr-1-other", 6)) yield "on"; })(request); }\n', false],
   ]) {
@@ -1771,6 +1773,99 @@ test("copied definitions follow current production when the pull request base is
     const result = await evaluateFlagDefinitions(common, head, dir);
     assert.equal(result.pass, !altered, result.reason);
     if (altered) assert.match(result.reason, /must set defaultMode/);
+  }
+});
+
+test("stale pull request bases do not charge a repair for server files production changed", async (t) => {
+  for (const scenario of ["production-owned", "own server edit", "wrongly named flag"]) {
+    const { dir, git } = makeRepo(t);
+    const chatRoute = "src/app/api/agent-chat/messages/route.ts";
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const CHAT_FLAG = "htpr-2-chat";\n');
+    writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, CHAT_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: CHAT_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+    const common = commit(git, "common base");
+    writeFile(dir, chatRoute, 'export async function POST() { return "production"; }\n');
+    const production = commit(git, "production changes the chat route");
+    git(["update-ref", "refs/remotes/origin/production", production]);
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { CHAT_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(CHAT_FLAG) ? <div /> : null;\n');
+    if (scenario === "own server edit") {
+      writeFile(dir, chatRoute, 'export async function POST() { return "repair"; }\n');
+    }
+    if (scenario === "wrongly named flag") {
+      writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const CHAT_FLAG = "htpr-2-chat";\nexport const WRONG_FLAG = "htpr-9-wrong";\n');
+      writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, CHAT_FLAG, WRONG_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: CHAT_FLAG },\n  { key: WRONG_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+    }
+    const head = commit(git, `repair ${scenario}`);
+    const result = await evaluate("HTPR-2 [FEATURE] repair the chat window", common, head, dir);
+    if (scenario === "production-owned") {
+      assert.equal(result.pass, true, result.reason);
+      assert.doesNotMatch(result.reason, /changes server behavior/);
+    }
+    if (scenario === "own server edit") {
+      assert.equal(result.pass, false, result.reason);
+      assert.match(result.reason, /changes server behavior/);
+    }
+    if (scenario === "wrongly named flag") {
+      assert.equal(result.pass, false, result.reason);
+      assert.match(result.reason, /New feature flag keys must start with htpr-2-/);
+    }
+  }
+});
+
+test("production UI changes do not count against an exempt bugfix repair", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const common = commit(git, "common base");
+  writeFile(dir, "src/components/ProductionOnly.tsx", Array.from({ length: 200 }, (_, index) => `export const Row${index} = () => <div />;`).join("\n"));
+  const production = commit(git, "production ships a large screen");
+  git(["update-ref", "refs/remotes/origin/production", production]);
+  git(["checkout", "-q", "-b", "pr", common]);
+  writeFile(dir, "src/components/ChatWindow.tsx", "export const ChatWindow = () => <div />;\n");
+  const head = commit(git, "chat window repair");
+  const result = await evaluate("HTPR-8988 [BUGFIX] Place floating chats side by side", common, head, dir);
+  assert.equal(result.pass, true, result.reason);
+  assert.equal(result.ownerReview, "exempt-ui");
+});
+
+test("production's own server gate does not excuse a stale-base repair", async (t) => {
+  for (const ownGate of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    const chatRoute = "src/app/api/agent-chat/messages/route.ts";
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const CHAT_FLAG = "htpr-2-chat";\n');
+    writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, CHAT_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: CHAT_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+    writeFile(dir, chatRoute, 'export async function POST() {\n  return new Response("base");\n}\n');
+    const common = commit(git, "common base");
+    writeFile(dir, chatRoute, [
+      'import { isFeatureEnabled } from "@/lib/flags";',
+      'import { CHAT_FLAG } from "@/lib/flags/keys";',
+      "export async function POST() {",
+      '  return new Response("base");',
+      "}",
+      "export async function GET() {",
+      "  if (isFeatureEnabled(CHAT_FLAG) === false) return new Response(\"off\");",
+      '  return new Response("production");',
+      "}",
+      "",
+    ].join("\n"));
+    const production = commit(git, "production gates its own chat route");
+    git(["update-ref", "refs/remotes/origin/production", production]);
+    git(["checkout", "-q", "-b", "pr", common]);
+    writeFile(dir, chatRoute, ownGate
+      ? [
+        'import { isFeatureEnabled } from "@/lib/flags";',
+        'import { CHAT_FLAG } from "@/lib/flags/keys";',
+        "export async function POST() {",
+        "  if (!isFeatureEnabled(CHAT_FLAG)) return new Response(\"off\");",
+        '  return new Response("repair");',
+        "}",
+        "",
+      ].join("\n")
+      : 'export async function POST() {\n  return new Response("repair");\n}\n');
+    commit(git, "chat window repair");
+    git(["merge", "-q", "--no-edit", production]);
+    const head = git(["rev-parse", "HEAD"]).trim();
+    const result = await evaluate("HTPR-2 [FEATURE] repair the chat window", common, head, dir);
+    assert.equal(result.pass, ownGate, result.reason);
+    if (!ownGate) assert.match(result.reason, /changes server behavior/);
   }
 });
 

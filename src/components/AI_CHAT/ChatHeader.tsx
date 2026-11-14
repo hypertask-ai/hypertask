@@ -152,7 +152,7 @@ function ChatSessionRow({
   );
 }
 
-export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean } = {}) => {
+export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !windowDrag }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean; allowDocking?: boolean } = {}) => {
   const [agentsOpen, setAgentsOpen] = useState(false);
   const agentButtonRef = useRef<HTMLButtonElement>(null);
   const closeAgents = useCallback(() => setAgentsOpen(false), []);
@@ -757,7 +757,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                       }}
                     />
                   )}
-                  {!isMbl && aiSessionActionsAvailable && !windowDrag && (
+                  {!isMbl && aiSessionActionsAvailable && allowDocking && (
                     <MenuRow
                       icon={isSidebarMode ? PictureInPicture2 : PanelRight}
                       label={isSidebarMode ? "Floating window" : "Sidebar"}
@@ -838,7 +838,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                 )}
                 <span>{aiChatPinned ? "Unpin AI chat" : "Pin AI chat open"}</span>
               </button>
-              {!isMbl && aiSessionActionsAvailable && !windowDrag && (
+              {!isMbl && aiSessionActionsAvailable && allowDocking && (
                 <button
                   type="button"
                   role="menuitem"

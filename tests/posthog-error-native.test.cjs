@@ -82,7 +82,8 @@ test("signed native created, reopened and spiking alerts relay into one rated ti
     if (url.includes("/tasks?")) return response({ tasks: tasks.filter((task) => new URL(url).searchParams.has("task_id") ? task.id === Number(new URL(url).searchParams.get("task_id")) : task.status === new URL(url).searchParams.get("status")) });
     if (url.endsWith("/tasks/create")) { const task = { ...body, id: 100, ticketNumber: "HTPR-7001", status: "Normal", labels: body.labels.map((id) => ({ name: id, id })) }; tasks.push(task); return response({ task }); }
     if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 999, section_title: "Done" }] }] });
-    if (url.endsWith("/comments")) { comments.push(body); return response({ success: true }); }
+    if (url.endsWith("/agents/runs")) return response({ success: true, run: { id: `run-${comments.length}` } }, 201);
+    if (/\/agents\/runs\/[^/]+\/activities$/.test(url)) { comments.push(body); return response({ success: true, activity: { id: "activity-1", text: body.text } }, 201); }
     if (url.endsWith("/tasks/update")) {
       assert.equal(Object.hasOwn(body, "description"), false);
       assert.equal(Object.hasOwn(body, "labels"), false);
@@ -112,9 +113,10 @@ test("signed native created, reopened and spiking alerts relay into one rated ti
   assert.match(tasks[0].description, /Human notes/);
   assert.match(tasks[0].description, /requested AI reply or draft is empty/);
   assert.match(tasks[0].description, /Production hits: 1/);
-  assert.match(comments[1].text, /600 production hits/);
+  assert.match(comments[1].text, /Production hits: 600\./);
   assert.equal(comments.length, 2);
-  assert.match(comments[1].text, /spike: 550 hits.*baseline 10/);
+  assert.match(comments[1].text, /PostHog saw a spike\. 550 hits, baseline 10\./);
+  assert.equal(comments[1].type, "thought");
 }));
 
 test("native authentication and retry claims fail closed, and failed dispatch can be redelivered", async () => withEnv(async () => {

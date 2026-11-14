@@ -40,6 +40,13 @@ export function isSubtaskSetting(value: unknown): value is SubtaskSetting {
     return typeof value === "string" && SUBTASK_SETTINGS.includes(value as SubtaskSetting)
 }
 
+export function boardDefaultSubtaskSetting(
+    setting: TBoardSubtaskSetting | null | undefined
+): TBoardSubtaskSetting {
+    if (!setting || setting === "None") return DEFAULT_SUBTASK_SETTING
+    return setting
+}
+
 
 export type TCreate_view_body = {
     userId: number,
@@ -108,6 +115,7 @@ export type TBodyAPIUnsaved = {
     board_sorting_stack?: TBoardSortingLevel[] | null;
     board_filters: IFilterSettings;
     board_subtask_setting: SubtaskSetting;
+    board_subtask_explicit?: boolean;
     board_empty_sections: EmptySections;
     board_staleness?: boolean | null;
     board_show_archived?: boolean | null;

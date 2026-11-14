@@ -24,21 +24,25 @@ const REMOVAL_SWEEP_LOCK_NAMESPACE = 1_179_207_763;
 const REMOVAL_SWEEP_LOCK_KEY = 1;
 
 function removalTitle(key: string) {
-  return `Remove feature flag ${key}`;
+  const ticket = key.match(/^([a-z]+\d*-\d+)(?:-|$)/i)?.[1].toUpperCase();
+  return `Remove the safety switch for ${ticket ?? "this released change"}`;
 }
 
 function removalDescription(key: string, releasedAt: Date) {
   const released = releasedAt.toISOString().slice(0, 10);
   const days = removalWindowForFlag({ key });
   return (
-    `<p><strong>Keep this released change. Remove its safety switch.</strong></p>` +
-    `<p>Switch: <a href="${FEATURE_FLAG_ADMIN_URL}/${key}"><code>${key}</code></a></p>` +
-    `<ul><li><p>Live for <strong>Everyone</strong> since ${released}.</p></li>` +
-    `<li><p>Live for more than ${days} days.</p></li>` +
-    `<li><p>Keep enabled behaviour. Remove the switch and unused alternative.</p></li>` +
-    `<li><p>Remove its saved setting too.</p></li>` +
-    `<li><p>Need to keep it? Choose <strong>Keep</strong> on ` +
-    `<a href="${FEATURE_FLAG_ADMIN_URL}">the flags page</a>.</p></li></ul>`
+    `<h2>Problem</h2><p>This released change still has a safety switch.</p>` +
+    `<p>Live for <strong>Everyone</strong> since ${released}.</p>` +
+    `<p>Live for more than ${days} days.</p>` +
+    `<h2>Fix</h2><p>Keep enabled behaviour. Remove the switch and unused alternative.</p>` +
+    `<p>Remove its saved setting too.</p>` +
+    `<h2>Done when</h2><p>The change still works without its safety switch.</p>` +
+    `<h2>Risk</h2><p>The released change could stop working. Undo the cleanup.</p>` +
+    `<p>Need to keep it? Choose <strong>Keep</strong> on ` +
+    `<a href="${FEATURE_FLAG_ADMIN_URL}">the flags page</a>.</p>` +
+    `<h2>Decision</h2><p>None.</p>` +
+    `<p><a href="${FEATURE_FLAG_ADMIN_URL}/${key}">Safety switch</a></p>`
   );
 }
 
@@ -141,7 +145,14 @@ async function sweep() {
       const description = removalDescription(flag.key, flag.releasedAt);
       const projectIdentifier = project.uniqueIdentifier;
       const existing = await prisma.task.findFirst({
-        where: { projectId: REMOVAL_PROJECT_ID, title, status: "Normal" },
+        where: {
+          projectId: REMOVAL_PROJECT_ID,
+          status: "Normal",
+          OR: [
+            { title: `Remove feature flag ${flag.key}` },
+            { title, description_: { is: { content: { contains: `href="${FEATURE_FLAG_ADMIN_URL}/${flag.key}"` } } } },
+          ],
+        },
         select: { id: true },
       });
       const taskId =

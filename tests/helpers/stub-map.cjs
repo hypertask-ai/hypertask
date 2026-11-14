@@ -1,5 +1,12 @@
 const QUIET_PERSONAL_LOG = "@/utils/controllers/logs/quietPersonalLog"
 const USER_COMMENT_COUNTS = "@/utils/controllers/tasks/userCommentCounts"
+const TASK_SAVE_LIMIT = "@/lib/tasks/saveLimit"
+let taskSaveLimit
+
+function realTaskSaveLimit() {
+  taskSaveLimit ??= require("./loadModule.cjs").loadModule("src/lib/tasks/saveLimit.ts")
+  return taskSaveLimit
+}
 
 function recordId(value) {
   if (typeof value === "string" || typeof value === "number") return String(value)
@@ -87,12 +94,16 @@ function withStubs(base = {}, extra = {}) {
   if (!(USER_COMMENT_COUNTS in base) && !(USER_COMMENT_COUNTS in extra)) {
     defaults[USER_COMMENT_COUNTS] = { userCommentCountsByTaskId: async () => new Map() }
   }
+  if (!("@/lib/savedViews/boardDefaultSubtasks" in base) && !("@/lib/savedViews/boardDefaultSubtasks" in extra)) {
+    defaults["@/lib/savedViews/boardDefaultSubtasks"] = { boardDefaultShowsSubtasks: async () => false }
+  }
   return new Proxy(Object.create(null), {
-    has: (_target, request) => request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,
+    has: (_target, request) => request === TASK_SAVE_LIMIT || request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,
     get: (_target, request) =>
       request in extra ? extra[request]
       : request in base ? base[request]
       : request in defaults ? defaults[request]
+      : request === TASK_SAVE_LIMIT ? realTaskSaveLimit()
       : request in sharedTicketWritingStubs ? sharedTicketWritingStubs[request]
       : request in agentPulseDotStubs ? agentPulseDotStubs[request]
       : request in emailStraightBoardStubs ? emailStraightBoardStubs[request]

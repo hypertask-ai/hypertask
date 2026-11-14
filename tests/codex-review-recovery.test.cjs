@@ -21,7 +21,7 @@ async function sweep({ comments = [], reviews = [], isDraft = false, currentHead
     paginate: async () => [],
     rest: {
       pulls: { get: async () => ({ data: { head: { sha: currentHead }, state, draft: isDraft } }) },
-      issues: { createComment: async value => posted.push(value) },
+      issues: { createComment: async value => posted.push(value), listForRepo: async () => ({ data: [] }) },
       repos: { createCommitStatus: async value => statuses.push(value) },
       checks: { listForRef: async () => {}, create: async () => {} },
     },

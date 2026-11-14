@@ -191,7 +191,7 @@ async function createTask(
     await scheduleDueDateJob({ taskId: result.task.id, projectId: project.id }, dueDate);
   }
   void upsertTaskToTurbopuffer(result.task.id);
-  void scheduleTaskSummaryGeneration({ taskId: result.task.id });
+  void scheduleTaskSummaryGeneration({ taskId: result.task.id, ownerUserId: actor.user.id });
   void broadcastBoardChange(project.id, { originUserId: actor.user.id });
 
   const task = await findTaskById(actor, result.task.id);

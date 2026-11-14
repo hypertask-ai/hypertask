@@ -26,7 +26,8 @@ const day = time => iso(time).slice(0, 10);
 const html = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const diagnostic = text => console.error(`error-collector: ${text}`);
 const refusedCreate = text => /project not found or access denied|label not found|rate limit exceeded|exactly one brain label/i.test(text)
-  || /^vcc: (?:task create refused[: ]|Ticket description refused[: ]|not filed\. The same problem is already open)/im.test(text);
+  || /^vcc: (?:task create refused[: ]|Ticket description refused[: ]|not filed\. The same problem is already open)/im.test(text)
+  || (/"success"\s*:\s*false/.test(text) && /"code"\s*:\s*"invalid_field"/.test(text));
 const occurrencePosted = (text, id) => typeof text === 'string' && (text.includes(`[error-occurrence:${id}]`) || text.includes(`[error-detail:${id}]`));
 
 function noiseRule(event) {
@@ -164,8 +165,17 @@ function merge(group, event) {
   group.routes = [...new Set([...group.routes, redact(event.route)])];
 }
 
+function titlePhrase(group) {
+  return group.noiseRule ? 'one warning repeated' : 'the same error happened';
+}
+
 function ticketLabels(board) {
   return `${board === PRODUCT_BOARD ? 'Error Log' : 'Infra'},brain-medium`;
+}
+
+function ticketTitle(group) {
+  const count = group.noiseRule ? group.hourlyCount : group.count;
+  return `${group.service}: ${titlePhrase(group)} ${count} time${count === 1 ? '' : 's'}.`;
 }
 
 function identityHref(group, fp) {
@@ -293,6 +303,8 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     timeLeft(Infinity);
     const result = spawnSync('vcc', args, { env, encoding: 'utf8', timeout: timeLeft(30000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
     const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    const duplicate = /^vcc: not filed\. The same problem is already open on [^\n]*?\b([A-Za-z][A-Za-z0-9_]*-\d+)\b/im.exec(text);
+    if (duplicate && !result.error) return { kind: 'duplicate', ticket: duplicate[1] };
     if (result.error || result.status !== 0) return refusedCreate(text) ? { kind: 'refused' } : { kind: 'ambiguous' };
     try { return { kind: 'created', ticket: ticketRef(payload(result.stdout).task) }; }
     catch { return { kind: 'ambiguous' }; }
@@ -532,7 +544,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);
         try {
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
-          const createArgs = ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', ticketLabels(group.board), '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path];
+          const createArgs = ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', ticketLabels(group.board), '--priority', 'high', '--title', ticketTitle(group), '--description-file', path];
           if (dryRun) {
             write('vcc', createArgs);
             state.created.push(iso(now));
@@ -541,10 +553,12 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           } else {
             const outcome = createOutcome(createArgs);
             if (outcome.kind === 'ambiguous') { stopCreates = true; throw new Error('ambiguous create'); }
-            if (outcome.kind !== 'created') throw new Error('refused create');
+            if (outcome.kind !== 'created' && outcome.kind !== 'duplicate') throw new Error('refused create');
             found = { ticket: outcome.ticket, deleted: false };
-            state.created.push(iso(now));
-            createdNow = true;
+            if (outcome.kind === 'created') {
+              state.created.push(iso(now));
+              createdNow = true;
+            }
           }
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };
         } finally { if (temp) await fs.rm(temp, { force: true }); }

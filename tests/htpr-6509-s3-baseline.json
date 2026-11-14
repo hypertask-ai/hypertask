@@ -1372,6 +1372,7 @@
             "notificationMatrix": null,
             "dictationLanguage": null,
             "inboxAdvanceOnSend": null,
+            "inboxSplitsOverflowHidden": null,
             "emojiFrequency": null,
             "calendarViews": null,
             "cardParts": null
@@ -1482,6 +1483,7 @@
               "notificationMatrix": null,
               "dictationLanguage": null,
               "inboxAdvanceOnSend": null,
+              "inboxSplitsOverflowHidden": null,
               "emojiFrequency": null,
               "calendarViews": null,
               "cardParts": null
@@ -1615,6 +1617,7 @@
               "notificationMatrix": null,
               "dictationLanguage": null,
               "inboxAdvanceOnSend": null,
+              "inboxSplitsOverflowHidden": null,
               "emojiFrequency": null,
               "calendarViews": null,
               "cardParts": null

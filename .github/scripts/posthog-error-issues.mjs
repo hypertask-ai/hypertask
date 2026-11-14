@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { setTimeout } from "node:timers/promises";
-import { createIncident, escapeHtml, jsonRequest, mcpHeaders } from "./posthog-error-alert.mjs";
+import { createIncident, jsonRequest, mcpHeaders } from "./posthog-error-alert.mjs";
 
 const POSTHOG = "https://eu.posthog.com";
 const PROJECT = "236160";
@@ -15,21 +15,21 @@ export function rateIssue(message, users, source) {
     return { severity: "P3", severity_reason: "A deliberate monitoring test, not a user failure." };
   }
   if (/included AI allowance|monthly AI allowance|AI allowance.*(?:used|exceeded)|dedicated team AI Gateway key|direct BYOK key is required/i.test(message)) {
-    return { severity: "P3", severity_reason: "An expected plan limit or missing AI key, not a crash.", user_impact: "AI cannot continue until the team adds a key or renews its allowance." };
+    return { severity: "P3", severity_reason: "An expected plan limit or missing AI key, not a crash.", user_impact: "AI stops until the team adds a key or renews the allowance." };
   }
   if (/^(?:Invalid input|Validation error|Project not found or access denied)$/.test(message)) {
-    return { severity: "P3", severity_reason: "A rejected user request, not a production outage.", user_impact: "The request is refused and the user sees a validation or access message." };
+    return { severity: "P3", severity_reason: "A rejected user request, not a production outage.", user_impact: "The request is refused. The user sees a validation or access message." };
   }
   if (users >= 10 || /data loss|lost data|out of memory|fatal|\bcrash(?:ed)?\b|AI usage persistence failed|Uncaught (?:Error|TypeError)|Minified React error/i.test(message) || source === "client") {
     return {
       severity: "P1",
       severity_reason: users >= 10 ? "At least ten known users are affected." : "A crash or failed durable accounting needs urgent investigation.",
-      ...(/AI usage persistence failed/i.test(message) ? { user_impact: "AI may finish answering, but its usage is not saved, so usage totals and allowance accounting may be wrong." } : source === "client" ? { user_impact: "The page stops working or shows an error fallback instead of the requested content." } : {}),
+      ...(/AI usage persistence failed/i.test(message) ? { user_impact: "AI may finish answering, but its usage is not saved. Usage totals and allowance may be wrong." } : source === "client" ? { user_impact: "The page stops working or shows an error fallback. The requested content does not appear." } : {}),
     };
   }
   return {
     severity: "P2", severity_reason: "A feature failed for some users; no confirmed crash or data loss.",
-    ...(/No output generated/i.test(message) ? { user_impact: "The requested AI reply or draft is empty." } : /prisma\.team\.findUnique/i.test(message) ? { user_impact: "A page that needs team details fails to load or shows an error." } : {}),
+    ...(/No output generated/i.test(message) ? { user_impact: "The requested AI reply or draft is empty." } : /prisma\.team\.findUnique/i.test(message) ? { user_impact: "A page that needs team details fails to load. It may show an error." } : {}),
   };
 }
 
@@ -145,10 +145,45 @@ async function linkIssueFlag(fetchImpl, token, config, issue, task) {
     method: "POST", headers: mcpHeaders(token, key),
     body: JSON.stringify({ source_task_id: task.id, target_ticket_number: ticket, target_project_id: config.boardId, relation_type: "RelatedTo" }),
   });
-  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
-    method: "POST", headers: mcpHeaders(token, `${key}-comment`),
-    body: JSON.stringify({ task_id: task.id, content_type: "html", text: `<p><strong>Error names this feature flag.</strong></p><p><a href="${escapeHtml(config.appUrl)}/admin/flags/${issue.feature_flag}">${issue.feature_flag}</a></p>` }),
+  await logIssueActivity(fetchImpl, token, config, task, `${key}-comment`, [
+    "This error names a feature flag.",
+    `${config.appUrl}/admin/flags/${issue.feature_flag}`,
+  ].join("\n"));
+}
+
+export function issueLogText(issue, oldLabels = []) {
+  const note = issue.alert_kind === "issue_spiking"
+    ? `PostHog saw a spike. ${issue.spike_count} hits, baseline ${issue.spike_baseline}.`
+    : issue.alert_kind === "issue_reopened" ? "PostHog reopened this issue after it was resolved." : "PostHog reported this issue again.";
+  const lines = [
+    note,
+    `Severity: ${issue.severity}. Production hits: ${issue.count}. Known users: ${issue.users}. Hits without a user identity: ${issue.unidentified_hits}.`,
+  ];
+  if (oldLabels.length !== 1 || oldLabels[0].id !== issue.severity_label_id) {
+    lines.push(`Severity changed from ${oldLabels.map((label) => label.name).join(" + ") || "unrated"} to ${issue.severity}. ${issue.severity_reason}`);
+  }
+  lines.push(`Last seen ${issue.last_seen}. Issue: ${issue.issue_url}`);
+  lines.push("Record findings here.");
+  return lines.join("\n");
+}
+
+export async function logIssueActivity(fetchImpl, token, config, task, key, text) {
+  const openRun = () => jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/agents/runs`, {
+    method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ taskId: Number(task.id), source: "runtime" }),
   });
+  const post = (runId) => jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/agents/runs/${runId}/activities`, {
+    method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ type: "thought", text }),
+  });
+  const runId = (await openRun())?.run?.id;
+  if (!runId) throw new Error("The agent log run returned no run id");
+  try {
+    await post(runId);
+  } catch (error) {
+    if (!/HTTP (?:404|409)/.test(error instanceof Error ? error.message : "")) throw error;
+    const retried = (await openRun())?.run?.id;
+    if (!retried) throw new Error("The agent log run returned no run id");
+    await post(retried);
+  }
 }
 
 export async function upsertIssue(fetchImpl, token, config, issue) {
@@ -202,13 +237,6 @@ export async function upsertIssue(fetchImpl, token, config, issue) {
     });
   }
   await linkIssueFlag(fetchImpl, token, config, issue, existing);
-  const note = issue.alert_kind === "issue_spiking"
-    ? `PostHog detected a spike: ${issue.spike_count} hits in its detection window, baseline ${issue.spike_baseline}.`
-    : issue.alert_kind === "issue_reopened" ? "PostHog reopened this issue after it was resolved." : "PostHog reported this issue again.";
-  const severityNote = severityChanged ? `<p>Severity changed from ${escapeHtml(oldLabels.map((label) => label.name).join(" + ") || "unrated")} to ${escapeHtml(issue.severity)}. ${escapeHtml(issue.severity_reason)}</p>` : "";
-  const text = `<p><strong>${escapeHtml(note)}</strong></p><p>${escapeHtml(issue.severity)}: ${issue.count} production hits, ${issue.users} known users in the issue's production history (${issue.unidentified_hits} hits without a user identity).</p>${severityNote}${issue.feature_flag ? "" : "<p>No confirmed feature flag.</p>"}<p>Last seen ${escapeHtml(issue.last_seen)}. <a href="${escapeHtml(issue.issue_url)}">PostHog issue</a></p><p>Next: Investigate the latest production errors in PostHog and record findings here.</p>`;
-  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
-    method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ task_id: existing.id, text, content_type: "html" }),
-  });
+  await logIssueActivity(fetchImpl, token, config, existing, key, issueLogText({ ...issue, severity_label_id: config.severityLabels[issue.severity] }, oldLabels));
   return { action: "updated" };
 }

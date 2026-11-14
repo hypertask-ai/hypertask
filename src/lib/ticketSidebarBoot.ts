@@ -37,12 +37,14 @@ export function buildTicketSidebarBootScript({
     if(!location.pathname.startsWith('/detail')||window.innerWidth<768)return;
     var s=JSON.parse(localStorage.getItem('recoil-persist')||'{}');
     if(!s||typeof s!=='object'||Array.isArray(s))return;
-    var open=s.isAiChatSidebarMode!==false&&!(${keepClosed}&&s.keepAiChatClosed===true)&&
+    var prefs=${autoOpenSwitches}?((s.aiChatAutoOpenPreferences||{})[${userId}]||null):null;
+    var keepClosed=(${keepClosed}&&s.keepAiChatClosed===true)||
+      (!!prefs&&prefs.aiChatOpenNewTickets===false&&prefs.aiChatOpenTickets===false&&prefs.aiChatOpenBoards===false);
+    var open=s.isAiChatSidebarMode!==false&&!keepClosed&&
       (s.aiChatPinned===true||(s.openAiChatByDefault!==false&&s.aiChatAutoOpenSuppressed!==true));
     if(${manualChat}){
-      try{open=s.isAiChatSidebarMode!==false&&sessionStorage.getItem('ht:aiChatOpen')==='1';}catch(e){open=false;}
+      try{open=s.isAiChatSidebarMode!==false&&!keepClosed&&sessionStorage.getItem('ht:aiChatOpen')==='1';}catch(e){open=false;}
     } else if(${autoOpenSwitches}){
-      var prefs=(s.aiChatAutoOpenPreferences||{})[${userId}];
       var enabled=prefs&&typeof prefs.aiChatOpenTickets==='boolean'?prefs.aiChatOpenTickets:
         s.keepAiChatClosed!==true&&Object.prototype.hasOwnProperty.call(s,'openAiChatByDefault')&&s.openAiChatByDefault===true;
       var samePage=s.aiChatAutoOpenPage==null||s.aiChatAutoOpenPage===String(${userId})+':'+location.pathname+':'+(new URLSearchParams(location.search).get('id')||'')+':'+(new URLSearchParams(location.search).get('view')||'');
