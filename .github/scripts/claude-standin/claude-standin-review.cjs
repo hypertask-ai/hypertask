@@ -180,9 +180,9 @@ function capNoticeBody({ sha, day, now }) {
   ].join('\n');
 }
 
-function capNotices(prs, { attemptsFor, day, now, notified }) {
+function capNotices(prs, { attemptsFor, day, now, notified, skip = new Set() }) {
   return greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor })
-    .filter(pr => !notified(pr.number))
+    .filter(pr => !skip.has(pr.headRefOid) && !notified(pr.number))
     .slice(0, MAX_CAP_NOTICES)
     .map(pr => ({ pr, body: capNoticeBody({ sha: pr.headRefOid, day, now }) }));
 }
@@ -236,8 +236,9 @@ function reviewRepo(REPO) {
   const attemptFile = sha => path.join(dir, 'attempts', sha);
   const attemptsFor = sha => Number(fs.existsSync(attemptFile(sha)) ? fs.readFileSync(attemptFile(sha), 'utf8') : 0) || 0;
 
-  const listing = JSON.parse(gh(['api', 'graphql', '-f', `query=${LIST}`, '-F', `owner=${REPO.split('/')[0]}`, '-F', `name=${REPO.split('/')[1]}`]));
-  const prs = listing.data.repository.pullRequests.nodes;
+  const fetchPrs = () => JSON.parse(gh(['api', 'graphql', '-f', `query=${LIST}`, '-F', `owner=${REPO.split('/')[0]}`, '-F', `name=${REPO.split('/')[1]}`])).data.repository.pullRequests.nodes;
+  const prs = fetchPrs();
+  const reviewedThisRun = new Set();
   const reviewed = reviewedToday();
   const picked = selectCandidates(prs, { now, attemptsFor, reviewedToday: reviewed });
   console.log(`standin: ${prs.length} open, ${picked.length} to review, ${reviewed} reviewed today`);
@@ -282,6 +283,7 @@ function reviewRepo(REPO) {
         continue;
       }
       gh(['api', '-X', 'POST', `repos/${REPO}/issues/${pr.number}/comments`, '-F', 'body=@-'], buildComment(sha, review));
+      reviewedThisRun.add(sha);
       fs.writeFileSync(dayFile, String(reviewedToday() + 1));
       console.log(`standin: PR #${pr.number} ${sha.slice(0, 7)} ${review.verdict} blocking=${review.blocking} model=${review.model} cost=$${review.costUsd}`);
     } finally {
@@ -289,15 +291,15 @@ function reviewRepo(REPO) {
     }
   }
   if (reviewedToday() >= PER_DAY) {
-    noticeCap(prs, { REPO, dir, day, now, attemptsFor });
+    noticeCap(fetchPrs(), { REPO, dir, day, now, attemptsFor, skip: reviewedThisRun });
   }
 }
 
-function noticeCap(prs, { REPO, dir, day, now, attemptsFor }) {
+function noticeCap(prs, { REPO, dir, day, now, attemptsFor, skip }) {
   const noticeDir = path.join(dir, 'notices', day);
   fs.mkdirSync(noticeDir, { recursive: true });
   const notified = number => fs.existsSync(path.join(noticeDir, String(number)));
-  const notices = capNotices(prs, { attemptsFor, day, now, notified });
+  const notices = capNotices(prs, { attemptsFor, day, now, notified, skip });
   for (const { pr, body } of notices) {
     try {
       if (!process.env.STANDIN_DRY) {
@@ -307,7 +309,7 @@ function noticeCap(prs, { REPO, dir, day, now, attemptsFor }) {
       } else {
         console.log(`standin: DRY RUN, would post on PR #${pr.number}:\n${body}`);
       }
-      fs.writeFileSync(path.join(noticeDir, String(pr.number)), String(now));
+      if (!process.env.STANDIN_DRY) fs.writeFileSync(path.join(noticeDir, String(pr.number)), String(now));
       console.log(`standin: PR #${pr.number} cap notice posted`);
     } catch (error) {
       console.log(`standin: PR #${pr.number} cap notice failed: ${String(error.message).split('\n')[0]}`);

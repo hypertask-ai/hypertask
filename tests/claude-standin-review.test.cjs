@@ -206,3 +206,14 @@ test('HYCI-437 cap: a head already reviewed or set aside gets no cap notice', ()
   });
   assert.deepEqual(notices.map(n => n.pr.number), [3]);
 });
+
+test('HYCI-437 cap: a head reviewed in this same run gets no cap notice', () => {
+  const now = Date.parse('2026-11-14T03:17:00Z');
+  const reviewed = withChecks(1, {}, '2026-11-13T00:00:00Z');
+  const waiting = withChecks(2, {}, '2026-11-13T00:00:00Z');
+  const notices = standin.capNotices([reviewed, waiting], {
+    attemptsFor: () => 0, day: '2026-11-14', now, notified: () => false,
+    skip: new Set([reviewed.headRefOid]),
+  });
+  assert.deepEqual(notices.map(n => n.pr.number), [2]);
+});
