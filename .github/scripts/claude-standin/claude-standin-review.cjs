@@ -202,7 +202,7 @@ function capNoticeBody({ sha, day, now }) {
 
 function capNotices(prs, { attemptsFor, day, now, notified, skip = new Set() }) {
   return greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor })
-    .filter(pr => !skip.has(pr.headRefOid) && !notified(pr.number))
+    .filter(pr => !skip.has(pr.headRefOid) && !notified(pr.number, pr.headRefOid))
     .slice(0, MAX_CAP_NOTICES)
     .map(pr => ({ pr, body: capNoticeBody({ sha: pr.headRefOid, day, now }) }));
 }
@@ -327,7 +327,8 @@ function reviewRepo(REPO) {
 function noticeCap(prs, { REPO, dir, day, now, attemptsFor, skip }) {
   const noticeDir = path.join(dir, 'notices', day);
   fs.mkdirSync(noticeDir, { recursive: true });
-  const notified = number => fs.existsSync(path.join(noticeDir, String(number)));
+  const noticeKey = (number, sha) => `${number}-${sha.slice(0, 12)}`;
+  const notified = (number, sha) => fs.existsSync(path.join(noticeDir, noticeKey(number, sha)));
   const notices = capNotices(prs, { attemptsFor, day, now, notified, skip });
   for (const { pr, body } of notices) {
     try {
@@ -338,7 +339,7 @@ function noticeCap(prs, { REPO, dir, day, now, attemptsFor, skip }) {
       } else {
         console.log(`standin: DRY RUN, would post on PR #${pr.number}:\n${body}`);
       }
-      if (!process.env.STANDIN_DRY) fs.writeFileSync(path.join(noticeDir, String(pr.number)), String(now));
+      if (!process.env.STANDIN_DRY) fs.writeFileSync(path.join(noticeDir, noticeKey(pr.number, pr.headRefOid)), String(now));
       console.log(`standin: PR #${pr.number} cap notice posted`);
     } catch (error) {
       console.log(`standin: PR #${pr.number} cap notice failed: ${String(error.message).split('\n')[0]}`);

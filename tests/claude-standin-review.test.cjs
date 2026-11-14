@@ -224,6 +224,19 @@ test('HYCI-437 cap: every waiting head says why it waits, once, and names the re
   assert.equal(standin.capNotices(prs, { attemptsFor: () => 2, day: '2026-11-14', now, notified: () => false }).length, 0);
 });
 
+test('HYCI-437 cap: a head pushed after this day was already noticed still says why it waits', () => {
+  const now = Date.parse('2026-11-14T12:47:00Z');
+  const noticed = gateNode(1, { headRefOid: 'b'.repeat(40), createdAt: '2026-11-14T03:40:00Z' });
+  const pushed = withChecks(1, {}, '2026-11-14T12:40:00Z');
+  const key = (number, sha) => `${number}-${sha.slice(0, 12)}`;
+  const noticedKeys = new Set([key(noticed.number, noticed.headRefOid)]);
+  const notified = (number, sha) => noticedKeys.has(key(number, sha));
+  assert.equal(standin.capNotices([noticed], { attemptsFor: () => 0, day: '2026-11-14', now, notified }).length, 0);
+  const notices = standin.capNotices([pushed], { attemptsFor: () => 0, day: '2026-11-14', now, notified });
+  assert.deepEqual(notices.map(n => n.pr.number), [1]);
+  assert.match(notices[0].body, /This head \(aaaaaaa\)/);
+});
+
 test('HYCI-437 cap: a head already reviewed or set aside gets no cap notice', () => {
   const now = Date.parse('2026-11-14T03:17:00Z');
   const reviewed = withChecks(1, { 'ai-review': 'SUCCESS' }, '2026-11-13T00:00:00Z');
