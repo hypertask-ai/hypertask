@@ -148,7 +148,7 @@ test("a team that disabled Anthropic is reported, and callers return no result i
 });
 
 test("a user's explicit non-Claude pick is honoured for user-pick features", () => {
-  for (const id of ["gpt-6.1-sol-high", "gpt-6-luna", "gemini-3.5-flash-lite", "deepseek-v4.1-flash", "kimi-k3"]) {
+  for (const id of ["gpt-6.1-sol-high", "gpt-6-luna", "gemini-3.5-flash-lite", "deepseek-v4.1-flash", "kimi-k3.1-pro"]) {
     assert.equal(catalog.getAiModelOptionById(id, true)?.id, id);
     const option = ladder.resolveUserFacingModelOption("aiChat", ALL_PROVIDERS_ON, id, {
       haiku55Enabled: true,

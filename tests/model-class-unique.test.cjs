@@ -36,7 +36,7 @@ test("every model definition has a non-empty modelClass, including hidden models
   assert.equal(catalog.getAiModelDefinition("claude-haiku-4.5"), undefined);
   assert.equal(catalog.getAiModelDefinition("claude-haiku-5-5").modelClass, "claude-haiku");
   assert.equal(catalog.getAiModelDefinition("kimi-k2.5").modelClass, "kimi-k2.5-free");
-  assert.equal(catalog.getAiModelDefinition("kimi-k3").modelClass, "kimi-k3");
+  assert.equal(catalog.getAiModelDefinition("kimi-k3.1-pro").modelClass, "kimi-k3");
   assert.equal(catalog.getAiModelDefinition("gemini-4-argon").modelClass, "gemini-argon");
   assert.equal(catalog.getAiModelDefinition("grok-4.7").modelClass, "grok");
 });
