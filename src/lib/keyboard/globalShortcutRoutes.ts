@@ -1,3 +1,5 @@
+import { isChatSurfaceTarget } from "./chatSurfaceFocus";
+
 const GLOBAL_SHORTCUT_BLOCKED_ROUTES = [
   "/interactive-onboarding",
   "/learn",
@@ -26,6 +28,11 @@ const startsWithAny = (
 export const areGlobalShortcutsEnabled = (
   pathname: string | null | undefined,
 ) => !startsWithAny(pathname, GLOBAL_SHORTCUT_BLOCKED_ROUTES);
+
+export const chatOwnsKey = (
+  agentChatKeys: boolean,
+  target: EventTarget | null | undefined,
+) => agentChatKeys && isChatSurfaceTarget(target);
 
 export const isGlobalCreateTaskShortcutEnabled = (
   pathname: string | null | undefined,
