@@ -5,6 +5,8 @@ import invokeDueDate from "@/utils/controllers/tasks/invokeDueDate";
 
 export const DUE_DATE_QUEUE_PATH = "/api/queues/duedateQueue";
 
+const MAX_DUE_DATE_JOB_DELAY_SECONDS = 365 * 24 * 60 * 60;
+
 export function buildDueDateJobId(taskId: number, projectId: number) {
   return `duedate-for-task-${taskId}-${projectId}`;
 }
@@ -13,11 +15,13 @@ export async function scheduleDueDateJob(payload: {
   taskId: number;
   projectId: number;
 }, runAt: Date) {
+  const notBefore = Math.floor(runAt.getTime() / 1000);
+  if (notBefore - Math.floor(Date.now() / 1000) > MAX_DUE_DATE_JOB_DELAY_SECONDS) return undefined;
   return scheduleJobById({
     jobId: buildDueDateJobId(payload.taskId, payload.projectId),
     path: DUE_DATE_QUEUE_PATH,
     body: payload,
-    notBefore: Math.floor(runAt.getTime() / 1000),
+    notBefore,
   });
 }
 
