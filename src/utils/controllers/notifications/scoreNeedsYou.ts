@@ -17,9 +17,9 @@ export async function scoreNeedsYouInbox(userId: number) {
       OR: [{ needsYouScoredAt: null }, { needsYouSource: "skipped", NOT: { needsYouReason: "Own AI" } }],
     },
     include: {
-      task: { select: { title: true, waitingOnUserId: true, priority: true } },
+      task: { select: { title: true, waitingOnUserId: true, waitingOnAgentId: true, status: true, section: true, priority: true, assignees: { select: { userId: true, agentId: true } } } },
       comment: { select: { text: true, kind: true } },
-      project: { select: { teamId: true, team: { select: { aiProviderSettings: true, byokApiKeys: { where: { enabled: true }, select: { provider: true } } } } } },
+      project: { select: { teamId: true, section: { where: { deleted: false }, select: { section_title: true, isDone: true } }, team: { select: { aiProviderSettings: true, byokApiKeys: { where: { enabled: true }, select: { provider: true } } } } } },
     },
     orderBy: { id: "asc" }, take: 100,
   });

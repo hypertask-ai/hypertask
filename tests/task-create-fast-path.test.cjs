@@ -192,6 +192,8 @@ test("task create trace emits one complete submit-to-visible sample", () => {
       duration_ms: 240,
       network_duration_ms: 240,
       submit_to_visible_ms: 590,
+      ai_task_writer_ms: null,
+      ai_title_ms: null,
       server_validate_ms: 12.1,
       server_task_create_ms: 90.4,
       server_enrich_ms: 7.5,
@@ -201,7 +203,7 @@ test("task create trace emits one complete submit-to-visible sample", () => {
       result: "success",
       response_status: 200,
       visible_completion: "task_detail",
-      task_create_measurement_version: 2,
+      task_create_measurement_version: 3,
       task_create_measurement_scope: "submit_to_visible",
     });
     assert.deepEqual(marks, [

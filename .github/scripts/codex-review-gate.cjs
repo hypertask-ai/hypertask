@@ -158,6 +158,7 @@ function evaluate(pr) {
   const claudeClearsStale = staleBlocking.length > 0 && claudeResult?.state === 'success';
 
   if (headBlocking.length || (staleBlocking.length && !claudeClearsStale)) {
+    if (!headBlocking.length && claudeResult?.state === 'failure') return claudeResult;
     const levels = blocking.map(priorityOf);
     const worst = levels.includes(0) ? 'P0' : levels.includes(1) ? 'P1' : 'unrated';
     return {
