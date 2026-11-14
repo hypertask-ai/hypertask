@@ -19,6 +19,7 @@ stubModule("src/lib/prisma.ts", {
   },
 });
 stubModule("src/utils/helperFunctions/Views/BoardFilterSanitizer.ts", { sanitizeProjectBoardFilters: (project) => project });
+stubModule("src/lib/savedViews/boardDefaultSubtasks.ts", { boardDefaultShowsSubtasks: async () => false });
 stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
   projectContentAccessWhere: (userId) => ({ ownerId: userId }),
   getProjectWhere: (userId) => ({ ownerId: userId, teamId: { not: null } }),

@@ -8,6 +8,7 @@ import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/Subtask
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getProjectViewBaseInclude } from "../projects/getAllIncludes";
 import { featureFlagsForUser } from "@/lib/flags";
+import { boardDefaultShowsSubtasks } from "@/lib/savedViews/boardDefaultSubtasks";
 import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 
 export default async function getProject(shareId: string) {
@@ -138,7 +139,8 @@ export default async function getProject(shareId: string) {
             },
         })
 
-        const project = sanitizeProjectBoardFilters(loadedProject, undefined, true);
+        const showsSubtasks = inviteObj.userId ? await boardDefaultShowsSubtasks(inviteObj.userId) : false;
+        const project = sanitizeProjectBoardFilters(loadedProject, undefined, true, showsSubtasks);
         if (!project) {
             return ({
                 status: 404,

@@ -56,6 +56,7 @@ function loadController(prisma, calls) {
         sanitized: true,
       }),
     },
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
     "@/utils/controllers/tasks/attachWaitingOnUsers": {
       attachWaitingOnUsers: async (tasks) => {
         calls.push(["waiting-on-users", tasks]);

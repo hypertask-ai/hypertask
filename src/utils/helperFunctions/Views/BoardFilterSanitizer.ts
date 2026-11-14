@@ -1,3 +1,5 @@
+import { boardDefaultSubtaskSetting, TBoardSubtaskSetting } from "@/models/Views/model";
+
 const BOARD_FILTER_KEYS = new Set(["addedFilters", "matchFilters"]);
 const FILTER_ENTRY_KEYS = new Set(["match", "searchPayload", "type"]);
 const SEARCH_PAYLOAD_KEYS = new Set([
@@ -186,10 +188,23 @@ export function sanitizeProjectViewBoardFilters<T>(projectView: T, userId?: numb
   return (changed ? sanitized : visibleProjectView) as T;
 }
 
-export function sanitizeProjectBoardFilters<T>(project: T, userId?: number, publicOnly = false): T {
+export function sanitizeBoardDefaultSubtaskSetting<T>(projectView: T, boardDefaultShowsSubtasks = false): T {
+  if (!boardDefaultShowsSubtasks || !isRecord(projectView)) return projectView;
+  const defaultView = projectView.default_view;
+  const storedSetting = isRecord(defaultView) ? defaultView.board_subtask_setting : undefined;
+  return {
+    ...projectView,
+    board_subtask_setting_for_default_view: boardDefaultSubtaskSetting(
+      typeof storedSetting === "string" ? (storedSetting as TBoardSubtaskSetting) : undefined
+    ),
+  } as T;
+}
+
+export function sanitizeProjectBoardFilters<T>(project: T, userId?: number, publicOnly = false, boardDefaultShowsSubtasks = false): T {
   if (!isRecord(project) || !("project_view" in project)) return project;
 
-  const projectView = sanitizeProjectViewBoardFilters(project.project_view, userId, publicOnly);
+  const sanitizedView = sanitizeProjectViewBoardFilters(project.project_view, userId, publicOnly);
+  const projectView = sanitizeBoardDefaultSubtaskSetting(sanitizedView, boardDefaultShowsSubtasks);
   return (projectView === project.project_view
     ? project
     : { ...project, project_view: projectView }) as T;
