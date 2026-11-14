@@ -64,6 +64,8 @@ if (name === 'ht') {
   if (plain[0] === 'task' && plain[1] === 'create') {
     if (args[0] !== '--json') throw new Error('must request JSON');
     if (cfg.createFail) { console.error('Project not found or access denied'); process.exit(1); }
+    if (cfg.titleRefused) { console.log(JSON.stringify({ success: false, error: 'title: Keep each sentence within twelve words ("Failed to start manager-lease-renew.service - Keep the Hype..."). Use short plain sentences for people; put technical details and status in the agent log.', code: 'invalid_field', field: 'title' })); process.exit(2); }
+    if (cfg.createServerError) { console.log(JSON.stringify({ success: false, error: 'Internal server error', code: 'internal_error' })); process.exit(2); }
     if (cfg.firstCreateRefusal && readFileSync(calls, 'utf8').trim().split('\\n').map(line => JSON.parse(line)).filter(call => call.name === 'vcc' && call.args.includes('create')).length === 1) {
       console.error(cfg.firstCreateRefusal); process.exit(5);
     }
@@ -611,6 +613,34 @@ check('reporting', 'default rolling cap, pending counts/routes survive and exact
   assert.equal(h.state().days['2026-10-14'].web.newGroups, 7);
 }));
 
+check('tickets', 'HYCI-271 a title the board rejects is a refusal, so the next group still files', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ titleRefused: true });
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+}));
+
+check('tickets', 'HYCI-271 an unknown server failure stays unclear and stops further creates', () => withHarness(async h => {
+  h.events([event(), event({ message: 'Payment failed for user 456' })]);
+  h.config({ createServerError: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.deepEqual(h.state().created, []);
+  assert.equal(Object.keys(h.state().pending).length, 2);
+}));
+
+check('tickets', 'HYCI-271 titles stay plain and short, with the count in them', () => withHarness(async h => {
+  h.events([event(), event({ ts: new Date(NOW - 2000).toISOString(), stack: '' })]);
+  await h.run();
+  const titles = creates(h).map(call => call.args[call.args.indexOf('--title') + 1]);
+  assert.deepEqual(titles, ['web: the same error happened 2 times.']);
+  for (const title of titles) {
+    for (const sentence of title.split(/(?<=[.!?])\s+/)) assert.ok(sentence.trim().split(/\s+/).length <= 12, title);
+  }
+}));
+
 check('reporting', 'cap override including zero and invalid cap', () => withHarness(async h => {
   h.env.ERROR_COLLECTOR_HOURLY_CAP = '0'; h.events([event()]); await h.run(); assert.equal(creates(h).length, 0);
   h.env.ERROR_COLLECTOR_HOURLY_CAP = '1'; await h.run({ now: NOW + 1000 }); assert.equal(creates(h).length, 1);
@@ -626,7 +656,7 @@ check('reporting', 'noise alert threshold plans exactly one ticket above the lim
     assert.equal(planned.status, 0, planned.stderr);
     assert.equal((planned.stdout.match(/"create"/g) ?? []).length, count > 50 ? 1 : 0);
     if (count > 50) {
-      assert.match(planned.stdout, /SSL configuration warning repeated 51 times in one hour/);
+      assert.match(planned.stdout, /vercel: one warning repeated 51 times\./);
       assert.match(planned.stdout, /One warning repeats too often/);
       assert.match(planned.stdout, /Quiet the warning/);
       assert.match(planned.stdout, /\/route\/0, \/route\/1/);
@@ -814,7 +844,7 @@ check('reporting', 'noise alert fixture dry run prints the planned ticket for 12
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run');
   assert.equal(result.status, 0, result.stderr);
   assert.equal((result.stdout.match(/"create"/g) ?? []).length, 1);
-  assert.match(result.stdout, /SSL configuration warning repeated 120 times in one hour/);
+  assert.match(result.stdout, /vercel: one warning repeated 120 times\./);
   assert.match(result.stdout, /Occurrences in one hour: 120/);
   assert.match(result.stdout, /"errors":0,"noise":120,"newGroups":0/);
   assert.equal(existsSync(dirname(h.statePath)), false);
