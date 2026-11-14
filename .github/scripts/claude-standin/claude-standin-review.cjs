@@ -179,7 +179,9 @@ query($owner: String!, $name: String!) {
   }
 }`;
 
-const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] });
+// A fresh cache dir per run: the shared gh read cache lives 5 minutes and would hand back a stale head.
+const FRESH_CACHE = fs.mkdtempSync(path.join(os.tmpdir(), 'standin-gh-'));
+const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, HT_GH_CACHE_DIR: FRESH_CACHE } });
 
 function stateDir() {
   const dir = process.env.STANDIN_STATE_DIR || path.join(os.homedir(), '.local/state/claude-standin');
