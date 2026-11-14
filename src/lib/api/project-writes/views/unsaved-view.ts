@@ -388,9 +388,12 @@ const route = taskWriteRoute({
               board_layout: sanitizeBoardLayout(comparisonView.board_layout),
             };
 
+            const storedExplicitHide =
+              user_project_view.unsavedView.board_subtask_explicit === true;
             if (
               isDeepEqual(settingsFromReqBody, settingsFromDB) &&
-              !(markExplicitSubtask && board_subtask_setting === "None")
+              !(markExplicitSubtask && board_subtask_setting === "None") &&
+              !storedExplicitHide
             )
               shouldDeleteUnsaved = true;
           } else {
