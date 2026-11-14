@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 
 APP = "https://app.hypertask.ai"
-DESKTOP_SHA = "f834499c6d4a96b7a198bbdb0546ce056b532e71"
+DESKTOP_SHA = "a82dafb1efc6104edc14ea7311d7016fb847db92"
 SANDBOX_BOARD_ID = 7049
 SANDBOX_TITLE = "QA Sandbox"
 FORBIDDEN_BOARDS = {15, 4060}
@@ -65,14 +65,13 @@ def safe_lines(text):
             kept.append(line[:300])
     return "\n".join(kept[-160:])
 
-def restored_notification(payload, wanted):
+def listed_notification(payload, wanted):
     if not isinstance(payload, dict) or payload.get("success") is not True:
-        return False
+        return True
     rows = payload.get("user_notifications")
-    return isinstance(rows, list) and any(
-        isinstance(row, dict) and row.get("id") == wanted and row.get("status") == "Normal"
-        for row in rows
-    )
+    if not isinstance(rows, list):
+        return True
+    return any(isinstance(row, dict) and row.get("id") == wanted for row in rows)
 
 def choose_board(projects):
     if not isinstance(projects, list):
@@ -126,18 +125,14 @@ def self_check():
         fail("branch dispatch was accepted")
     if not production_dispatch("refs/heads/production"):
         fail("production dispatch was refused")
-    row = {"id": 1, "status": "Normal", "task": {"id": 9}}
+    row = {"id": 1, "status": "Normal"}
     listing = {"success": True, "user_notifications": [row]}
-    if not restored_notification(listing, 1) or restored_notification(listing, 9):
-        fail("notification identity check failed")
-    row["status"] = "Archive"
-    if restored_notification(listing, 1):
-        fail("archived notification counted as restored")
-    row["status"] = "Normal"
-    for invalid in ({"success": False, "user_notifications": [row]}, [], {"success": True}):
-        if restored_notification(invalid, 1):
-            fail("invalid notification response counted as restored")
-    print("NOTIFICATION_IDENTITY_OK")
+    if not listed_notification(listing, 1) or listed_notification(listing, 9):
+        fail("listed notification identity check failed")
+    for invalid in ({"success": False, "user_notifications": [row]}, [], {"success": True}, {"success": True, "user_notifications": {"id": 1}}):
+        if not listed_notification(invalid, 1):
+            fail("invalid notification response counted as absent")
+    print("NOTIFICATION_LISTING_OK")
     print("PRODUCTION_REF_OK")
     print("CLEANUP_STATUS_OK")
     env = {key: os.environ[key] for key in CHILD_ENV_KEYS if key in os.environ}
@@ -304,9 +299,10 @@ def main():
             fail(f"missing {marker}")
     task_ids = re.findall(r"BOARD_READBACK task (\d+)", output)
     note_ids = re.findall(r"INBOX_READBACK notification (\d+)", output)
-    if len(task_ids) != 1 or len(note_ids) != 1:
+    note_tasks = re.findall(r"INBOX_READBACK notification \d+ task (\d+)", output)
+    if len(task_ids) != 1 or len(note_ids) != 1 or len(note_tasks) != 1:
         fail("readback ids were not singular")
-    task_id, note_id = task_ids[0], note_ids[0]
+    task_id, note_id, note_task = task_ids[0], note_ids[0], note_tasks[0]
     def api(method, path):
         return request(
             method,
@@ -320,6 +316,9 @@ def main():
     status, _, raw = api("GET", f"/tasks?task_id={task_id}")
     if task_still_present(status, raw, task_id):
         fail(f"temporary task still exists after a {status} readback")
+    status, _, raw = api("GET", f"/tasks?task_id={note_task}")
+    if task_still_present(status, raw, note_task):
+        fail(f"inbox row's temporary task still exists after a {status} readback")
     status, _, raw = api("GET", "/inbox/list")
     if status != 200:
         fail(f"inbox cleanup check status {status}")
@@ -327,10 +326,10 @@ def main():
         listing = json.loads(raw.decode())
     except json.JSONDecodeError:
         fail("inbox cleanup check was not JSON")
-    if not restored_notification(listing, int(note_id)):
-        fail("archived inbox row was not restored")
+    if listed_notification(listing, int(note_id)):
+        fail("inbox row outlived the task the run deleted")
     print("TASK_CLEANED")
-    print("INBOX_RESTORED")
+    print("INBOX_ROW_WENT_WITH_ITS_TASK")
     print("DESKTOP_READBACK_PASSED")
 
 if __name__ == "__main__":
