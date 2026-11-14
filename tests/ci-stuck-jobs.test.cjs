@@ -676,34 +676,97 @@ test('the nine real stuck jobs of run 41286623269 paid minutes and now pay secon
   assert.ok(newWorst < CAP_BUDGET_MS, `the new cadence pays ${newWorst} ms`);
 });
 
-const guardRun = (id, minutesAgo) => ({
+const guardStatuses = ['queued', 'pending', 'requested', 'waiting', 'in_progress'];
+
+const guardRun = (id, minutesAgo, status = 'queued') => ({
   id,
-  status: 'pending',
+  status,
   created_at: new Date(now - minutesAgo * 60 * 1000).toISOString(),
 });
 
-test('a guard run waiting under thirty minutes keeps its turn and one waiting longer is cancelled', async () => {
+const guardPath = status => `/repos/o/r/actions/workflows/feature-flag-gate.yml/runs?status=${status}&per_page=100`;
+
+const guardApi = (byStatus, calls = []) => async (path, method = 'GET') => {
+  calls.push(`${method} ${path}`);
+  if (method !== 'GET') return {};
+  const status = new URL(`https://github.com${path}`).searchParams.get('status');
+  return { workflow_runs: byStatus[status] ?? [] };
+};
+
+const posts = calls => calls.filter(call => call.startsWith('POST'));
+
+test('a guard run in any not-finished state keeps its turn under thirty minutes and loses it after thirty', async () => {
   assert.equal(GUARD_PENDING_MINUTES, 30);
-  const runs = [guardRun(41, 29), guardRun(42, 31), { ...guardRun(43, 90), status: 'completed' }];
-  assert.deepEqual(overdueRuns(runs, { now }).map(run => run.id), [42]);
+  const overdue = guardStatuses.map((status, index) => guardRun(41 + index, 31, status));
+  const kept = [guardRun(50, 29), guardRun(51, 29, 'in_progress'), { ...guardRun(52, 90), status: 'completed' }];
+  assert.deepEqual(overdueRuns([...overdue, ...kept], { now }).map(run => run.id), [41, 42, 43, 44, 45]);
   const calls = [];
-  const api = async (path, method = 'GET') => {
-    calls.push(`${method} ${path}`);
-    if (path === '/repos/o/r/actions/workflows/feature-flag-gate.yml/runs?status=pending&per_page=100') return { workflow_runs: runs };
-    return {};
-  };
-  assert.deepEqual(await cancelOverdueGuards('o/r', { now, api }), { checked: 3, cancelled: 1 });
-  assert.deepEqual(calls.slice(1), ['POST /repos/o/r/actions/runs/42/cancel']);
+  const outcome = await cancelOverdueGuards('o/r', { now, api: guardApi({ queued: [...overdue, ...kept] }, calls) });
+  assert.deepEqual(outcome, { checked: 8, cancelled: 5 });
+  assert.deepEqual(posts(calls), [41, 42, 43, 44, 45].map(id => `POST /repos/o/r/actions/runs/${id}/cancel`));
 });
 
-test('guard expiry includes exactly thirty minutes but rejects invalid ages and non-pending runs', () => {
+test('the guard queue is read once for every not-finished status GitHub reports', async () => {
+  const calls = [];
+  assert.deepEqual(await cancelOverdueGuards('o/r', { now, api: guardApi({}, calls) }), { checked: 0, cancelled: 0 });
+  assert.deepEqual(calls, guardStatuses.map(status => `GET ${guardPath(status)}`));
+});
+
+test('a guard run listed under two statuses is judged and cancelled once', async () => {
+  const calls = [];
+  const outcome = await cancelOverdueGuards('o/r', {
+    now,
+    api: guardApi({ queued: [guardRun(71, 31)], waiting: [guardRun(71, 31), guardRun(72, 40)] }, calls),
+  });
+  assert.deepEqual(outcome, { checked: 2, cancelled: 2 });
+  assert.deepEqual(posts(calls), ['POST /repos/o/r/actions/runs/71/cancel', 'POST /repos/o/r/actions/runs/72/cancel']);
+});
+
+test('the twelve guard runs the real repository left unfinished are found and cancelled', async () => {
+  const realNow = Date.parse('2026-11-14T17:15:00Z');
+  const queued = [
+    [43096179092, '2026-11-11T20:27:37Z'],
+    [43096650005, '2026-11-11T20:32:23Z'],
+    [43096772690, '2026-11-11T20:33:38Z'],
+    [43096822840, '2026-11-11T20:34:10Z'],
+    [43097151578, '2026-11-11T20:37:22Z'],
+    [43097369272, '2026-11-11T20:39:44Z'],
+    [43097685651, '2026-11-11T20:43:04Z'],
+    [43098007974, '2026-11-11T20:46:17Z'],
+    [43098156484, '2026-11-11T20:47:58Z'],
+    [43098221109, '2026-11-11T20:48:42Z'],
+    [43098458725, '2026-11-11T20:51:19Z'],
+  ].map(([id, created_at]) => ({ id, status: 'queued', created_at }));
+  const orphan = [{ id: 39784077837, status: 'in_progress', created_at: '2026-10-22T13:07:15Z' }];
+  const found = overdueRuns([...queued, ...orphan], { now: realNow }).map(run => run.id);
+  assert.deepEqual(found.sort((a, b) => a - b), [39784077837, ...queued.map(run => run.id)].sort((a, b) => a - b));
+  const calls = [];
+  const outcome = await cancelOverdueGuards('o/r', { now: realNow, api: guardApi({ queued, in_progress: orphan }, calls) });
+  assert.deepEqual(outcome, { checked: 12, cancelled: 12 });
+  assert.equal(posts(calls).length, 12);
+});
+
+test('a status query that fails is reported and does not stop the other statuses', async () => {
+  const outcome = await cancelOverdueGuards('o/r', {
+    now,
+    api: async (path, method = 'GET') => {
+      if (method !== 'GET') return {};
+      if (path.includes('status=queued')) throw new Error('gh api failed: HTTP 502');
+      if (path.includes('status=waiting')) return { workflow_runs: [guardRun(81, 31)] };
+      return { workflow_runs: [] };
+    },
+  });
+  assert.deepEqual(outcome, { checked: 1, cancelled: 1, unread: 'gh api failed: HTTP 502' });
+});
+
+test('guard expiry includes exactly thirty minutes but rejects invalid ages and finished runs', () => {
   const runs = [
     guardRun(51, 30),
     guardRun(52, -1),
-    { id: 53, status: 'pending' },
-    { id: 54, status: 'pending', created_at: 'invalid' },
-    { ...guardRun(55, 90), status: 'queued' },
-    { ...guardRun(56, 90), status: 'in_progress' },
+    { id: 53, status: 'queued' },
+    { id: 54, status: 'queued', created_at: 'invalid' },
+    { ...guardRun(55, 90), status: 'completed' },
+    { ...guardRun(56, 90), status: undefined },
   ];
   assert.deepEqual(overdueRuns(runs, { now }).map(run => run.id), [51]);
 });
