@@ -13,7 +13,9 @@ const MARKER_PREFIX = 'claude-standin-review:v1';
 const MODEL_ALIAS = 'sonnet';
 const MAX_DIFF_CHARS = 180_000;
 const PER_RUN = 3;
-const PER_DAY = 40;
+const PER_DAY = Number(process.env.STANDIN_PER_DAY) > 0 ? Number(process.env.STANDIN_PER_DAY) : 100;
+const MAX_CAP_NOTICES = 25;
+const CAP_NOTICE_MARKER = 'claude-standin-cap:v1';
 const ATTEMPTS_PER_HEAD = 2;
 const REVIEW_TIMEOUT_MS = 12 * 60 * 1000;
 
@@ -129,32 +131,98 @@ function buildComment(sha, review) {
   return lines.join('\n');
 }
 
+const FAILED_STATES = ['failure', 'error'];
+const FAILED_CONCLUSIONS = ['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure'];
+const PENDING_STATUSES = ['in_progress', 'queued', 'requested', 'waiting', 'pending'];
+
+const legacyStatusChecksOf = pr =>
+  (pr.commits?.nodes?.[0]?.commit?.status?.contexts ?? [])
+    .map(c => ({ name: c.context ?? '', state: String(c.state ?? '').toLowerCase() }));
+
+const rollupCheckRunsOf = pr => (pr.statusCheckRollup?.contexts?.nodes ?? []).filter(Boolean);
+
+const checkRunStateOf = c => c.conclusion
+  ? String(c.conclusion).toLowerCase()
+  : PENDING_STATUSES.includes(String(c.status ?? '').toLowerCase()) ? 'pending' : String(c.state ?? '').toLowerCase();
+
+const checksOf = pr => {
+  const rollup = rollupCheckRunsOf(pr);
+  return rollup.length
+    ? rollup.map(c => ({ name: c.name ?? c.context ?? '', state: checkRunStateOf(c) }))
+    : legacyStatusChecksOf(pr);
+};
+
+const isGreen = pr => !checksOf(pr).some(c => FAILED_CONCLUSIONS.includes(c.state) || FAILED_STATES.includes(c.state));
+
+const createdAtOf = pr => Date.parse(pr.createdAt ?? '') || 0;
+
+const headAgeOf = pr => Date.parse(pr.commits?.nodes?.[0]?.commit?.committedDate ?? '') || createdAtOf(pr);
+
+function waitingForReview(pr, attemptsFor) {
+  if (pr.isDraft || pr.isCrossRepository || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '')) return false;
+  const gate = checksOf(pr).find(c => c.name === 'ai-review');
+  if (gate && gate.state === 'success') return false;
+  const done = (pr.comments?.nodes ?? []).some(c =>
+    String(c.author?.login ?? '').replace(/\[bot\]$/, '') === AUTHOR
+    && String(c.body ?? '').includes(`${MARKER_PREFIX} {`) && String(c.body).includes(`"sha":"${pr.headRefOid}"`));
+  if (done) return false;
+  return attemptsFor(pr.headRefOid) < ATTEMPTS_PER_HEAD;
+}
+
+function greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor }) {
+  return [...prs.filter(pr => waitingForReview(pr, attemptsFor))].sort((a, b) =>
+    (isGreen(a) ? 0 : 1) - (isGreen(b) ? 0 : 1)
+    || headAgeOf(a) - headAgeOf(b)
+    || createdAtOf(a) - createdAtOf(b)
+    || a.number - b.number);
+}
+
 function selectCandidates(prs, { now, attemptsFor, reviewedToday }) {
   const room = Math.max(0, Math.min(PER_RUN, PER_DAY - reviewedToday));
-  const picked = [];
-  for (const pr of prs) {
-    if (picked.length >= room) break;
-    if (pr.isDraft || pr.isCrossRepository || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '')) continue;
-    const contexts = pr.commits?.nodes?.[0]?.commit?.status?.contexts ?? [];
-    const gate = contexts.find(c => c.context === 'ai-review');
-    if (gate && String(gate.state).toLowerCase() === 'success') continue;
-    const done = (pr.comments?.nodes ?? []).some(c =>
-      String(c.author?.login ?? '').replace(/\[bot\]$/, '') === AUTHOR
-      && String(c.body ?? '').includes(`${MARKER_PREFIX} {`) && String(c.body).includes(`"sha":"${pr.headRefOid}"`));
-    if (done) continue;
-    if (attemptsFor(pr.headRefOid) >= ATTEMPTS_PER_HEAD) continue;
-    picked.push(pr);
-  }
-  return picked;
+  return greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor }).slice(0, room);
+}
+
+const capNoticeMarker = day => `<!-- ${CAP_NOTICE_MARKER} ${JSON.stringify({ day })} -->`;
+
+const refillAt = now => new Date(Math.ceil((now + 1) / 86_400_000) * 86_400_000);
+
+function capNoticeBody({ sha, day, now }) {
+  const refill = refillAt(now);
+  const hours = Math.max(1, Math.round((refill - now) / 3_600_000));
+  return [
+    `**Claude Sonnet stand-in review: waiting for today's cap.**`,
+    '',
+    `The stand-in reviews ${PER_DAY} heads per UTC day and all ${PER_DAY} are used.`,
+    `This head (${sha.slice(0, 7)}) is reviewed after ${refill.toISOString().slice(0, 16).replace('T', ' ')} UTC, about ${hours} hour(s) from now.`,
+    'Heads whose checks still pass, oldest first, are reviewed before the rest.',
+    '',
+    capNoticeMarker(day),
+  ].join('\n');
+}
+
+function capNotices(prs, { attemptsFor, day, now, notified, skip = new Set() }) {
+  return greenFirstOldestFirstWaitingCandidates(prs, { attemptsFor })
+    .filter(pr => !skip.has(pr.headRefOid) && !notified(pr.number, pr.headRefOid))
+    .slice(0, MAX_CAP_NOTICES)
+    .map(pr => ({ pr, body: capNoticeBody({ sha: pr.headRefOid, day, now }) }));
 }
 
 const LIST = `
 query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: 50, baseRefName: "production", orderBy: {field: UPDATED_AT, direction: DESC}) {
+    pullRequests(states: OPEN, first: 100, baseRefName: "production", orderBy: {field: UPDATED_AT, direction: DESC}) {
       nodes {
-        number title body isDraft isCrossRepository headRefOid
-        commits(last: 1) { nodes { commit { status { contexts { context state } } } } }
+        number title body isDraft isCrossRepository headRefOid createdAt
+        commits(last: 1) { nodes { commit { committedDate status { contexts { context state } } } } }
+        statusCheckRollup {
+          contexts(first: 100) {
+            nodes {
+              __typename
+              ... on CheckRun { name status conclusion }
+              ... on StatusContext { context state }
+            }
+          }
+        }
         comments(last: 100) { nodes { author { login } body } }
       }
     }
@@ -197,10 +265,12 @@ function reviewRepo(REPO) {
   const attemptFile = sha => path.join(dir, 'attempts', sha);
   const attemptsFor = sha => Number(fs.existsSync(attemptFile(sha)) ? fs.readFileSync(attemptFile(sha), 'utf8') : 0) || 0;
 
-  const listing = JSON.parse(gh(['api', 'graphql', '-f', `query=${LIST}`, '-F', `owner=${REPO.split('/')[0]}`, '-F', `name=${REPO.split('/')[1]}`]));
-  const prs = listing.data.repository.pullRequests.nodes;
-  const picked = selectCandidates(prs, { now, attemptsFor, reviewedToday: reviewedToday() });
-  console.log(`standin: ${prs.length} open, ${picked.length} to review, ${reviewedToday()} reviewed today`);
+  const fetchPrs = () => JSON.parse(gh(['api', 'graphql', '-f', `query=${LIST}`, '-F', `owner=${REPO.split('/')[0]}`, '-F', `name=${REPO.split('/')[1]}`])).data.repository.pullRequests.nodes;
+  const prs = fetchPrs();
+  const reviewedThisRun = new Set();
+  const reviewed = reviewedToday();
+  const picked = selectCandidates(prs, { now, attemptsFor, reviewedToday: reviewed });
+  console.log(`standin: ${prs.length} open, ${picked.length} to review, ${reviewed} reviewed today`);
 
   for (const pr of picked) {
     const sha = pr.headRefOid;
@@ -242,17 +312,46 @@ function reviewRepo(REPO) {
         continue;
       }
       gh(['api', '-X', 'POST', `repos/${REPO}/issues/${pr.number}/comments`, '-F', 'body=@-'], buildComment(sha, review));
+      reviewedThisRun.add(sha);
       fs.writeFileSync(dayFile, String(reviewedToday() + 1));
       console.log(`standin: PR #${pr.number} ${sha.slice(0, 7)} ${review.verdict} blocking=${review.blocking} model=${review.model} cost=$${review.costUsd}`);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }
+  if (reviewedToday() >= PER_DAY) {
+    noticeCap(fetchPrs(), { REPO, dir, day, now, attemptsFor, skip: reviewedThisRun });
+  }
+}
+
+function noticeCap(prs, { REPO, dir, day, now, attemptsFor, skip }) {
+  const noticeDir = path.join(dir, 'notices', day);
+  fs.mkdirSync(noticeDir, { recursive: true });
+  const noticeKey = (number, sha) => `${number}-${sha.slice(0, 12)}`;
+  const notified = (number, sha) => fs.existsSync(path.join(noticeDir, noticeKey(number, sha)));
+  const notices = capNotices(prs, { attemptsFor, day, now, notified, skip });
+  for (const { pr, body } of notices) {
+    try {
+      if (!process.env.STANDIN_DRY) {
+        execFileSync('gh', ['api', '-X', 'POST', `repos/${REPO}/issues/${pr.number}/comments`, '-F', 'body=@-'], {
+          input: body, encoding: 'utf8', env: { ...process.env, HT_GH_CACHE_DIR: FRESH_CACHE },
+        });
+      } else {
+        console.log(`standin: DRY RUN, would post on PR #${pr.number}:\n${body}`);
+      }
+      if (!process.env.STANDIN_DRY) fs.writeFileSync(path.join(noticeDir, noticeKey(pr.number, pr.headRefOid)), String(now));
+      console.log(`standin: PR #${pr.number} cap notice posted`);
+    } catch (error) {
+      console.log(`standin: PR #${pr.number} cap notice failed: ${String(error.message).split('\n')[0]}`);
+    }
+  }
+  return notices.length;
 }
 
 module.exports = {
-  AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS, PER_RUN, PER_DAY,
+  AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS, PER_RUN, PER_DAY, CAP_NOTICE_MARKER,
   isBlocking, hasPatch, parseClaudeOutput, buildComment, selectCandidates,
+  isGreen, greenFirstOldestFirstWaitingCandidates, capNotices, capNoticeBody, refillAt,
 };
 
 if (require.main === module) main();

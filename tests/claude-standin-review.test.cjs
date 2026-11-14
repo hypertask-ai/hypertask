@@ -194,3 +194,104 @@ test('HYCI-416 only real patch text is sent for review', () => {
   assert.equal(standin.hasPatch('{"url":"https://api.github.com/repos/o/r/pulls/1","additions":2}'), false);
   assert.equal(standin.hasPatch(''), false);
 });
+
+const withChecks = (number, states, createdAt) => gateNode(number, {
+  createdAt,
+  commits: { nodes: [{ commit: { status: { contexts: Object.entries(states).map(([context, state]) => ({ context, state })) } } }] },
+});
+
+test('HYCI-437 select: a green head goes before a red one, and the oldest green head first', () => {
+  const prs = [
+    withChecks(1, { 'ci-tests': 'FAILURE' }, '2026-11-13T00:00:00Z'),
+    withChecks(2, { 'ci-tests': 'SUCCESS' }, '2026-11-14T09:00:00Z'),
+    withChecks(3, { 'ci-tests': 'SUCCESS' }, '2026-11-12T00:00:00Z'),
+    withChecks(4, { 'ci-tests': 'SUCCESS', 'app-smoke': 'ERROR' }, '2026-11-10T00:00:00Z'),
+  ];
+  assert.deepEqual(pick(prs).map(p => p.number), [3, 2, 4]);
+  assert.equal(pick(prs, { reviewedToday: standin.PER_DAY - 1 })[0].number, 3);
+});
+
+test('HYCI-437 select: the cap is spent on the heads that have waited longest', () => {
+  const prs = [
+    withChecks(7, { 'ci-tests': 'SUCCESS' }, '2026-11-14T11:00:00Z'),
+    withChecks(8, { 'ci-tests': 'SUCCESS' }, '2026-11-11T11:00:00Z'),
+  ];
+  assert.equal(pick(prs, { reviewedToday: standin.PER_DAY - 1 })[0].number, 8);
+});
+
+test('HYCI-437 cap: every waiting head says why it waits, once, and names the refill hour', () => {
+  const now = Date.parse('2026-11-14T03:17:00Z');
+  const prs = [withChecks(1, { 'ci-tests': 'SUCCESS' }, '2026-11-13T00:00:00Z'), withChecks(2, { 'ci-tests': 'FAILURE' }, '2026-11-12T00:00:00Z')];
+  const notices = standin.capNotices(prs, { attemptsFor: () => 0, day: '2026-11-14', now, notified: () => false });
+  assert.deepEqual(notices.map(n => n.pr.number), [1, 2]);
+  assert.equal(standin.refillAt(now).toISOString(), '2026-11-15T00:00:00.000Z');
+  assert.match(notices[0].body, /Claude Sonnet stand-in review: waiting/);
+  assert.match(notices[0].body, /after 2026-11-15 00:00 UTC, about 21 hour/);
+  assert.match(notices[0].body, /claude-standin-cap:v1/);
+  assert.equal(notices.some(n => /claude-standin-review:v1/.test(n.body)), false);
+  assert.equal(standin.capNotices(prs, { attemptsFor: () => 0, day: '2026-11-14', now, notified: () => true }).length, 0);
+  assert.equal(standin.capNotices(prs, { attemptsFor: () => 2, day: '2026-11-14', now, notified: () => false }).length, 0);
+});
+
+test('HYCI-437 cap: a head pushed after this day was already noticed still says why it waits', () => {
+  const now = Date.parse('2026-11-14T12:47:00Z');
+  const noticed = gateNode(1, { headRefOid: 'b'.repeat(40), createdAt: '2026-11-14T03:40:00Z' });
+  const pushed = withChecks(1, {}, '2026-11-14T12:40:00Z');
+  const key = (number, sha) => `${number}-${sha.slice(0, 12)}`;
+  const noticedKeys = new Set([key(noticed.number, noticed.headRefOid)]);
+  const notified = (number, sha) => noticedKeys.has(key(number, sha));
+  assert.equal(standin.capNotices([noticed], { attemptsFor: () => 0, day: '2026-11-14', now, notified }).length, 0);
+  const notices = standin.capNotices([pushed], { attemptsFor: () => 0, day: '2026-11-14', now, notified });
+  assert.deepEqual(notices.map(n => n.pr.number), [1]);
+  assert.match(notices[0].body, /This head \(aaaaaaa\)/);
+});
+
+test('HYCI-437 cap: a head already reviewed or set aside gets no cap notice', () => {
+  const now = Date.parse('2026-11-14T03:17:00Z');
+  const reviewed = withChecks(1, { 'ai-review': 'SUCCESS' }, '2026-11-13T00:00:00Z');
+  const sameHead = withChecks(2, { 'ai-review': 'PENDING' }, '2026-11-13T00:00:00Z');
+  sameHead.comments = { nodes: [{ author: { login: 'hypertask-runners' }, body: `<!-- claude-standin-review:v1 {"sha":"${sameHead.headRefOid}"} -->` }] };
+  const notices = standin.capNotices([reviewed, sameHead, withChecks(3, {}, '2026-11-13T00:00:00Z')], {
+    attemptsFor: () => 0, day: '2026-11-14', now, notified: () => false,
+  });
+  assert.deepEqual(notices.map(n => n.pr.number), [3]);
+});
+
+test('HYCI-437 cap: a head reviewed in this same run gets no cap notice', () => {
+  const now = Date.parse('2026-11-14T03:17:00Z');
+  const reviewed = withChecks(1, {}, '2026-11-13T00:00:00Z');
+  const waiting = withChecks(2, {}, '2026-11-13T00:00:00Z');
+  const notices = standin.capNotices([reviewed, waiting], {
+    attemptsFor: () => 0, day: '2026-11-14', now, notified: () => false,
+    skip: new Set([reviewed.headRefOid]),
+  });
+  assert.deepEqual(notices.map(n => n.pr.number), [2]);
+});
+
+test('HYCI-437 cap: the default day cap is above the 60 reviews 14 Nov spent', () => {
+  assert.ok(standin.PER_DAY > 60, `default cap is ${standin.PER_DAY}`);
+});
+
+test('HYCI-437 select: a red Actions check run makes a head red, and the oldest head goes first', () => {
+  const rollup = (number, conclusion, committedDate, createdAt) => gateNode(number, {
+    createdAt,
+    commits: { nodes: [{ commit: { committedDate, status: { contexts: [] } } }] },
+    statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'ci-tests', status: 'COMPLETED', conclusion }] } },
+  });
+  const prs = [
+    rollup(1, 'FAILURE', '2026-11-14T11:00:00Z', '2026-11-10T00:00:00Z'),
+    rollup(2, 'SUCCESS', '2026-11-14T12:00:00Z', '2026-11-11T00:00:00Z'),
+    rollup(3, 'SUCCESS', '2026-11-14T05:00:00Z', '2026-11-13T00:00:00Z'),
+  ];
+  assert.deepEqual(pick(prs).map(p => p.number), [3, 2, 1]);
+});
+
+test('HYCI-437 select: a running check run is neither green nor red', () => {
+  const running = gateNode(1, {
+    createdAt: '2026-11-14T00:00:00Z',
+    commits: { nodes: [{ commit: { committedDate: '2026-11-14T00:00:00Z', status: { contexts: [] } } }] },
+    statusCheckRollup: { contexts: { nodes: [{ __typename: 'CheckRun', name: 'ci-tests', status: 'IN_PROGRESS', conclusion: null }] } },
+  });
+  assert.equal(standin.isGreen(running), true);
+  assert.deepEqual(pick([running]).map(p => p.number), [1]);
+});
