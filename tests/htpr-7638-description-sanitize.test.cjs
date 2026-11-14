@@ -243,7 +243,7 @@ test("inert notification parsers preserve previews, quote removal and mention hi
   const modules = ["@/hooks/useFlag", "@/utils/generateTime", "@/lib/firstScreen/SurfaceContext", "@/lib/firstScreen/display", "../Common/UserAvatar",
     "@/lib/IconsLocal", "../Common/Tooltip", "@/lib/contexts/NotificationContext", "../Common/TaskRowComponents/TaskRowContainer",
     "../Common/TaskRowComponents/TaskTitle", "./inboxSplit/RemindMeInbox", "@/lib/configs/inbox.config",
-    "@/lib/nativeAgent/agentMessageEnvelope"];
+    "@/lib/nativeAgent/agentMessageEnvelope", "@/lib/contexts/mobileContext"];
   const mocks = Object.fromEntries(modules.map(name => [name, {}]));
   const { renderCommentPreview, renderCommentMentionSimple } = load("src/components/notifications/NotificationRow.tsx", {
     ...mocks, "next/dynamic": renderMocks["next/dynamic"],

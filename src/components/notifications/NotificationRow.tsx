@@ -20,6 +20,8 @@ import Tooltip from "../Common/Tooltip";
 import { useNotificationContext } from "@/lib/contexts/NotificationContext";
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import { HTPR_8264_INBOX_NAME_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-name-column";
+import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-layout";
+import { useMobileView } from "@/lib/contexts/mobileContext";
 import { buildInboxRowFillParts, clipInboxPreview, type InboxRowFillPartKind } from "@/lib/inbox/inboxRowFill";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import TaskRowContainer from "../Common/TaskRowComponents/TaskRowContainer";
@@ -49,6 +51,8 @@ const NotificationRow = (props: Props) => {
     const { notification, isIbxSlctd, selectedIds } = useNotificationContext();
     const inboxRowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
     const inboxNameColumn = useFlag(HTPR_8264_INBOX_NAME_COLUMN_FLAG);
+    const isPhone = useMobileView();
+    const narrowInboxTabs = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG) && !isPhone;
     const flipMentionHierarchy = !inboxRowFill && notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const handleClick = () => {
@@ -66,7 +70,7 @@ const NotificationRow = (props: Props) => {
             handleMouseLeave={handleMouseLeave}
             openTask={handleClick}
             className={`relative flex cursor-pointer  ${inboxRowFill ? "md:space-x-4" : "md:space-x-8"}  py-[8px]   px-[20px] md:px-0 ${inboxRowFill ? "rounded-[4px]" : "rounded-md"}
-                justify-between w-full flex-col md:flex-row`}
+                ${narrowInboxTabs ? "@container" : ""} justify-between w-full flex-col md:flex-row`}
         >
 
             <div className={cn('flex md:space-x-6', inboxRowFill && inboxNameColumn ? 'md:w-[180px] md:min-w-[180px] md:max-w-[180px] md:shrink-0' : inboxRowFill ? 'md:shrink-0 md:min-w-0 md:max-w-[180px]' : 'md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0')}>

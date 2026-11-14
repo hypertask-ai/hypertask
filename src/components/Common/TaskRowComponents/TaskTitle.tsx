@@ -13,6 +13,8 @@ import { formatWaitingOnAge } from '@/lib/waitingOn';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-row-fill';
 import { HTPR_8264_INBOX_NAME_COLUMN_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-name-column';
+import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from '@/lib/flags/definitions/htpr-9076-narrow-inbox-layout';
+import { useMobileView } from '@/lib/contexts/mobileContext';
 
 interface ITitleContainer {
     notification?: INotification;
@@ -29,6 +31,8 @@ interface IRenderMessageTag {
 
 export const TaskMetaChips: React.FC<{ task: ITask; showDueDate?: boolean }> = ({ task, showDueDate }) => {
     const { isIbxSlctd } = useNotificationContext();
+    const isPhone = useMobileView();
+    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG) && !isPhone;
     const snapshot = useFirstScreenSurface();
     const [now] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
     const MAX_LABELS = 3;
@@ -38,14 +42,19 @@ export const TaskMetaChips: React.FC<{ task: ITask; showDueDate?: boolean }> = (
     const isOverdue = !!dueDate && new Date(dueDate).getTime() < now;
     const chipClassName = cn(
         inboxConfig.bulkSelectionStyling.taskLabels(isIbxSlctd),
-        'min-w-0 max-w-[120px] overflow-hidden whitespace-nowrap'
+        narrowRow
+            ? 'shrink-0 max-w-[120px] overflow-hidden whitespace-nowrap'
+            : 'min-w-0 max-w-[120px] overflow-hidden whitespace-nowrap'
     );
 
     if (!dueDate && !task.priority && !task.estimate && labels.length === 0) return null;
 
 
     return (
-        <div className="flex shrink-0 items-center gap-1 overflow-hidden md:max-w-[180px]">
+        <div className={cn(
+            "flex shrink-0 items-center gap-1 overflow-hidden md:max-w-[180px]",
+            narrowRow && "hidden @min-[700px]:flex"
+        )}>
             {dueDate && (
                 <DueDateLabel
                     flexBasis={false}
@@ -158,6 +167,8 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
     const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
     const nameColumn = useFlag(HTPR_8264_INBOX_NAME_COLUMN_FLAG) && rowFill && Boolean(notification);
     const flipMentionHierarchy = !rowFill && notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
+    const isPhone = useMobileView();
+    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG) && !isPhone;
 
     const defaultClassName = "truncate flex-1 flex-column sm:flex-initial md:min-w-[180px]"
 
@@ -181,8 +192,10 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
                         fontSize={11}
                         dueDate={task.dueDate}
                         overdue={isOverdue}
-                        className={cn(inboxConfig.bulkSelectionStyling.taskLabels(isIbxSlctd))}
-
+                        className={cn(
+                            inboxConfig.bulkSelectionStyling.taskLabels(isIbxSlctd),
+                            narrowRow && 'hidden @min-[700px]:inline-flex'
+                        )}
                     />
                 )}
                 <div
