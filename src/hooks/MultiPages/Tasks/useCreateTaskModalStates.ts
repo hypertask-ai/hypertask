@@ -691,6 +691,7 @@ const useCreateTaskModalGlobalStates = () => {
     descriptionOverride?: string,
     titleOverride?: string,
     formValuesOverride?: IForm,
+    titleGenerationMs?: number | null,
   ) => {
     const formValuesAtSave = formValuesOverride ?? formValues;
     const traceScope =
@@ -698,6 +699,7 @@ const useCreateTaskModalGlobalStates = () => {
         ? beginTaskCreatePerformanceTrace({
             accountId: currentUser.id,
             projectId: formValuesAtSave.currentProject.id,
+            titleMs: titleGenerationMs ?? null,
           })
         : null;
 

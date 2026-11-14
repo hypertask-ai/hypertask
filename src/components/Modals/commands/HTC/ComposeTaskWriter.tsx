@@ -22,6 +22,7 @@ import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG } from "@/lib/flags/keys";
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, requestComposeSkillFollowup, type ComposeTaskStage } from "@/lib/ai/composeTask";
+import { completeTaskCreatePerformanceTrace, completeTaskCreatePerformanceTraceAfterPaint, type TaskCreateTraceScope } from "@/lib/analytics/productPerformance";
 import globalAPIHandlers from "@/utils/api/global";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
@@ -371,6 +372,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     onBusyChange(true);
     setError(null);
     const assigneesAtFetchStart = taskContextRef.current?.currentTask?.assignees;
+    let traceScope: TaskCreateTraceScope | null = null;
     try {
       let existingTaskId: number | undefined;
       const detail = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
@@ -390,15 +392,20 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       }
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
-      const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = await createComposedTask({
+      const composed = await createComposedTask({
         text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(guaranteeScreenshots ? { guaranteeScreenshots } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(writerModelPicker && writerModel ? { writerModel } : {}),
         ...(currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
       });
+      traceScope = composed.traceScope;
+      const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = composed;
       let task = savedTask;
-      if (!mounted.current) return;
+      if (!mounted.current) {
+        completeTaskCreatePerformanceTrace("error", traceScope);
+        return;
+      }
       if (existingTaskId) {
         const queryKey = cachedTaskDetailKey(user.id, task.id);
         await queryClient.cancelQueries({ queryKey });
@@ -460,8 +467,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       const taskPath = `/detail/project-${projectId}/${task.uniqueIndex}`;
       setNewTicketPath(taskPath);
       router.push(taskPath);
+      completeTaskCreatePerformanceTraceAfterPaint("task_detail", traceScope);
       if (!mobile || !newTaskWindow) onCreated();
     } catch (failure) {
+      completeTaskCreatePerformanceTrace("error", traceScope);
       if (mounted.current) setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here. Try again.");
     } finally {
       sending.current = false;

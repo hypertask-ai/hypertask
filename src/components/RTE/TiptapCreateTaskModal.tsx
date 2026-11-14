@@ -621,11 +621,13 @@ const TiptapCreateTaskModal = () => {
       formValuesOverride?.description ?? editor?.getHTML() ?? formValues.description;
     let titleAtSave = formValuesOverride?.title ?? getCurrentTitle();
     const epochAtSave = saveEpochRef.current;
+    let titleGenerationMs: number | null = null;
     if (shouldGenerateTitleForSave(titleAtSave, descriptionAtSave)) {
       if (titleGenerationForSaveRef.current) {
         releaseSubmission();
         return;
       }
+      const titleGenerationStartedAt = performance.now();
       titleGenerationForSaveRef.current = true;
       setUploadInProgress(true);
       try {
@@ -656,6 +658,7 @@ const TiptapCreateTaskModal = () => {
         return;
       } finally {
         titleGenerationForSaveRef.current = false;
+        titleGenerationMs = performance.now() - titleGenerationStartedAt;
       }
     }
     if (!titleAtSave) {
@@ -685,6 +688,7 @@ const TiptapCreateTaskModal = () => {
           descriptionAtSave,
           titleAtSave,
           formValuesAtSave,
+          titleGenerationMs,
         );
         traceScope = getTaskCreatePerformanceTraceScope();
         const taskUrl = await createTask;
@@ -722,6 +726,7 @@ const TiptapCreateTaskModal = () => {
         descriptionAtSave,
         titleAtSave,
         formValuesAtSave,
+        titleGenerationMs,
       );
       const traceScope = getTaskCreatePerformanceTraceScope();
       toast.promise(createTask, {
@@ -753,6 +758,7 @@ const TiptapCreateTaskModal = () => {
         descriptionAtSave,
         titleAtSave,
         formValuesAtSave,
+        titleGenerationMs,
       );
       const traceScope = getTaskCreatePerformanceTraceScope();
       toast.promise(createTask, {

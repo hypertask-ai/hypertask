@@ -116,6 +116,8 @@ export type TaskCreatePerformanceEvent = {
     duration_ms: number | null;
     network_duration_ms: number | null;
     submit_to_visible_ms: number | null;
+    ai_task_writer_ms: number | null;
+    ai_title_ms: number | null;
     server_validate_ms: number | null;
     server_task_create_ms: number | null;
     server_enrich_ms: number | null;
@@ -125,7 +127,7 @@ export type TaskCreatePerformanceEvent = {
     result: "success" | "error";
     response_status: number;
     visible_completion: TaskCreateVisibleCompletion;
-    task_create_measurement_version: 2;
+    task_create_measurement_version: 3;
     task_create_measurement_scope: "submit_to_visible";
   };
 };
@@ -240,14 +242,28 @@ export type TaskCreateTraceScope = {
   traceId: number;
 };
 
-type TaskCreateTraceRuntime = TaskCreateTraceScope & {
-  accountId: number;
-  projectId: number;
-  startedAt: number;
-  networkDurationMs: number | null;
-  responseStatus: number;
-  responseRecorded: boolean;
-  serverTimings: TaskCreateServerTimings;
+export type TaskCreateAiStepTimings = {
+  taskWriterMs: number | null;
+  titleMs: number | null;
+};
+
+type TaskCreateTraceRuntime = TaskCreateTraceScope &
+  TaskCreateAiStepTimings & {
+    accountId: number;
+    projectId: number;
+    startedAt: number;
+    networkDurationMs: number | null;
+    responseStatus: number;
+    responseRecorded: boolean;
+    serverTimings: TaskCreateServerTimings;
+  };
+
+const aiStepMs = (durationMs: number | null | undefined): number | null => {
+  if (typeof durationMs !== "number" || !Number.isFinite(durationMs)) {
+    return null;
+  }
+  if (durationMs < 0) return null;
+  return Math.round(durationMs);
 };
 
 let taskCreateTraceSequence = 0;
@@ -332,9 +348,13 @@ const taskCreateScopeMatches = (
 export const beginTaskCreatePerformanceTrace = ({
   accountId,
   projectId,
+  taskWriterMs = null,
+  titleMs = null,
 }: {
   accountId: number;
   projectId: number;
+  taskWriterMs?: number | null;
+  titleMs?: number | null;
 }): TaskCreateTraceScope | null => {
   if (
     typeof window === "undefined" ||
@@ -356,6 +376,8 @@ export const beginTaskCreatePerformanceTrace = ({
     responseStatus: 0,
     responseRecorded: false,
     serverTimings: emptyTaskCreateServerTimings(),
+    taskWriterMs: aiStepMs(taskWriterMs),
+    titleMs: aiStepMs(titleMs),
   });
   performance.mark("ht-task-create-submit");
   return scope;
@@ -446,6 +468,8 @@ export const completeTaskCreatePerformanceTrace = (
         duration_ms: runtime.networkDurationMs,
         network_duration_ms: runtime.networkDurationMs,
         submit_to_visible_ms: submitToVisibleMs,
+        ai_task_writer_ms: runtime.taskWriterMs,
+        ai_title_ms: runtime.titleMs,
         server_validate_ms: runtime.serverTimings.validate,
         server_task_create_ms: runtime.serverTimings.taskCreate,
         server_enrich_ms: runtime.serverTimings.enrich,
@@ -457,7 +481,7 @@ export const completeTaskCreatePerformanceTrace = (
         result,
         response_status: runtime.responseStatus,
         visible_completion: visibleCompletion,
-        task_create_measurement_version: 2,
+        task_create_measurement_version: 3,
         task_create_measurement_scope: "submit_to_visible",
       },
     },

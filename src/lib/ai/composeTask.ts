@@ -17,6 +17,7 @@ import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/Views
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
 import { isBugsColumn, readTaskWriterTicketType, ticketTypeSection, TICKET_TYPE_HEADER, type TaskWriterTicketType } from "@/lib/ai/taskWriterTicketType";
 import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
+import { beginTaskCreatePerformanceTrace, completeTaskCreatePerformanceTrace, type TaskCreateTraceScope } from "@/lib/analytics/productPerformance";
 
 export function composeTaskBoardId(
   url: string,
@@ -76,7 +77,7 @@ export async function createComposedTask({
   viewProject?: IProject;
   explainWriterFailure?: boolean;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
-}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; skills?: TaskWriterSkills; tasks: ITask[]; failedTitles: string[] }> {
+}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; skills?: TaskWriterSkills; tasks: ITask[]; failedTitles: string[]; traceScope: TaskCreateTraceScope | null }> {
   let defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
     params: { projectId: project.id, position: "top" },
   });
@@ -107,6 +108,8 @@ export async function createComposedTask({
   let writerFailureReason: string | undefined;
   let drafts: ({ title: string; description: string; writerDueDate?: string; writerLabelIds?: string[]; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const writerStartedAt = typeof performance === "undefined" ? 0 : performance.now();
+  let writerMs: number | null = null;
   try {
     onProgress?.("Reading past tickets");
     const response = await fetch(taskWriterRoute, {
@@ -230,6 +233,10 @@ export async function createComposedTask({
     if ((error as { code?: string })?.code === "PLAN_LIMIT_REACHED") throw error;
     writerFailed = true;
     drafts = [];
+  } finally {
+    if (typeof performance !== "undefined") {
+      writerMs = performance.now() - writerStartedAt;
+    }
   }
   if (!drafts.length) drafts = [{ title, description }];
   if (guaranteeScreenshots && drafts.length === 1) {
@@ -246,6 +253,15 @@ export async function createComposedTask({
     defaults = await axios.get("/api/tasks/createGlobally", { params: { projectId: project.id, position: "top" } });
     if (!defaults?.data?.sectionId) throw new Error("This board has no column to create a task in.");
   }
+  const traceScope = beginTaskCreatePerformanceTrace({
+    accountId: userId,
+    projectId: project.id,
+    taskWriterMs: writerMs,
+  });
+  const failCreate = (error: unknown): never => {
+    completeTaskCreatePerformanceTrace("error", traceScope);
+    throw error;
+  };
   onProgress?.("Saving the ticket");
   const filters = !existingTaskId && viewProject?.id === project.id
     ? getActiveFiltersFromProject(viewProject) : undefined;
@@ -288,7 +304,7 @@ export async function createComposedTask({
         ...(draft.writerLabelIds?.length ? { writerLabelIds: draft.writerLabelIds } : {}),
         ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
-      });
+      }, traceScope);
       const task = created?.resposne?.newTask;
       if (created?.error || !task?.id) {
         const failure = created?.ErrorMessage;
@@ -302,18 +318,18 @@ export async function createComposedTask({
       bindCreateTaskUploads(task.id, files);
     } catch (error) {
       if ((error as { code?: string })?.code === "PLAN_LIMIT_REACHED") {
-        if (!tasks.length) throw error;
+        if (!tasks.length) failCreate(error);
         failedTitles.push(...drafts.slice(index).map((remaining, offset) => offset === 0
           ? `${remaining.title}: ${toErrorMessage(error, "Could not create this ticket")}`
           : remaining.title));
         break;
       }
-      if (drafts.length === 1 || fillsExistingTask) throw error;
+      if (drafts.length === 1 || fillsExistingTask) failCreate(error);
       failedTitles.push(draft.title);
     }
   }
-  if (!tasks.length) throw new Error("Couldn’t create the tasks. Your note is still here. Try again.");
-  return { task: tasks[0], writerFailed, ...(!writerFailed && skills ? { skills } : {}), ...(writerFailureReason ? { writerFailureReason } : {}), tasks, failedTitles };
+  if (!tasks.length) failCreate(new Error("Couldn’t create the tasks. Your note is still here. Try again."));
+  return { task: tasks[0], writerFailed, ...(!writerFailed && skills ? { skills } : {}), ...(writerFailureReason ? { writerFailureReason } : {}), tasks, failedTitles, traceScope };
 }
 
 export async function requestComposeSkillFollowup(taskId: number, skills: TaskWriterSkills, originalInput: string): Promise<{ questions: string[]; followup: string } | null> {
