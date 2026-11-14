@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 
 APP = "https://app.hypertask.ai"
-DESKTOP_SHA = "13b5fc7d2795fe59b30463001fe8d32c8b3f1802"
+DESKTOP_SHA = "e7ec3f606dbc58a02c37072dbf7b743d173fb028"
 SANDBOX_BOARD_ID = 7049
 SANDBOX_TITLE = "QA Sandbox"
 FORBIDDEN_BOARDS = {15, 4060}
@@ -61,9 +61,9 @@ def redact(text, secrets):
 def safe_lines(text):
     kept = []
     for line in text.splitlines():
-        if any(marker in line for marker in (*MARKERS, "LIVE_READBACK", "INBOX_EMPTY", "API ", "cli ", "queued", "SystemExit")):
+        if any(marker in line for marker in (*MARKERS, "LIVE_READBACK", "INBOX_EMPTY", "KIND_", "KINDS_PASSED", "REOPEN_", "CLEANUP", "API ", "cli ", "queued", "SystemExit")):
             kept.append(line[:300])
-    return "\n".join(kept[-40:])
+    return "\n".join(kept[-160:])
 
 def restored_notification(payload, wanted):
     if not isinstance(payload, dict) or payload.get("success") is not True:
