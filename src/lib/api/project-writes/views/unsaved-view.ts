@@ -16,6 +16,7 @@ import {
   canUseViewAsTabBase,
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
+import { boardDefaultSubtaskSetting } from "@/models/Views/model";
 import { sanitizeTableCollapsedSectionsForWrite } from "@/lib/table-view/tableGroupByTag";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
 import { gatedTableCollapsedSectionsForViewWrite } from "./gate-table-collapsed-sections";
@@ -150,8 +151,9 @@ const route = taskWriteRoute({
         user_project_views: loadedUserProjectView ? [loadedUserProjectView] : [],
       }, userId);
       const user_project_view = projectView.user_project_views[0] ?? null;
+      const boardDefaultOn = await boardDefaultShowsSubtasks(userId);
       const markExplicitSubtask = persistExplicitSubtaskDraft(
-        await boardDefaultShowsSubtasks(userId),
+        boardDefaultOn,
         req.body.board_subtask_explicit,
         !hasBaseViewId || baseViewId == null || baseViewId === projectView.default_view_id,
       );
@@ -366,6 +368,11 @@ const route = taskWriteRoute({
 
           if (comparisonView) {
             console.log("============== checking for equality in appliedView");
+            const requestMatchesBoardDefault =
+              boardDefaultOn &&
+              comparisonView.id === projectView.default_view_id &&
+              board_subtask_setting ===
+                boardDefaultSubtaskSetting(comparisonView.board_subtask_setting);
             const settingsFromDB = {
               board_columns_view: comparisonView.board_columns_view,
               board_filters: sanitizeBoardFilters(
@@ -375,7 +382,9 @@ const route = taskWriteRoute({
               board_sorting_order: comparisonView.board_sorting_order,
               board_sorting_stack:
                 comparisonView.board_sorting_stack ?? [],
-              board_subtask_setting: comparisonView.board_subtask_setting,
+              board_subtask_setting: requestMatchesBoardDefault
+                ? board_subtask_setting
+                : comparisonView.board_subtask_setting,
               board_empty_sections: comparisonView.board_empty_sections,
               board_staleness: comparisonView.board_staleness,
               board_show_archived: comparisonView.board_show_archived,
