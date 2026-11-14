@@ -172,3 +172,48 @@ test("real pending-prompt effect starts fresh and sends triage without touching 
   assert.equal(sent.length, 1, "an extra chat window never takes the shared handoff");
   assert.deepEqual(pending, prompt, "the handoff stays for the first window");
 });
+
+test("choosing any palette row with Enter stays inside the palette on pages with their own Enter handler", () => {
+  const { commitPaletteSearchEnter } = load(path.join(root, "src/components/Modals/commands/HTC/paletteSearchEnter.ts"));
+  const command = rows(true).find(row => row.key === "triageInbox");
+  const calls = [];
+  const pageListeners = [];
+  const fire = (event, chosen = command) => {
+    const stopped = commitPaletteSearchEnter(event, chosen, picked => calls.push(picked.key));
+    if (!event.propagationStopped) pageListeners.forEach(listener => listener());
+    return stopped;
+  };
+  const event = {
+    key: "Enter",
+    propagationStopped: false,
+    preventDefault() { this.defaultPrevented = true; },
+    stopPropagation() { this.propagationStopped = true; },
+    nativeEvent: {
+      stopImmediatePropagation() { event.propagationStopped = true; },
+    },
+  };
+  pageListeners.push(() => calls.push("inbox opened a task"));
+  assert.equal(fire(event), true);
+  assert.equal(event.defaultPrevented, true);
+  assert.deepEqual(calls, ["triageInbox"]);
+  calls.length = 0;
+  assert.equal(fire({ key: "a", nativeEvent: {}, preventDefault() { throw Error("must not prevent typing"); } }), false);
+  assert.equal(fire({ key: "Enter", nativeEvent: {}, preventDefault() {}, stopPropagation() {} }, null), false);
+  assert.equal(
+    fire({ key: "Enter", nativeEvent: { isComposing: true }, preventDefault() { throw Error("must not consume an IME confirmation"); }, stopPropagation() {}, }),
+    false,
+    "an Enter that confirms an IME composition is left alone",
+  );
+  assert.equal(calls.includes("triageInbox"), false, "no command runs without a chosen row or during IME");
+});
+
+test("both palette search inputs use the guarded Enter commit", () => {
+  const wired = [];
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.getText(source) === "onKeyDown") wired.push(node.getText(source));
+    else ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.equal(wired.length, 2);
+  for (const attribute of wired) assert.match(attribute, /commitPaletteSearchEnter\(e, selectedCommand, updateCommandFrequency\)/);
+});

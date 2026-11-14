@@ -75,6 +75,7 @@ import {
   recordHTCCommandUsage,
 } from "./htcFrecency";
 import { findCommandPosition } from "./commandSelection";
+import { commitPaletteSearchEnter } from "./paletteSearchEnter";
 import type { CommandIdentity } from "./commandSelection";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -845,11 +846,7 @@ const Commands = (props: Props) => {
           onKeyChange(event);
         }}
         value={keyword}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && selectedCommand) {
-            updateCommandFrequency(selectedCommand);
-          }
-        }}
+        onKeyDown={(e) => commitPaletteSearchEnter(e, selectedCommand, updateCommandFrequency)}
         className="px-0"
         {...(composeEnabled ? { onBlur: undefined } : {})}
       />
@@ -938,12 +935,7 @@ const Commands = (props: Props) => {
                  onKeyChange(event);
                }}
                value={keyword}
-               onKeyDown={(e) => {
-                 if (e.key === "Enter" && selectedCommand) {
-                   updateCommandFrequency(selectedCommand)
-
-                 }
-               }}
+               onKeyDown={(e) => commitPaletteSearchEnter(e, selectedCommand, updateCommandFrequency)}
                className="px-0"
                {...(composeEnabled ? { onBlur: undefined } : {})}
             />
