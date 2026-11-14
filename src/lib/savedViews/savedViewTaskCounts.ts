@@ -39,17 +39,15 @@ export const savedViewCountSections = (
   );
 };
 
-const subtaskSettingForCount = (
-  view: IView,
-  project: IProject,
-): TBoardSubtaskSetting => {
+const subtaskSettingForCount = (view: IView, project: IProject): TBoardSubtaskSetting => {
   const stored = view.board_subtask_setting ?? DEFAULT_SUBTASK_SETTING;
   const boardDefault = project.project_view?.board_subtask_setting_for_default_view;
-  if (!boardDefault || view.id !== project.project_view?.default_view_id) return stored;
-  const row = project.project_view?.user_project_views?.[0];
-  const onMain = !row?.appliedViewId || row.appliedViewId === project.project_view?.default_view_id;
-  if (onMain) return getActiveSubtaskSettingFromProject(project);
-  return boardDefault;
+  const defaultId = project.project_view?.default_view_id;
+  if (!boardDefault || view.id !== defaultId) return stored;
+  const appliedId = project.project_view?.user_project_views?.[0]?.appliedViewId;
+  return !appliedId || appliedId === defaultId
+    ? getActiveSubtaskSettingFromProject(project)
+    : boardDefault;
 };
 
 export const countTasksInSavedView = (
