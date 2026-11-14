@@ -371,10 +371,22 @@ if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
 fi
 # A runner writes as its own agent or not at all: ship-identity falls back to Valentin when no
 # token exists, which would post a runner's words under his name (YPER4-960).
+# HYCI-408: a session named for its tmux slot ("ht-or-runner-5") resolves to "RUNNER 5" in ship-identity, so the
+# name differs while the slot is the same. That is the same runner, not Valentin: accept it, and still refuse a
+# name whose slot differs from the resolved identity or a name with no slot at all ("SPEED RUNNER").
+runner_slot() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' \
+    | grep -oE '(^|[^a-z0-9])runner[-_ ]?[0-9]+([^a-z0-9]|$)' \
+    | grep -oE '[0-9]+' | head -1 || true
+}
 case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
   *runner*)
-    [ "$IDENTITY" = "${SHIP_SESSION_NAME%% | *}" ] \
-      || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; } ;;
+    if [ "$IDENTITY" != "${SHIP_SESSION_NAME%% | *}" ]; then
+      session_slot=$(runner_slot "${SHIP_SESSION_NAME}")
+      identity_slot=$(runner_slot "$IDENTITY")
+      [ -n "$session_slot" ] && [ "$session_slot" = "$identity_slot" ] \
+        || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; }
+    fi ;;
 esac
 HT_TOKEN="$(cat "$TOKEN_FILE")"
 [ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
