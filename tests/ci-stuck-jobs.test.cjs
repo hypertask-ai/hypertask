@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { mkdtempSync, writeFileSync } = require('node:fs');
+const { mkdtempSync, writeFileSync, chmodSync, readFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const {
@@ -777,7 +778,7 @@ test('a refused guard cancellation does not stop later overdue cancellations', a
     now,
     api: async (path, method) => {
       if (method !== 'POST') return { workflow_runs: [guardRun(61, 31), guardRun(62, 40)] };
-      if (path.endsWith('/61/cancel')) throw new Error('HTTP 409');
+      if (path.includes('/61/')) throw new Error('HTTP 409');
       cancelled.push(path);
       return {};
     },
@@ -792,4 +793,68 @@ test('an unreadable guard queue is reported and never stops the sweep', async ()
     api: async () => { throw new Error('gh api failed: HTTP 502'); },
   });
   assert.deepEqual(outcome, { checked: 0, cancelled: 0, unread: 'gh api failed: HTTP 502' });
+});
+
+const fakeGhSource = `#!${process.execPath}
+const { appendFileSync } = require('node:fs');
+const args = process.argv.slice(2);
+const method = args.includes('-X') ? args[args.indexOf('-X') + 1] : 'GET';
+const path = args.find(arg => arg.startsWith('/repos'));
+appendFileSync(process.env.FAKE_GH_LOG, method + ' ' + path + '\\n');
+const fail = text => { process.stderr.write(text + '\\n'); process.exit(1); };
+if (path.includes('/actions/variables/')) fail('gh: Not Found (HTTP 404)');
+if (method === 'POST' && path.endsWith('/force-cancel')) {
+  if (process.env.FAKE_GH_FORCE === 'refuse') fail('gh: Cannot force-cancel this run. (HTTP 409)');
+  console.log('{}');
+} else if (method === 'POST' && path.endsWith('/cancel')) {
+  fail('gh: Cannot cancel a workflow run that is not in progress. (HTTP 409)');
+} else if (path.includes('/workflows/feature-flag-gate.yml/runs?status=queued')) {
+  console.log(JSON.stringify({ workflow_runs: [
+    { id: 101, status: 'queued', created_at: '2026-11-11T20:27:37Z' },
+    { id: 102, status: 'queued', created_at: '2026-11-11T20:32:23Z' },
+  ] }));
+} else {
+  console.log(JSON.stringify({ workflow_runs: [] }));
+}
+`;
+
+function liveSweep(force) {
+  const dir = mkdtempSync(join(tmpdir(), 'fake-gh-'));
+  const log = join(dir, 'calls.log');
+  writeFileSync(log, '');
+  writeFileSync(join(dir, 'gh'), fakeGhSource);
+  chmodSync(join(dir, 'gh'), 0o755);
+  const run = spawnSync(process.execPath, [join(__dirname, '../.github/scripts/ci-stuck-jobs.cjs'), '--apply', '--repo', 'o/r'], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, FAKE_GH_LOG: log, FAKE_GH_FORCE: force },
+  });
+  const posts = readFileSync(log, 'utf8').split('\n').filter(line => line.startsWith('POST'));
+  return { run, posts, report: JSON.parse(run.stdout.slice(run.stdout.indexOf('{\n'), run.stdout.lastIndexOf('\n}') + 2)) };
+}
+
+test('the live sweep force-cancels a guard run GitHub refuses to cancel', () => {
+  const { run, posts, report } = liveSweep('accept');
+  assert.equal(run.status, 0);
+  assert.deepEqual(posts, [
+    'POST /repos/o/r/actions/runs/101/cancel',
+    'POST /repos/o/r/actions/runs/101/force-cancel',
+    'POST /repos/o/r/actions/runs/102/cancel',
+    'POST /repos/o/r/actions/runs/102/force-cancel',
+  ]);
+  assert.deepEqual(report.guards, { checked: 2, cancelled: 2 });
+  assert.match(run.stdout, /::notice::guard run 101 was still queued after 30 minutes; force-cancelled\./);
+});
+
+test('the live sweep says why neither cancel worked and still ends cleanly', () => {
+  const { run, report } = liveSweep('refuse');
+  assert.equal(run.status, 0);
+  assert.deepEqual(report.guards, { checked: 2, cancelled: 0 });
+  assert.match(run.stdout, /::warning::guard run 101 could not be cancelled: gh: Cannot cancel a workflow run that is not in progress\. \(HTTP 409\); force-cancel: gh: Cannot force-cancel this run\. \(HTTP 409\)\./);
+});
+
+test('a guard run GitHub cancels normally is never force-cancelled', async () => {
+  const calls = [];
+  const outcome = await cancelOverdueGuards('o/r', { now, api: guardApi({ queued: [guardRun(91, 31)] }, calls) });
+  assert.deepEqual(outcome, { checked: 1, cancelled: 1 });
+  assert.deepEqual(posts(calls), ['POST /repos/o/r/actions/runs/91/cancel']);
 });

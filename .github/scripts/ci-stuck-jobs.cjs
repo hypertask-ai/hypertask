@@ -220,6 +220,26 @@ async function guardRuns(repo, status, api) {
   return payload.workflow_runs ?? [];
 }
 
+function refusal(error) {
+  const lines = String(error.message).split('\n');
+  return (lines.length > 1 ? lines.slice(1).join(' ') : lines[0]).trim().slice(0, 120);
+}
+
+async function cancelGuard(repo, run, api) {
+  const path = `/repos/${repo}/actions/runs/${run.id}`;
+  try {
+    await api(`${path}/cancel`, 'POST');
+    return { how: 'cancelled' };
+  } catch (refused) {
+    try {
+      await api(`${path}/force-cancel`, 'POST');
+      return { how: 'force-cancelled' };
+    } catch (forced) {
+      return { how: null, reason: `${refusal(refused)}; force-cancel: ${refusal(forced)}` };
+    }
+  }
+}
+
 async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PENDING_MINUTES, api = json } = {}) {
   const runs = [];
   const seen = new Set();
@@ -237,12 +257,12 @@ async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PEN
   }
   let cancelled = 0;
   for (const run of overdueRuns(runs, { now, minutes })) {
-    try {
-      await api(`/repos/${repo}/actions/runs/${run.id}/cancel`, 'POST');
+    const outcome = await cancelGuard(repo, run, api);
+    if (outcome.how) {
       cancelled += 1;
-      console.log(`::notice::guard run ${run.id} was still ${run.status} after ${minutes} minutes; cancelled.`);
-    } catch (error) {
-      console.log(`::warning::guard run ${run.id} could not be cancelled: ${String(error.message).slice(0, 120)}.`);
+      console.log(`::notice::guard run ${run.id} was still ${run.status} after ${minutes} minutes; ${outcome.how}.`);
+    } else {
+      console.log(`::warning::guard run ${run.id} could not be cancelled: ${outcome.reason}.`);
     }
   }
   return unread ? { checked: runs.length, cancelled, unread } : { checked: runs.length, cancelled };
