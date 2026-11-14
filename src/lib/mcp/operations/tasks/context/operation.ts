@@ -160,9 +160,17 @@ export async function GET(request: NextRequest) {
             },
           },
         }),
-        prisma.comment.count({ where: commentWhere }),
+        prisma.comment.count({
+          where: {
+            ...commentWhere,
+            task: { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+          },
+        }),
         prisma.comment.findMany({
-          where: commentWhere,
+          where: {
+            ...commentWhere,
+            task: { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+          },
           select: {
             id: true,
             text: true,
@@ -182,7 +190,10 @@ export async function GET(request: NextRequest) {
           take: commentLimit,
         }),
         prisma.comment.findMany({
-          where: commentWhere,
+          where: {
+            ...commentWhere,
+            task: { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+          },
           select: {
             text: true,
             commentText: true,
