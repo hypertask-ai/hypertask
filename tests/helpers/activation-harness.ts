@@ -173,6 +173,7 @@ export function activationHarness() {
     "@/utils/helperFunctions/Views/FilterHelperFunctions": { defaultFilterSettings: {} },
     "@/utils/controllers/projects/boardQuota": { isBoardLimitReached: async () => false },
     "@/utils/controllers/projects/getAll": { getProjectViewInclude: () => ({}) },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
     "@/utils/controllers/notifications/sendNotification": { sendEmailNotification: async () => true },
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
     "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed", accountNotificationsBlocked: async () => false },
