@@ -1,0 +1,9 @@
+[Unit]
+Description=Scripted release chores for runner %i
+[Service]
+Type=oneshot
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="SHIP_SESSION_NAME=RUNNER %i"
+ExecStart=/usr/bin/python3 %h/.local/lib/hypertask/ship-chores/ship-chores sweep
+TimeoutStartSec=4min
+ExecStopPost=/bin/sh -c 'test "$$SERVICE_RESULT" = success || rm -f "$$HOME/.local/state/fleet/one-run.on"'

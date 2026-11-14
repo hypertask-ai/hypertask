@@ -8,6 +8,51 @@ const BADGES = [/\bP([0-9]) Badge/g, /badge\/P([0-9])-/g, /\[P([0-9])\]/g, /\bP(
 
 const isCodex = login => String(login ?? '').replace(/\[bot\]$/, '') === CODEX_LOGIN;
 
+const REVIEWER_MODELS = { claude: /^claude-sonnet/, deepseek: /^deepseek/ };
+const REVIEWER_NAMES = { claude: 'Claude Sonnet', deepseek: 'DeepSeek' };
+const STANDIN_AUTHOR = 'hypertask-runners';
+const STANDIN_STATE = /<!-- claude-standin-review:v1 (\{.*?\}) -->/s;
+const SWITCH_LABEL = 'review-switch';
+const SWITCH_STATE = /<!-- review-switch:v1 (\{.*?\}) -->/s;
+
+const isApp = login => String(login ?? '').replace(/\[bot\]$/, '') === STANDIN_AUTHOR;
+
+function reviewerFromIssues(issues) {
+  for (const issue of issues ?? []) {
+    if (issue.pull_request || !isApp(issue.user?.login)) continue;
+    try {
+      const reviewer = JSON.parse(SWITCH_STATE.exec(String(issue.body ?? ''))?.[1] ?? 'null')?.reviewer;
+      if (reviewer === 'codex' || REVIEWER_MODELS[reviewer]) return reviewer;
+    } catch {}
+  }
+  return 'codex';
+}
+
+function standinResultFor(comments, headOid, reviewer) {
+  const modelPattern = REVIEWER_MODELS[reviewer];
+  if (!modelPattern) return null;
+  const short = headOid.slice(0, 7);
+  for (const comment of [...(comments ?? [])].reverse()) {
+    if (!isApp(comment.author)) continue;
+    const raw = [...String(comment.body ?? '').matchAll(new RegExp(STANDIN_STATE.source, 'gs'))].at(-1)?.[1];
+    if (!raw) continue;
+    let state;
+    try {
+      state = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (state?.sha !== headOid || !modelPattern.test(String(state.model ?? ''))) continue;
+    if (!['APPROVE', 'CONCERNS'].includes(state.verdict) || !Number.isInteger(state.blocking) || state.blocking < 0) continue;
+    const evidence = comment.url ?? '';
+    const name = REVIEWER_NAMES[reviewer];
+    return state.blocking > 0
+      ? { state: 'failure', description: `${name} reviewed ${short}: ${state.blocking} blocker/major finding(s)`, evidence }
+      : { state: 'success', description: `${name} reviewed ${short}: no blocker/major findings`, evidence };
+  }
+  return null;
+}
+
 function priorityOf(body) {
   for (const pattern of BADGES) {
     const levels = [...String(body ?? '').matchAll(pattern)].map(match => Number(match[1]));
@@ -60,10 +105,21 @@ function codeReviewStateFor(comments, headOid) {
     if (!raw) continue;
     try {
       const state = JSON.parse(raw).code_review;
-      if (state?.commit_sha === headOid) return { ...state, url: comment.url ?? '' };
+      if (state?.commit_sha === headOid) return { ...state, url: comment.url ?? '', updatedAt: comment.updatedAt };
     } catch {
       continue;
     }
+  }
+  return null;
+}
+
+const CLEAN_RECEIPT = /Didn['’]t find any major issues[\s\S]{0,500}?Reviewed commit:\**\s*`([0-9a-f]{10,40})`/i;
+
+function cleanHeadReceipt(comments, headOid) {
+  for (const comment of [...(comments ?? [])].sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))) {
+    if (!isCodex(comment.author)) continue;
+    const match = CLEAN_RECEIPT.exec(String(comment.body ?? ''));
+    if (match && headOid.startsWith(match[1])) return comment;
   }
   return null;
 }
@@ -73,14 +129,26 @@ function evaluate(pr) {
   const codexReviews = pr.reviews.filter(review => isCodex(review.author));
   const headReviews = codexReviews.filter(review => review.commit === pr.headOid);
   const staleReviews = codexReviews.filter(review => review.commit !== pr.headOid);
-  const headCommentBodies = staleReviews.flatMap(review => review.comments.filter(
+  const summary = codeReviewStateFor(pr.comments, pr.headOid);
+  const receipt = cleanHeadReceipt(pr.comments, pr.headOid);
+  const receiptUrl = receipt?.url ?? '';
+  const summaryClean = summary?.status === 'completed' && (
+    summary.has_any_findings === false || summary.has_unresolved_findings === false);
+  const reviewedAt = Math.max(0, ...[
+    ...headReviews.map(review => review.submittedAt),
+    summaryClean ? summary.updatedAt : null,
+    summary?.status === 'completed' ? receipt?.createdAt : null,
+  ].map(value => Date.parse(value) || 0));
+  const unclearedReviews = staleReviews.filter(review =>
+    !(Date.parse(review.submittedAt) > 0 && Date.parse(review.submittedAt) < reviewedAt));
+  const remappedBodies = unclearedReviews.flatMap(review => review.comments.filter(
     comment => commentCommit(comment, review) === pr.headOid)).map(commentBody);
-  const unreadStale = !headReviews.length && staleReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
+  const unreadStale = unclearedReviews.some(review => review.comments.some(comment => commentBody(comment) === UNREAD));
 
   const rawBlocking = headReviews.flatMap(review => review.comments.length
     ? review.comments.map(commentBody).filter(blocks)
     : priorityOf(review.body) !== null && blocks(review.body) ? [review.body] : [])
-    .concat(headCommentBodies.filter(blocks), unreadStale ? [UNREAD] : []);
+    .concat(remappedBodies.filter(blocks), unreadStale ? [UNREAD] : []);
   const blocking = rawBlocking.filter(body => !waivedOwnerQaVisualReleaseFinding(body, pr.statusContexts));
   if (blocking.length) {
     const levels = blocking.map(priorityOf);
@@ -98,15 +166,21 @@ function evaluate(pr) {
       evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
-  if (headReviews.length || headCommentBodies.length) {
+  if (headReviews.length || remappedBodies.length) {
     return {
       state: 'success',
       description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
       evidence: codexReviews.findLast(review => review.url)?.url ?? '',
     };
   }
+  if (summary?.status === 'completed' && receiptUrl) {
+    return {
+      state: 'success',
+      description: `Codex reviewed ${short} and raised no P0 or P1 findings`,
+      evidence: receiptUrl,
+    };
+  }
 
-  const summary = codeReviewStateFor(pr.comments, pr.headOid);
   if (summary?.status === 'completed') {
     if (summary.has_unresolved_findings === false || summary.has_any_findings === false
         || summary.has_unresolved_findings === true) {
@@ -123,6 +197,8 @@ function evaluate(pr) {
       };
     }
   }
+  const standin = standinResultFor(pr.comments, pr.headOid, pr.reviewer);
+  if (standin) return standin;
   return { state: 'pending', description: `Waiting for the Codex review of ${short}`, evidence: '' };
 }
 
@@ -134,8 +210,8 @@ query($owner: String!, $name: String!, $after: String) {
       nodes {
         number isDraft isCrossRepository headRefOid
         commits(last: 1) { nodes { commit { oid status { contexts { context state description } } } } }
-        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
-        comments(last: 100) { nodes { author { login } url body } }
+        reviews(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } url body submittedAt commit { oid } comments(first: 50) { pageInfo { hasNextPage } nodes { body author { login } replyTo { id } commit { oid } } } } }
+        comments(last: 100) { nodes { author { login } url body createdAt updatedAt } }
       }
     }
   }
@@ -144,6 +220,14 @@ query($owner: String!, $name: String!, $after: String) {
 async function run({ github, context, core }) {
   const { owner, repo } = context.repo;
   const only = context.payload.pull_request?.number ?? context.payload.issue?.number ?? 0;
+  let reviewer = 'codex';
+  try {
+    const { data } = await github.rest.issues.listForRepo({ owner, repo, labels: SWITCH_LABEL, state: 'open', per_page: 10 });
+    reviewer = reviewerFromIssues(data);
+  } catch (error) {
+    core.warning(`review switch unreadable, using codex: ${error.message}`);
+  }
+  core.info(`reviewer: ${reviewer}`);
 
   const nodes = [];
   for (let after = null, more = true; more;) {
@@ -156,10 +240,11 @@ async function run({ github, context, core }) {
     const head = node.commits.nodes[0]?.commit;
     if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
     const result = evaluate({
+      reviewer,
       headOid: node.headRefOid,
       statusContexts: head?.status?.contexts ?? [],
       reviews: node.reviews.nodes.map(review => ({
-        author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid,
+        author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid, submittedAt: review.submittedAt,
         comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => ({ body: comment.body ?? '', commit: comment.commit?.oid })).concat(review.comments.pageInfo.hasNextPage ? [UNREAD] : []),
       })),
       comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
@@ -170,7 +255,7 @@ async function run({ github, context, core }) {
     const running = codeReviewStateFor(comments, node.headRefOid)?.status === 'running';
     const requested = comments.some(comment =>
       String(comment.author ?? '').replace(/\[bot\]$/, '') === 'github-actions' && comment.body?.includes(requestMarker));
-    if (result.state === 'pending' && !node.isDraft && !running && !requested) {
+    if (result.state === 'pending' && reviewer === 'codex' && !node.isDraft && !running && !requested) {
       const current = await github.rest.pulls.get({ owner, repo, pull_number: node.number });
       if (current.data.head.sha === node.headRefOid && current.data.state === 'open' && !current.data.draft) {
         await github.rest.issues.createComment({
@@ -224,7 +309,7 @@ async function run({ github, context, core }) {
     if (result.state === 'success' && !alreadyApproved) {
       await github.rest.issues.createComment({
         owner, repo, issue_number: node.number,
-        body: `APPROVE\n\n${result.description}.${result.evidence ? ` Codex review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
+        body: `APPROVE\n\n${result.description}.${result.evidence ? ` ${result.description.startsWith(REVIEWER_NAMES[reviewer] ?? '\u0000') ? REVIEWER_NAMES[reviewer] : 'Codex'} review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
       });
     }
     core.info(`PR #${node.number} ${node.headRefOid.slice(0, 7)}: ${result.state}. ${result.description}`);
@@ -233,6 +318,8 @@ async function run({ github, context, core }) {
 
 module.exports = {
   evaluate,
+  standinResultFor,
+  reviewerFromIssues,
   priorityOf,
   blocks,
   isCodex,

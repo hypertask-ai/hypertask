@@ -76,6 +76,7 @@ const TaskTopRow = loadComponent(
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
     "@/lib/flags/definitions/htpr-8970-calm-cards": { HTPR_8970_CALM_CARDS_FLAG: "htpr-8970-calm-cards" },
     "@/lib/flags/definitions/htpr-7339-agent-pulse-dot": { HTPR_7339_AGENT_PULSE_DOT_FLAG: "htpr-7339-agent-pulse-dot" },
+    "@/lib/flags/definitions/htpr-9075-card-property-row": { HTPR_9075_CARD_PROPERTY_ROW_FLAG: "htpr-9075-card-property-row" },
     "@/lib/agentStatus/cardStatus": { useCardAgentStatus: () => null, stackFaces: (users, agents) => ({ users, agents }) },
     "@/lib/agentStatus/AgentStatusDot": empty,
     "@/lib/agentStatus/dot": { agentStatusDotMode: () => null },

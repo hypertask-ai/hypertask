@@ -6,6 +6,7 @@ import { HTPR_8960_BORDER_ONLY_SELECT_FLAG } from "@/lib/flags/definitions/htpr-
 import { HTPR_8970_CALM_CARDS_FLAG } from "@/lib/flags/definitions/htpr-8970-calm-cards";
 import { HTPR_8971_CARD_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-8971-card-settings";
 import { HTPR_9026_CARD_PEOPLE_FLAG } from "@/lib/flags/definitions/htpr-9026-card-people";
+import { HTPR_9075_CARD_PROPERTY_ROW_FLAG } from "@/lib/flags/definitions/htpr-9075-card-property-row";
 import { ALL_CARD_PARTS, EMPTY_CARD_PARTS, cardPartsView } from "@/lib/kanban/cardParts";
 import { useCardParts } from "@/hooks/General/useCardParts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -123,9 +124,19 @@ const KanbanTaskCard = ({
   const calm = useFlag(HTPR_8970_CALM_CARDS_FLAG);
   const cardSettings = useFlag(HTPR_8971_CARD_SETTINGS_FLAG);
   const cardPeople = useFlag(HTPR_9026_CARD_PEOPLE_FLAG);
+  const collapseEmptyRow = useFlag(HTPR_9075_CARD_PROPERTY_ROW_FLAG);
   const savedParts = useCardParts();
   const parts = savedParts ?? EMPTY_CARD_PARTS;
   const card = cardPartsView(task, blockingUser, cardSettings ? parts : ALL_CARD_PARTS);
+  const staleSnapshot = useFirstScreenSurface();
+  const staleLevel = calm && card.staleness && getActiveStalenessFromProject(project)
+    ? taskStaleness(
+        task,
+        { warnDays: project?.staleWarnDays, hotDays: project?.staleHotDays },
+        staleSnapshot ? Date.parse(staleSnapshot.now) : undefined,
+      ).level
+    : "none";
+  const showsStaleClock = collapseEmptyRow ? staleLevel !== "none" : Boolean(calm && card.staleness);
   const subTasks = <CardSubTasks subTasks={card.subTasks} currentSetting={currentSetting} onClick={onSubtaskClick} />;
   return (
   <div
@@ -211,7 +222,7 @@ const KanbanTaskCard = ({
         hover={hover}
         handleStarTask={handleStarTask}
         avatarSize={cleanup ? (isMobile ? 18 : 20) : undefined}
-        staleClock={calm && card.staleness ? (
+        staleClock={showsStaleClock ? (
           <TaskStaleClock
             enabled={getActiveStalenessFromProject(project)}
             project={project}
