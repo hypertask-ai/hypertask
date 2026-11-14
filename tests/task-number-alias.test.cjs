@@ -100,6 +100,10 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
         return aliases.find(alias => matches(alias, where.projectId_uniqueIndex)) ?? null;
       },
     },
+    $queryRaw: async (_strings, ticketNumber) => tasks
+      .filter(task => (task.ticketNumber ?? "").toLowerCase() === String(ticketNumber).toLowerCase())
+      .sort((left, right) => left.projectId - right.projectId || left.id - right.id)
+      .map(task => ({ id: task.id })),
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
