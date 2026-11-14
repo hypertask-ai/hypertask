@@ -73,7 +73,35 @@ test('HYCI-416 a real Codex result always wins over the stand-in', () => {
   assert.match(result.description, /^Codex review/);
 });
 
-test('HYCI-416 the reviewer script posts as the same account the gate trusts', () => {
+const staleP1Review = extra => ({
+  author: codex, commit: 'd'.repeat(40), body: 'Codex Review', url: 'https://example.test/r/stale',
+  comments: [{ body: '![P1 Badge](https://img.shields.io/badge/P1-orange) Add the tests.', commit: head }],
+  submittedAt: '2026-11-13T12:00:00Z', ...extra,
+});
+
+test('HYCI-442 a clean stand-in verdict clears an old Codex P1 remapped onto the head', () => {
+  const result = evaluate(pr({ reviews: [staleP1Review()], comments: [standinComment()] }));
+  assert.equal(result.state, 'success');
+  assert.match(result.description, /^Claude Sonnet reviewed ccccccc: no blocker\/major findings/);
+});
+
+test('HYCI-442 an old Codex P1 with no stand-in verdict still fails', () => {
+  const result = evaluate(pr({ reviews: [staleP1Review()] }));
+  assert.equal(result.state, 'failure');
+  assert.match(result.description, /raised 1 finding\(s\), worst P1/);
+});
+
+test('HYCI-442 a same-head Codex P1 still wins over a clean stand-in verdict', () => {
+  const sameHead = staleP1Review({ commit: head, submittedAt: '2026-11-14T11:00:00Z' });
+  assert.equal(evaluate(pr({ reviews: [sameHead], comments: [standinComment()] })).state, 'failure');
+});
+
+test('HYCI-442 a stand-in that failed does not clear an old Codex P1', () => {
+  const comments = [standinComment({ verdict: 'CONCERNS', blocking: 1 })];
+  assert.equal(evaluate(pr({ reviews: [staleP1Review()], comments })).state, 'failure');
+});
+
+test('HYCI-442 the reviewer script posts as the same account the gate trusts', () => {
   assert.equal(standin.AUTHOR, 'hypertask-runners');
 });
 
