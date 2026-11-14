@@ -50,6 +50,11 @@ git reset -q --hard; rm -f UPSTREAM.md
 printf 'token: %s\n' "$sha" > hex-key.txt; git add hex-key.txt
 if git commit -qm hex 2>/dev/null; then bad "hex key outside a commit context blocked"; else ok "hex key outside a commit context blocked"; fi
 git reset -q --hard; rm -f hex-key.txt
+# A real 40-hex key described with 'at' is not a commit SHA, so it still blocks (the keyword
+# makes the sourcegraph rule fire, as it would on a line naming a real key's source).
+printf 'Datadog app key at `%s`, per sourcegraph\n' "$sha" > dd.md; git add dd.md
+if git commit -qm dd 2>/dev/null; then bad "40-hex key after 'at' blocks"; else ok "40-hex key after 'at' blocks"; fi
+git reset -q --hard; rm -f dd.md
 
 # A key trufflehog proves still works (a stub stands in for the live check).
 mkdir -p "$tmp/stub"; printf '#!/bin/sh\necho "{\\"DetectorName\\":\\"Cloudflare\\"}"\nexit 183\n' > "$tmp/stub/trufflehog"
@@ -59,16 +64,36 @@ if PATH="$tmp/stub:$PATH" git commit -qm live 2>"$tmp/err"; then bad "working ke
 git reset -q --hard
 # A package lockfile repeats the same package's 32-character peer hash per peer set, and
 # trufflehog's Alchemy detector reads those as keys (HYCI-405). The lockfile must commit.
-mkdir -p "$tmp/stub-lock"; printf '#!/bin/sh\necho "{\\"SourceMetadata\\":{\\"Data\\":{\\"Filesystem\\":{\\"file\\":\\"%s/pnpm-lock.yaml\\",\\"line\\":5048}}},\\"DetectorName\\":\\"Alchemy\\"}"\nexit 183\n' '$2' > "$tmp/stub-lock/trufflehog"
+mkdir -p "$tmp/stub-lock"; printf '#!/bin/sh\necho "{\\"SourceMetadata\\":{\\"Data\\":{\\"Filesystem\\":{\\"file\\":\\"%s/pnpm-lock.yaml\\",\\"line\\":5048}}},\\"DetectorName\\":\\"Alchemy\\",\\"Raw\\":\\"0123456789abcdef0123456789abcdef\\"}"\nexit 183\n' '$2' > "$tmp/stub-lock/trufflehog"
 chmod +x "$tmp/stub-lock/trufflehog"; echo "lockfile: 1" > pnpm-lock.yaml; git add pnpm-lock.yaml
 if PATH="$tmp/stub-lock:$PATH" git commit -qm lockfile 2>"$tmp/err"; then ok "lockfile Alchemy false hit passes"; else bad "lockfile Alchemy false hit passes"; fi
 git reset -q --hard; rm -f pnpm-lock.yaml
 # The same hit in a source file is a real finding and still blocks.
-mkdir -p "$tmp/stub-src"; printf '#!/bin/sh\necho "{\\"SourceMetadata\\":{\\"Data\\":{\\"Filesystem\\":{\\"file\\":\\"%s/src/keys.ts\\",\\"line\\":3}}},\\"DetectorName\\":\\"Alchemy\\"}"\nexit 183\n' '$2' > "$tmp/stub-src/trufflehog"
+mkdir -p "$tmp/stub-src"; printf '#!/bin/sh\necho "{\\"SourceMetadata\\":{\\"Data\\":{\\"Filesystem\\":{\\"file\\":\\"%s/src/keys.ts\\",\\"line\\":3}}},\\"DetectorName\\":\\"Alchemy\\",\\"Raw\\":\\"0123456789abcdef0123456789abcdef\\"}"\nexit 183\n' '$2' > "$tmp/stub-src/trufflehog"
 chmod +x "$tmp/stub-src/trufflehog"
 mkdir -p src; echo "key" > src/keys.ts; git add src/keys.ts
 if PATH="$tmp/stub-src:$PATH" git commit -qm src 2>/dev/null; then bad "Alchemy hit in a source file blocked"; else ok "Alchemy hit in a source file blocked"; fi
 git reset -q --hard; rm -rf src
+# An Alchemy hit in a lockfile whose value is not a 32-hex peer hash is not the proven shape.
+mkdir -p "$tmp/stub-lock-long"; printf '#!/bin/sh\necho "{\\"SourceMetadata\\":{\\"Data\\":{\\"Filesystem\\":{\\"file\\":\\"%s/pnpm-lock.yaml\\",\\"line\\":5048}}},\\"DetectorName\\":\\"Alchemy\\",\\"Raw\\":\\"%s\\"}"\nexit 183\n' '$2' "$sha" > "$tmp/stub-lock-long/trufflehog"
+chmod +x "$tmp/stub-lock-long/trufflehog"; echo "lockfile: 2" > pnpm-lock.yaml; git add pnpm-lock.yaml
+if PATH="$tmp/stub-lock-long:$PATH" git commit -qm locklong 2>/dev/null; then bad "Alchemy hit with a key-shaped value in a lockfile blocks"; else ok "Alchemy hit with a key-shaped value in a lockfile blocks"; fi
+git reset -q --hard; rm -f pnpm-lock.yaml
+# A trufflehog hit on a commit SHA quoted in a GitHub URL is not a key (HYCI-405).
+mkdir -p "$tmp/stub-sha"; printf '#!/bin/sh\necho "{\\"SourceMetadata\\":{\\"Data\\":{\\"Filesystem\\":{\\"file\\":\\"%s/UPSTREAM.md\\",\\"line\\":1}}},\\"DetectorName\\":\\"Cloudflare\\",\\"Raw\\":\\"%s\\"}"\nexit 183\n' '$2' "$sha" > "$tmp/stub-sha/trufflehog"
+chmod +x "$tmp/stub-sha/trufflehog"
+printf 'Source: [x](https://github.com/o/r/tree/%s)\n' "$sha" > UPSTREAM.md; git add UPSTREAM.md
+if PATH="$tmp/stub-sha:$PATH" git commit -qm sha-url-tr 2>/dev/null; then ok "trufflehog commit SHA in a GitHub URL passes"; else bad "trufflehog commit SHA in a GitHub URL passes"; fi
+git reset -q --hard; rm -f UPSTREAM.md
+# The same SHA in a line that does not quote it as a commit is a bare 40-hex key.
+printf 'value: %s\n' "$sha" > key.txt; git add key.txt
+if PATH="$tmp/stub-sha:$PATH" git commit -qm sha-bare 2>/dev/null; then bad "trufflehog bare 40-hex value blocks"; else ok "trufflehog bare 40-hex value blocks"; fi
+git reset -q --hard; rm -f key.txt
+# Trufflehog exiting 183 with an unreadable report blocks instead of passing.
+mkdir -p "$tmp/stub-empty"; printf '#!/bin/sh\nexit 183\n' > "$tmp/stub-empty/trufflehog"
+chmod +x "$tmp/stub-empty/trufflehog"; echo "harmless" > empty.txt; git add empty.txt
+if PATH="$tmp/stub-empty:$PATH" git commit -qm empty 2>/dev/null; then bad "unreadable trufflehog report blocks"; else ok "unreadable trufflehog report blocks"; fi
+git reset -q --hard; rm -f empty.txt
 
 # A symlink replaced by a regular file (a type change) is scanned too.
 ln -s a.txt link; git add link; git commit -qm link

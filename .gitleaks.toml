@@ -4,6 +4,26 @@
 [extend]
 useDefault = true
 
+# A git commit SHA is not a key, but two rules read one: gitleaks' own sourcegraph rule reads
+# any bare 40-character hex run as a token, and the cloudflare rule below reads one next to a
+# Cloudflare word. Inherited files copied to a new path blocked the docs move that way
+# (HYCI-405). The sourcegraph rule is therefore restated here with the same regex, entropy and
+# keywords, plus an allowlist for that one rule only. It drops a finding when the line quotes
+# the SHA in a documented commit place: a JSON commit field, a GitHub URL path, backticks right
+# after commit or sha, or a repo-pinned `owner/repo#<sha>`. A 40-hex value anywhere else still
+# blocks, and every other rule still runs unchanged on these lines.
+[[rules]]
+id = "sourcegraph-access-token"
+description = "Sourcegraph is a code search and navigation engine."
+regex = '''(?i)\b(\b(sgp_(?:[a-fA-F0-9]{16}|local)_[a-fA-F0-9]{40}|sgp_[a-fA-F0-9]{40}|[a-fA-F0-9]{40})\b)(?:[\x60'"\s;]|\\[nr]|$)'''
+entropy = 3
+keywords = ["sgp_", "sourcegraph"]
+[[rules.allowlists]]
+description = "A git commit SHA quoted in a commit place is not a Sourcegraph token"
+condition = "AND"
+regexTarget = "line"
+regexes = ['''"(?:sha|commit|commits|previousCommit|previousSha|sourceCommit|provenanceCommit|pinnedCommit|mergeCommit|headCommit)"\s*:\s*"[0-9a-f]{40}"|/(?:tree|commits?|blob)/[0-9a-f]{40}(?:[`'"\s)#,)]|$)|(?:^|[^A-Za-z0-9_-])(?:commit|sha)(?:\s+sha)?:? `[0-9a-f]{40}`|(?:^|[^A-Za-z0-9_-])at (?:commit|sha) `[0-9a-f]{40}`|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9a-f]{40}`''']
+
 # The default rules missed a Cloudflare token written as `value <token>` in a markdown table
 # (agent-fleet 6ac2c153), so a 40-character token near a Cloudflare word counts as a key.
 [[rules]]
@@ -13,6 +33,12 @@ regex = '''(?i)(?:cloudflare|\bcf\b|\bcf_|wrangler)[^\n]{0,120}?[`'"= ]([A-Za-z0
 secretGroup = 1
 entropy = 3.5
 keywords = ["cloudflare", "cf", "wrangler"]
+# Same commit-SHA allowance, still only for this rule (HYCI-405).
+[[rules.allowlists]]
+description = "A git commit SHA quoted next to a Cloudflare word is not a Cloudflare token"
+condition = "AND"
+regexTarget = "line"
+regexes = ['''"(?:sha|commit|commits|previousCommit|previousSha|sourceCommit|provenanceCommit|pinnedCommit|mergeCommit|headCommit)"\s*:\s*"[0-9a-f]{40}"|/(?:tree|commits?|blob)/[0-9a-f]{40}(?:[`'"\s)#,)]|$)|(?:^|[^A-Za-z0-9_-])(?:commit|sha)(?:\s+sha)?:? `[0-9a-f]{40}`|(?:^|[^A-Za-z0-9_-])at (?:commit|sha) `[0-9a-f]{40}`|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9a-f]{40}`''']
 
 # A long random value in quotes or backticks next to token, secret, key or password.
 [[rules]]
@@ -25,9 +51,6 @@ keywords = ["token", "secret", "key", "password"]
 
 [allowlist]
 description = "Known false positives"
-# Match the line, not just the value: the commit-SHA entries below need the surrounding place
-# to tell a git SHA from a key (HYCI-405). Every other entry still matches inside its line.
-regexTarget = "line"
 regexes = [
   '''AIzaSy[0-9A-Za-z_-]{33}''',
   '''CMD/CTRL\+SHIFT\+O''',
@@ -37,7 +60,7 @@ regexes = [
   # Feature-flag keys are ticket slugs (htpr, hyfa, yper4), never credentials.
   '''(?:htpr|hyfa|yper4)-[0-9]+-[a-z0-9-]+''',
   # These two flag constants also occur in the PR's historical test diffs.
-  '''(?:flags|keys)\.HTPR_(?:7038_HAIKU_DEFAULT|7010_HAIKU_5_5)_FLAG''',
+  '''^(?:flags|keys)\.HTPR_(?:7038_HAIKU_DEFAULT|7010_HAIKU_5_5)_FLAG$''',
   # QA login unit-test fixture, never a live secret.
   '''correct-horse-battery-staple-32b''',
   # HTPR-8276: a sha256 call digest in .github/paid-api-cost-notes.json whose source path
@@ -50,11 +73,4 @@ regexes = [
   # HYCI-254: sha256 call digest in paid-api-cost-notes.json. The path
   # githubLinkAuth.ts contains Auth, so the generic rule reads the digest as a key.
   '''6733e7778b3d8693e30cd26563956cc65d74fd041a697094e8288278fc97945f''',
-  # HYCI-405: git commit SHAs quoted in records, GitHub URLs and prose. The custom rules below
-  # and gitleaks' sourcegraph rule read a 40-character SHA as a key once inherited files land at
-  # a new path. Each entry needs the SHA shape and its documented place.
-  '''"(?:sha|commit|commits|previousCommit|previousSha|sourceCommit|provenanceCommit|pinnedCommit|mergeCommit|headCommit)"\s*:\s*"[0-9a-f]{40}"''',
-  '''/(?:tree|commits?|blob)/[0-9a-f]{40}(?:[`'"\s)#,)]|$)''',
-  '''(?:commit|sha|at) `[0-9a-f]{40}`''',
-  '''#[0-9a-f]{40}`''',
 ]
