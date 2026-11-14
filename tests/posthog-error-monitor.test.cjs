@@ -104,13 +104,13 @@ test("watchdog directly creates one infra ticket and comments on it for subseque
     const body = options.body ? JSON.parse(options.body) : undefined;
     if (url.includes("/tasks?")) return response({ tasks });
     if (url.endsWith("/tasks/create")) { tasks.push({ ...body, id: 100, status: "Normal" }); return response({ task: { id: 100, ticketNumber: "YPER4-999" } }); }
-    if (url.includes("/projects?")) return response({ projects: [{ id: 4060, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 11514, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
     if (url.endsWith("/comments")) return response({ success: true });
     assert.fail(url);
   };
   for (const runId of ["10001", "10002", "10003"]) await reportFailure({ fetchImpl, token: "fixture", runId, runUrl: `https://github.com/hypertask-ai/hypertask/actions/runs/${runId}`, workflow: "PostHog Error Alert" });
   assert.equal(tasks.length, 1);
-  assert.equal(tasks[0].project_id, 4060);
+  assert.equal(tasks[0].project_id, 11514);
   assert.equal(tasks[0].title, FAILURE_TITLE);
   assert.equal(calls.filter((call) => call.url.endsWith("/comments")).length, 2);
   assert.equal(JSON.parse(calls.at(-1).options.body).task_id, 100);
@@ -123,7 +123,7 @@ test("watchdog reuses archived incidents and rejects untrusted run links", async
   const fetchImpl = async (url, options) => {
     if (url.includes("status=Normal")) return response({ tasks: [] });
     if (url.includes("status=Archive")) return response({ tasks: [{ title: FAILURE_TITLE, id: 100, status: "Archive" }] });
-    if (url.includes("/projects?")) return response({ projects: [{ id: 4060, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 11514, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
     writes.push(JSON.parse(options.body)); return response({ success: true });
   };
   await reportFailure({ fetchImpl, token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001" });
@@ -151,7 +151,7 @@ test("nightly and independent workflow_run watchdog use trusted production code 
 });
 
 
-test("review watchdog reopen returns Normal Done tickets to board 4060 active sections", async () => {
+test("review watchdog reopen returns Normal Done tickets to the monitoring board active sections", async () => {
   const { reportFailure, FAILURE_TITLE } = await import(script);
   for (const sections of [
     [{ id: 11, section_title: "In Progress" }, { id: 20, section_title: "Done" }, { id: 10, section_title: "Backlog" }],
@@ -160,7 +160,7 @@ test("review watchdog reopen returns Normal Done tickets to board 4060 active se
     const writes = [];
     const fetchImpl = async (url, options) => {
       if (url.includes("/tasks?")) return response({ tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] });
-      if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 99, title: "Backlog" }] }, { id: 4060, sections }] });
+      if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 99, title: "Backlog" }] }, { id: 11514, sections }] });
       writes.push({ url, body: JSON.parse(options.body) });
       return response({ success: true });
     };
@@ -169,7 +169,7 @@ test("review watchdog reopen returns Normal Done tickets to board 4060 active se
     assert.match(writes[0].url, /tasks\/update$/);
     assert.match(writes[1].url, /comments$/);
   }
-  await assert.rejects(reportFailure({ token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001", fetchImpl: async (url) => response(url.includes("/tasks?") ? { tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] } : { projects: [{ id: 4060, sections: [{ id: 20, title: "Done" }] }] }) }), /active section is unavailable/);
+  await assert.rejects(reportFailure({ token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001", fetchImpl: async (url) => response(url.includes("/tasks?") ? { tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] } : { projects: [{ id: 11514, sections: [{ id: 20, title: "Done" }] }] }) }), /active section is unavailable/);
 });
 
 
@@ -180,16 +180,16 @@ test("canary verifies and closes an independent fallback only after matching the
   const fetchImpl = async (url, options) => {
     if (url.endsWith("/error-test")) return response({}, 500);
     if (url.includes("/error_tracking/issues/?")) { assert.equal(options.method, "GET"); return response({ results: [{ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1" }], next: null }); }
-    if (url.includes("/tasks?")) return response({ tasks: new URL(url).searchParams.get("project_id") === "4060" ? [{ id: 101, description: receipt }] : [] });
+    if (url.includes("/tasks?")) return response({ tasks: new URL(url).searchParams.get("project_id") === "11514" ? [{ id: 101, description: receipt }] : [] });
     if (url.includes("/issues/")) return response({ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
-    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }, { id: 4060, sections: [{ id: 888, section_title: "Done" }] }] });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }, { id: 11514, sections: [{ id: 888, section_title: "Done" }] }] });
     if (url.endsWith("/tasks/update")) { writes.push(JSON.parse(options.body)); return response({ success: true }); }
     assert.fail(url);
   };
   const options = { fetchImpl, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1" };
   const result = await runCanary(options);
   assert.equal(result.delivery, "fallback");
-  assert.equal(result.boardId, 4060);
+  assert.equal(result.boardId, 11514);
   assert.deepEqual(writes, [{ task_id: 101, sectionId: 888 }]);
   writes.length = 0;
   await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes(`/issues/${ISSUE_ID}/`) ? response({ id: ISSUE_ID, description: "another customer's error" }) : fetchImpl(url, opts) }), /does not match the nightly canary/);
@@ -220,4 +220,140 @@ test("canary issue discovery uses only bounded same-origin REST reads", async ()
   assert.equal(refusedCalls, 3);
   await assert.rejects(findCanaryIssue({ ...options, fetchImpl: async () => response({}, 403) }), /HTTP 403/);
   await assert.rejects(findCanaryIssue({ ...options, deadline: 0, fetchImpl: async () => assert.fail("expired lookup fetched") }), /exceeded fifteen minutes/);
+});
+
+function refusedFallbackFetch(searchesToFind = 2, refusalBody = { success: false, error: "Project not found or access denied" }) {
+  const calls = [];
+  let searches = 0;
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith("/error-test")) return response({}, 500);
+    if (url.includes("/error_tracking/issues/?")) return response({ results: [{ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1" }], next: null });
+    if (url.includes("/tasks?")) {
+      if (new URL(url).searchParams.get("project_id") === "11514") return response(refusalBody, 403);
+      return response({ tasks: ++searches < searchesToFind ? [] : [
+        { id: 100, description: `PostHog issue ID: <code>${ISSUE_ID}</code> PostHog pipeline canary yper4-331-123-1 posthog-alert:issue_created:alert-id` },
+      ] });
+    }
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }] });
+    if (url.endsWith("/tasks/update")) return response({ success: true });
+    if (url.includes("posthog.com/api/projects/236160/error_tracking/issues/")) return response({ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
+    assert.fail(url);
+  };
+  return { calls, fetchImpl, boards: () => calls.filter((call) => call.url.includes("/tasks?") && new URL(call.url).searchParams.get("project_id") === "11514").length };
+}
+
+test("a refused fallback board does not end the night the native ticket still arrives", async () => {
+  const { runCanary } = await import(script);
+  const state = refusedFallbackFetch();
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (message) => warnings.push(String(message));
+  let clock = 0;
+  try {
+    const result = await runCanary({ ...state, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; } });
+    assert.equal(result.action, "verified");
+    assert.equal(result.delivery, "github");
+    assert.equal(result.boardId, 15);
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(state.boards(), 1);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /Fallback board 11514 is unavailable/);
+  assert.match(warnings[0], /Project not found or access denied/);
+});
+
+test("a refusal that outlasts the window fails and names the served reason", async () => {
+  const { runCanary } = await import(script);
+  const state = refusedFallbackFetch(Infinity);
+  const warn = console.warn;
+  console.warn = () => {};
+  let clock = 0;
+  try {
+    await assert.rejects(
+      runCanary({ ...state, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; } }),
+      /No matching board 15 PostHog ticket within 15 minutes: yper4-331-123-1; the 11514 fallback board was refused: .*HTTP 403: Project not found or access denied/,
+    );
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(clock, 15 * 60_000);
+  assert.equal(state.boards(), 1);
+});
+
+test("only a refused fallback is tolerated; other refusals and failures still fail the run", async () => {
+  const { runCanary } = await import(script);
+  const options = { token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", attempt: "1" };
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const broken = refusedFallbackFetch();
+    await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("/tasks?") && new URL(url).searchParams.get("project_id") === "11514" ? response({}, 500) : broken.fetchImpl(url, opts) }), /returned HTTP 500/);
+    const refusedBoardFifteen = refusedFallbackFetch();
+    await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("/tasks?") && new URL(url).searchParams.get("project_id") === "15" ? response({ success: false, error: "Project not found or access denied" }, 403) : refusedBoardFifteen.fetchImpl(url, opts) }), /refused \/tasks with HTTP 403: Project not found or access denied/);
+    const refusedClose = refusedFallbackFetch(1);
+    await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.endsWith("/tasks/update") ? response({ success: false, error: "Board not found or access denied" }, 403) : refusedClose.fetchImpl(url, opts) }), /refused \/tasks\/update with HTTP 403/);
+  } finally {
+    console.warn = warn;
+  }
+});
+
+const OLD_ISSUE_ID = "01a1d034-5125-7402-85b2-aafb7ec6e3e2";
+function canaryAlertTicket(id, runId, { assignees = [], sectionIsDone = false, sectionId, attempt = 1 } = {}) {
+  return {
+    id,
+    assignees,
+    sectionIsDone,
+    sectionId,
+    description: `<p><strong>Error</strong>. PostHog pipeline canary yper4-331-${runId}-${attempt}</p>`
+      + `<p>PostHog issue ID: <code>${OLD_ISSUE_ID}</code></p><p>posthog-alert:issue_created:alert-${runId}</p>`,
+  };
+}
+
+test("a passing canary retires earlier canary tickets nobody picked up and resolves their issue", async () => {
+  const { earlierCanaryTickets, retireEarlierCanaryTickets } = await import(script);
+  const tasks = [
+    canaryAlertTicket(201, "111"),
+    canaryAlertTicket(202, "112", { assignees: [{ displayName: "Runner 3" }] }),
+    canaryAlertTicket(203, "400"),
+    canaryAlertTicket(204, "111", { sectionIsDone: true }),
+    canaryAlertTicket(205, "111", { sectionId: 777 }),
+    { id: 206, description: `Former poll PostHog issue ID: <code>${OLD_ISSUE_ID}</code> yper4-331-111-1` },
+    { id: 207, description: "an unrelated error ticket" },
+  ];
+  assert.deepEqual(earlierCanaryTickets(tasks, { runId: "300", attempt: "1", ticketId: 999, doneSectionId: 777 }).map((ticket) => ticket.id), [201]);
+  assert.deepEqual(earlierCanaryTickets(tasks, { runId: "300", attempt: "1", ticketId: 999 }).map((ticket) => ticket.id), [201, 205]);
+  assert.deepEqual(earlierCanaryTickets(tasks, { runId: "112", attempt: "2", ticketId: 202, doneSectionId: 777 }).map((ticket) => ticket.id), [201]);
+  assert.deepEqual(earlierCanaryTickets([canaryAlertTicket(208, "112", { attempt: 1 })], { runId: "112", attempt: "2", ticketId: 999, doneSectionId: 777 }).map((ticket) => ticket.id), [208]);
+  assert.deepEqual(earlierCanaryTickets([canaryAlertTicket(209, "112", { attempt: 2 })], { runId: "112", attempt: "2", ticketId: 999, doneSectionId: 777 }), []);
+
+  const writes = [];
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    if (url.includes("/tasks?")) return response({ tasks });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }] });
+    if (url.endsWith("/tasks/update")) { writes.push(JSON.parse(options.body)); return response({ success: true }); }
+    if (new URL(url).hostname === "eu.posthog.com") return response({ id: OLD_ISSUE_ID, status: options.method === "PATCH" ? "resolved" : "active" });
+    assert.fail(url);
+  };
+  const retired = await retireEarlierCanaryTickets({ fetchImpl, token: "fixture", apiKey: "ph-fixture", runId: "300", attempt: "1", ticketId: 999 });
+  assert.deepEqual(retired, ["PostHog pipeline canary yper4-331-111-1"]);
+  assert.deepEqual(writes, [{ task_id: 201, sectionId: 777 }]);
+  assert.equal(calls.find((call) => call.url.endsWith("/tasks/update")).options.headers["Idempotency-Key"], "posthog-canary-retire-PostHog pipeline canary yper4-331-111-1");
+  assert.equal(calls.filter((call) => new URL(call.url).hostname === "eu.posthog.com").length, 1);
+});
+
+test("retirement needs the board Done section before it writes anything", async () => {
+  const { retireEarlierCanaryTickets } = await import(script);
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "QA" }] }] });
+    if (url.includes("/tasks?")) return response({ tasks: [canaryAlertTicket(201, "111")] });
+    assert.fail(url);
+  };
+  await assert.rejects(retireEarlierCanaryTickets({ fetchImpl, token: "fixture", apiKey: "ph-fixture", runId: "300", attempt: "1", ticketId: 999 }), /Done section is unavailable/);
+  assert.equal(calls.some((url) => url.endsWith("/tasks/update")), false);
 });

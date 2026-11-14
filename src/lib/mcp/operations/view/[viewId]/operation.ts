@@ -277,8 +277,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
     })
     return NextResponse.json({ success: true, view: updated })
   } catch (error) {
-    console.error('Error updating view:', error)
-    return isViewCallerError(error) ? viewMutationRefusal(error) : plainViewError(error)
+    const callerError = isViewCallerError(error)
+    if (callerError) console.warn('Error updating view:', error)
+    else console.error('Error updating view:', error)
+    return callerError ? viewMutationRefusal(error) : plainViewError(error)
   }
 
   })(request)
@@ -303,8 +305,10 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ vi
     const deleted = await deleteView(viewId, ctx.user.id, ctx.agentId, ctx.teamScope)
     return NextResponse.json({ success: true, view: deleted })
   } catch (error) {
-    console.error('Error deleting view:', error)
-    return isViewCallerError(error) ? viewMutationRefusal(error) : plainViewError(error)
+    const callerError = isViewCallerError(error)
+    if (callerError) console.warn('Error deleting view:', error)
+    else console.error('Error deleting view:', error)
+    return callerError ? viewMutationRefusal(error) : plainViewError(error)
   }
 
   })(request)
