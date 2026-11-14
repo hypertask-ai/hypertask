@@ -217,3 +217,7 @@ test('HYCI-437 cap: a head reviewed in this same run gets no cap notice', () => 
   });
   assert.deepEqual(notices.map(n => n.pr.number), [2]);
 });
+
+test('HYCI-437 cap: the default day cap is above the 60 reviews 14 Nov spent', () => {
+  assert.ok(standin.PER_DAY > 60, `default cap is ${standin.PER_DAY}`);
+});
