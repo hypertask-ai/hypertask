@@ -137,7 +137,7 @@ function selectCandidates(prs, { now, attemptsFor, reviewedToday }) {
     if (pr.isDraft || pr.isCrossRepository || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '')) continue;
     const contexts = pr.commits?.nodes?.[0]?.commit?.status?.contexts ?? [];
     const gate = contexts.find(c => c.context === 'ai-review');
-    if (gate && String(gate.state).toLowerCase() !== 'pending') continue;
+    if (gate && String(gate.state).toLowerCase() === 'success') continue;
     const done = (pr.comments?.nodes ?? []).some(c =>
       String(c.author?.login ?? '').replace(/\[bot\]$/, '') === AUTHOR
       && String(c.body ?? '').includes(`${MARKER_PREFIX} {`) && String(c.body).includes(`"sha":"${pr.headRefOid}"`));

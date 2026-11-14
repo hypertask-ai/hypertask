@@ -173,6 +173,15 @@ test('HYCI-416 select: reviews only heads with no result, no stand-in comment an
   assert.deepEqual(pick(prs, { attemptsFor: sha => (sha === gateNode(1).headRefOid ? 2 : 0) }).map(p => p.number), [2]);
 });
 
+test('HYCI-442 select: a head the gate failed on an old finding still waits for its stand-in verdict', () => {
+  const failed = { commits: { nodes: [{ commit: { status: { contexts: [{ context: 'ai-review', state: 'FAILURE' }] } } }] } };
+  const green = { commits: { nodes: [{ commit: { status: { contexts: [{ context: 'ai-review', state: 'SUCCESS' }] } } }] } };
+  const have = n => ({ comments: { nodes: [{ author: { login: 'hypertask-runners' }, body: `<!-- claude-standin-review:v1 {"sha":"${String(n).padStart(40, 'a')}"} -->` }] } });
+  assert.deepEqual(pick([gateNode(7, failed)]).map(p => p.number), [7]);
+  assert.deepEqual(pick([gateNode(8, green)]).map(p => p.number), []);
+  assert.deepEqual(pick([gateNode(9, { ...failed, ...have(9) })]).map(p => p.number), []);
+});
+
 test('HYCI-416 select: caps per run and per day', () => {
   const many = [1, 2, 3, 4, 5].map(n => gateNode(n));
   assert.equal(pick(many).length, standin.PER_RUN);
