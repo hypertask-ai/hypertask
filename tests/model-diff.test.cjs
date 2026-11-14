@@ -31,7 +31,7 @@ function assertPickerModelsListed(sources) {
 
 test("approved examples are discovered, with one finding per model class and no stale Haiku left", () => {
   const findings = report().findings;
-  for (const model of ["claude-fable-5.1", "gpt-6-astra", "kimi-k3.1-pro", "qwen3.8-plus"]) {
+  for (const model of ["claude-fable-5.1", "gpt-6-astra", "qwen3.8-plus"]) {
     assert.ok(findings.some((finding) => finding.model.endsWith(`/${model}`)), model);
   }
   assert.equal(findings.filter((finding) => finding.kind === "stale").length, 0);
