@@ -7,6 +7,33 @@ import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/projects/getAllIncludes';
 
+export const TICKET_NUMBER_CANDIDATE_LIMIT = 8;
+
+const LIKE_WILDCARD = /[\\%_]/;
+
+export const needsIlikeSemantics = (ticketNumber: string) => LIKE_WILDCARD.test(ticketNumber);
+
+export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string): Promise<number[] | null> => {
+  try {
+    const rows = needsIlikeSemantics(ticketNumber)
+      ? await prisma.$queryRaw<{ id: number }[]>`
+          SELECT id FROM "Task"
+          WHERE "ticketNumber" ILIKE ${ticketNumber}
+          ORDER BY "projectId" ASC, id ASC
+          LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
+        `
+      : await prisma.$queryRaw<{ id: number }[]>`
+          SELECT id FROM "Task"
+          WHERE lower("ticketNumber") = lower(${ticketNumber})
+          ORDER BY "projectId" ASC, id ASC
+          LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
+        `;
+    return rows.map((row) => row.id);
+  } catch {
+    return null;
+  }
+};
+
 export class TaskIdentifierAmbiguityError extends Error {
   readonly status = 400;
   readonly code = 'ambiguous_ticket_number';
@@ -76,12 +103,27 @@ export async function findTaskByIdentifier(
   const identityWhere = ticket_number
     ? { ticketNumber: { equals: ticket_number, mode: 'insensitive' as const }, ...(project_id ? { projectId: project_id } : {}) }
     : { projectId: project_id!, uniqueIndex: unique_index! };
-  const matches = await prisma.task.findMany({
-    where: { ...identityWhere, status: { not: 'Deleted' }, project: projectFilter },
-    select: { id: true, projectId: true },
-    orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
-    take: project_id ? 1 : 2,
-  });
+  const findMatches = (where: Prisma.TaskWhereInput) =>
+    prisma.task.findMany({
+      where,
+      select: { id: true, projectId: true },
+      orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
+      take: project_id ? 1 : 2,
+    });
+  let matches: { id: number; projectId: number }[] = [];
+  let indexedMiss = false;
+  const scope = { status: { not: 'Deleted' as const }, project: projectFilter };
+  if (ticket_number && await isFeatureEnabled("htpr-8977-indexed-ticket-lookup", user.id)) {
+    const candidates = await caseInsensitiveTicketNumberCandidates(ticket_number);
+    indexedMiss = candidates != null && candidates.length === 0;
+    matches = indexedMiss
+      ? []
+      : candidates != null && candidates.length <= TICKET_NUMBER_CANDIDATE_LIMIT
+        ? await findMatches({ id: { in: candidates }, ...identityWhere, ...scope })
+        : await findMatches({ ...identityWhere, ...scope });
+  } else {
+    matches = await findMatches({ ...identityWhere, ...scope });
+  }
   if (!project_id && matches.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
@@ -90,11 +132,13 @@ export async function findTaskByIdentifier(
     return matches[0];
   }
 
-  const liveTask = await prisma.task.findFirst({
-    where: { ...identityWhere, status: { not: 'Deleted' } },
-    select: { id: true },
-  });
-  if (liveTask) return null;
+  if (!indexedMiss) {
+    const liveTask = await prisma.task.findFirst({
+      where: { ...identityWhere, status: { not: 'Deleted' } },
+      select: { id: true },
+    });
+    if (liveTask) return null;
+  }
 
   const aliases = await prisma.taskNumberAlias.findMany({
     where: {

@@ -2,6 +2,8 @@
 import json
 import os
 from pathlib import Path
+import shutil
+import sys
 import subprocess
 import tempfile
 import time
@@ -32,6 +34,7 @@ class FinishChecks(unittest.TestCase):
         self.env.pop('CLAUDE_CODE_SESSION_ID', None)
         self.env.pop('CODEX_THREAD_ID', None)
         self.env.pop('PI_SESSION_ID', None)
+        self.env.pop('CURSOR_CONVERSATION_ID', None)
         self.write('hypertask', '''#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -379,9 +382,37 @@ esac
         self.run_git('push', '-q', 'origin', '--delete', branch)
         self.assertIn('cleaned ok', self.check('cleaned', ticket))
 
+    def test_hax_records_and_checks_the_same_session_without_identity_env(self):
+        hax = self.bin / 'hax'
+        shutil.copyfile(Path(sys.executable).resolve(), hax)
+        hax.chmod(0o755)
+        env = dict(self.env)
+        for key in ('CLAUDE_CODE_SESSION_ID', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID',
+                    'CURSOR_CONVERSATION_ID'):
+            env.pop(key, None)
+        driver = '''import subprocess, sys
+script = sys.argv[1]
+subprocess.run([script, 'branch', 'HYCI-294', 'none'], check=True)
+subprocess.run([script, 'cleaned', 'HYCI-294'], check=True)
+'''
+        result = subprocess.run([str(hax), '-c', driver, str(SCRIPT.resolve())],
+                                env=env, cwd=self.repo, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('cleaned ok', result.stdout)
+        records = list((self.root / 'evidence/HYCI-294/cleanup').iterdir())
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].read_text(), 'none\n')
+        result = subprocess.run([str(hax), '-c',
+                                 'import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))',
+                                 str(SCRIPT.resolve()), 'cleaned', 'HYCI-294'],
+                                env=env, cwd=self.repo, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('record this session', result.stdout)
+
     def test_missing_ownership_is_not_a_pass(self):
         self.check('cleaned', 'YPER4-697', success=False)
-        self.check('branch', 'YPER4-697', 'none', success=False, CODEX_SESSION_ID='')
+        self.check('branch', 'YPER4-697', 'none', success=False, CODEX_SESSION_ID='',
+                   AI_AGENT='hax', SHIP_SESSION_NAME='RUNNER 4')
         self.check('branch', 'YPER4-697', 'none', success=False, CODEX_SESSION_ID='../other')
 
     def test_pi_session_id_records_ownership(self):

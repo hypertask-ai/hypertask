@@ -971,7 +971,7 @@ test("retired model options keep their saved variant and price tier", () => {
   assert.equal(getAiModelOptionById("gpt-6-luna")?.id, "gpt-6-luna");
   assert.equal(getAiModelOptionById("gpt-5.5-instant")?.id, "gpt-6.1-sol-light");
   assert.equal(getAiModelOptionById("gpt-5.5-thinking")?.id, "gpt-6.1-sol-high");
-  assert.equal(getAiModelOptionById("kimi-k2.6")?.id, "kimi-k3");
+  assert.equal(getAiModelOptionById("kimi-k2.6")?.id, "kimi-k3.1-pro");
   assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 2);
   assert.equal(getAiModelDefinition("gpt-6.1-terra").priceTier, 2);
   assert.equal(getAiModelDefinition("gpt-6.1-sol").priceTier, 3);
@@ -1028,12 +1028,15 @@ test("model and effort dimensions resolve every supported provider configuration
     ["deepseek-v4.1-flash-fast", undefined, undefined],
     ["deepseek-v4-pro", undefined, undefined],
     ["kimi-k2.5", undefined, undefined],
-    ["kimi-k3", undefined, undefined],
-    ["qwen3.7-plus", undefined, undefined],
+    ["kimi-k3.1-pro", undefined, undefined],
+    ["qwen3.8-max", undefined, undefined],
+    ["qwen3.8-max-prime", undefined, undefined],
+    ["glm-5.3", undefined, undefined],
     ["glm-5.3-flash", undefined, undefined],
     ["gemini-3.5-flash-lite", undefined, undefined],
     ["gemini-3.8-flash", undefined, undefined],
     ["gemini-4-argon", undefined, undefined],
+    ["gemini-3.1-pro-preview", undefined, undefined],
     ["grok-4.7", undefined, undefined],
     ["claude-haiku-5-5", undefined, claudeThinking("adaptive", "medium")],
     ["custom", undefined, undefined],
@@ -1064,15 +1067,20 @@ test("model and effort dimensions resolve every supported provider configuration
     "deepseek-v4-flash": ["deepseek-v4.1-flash", undefined],
     "deepseek-v4-pro": ["deepseek-v4-pro", undefined],
     "kimi-k2.5": ["kimi-k2.5", undefined],
-    "kimi-k2.6": ["kimi-k3", undefined],
-    "kimi-k3": ["kimi-k3", undefined],
-    "qwen3.7-plus": ["qwen3.7-plus", undefined],
+    "kimi-k2.6": ["kimi-k3.1-pro", undefined],
+    "kimi-k3": ["kimi-k3.1-pro", undefined],
+    "kimi-k3.1-pro": ["kimi-k3.1-pro", undefined],
+    "qwen3.7-plus": ["qwen3.8-max", undefined],
+    "qwen3.8-max": ["qwen3.8-max", undefined],
+    "qwen3.8-max-prime": ["qwen3.8-max-prime", undefined],
     "glm-5.2": ["glm-5.3-flash", undefined],
+    "glm-5.3": ["glm-5.3", undefined],
     "glm-5.3-flash": ["glm-5.3-flash", undefined],
     "gemini-3.1-flash-lite": ["gemini-3.5-flash-lite", undefined],
     "gemini-3.5-flash": ["gemini-3.8-flash", undefined],
     "gemini-3.6-flash": ["gemini-3.8-flash", undefined],
     "gemini-4-argon": ["gemini-4-argon", undefined],
+    "gemini-3.1-pro-preview": ["gemini-3.1-pro-preview", undefined],
     "grok-4.7": ["grok-4.7", undefined],
     "grok-4.1-fast-instant": ["gpt-6-luna", "standard"],
     "grok-4.1-fast-thinking": ["gpt-6-luna", "standard"],

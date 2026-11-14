@@ -1113,6 +1113,7 @@ model View {
   board_sorting_mode    SortingMode      @default(Manual)
   board_sorting_order   SortingOrder     @default(Descending)
   board_subtask_setting SubtaskSetting   @default(Flattened_Card)
+  board_subtask_explicit Boolean         @default(false)
   board_empty_sections  EmptySections    @default(Show)
   board_empty_sections_staged Boolean       @default(false)
   // null inherits the board's Project.stalenessEnabled; true/false overrides per view.
