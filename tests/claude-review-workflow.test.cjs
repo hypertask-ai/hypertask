@@ -5,8 +5,8 @@ const path = require('node:path');
 const yaml = require('js-yaml');
 
 const file = path.join(__dirname, '../.github/workflows/claude-review.yml');
-const text = fs.readFileSync(file, 'utf8');
-const workflow = yaml.load(text);
+const workflow = yaml.load(fs.readFileSync(file, 'utf8'));
+const parsed = JSON.stringify(workflow);
 const job = workflow.jobs.review;
 
 test('HYCI-416 claude review runs on pull_request, never pull_request_target', () => {
@@ -34,12 +34,12 @@ test('HYCI-416 one parallel run per pull request, a newer push cancels the older
 });
 
 test('HYCI-416 only the subscription token is used, never a paid API key', () => {
-  assert.match(text, /secrets\.CLAUDE_CODE_OAUTH_TOKEN/);
-  assert.doesNotMatch(text, /ANTHROPIC_API_KEY|OPENAI_API_KEY|OPENROUTER|OPENCODE/);
-  assert.match(text, /exit 1/);
+  assert.ok(parsed.includes('secrets.CLAUDE_CODE_OAUTH_TOKEN'));
+  for (const name of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER', 'OPENCODE']) assert.ok(!parsed.includes(name));
+  assert.ok(job.steps.some(step => (step.run || '').includes('exit 1')));
 });
 
 test('HYCI-416 every action is pinned to a commit and the CLI to a version', () => {
   for (const step of job.steps.filter(entry => entry.uses)) assert.match(step.uses, /@[0-9a-f]{40}$/);
-  assert.match(text, /@anthropic-ai\/claude-code@\d+\.\d+\.\d+\b/);
+  assert.ok(job.steps.some(step => /@anthropic-ai\/claude-code@\d+\.\d+\.\d+$/m.test(step.run || '') || /@anthropic-ai\/claude-code@\d+\.\d+\.\d+\s/.test(step.run || '')));
 });
