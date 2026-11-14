@@ -699,6 +699,7 @@ export interface ISection {
 
 export interface INotification {
   needsYouEnabled?: boolean;
+  needsYouOnly?: boolean;
   needsYouScore?: number | null;
   needsYouReason?: string | null;
   needsYouSource?: string | null;

@@ -12,10 +12,10 @@ const notice = (extra = {}) => ({ id: 1, taskId: 1, userId: 985, type: "TaskMove
   task: { uniqueIndex: 1, title: "Routine move", waitingOnUserId: null }, project: { id: 7049, title: "QA" },
   createdAt: "2026-11-11T00:00:00Z", needsYouEnabled: true, ...extra });
 
-test("rules cap boosts; highest distinct ticket wins, never date order", () => {
+test("rules cap boosts; actionable distinct tickets keep model ranking, never date order", () => {
   assert.deepEqual(rules.needsYouRules(notice()), { score: 0, reason: "Update" });
   assert.equal(rules.needsYouRules(notice({ type: "Mentioned", comment: { kind: "question", text: "Pay?" }, task: { waitingOnUserId: 985, priority: { priority_index: 1 } } })).score, 20);
-  const rows = [notice({ needsYouScore: 5 }), notice({ id: 2, needsYouScore: 95, createdAt: "2026-10-01T00:00:00Z" }), notice({ id: 3, taskId: 2, task: { uniqueIndex: 2 }, needsYouScore: 70 })];
+  const rows = [notice({ type: "Mentioned", needsYouSource: "jev", needsYouScore: 5 }), notice({ id: 2, type: "Mentioned", needsYouSource: "jev", needsYouScore: 95, createdAt: "2026-10-01T00:00:00Z" }), notice({ id: 3, type: "Mentioned", taskId: 2, task: { uniqueIndex: 2 }, needsYouSource: "jev", needsYouScore: 70 })];
   const tabs = getInboxTabs(rows);
   assert.deepEqual(tabs.data[tabs.tabs.findIndex(({ project }) => project === "Needs you")], [1, 2]);
   assert.equal(getInboxTabs(rows.map((row) => ({ ...row, needsYouEnabled: false }))).tabs.some(({ project }) => project === "Needs you"), false);
@@ -38,6 +38,10 @@ test("Jev converts a five-point score to 0-100 and stores cost; all failures ret
   assert.deepEqual(await needsYouScore(notice()), { needsYouScore: 95, needsYouReason: "Needs your decision; Update", needsYouSource: "jev", needsYouCostUsd: 0.00003 });
   assert.deepEqual(sent.provider, { zdr: true, only: ["typesafe"], data_collection: "deny" });
   assert.equal(sent.model, "typesafe/jev-1.14");
+  await needsYouScore(notice({ task: { waitingOnUserId: 985, waitingOnAgentId: "runner" } }));
+  assert.equal(sent.state.waiting_on_you, false);
+  await needsYouScore(notice({ task: { waitingOnUserId: 985, waitingOnAgentId: null } }));
+  assert.equal(sent.state.waiting_on_you, true);
   for (const response of [{ ok: false }, { ok: true, json: async () => ({ answers: { urgency: { type: "score", score: 999 } } }) }]) {
     global.fetch = async () => response;
     assert.equal((await needsYouScore(notice({ type: "Mentioned" }))).needsYouScore, 5);
@@ -49,11 +53,14 @@ test("Jev converts a five-point score to 0-100 and stores cost; all failures ret
   try { assert.equal((await needsYouScore(notice())).needsYouSource, "rules"); } finally { clearTimeout(keepAlive); }
 });
 
-function worker({ enabled = true, source = "managed", plan = "Pro", settings = { providers: { openrouter: true } }, providers = [], access = true, ownKey } = {}) {
-  const row = notice({ needsYouScoredAt: null, project: { teamId: "team", team: { aiProviderSettings: settings, byokApiKeys: providers.map((provider) => ({ provider })) } } });
+function worker({ enabled = true, source = "managed", plan = "Pro", settings = { providers: { openrouter: true } }, providers = [], access = true, ownKey, task, section, type = "Mentioned" } = {}) {
+  const row = notice({ needsYouScoredAt: null, ...(task ? { task, type, comment: { text: "Access?", kind: "question" } } : {}), project: { teamId: "team", section, team: { aiProviderSettings: settings, byokApiKeys: providers.map((provider) => ({ provider })) } } });
   let paid = 0;
   const database = { notification: {
-    findMany: async () => row.needsYouScoredAt ? [] : [row],
+    findMany: async ({ include }) => row.needsYouScoredAt ? [] : [{ ...row,
+      task: Object.fromEntries(Object.keys(include.task.select).map((key) => [key, row.task[key]])),
+      project: Object.fromEntries(Object.keys(include.project.select).map((key) => [key, row.project[key]])),
+    }],
     updateMany: async ({ data }) => { if (row.needsYouScoredAt) return { count: 0 }; Object.assign(row, data); return { count: 1 }; },
     update: async ({ data }) => Object.assign(row, data),
   } };
@@ -83,6 +90,31 @@ test("arrival retries and concurrent delivery score once; own-AI teams and revok
   }
 });
 
+test("arrival scoring reads current recipient, assignees and explicit completion metadata", async () => {
+  for (const [task, section, type, score] of [
+    [{ waitingOnUserId: 985, waitingOnAgentId: "runner" }, [], "Mentioned", 13],
+    [{ section: "Live" }, [{ section_title: "Live", isDone: false }], "Mentioned", 13],
+    [{ section: "Review" }, [{ section_title: "Review", isDone: true }], "Mentioned", 8],
+    [{ status: "Archive" }, [], "Mentioned", 8],
+    [{ assignees: [{ userId: 985, agentId: null }] }, [], "Comment", 8],
+  ]) {
+    const { run, row } = worker({ task, section, type, settings: {} });
+    assert.equal(await run(985), 1);
+    assert.equal(row.needsYouScore, score);
+    assert.doesNotMatch(row.needsYouReason, /Waiting on you/);
+  }
+});
+
+test("Needs you honors explicit completion metadata and falls back when omitted", () => {
+  const project = { section: [{ section_title: "Live", isDone: false }, { section_title: "Review", isDone: true },
+    { section_title: "Done" }, { section_title: "In Progress" }] };
+  const rows = [notice({ project, task: { waitingOnUserId: 985, section: "Live" } }),
+    notice({ taskId: 2, project, task: { waitingOnUserId: 985, section: "Review" } }),
+    notice({ taskId: 3, project, task: { waitingOnUserId: 985, section: "Done" } }),
+    notice({ taskId: 4, project, task: { waitingOnUserId: 985, section: "In Progress" } })];
+  assert.deepEqual(rules.needsYouIndices(rows), [0, 3]);
+});
+
 test("catch-up route rejects unsigned calls and scores without a daily scan", async () => {
   const { GET } = loadModule("src/app/api/cron/needs-you/route.ts", {
     "@/lib/prisma": { default: { notification: { findMany: async () => [{ userId: 985 }] } } },
@@ -95,9 +127,9 @@ test("catch-up route rejects unsigned calls and scores without a daily scan", as
   assert.deepEqual(await response.json(), { scored: 1 });
 });
 
-test("inbox entry point keeps older scores through task collapse and never asks Jev on reads", async () => {
+test("inbox entry point keeps each displayed notice score and never asks Jev on reads", async () => {
   const date = new Date();
-  const rows = [notice({ needsYouScore: 5 }), notice({ id: 3, taskId: 2, needsYouScore: 70 })].map((row) => ({ ...row, needsYouEnabled: false, createdAt: date,
+  const rows = [notice({ type: "Mentioned", needsYouSource: "jev", needsYouScore: 5 }), notice({ id: 3, type: "Mentioned", needsYouSource: "jev", taskId: 2, needsYouScore: 70 })].map((row) => ({ ...row, needsYouEnabled: false, createdAt: date,
     task: { ...row.task, sectionChangedAt: date, createdAt: date, lastCommentAt: date, assignees: [] } }));
   let enabled = true;
   const database = { $queryRaw: async (query) => query.sql.includes("AS selected") ? [{ id: 1, needsYouScore: 95 }, { id: 3, needsYouScore: 70 }] : [],
@@ -110,11 +142,95 @@ test("inbox entry point keeps older scores through task collapse and never asks 
   }).default;
   const result = await entry("985");
   assert.equal(result.status, 200);
-  assert.deepEqual(result.json.notifications.map(({ needsYouScore }) => needsYouScore), [95, 70]);
+  assert.deepEqual(result.json.notifications.map(({ needsYouScore }) => needsYouScore), [5, 70]);
   const tab = result.json.structuredData.tabs.find(({ project }) => project === "Needs you");
-  assert.deepEqual(result.json.structuredData.data[tab.idx], [0, 1]);
+  assert.deepEqual(result.json.structuredData.data[tab.idx], [1, 0]);
   enabled = false;
   const old = await entry("985");
   assert.equal(old.status, 200);
+  assert.equal(old.json.structuredData.tabs.some(({ project }) => project === "Needs you"), false);
+});
+
+test("current recipient blocks beat every model score; noise and resolved blocks are excluded", () => {
+  const rows = [
+    notice({ needsYouSource: "jev", needsYouScore: 100, fromAgentId: "runner", task: { title: "Urgent access payment?", priority: { priority_index: 1 } } }),
+    notice({ taskId: 2, type: "Mentioned", needsYouSource: "jev", needsYouScore: 100 }),
+    notice({ taskId: 3, needsYouSource: "rules", needsYouScore: 0, task: { waitingOnUserId: 985 } }),
+    notice({ taskId: 4, needsYouSource: "rules", needsYouScore: 20, task: { waitingOnUserId: 42 } }),
+    notice({ taskId: 5, task: { waitingOnUserId: 985, waitingOnAgentId: "runner" } }),
+    notice({ taskId: 6, task: { waitingOnUserId: 985, section: "Done" } }),
+    notice({ taskId: 7, type: "Mentioned", task: { status: "Archive" } }),
+    notice({ taskId: 8, type: "Comment", fromAgentId: "runner", comment: { text: "Question: pay now?", kind: "question" } }),
+  ];
+  assert.deepEqual(rules.needsYouIndices(rows), [2, 1]);
+  rows[2].task.waitingOnUserId = null;
+  assert.deepEqual(rules.needsYouIndices(rows), [1]);
+  assert.equal(rules.needsYouRules(rows[0]).reason, "Urgent");
+});
+
+test("routine-only inbox keeps its normal default split instead of an empty Needs you", () => {
+  const rows = [notice({ needsYouSource: "rules", needsYouScore: 0 })];
+  const { tabs, data } = getInboxTabs(rows);
+  assert.equal(tabs.some(({ project }) => project === "Needs you"), false);
+  assert.ok(data[tabs[0].idx].includes(0));
+});
+
+test("addressed agent questions earn a place, but answered questions and bot status mentions do not", () => {
+  const rows = [
+    notice({ type: "Mentioned", fromAgentId: "runner", comment: { text: "Status: shipped", kind: "done" }, needsYouScore: 100, needsYouSource: "jev" }),
+    notice({ taskId: 2, type: "Mentioned", fromAgentId: "runner", comment: { text: "<p><strong>Question:</strong> pay now?</p>", kind: "question" } }),
+    notice({ taskId: 3, type: "Mentioned", fromAgentId: "runner", quietImportant: true, comment: { text: "Question: old request?", kind: "question" } }),
+    notice({ taskId: 4, isDecision: true, type: "TaskMoved", fromAgentId: "runner" }),
+    notice({ taskId: 5, type: "Comment", fromAgentId: "runner", comment: { kind: "question", text: "Please choose" }, task: { assignees: [{ userId: 985, agentId: null }] } }),
+    notice({ taskId: 6, type: "Comment", fromAgentId: "runner", comment: { kind: "question", text: "Please choose" }, task: { assignees: [{ userId: 985, agentId: "runner" }] } }),
+  ];
+  assert.deepEqual(rules.needsYouIndices(rows), [1, 4, 3]);
+  assert.match(rules.needsYouRules(rows[1]).reason, /Question/);
+});
+
+test("thirty dismissed current blockers stay in Needs you, not ordinary inbox tabs, ahead of sixteen noise rows", async () => {
+  const date = new Date("2026-11-12T03:00:00Z");
+  const project = { id: 7049, title: "QA", teamId: "team", section: [
+    { section_title: "Live", isDone: false }, { section_title: "Review", isDone: true },
+  ] };
+  const waiting = Array.from({ length: 30 }, (_, i) => ({ id: 100 + i, uniqueIndex: 100 + i, projectId: 7049, project,
+    title: `Decision ${i}`, status: "Normal", section: "Valentin Review", createdAt: date, sectionChangedAt: date,
+    waitingOnUserId: 985, waitingOnAgentId: null, waitingOnSetAt: date, waitingOnSetById: null,
+    user: { id: 99, displayName: "Requester" }, notifications: [{ archivedAt: date }],
+  }));
+  waiting[0].section = "Live";
+  waiting.push({ ...waiting[0], id: 500, notifications: [{ archivedAt: date, needsYouSource: "skipped" }] });
+  waiting.push({ ...waiting[0], id: 501, section: "Review" });
+  const noise = Array.from({ length: 16 }, (_, i) => notice({ id: i + 1, taskId: i + 1, project, fromAgentId: "runner",
+    createdAt: date, needsYouSource: "rules", needsYouScore: i % 2 ? 3 : 0,
+    task: { title: "Access key status", section: "Backlog", status: "Normal", priority: { priority_index: 1 },
+      waitingOnUserId: null, sectionChangedAt: date, createdAt: date, assignees: [] },
+  }));
+  let enabled = true;
+  const database = { $queryRaw: async (query) => query.sql.includes("AS selected") ? noise.map(({ id }) => ({ id })) : [],
+    notification: { findMany: async ({ where }) => where.AND?.some((clause) => clause.id) ? noise : [], groupBy: async () => [] },
+    task: { findMany: async ({ select }) => waiting.map((task) => ({ ...task,
+      project: Object.fromEntries(Object.keys(select.project.select).map((key) => [key, project[key]])),
+    })) }, userSetting: { findUnique: async () => null },
+    agent: { findMany: async () => [{ id: "runner", permissions: { postsToImportant: false } }] },
+    user: { findMany: async () => [] },
+    taskReadState: { findMany: async () => [] }, comment: { groupBy: async () => [] } };
+  const entry = loadModule("src/utils/controllers/notifications/getAll.ts", {
+    "@/lib/prisma": { default: database },
+    "@/lib/flags": { isFeatureEnabled: async (key) => key === "htpr-7840-blocked-inbox-archive" || (enabled && key === "htpr-9055-needs-you") },
+    "@/utils/controllers/notifications/quietOwnerInbox": { markQuietAgentMentions: async (_db, _userId, rows) => rows },
+  }).default;
+  const result = await entry("985");
+  assert.equal(result.status, 200);
+  const { tabs, data } = result.json.structuredData;
+  const tab = tabs.find(({ project }) => project === "Needs you");
+  assert.equal(tab.length, 30);
+  assert.deepEqual(data[tab.idx].map(i => result.json.notifications[i].taskId), waiting.slice(0, 30).map(({ id }) => id));
+  assert.equal(tabs.some(({ project }) => project === "Blocked by you"), false);
+  assert.equal(data[tabs.find(({ project }) => project === "All").idx].length, 16);
+  enabled = false;
+  const old = await entry("985");
+  assert.equal(old.status, 200);
+  assert.equal(old.json.notifications.length, 16);
   assert.equal(old.json.structuredData.tabs.some(({ project }) => project === "Needs you"), false);
 });
