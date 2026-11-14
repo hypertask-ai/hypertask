@@ -97,7 +97,7 @@ function parseClaudeOutput(stdout) {
   };
 }
 
-const plain = text => String(text ?? '').replace(/<!--|-->/g, '');
+const plain = text => String(text ?? '').replace(/</g, '&lt;');
 
 function buildComment(sha, review) {
   const lines = [
