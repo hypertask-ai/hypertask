@@ -43,6 +43,7 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer") return { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: "htpr-8824-ai-chat-one-composer" };
     if (id === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
     if (id === "@/lib/flags/definitions/htpr-8095-task-create-ai-step-timing") return { HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG: "htpr-8095-task-create-ai-step-timing" };
+    if (id === "@/lib/analytics/productPerformance") return { beginTaskCreatePerformanceTrace: () => null, completeTaskCreatePerformanceTrace: () => {}, completeTaskCreatePerformanceTraceAfterPaint: () => {} };
     if (id === "@/components/Common/ComposerPlusActions") return { ComposerPlusActions: () => null };
     if (id === "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top") return { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG: "htpr-8943-ctrlk-tabs-on-top" };
     if (id === "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model") return { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG: "htpr-8265-task-shortcuts-writer-model" };
