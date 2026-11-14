@@ -12,6 +12,7 @@ const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
 const customEndpoint = load(path.join(root, "src/lib/ai/customEndpoint.ts"));
 const flag = load(path.join(root, "src/lib/flags/definitions/htpr-7732-baseten-byok.ts"));
 const providerSyncFlag = load(path.join(root, "src/lib/flags/definitions/htpr-7741-byok-enables-provider.ts"));
+const qwenMaxFlag = load(path.join(root, "src/lib/flags/definitions/htpr-8207-qwen-max-byok.ts"));
 const flagKey = "htpr-7732-baseten-byok";
 const fakeKey = "fake-baseten-team-secret";
 const lookup = { trustedTeamId: "fixture-team", userId: 985 };
@@ -68,6 +69,7 @@ function routingHarness({ enabled = true, plan = "Pro", saved = true, keyEnabled
       } },
     } },
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
+    "@/lib/flags/definitions/htpr-8207-qwen-max-byok": qwenMaxFlag,
     "@/lib/flags/definitions/htpr-7634-openai-only-default": {},
     "@/app/api/ai/_lib/autoModel": { autoModelEnabled: async () => false },
     "@/lib/flags/definitions/htpr-8049-always-use-this-key": { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG: "htpr-8049-always-use-this-key" },
@@ -103,6 +105,7 @@ function settingsHarness({ enabled = true, paid = true, gdpr = false, allowed = 
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { assert.ok([flagKey, providerSyncFlag.HTPR_7741_BYOK_ENABLES_PROVIDER_FLAG].includes(key)); assert.equal(userId, 985); return key === flagKey ? enabled : true; } },
     "@/lib/flags/definitions/htpr-7741-byok-enables-provider": providerSyncFlag,
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
+    "@/lib/flags/definitions/htpr-8207-qwen-max-byok": qwenMaxFlag,
     "@/lib/flags/definitions/htpr-8049-always-use-this-key": { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG: "htpr-8049-always-use-this-key" },
     "@/lib/ai/forcedTeamKey": load(path.join(root, "src/lib/ai/forcedTeamKey.ts")),
     "@/lib/prisma": { default: {
@@ -140,6 +143,7 @@ function testKeyHarness({ enabled = true, paid = true, gdpr = false, allowed = t
     "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
     "@/lib/flags": { isFeatureEnabled: async () => enabled },
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
+    "@/lib/flags/definitions/htpr-8207-qwen-max-byok": qwenMaxFlag,
     "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async (url, init) => {
       calls.network.push({ url, init });
       if (networkError) throw new Error(`Provider echoed ${fakeKey}`);
