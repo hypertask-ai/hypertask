@@ -1,0 +1,24 @@
+name: Claude review request
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [production]
+
+permissions:
+  contents: read
+
+jobs:
+  request:
+    name: Request a Claude review
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Record the request
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+        run: echo "Claude review requested for PR $PR_NUMBER at $PR_SHA. The trusted Claude review workflow picks it up." >> "$GITHUB_STEP_SUMMARY"
