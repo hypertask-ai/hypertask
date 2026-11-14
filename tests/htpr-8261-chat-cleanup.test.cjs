@@ -46,8 +46,6 @@ test("the chat composer turns the pill on for desktop and mobile", () => {
 });
 
 test("no sparkle is left in the chat surfaces", () => {
-  const window = read("src/components/AI_CHAT/ChatWindow.tsx");
-  assert.match(window, /\{!chatCleanupEnabled && \(\s*<Sparkles/);
   const welcome = read("src/components/AI_CHAT/WelcomeScreen.tsx");
   assert.match(welcome, /\{!chatCleanupEnabled && \(\s*<Sparkles/);
   assert.match(welcome, /chatCleanupEnabled\s*\? "flex w-full items-center gap-2 rounded-\[4px\] border-thin border-border-light-gray-thin/);
@@ -99,7 +97,7 @@ test("cleanup puts the microphone immediately before Send", () => {
   }
 });
 
-test("collapsed chat corners follow the cleanup flag", () => {
+test("collapsed chats keep four-pixel corners without sparkles in both cleanup states", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
   const mobileContext = React.createContext(false);
@@ -115,11 +113,12 @@ test("collapsed chat corners follow the cleanup flag", () => {
     "./AI_Tiptap_Container": { AI_Tiptap_Container: () => null },
   });
   const render = () => renderToStaticMarkup(React.createElement(ChatWindow));
-  assert.match(render(), /rounded-t-lg/);
+  assert.match(render(), /rounded-t-\[4px\]/);
+  assert.doesNotMatch(render(), /lucide-sparkles|text-hypertasks-ai-purple/);
   cleanup = true;
   const html = render();
   assert.match(html, /rounded-t-\[4px\]/);
-  assert.doesNotMatch(html, /rounded-t-lg/);
+  assert.doesNotMatch(html, /rounded-t-lg|lucide-sparkles|text-hypertasks-ai-purple/);
 });
 
 test("floating chat frame corners remain four pixels in both cleanup states", () => {

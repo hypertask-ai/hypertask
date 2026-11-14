@@ -10,7 +10,7 @@ import {
 import { Metadata } from "next";
 import { getServerCookieUser, requireServerCookieUser } from "@/lib/auth/serverUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, HTPR_7848_SUMMARY_ON_VIEW_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
 import { redirect } from "next/navigation";
@@ -25,6 +25,8 @@ import { ScrollSetting } from "@prisma/client";
 import { getTaskReadStateLastReadAt } from "@/utils/controllers/tasks/markRead";
 import { filterCommentReadReceipts } from "@/utils/controllers/comments/readReceipts";
 import { listTaskAgentRunActivities } from "@/lib/agentRuns/service";
+import { requestTaskSummaryRefreshOnView } from "@/app/api/ai/_lib/taskSummaryFreshness";
+import { waitUntil } from "@vercel/functions";
 import Unauthorized from "../../unauthorized/page";
 
 
@@ -105,6 +107,14 @@ export default async function Page(
       redirect(`/detail/project-${currentTask.projectId}/${currentTask.uniqueIndex}`);
     }
     return <Unauthorized />;
+  }
+
+  try {
+    if (await isFeatureEnabled(HTPR_7848_SUMMARY_ON_VIEW_FLAG, task.userId)) {
+      waitUntil(requestTaskSummaryRefreshOnView({ taskId: task.id, ownerUserId: task.userId }).catch(() => undefined));
+    }
+  } catch (error) {
+    console.warn("[task-summary] Switch lookup failed", task.id, error);
   }
 
   [lastReadAt, agentRunActivities] = await Promise.all([

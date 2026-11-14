@@ -12,6 +12,7 @@ let pendingRows;
 let replies;
 let rawQueries;
 let chatAllEnabled;
+let heartbeatReads;
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
@@ -77,7 +78,11 @@ const tx = {
     findUnique: async () => (activeWebhook ? { active: true, events: ["chat.message"] } : null),
   },
   agent: {
-    findFirst: async () => ({ heartbeatAt: new Date() }),
+    findFirst: async () => {
+      heartbeatReads += 1;
+      return { heartbeatAt: new Date() };
+    },
+    updateMany: async () => ({ count: 1 }),
   },
   chatSession: { update: async () => null },
   chatMessage,
@@ -206,6 +211,7 @@ test.beforeEach(() => {
   ];
   replies = [];
   rawQueries = [];
+  heartbeatReads = 0;
 });
 
 test("pending returns the daemon payload and marks each message delivered", async () => {
@@ -269,12 +275,30 @@ test("MCP inbox retries delivered but unanswered messages until a reply exists",
   assert.deepEqual((await fetchPending(true)).body.messages, []);
 });
 
-test("MCP inbox preserves undelivered state and is unavailable with the flag off", async () => {
-  assert.equal((await fetchPending(true)).response.status, 404);
-  assert.equal(pendingRows[0].isDelivered, false);
+test("MCP inbox replays a read but unanswered message with the switch off, without touching the online status", async () => {
+  pendingRows[0].isDelivered = true;
+
+  const first = await fetchPending(true);
+  assert.equal(first.response.status, 200);
+  assert.equal(first.body.messages[0].id, "message-1");
+
+  const second = await fetchPending(true);
+  assert.equal(second.body.messages[0].id, "message-1");
+  assert.equal(pendingRows[0].isDelivered, true);
+  assert.equal(heartbeatReads, 0);
+
+  assert.equal((await postReply()).response.status, 200);
+  assert.deepEqual((await fetchPending(true)).body.messages, []);
+});
+
+test("MCP inbox replays until answered with the switch on and leaves the message undelivered", async () => {
   chatAllEnabled = true;
+
   assert.equal((await fetchPending(true)).body.messages[0].id, "message-1");
   assert.equal(pendingRows[0].isDelivered, false);
+  assert.equal((await fetchPending(true)).body.messages[0].id, "message-1");
+  assert.ok(heartbeatReads >= 1);
+
   assert.equal((await fetchPending()).body.messages[0].id, "message-1");
   assert.equal(pendingRows[0].isDelivered, true);
 });

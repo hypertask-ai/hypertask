@@ -14,6 +14,7 @@ import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { HTPR_8030_CHAT_OPEN_RACE_FLAG } from "@/lib/flags/definitions/htpr-8030-chat-open-race";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
+import { HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8988-chat-window-layout";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import {
   MOBILE_OVERLAY_SHEET_Z,
@@ -71,6 +72,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
     togglePopover,
     minimized,
   } = chat;
+  const sideBySide = useFlag(HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG);
   const chatCleanup = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const dockMinimizedTab = chatCleanup && minimized && !showQuickTips;
   const idempotentChatOpen = useFlag(HTPR_8030_CHAT_OPEN_RACE_FLAG);
@@ -150,7 +152,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
             >
               <ChatWindow />
             </AppSheet>
-          ) : (
+          ) : sideBySide && chat.chatWindows?.enabled ? null : (
             <div
               className={cn(
                 "fixed right-[0.5rem] z-floating",

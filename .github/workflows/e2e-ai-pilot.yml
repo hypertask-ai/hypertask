@@ -119,7 +119,7 @@ jobs:
           npx prisma generate
           npm ci --prefix e2e/ai-pilot --no-audit --no-fund
           bash .github/scripts/install-chromium.sh
-          (cd e2e/ai-pilot && npx @e2e-dev/web install chromium --with-deps)
+          (cd e2e/ai-pilot && npx @e2e-dev/web install chromium)
       - name: Prepare disposable local credentials
         shell: bash
         run: |
