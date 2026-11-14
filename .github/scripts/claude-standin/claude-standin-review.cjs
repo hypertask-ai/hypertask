@@ -241,7 +241,7 @@ function reviewRepo(REPO) {
         console.log(`standin: DRY RUN, would post on PR #${pr.number}:\n${buildComment(sha, review)}`);
         continue;
       }
-      gh(['api', `repos/${REPO}/issues/${pr.number}/comments`, '-F', 'body=@-'], buildComment(sha, review));
+      gh(['api', '-X', 'POST', `repos/${REPO}/issues/${pr.number}/comments`, '-F', 'body=@-'], buildComment(sha, review));
       fs.writeFileSync(dayFile, String(reviewedToday() + 1));
       console.log(`standin: PR #${pr.number} ${sha.slice(0, 7)} ${review.verdict} blocking=${review.blocking} model=${review.model} cost=$${review.costUsd}`);
     } finally {
