@@ -331,12 +331,44 @@ run_bad 'unmerged working-tree code rejected'
 restored dirty-source
 eq 'dirty source alerts before install' "$(events)|$(cat "$FAKE_SYSTEMCTL_LOG")" '1|'
 
+retire_pickup_units() { rm -f "$C/units/runner-pickup@.service" "$C/units/runner-pickup@.timer" "$C/old-units/runner-pickup@.service" "$C/old-units/runner-pickup@.timer"; }
+
 setup no-runners
-merge runner-deliver '# no enabled runner'
+retire_pickup_units
+merge runner-deliver '# no active runner timer'
+merge runner-pickup '# no active runner timer'
 export FAKE_NO_RUNNERS=1
-run_ok 'no enabled runner skips installation'
-restored no-runners
-eq 'no runner raises no event' "$(events)" 0
+run_ok 'no active runner timer still installs the update'
+if cmp -s "$S/runner-deliver" "$C/lib/runner-deliver" && cmp -s "$S/runner-pickup" "$C/lib/runner-pickup"; then
+  ok 'installed delivery and pickup equal production'
+else bad 'update was not installed without a runner timer'; fi
+eq 'no runner timer is enabled' "$(grep -c 'enable --now runner-pickup@' "$FAKE_SYSTEMCTL_LOG")" 0
+eq 'webhook installed once without a runner timer' "$(grep -c 'enable --now runner-webhook.service' "$FAKE_SYSTEMCTL_LOG")" 1
+if [ -e "$C/units/runner-pickup@.service" ] || [ -e "$C/units/runner-pickup@.timer" ]; then bad 'retired pickup units were reinstalled'; else ok 'retired pickup units stay removed'; fi
+eq 'no runner timer success names production sha' "$(cat "$C/output")" "runner-selfupdate: installed production $(git -C "$C/source" rev-parse HEAD)"
+eq 'no runner timer success raises no event' "$(events)" 0
+: > "$FAKE_SYSTEMCTL_LOG"
+run_ok 'no runner timer update is idempotent'
+eq 'no runner timer second run only lists timers' "$(grep -vc 'list-units' "$FAKE_SYSTEMCTL_LOG")" 0
+
+setup no-runners-units-present
+merge runner-deliver '# no active runner timer, pickup units kept'
+printf '# merged unit change\n' >> "$C/source/.claude/systemd/runner-pickup@.service"; commit; git -C "$C/source" push -q origin production
+export FAKE_NO_RUNNERS=1
+run_ok 'no runner timer with pickup units present installs'
+if cmp -s "$C/source/.claude/systemd/runner-pickup@.service" "$C/units/runner-pickup@.service"; then ok 'present pickup unit refreshed'; else bad 'present pickup unit not refreshed'; fi
+eq 'present pickup units enable no runner timer' "$(grep -c 'enable --now runner-pickup@' "$FAKE_SYSTEMCTL_LOG")" 0
+: > "$FAKE_SYSTEMCTL_LOG"
+run_ok 'no runner timer with pickup units present is idempotent'
+eq 'second run performs no install' "$(grep -vc 'list-units' "$FAKE_SYSTEMCTL_LOG")" 0
+
+setup no-runners-install-failure
+retire_pickup_units
+merge runner-deliver '# no runner timer, failed installation'
+export FAKE_NO_RUNNERS=1 FAKE_SYSTEMCTL_FAIL=install
+run_bad 'failed installation without a runner timer is rejected'
+restored no-runners-install-failure
+eq 'failed installation without a runner timer alerts once' "$(events)" 1
 
 setup inactive-webhook
 merge runner-webhook '# receiver must become active'
