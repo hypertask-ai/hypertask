@@ -10,8 +10,10 @@ const { GET } = load("src/app/api/settings/ai-usage/route.ts", {
   "@/app/api/ai/_lib/sharedAllowance": { billedCostEnabled: async () => false },
   "next/server": { NextResponse: { json: Response.json } },
   "@/app/api/ai/_lib/byokKeys": { getTeamGatewayFunding: async () => ({ source, apiKey: "never-show-this-key" }) },
-  "@/lib/auth/serverUser": { getServerCookieUser: async () => user },
+  "@/lib/auth/getSessionUser": { getSessionUser: async () => user && ({ userId: user.id }) },
+  "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
   "@/lib/prisma": { __esModule: true, default: {
+    user: { findUnique: async () => user },
     team: { findUnique: async () => ({ googleAccount: { userId: 3412 }, googleAccountId: 1 }) },
     aiUsage: { groupBy: async () => [] },
     project: { findMany: async () => [] }, task: { findMany: async () => [] }, agent: { findMany: async () => [] },

@@ -30,14 +30,15 @@ function fixture(t, options = {}) {
   });
   const route = load("src/app/api/settings/ai-usage/route.ts", {
     "next/server": { NextResponse: { json: Response.json } },
-    "@/lib/auth/serverUser": { getServerCookieUser: async () => options.anonymous ? null : { id: 6 } },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => options.anonymous ? null : { userId: 6 } },
+    "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
     "@/lib/prisma": { default: {
       team: { findUnique: async () => ({ googleAccount: { userId: 6 }, googleAccountId: "account" }) },
       aiUsage: { groupBy: async ({ by }) => by[0] === "feature" ? [{ feature: "chat", _sum: { totalTokens: 10 } }] : [] },
       project: { findMany: async () => [] },
       task: { findMany: async () => [] },
       agent: { findMany: async () => [] },
-      user: { findMany: async () => [] },
+      user: { findUnique: async () => ({ id: 6 }), findMany: async () => [] },
     } },
     "@/utils/controllers/teams/hasTeamOwnerOrProjectAdminAccess": { default: async () => options.access !== false },
     "@/app/api/ai/_lib/byokKeys": { getTeamGatewayFunding: async () => ({ apiKey: credential, source: options.source ?? "managed" }) },

@@ -2,7 +2,9 @@ import { resolveTeamAllowancePolicy } from "@/app/api/ai/_lib/planAllowancePolic
 import { billedCostEnabled, teamAllowanceSnapshot } from "@/app/api/ai/_lib/sharedAllowance";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
-import { getServerCookieUser } from "@/lib/auth/serverUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 import hasTeamOwnerOrProjectAdminAccess from "@/utils/controllers/teams/hasTeamOwnerOrProjectAdminAccess";
 import {
@@ -128,6 +130,7 @@ const loadAiUsageBreakdown = async (
   teamId: string,
   startDate: string,
   endDate: string,
+  session: SessionUser,
   scopeProjectIds?: number[],
 ): Promise<AiUsageBreakdown | null> => {
   try {
@@ -181,7 +184,13 @@ const loadAiUsageBreakdown = async (
     );
     const [projects, tasks, agents] = await Promise.all([
       prisma.project.findMany({
-        where: { id: { in: usageProjectIds } },
+        where: {
+          id: { in: usageProjectIds },
+          teamId,
+          ...((session.agentId || session.teamScope)
+            ? projectContentAccessWhere(session.userId, session.agentId, session.teamScope)
+            : {}),
+        },
         select: { id: true, title: true, name: true },
       }),
       prisma.task.findMany({
@@ -189,6 +198,9 @@ const loadAiUsageBreakdown = async (
           id: { in: taskIds },
           project: {
             teamId,
+            ...((session.agentId || session.teamScope)
+              ? projectContentAccessWhere(session.userId, session.agentId, session.teamScope)
+              : {}),
             ...(scopeProjectIds
               ? { id: { in: scopeProjectIds } }
               : {}),
@@ -331,7 +343,18 @@ const loadMemberSpendRows = async (
 };
 
 export async function GET(request: Request) {
-  const user = await getServerCookieUser();
+  return withAgentScopeRequest(request, () => getAiUsage(request));
+}
+
+async function getAiUsage(request: Request) {
+  const session = await getSessionUser(request.headers);
+  if (!session) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, accountId: true },
+  });
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
@@ -357,7 +380,7 @@ export async function GET(request: Request) {
 
   const hasAccess = await hasTeamOwnerOrProjectAdminAccess(
     user.id,
-    user.accountId,
+    user.accountId ?? undefined,
     team,
     teamId,
     projectId ?? null,
@@ -371,9 +394,18 @@ export async function GET(request: Request) {
   const isTeamOwner =
     team.googleAccount.userId === user.id ||
     Boolean(user.accountId && user.accountId === team.googleAccountId);
-  const breakdownProjectIds = isTeamOwner
-    ? undefined
-    : [Number(projectId)];
+  const scopedProjects = session.agentId || session.teamScope
+    ? await prisma.project.findMany({
+        where: {
+          teamId,
+          ...(!isTeamOwner ? { id: Number(projectId) } : {}),
+          ...projectContentAccessWhere(session.userId, session.agentId, session.teamScope),
+        },
+        select: { id: true },
+      })
+    : null;
+  const adminProjectIds = isTeamOwner ? undefined : [Number(projectId)];
+  const breakdownProjectIds = scopedProjects?.map((project) => project.id) ?? adminProjectIds;
 
   const funding = await getTeamGatewayFunding({ trustedTeamId: teamId });
 
@@ -421,6 +453,7 @@ export async function GET(request: Request) {
       teamId,
       startDate,
       endDate,
+      session,
       breakdownProjectIds,
     );
     const [dailyReportResponse, modelReportResponse, tagReportResponse] =

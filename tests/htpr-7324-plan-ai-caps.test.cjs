@@ -794,9 +794,11 @@ test("settings displays the all-in committed snapshot including legacy pending; 
   redis.values.set(`${prefix}:legacy-pending`, "100000");
   const route = moduleWithStubs("src/app/api/settings/ai-usage/route.ts", {
     "next/server": { NextResponse: { json: Response.json } },
-    "@/lib/auth/serverUser": { getServerCookieUser: async () => ({ id: 7324 }) },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7324 }) },
+    "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/prisma": { __esModule: true, default: {
+      user: { findUnique: async () => ({ id: 7324 }) },
       team: { findUnique: async () => ({ googleAccount: { userId: 7324 } }) },
       aiUsage: { groupBy: async () => [] },
       project: { findMany: async () => [] }, task: { findMany: async () => [] }, agent: { findMany: async () => [] },

@@ -39,11 +39,13 @@ stub("src/app/api/ai/_lib/byokKeys.ts", { getTeamGatewayFunding: async (lookup, 
   return funding;
 } });
 stub("src/lib/errors/reportError.ts", { reportError: async (value) => alerts.push(value) });
-stub("src/lib/auth/serverUser.ts", { getServerCookieUser: async () => ({ id: 985, accountId: 7 }) });
+stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 985 }) });
+stub("src/lib/auth/agentScope.ts", { withAgentScopeRequest: (_request, run) => run() });
 stub("src/utils/controllers/teams/hasTeamOwnerOrProjectAdminAccess.ts", { default: async () => true });
 stub("src/app/api/ai/_lib/planAllowancePolicy.ts", { resolveTeamAllowancePolicy: async () => policy });
 stub("src/app/api/ai/_lib/planGate.ts", { storePlanIdForProject: async () => "Free" });
 stub("src/lib/prisma.ts", { default: {
+  user: { findUnique: async () => ({ id: 985, accountId: 7 }) },
   team: { findUnique: async () => ({ title: "Billed team", googleAccount: { userId: 985 }, googleAccountId: 7 }) },
   aiUsage: { groupBy: async () => [] },
   project: { findMany: async () => [] }, task: { findMany: async () => [] }, agent: { findMany: async () => [] },

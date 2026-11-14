@@ -103,7 +103,7 @@ test("caller-supplied task attribution is project- and access-scoped", () => {
   assert.match(editor, /Project not found or access denied/);
   assert.match(chat, /projectId: usageProjectId/);
   assert.match(settings, /project:\s*\{[\s\S]*teamId,/);
-  assert.match(settings, /const breakdownProjectIds = isTeamOwner/);
+  assert.match(settings, /const adminProjectIds = isTeamOwner/);
   assert.match(settings, /projectId: \{ in: scopeProjectIds \}/);
   assert.match(settings, /loadAiUsageBreakdown\([\s\S]*breakdownProjectIds/);
   assert.match(settings, /const totalsByLabel = new Map<string, number>/);

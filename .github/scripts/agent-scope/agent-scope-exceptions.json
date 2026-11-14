@@ -70,5 +70,53 @@
     "approvedIn": "https://app.hypertask.ai/detail/project-15/9072",
     "sha256": "f38e232df36c0e0ed8cb330be51c3accb0faebc5f88ebfe57730914ad81d514b",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project. HTPR-7733 only narrows person-assignee predicates with agentId null when its flag is enabled; project and credential scope gates are unchanged. HTPR-8340 re-review (2026-11-03): only the assigned_to validation changed; the required arguments and the project scoping are unchanged. HTPR-8295 re-review (2026-11-03): only the assignee=me branch changed, so an agent caller now matches its own agentId; the authenticated arguments and the project scoping are unchanged. HTPR-8460 re-review: the section parameter now resolves a numeric column id through parseSectionFilter into where.sectionId, keeps a column title in where.section, and the identifier range check now names that final column id; every scope conjunct and the authenticated project predicate are unchanged. HTPR-8536 adds one more conjunct to the same where object, section notIn the column titles the caller names, and drops nothing: every scope conjunct and the authenticated project predicate stay exactly as reviewed. HTPR-8847 re-review: the sort rejection now names the sort field and the allowed values. The prisma count and findMany calls and every scope conjunct stay exactly as reviewed. HTPR-9072 re-review: search now also asks for the optional description record content when the search-description flag is on, so the select reads the flag-scoped description field and the two findMany call texts changed. Authentication, accessibleProjectIds from getProjectWhere(user.id, ctx.agentId, ctx.teamScope), the project relation and every where conjunct are unchanged; the two count calls are unchanged. The returned description text is the same text the caller can already read from task list and task get."
+  },
+  {
+    "path": "src/app/api/feedback/route.ts",
+    "call": "prisma.project.findFirst({ where: { id: FEEDBACK_PROJECT_ID, status: \"Normal\" }, select: { uniqueIdentifier: true, ownerId: true, section: { where: { deleted: false, visibility: true, id: FEEDBACK_SECTION_ID, }, take: 1, select: { id: true, section_title: true }, }, }, })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7508",
+    "sha256": "8a4617501fedf1f1d78b710f2565a31fb4c97a19668349edcc7e5896e6b78feb",
+    "reason": "Intentional cross-board feedback ingress, not a board-content API. POST authenticates getSessionUser(request.headers), validates text/kind/notify/context, then reads only the fixed FEEDBACK_PROJECT_ID=15 and fixed destination section. The query supplies destination metadata and owner for createProvisionedTaskCore and notifications; POST returns only {success:true}, never the project or its contents. Requiring submitters to be members of board 15 would break customer feedback. Existing feedback-route-board-15 tests and HTPR-7508 boundary tests cover authenticated submission without membership and signed-out refusal."
+  },
+  {
+    "path": "src/lib/mcp/operations/inbox/composition/operation.ts",
+    "call": "prisma.project.findUnique({ where: { id: projectId }, select: { id: true, title: true, name: true, ownerId: true, stalenessEnabled: true }, })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7508",
+    "sha256": "44ed52296160a330d0fc13ee1fb321b03512ca3b60a8de485b00b15671c4c778",
+    "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. The initial project lookup only resolves the requested ID; no field is returned before the immediately following access gate. Team-scoped or enforced-agent callers must pass prisma.project.findFirst with the same projectId and projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope). Other callers must be the owner or a human member. Notifications retain the scoped task.project predicate. tests/htpr-7179-inbox-analytics-scope.test.cjs exercises WATCH, ENFORCE and flag errors with bound/unbound/human callers, allowed board A notifications and forbidden board B changes."
+  },
+  {
+    "path": "src/pages/api/stats/dashboard/boards.ts",
+    "call": "prisma.project.count({ where: { status: { not: \"Deleted\" } } })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7508",
+    "sha256": "dc8f3f31b58e683a2768f5def689d6b4e07b986fa0190c513d0529d493825582",
+    "reason": "Intentional global aggregate admin endpoint. Before getProjectCounts/getTaskCounts and every Prisma/raw count, the handler requires both a verified getSessionUser identity and a configured ADMIN_USER_RESET_PW matching x-admin-password. A normal human or agent session alone is insufficient. Counts expose global totals only to this explicit administrator capability, so filtering by board membership would corrupt the admin report. tests/htpr-7508-reviewed-boundaries.test.cjs covers signed-out, missing/wrong/unconfigured password refusal without database access and still-allowed session-plus-password aggregate responses."
+  },
+  {
+    "path": "src/pages/api/stats/dashboard/comments.ts",
+    "call": "prisma.comment.count({where:{task:{projectId:{not:15}}}})",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7508",
+    "sha256": "60c0bb03bc7e5d1fbcca185ef0c1553af4ddbcaeff4c62091a00ff8bff29fe9f",
+    "reason": "Intentional global aggregate admin endpoint. Before getProjectCounts/getTaskCounts and every Prisma/raw count, the handler requires both a verified getSessionUser identity and a configured ADMIN_USER_RESET_PW matching x-admin-password. A normal human or agent session alone is insufficient. Counts expose global totals only to this explicit administrator capability, so filtering by board membership would corrupt the admin report. tests/htpr-7508-reviewed-boundaries.test.cjs covers signed-out, missing/wrong/unconfigured password refusal without database access and still-allowed session-plus-password aggregate responses."
+  },
+  {
+    "path": "src/pages/api/stats/dashboard/tasks.ts",
+    "call": "prisma.task.count({ where: { status: \"Normal\", projectId:{not:15} } })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7508",
+    "sha256": "38f1b3d27a60966b7fbada3f42c3aa402c291f5aef683212d2e517db33bbf712",
+    "reason": "Intentional global aggregate admin endpoint. Before getProjectCounts/getTaskCounts and every Prisma/raw count, the handler requires both a verified getSessionUser identity and a configured ADMIN_USER_RESET_PW matching x-admin-password. A normal human or agent session alone is insufficient. Counts expose global totals only to this explicit administrator capability, so filtering by board membership would corrupt the admin report. tests/htpr-7508-reviewed-boundaries.test.cjs covers signed-out, missing/wrong/unconfigured password refusal without database access and still-allowed session-plus-password aggregate responses."
+  },
+  {
+    "path": "src/pages/api/stats/dashboard/tasks.ts",
+    "call": "prisma.task.count({ where: { status: \"Archive\",projectId:{not:15} } })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7508",
+    "sha256": "38f1b3d27a60966b7fbada3f42c3aa402c291f5aef683212d2e517db33bbf712",
+    "reason": "Intentional global aggregate admin endpoint. Before getProjectCounts/getTaskCounts and every Prisma/raw count, the handler requires both a verified getSessionUser identity and a configured ADMIN_USER_RESET_PW matching x-admin-password. A normal human or agent session alone is insufficient. Counts expose global totals only to this explicit administrator capability, so filtering by board membership would corrupt the admin report. tests/htpr-7508-reviewed-boundaries.test.cjs covers signed-out, missing/wrong/unconfigured password refusal without database access and still-allowed session-plus-password aggregate responses."
   }
 ]
