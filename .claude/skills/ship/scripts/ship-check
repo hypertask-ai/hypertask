@@ -1013,7 +1013,7 @@ check_premerge() {
 
 check_premerge_status() (
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
-  local sha current lock state=success description rc=0
+  local sha current existing lock state=success description rc=0
   local state_dir=${PREMERGE_STATUS_STATE:-$HOME/.local/state/premerge-evidence}
   mkdir -p "$state_dir" && exec {lock}>"$state_dir/publish.lock" \
     && flock -x -w 600 "$lock" || fail "cannot lock premerge publisher; no success posted"
@@ -1022,13 +1022,17 @@ check_premerge_status() (
     || fail "cannot read PR $1 head; no success posted"
   [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "premerge status requires an open production PR with a full head sha; no status posted"
   description=$(check_premerge)
+  existing=$(gh api "repos/$REPO/commits/$sha/status" --paginate \
+    --jq '.statuses[] | select(.context == "premerge-evidence") | [.state, .description] | @tsv' 2>/dev/null) || existing=''
   current=$(gh pr view "$1" -R "$REPO" --json headRefOid,baseRefName,state --jq "$query" 2>/dev/null) || current=''
   if [ "$current" != "$sha" ]; then
     state=failure; description='cannot confirm unchanged PR head; retry'; rc=1
   fi
-  gh api "repos/$REPO/statuses/$sha" --method POST -f context=premerge-evidence \
-    -f "state=$state" -f "description=${description:0:140}" >/dev/null 2>&1 \
-    || fail "cannot post premerge-evidence for PR $1; retry before merging"
+  if [ "$existing" != "$state"$'\t'"${description:0:140}" ]; then
+    gh api "repos/$REPO/statuses/$sha" --method POST -f context=premerge-evidence \
+      -f "state=$state" -f "description=${description:0:140}" >/dev/null 2>&1 \
+      || fail "cannot post premerge-evidence for PR $1; retry before merging"
+  fi
   echo "premerge-evidence: $state ($description)"
   return "$rc"
 )
