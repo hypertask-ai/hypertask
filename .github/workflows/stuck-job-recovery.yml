@@ -69,7 +69,7 @@ jobs:
       # (prod-health.yml). Without it the store cannot be read, and a sweep with no
       # store cancels nothing: a cancelled run nobody can finish is worse than a
       # slow one.
-      - name: Cancel or re-run stuck runs for eight ticks, then start the next sweep
+      - name: Cancel or re-run stuck runs and overdue guard runs for eight ticks, then start the next sweep
         env:
           GH_TOKEN: ${{ github.token }}
           STORE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
