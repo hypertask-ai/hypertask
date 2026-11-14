@@ -61,6 +61,7 @@ const crashReports = []
 const load = loader({
   '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: (_request, error) => { crashReports.push(error) } },
   '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler },
+  '@/lib/flags': { isFeatureEnabled: async (key) => key === 'htpr-9308-update-failure-cause' && state.causeFlagOn === true },
   '@/lib/prisma': { __esModule: true, default: prisma },
   '@/lib/redis': { getRedis: async () => redis },
   '@/lib/auth/session': { SESSION_COOKIE: 'fixture_session', signSession: (claims) => {
@@ -91,7 +92,7 @@ const batch = load('src/lib/mcp/tasks/batchTasks.ts').handleBatchBody
 
 function reset(extra = {}) {
   state = {
-    events: [], reads: [], cache: new Map(),
+    events: [], reads: [], cache: new Map(), causeFlagOn: true,
     tasks: [{ id: 101, projectId: 15, sectionId: 10, status: 'Normal', title: 'Before' }],
     ctx: { user, agentId: null }, ...extra,
   }
@@ -191,6 +192,21 @@ test('a 500 update reports its real cause instead of a bare server error', async
   assert.equal(response.status, 500)
   assert.equal(crashReports.length, 1)
   assert.match(crashReports[0].message, /Fixture write failed/)
+})
+
+test('with the switch off a failed update keeps the old response and reports nothing', async () => {
+  crashReports.length = 0
+  reset({ failTaskId: 101 })
+  const on = await withFetch(() => operation(request({ task_id: 101, title: 'After' })))
+  const onText = await on.text()
+  assert.equal(crashReports.length, 1)
+  crashReports.length = 0
+  reset({ failTaskId: 101, causeFlagOn: false })
+  const off = await withFetch(() => operation(request({ task_id: 101, title: 'After' })))
+  const offText = await off.text()
+  assert.equal(off.status, on.status)
+  assert.deepEqual(JSON.parse(offText), JSON.parse(onText))
+  assert.deepEqual(crashReports, [])
 })
 
 test('a caller refusal is not reported as a server crash', async () => {

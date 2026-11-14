@@ -16,6 +16,8 @@ import prisma from '@/lib/prisma'
 import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog"
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_9308_UPDATE_FAILURE_CAUSE_FLAG } from '@/lib/flags/definitions/htpr-9308-update-failure-cause'
 import {
   executeTaskUpdate,
   type UpdateTaskBody,
@@ -111,7 +113,9 @@ export async function POST(request: NextRequest) {
         })
     )
 
-    if (result.cause !== undefined) reportMcpOperationCrash(request, result.cause)
+    if (result.cause !== undefined && await isFeatureEnabled(HTPR_9308_UPDATE_FAILURE_CAUSE_FLAG, ctx.user.id)) {
+      reportMcpOperationCrash(request, result.cause)
+    }
     return result.response
   } catch (error) {
     if (isPlanLimitReachedError(error)) {
