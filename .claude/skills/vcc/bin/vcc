@@ -51,7 +51,7 @@ if helper_run; then
     --help|help|--version) ;;
     *) case "${2:-}" in
       get|list|search|last) ;;
-      *) printf '%s\n' 'vcc: helpers never write to the board; report to your runner' >&2; exit 3 ;;
+      *) printf '%s\n' 'vcc: helpers never write to the board; report to your runner. If you are a pool runner, this is a bug: file it with agent-feedback and park.' >&2; exit 3 ;;
     esac ;;
   esac
 fi
