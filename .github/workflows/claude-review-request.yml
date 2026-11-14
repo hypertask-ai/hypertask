@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: claude-review-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   request:
     name: Request a Claude review
