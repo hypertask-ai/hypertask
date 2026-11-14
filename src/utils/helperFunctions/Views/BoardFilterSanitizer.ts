@@ -1,4 +1,4 @@
-import { boardDefaultSubtaskSetting, TBoardSubtaskSetting } from "@/models/Views/model";
+import { boardDefaultSubtaskSetting } from "@/models/Views/model";
 
 const BOARD_FILTER_KEYS = new Set(["addedFilters", "matchFilters"]);
 const FILTER_ENTRY_KEYS = new Set(["match", "searchPayload", "type"]);
@@ -191,12 +191,10 @@ export function sanitizeProjectViewBoardFilters<T>(projectView: T, userId?: numb
 export function sanitizeBoardDefaultSubtaskSetting<T>(projectView: T, boardDefaultShowsSubtasks = false): T {
   if (!boardDefaultShowsSubtasks || !isRecord(projectView)) return projectView;
   const defaultView = projectView.default_view;
-  const storedSetting = isRecord(defaultView) ? defaultView.board_subtask_setting : undefined;
+  if (!isRecord(defaultView) || defaultView.board_subtask_setting !== "None") return projectView;
   return {
     ...projectView,
-    board_subtask_setting_for_default_view: boardDefaultSubtaskSetting(
-      typeof storedSetting === "string" ? (storedSetting as TBoardSubtaskSetting) : undefined
-    ),
+    board_subtask_setting_for_default_view: boardDefaultSubtaskSetting("None"),
   } as T;
 }
 

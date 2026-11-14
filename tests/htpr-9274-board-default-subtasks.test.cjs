@@ -118,6 +118,52 @@ test("a filtered view keeps its own sub-ticket setting", () => {
   assert.equal(getActiveSubtaskSettingFromProject(project), "Parent");
 });
 
+test("a filtered view keeps a personal draft of its sub-ticket setting", () => {
+  const project = payload(
+    projectWith({
+      defaultSetting: "None",
+      applied: { id: "rat-stack", setting: "Flattened" },
+      draft: "Parent",
+    }),
+    true,
+  );
+
+  assert.equal(getActiveSubtaskSettingFromProject(project), "Parent");
+});
+
+test("a filtered view keeps an explicit hide draft", () => {
+  const project = payload(
+    projectWith({
+      defaultSetting: "None",
+      applied: { id: "rat-stack", setting: "Flattened" },
+      draft: "None",
+    }),
+    true,
+  );
+
+  assert.equal(getActiveSubtaskSettingFromProject(project), "None");
+});
+
+test("a filtered view with an empty sub-ticket setting keeps the stored fallback", () => {
+  const base = projectWith({
+    defaultSetting: "None",
+    applied: { id: "rat-stack", setting: "Flattened" },
+  });
+  base.project_view.user_project_views[0].appliedView.board_subtask_setting = null;
+  const project = payload(base, true);
+
+  assert.equal(getActiveSubtaskSettingFromProject(project), "None");
+  assert.notEqual(getActiveSubtaskSettingFromProject(project), "Flattened_Card");
+});
+
+test("a payload with no default view does not invent a sub-ticket setting", () => {
+  const base = projectWith({ defaultSetting: "None" });
+  base.project_view.default_view = null;
+  const sanitized = payload(base, true).project_view;
+
+  assert.equal(sanitized.board_subtask_setting_for_default_view, undefined);
+});
+
 test("with the switch off the main board keeps the stored resolution", () => {
   const project = payload(projectWith({ defaultSetting: "None" }), false);
 
