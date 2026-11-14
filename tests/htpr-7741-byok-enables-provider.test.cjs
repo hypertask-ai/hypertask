@@ -95,9 +95,9 @@ function harness({ settings = {}, rows = {}, enabled = true, paid = true, owner 
 
 for (const [provider, model] of [
   ["deepseek", "deepseek-v4.1-flash"],
-  ["moonshot", "kimi-k3"],
+  ["moonshot", "kimi-k3.1-pro"],
   ["zhipu", "glm-5.3-flash"],
-  ["alibaba", "qwen3.7-plus"],
+  ["alibaba", "qwen3.8-max"],
 ]) {
   test(`saving an enabled ${provider} key keeps its selected model instead of substituting a fallback`, async () => {
     const h = harness();
