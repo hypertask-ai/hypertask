@@ -23,6 +23,7 @@ import {
   getDefaultAiModelOptionForPlan,
   isAiModelOptionVisible,
   isGrokGemini4ModelKey,
+  isHtpr8207ModelKey,
   getAiModelDefinition,
   getAiModelOptionById,
 } from "@/lib/aiModelOptions";
@@ -327,9 +328,12 @@ const AiFeaturesSection = () => {
   const gatedModelOptions = grokGemini4Enabled
     ? flagModelOptions
     : flagModelOptions.filter((option) => !isGrokGemini4ModelKey(option.modelKey));
+  const ticketModelOptions = htpr8207ModelsEnabled
+    ? gatedModelOptions
+    : gatedModelOptions.filter((option) => !isHtpr8207ModelKey(option.modelKey));
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true, htpr8207ModelsEnabled))
-    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true, htpr8207ModelsEnabled));
+    ? ticketModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
+    : ticketModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();

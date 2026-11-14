@@ -932,10 +932,8 @@ export function isAiModelOptionVisible(
   _haiku55Enabled: boolean,
   deepseekFlashFastEnabled = false,
   grokGemini4Enabled = false,
-  htpr8207ModelsEnabled = true,
 ): boolean {
   if (isGrokGemini4ModelKey(option.modelKey) && !grokGemini4Enabled) return false;
-  if (isHtpr8207ModelKey(option.modelKey) && !htpr8207ModelsEnabled) return false;
   return option.modelKey !== "deepseek-v4.1-flash-fast" || deepseekFlashFastEnabled;
 }
 

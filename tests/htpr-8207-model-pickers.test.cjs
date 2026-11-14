@@ -44,24 +44,23 @@ test("the two new models are catalogued with the gateway ids and their own class
   assert.equal(catalog.getAiModelDefinition("gemini-4-argon").modelClass, "gemini-argon");
 });
 
-test("picker filtering hides both new models when the flag is Off and shows them by default", () => {
+test("the ticket flag filter hides both new models when Off and leaves every other option alone", () => {
   const catalog = loadTs("src/lib/aiModelOptions.ts");
-  for (const haiku55Enabled of [false, true]) {
-    const visible = (enabled) =>
-      catalog.aiModelOptions.filter((option) =>
-        catalog.isAiModelOptionVisible(option, haiku55Enabled, true, true, enabled));
-    for (const modelKey of modelKeys) {
-      const option = catalog.getAiModelOptionById(modelKey);
-      assert.ok(option, modelKey);
-      assert.equal(catalog.isAiModelOptionVisible(option, haiku55Enabled), true, `${modelKey} hidden by default`);
-      assert.equal(visible(false).includes(option), false, `${modelKey} visible while Off`);
-      assert.equal(visible(true).includes(option), true, `${modelKey} hidden while On`);
-    }
-    assert.deepEqual(
-      visible(true).filter((option) => !modelKeys.includes(option.modelKey)),
-      visible(false),
-    );
+  const ticketFilter = (enabled) =>
+    enabled
+      ? catalog.aiModelOptions
+      : catalog.aiModelOptions.filter((option) => !catalog.isHtpr8207ModelKey(option.modelKey));
+  for (const modelKey of modelKeys) {
+    const option = catalog.getAiModelOptionById(modelKey);
+    assert.ok(option, modelKey);
+    assert.equal(ticketFilter(false).includes(option), false, `${modelKey} visible while Off`);
+    assert.equal(ticketFilter(true).includes(option), true, `${modelKey} hidden while On`);
   }
+  assert.deepEqual(
+    ticketFilter(true).filter((option) => !modelKeys.includes(option.modelKey)),
+    ticketFilter(false),
+  );
+  assert.equal(catalog.isAiModelOptionVisible(catalog.getAiModelOptionById(modelKeys[0]), true), true);
 });
 
 test("only the two ticket models are recognised as gated by this flag", () => {
@@ -76,8 +75,9 @@ test("every web model picker reads the flag and passes it to the visibility filt
   for (const file of pickers) {
     const source = read(file);
     assert.match(source, /useFlag\(HTPR_8207_QWEN_MAX_BYOK_FLAG\)/, file);
-    assert.match(source, /isAiModelOptionVisible\(option, true, true, true, htpr8207ModelsEnabled\)/, file);
-    assert.match(source, /isAiModelOptionVisible\(option, false, true, true, htpr8207ModelsEnabled\)/, file);
+    assert.match(source, /htpr8207ModelsEnabled\s*\?\s*gatedModelOptions\s*:\s*gatedModelOptions\.filter\(\(option\) => !isHtpr8207ModelKey\(option\.modelKey\)\)/, file);
+    assert.match(source, /ticketModelOptions\.filter\(\(option\) => isAiModelOptionVisible\(option, true, true, true\)\)/, file);
+    assert.match(source, /ticketModelOptions\.filter\(\(option\) => isAiModelOptionVisible\(option, false, true, true\)\)/, file);
   }
 });
 
