@@ -13,17 +13,39 @@ const LIKE_WILDCARD = /[\\%_]/;
 
 export const needsIlikeSemantics = (ticketNumber: string) => LIKE_WILDCARD.test(ticketNumber);
 
-export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string, materialized: boolean): Promise<number[] | null> => {
+const runTicketNumberCandidates = async (
+  query: () => Promise<{ id: number }[]>,
+): Promise<number[] | null> => {
   try {
-    const rows = needsIlikeSemantics(ticketNumber)
-      ? await prisma.$queryRaw<{ id: number }[]>`
+    const rows = await query();
+    return rows.map((row) => row.id);
+  } catch {
+    return null;
+  }
+};
+
+export const caseInsensitiveTicketNumberCandidates = (ticketNumber: string): Promise<number[] | null> =>
+  runTicketNumberCandidates(() =>
+    needsIlikeSemantics(ticketNumber)
+      ? prisma.$queryRaw<{ id: number }[]>`
           SELECT id FROM "Task"
           WHERE "ticketNumber" ILIKE ${ticketNumber}
           ORDER BY "projectId" ASC, id ASC
           LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
         `
-      : materialized
-        ? await prisma.$queryRaw<{ id: number }[]>`
+      : prisma.$queryRaw<{ id: number }[]>`
+          SELECT id FROM "Task"
+          WHERE lower("ticketNumber") = lower(${ticketNumber})
+          ORDER BY "projectId" ASC, id ASC
+          LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
+        `,
+  );
+
+export const materializedTicketNumberCandidates = (ticketNumber: string): Promise<number[] | null> =>
+  needsIlikeSemantics(ticketNumber)
+    ? caseInsensitiveTicketNumberCandidates(ticketNumber)
+    : runTicketNumberCandidates(() =>
+        prisma.$queryRaw<{ id: number }[]>`
           WITH indexed_matches AS MATERIALIZED (
             SELECT id, "projectId" FROM "Task"
             WHERE lower("ticketNumber") = lower(${ticketNumber})
@@ -31,18 +53,8 @@ export const caseInsensitiveTicketNumberCandidates = async (ticketNumber: string
           SELECT id FROM indexed_matches
           ORDER BY "projectId" ASC, id ASC
           LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
-        `
-        : await prisma.$queryRaw<{ id: number }[]>`
-          SELECT id FROM "Task"
-          WHERE lower("ticketNumber") = lower(${ticketNumber})
-          ORDER BY "projectId" ASC, id ASC
-          LIMIT ${TICKET_NUMBER_CANDIDATE_LIMIT + 1}
-        `;
-    return rows.map((row) => row.id);
-  } catch {
-    return null;
-  }
-};
+        `,
+      );
 
 export class TaskIdentifierAmbiguityError extends Error {
   readonly status = 400;
@@ -124,8 +136,9 @@ export async function findTaskByIdentifier(
   let indexedMiss = false;
   const scope = { status: { not: 'Deleted' as const }, project: projectFilter };
   if (ticket_number && await isFeatureEnabled("htpr-8977-indexed-ticket-lookup", user.id)) {
-    const materialized = await isFeatureEnabled("htpr-8977-materialized-ticket-lookup", user.id);
-    const candidates = await caseInsensitiveTicketNumberCandidates(ticket_number, materialized);
+    const candidates = await isFeatureEnabled("htpr-8977-materialized-ticket-lookup", user.id)
+      ? await materializedTicketNumberCandidates(ticket_number)
+      : await caseInsensitiveTicketNumberCandidates(ticket_number);
     indexedMiss = candidates != null && candidates.length === 0;
     matches = indexedMiss
       ? []
