@@ -77,6 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           bash .claude/skills/vcc/bin/vcc.test.sh
+          bash .claude/skills/ship/scripts/ship-identity.test.sh
           bash .claude/skills/setup-runner/scripts/setup-runner.test.sh
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/ship-check-finish.test.py

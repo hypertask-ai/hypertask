@@ -16,7 +16,7 @@ const OWNED_AGENT = "agent-owned";
 const REVOKED_AGENT = "agent-revoked";
 const BORROWED_AGENT = "agent-someone-elses";
 
-function loadHandler(session = null, { taskBroadcastGate } = {}) {
+function loadHandler(session = null, { taskBroadcastGate, taskLookupGate, controllerHold } = {}) {
   const deleted = [];
   const updated = [];
   const broadcasts = [];
@@ -69,6 +69,7 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
         },
         task: {
           findUnique: async ({ where }) => {
+            await taskLookupGate;
             if (where.id === TASK_ON_MEMBER_BOARD)
               return { projectId: MEMBER_PROJECT };
             if (where.id === TASK_ON_FOREIGN_BOARD)
@@ -92,9 +93,12 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
         deleted.push(id);
         return { status: 200, json: { id } };
       },
-      updateTaskSingle: async (newTask) => {
+      updateTaskSingle: async (newTask, _user, _agent, options) => {
         updated.push(newTask);
-        return { status: 200, json: { id: newTask.id, projectId: MEMBER_PROJECT } };
+        const saved = { status: 200, json: { id: newTask.id, projectId: MEMBER_PROJECT } };
+        options.onCommitted?.(saved);
+        await controllerHold;
+        return saved;
       },
     },
     "@/lib/realtime/server": {
@@ -138,6 +142,32 @@ function call(handler, { method, taskId, body }) {
   };
   return handler(req, res).then(() => ({ status, payload }));
 }
+
+test("HTPR-9106 app saves return a plain timeout or committed success within ten seconds", { timeout: 15_000 }, async () => {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  const blocked = loadHandler({ userId: MEMBER_USER_ID }, { taskLookupGate: held });
+  const committed = loadHandler({ userId: MEMBER_USER_ID }, { controllerHold: held });
+  const started = Date.now();
+  try {
+    const [failure, success] = await Promise.all([blocked, committed].map(({ handler }) => call(handler, {
+      method: "PUT", taskId: TASK_ON_MEMBER_BOARD,
+      body: { newTask: { id: TASK_ON_MEMBER_BOARD, title: "Saved title" } },
+    })));
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed >= 5_000 && elapsed < 10_000, `app save took ${elapsed}ms`);
+    assert.equal(failure.status, 503);
+    assert.equal(failure.payload.message, "Saving this ticket took too long. Try again.");
+    assert.equal(success.status, 200);
+    assert.equal(success.payload.id, TASK_ON_MEMBER_BOARD);
+    assert.equal(blocked.updated.length, 0);
+    assert.equal(committed.updated.length, 1);
+  } finally {
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(blocked.updated.length, 0, "an expired access lookup must not start saving later");
+});
 
 test("GET refuses to hand a task body to an anonymous caller", async () => {
   const { handler } = loadHandler();
