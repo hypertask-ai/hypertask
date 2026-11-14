@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: feature-flag-gate-production
+  group: feature-flag-gate-serialized
   queue: max
   cancel-in-progress: false
 
