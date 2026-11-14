@@ -73,6 +73,8 @@ function harness(t, { tasks = [task(42)], leases = new Map(), writeError, cancel
   });
   const { POST } = load("src/app/api/mcp/tasks/update/route.ts", {
     "@/lib/prisma": { default: prisma },
+    "@/lib/flags": { isFeatureEnabled: async (key) => key === "htpr-9308-update-failure-cause" },
+    "@/lib/mcp/operationCrashReport": crashReport,
     "@/lib/mcp/routeWrapper": wrapper,
     "@/lib/mcp/auth": auth,
     "@/lib/mcp/tasks/agentMutationLeaseAdoption": adoption,
@@ -169,7 +171,8 @@ test(`a plain Prisma write Error still answers 500 and sends a PostHog report`, 
   assert.equal(h.reports.length, 1);
   assert.equal(h.reports[0].extra.route, "/api/mcp/tasks/update");
   assert.equal(h.reports[0].extra.method, "POST");
-  assert.equal(h.reports[0].extra.errorName, "McpServerErrorWithoutCause");
+  assert.equal(h.reports[0].extra.errorName, "Error");
+  assert.equal(h.reports[0].message, "MCP POST /api/mcp/tasks/update failed with Error");
   assert.deepEqual(h.writes, []);
 });
 
