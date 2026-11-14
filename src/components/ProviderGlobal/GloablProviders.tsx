@@ -186,6 +186,7 @@ import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/keys";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 import { isGuestUser } from "@/lib/demo/guest";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
@@ -202,6 +203,7 @@ import {
 } from "@/lib/keyboard/globalGShortcuts";
 import {
   areGlobalShortcutsEnabled,
+  chatOwnsKey,
   isGlobalCreateTaskShortcut,
 } from "@/lib/keyboard/globalShortcutRoutes";
 import useAppShellSurfaceShortcuts from "@/hooks/Homepage/useAppShellSurfaceShortcuts";
@@ -478,6 +480,7 @@ export default function GlobalProvider({
   const shouldMountAgentChatRuntime =
     isAgentChatPage && mbl;
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
   const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const [sidebarRequested, setSidebarRequested] = useState(false);
@@ -747,6 +750,8 @@ export default function GlobalProvider({
   const handleKeyPress = async (e: KeyboardEvent) => {
     if (showTrialModal || emailVerificationBlocking) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
+
+    if (chatOwnsKey(agentChatKeys, e, e.target)) return;
 
     if (isFavoriteBoardShortcut(e, isApple)) {
       e.preventDefault();
@@ -1253,6 +1258,7 @@ export default function GlobalProvider({
     handleKeyPress,
     handleKeyUp,
     showTrialModal,
+    agentChatKeys,
   ]);
 
 

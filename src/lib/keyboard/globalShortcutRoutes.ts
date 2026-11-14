@@ -1,3 +1,6 @@
+import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import { isChatSurfaceTarget } from "@/lib/keyboard/chatSurfaceFocus";
+
 const GLOBAL_SHORTCUT_BLOCKED_ROUTES = [
   "/interactive-onboarding",
   "/learn",
@@ -35,6 +38,23 @@ type GlobalCreateTaskKeyboardEvent = Pick<
   KeyboardEvent,
   "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey"
 >;
+
+type ChatGuardKeyboardEvent = Pick<
+  KeyboardEvent,
+  "altKey" | "ctrlKey" | "keyCode" | "metaKey"
+>;
+
+export const chatOwnsKey = (
+  agentChatKeys: boolean,
+  event: ChatGuardKeyboardEvent,
+  target: EventTarget | null | undefined,
+) =>
+  agentChatKeys &&
+  event.keyCode !== KeyCodes.ESCAPE &&
+  !event.altKey &&
+  !event.ctrlKey &&
+  !event.metaKey &&
+  isChatSurfaceTarget(target);
 
 export const isGlobalCreateTaskShortcut = (
   event: GlobalCreateTaskKeyboardEvent,
