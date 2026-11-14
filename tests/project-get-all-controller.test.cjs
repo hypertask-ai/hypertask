@@ -35,6 +35,7 @@ function loadController(prisma, calls) {
         sanitized: true,
       }),
     },
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
   };
   const mod = { exports: {} };
   new Function("module", "exports", "require", javascript)(

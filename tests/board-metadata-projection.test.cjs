@@ -18,6 +18,7 @@ function loadBoardController(prisma) {
     "@/utils/controllers/tasks/attachWaitingOnUsers": {
       attachWaitingOnUsers: async (tasks) => tasks,
     },
+    "@/lib/savedViews/boardDefaultSubtasks": { boardDefaultShowsSubtasks: async () => false },
   };
   function load(file) {
     if (cache.has(file)) return cache.get(file).exports;
