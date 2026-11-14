@@ -32,7 +32,5 @@ test("the thin line shows only once the list is scrolled", () => {
 });
 
 test("still allowed: flag off keeps today's non-sticky bar", () => {
-  assert.match(container, /:\s*"relative"\s*\}/);
-  assert.match(container, /narrowLayout \? "flex" : "hidden @md:flex"/);
-  assert.match(container, /items-baseline pr-\[16px\] pt-4/);
+  assert.match(container, /:\s*"relative"\s*\}\s*\$\{hidden \? "hidden" : narrowLayout \? "flex" : "hidden @md:flex"\} items-baseline pr-\[16px\] pt-4/);
 });

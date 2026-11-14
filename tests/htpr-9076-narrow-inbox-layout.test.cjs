@@ -24,6 +24,8 @@ test('the inbox tab bar follows the phone signal, not a container width', () => 
   const tabBar = inbox.slice(inbox.indexOf('const SplitTitlesContainer'));
   assert.match(tabBar, /hidden \? "hidden" : narrowLayout \? "flex" : "hidden @md:flex"/,
     'flag on must show the tabs at the top at any column width, flag off keeps the container query');
+  assert.match(tabBar, /\$\{narrowLayout \? "gap-\[9px\]" : "@md:gap-\[9px\]"\}/,
+    'flag on keeps the tab gap at any width, flag off keeps the container query gap');
 });
 
 test('flag off keeps the bottom tab bar that flag on removes', () => {
@@ -40,7 +42,11 @@ test('narrow rows drop their tags before the title, and never shrink a chip into
   assert.match(title, /'shrink-0 max-w-\[120px\] overflow-hidden whitespace-nowrap'/,
     'a visible chip keeps its width instead of clipping to one letter');
 
+  assert.equal(title.match(/useFlag\(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG\) && !isPhone/g).length, 2,
+    'tags and the inline due date hide on narrow rows only, never on a phone');
+
   const row = read('src/components/notifications/NotificationRow.tsx');
+  assert.match(row, /useFlag\(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG\) && !isPhone/, 'a phone row never becomes the container');
   assert.match(row, /useFlag\(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG\)/, 'the row must read the flag');
   assert.match(row, /\$\{narrowInboxTabs \? "@container" : ""\}/, 'the row must be its own container when the flag is on');
 });

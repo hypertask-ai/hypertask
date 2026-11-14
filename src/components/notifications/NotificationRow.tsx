@@ -21,6 +21,7 @@ import { useNotificationContext } from "@/lib/contexts/NotificationContext";
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import { HTPR_8264_INBOX_NAME_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-name-column";
 import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-layout";
+import { useMobileView } from "@/lib/contexts/mobileContext";
 import { buildInboxRowFillParts, clipInboxPreview, type InboxRowFillPartKind } from "@/lib/inbox/inboxRowFill";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import TaskRowContainer from "../Common/TaskRowComponents/TaskRowContainer";
@@ -50,7 +51,8 @@ const NotificationRow = (props: Props) => {
     const { notification, isIbxSlctd, selectedIds } = useNotificationContext();
     const inboxRowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
     const inboxNameColumn = useFlag(HTPR_8264_INBOX_NAME_COLUMN_FLAG);
-    const narrowInboxTabs = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG);
+    const isPhone = useMobileView();
+    const narrowInboxTabs = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG) && !isPhone;
     const flipMentionHierarchy = !inboxRowFill && notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const handleClick = () => {

@@ -1144,7 +1144,7 @@ const SplitTitlesContainer: FC<IProps> = ({
           : "relative"
       } ${hidden ? "hidden" : narrowLayout ? "flex" : "hidden @md:flex"} items-baseline pr-[16px] pt-4 ${
         contentGap ? "mx-[12px] w-[calc(100%-24px)] pb-4" : "w-full"
-      } responsive-inbox-padding @md:gap-[9px] h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
+      } responsive-inbox-padding ${narrowLayout ? "gap-[9px]" : "@md:gap-[9px]"} h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
     >
       {overflowHidden && (canScrollLeft || canScrollRight) && (
         <button

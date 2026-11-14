@@ -14,6 +14,7 @@ import { useFlag } from '@/hooks/useFlag';
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-row-fill';
 import { HTPR_8264_INBOX_NAME_COLUMN_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-name-column';
 import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from '@/lib/flags/definitions/htpr-9076-narrow-inbox-layout';
+import { useMobileView } from '@/lib/contexts/mobileContext';
 
 interface ITitleContainer {
     notification?: INotification;
@@ -30,7 +31,8 @@ interface IRenderMessageTag {
 
 export const TaskMetaChips: React.FC<{ task: ITask; showDueDate?: boolean }> = ({ task, showDueDate }) => {
     const { isIbxSlctd } = useNotificationContext();
-    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG);
+    const isPhone = useMobileView();
+    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG) && !isPhone;
     const snapshot = useFirstScreenSurface();
     const [now] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
     const MAX_LABELS = 3;
@@ -165,7 +167,8 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
     const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
     const nameColumn = useFlag(HTPR_8264_INBOX_NAME_COLUMN_FLAG) && rowFill && Boolean(notification);
     const flipMentionHierarchy = !rowFill && notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
-    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG);
+    const isPhone = useMobileView();
+    const narrowRow = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG) && !isPhone;
 
     const defaultClassName = "truncate flex-1 flex-column sm:flex-initial md:min-w-[180px]"
 
