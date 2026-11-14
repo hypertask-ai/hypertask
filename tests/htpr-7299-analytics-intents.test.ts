@@ -207,6 +207,7 @@ function taskController(h: Harness) {
       agentWritingPolicyEnabled: async () => true,
       enforceAgentWriting: async (_userId: number, agentId: string | null | undefined, fields: any, previous: any = {}) => h.load("src/lib/agents/writing.ts").assertAgentWriting(agentId, fields, previous),
     },
+    "@/lib/tasks/saveLimit": h.load("src/lib/tasks/saveLimit.ts"),
     "@/lib/tasks/sameBoardRelations": h.load("src/lib/tasks/sameBoardRelations.ts"),
     "@/utils/controllers/tasks/parentTaskAccess": h.load("src/utils/controllers/tasks/parentTaskAccess.ts"),
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: noop },
@@ -236,6 +237,12 @@ test("agent_task_completed move survives death after its save transaction", asyn
   assert.equal((await taskController(h)({ id: 9, sectionId: 2 }, h.users.get(123), "managed")).status, 200);
   assert.equal(h.tasks.get(9).sectionId, 2);
   assert.match(h.intentRows[0].key, /^agent_task_completed:9:\d+$/);
+  assert.equal(h.jobs.length, 1);
+  const [registration] = h.jobs.splice(0);
+  await registration;
+  assert.equal(h.jobs.length, 0);
+  assert.equal(h.captures.length, 0);
+  assert.equal(h.intentRows[0].processedAt, null);
   await replayOnce(h, "agent_task_completed");
 });
 
