@@ -138,6 +138,12 @@ login_refused env SHIP_SESSION_NAME='RUNNER 8' bash "$vcc" comment add X-1 --tex
 login_refused env SHIP_SESSION_NAME='SPEED RUNNER' bash "$vcc" task move X-1 --section 'In Progress'
 login_refused env SHIP_SESSION_NAME='RUNNER 8 | HTPR-1 | fix' bash "$vcc" activity add X-1 'note'
 allowed env SHIP_SESSION_NAME='HTPR-1 | fix' bash "$vcc" comment add X-1 --text hi
+# HYCI-408: a runner that put its tmux slot name in SHIP_SESSION_NAME resolves to its own RUNNER slot and writes as it.
+allowed env VCC_TEST_IDENTITY='RUNNER 5' SHIP_SESSION_NAME='ht-or-runner-5' bash "$vcc" comment add X-1 --text hi
+allowed env VCC_TEST_IDENTITY='RUNNER 5' SHIP_SESSION_NAME='cursor-grok-runner-5 (Cursor Grok RUNNER 5)' bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_IDENTITY='RUNNER 6' SHIP_SESSION_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
+login_refused env VCC_TEST_IDENTITY='Fixture' SHIP_SESSION_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
+printf 'ok runner slot names write as that runner, another slot or no slot is refused\n'
 printf ' \n\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 run env SHIP_SESSION_NAME='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
 [ "$status" = 2 ] || fail 'empty board login was not refused'

@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # ship-identity: which Hypertask identity this session writes as (Valentin, 2026-10-02).
-# Two cases only:
+# Three cases only:
 #   1. The session has a name Valentin gave it (/rename) and a token exists for that name:
 #      ~/.config/hypertask-agents/credentials/sessions/<slug>-agent-token, slug = name lowercased, non-alphanumerics -> "-".
 #      Only identities Valentin put in that sessions folder can be picked; other agents' tokens never are.
-#   2. Otherwise: Valentins Claude Code.
+#   2. The name carries a runner slot ("ht-or-runner-5", "cursor-grok-runner-5 (Cursor Grok RUNNER 5)") and that slot
+#      has its own token: write as "RUNNER 5" (HYCI-408). A runner that put its tmux name in SHIP_SESSION_NAME was
+#      refused every board write, looped 165 runs on HTPR-7766, and nobody saw why. A literal token still wins.
+#   3. Otherwise: Valentins Claude Code.
 # Prints "<name>\t<token file>". The name survives /clear, so the identity does too.
 set -uo pipefail
 CREDS=${VCC_CREDENTIALS_DIR:-$HOME/.config/hypertask-agents/credentials}
@@ -25,12 +28,25 @@ session_name() {
   done
 }
 
+# The first runner slot in a name, as a number, or "". "runner 5", "runner-5", "RUNNER_5" and a slot word inside a
+# longer tmux name all count; "runner" with no number and "sprint" do not.
+runner_slot() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' \
+    | grep -oE '(^|[^a-z0-9])runner[-_ ]?[0-9]+([^a-z0-9]|$)' \
+    | grep -oE '[0-9]+' | head -1
+}
+
 name=${SHIP_SESSION_NAME:-$(session_name)}
 # A per-ticket title ("HTPR-6629 | ...") or a "<name> | ..." form: the identity is the part before " | ".
 name=${name%% | *}
 slug=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
 if [ -n "$slug" ] && [ -s "$SESSION_CREDS/$slug-agent-token" ]; then
   printf '%s\t%s\n' "$name" "$SESSION_CREDS/$slug-agent-token"
-else
-  printf '%s\t%s\n' "$FALLBACK_NAME" "$FALLBACK_TOKEN"
+  exit 0
 fi
+slot=$(runner_slot "$name")
+if [ -n "$slot" ] && [ -s "$SESSION_CREDS/runner-$slot-agent-token" ]; then
+  printf '%s\t%s\n' "RUNNER $slot" "$SESSION_CREDS/runner-$slot-agent-token"
+  exit 0
+fi
+printf '%s\t%s\n' "$FALLBACK_NAME" "$FALLBACK_TOKEN"
