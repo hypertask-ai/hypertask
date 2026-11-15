@@ -288,7 +288,7 @@ const UpdateKanban = () => {
     const filteredSections = reconcileSections(
       previousProject.filteredSections,
       showEmptyViewColumns
-        ? getFilteredEmptySections(sectionsForView, projectToUpdate, true)
+        ? getFilteredEmptySections(sectionsForView, projectToUpdate, true, projectToUpdate.sections)
         : getFilteredEmptySections(sectionsForView, projectToUpdate),
     );
     projectToUpdate = {

@@ -534,7 +534,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       filterRuntimeContext,
     )
     const filteredEmptySections = showEmptyViewColumns
-      ? getFilteredEmptySections(filteredAppliedSections, _currentProject, true)
+      ? getFilteredEmptySections(filteredAppliedSections, _currentProject, true, newSections)
       : getFilteredEmptySections(filteredAppliedSections, _currentProject)
     const filteredSubtaskSections = getAppliedSubtaskSections(filteredEmptySections,_currentProject) 
     setSectionsToDisplay(filteredSubtaskSections)

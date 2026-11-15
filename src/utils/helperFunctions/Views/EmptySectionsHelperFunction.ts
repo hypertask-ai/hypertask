@@ -8,17 +8,22 @@ export const getFilteredEmptySections = (
   sections: ISection[],
   project: IProject,
   showEmptyViewColumns = false,
+  unfilteredSections?: ISection[],
 ) => {
   const currentSetting = getActiveEmptySectionSettingFromProject(project);
-  return applyEmptySectionSetting(sections, currentSetting, showEmptyViewColumns);
+  return applyEmptySectionSetting(sections, currentSetting, showEmptyViewColumns, unfilteredSections);
 };
 
 function applyEmptySectionSetting(
   sections: ISection[],
   setting: TBoardEmptySections,
   showEmptyViewColumns: boolean,
+  unfilteredSections?: ISection[],
 ): ISection[] {
-  if (setting === "Hidden" && showEmptyViewColumns &&
+  const boardHasTasks = (unfilteredSections ?? sections).some(
+    (section) => (section.items?.length ?? 0) > 0,
+  );
+  if (setting === "Hidden" && showEmptyViewColumns && !boardHasTasks &&
       !sections.some((section) => section.visibility && (section.items?.length ?? 0) > 0)) {
     return sections.filter((section) => section.visibility);
   }

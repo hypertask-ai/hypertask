@@ -127,7 +127,7 @@ const subtaskSectionsForActiveView = useMemo(() => {
 ]);
 let filteredSectionsForActiveView = subtaskSectionsForActiveView;
 if (showEmptyViewColumns) {
-  if (_currentProject) filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject, true);
+  if (_currentProject) filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject, true, boardSections);
 } else if (_currentProject) {
   filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject);
 }

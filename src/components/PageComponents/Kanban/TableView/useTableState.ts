@@ -323,7 +323,7 @@ export function useTableState(context: Context) {
   }, [filteredSections, _sections, _currentProject, excludedTaskIds]);
   let sections = sortedSections;
   if (showEmptyViewColumns) {
-    if (_currentProject) sections = getFilteredEmptySections(sortedSections, _currentProject, true);
+    if (_currentProject) sections = getFilteredEmptySections(sortedSections, _currentProject, true, _sections);
   } else if (_currentProject) {
     sections = getFilteredEmptySections(sortedSections, _currentProject);
   }

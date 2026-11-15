@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { load, restore } = require('./board-filters/runtime.cjs');
 const { getFilteredEmptySections } = load('utils/helperFunctions/Views/EmptySectionsHelperFunction.ts');
 const { getActiveEmptySectionSettingFromProject } = load('utils/helperFunctions/Views/ViewsHelperFunctions.ts');
+const { detectEmptyBoardState } = load('utils/helperFunctions/Views/BoardEmptyStateHelper.ts');
 const flag = load('lib/flags/definitions/htpr-7807-empty-view-columns.ts');
 
 function emptyView(setting = 'Hidden') {
@@ -58,6 +59,33 @@ test('Show and other view preferences remain unchanged across reloads', () => {
 test('no columns and builtin views with no matching sections stay empty', () => {
   const { project } = emptyView();
   assert.deepEqual(getFilteredEmptySections([], project, true), []);
+});
+
+test('a filter hiding every ticket keeps the saved hiding so the filter screen returns', () => {
+  const project = restore({
+    board_empty_sections: 'Hidden',
+    board_filters: { matchFilters: 'ALL', addedFilters: [{ type: 'Priority', searchPayload: [{ priority_index: 1 }] }] },
+  });
+  const unfiltered = project.sections.map((section) => ({ ...section, items: [{ id: 500 + section.id }] }));
+  const filtered = unfiltered.map((section) => ({ ...section, items: [] }));
+  assert.deepEqual(getFilteredEmptySections(filtered, project, true, unfiltered), []);
+  assert.equal(detectEmptyBoardState(unfiltered, filtered, project).cause, 'filters_hiding_all');
+});
+
+test('a filter that keeps some tickets still shows only the matching columns', () => {
+  const { project, sections } = emptyView();
+  const unfiltered = sections.map((section) => ({ ...section, items: [{ id: 600 + section.id }] }));
+  const filtered = unfiltered.map((section, index) => ({
+    ...section,
+    items: index === 1 ? [{ id: 700 }] : [],
+  }));
+  assert.deepEqual(ids(getFilteredEmptySections(filtered, project, true, unfiltered)), [2]);
+});
+
+test('a board with no tickets left shows its empty columns even with a filter saved', () => {
+  const { project, sections } = emptyView();
+  const unfiltered = sections.map((section) => ({ ...section, items: [] }));
+  assert.deepEqual(ids(getFilteredEmptySections(sections, project, true, unfiltered)), [1, 2, 3, 4, 5, 6]);
 });
 
 test('the improvement defaults to Everyone and stays independently reversible', () => {
