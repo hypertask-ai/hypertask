@@ -106,9 +106,6 @@ export function Calendar() {
       ? `Sort, by ${sortingModeLabel(calendarSort.mode).toLowerCase()}`
       : "Sort, off"
     : "Show sorting options";
-  const activeControlClass = announceCalendarControlState
-    ? "text-view-control-active"
-    : "text-[#51A4F1]";
 
   return (
     <div
@@ -309,8 +306,11 @@ export function Calendar() {
                   onClick={toggleFilterModal}
                   aria-label={filterName}
                   className={`flex h-8 w-8 items-center justify-center bg-transparent p-0 ${
+                    announceCalendarControlState && hasActiveTaskFilters
+                      ? "text-view-control-active"
+                      :
                     hasActiveTaskFilters
-                      ? activeControlClass
+                      ? "text-[#51A4F1]"
                       : "text-text-light-gray"
                   }`}
                 >
@@ -330,7 +330,10 @@ export function Calendar() {
                   onClick={() => setShowSortModal(true)}
                   aria-label={sortName}
                   className={`flex h-8 w-8 items-center justify-center bg-transparent ${
-                    calendarSort ? activeControlClass : "text-text-light-gray"
+                    announceCalendarControlState && calendarSort
+                      ? "text-view-control-active"
+                      :
+                    calendarSort ? "text-[#51A4F1]" : "text-text-light-gray"
                   }`}
                 >
                   <ArrowUpDown size={18} strokeWidth={1.75} />
