@@ -77,6 +77,14 @@ interface LinkTaskPullRequestInput {
   db?: typeof prisma;
 }
 
+interface UnlinkTaskPullRequestsInput {
+  taskId: number;
+  userId: number;
+  agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
+  db?: typeof prisma;
+}
+
 const pullRequestSelect = {
   id: true,
   repositoryOwner: true,
@@ -549,6 +557,39 @@ export async function linkTaskPullRequest({
     }
     throw error;
   }
+}
+
+export async function unlinkTaskPullRequests({
+  taskId,
+  userId,
+  agentId = null,
+  teamScope,
+  db = prisma,
+}: UnlinkTaskPullRequestsInput): Promise<{ removed: number }> {
+  const authorizedTask = await db.task.findFirst({
+    where: {
+      id: taskId,
+      status: { not: "Deleted" },
+      project: taskWriteAccessWhere(userId, agentId, teamScope),
+    },
+    select: { id: true },
+  });
+  if (!authorizedTask) {
+    throw new PullRequestLinkError(
+      "Task not found or access denied",
+      404,
+      "task_not_found",
+    );
+  }
+
+  const { count } = await db.taskPullRequest.deleteMany({ where: { taskId } });
+  if (count > 0) {
+    await db.task.update({
+      where: { id: taskId },
+      data: { updatedAt: new Date() },
+    });
+  }
+  return { removed: count };
 }
 
 export { pullRequestSelect };
