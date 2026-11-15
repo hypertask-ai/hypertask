@@ -170,13 +170,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   );
   assert.match(mountPositioning, /runInitialPositioning\(scrollToElement\)/);
   assert.match(mountPositioning, /runInitialPositioning\(\(\) =>\s*focusOn/);
-  assert.match(mountPositioning, /\}, \[_parsedTask\.id, stableLayout, cachedLayout, unreadTicketOpensTop\]\);$/);
   assert.match(mountPositioning, /useEffect\(\(\) => \{/);
-  assert.ok(
-    mountPositioning.indexOf("else if (stableLayout && cachedLayout)") >
-      mountPositioning.indexOf("searchParams?.get(taskDetailConfig.searchParams.audio)"),
-    "automatic scroll suppression must follow all explicit URL actions"
-  );
   assert.match(unreadPositioning, /initialScrollGuard\.allows\(generation\)/);
   assert.notEqual(
     unreadDependencyStart,
@@ -190,6 +184,97 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
     unreadPositioning,
     /requestAnimationFrame\(\(\) => \{\s*runInitialPositioning\(\(\) => \{/
   );
+});
+
+const { initialTicketPosition } = jiti(path.join(root, "src/lib/taskDetail/initialTicketPosition.ts"));
+const taskDetailConfig = {
+  searchParams: { commentId: "commentId", reply: "reply", audio: "audio", inboxFlow: "inboxFlow" },
+  delays: { scrollToElement: 500, focusCommentInput: 300, defaultCommentFocus: 400, mobileFocusComment: 500 },
+  elementIds: { comment: "comment", commentInput: "comment-input" },
+  audioButtons: { suffix: "audio-button", createComment: "create-comment" },
+};
+
+function renderOpenedTicket({ deepLink, lastReadAt = null, unread = false, snapshotReady = true } = {}) {
+  const effects = [];
+  const timers = new Map();
+  const frames = [];
+  const movement = [];
+  const flagKeys = [];
+  let timerId = 0;
+  let clock = 0;
+  const target = Object.assign(new EventTarget(), {
+    scrollHeight: 6000,
+    scrollTo: (options) => movement.push(["scroll", options]),
+    scrollBy: (options) => movement.push(["offset", options]),
+    location: { hash: deepLink === "hash" ? "#comment-4" : "" },
+    history: {},
+    innerHeight: 900,
+  });
+  const params = new URLSearchParams();
+  if (deepLink && deepLink !== "hash") params.set(taskDetailConfig.searchParams[deepLink], deepLink === "commentId" ? "comment-4" : "true");
+  const mocks = {
+    react: { useEffect: (callback) => effects.push(callback), useLayoutEffect: () => {}, useCallback: (callback) => callback },
+    "@/hooks/useFlag": { useFlag: (key) => { flagKeys.push(key); return false; } },
+    "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_7395_CACHED_STATIC_FIRST_FLAG: "static" },
+    "@/lib/taskDetail/initialTicketPosition": { initialTicketPosition },
+    "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: false, newCommentsLastReadAt: lastReadAt, descriptionStart: "live", liveRowsPendingFor: () => false }) },
+    "@/lib/configs/taskDetail.config": { __esModule: true, default: taskDetailConfig },
+    "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
+    "@/lib/snippets": { getTiptapEditorForMode: () => null },
+  };
+  const source = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx"), "utf8");
+  const js = require("typescript").transpileModule(source, { compilerOptions: { module: require("typescript").ModuleKind.CommonJS } }).outputText;
+  const exports = {};
+  new Function("require", "exports", "window", "document", "setTimeout", "clearTimeout", "requestAnimationFrame", "performance", js)(
+    (name) => { assert.ok(name in mocks, name); return mocks[name]; },
+    exports,
+    target,
+    { documentElement: target, getElementById: (id) => ({ click: () => movement.push(["click", id]) }) },
+    (callback) => { timers.set(++timerId, callback); return timerId; },
+    (id) => timers.delete(id),
+    (callback) => frames.push(callback),
+    { now: () => (clock += 500) },
+  );
+  const guard = createTaskDetailInitialScrollGuard(() => {});
+  exports.useTaskDetailInitialScroll({
+    _parsedTask: { id: 42 }, _mbl: false, scrollSetting: "Bottom", searchParams: params, showCreateTaskModal: { show: false },
+    newCommentsSnapshotReady: snapshotReady, newCommentIds: unread ? [77] : [], comments: [{ id: "77" }], visibleCommentIndices: [0],
+    bottomScrollCancelRef: { current: null }, hasBottomScrolledRef: { current: false }, hasScrolledToUnreadRef: { current: false },
+    initialScrollGenerationRef: { current: guard.reset() }, initialScrollViewportRef: { current: {} }, scrollElementRef: undefined,
+    virtualizeIndexes: { commentsStartVirtualIndex: 3 }, virtualizer: { scrollToIndex: (...args) => movement.push(["index", ...args]) },
+    focusOn: (...args) => movement.push(["focus", ...args]), defaultCommentFocus: () => movement.push(["bottom"]),
+    scrollVirtualize: (...args) => movement.push(["link", ...args]), setPriority_: () => {}, setEstimate_: () => {},
+    priorityForTaskTQ: null, estimateForTaskTQ: null, initialScrollGuard: guard,
+  });
+  assert.equal(effects.length, 5);
+  effects[3]();
+  effects[4]();
+  for (let i = 0; timers.size || frames.length; i++) {
+    assert.ok(i < 30, "scroll settling must be bounded");
+    const pending = [...timers.values()];
+    timers.clear();
+    pending.forEach((callback) => callback());
+    frames.splice(0).forEach((callback) => callback());
+  }
+  return { movement, flagKeys };
+}
+
+test("opening a ticket keeps the live unread position and ignores the removed switch", () => {
+  const waiting = renderOpenedTicket({ lastReadAt: null, snapshotReady: false });
+  assert.deepEqual(waiting.flagKeys, ["stable", "static"]);
+  assert.deepEqual(waiting.movement, []);
+
+  const neverRead = renderOpenedTicket({ lastReadAt: null });
+  assert.deepEqual(neverRead.movement, [
+    ["focus", "description-container", true, "auto", "start"],
+    ["scroll", { top: 0, behavior: "auto" }],
+  ]);
+
+  const audio = renderOpenedTicket({ deepLink: "audio", lastReadAt: null });
+  assert.deepEqual(audio.movement, [
+    ["click", `${taskDetailConfig.audioButtons.createComment}-${taskDetailConfig.audioButtons.suffix}`],
+    ["focus", taskDetailConfig.elementIds.commentInput],
+  ]);
 });
 
 test("the task detail virtualizer leaves row-resize scroll compensation to the browser (HTPR-6277)", () => {

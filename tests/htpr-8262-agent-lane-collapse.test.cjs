@@ -170,7 +170,6 @@ test("the real thread hook toggles all rows across a refresh", async () => {
   const useHook = loadModule("src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts", {
     "@/hooks/useFlag": { useFlag: (key) => key === flagKey && flagEnabled },
     "@/lib/flags/definitions/htpr-8262-agent-lane-collapse": { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG: flagKey },
-    "@/lib/flags/keys": { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: "unread" },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => context },
     "@/utils/helperFunctions/helperFunctions": { emptyDescription: "", returnIfModalOrInputActive: () => false },
     "@tanstack/react-query": { useQueryClient: () => queryClient },
