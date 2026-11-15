@@ -16,6 +16,7 @@ function load(file, mocks) {
   } }).outputText;
   new Function("require", "module", "exports", js)((name) => {
     if (Object.hasOwn(mocks, name)) return mocks[name];
+    if (name === "@/lib/flags/definitions/htpr-9245-chat-waits-for-saved-switches") return { HTPR_9245_CHAT_WAITS_FOR_SAVED_SWITCHES_FLAG: "htpr-9245-chat-waits-for-saved-switches" };
     assert.ok(name.startsWith("react"), `unmocked dependency: ${name}`);
     return require(name);
   }, loadedModule, loadedModule.exports);
@@ -61,7 +62,7 @@ test("the shared veto follows the per-user switches when they are on, so the hea
         "@/lib/state": { useRecoilValue: () => legacy }, "@/store": { keepAiChatClosedAtom: "saved" },
         "@/lib/flags/keys": flagModule,
         "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: keys },
-        "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: true, ready: true, values }) },
+        "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: true, ready: true, savedReady: true, values }) },
       });
       assert.deepEqual(useKeepChatClosed(), { keepChatClosed: keys.every((key) => !values[key]), ready: true });
     }

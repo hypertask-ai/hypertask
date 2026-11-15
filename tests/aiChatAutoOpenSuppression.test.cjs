@@ -121,9 +121,10 @@ async function harness(persisted, run, flagEnabled = true, flagReady = true, swi
     "@/lib/state": state,
     "@/store": atoms,
     "@/lib/flags/keys": { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
+    "@/lib/flags/definitions/htpr-9245-chat-waits-for-saved-switches": { HTPR_9245_CHAT_WAITS_FOR_SAVED_SWITCHES_FLAG: "htpr-9245-chat-waits-for-saved-switches" },
     "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: ["aiChatOpenNewTickets", "aiChatOpenTickets", "aiChatOpenBoards"] },
     "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({
-      enabled: switchesEnabled, ready: true,
+      enabled: switchesEnabled, ready: true, savedReady: true,
       values: switches.autoOpen ?? { aiChatOpenNewTickets: false, aiChatOpenTickets: false, aiChatOpenBoards: false },
     }) },
   });

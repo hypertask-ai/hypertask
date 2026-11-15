@@ -14,6 +14,9 @@ import { useGetUserPreferences, type IUserPreferences } from "./useGetUserPrefer
 
 let preferenceWrites: Promise<unknown> = Promise.resolve();
 
+const savedSwitchesQueryKey = (userId: number | undefined) =>
+  ["user-preferences", "ai-chat-auto-open", String(userId ?? "anonymous")];
+
 export function useAiChatOpenPreferences() {
   const enabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const flagReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
@@ -24,7 +27,10 @@ export function useAiChatOpenPreferences() {
   const queryClient = useQueryClient();
   const migrated = useMemo(() => hydrated ? readLocalAiChatAutoOpenPreferences() : AI_CHAT_AUTO_OPEN_DEFAULTS, [hydrated, user?.id]);
   const values = user?.id ? { ...migrated, ...saved[user.id] } : migrated;
-  const savedSwitchesKnown = !waitsForSavedSwitches || Boolean(user?.id && saved[user.id]);
+  const { isError: savedSwitchesUnavailable } = useGetUserPreferences(savedSwitchesQueryKey(user?.id), undefined, {
+    enabled: enabled && hydrated && flagReady && !!user?.id,
+  });
+  const savedSwitchesKnown = !waitsForSavedSwitches || !user?.id || Boolean(saved[user.id]) || savedSwitchesUnavailable;
   const setPreference = useCallback((key: AiChatAutoOpenKey, value: boolean) => {
     if (!enabled || !user?.id) return;
     setSaved((previous) => ({ ...previous, [user.id]: { ...migrated, ...previous[user.id], [key]: value } }));
@@ -41,7 +47,7 @@ export function useSyncAiChatOpenPreferences() {
   const { enabled, ready } = useAiChatOpenPreferences();
   const user = useRecoilValue(currentUserAtom);
   const [saved, setSaved] = useRecoilState(aiChatAutoOpenPreferencesAtom);
-  const queryKey = useMemo(() => ["user-preferences", "ai-chat-auto-open", String(user?.id ?? "anonymous")], [user?.id]);
+  const queryKey = useMemo(() => savedSwitchesQueryKey(user?.id), [user?.id]);
   const { data, dataUpdatedAt, isSuccess } = useGetUserPreferences(queryKey, undefined, { enabled: enabled && ready && !!user?.id });
   const attempted = useRef(new Set<string>());
   const applied = useRef<{ userId: number; data: IUserPreferences } | null>(null);

@@ -66,11 +66,11 @@ function stateHarness(initial, opens) {
   } };
 }
 
-function harness({ switches = {}, saved = {}, waits = true } = {}) {
+function harness({ switches = {}, saved = {}, waits = true, user = { id: 7 }, path = "/detail/project-15/1", fetchFailed = false } = {}) {
   const opens = [];
   const h = hooks();
   const s = stateHarness({
-    currentUserAtom: { id: 7 },
+    currentUserAtom: user,
     currentProjectAtom: { id: 15 },
     aiChatNewTicketPathAtom: "/detail/project-15/1",
     aiChatAutoOpenPreferencesAtom: saved,
@@ -86,13 +86,14 @@ function harness({ switches = {}, saved = {}, waits = true } = {}) {
     "htpr-7650-ai-chat-open-switches": true,
     "htpr-8038-chat-opener-ready": true,
     "htpr-7530-keep-ai-chat-closed": true,
+    "htpr-7983-free-mode-signup": true,
     [WAITS]: waits,
   };
-  const server = { data: undefined, dataUpdatedAt: 0 };
+  const server = { data: undefined, dataUpdatedAt: 0, isError: fetchFailed };
   const queryClient = { setQueryData: () => {}, invalidateQueries: () => {} };
   const api = load("src/hooks/General/useAiChatAutoOpen.ts", {
     react: h.react,
-    "next/navigation": { usePathname: () => "/detail/project-15/1", useSearchParams: () => new URLSearchParams("") },
+    "next/navigation": { usePathname: () => path.split("?")[0], useSearchParams: () => new URLSearchParams(path.split("?")[1] ?? "") },
     "@/lib/state": s.state,
     "@/store": atoms,
     "@/hooks/useFlag": { useFlag: (key) => flags[key] === true, useFlagReady: () => true },
@@ -105,11 +106,7 @@ function harness({ switches = {}, saved = {}, waits = true } = {}) {
       readChatNavigationState: () => ({}),
       writeChatNavigationState: () => {},
     },
-    "@/lib/aiChat/guestAutoOpen": {
-      guestAutoOpenAllowed: () => false,
-      signedInBoardAutoOpenAllowed: ({ manualChat, page, mobile, savedPreference, pinned }) =>
-        !manualChat && page !== null && (savedPreference || (pinned && !mobile)),
-    },
+    "@/lib/aiChat/guestAutoOpen": guestAutoOpen,
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     axios: { __esModule: true, default: { post: () => Promise.resolve(), get: () => Promise.resolve() } },
     "./useHydrated": { useHydrated: () => true },
@@ -118,6 +115,7 @@ function harness({ switches = {}, saved = {}, waits = true } = {}) {
         data: server.data,
         dataUpdatedAt: server.dataUpdatedAt,
         isSuccess: server.dataUpdatedAt > 0,
+        isError: server.isError,
       }),
     },
   });
@@ -125,10 +123,16 @@ function harness({ switches = {}, saved = {}, waits = true } = {}) {
   return {
     opens,
     render,
+    reserve: () => render().reserve,
     open: () => s.values.showAIChatInterfaceAtom,
+    savedCopy: () => s.values.aiChatAutoOpenPreferencesAtom,
     receive(data) { server.data = data; server.dataUpdatedAt += 1; render(); },
   };
 }
+
+const guestAutoOpen = load("src/lib/aiChat/guestAutoOpen.ts", {
+  "@/lib/demo/guest": { isGuestUser: (user) => Boolean(user?.uid?.startsWith("guest_")) },
+});
 
 test("a fresh browser stays closed when the account switches every auto-open off", () => {
   const h = harness();
@@ -161,6 +165,44 @@ test("with the switch off the chat opens immediately, as it does today", () => {
   const h = harness({ waits: false });
   h.render();
   assert.deepEqual(h.opens, [true]);
+});
+
+test("an account whose saved switches are still unset opens the chat as today", () => {
+  const h = harness();
+  h.render();
+  assert.deepEqual(h.opens, []);
+  h.receive({ aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null });
+  assert.deepEqual(h.opens, [true]);
+  assert.equal(h.open(), true);
+});
+
+test("a signed-in account with no saved switches row opens the chat as today", () => {
+  const h = harness({ fetchFailed: true });
+  h.render();
+  assert.deepEqual(h.opens, [true]);
+  assert.equal(h.open(), true);
+  assert.deepEqual(h.savedCopy(), {}, "a missing row must not be recorded as a saved copy");
+});
+
+test("a guest on a shared board still opens the chat by itself", () => {
+  const h = harness({ user: { id: 9, uid: "guest_abc" }, path: "/project?id=15" });
+  h.render();
+  assert.deepEqual(h.opens, []);
+  h.receive({ aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null });
+  assert.deepEqual(h.opens, [true]);
+  assert.equal(h.open(), true);
+});
+
+test("a signed-out visitor keeps the chat space reserved as today", () => {
+  const h = harness({ user: null });
+  assert.equal(h.reserve(), true);
+});
+
+test("a failed preferences fetch opens the chat as today", () => {
+  const h = harness({ fetchFailed: true });
+  h.render();
+  assert.deepEqual(h.opens, [true]);
+  assert.equal(h.open(), true);
 });
 
 test("the flag is a client-safe bugfix that ships to everyone", () => {
