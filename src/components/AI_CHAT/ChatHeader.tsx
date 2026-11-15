@@ -407,7 +407,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
         aria-label={drawer ? "Past chats" : undefined}
         className={cn(
           "overflow-y-auto bg-modalBackground scrollbar-none z-popup",
-          drawer
+          phonePastChatDrawer && isMbl
             ? "fixed inset-y-0 left-0 flex h-full w-[min(20rem,85vw)] flex-col pt-[max(0.25rem,env(safe-area-inset-top))] pr-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] pl-[max(0.25rem,env(safe-area-inset-left))] shadow-[0_8px_30px_rgba(0,0,0,0.45)]"
             : cn("absolute mt-2 w-64 max-w-[calc(100vw-1rem)]", headerMenus ? "max-h-[75svh] rounded-[4px] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]" : "max-h-[min(60svh,15rem)] rounded-md shadow-lg", alignmentClass),
         )}
