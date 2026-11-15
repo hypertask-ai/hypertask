@@ -32,6 +32,7 @@ import { useAiChatOpenPreferences } from "@/hooks/General/useAiChatOpenPreferenc
 import { AI_CHAT_AUTO_OPEN_DEFAULTS, AI_CHAT_AUTO_OPEN_KEYS } from "@/lib/aiChat/autoOpenPreferences";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7575_PHONE_CHAT_DELETE_FLAG } from "@/lib/flags/definitions/htpr-7575-phone-chat-delete";
+import { HTPR_9302_PHONE_CHAT_DRAWER_FLAG } from "@/lib/flags/definitions/htpr-9302-phone-chat-drawer";
 import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-7773-chat-header-name";
 import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 import Tooltip from "../Common/Tooltip";
@@ -179,6 +180,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
   const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
   const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
   const headerMenus = useFlag("htpr-8956-ai-chat-header-menus");
+  const phonePastChatDrawer = useFlag(HTPR_9302_PHONE_CHAT_DRAWER_FLAG);
   const keepClosedSwitch = useFlag("htpr-7530-keep-ai-chat-closed");
   const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
@@ -343,6 +345,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
 
   const renderSessionMenu = (alignmentClass: string) => {
     if (!isDropdownOpen) return null;
+    const drawer = phonePastChatDrawer && isMbl && alignmentClass === "drawer";
     const sessionRows = (chats: HistorySession[]) => {
       const rows: ReactNode[] = [];
       for (const chat of chats) {
@@ -398,8 +401,16 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
     return (
       <div
         id="ai-chat-session-history"
-        className={cn("absolute mt-2 w-64 max-w-[calc(100vw-1rem)] overflow-y-auto bg-modalBackground scrollbar-none z-popup", headerMenus ? "max-h-[75svh] rounded-[4px] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]" : "max-h-[min(60svh,15rem)] rounded-md shadow-lg", alignmentClass)}
-        style={headerMenus && historyMaxHeight ? { maxHeight: historyMaxHeight } : undefined}
+        role={drawer ? "dialog" : undefined}
+        aria-modal={drawer ? true : undefined}
+        aria-label={drawer ? "Past chats" : undefined}
+        className={cn(
+          "overflow-y-auto bg-modalBackground scrollbar-none z-popup",
+          drawer
+            ? "fixed inset-y-0 left-0 flex h-full w-[min(20rem,85vw)] flex-col p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]"
+            : cn("absolute mt-2 w-64 max-w-[calc(100vw-1rem)]", headerMenus ? "max-h-[75svh] rounded-[4px] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]" : "max-h-[min(60svh,15rem)] rounded-md shadow-lg", alignmentClass),
+        )}
+        style={!drawer && headerMenus && historyMaxHeight ? { maxHeight: historyMaxHeight } : undefined}
         onScroll={(event) => {
           const menu = event.currentTarget;
           if (sessionPagingEnabled && hasMoreSessions && !isLoadingMoreSessions && menu.scrollTop + menu.clientHeight >= menu.scrollHeight - 40) {
@@ -613,7 +624,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
         {agentsButton}
         <div className="relative shrink-0" ref={dropdownRef}>
           {historyButton}
-          {renderSessionMenu("right-0")}
+          {phonePastChatDrawer ? renderSessionMenu("drawer") : renderSessionMenu("right-0")}
         </div>
         <button
           type="button"
