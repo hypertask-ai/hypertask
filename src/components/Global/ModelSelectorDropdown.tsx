@@ -707,7 +707,7 @@ const AIModelDropDownList = ({
             </div>
           ) : null}
 
-          {Boolean(calm) && calmPicker && !(thinkingFlag && thinkingModelSupported) ? (
+          {showCalm ? (
             <div className="flex max-h-[360px] flex-col">
               <div className="min-h-0 overflow-y-auto">
                 {autoOption ? (
@@ -721,7 +721,7 @@ const AIModelDropDownList = ({
                     }}
                   />
                 ) : null}
-                {autoOption ? <div className="mx-2 my-1 h-px bg-border-light-gray-thin" /> : null}
+                {autoOption ? <div className="mx-2 my-1 border-t border-border-light-gray-thin" /> : null}
                 {calmRows.map((row) => {
                   const definition = getAiModelDefinition(row.key as TAiModelKey);
                   const option = availableOptions.find((candidate) => candidate.modelKey === row.key);
@@ -977,7 +977,7 @@ const AIModelDropDownList = ({
             </>
           ) : null}
 
-          <div className="mx-2 my-1 h-px bg-border-light-gray-thin" />
+          <div className="mx-2 my-1 border-t border-border-light-gray-thin" />
           <button
             type="button"
             className="flex w-full items-center justify-between rounded-[4px] px-2.5 py-2 text-left text-text-light-gray transition-colors hover:bg-hoverCardBackground hover:text-white-black disabled:cursor-not-allowed disabled:opacity-45"

@@ -28,7 +28,7 @@ test("calm rows stay flat, keep provider and price, and drop descriptions", () =
   assert.equal(JSON.stringify(rows).includes("Deep reasoning"), false);
 });
 
-async function mount(enabled) {
+async function mount(enabled, props = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://app.hypertask.ai/project" });
   const previousWindow = global.window;
   const previousDocument = global.document;
@@ -88,6 +88,7 @@ async function mount(enabled) {
       aiSelected: selected,
       currentOptions: [toAutoModelOption(selected), ...aiModelOptions],
       calm: true,
+      mobileQuickPicker: props.mobileQuickPicker,
       optionCallback() {},
     }));
   });
@@ -126,6 +127,25 @@ test("flag on pins Auto, shows provider and price, and hides the nested menu", a
     const standard = menu.querySelector("[data-calm-effort='standard']");
     assert.equal(standard && standard.getAttribute("aria-pressed"), "true");
     assert.match(standard.textContent, /Standard/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("flag on still lists models in the phone quick picker", async () => {
+  const { container, cleanup } = await mount(true, { mobileQuickPicker: true });
+  try {
+    const trigger = container.querySelector("button[aria-expanded='false']");
+    assert.ok(trigger);
+    await React.act(async () => trigger.click());
+    const menu = container.querySelector("#mobile-ai-chat-model-menu");
+    assert.ok(menu);
+    const calmShell = menu.querySelector("[data-calm-model-picker]");
+    const models = calmShell
+      ? [...calmShell.querySelectorAll("[data-calm-model]")]
+      : [...menu.querySelectorAll("[role='menuitemradio']")];
+    assert.ok(models.length > 1);
+    assert.match(models.map((row) => row.textContent).join("\n"), /Luna 6/);
   } finally {
     await cleanup();
   }
