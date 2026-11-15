@@ -1,9 +1,9 @@
 const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const test = require("node:test");
 const path = require("node:path");
 const { createJiti } = require("jiti");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { interopDefault: true });
@@ -212,51 +212,59 @@ function renderOpenedTicket({ deepLink, lastReadAt = null, unread = false, snaps
   });
   const params = new URLSearchParams();
   if (deepLink && deepLink !== "hash") params.set(taskDetailConfig.searchParams[deepLink], deepLink === "commentId" ? "comment-4" : "true");
-  const mocks = {
+  const { useTaskDetailInitialScroll } = loadModule("src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx", {
     react: { useEffect: (callback) => effects.push(callback), useLayoutEffect: () => {}, useCallback: (callback) => callback },
     "@/hooks/useFlag": { useFlag: (key) => { flagKeys.push(key); return false; } },
     "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_7395_CACHED_STATIC_FIRST_FLAG: "static" },
     "@/lib/taskDetail/initialTicketPosition": { initialTicketPosition },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: false, newCommentsLastReadAt: lastReadAt, descriptionStart: "live", liveRowsPendingFor: () => false }) },
-    "@/lib/configs/taskDetail.config": { __esModule: true, default: taskDetailConfig },
+    "@/lib/configs/taskDetail.config": { default: taskDetailConfig },
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
     "@/lib/snippets": { getTiptapEditorForMode: () => null },
-  };
-  const source = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx"), "utf8");
-  const js = require("typescript").transpileModule(source, { compilerOptions: { module: require("typescript").ModuleKind.CommonJS } }).outputText;
-  const exports = {};
-  new Function("require", "exports", "window", "document", "setTimeout", "clearTimeout", "requestAnimationFrame", "performance", js)(
-    (name) => { assert.ok(name in mocks, name); return mocks[name]; },
-    exports,
-    target,
-    { documentElement: target, getElementById: (id) => ({ click: () => movement.push(["click", id]) }) },
-    (callback) => { timers.set(++timerId, callback); return timerId; },
-    (id) => timers.delete(id),
-    (callback) => frames.push(callback),
-    { now: () => (clock += 500) },
-  );
-  const guard = createTaskDetailInitialScrollGuard(() => {});
-  exports.useTaskDetailInitialScroll({
-    _parsedTask: { id: 42 }, _mbl: false, scrollSetting: "Bottom", searchParams: params, showCreateTaskModal: { show: false },
-    newCommentsSnapshotReady: snapshotReady, newCommentIds: unread ? [77] : [], comments: [{ id: "77" }], visibleCommentIndices: [0],
-    bottomScrollCancelRef: { current: null }, hasBottomScrolledRef: { current: false }, hasScrolledToUnreadRef: { current: false },
-    initialScrollGenerationRef: { current: guard.reset() }, initialScrollViewportRef: { current: {} }, scrollElementRef: undefined,
-    virtualizeIndexes: { commentsStartVirtualIndex: 3 }, virtualizer: { scrollToIndex: (...args) => movement.push(["index", ...args]) },
-    focusOn: (...args) => movement.push(["focus", ...args]), defaultCommentFocus: () => movement.push(["bottom"]),
-    scrollVirtualize: (...args) => movement.push(["link", ...args]), setPriority_: () => {}, setEstimate_: () => {},
-    priorityForTaskTQ: null, estimateForTaskTQ: null, initialScrollGuard: guard,
   });
-  assert.equal(effects.length, 5);
-  effects[3]();
-  effects[4]();
-  for (let i = 0; timers.size || frames.length; i++) {
-    assert.ok(i < 30, "scroll settling must be bounded");
-    const pending = [...timers.values()];
-    timers.clear();
-    pending.forEach((callback) => callback());
-    frames.splice(0).forEach((callback) => callback());
+  const previous = {
+    window: global.window,
+    document: global.document,
+    setTimeout: global.setTimeout,
+    clearTimeout: global.clearTimeout,
+    requestAnimationFrame: global.requestAnimationFrame,
+    performance: global.performance,
+  };
+  global.window = target;
+  global.document = { documentElement: target, getElementById: (id) => ({ click: () => movement.push(["click", id]) }) };
+  global.setTimeout = (callback) => { timers.set(++timerId, callback); return timerId; };
+  global.clearTimeout = (id) => { timers.delete(id); };
+  global.requestAnimationFrame = (callback) => { frames.push(callback); };
+  global.performance = { now: () => (clock += 500) };
+  try {
+    const guard = createTaskDetailInitialScrollGuard(() => {});
+    useTaskDetailInitialScroll({
+      _parsedTask: { id: 42 }, _mbl: false, scrollSetting: "Bottom", searchParams: params, showCreateTaskModal: { show: false },
+      newCommentsSnapshotReady: snapshotReady, newCommentIds: unread ? [77] : [], comments: [{ id: "77" }], visibleCommentIndices: [0],
+      bottomScrollCancelRef: { current: null }, hasBottomScrolledRef: { current: false }, hasScrolledToUnreadRef: { current: false },
+      initialScrollGenerationRef: { current: guard.reset() }, initialScrollViewportRef: { current: {} }, scrollElementRef: undefined,
+      virtualizeIndexes: { commentsStartVirtualIndex: 3 }, virtualizer: { scrollToIndex: (...args) => movement.push(["index", ...args]) },
+      focusOn: (...args) => movement.push(["focus", ...args]), defaultCommentFocus: () => movement.push(["bottom"]),
+      scrollVirtualize: (...args) => movement.push(["link", ...args]), setPriority_: () => {}, setEstimate_: () => {},
+      priorityForTaskTQ: null, estimateForTaskTQ: null, initialScrollGuard: guard,
+    });
+    assert.equal(effects.length, 5);
+    effects[3]();
+    effects[4]();
+    for (let i = 0; timers.size || frames.length; i++) {
+      assert.ok(i < 30, "scroll settling must be bounded");
+      const pending = [...timers.values()];
+      timers.clear();
+      pending.forEach((callback) => callback());
+      frames.splice(0).forEach((callback) => callback());
+    }
+    return { movement, flagKeys };
+  } finally {
+    for (const key of Object.keys(previous)) {
+      if (previous[key] === undefined) delete global[key];
+      else global[key] = previous[key];
+    }
   }
-  return { movement, flagKeys };
 }
 
 test("opening a ticket keeps the live unread position and ignores the removed switch", () => {
