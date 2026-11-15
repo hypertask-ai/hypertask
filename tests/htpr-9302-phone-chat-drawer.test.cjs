@@ -113,6 +113,7 @@ test("phone flag off keeps the history dropdown over the chat", async () => {
     const history = await openHistory(view);
     assert.equal(history.getAttribute("role"), null);
     assert.match(history.className, /\babsolute\b/);
+    assert.match(history.className, /\bright-0\b/);
     assert.doesNotMatch(history.className, /\bfixed\b/);
     assert.match(history.textContent, /Launch plan/);
   } finally {
@@ -126,8 +127,35 @@ test("desktop keeps the history dropdown when the phone drawer flag is on", asyn
     const history = await openHistory(view);
     assert.equal(history.getAttribute("role"), null);
     assert.match(history.className, /\babsolute\b/);
+    assert.match(history.className, /\bleft-0\b/);
+    assert.doesNotMatch(history.className, /\bdrawer\b/);
     assert.doesNotMatch(history.className, /\bfixed\b/);
     assert.match(history.textContent, /Launch plan/);
+  } finally {
+    await view.cleanup();
+  }
+});
+
+test("phone flag on closes the past-chat drawer on backdrop tap and Escape", async () => {
+  const view = await mount({ mobile: true, drawer: true });
+  try {
+    const history = await openHistory(view);
+    assert.match(history.className, /safe-area-inset-top/);
+    assert.match(history.className, /safe-area-inset-left/);
+    assert.match(history.className, /safe-area-inset-bottom/);
+    const backdrop = [...view.container.querySelectorAll("div")].find((el) => el.getAttribute("aria-hidden") === "true" && el.className.includes("inset-0"));
+    assert.ok(backdrop);
+    assert.match(backdrop.className, /bg-black\/40/);
+    await React.act(async () => {
+      backdrop.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+    });
+    assert.equal(view.container.querySelector('[role="dialog"][aria-label="Past chats"]'), null);
+    assert.deepEqual(view.selected, []);
+    await openHistory(view);
+    await React.act(async () => {
+      document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    assert.equal(view.container.querySelector('[role="dialog"][aria-label="Past chats"]'), null);
   } finally {
     await view.cleanup();
   }

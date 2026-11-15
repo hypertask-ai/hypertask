@@ -458,6 +458,7 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
     '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
     "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
     '@/lib/flags/definitions/htpr-7575-phone-chat-delete': { HTPR_7575_PHONE_CHAT_DELETE_FLAG: 'htpr-7575-phone-chat-delete' },
+    '@/lib/flags/definitions/htpr-9302-phone-chat-drawer': { HTPR_9302_PHONE_CHAT_DRAWER_FLAG: 'htpr-9302-phone-chat-drawer' },
     '../Common/Tooltip': { __esModule: true, default: () => null },
     '@/lib/contexts/mobileContext': { MobileViewContext: React.createContext(false) },
     '@/lib/contexts/deviceContext': { useDeviceContext: () => false },

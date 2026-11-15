@@ -55,6 +55,7 @@ for (const mobile of [false, true]) {
       "@/lib/flags/definitions/htpr-7773-chat-header-name": flag,
       "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
       "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: "htpr-7575-phone-chat-delete" },
+      "@/lib/flags/definitions/htpr-9302-phone-chat-drawer": { HTPR_9302_PHONE_CHAT_DRAWER_FLAG: "htpr-9302-phone-chat-drawer" },
       "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => state },
       "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
       "@/lib/contexts/deviceContext": { useDeviceContext: () => false },

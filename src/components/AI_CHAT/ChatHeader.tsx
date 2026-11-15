@@ -207,6 +207,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
     ? <Loader2 size={16} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />
     : null;
   const isMbl = useContext(MobileViewContext);
+  const pastChatDrawer = phonePastChatDrawer && isMbl;
   const isApple = useDeviceContext();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
@@ -345,7 +346,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
 
   const renderSessionMenu = (alignmentClass: string) => {
     if (!isDropdownOpen) return null;
-    const drawer = phonePastChatDrawer && isMbl && alignmentClass === "drawer";
+    const drawer = pastChatDrawer;
     const sessionRows = (chats: HistorySession[]) => {
       const rows: ReactNode[] = [];
       for (const chat of chats) {
@@ -398,7 +399,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
       setIsDropdownOpen(false);
       sidebarChats?.onStartAgentSession?.(agentView);
     };
-    return (
+    const menu = (
       <div
         id="ai-chat-session-history"
         role={drawer ? "dialog" : undefined}
@@ -407,7 +408,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
         className={cn(
           "overflow-y-auto bg-modalBackground scrollbar-none z-popup",
           drawer
-            ? "fixed inset-y-0 left-0 flex h-full w-[min(20rem,85vw)] flex-col p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]"
+            ? "fixed inset-y-0 left-0 flex h-full w-[min(20rem,85vw)] flex-col pt-[max(0.25rem,env(safe-area-inset-top))] pr-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] pl-[max(0.25rem,env(safe-area-inset-left))] shadow-[0_8px_30px_rgba(0,0,0,0.45)]"
             : cn("absolute mt-2 w-64 max-w-[calc(100vw-1rem)]", headerMenus ? "max-h-[75svh] rounded-[4px] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]" : "max-h-[min(60svh,15rem)] rounded-md shadow-lg", alignmentClass),
         )}
         style={!drawer && headerMenus && historyMaxHeight ? { maxHeight: historyMaxHeight } : undefined}
@@ -549,6 +550,17 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
         {!agentView && sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
     );
+    if (!drawer) return menu;
+    return (
+      <>
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-popup bg-black/40"
+          onPointerDown={() => setIsDropdownOpen(false)}
+        />
+        {menu}
+      </>
+    );
   };
 
   const historyButton = (
@@ -624,7 +636,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
         {agentsButton}
         <div className="relative shrink-0" ref={dropdownRef}>
           {historyButton}
-          {phonePastChatDrawer ? renderSessionMenu("drawer") : renderSessionMenu("right-0")}
+          {renderSessionMenu("right-0")}
         </div>
         <button
           type="button"
