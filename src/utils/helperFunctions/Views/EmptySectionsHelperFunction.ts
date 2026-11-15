@@ -21,7 +21,7 @@ function applyEmptySectionSetting(
   unfilteredSections?: ISection[],
 ): ISection[] {
   const boardHasTasks = (unfilteredSections ?? sections).some(
-    (section) => (section.items?.length ?? 0) > 0,
+    (section) => section.visibility && (section.items?.length ?? 0) > 0,
   );
   if (setting === "Hidden" && showEmptyViewColumns && !boardHasTasks &&
       !sections.some((section) => section.visibility && (section.items?.length ?? 0) > 0)) {
