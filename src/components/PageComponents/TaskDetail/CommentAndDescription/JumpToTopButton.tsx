@@ -9,19 +9,46 @@ import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 
 const SHOW_AFTER_PX = 200;
 
+function scrollTarget(value: unknown): HTMLElement | Window | null {
+  if (value instanceof HTMLElement) return value;
+  if (value === window) return window;
+  return null;
+}
+
+function scrollPosition(target: HTMLElement | Window) {
+  if (target instanceof HTMLElement) return target.scrollTop;
+  return target.scrollY;
+}
+
 const JumpToTopButton = () => {
   const jumpToTop = useFlag(HTPR_8998_JUMP_TO_TOP_FLAG);
   const { focusOn, scrollVirtualize, virtualizer } = useTaskContext();
   const [scrolled, setScrolled] = useState(false);
 
-  useEffect(jumpToTop ? () => {
-    const element = virtualizer.scrollElement as HTMLElement | null;
-    const target: HTMLElement | Window = element ?? window;
-    const sync = () => setScrolled((target === window ? window.scrollY : target.scrollTop) > SHOW_AFTER_PX);
-    sync();
-    target.addEventListener("scroll", sync, { passive: true });
-    return () => target.removeEventListener("scroll", sync);
-  } : () => {}, [jumpToTop, virtualizer]);
+  useEffect(() => {
+    if (!jumpToTop) return;
+    let detach = () => {};
+    let frame = 0;
+    let stopped = false;
+    const watch = () => {
+      if (stopped) return;
+      const element = scrollTarget(virtualizer.scrollElement);
+      if (!element) {
+        frame = window.requestAnimationFrame(watch);
+        return;
+      }
+      const sync = () => setScrolled(scrollPosition(element) > SHOW_AFTER_PX);
+      sync();
+      element.addEventListener("scroll", sync, { passive: true });
+      detach = () => element.removeEventListener("scroll", sync);
+    };
+    watch();
+    return () => {
+      stopped = true;
+      if (frame) window.cancelAnimationFrame(frame);
+      detach();
+    };
+  }, [jumpToTop, virtualizer]);
 
   if (!jumpToTop || !scrolled) return null;
 
