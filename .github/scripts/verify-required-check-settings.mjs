@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const maxWaitSeconds = 3900;
 const deadline = Date.now() + 4_000_000;
@@ -113,6 +114,33 @@ function publishResult(verified) {
   if (output) appendFileSync(output, `verified=${verified}\n`);
 }
 
+const expected = [
+  "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
+  "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "premerge-evidence",
+].sort();
+const retiring = [
+  "premerge-evidence",
+].sort();
+
+export function liveRequiredChecksMatch(actualContexts) {
+  const actual = new Set(actualContexts);
+  const required = new Set(expected);
+  const retired = new Set(retiring);
+  for (const context of actual) {
+    if (!required.has(context)) return false;
+  }
+  for (const context of required) {
+    if (!actual.has(context) && !retired.has(context)) return false;
+  }
+  return true;
+}
+
+export function assertLiveRequiredChecks(actualContexts) {
+  if (!liveRequiredChecksMatch(actualContexts)) {
+    throw new Error("Live required checks do not match docs/ci-policy.yml.");
+  }
+}
+
 function reportRateLimitRefusal(error) {
   const proof = lastVerified();
   const line = describeProof(proof);
@@ -127,6 +155,7 @@ function reportRateLimitRefusal(error) {
   publishResult(false);
 }
 
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 try {
   if (!needsVerification()) {
     console.log("Required-check settings: PR has no CI-policy changes; skipping settings API reads.");
@@ -147,16 +176,10 @@ try {
         ruleset.conditions.ref_name.exclude.includes("refs/heads/production")) {
       throw new Error("The required-check ruleset does not protect production.");
     }
-    const expected = [
-      "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
-      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "premerge-evidence",
-    ].sort();
     const actual = [...new Set(ruleset.rules
       .filter((rule) => rule.type === "required_status_checks")
       .flatMap((rule) => rule.parameters.required_status_checks.map((check) => check.context)))].sort();
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-      throw new Error("Live required checks do not match docs/ci-policy.yml.");
-    }
+    assertLiveRequiredChecks(actual);
     recordVerified({
       repository: repo,
       defaultBranch: repository.default_branch,
@@ -173,4 +196,5 @@ try {
     console.error(`::error::${error.message}`);
     process.exitCode = 1;
   }
+}
 }

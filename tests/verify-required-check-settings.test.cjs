@@ -4,6 +4,7 @@ const { spawnSync } = require("node:child_process");
 const { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
+const { pathToFileURL } = require("node:url");
 
 const script = resolve(__dirname, "../.github/scripts/verify-required-check-settings.mjs");
 const base = "a".repeat(40);
@@ -251,4 +252,58 @@ test("different live required contexts fail verification", () => {
   assertRejected(result);
   assert.match(result.output, /Live required checks do not match docs\/ci-policy.yml/);
   assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 3);
+});
+
+function loadChecker() {
+  return import(pathToFileURL(script).href);
+}
+
+test("live required checks pass with all ten contexts", async () => {
+  const { assertLiveRequiredChecks } = await loadChecker();
+  assert.doesNotThrow(() => assertLiveRequiredChecks(contexts));
+});
+
+test("live required checks pass with nine contexts when premerge-evidence is gone", async () => {
+  const { assertLiveRequiredChecks } = await loadChecker();
+  const nine = contexts.filter((context) => context !== "premerge-evidence");
+  assert.equal(nine.length, 9);
+  assert.doesNotThrow(() => assertLiveRequiredChecks(nine));
+});
+
+test("live required checks fail with eight contexts", async () => {
+  const { assertLiveRequiredChecks } = await loadChecker();
+  const eight = contexts.filter((context) => context !== "premerge-evidence" && context !== "ci-tests");
+  assert.equal(eight.length, 8);
+  assert.throws(
+    () => assertLiveRequiredChecks(eight),
+    { message: "Live required checks do not match docs/ci-policy.yml." },
+  );
+});
+
+test("live required checks fail when a context that is not retiring is missing", async () => {
+  const { assertLiveRequiredChecks } = await loadChecker();
+  const nine = contexts.filter((context) => context !== "ci-tests");
+  assert.equal(nine.length, 9);
+  assert.throws(
+    () => assertLiveRequiredChecks(nine),
+    { message: "Live required checks do not match docs/ci-policy.yml." },
+  );
+});
+
+test("live required checks fail with an unknown extra context", async () => {
+  const { assertLiveRequiredChecks } = await loadChecker();
+  assert.throws(
+    () => assertLiveRequiredChecks([...contexts, "not-a-real-check"]),
+    { message: "Live required checks do not match docs/ci-policy.yml." },
+  );
+});
+
+test("nine live contexts without premerge-evidence still verify", () => {
+  const live = contexts.filter((context) => context !== "premerge-evidence");
+  const result = runSettings({ liveContexts: live });
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /Required-check settings verified:/);
+  assert.doesNotMatch(result.output, /::error::/);
+  assert.deepEqual(result.stored.contexts, [...live].sort());
+  assert.equal(result.stepOutput, "verified=true\n");
 });

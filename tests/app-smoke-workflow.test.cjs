@@ -456,10 +456,16 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.match(settingsScript, /ruleset\.conditions\.ref_name\.exclude\.includes\("refs\/heads\/production"\)/);
   assert.match(settingsScript, /new Set\(ruleset\.rules/);
   assert.match(settingsScript, /Live required checks do not match docs\/ci-policy\.yml/);
+  const policy = yaml.load(await readFile("docs/ci-policy.yml", "utf8"));
   const contexts = settingsScript.match(/const expected = \[([\s\S]*?)\]\.sort\(\)/)[1];
+  const retiringContexts = settingsScript.match(/const retiring = \[([\s\S]*?)\]\.sort\(\)/)[1];
   assert.deepEqual(
     [...contexts.matchAll(/"([^"\n]+)"/g)].map((match) => match[1]).sort(),
-    yaml.load(await readFile("docs/ci-policy.yml", "utf8")).required_checks.contexts.sort(),
+    policy.required_checks.contexts.sort(),
+  );
+  assert.deepEqual(
+    [...retiringContexts.matchAll(/"([^"\n]+)"/g)].map((match) => match[1]).sort(),
+    policy.required_checks.retiring_contexts.sort(),
   );
 });
 
@@ -490,6 +496,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     policy.policies.production_ruleset.required_status_checks,
     required,
   );
+  assert.deepEqual(policy.required_checks.retiring_contexts, ["premerge-evidence"]);
 });
 
 test("npm registry proxy refuses arbitrary CONNECT targets", async (t) => {
