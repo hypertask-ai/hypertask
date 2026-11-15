@@ -3,6 +3,7 @@ import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7
 import { HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG } from '@/lib/flags/definitions/htpr-8797-feedback-house-parts'
 import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
 import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
+import { HTPR_9275_UNEXPLAINED_AGENT_REPORT_FLAG } from '@/lib/flags/definitions/htpr-9275-unexplained-agent-report'
 import { accountCategory } from '@/lib/telemetry/accountCategory'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
@@ -87,8 +88,9 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
 }
 
-function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
-  return input.category === 'call_failed' && input.tool !== undefined && input.status === undefined && !input.errorCode && !input.field
+function toolOnlyFailure(input: AutomaticFeedbackInput, hasKeptNote: boolean): boolean {
+  const explainsNothing = input.status === undefined && !input.errorCode && !input.field && !hasKeptNote
+  return explainsNothing && input.tool !== undefined && (input.category === 'call_failed' || input.category === 'other')
 }
 
 async function noEvidenceRefused(userId?: number): Promise<boolean> {
@@ -97,6 +99,17 @@ async function noEvidenceRefused(userId?: number): Promise<boolean> {
     return userId === undefined
       ? await featureFlagCandidateUserIds(HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG) === null
       : await isFeatureEnabled(HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG, userId)
+  } catch {
+    return false
+  }
+}
+
+async function unexplainedReportRefused(userId?: number): Promise<boolean> {
+  try {
+    const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
+    return userId === undefined
+      ? await featureFlagCandidateUserIds(HTPR_9275_UNEXPLAINED_AGENT_REPORT_FLAG) === null
+      : await isFeatureEnabled(HTPR_9275_UNEXPLAINED_AGENT_REPORT_FLAG, userId)
   } catch {
     return false
   }
@@ -293,7 +306,9 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
         }
-        if (reporter.origin === 'agent' && toolOnlyFailure(input) && !existing && await noEvidenceRefused(userId)) {
+        const noEvidence = reporter.origin === 'agent' && toolOnlyFailure(input, Boolean(stored?.note)) && !existing &&
+          (input.category === 'call_failed' ? await noEvidenceRefused(userId) : await unexplainedReportRefused(userId))
+        if (noEvidence) {
           console.info('AI feedback not filed: the report names a tool but no status, error code or field', { surface: input.surface, tool: input.tool, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'no_evidence' as const, error: 'No ticket filed: the report names a tool but no HTTP status or error code. Report again with the status and error code of the failed call.' }
         }
