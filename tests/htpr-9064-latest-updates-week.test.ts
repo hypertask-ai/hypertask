@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  digestRunLabel,
   latestUpdatesDayGroups,
 } from "../src/lib/rocketDigest/panel";
 
@@ -87,6 +88,9 @@ test("day groups keep the sidebar readable and in order", () => {
   assert.deepEqual(groups[2].posts.map((post) => post.id), ["d"]);
   assert.equal(groups[0].label, "Today");
   assert.equal(groups[1].label, "Yesterday");
+  assert.match(digestRunLabel(now.toISOString(), now), /^Notes last ran today at /);
+  assert.match(digestRunLabel(hoursAgo(30).toISOString(), now), /^Notes last ran yesterday at /);
+  assert.equal(digestRunLabel(null, now), "Notes job has not run yet");
 });
 
 async function main() {

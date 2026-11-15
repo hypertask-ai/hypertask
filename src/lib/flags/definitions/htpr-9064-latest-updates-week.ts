@@ -7,9 +7,9 @@ export default {
   kind: "improvement",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-15",
-  description: "Latest Updates reaches back a week of notes and groups them under day headings.",
+  description: "Latest Updates reaches back a week of notes, groups them by day, and names the last notes job run in the panel footer.",
   releaseRisk: {
     risk: "small",
-    reason: "Only the Latest Updates panel shows a week of notes with day headings. Off shows the newest 15 notes in one flat list.",
+    reason: "Only the Latest Updates panel shows more notes, day headings and one footer line. Off shows the newest 15 notes in one flat list with no footer line.",
   },
 } as const satisfies FeatureFlagDefinition;

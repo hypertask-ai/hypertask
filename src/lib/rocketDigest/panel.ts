@@ -35,3 +35,12 @@ export function latestUpdatesDayGroups<T extends DatedPost>(
   }
   return groups;
 }
+
+export function digestRunLabel(iso: string | null | undefined, now: Date): string {
+  if (!iso) return "Notes job has not run yet";
+  const run = new Date(iso);
+  if (Number.isNaN(run.getTime())) return "Notes job run time is unknown";
+  const day = dayLabel(run, now);
+  const time = run.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `Notes last ran ${day === "Today" || day === "Yesterday" ? day.toLowerCase() : `on ${day}`} at ${time}`;
+}
