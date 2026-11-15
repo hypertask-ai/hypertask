@@ -9,9 +9,9 @@ const root = path.resolve(__dirname, '..')
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: config.url ?? 'https://example.test/search' })
-  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'fetch']
+  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'fetch', 'getComputedStyle', 'ResizeObserver']
     .map((key) => [key, Object.getOwnPropertyDescriptor(global, key)])
-  Object.assign(global, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, IS_REACT_ACT_ENVIRONMENT: true })
+  Object.assign(global, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, IS_REACT_ACT_ENVIRONMENT: true, getComputedStyle: dom.window.getComputedStyle, ResizeObserver: class { observe() {} disconnect() {} } })
   Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator })
   dom.window.HTMLElement.prototype.attachEvent = () => {}
   dom.window.HTMLElement.prototype.detachEvent = () => {}
