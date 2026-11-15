@@ -13,10 +13,10 @@ import {
 } from "@/models/Announcements/model";
 import { useAnnouncementMute } from "@/hooks/General/useGetUserPreferences";
 import { prefixUseGetAnnouncements } from "@/hooks/MultiPages/Sidebar/useGetAnnouncements";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_9064_LATEST_UPDATES_WEEK_FLAG } from "@/lib/flags/definitions/htpr-9064-latest-updates-week";
-import { digestRunLabel, latestUpdatesDayGroups } from "@/lib/rocketDigest/panel";
+import { latestUpdatesDayGroups } from "@/lib/rocketDigest/panel";
 
 
 const YOUTUBE_URL = "https://www.youtube.com/@hypertasks";
@@ -257,58 +257,37 @@ const SinglePost: React.FC<{
   );
 };
 
-const useLastDigestRun = (enabled: boolean) =>
-  useQuery<{ lastRunAt: string | null }>({
-    queryKey: ["announcements-last-digest-run"],
-    queryFn: async () =>
-      (await axios.get<{ lastRunAt: string | null }>(
-        "/api/users/announcements/getLastDigestRun",
-      )).data,
-    enabled,
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-  });
-
-const ChannelsFooter = () => {
-  const weekOfUpdates = useFlag(HTPR_9064_LATEST_UPDATES_WEEK_FLAG);
-  const { data: lastRun } = useLastDigestRun(weekOfUpdates);
-  return (
-    <div className="border-t border-border xs:px-3 sm:px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-      {weekOfUpdates && lastRun && (
-        <p className="mb-3 text-micro text-text-light-gray">
-          {digestRunLabel(lastRun.lastRunAt, new Date())}
-        </p>
-      )}
-      <p className="mb-2 text-micro uppercase tracking-wider text-text-light-gray">
-        Follow along
-      </p>
-      <div className="flex flex-col">
-        <ChannelRow
-          href={YOUTUBE_URL}
-          label="YouTube"
-          sub="@hypertasks · feature demos"
-          iconBg="rgba(255,61,61,0.14)"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF3D3D">
-              <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4l6.2 3.6z" />
-            </svg>
-          }
-        />
-        <ChannelRow
-          href={X_URL}
-          label="X"
-          sub="@hypertasks · follow updates"
-          iconBg="#000000"
-          icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff">
-              <path d="M18.9 1.1h3.7l-8 9.1L24 22.9h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.1h7.6l5.2 6.9zM17.6 20.7h2L6.5 3.2H4.3z" />
-            </svg>
-          }
-        />
-      </div>
+const ChannelsFooter = () => (
+  <div className="border-t border-border xs:px-3 sm:px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <p className="mb-2 text-micro uppercase tracking-wider text-text-light-gray">
+      Follow along
+    </p>
+    <div className="flex flex-col">
+      <ChannelRow
+        href={YOUTUBE_URL}
+        label="YouTube"
+        sub="@hypertasks · feature demos"
+        iconBg="rgba(255,61,61,0.14)"
+        icon={
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF3D3D">
+            <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4l6.2 3.6z" />
+          </svg>
+        }
+      />
+      <ChannelRow
+        href={X_URL}
+        label="X"
+        sub="@hypertasks · follow updates"
+        iconBg="#000000"
+        icon={
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff">
+            <path d="M18.9 1.1h3.7l-8 9.1L24 22.9h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.1h7.6l5.2 6.9zM17.6 20.7h2L6.5 3.2H4.3z" />
+          </svg>
+        }
+      />
     </div>
-  );
-};
+  </div>
+);
 
 const ChannelRow = ({
   href,
