@@ -57,6 +57,7 @@ import { AiComposerTextarea } from "./AiComposerTextarea";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
+import { HTPR_8957_CALM_MODEL_PICKER_FLAG } from "@/lib/flags/definitions/htpr-8957-calm-model-picker";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
@@ -117,6 +118,7 @@ export function AI_Tiptap_Container({
   const chatCleanupFlag = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const oneComposerFlag = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
   const thinkingControlsFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
+  const calmModelPicker = useFlag(HTPR_8957_CALM_MODEL_PICKER_FLAG);
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
@@ -297,6 +299,7 @@ export function AI_Tiptap_Container({
       className={oneComposer ? "bottom-[110%] right-0 left-auto top-auto" : "bottom-[110%] top-auto"}
       stackSubmenus
       thinkingControls={thinkingControlsEnabled}
+      calm={calmModelPicker ? true : undefined}
       effortLabelClassName={
         oneComposer || pathname?.startsWith("/chat") ? undefined : "hidden"
       }
@@ -462,6 +465,7 @@ export function AI_Tiptap_Container({
                 modelBilling={modelBilling}
                 currentOptions={displayAiOptions}
                 mobileQuickPicker
+                calm={calmModelPicker ? true : undefined}
               />
             )
           }

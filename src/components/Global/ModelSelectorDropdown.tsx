@@ -9,6 +9,8 @@ import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
 import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
+import { HTPR_8957_CALM_MODEL_PICKER_FLAG } from "@/lib/flags/definitions/htpr-8957-calm-model-picker";
+import { calmModelRows } from "@/lib/aiChat/calmModelPicker";
 import {
   AI_THINKING_EFFORTS,
   modelSupportsThinkingControl,
@@ -115,6 +117,7 @@ const AIModelDropDownList = ({
   onKeyboardClose,
   shortcutHint,
   thinkingControls = false,
+  calm = false,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -134,6 +137,7 @@ const AIModelDropDownList = ({
   onKeyboardClose?: () => void;
   shortcutHint?: string;
   thinkingControls?: boolean;
+  calm?: boolean;
 }) => {
   const alwaysUseThisKey = useFlag(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG);
   const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
@@ -220,6 +224,7 @@ const AIModelDropDownList = ({
   const autoFlag = useFlag(HTPR_7915_AUTO_MODEL_FLAG);
   const pickerAutoFlag = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
   const thinkingFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
+  const calmPicker = useFlag(HTPR_8957_CALM_MODEL_PICKER_FLAG);
   const { preference: thinkingPreference, setPreference: setThinkingPreference } = useAiThinkingPreference();
   const autoOption = autoFlag || pickerAutoFlag
     ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID) ??
@@ -263,6 +268,28 @@ const AIModelDropDownList = ({
     thinkingControls &&
     !autoSelected &&
     modelSupportsThinkingControl(selectedOption.modelKey);
+  const showCalm = Boolean(calm) && calmPicker && !mobileQuickPicker && !(thinkingFlag && thinkingModelSupported);
+  const calmCandidates: {
+    key: string;
+    label: string;
+    provider: string;
+    priceTier?: 1 | 2 | 3;
+  }[] = [];
+  if (showCalm) {
+    for (const model of aiModelDefinitions) {
+      const listed = isGuest
+        ? listedModelKeys.has(model.key)
+        : availableOptions.some((option) => option.modelKey === model.key);
+      if (!listed || model.provider === "custom") continue;
+      calmCandidates.push({
+        key: model.key,
+        label: model.label,
+        provider: model.provider,
+        priceTier: model.priceTier,
+      });
+    }
+  }
+  const calmRows = showCalm ? calmModelRows(AI_PROVIDERS, calmCandidates) : [];
 
   const isByokPlan =
     respectTeamAvailability && scopedBilling?.storePlanId === "BYOK";
@@ -651,8 +678,10 @@ const AIModelDropDownList = ({
       {isOpen ? (
         <div
           ref={menuRef}
+          data-calm-model-picker={showCalm ? "" : undefined}
           className={cn(
-            "absolute top-[calc(100%+6px)] z-50 w-[250px] max-w-[calc(100vw-16px)] rounded-[4px] bg-modalBackground p-1.5 text-dense text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]",
+            "absolute top-[calc(100%+6px)] z-50 max-w-[calc(100vw-16px)] rounded-[4px] bg-modalBackground p-1.5 text-dense text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]",
+            showCalm ? "w-[300px]" : "w-[250px]",
             menuAlign === "right" ? "right-0" : "left-0",
             className
           )}
@@ -678,6 +707,95 @@ const AIModelDropDownList = ({
             </div>
           ) : null}
 
+          {Boolean(calm) && calmPicker && !(thinkingFlag && thinkingModelSupported) ? (
+            <div className="flex max-h-[360px] flex-col">
+              <div className="min-h-0 overflow-y-auto">
+                {autoOption ? (
+                  <SubmenuRow
+                    label={autoOption.title}
+                    selected={autoSelected}
+                    marker="auto"
+                    onClick={() => {
+                      optionCallback(autoOption);
+                      setSubmenu(null);
+                    }}
+                  />
+                ) : null}
+                {autoOption ? <div className="mx-2 my-1 h-px bg-border-light-gray-thin" /> : null}
+                {calmRows.map((row) => {
+                  const definition = getAiModelDefinition(row.key as TAiModelKey);
+                  const option = availableOptions.find((candidate) => candidate.modelKey === row.key);
+                  const isGuestLocked = isGuest && !isGuestAllowedModelKey(row.key as TAiModelKey);
+                  const hasCustomerKey = !!option && isProviderEnabled(option.source);
+                  const isPremiumLocked =
+                    !isGuest &&
+                    respectTeamAvailability &&
+                    isPremiumAiModelDefinition(definition, freePlan) &&
+                    (scopedBilling?.storePlanId === "Free" ||
+                      (scopedBilling?.storePlanId === "BYOK" && !hasCustomerKey));
+                  const locked = isGuestLocked || isPremiumLocked;
+                  return (
+                    <SubmenuRow
+                      key={row.key}
+                      label={row.label}
+                      aside={row.providerLabel}
+                      priceTier={definition?.priceTier}
+                      selected={!autoSelected && definition?.key === selectedOption.modelKey}
+                      locked={locked}
+                      marker="model"
+                      onClick={() => {
+                        if (isGuestLocked) {
+                          router.push("/login");
+                          return;
+                        }
+                        if (isPremiumLocked) {
+                          if (pricingHref) {
+                            selectSettingsTeam();
+                            router.push(pricingHref);
+                          }
+                          return;
+                        }
+                        selectModel(row.key as TAiModelKey);
+                      }}
+                    />
+                  );
+                })}
+                {customEndpoint.configured ? (
+                  <SubmenuRow
+                    label={customEndpoint.modelId ?? "Custom endpoint"}
+                    aside="Custom"
+                    selected={!autoSelected && selectedOption.source === "custom"}
+                    marker="model"
+                    disabled={isByokPlan && !isProviderEnabled("custom")}
+                    onClick={() => selectModel("custom")}
+                  />
+                ) : null}
+              </div>
+              {selectedEfforts.length > 0 ? (
+                <div className="mt-1 flex flex-wrap items-center gap-1 border-t border-border-light-gray-thin px-1.5 pt-1.5">
+                  <span className="px-1 text-text-light-gray">Effort</span>
+                  {selectedEfforts.map((effort) => (
+                    <button
+                      key={effort}
+                      type="button"
+                      data-calm-effort={effort}
+                      aria-pressed={effort === selectedOption.effort}
+                      className={cn(
+                        "rounded-[4px] px-2 py-1",
+                        effort === selectedOption.effort
+                          ? "bg-hoverCardBackground text-white-black"
+                          : "text-text-light-gray",
+                      )}
+                      onClick={() => selectEffort(effort)}
+                    >
+                      {getAiEffortLabel(selectedOption.modelKey, effort)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+          <>
           <MenuRow
             label="Model"
             value={selectedModelLabel ?? "Select model"}
@@ -881,6 +999,8 @@ const AIModelDropDownList = ({
             <span>Reset to default</span>
             <RotateCcw size={16} className="text-content" strokeWidth={1.75} />
           </button>
+          </>
+          )}
 
         </div>
       ) : null}
@@ -921,24 +1041,30 @@ function MenuRow({
 function SubmenuRow({
   label,
   note,
+  aside,
   priceTier,
   selected,
   disabled = false,
   locked = false,
+  marker,
   onClick,
 }: {
   label: string;
   note?: string;
+  aside?: string;
   priceTier?: 1 | 2 | 3;
   selected: boolean;
   disabled?: boolean;
   locked?: boolean;
+  marker?: "auto" | "model";
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
+      data-calm-auto={marker === "auto" ? "" : undefined}
+      data-calm-model={marker === "model" ? "" : undefined}
       className={cn(
         "flex w-full items-center justify-between gap-2 rounded-[4px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground disabled:cursor-not-allowed disabled:opacity-45",
         locked && "cursor-pointer opacity-45"
@@ -954,6 +1080,7 @@ function SubmenuRow({
         ) : null}
       </span>
       <span className="flex flex-none items-center gap-2">
+        {aside ? <span className="text-text-light-gray">{aside}</span> : null}
         {priceTier ? (
           <span className="font-mono text-micro text-text-light-gray">
             {"$".repeat(priceTier)}
