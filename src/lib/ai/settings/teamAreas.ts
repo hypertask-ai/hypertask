@@ -25,8 +25,9 @@ async function board(userId: number, projectId: number) {
     },
     select: { id: true, team: { select: { id: true, aiProviderSettings: true, googleAccount: { select: { userId: true } } } } },
   });
-  if (!project?.team) throw new Error(denied);
-  return project;
+  const team = project?.team;
+  if (!project || !team) throw new Error(denied);
+  return { id: project.id, team };
 }
 async function owned(userId: number, projectId: number) {
   const project = await board(userId, projectId);
@@ -138,7 +139,7 @@ export async function applyTeamArea(userId: number, scope: SettingsScope, change
       if (resolveTeamProviderEnabled(team?.aiProviderSettings, provider) !== expected) throw new Error(stale);
       const stored = providerSettings(team?.aiProviderSettings, provider, next);
       if (resolveTeamProviderEnabled(stored, provider) !== next) throw new Error("Turn off GDPR safe mode before enabling this provider.");
-      await tx.team.update({ where: { id: teamId }, data: { aiProviderSettings: stored } });
+      await tx.team.update({ where: { id: teamId }, data: { aiProviderSettings: stored as Prisma.InputJsonValue } });
     }, operation);
     return;
   }

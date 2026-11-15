@@ -10,7 +10,7 @@ export function createSettingsTool(context: ToolContext) {
   let proposalIssued = false;
   return {
     hypertask_settings: tool({
-      description: "Help with the currently open Settings page, using only the signed-in person's rights. Read first for current values and exact ids. Propose ONE change: theme, notification category or channel, email notification switch, board member role, column visibility, team AI provider, existing own-key switch, skill switch, webhook switch, or management-key switch. This never applies it. The app shows From and To, then Apply, Cancel, and Undo. Only the board owner can change roles. Only the team owner can change providers, keys, webhooks, and management keys. A person can change only their own skills and email switch. Never claim success before Apply. Billing, deletion, invitations, and new secrets stay manual. Never type a key or token into chat, and never use other tools to bypass the confirmation card. Settings outside the open page require opening that page first.",
+      description: "One proposal on the open page. Never apply or type a secret. Use open otherwise. Roles: board owner. Providers, keys, webhooks, management keys: team owner. Skill and email: that person only. Manual: billing, deletion, invitations, new secrets.",
       inputSchema: z.object({
         action: z.enum(["read", "propose", "open"]),
         change: settingChangeSchema.optional(),
@@ -38,7 +38,11 @@ export function createSettingsTool(context: ToolContext) {
           const proposal = await createSettingProposal(context.user.id, context.body.session_id, scope, input.change);
           return { success: true, proposal, message: "Nothing changed yet. Ask the person to review the app's confirmation card and press Apply or Cancel." };
         } catch (error) {
-          const section = input.change.kind === "theme" ? "appearance" : input.change.kind === "notification" ? "notifications" : input.change.kind === "team-area" ? teamAreaPages[input.change.area] : "board-members";
+          const parsed = settingChangeSchema.safeParse(input.change).data;
+          let section = "board-members";
+          if (parsed && parsed.kind === "theme") section = "appearance";
+          else if (parsed && parsed.kind === "notification") section = "notifications";
+          else if (parsed && parsed.kind === "team-area") section = teamAreaPages[parsed.area];
           context.send("settings", { path: `/settings/${section}` });
           return { success: false, error: error instanceof Error ? error.message : "Could not propose setting change", path: `/settings/${section}` };
         }
