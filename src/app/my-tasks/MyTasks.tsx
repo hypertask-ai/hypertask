@@ -4,14 +4,10 @@ import BackButton from "@/components/Buttons/BackButton";
 import { SplitTitle } from "@/components/Common/TaskRowComponents/TaskListRow";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
-import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8144_PHONE_MY_TASKS_FLAG } from "@/lib/flags/definitions/htpr-8144-phone-my-tasks";
 import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import { HTPR_6940_DROP_BOARD_TABS_FLAG } from "@/lib/flags/definitions/htpr-6940-drop-board-tabs";
-import {
-  MY_TASKS_PRIORITY_FILTER_FLAG,
-} from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
   createMyTasksReconcileRunner,
@@ -20,8 +16,6 @@ import {
 import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import { MyTasksBulkSelectionProvider } from "@/lib/contexts/MyTasks/BulkSelectionContext";
 import MyTasksBulkActionBar from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
-import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
-import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
   myTasksOverdueCountsAPIRoute,
   myTasksViewAPIRoute,
@@ -29,7 +23,6 @@ import {
 } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
-import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
 import {
   applyMyTasksView,
   overdueCountForMyTasksView,
@@ -184,12 +177,6 @@ const MyTasks = ({
   );
   const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
-  const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
-  const [prioritySelection, setPrioritySelection] = useState<
-    IPrioritiesConstants[]
-  >([]);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
   const saveRequestToken = useRef(0);
   const observedViewParam = useRef<string | null | undefined>(undefined);
   const updateViewConfig = useCallback(
@@ -199,8 +186,6 @@ const MyTasks = ({
     },
     [],
   );
-  useClickOutside(filterRef, () => setFilterOpen(false));
-
   const reconcileScopes = useMemo(
     () => effectiveMyTasksScopes(viewConfig.scopes),
     [viewConfig.scopes],
@@ -386,12 +371,6 @@ const MyTasks = ({
     activeView?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
   );
   const dirty = JSON.stringify(viewConfig) !== JSON.stringify(baselineConfig);
-
-  const selectedPriorities = filterEnabled ? prioritySelection : [];
-  const priorityFilteredSections = useMemo(
-    () => filterMyTasksByPriority(sections, selectedPriorities),
-    [sections, selectedPriorities]
-  );
 
   const groupBy = effectiveMyTasksGroupBy(viewConfig);
 
@@ -643,7 +622,6 @@ const MyTasks = ({
     }
     setActiveViewId(requestedView.id);
     updateViewConfig(parseMyTasksViewConfig(requestedView.config));
-    setFilterOpen(false);
   }, [activeViewId, replaceParams, updateViewConfig, viewParam, views]);
 
   useEffect(() => {
@@ -655,10 +633,6 @@ const MyTasks = ({
         !returnIfModalOrInputActive()
       ) {
         event.preventDefault();
-        if (filterOpen) {
-          setFilterOpen(false);
-          return;
-        }
         router.back();
         return;
       }
@@ -680,7 +654,7 @@ const MyTasks = ({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeSplit, activeTabs.length, boardTabsHidden, filterOpen, router, showCommands.show, updateSplit]);
+  }, [activeSplit, activeTabs.length, boardTabsHidden, router, showCommands.show, updateSplit]);
 
   const selectView = (viewId: number | null) => {
     pickedView.current = true;
@@ -693,7 +667,6 @@ const MyTasks = ({
     );
     setActiveViewId(view?.id ?? null);
     updateViewConfig(nextConfig);
-    setFilterOpen(false);
     const currentBoardId = boardParam ? Number(boardParam) : null;
     const boardStillVisible =
       currentBoardId === null ||
@@ -919,13 +892,6 @@ const boardTabCounts = useMemo(() => {
     [boardTabsHidden, dateFilterVersion, visibleSections],
   );
 
-  const togglePriority = (priority: IPrioritiesConstants) =>
-    setPrioritySelection((current) =>
-      current.some((p) => p.priority_index === priority.priority_index)
-        ? current.filter((p) => p.priority_index !== priority.priority_index)
-        : [...current, priority]
-    );
-
   const splitTitles = activeTabs.map((item, index) => (
     <SplitTitle
       key={`split-my-tasks-${index}`}
@@ -1004,9 +970,7 @@ const boardTabCounts = useMemo(() => {
 
       <div data-testid="my-tasks-list" className="mt-3 flex-1 min-h-0 w-full">
         <MyTasksBulkSelectionProvider
-          resetSelectionKey={`${activeViewId ?? "all"}:${splitIndex}:${prioritySelection
-            .map((priority) => priority.priority_index)
-            .join(",")}`}
+          resetSelectionKey={`${activeViewId ?? "all"}:${splitIndex}`}
           onAfterMutation={() => reconcileRunner.request()}
         >
         <TableView

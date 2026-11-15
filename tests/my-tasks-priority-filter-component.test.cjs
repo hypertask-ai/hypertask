@@ -24,7 +24,7 @@ const stubModule = (filename, exports) => {
 const stubSourceModule = (relativePath, exports) =>
   stubModule(path.join(root, relativePath), exports);
 
-const flagValues = { "htpr-6312-my-tasks-priority-filter": true };
+const flagValues = {};
 const tableViewProps = [];
 const realtimeSubscriptions = [];
 let reconcileRequests = 0;
@@ -147,15 +147,14 @@ const renderMyTasks = (dom) => {
   return reactRoot;
 };
 
-test("flag off: no filter control and no filtering", () => {
+test("no priority filter control and no filtering", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
   global.window = dom.window;
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  flagValues["htpr-6312-my-tasks-priority-filter"] = false;
   const reactRoot = renderMyTasks(dom);
 
-  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "filter button must be hidden with the flag off");
+  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "the priority filter control is gone");
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
 
   act(() => { reactRoot.unmount(); });
@@ -164,15 +163,14 @@ test("flag off: no filter control and no filtering", () => {
   delete global.IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("views on: legacy priority button stays hidden", () => {
+test("views on: the removed priority button stays hidden", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
   global.window = dom.window;
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  flagValues["htpr-6312-my-tasks-priority-filter"] = true;
   const reactRoot = renderMyTasks(dom);
 
-  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "legacy priority button stays hidden");
+  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "priority button stays hidden");
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
 
   act(() => { reactRoot.unmount(); });
@@ -181,22 +179,20 @@ test("views on: legacy priority button stays hidden", () => {
   delete global.IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("flag turning off mid-session keeps the legacy control hidden", () => {
+test("a re-render keeps the removed priority control hidden", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
   global.window = dom.window;
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  flagValues["htpr-6312-my-tasks-priority-filter"] = true;
   const reactRoot = renderMyTasks(dom);
 
   assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'));
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
 
-  flagValues["htpr-6312-my-tasks-priority-filter"] = false;
   act(() => {
     reactRoot.render(React.createElement(MyTasks, { sections, tabs: ["All", "Board A", "Board B"], currentUser: { id: 6 } }));
   });
-  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "control hidden after flag off");
+  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "control stays hidden after re-render");
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4], "list stays unfiltered");
 
   act(() => { reactRoot.unmount(); });
@@ -252,7 +248,6 @@ test("Escape with no priority menu navigates back", () => {
   global.window = dom.window;
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  flagValues["htpr-6312-my-tasks-priority-filter"] = true;
   const reactRoot = renderMyTasks(dom);
 
   assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'));
@@ -277,7 +272,6 @@ for (const groupBy of ["board", "time"]) {
     global.window = dom.window;
     global.document = dom.window.document;
     global.IS_REACT_ACT_ENVIRONMENT = true;
-    flagValues["htpr-6312-my-tasks-priority-filter"] = false;
     const boardSections = [10, 20, 30, 40].map((projectId) => ({
       id: projectId, projectId, section_title: `Board ${projectId}`,
       items: [{ id: projectId, projectId }],
