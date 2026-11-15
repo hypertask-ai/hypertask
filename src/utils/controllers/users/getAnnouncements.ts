@@ -8,10 +8,7 @@ const REACH_MS = LATEST_UPDATES_REACH_DAYS * 24 * 60 * 60 * 1000;
 
 export const getUserAnnouncements = async (
   userId: number,
-  { now = new Date(), flagEnabled = isFeatureEnabled }: {
-    now?: Date;
-    flagEnabled?: (key: string, userId: number) => Promise<boolean>;
-  } = {},
+  { now = new Date() }: { now?: Date } = {},
 ) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -19,7 +16,12 @@ export const getUserAnnouncements = async (
   });
   if (!user) return null;
 
-  const weekOfUpdates = await flagEnabled(HTPR_9064_LATEST_UPDATES_WEEK_FLAG, userId).catch(() => false);
+  let weekOfUpdates = false;
+  try {
+    if (await isFeatureEnabled(HTPR_9064_LATEST_UPDATES_WEEK_FLAG, userId)) weekOfUpdates = true;
+  } catch {
+    weekOfUpdates = false;
+  }
   const since = new Date(now.getTime() - REACH_MS);
 
   const missing = await prisma.announcments.findMany({

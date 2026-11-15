@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { loadModule } from "./helpers/loadModule.cjs";
 
 import {
+  dayLabel,
   latestUpdatesDayGroups,
 } from "../src/lib/rocketDigest/panel";
 
-const now = new Date("2026-11-15T09:00:00.000Z");
+process.env.TZ = "Europe/London";
+
+const now = new Date(2026, 10, 15, 9, 0, 0);
 const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1000);
 const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
@@ -59,6 +63,26 @@ function installFakeAnnouncements(
   return rows;
 }
 
+function panelClient() {
+  return {
+    user: { findUnique: async () => null },
+    announcments: { findMany: async () => [] },
+    userAnnouncement: { findMany: async () => [], createMany: async () => ({ count: 0 }) },
+  };
+}
+
+function loadPanel(client: any, weekOfUpdates: boolean) {
+  return loadModule("src/utils/controllers/users/getAnnouncements.ts", {
+    "@/lib/prisma": { default: client },
+    "@/lib/flags": { isFeatureEnabled: async () => weekOfUpdates },
+  }) as {
+    getUserAnnouncements: (
+      userId: number,
+      options?: { now?: Date },
+    ) => Promise<Array<{ announcement: FakeAnnouncement }> | null>;
+  };
+}
+
 test("the flag ships a week of updates to the owner and QA", async () => {
   const { default: definition, HTPR_9064_LATEST_UPDATES_WEEK_FLAG } = await import(
     "../src/lib/flags/definitions/htpr-9064-latest-updates-week"
@@ -89,74 +113,57 @@ test("day groups keep the sidebar readable and in order", () => {
   assert.equal(groups[1].label, "Yesterday");
 });
 
-async function main() {
-  process.env.DATABASE_URL = "postgresql://unused:unused@localhost:5432/unused";
-  const [{ default: prisma }, { getUserAnnouncements }] = await Promise.all([
-    import("@/lib/prisma"),
-    import("@/utils/controllers/users/getAnnouncements"),
-  ]);
-  const client = prisma as any;
-  const originals = {
-    userFindUnique: client.user.findUnique,
-    announcementsFindMany: client.announcments.findMany,
-    userAnnouncementFindMany: client.userAnnouncement.findMany,
-    userAnnouncementCreateMany: client.userAnnouncement.createMany,
-  };
-  const restore = () => {
-    client.user.findUnique = originals.userFindUnique;
-    client.announcments.findMany = originals.announcementsFindMany;
-    client.userAnnouncement.findMany = originals.userAnnouncementFindMany;
-    client.userAnnouncement.createMany = originals.userAnnouncementCreateMany;
-  };
-  const everyone = 4242;
-  const ownerOrQa = 985;
+test("a 23-hour day still labels the previous day as yesterday", () => {
+  const dstNow = new Date(2026, 2, 30, 0, 30);
+  const yesterdayNoon = new Date(2026, 2, 29, 12, 0);
+  assert.equal(new Date(dstNow.getTime() - 24 * 60 * 60 * 1000).getDate(), 28);
+  assert.equal(dstNow.getTime() - yesterdayNoon.getTime() > 12 * 60 * 60 * 1000, true);
+  assert.equal(dayLabel(yesterdayNoon, dstNow), "Yesterday");
+  const [group] = latestUpdatesDayGroups([{ createdAt: yesterdayNoon.toISOString(), id: "dst" }], dstNow);
+  assert.equal(group.label, "Yesterday");
+  assert.equal(group.key, "2026-3-29");
+});
 
-  try {
-    await test("the flag off keeps the newest fifteen notes", async () => {
-      const rows = installFakeAnnouncements(client, everyone, [...recentNotes(), ...oldNotes()]);
-      const result = await getUserAnnouncements(everyone, {
-        now,
-        flagEnabled: async () => false,
-      });
-      assert.equal(result?.length, 15);
-      assert.equal(result?.[0].announcement.id, 900);
-      assert.equal(result?.[14].announcement.id, 914);
-      assert.equal(rows.length, 15);
-    });
+test("the flag off keeps the newest fifteen notes", async () => {
+  const client = panelClient();
+  const userId = 4242;
+  const rows = installFakeAnnouncements(client, userId, [...recentNotes(), ...oldNotes()]);
+  const { getUserAnnouncements } = loadPanel(client, false);
+  const result = await getUserAnnouncements(userId, { now });
+  assert.equal(result?.length, 15);
+  assert.equal(result?.[0].announcement.id, 900);
+  assert.equal(result?.[14].announcement.id, 914);
+  assert.equal(rows.length, 15);
+});
 
-    await test("the flag on reaches a full week of notes", async () => {
-      const rows = installFakeAnnouncements(client, ownerOrQa, [...recentNotes(), ...oldNotes()]);
-      const result = await getUserAnnouncements(ownerOrQa, {
-        now,
-        flagEnabled: async () => true,
-      });
-      assert.equal(result?.length, 40);
-      assert.equal(result?.[0].announcement.id, 900);
-      assert.equal(result?.[39].announcement.id, 939);
-      assert.equal(result?.some((row) => row.announcement.id === 100), false);
-      assert.equal(rows.length, 40);
-    });
+test("the flag on reaches a full week of notes", async () => {
+  const client = panelClient();
+  const userId = 985;
+  const rows = installFakeAnnouncements(client, userId, [...recentNotes(), ...oldNotes()]);
+  const { getUserAnnouncements } = loadPanel(client, true);
+  const result = await getUserAnnouncements(userId, { now });
+  assert.equal(result?.length, 40);
+  assert.equal(result?.[0].announcement.id, 900);
+  assert.equal(result?.[39].announcement.id, 939);
+  assert.equal(result?.some((row) => row.announcement.id === 100), false);
+  assert.equal(rows.length, 40);
+});
 
-    await test("the flag on backfills notes older than the fifteen newest", async () => {
-      const rows = installFakeAnnouncements(client, ownerOrQa, [...recentNotes(), ...oldNotes()]);
-      await getUserAnnouncements(ownerOrQa, { now, flagEnabled: async () => true });
-      const stored = rows.map((row) => row.announcementId).sort((left, right) => left - right);
-      assert.equal(stored.length, 40);
-      assert.equal(stored[0], 900);
-      assert.equal(stored[39], 939);
-    });
+test("the flag on backfills notes older than the fifteen newest", async () => {
+  const client = panelClient();
+  const userId = 985;
+  const rows = installFakeAnnouncements(client, userId, [...recentNotes(), ...oldNotes()]);
+  const { getUserAnnouncements } = loadPanel(client, true);
+  await getUserAnnouncements(userId, { now });
+  const stored = rows.map((row) => row.announcementId).sort((left, right) => left - right);
+  assert.equal(stored.length, 40);
+  assert.equal(stored[0], 900);
+  assert.equal(stored[39], 939);
+});
 
-    await test("an unknown user gets no panel data", async () => {
-      installFakeAnnouncements(client, everyone, recentNotes());
-      client.user.findUnique = async () => null;
-      const result = await getUserAnnouncements(everyone, { now });
-      assert.equal(result, null);
-    });
-  } finally {
-    restore();
-  }
-}
-
-void main().then(() => {
-  console.log("htpr-9064-latest-updates-week.test.ts: all assertions passed");
+test("an unknown user gets no panel data", async () => {
+  const client = panelClient();
+  const { getUserAnnouncements } = loadPanel(client, true);
+  const result = await getUserAnnouncements(4242, { now });
+  assert.equal(result, null);
 });

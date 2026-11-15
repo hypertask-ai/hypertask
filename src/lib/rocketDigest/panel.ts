@@ -4,16 +4,18 @@ export type DatedPost = { createdAt: string };
 
 export type DayGroup<T extends DatedPost> = { key: string; label: string; posts: T[] };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 function dayKey(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function previousDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
 }
 
 export function dayLabel(date: Date, now: Date): string {
   const key = dayKey(date);
   if (key === dayKey(now)) return "Today";
-  if (key === dayKey(new Date(now.getTime() - DAY_MS))) return "Yesterday";
+  if (key === dayKey(previousDay(now))) return "Yesterday";
   return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
