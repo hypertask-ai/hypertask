@@ -74,7 +74,6 @@ function renderRail({ enabled, wide, pathname, inboxRowFill, board = false }) {
     "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "pages" },
     "@/lib/flags/definitions/htpr-7309-pages-screens": { HTPR_7309_PAGES_SCREENS_FLAG: "screens" },
     "@/lib/flags/definitions/htpr-8146-settings-name": { HTPR_8146_SETTINGS_NAME_FLAG: "settings" },
-    "@/lib/flags/definitions/htpr-8035-sidebar-new-task": { HTPR_8035_SIDEBAR_NEW_TASK_FLAG: "new-task" },
     "@/lib/flags/definitions/htpr-8035-new-task-fill": { HTPR_8035_NEW_TASK_FILL_FLAG: "fill" },
     "@/lib/flags/definitions/htpr-8264-inbox-row-fill": { HTPR_8264_INBOX_ROW_FILL_FLAG: inboxFlag },
     "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: () => {} },

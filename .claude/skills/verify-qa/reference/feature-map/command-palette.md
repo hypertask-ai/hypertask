@@ -99,8 +99,7 @@ they only prove the rows still render.
 
 ### Desktop New Task entry
 
-While `htpr-8035-sidebar-new-task` and the compose task writer are on, the
-left sidebar has a primary plus button. Hover shows New Task and Ctrl+J
+The left sidebar has a primary plus button. Hover shows New Task and Ctrl+J
 (Cmd+J on Apple); expanding the sidebar also shows the text label. Clicking
 opens the same New Task compose tab as the shortcut, without changing routes.
 Check a board, task, Inbox, My Tasks, Calendar and Search; cancel with Escape,
@@ -110,8 +109,8 @@ foreground and background as Sign up for free: light fill in dark themes, dark
 fill in light themes. Off restores `bg-shadcn-primary` with
 `text-primary-foreground`. Its size, position, plus icon and tooltip must
 remain unchanged either way.
-The button must not appear at 390x844, or when its flag is off. Existing
-navigation must still work, and the main content must not move horizontally.
+The button must not appear at 390x844. Existing navigation must still work,
+and the main content must not move horizontally.
 
 ### Archive one column
 

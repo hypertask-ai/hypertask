@@ -12,6 +12,6 @@ export default {
   releaseRisk: {
     risk: "small",
     reason:
-      "Changes one colour pair on the existing button. Placement, size, plus icon, label, Ctrl+J tooltip, click action and the htpr-8035-sidebar-new-task flag stay the same, and Off restores the primary fill.",
+      "Changes one colour pair on the existing button. Placement, size, plus icon, label, Ctrl+J tooltip and click action stay the same, and Off restores the primary fill.",
   },
 } as const satisfies FeatureFlagDefinition;

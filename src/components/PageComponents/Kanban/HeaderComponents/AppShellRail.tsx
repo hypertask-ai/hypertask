@@ -67,7 +67,6 @@ import { currentPageActionsAtom } from "@/store/currentPageActions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
-import { HTPR_8035_SIDEBAR_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-8035-sidebar-new-task";
 import { HTPR_8146_SETTINGS_NAME_FLAG } from "@/lib/flags/definitions/htpr-8146-settings-name";
 import { prefetchInboxQuery } from "@/hooks/Inbox/useGetNotifications";
 
@@ -127,7 +126,6 @@ const AppShellRail = ({
     defaultIconClass = "[.graphite-2_&]:hidden";
   }
   const settingsAccessibleName = useFlag(HTPR_8146_SETTINGS_NAME_FLAG);
-  const sidebarNewTask = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
   const newTaskFill = useFlag(HTPR_8035_NEW_TASK_FILL_FLAG);
   const inboxRowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
   const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
@@ -356,22 +354,20 @@ const AppShellRail = ({
       </div>
 
       <div className={`mt-3 flex flex-col ${wide ? "w-full" : "items-center"}`}>
-        {sidebarNewTask && (
-          <button
-            type="button"
-            aria-label="New Task"
-            onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
-            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} ${
-              newTaskFill ? "bg-white-black text-white-black-inverted" : "bg-shadcn-primary text-primary-foreground"
-            } hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
-              wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
-            }`}
-          >
-            <><Plus size={18} strokeWidth={1.75} className={defaultIconClass} /><IconoirPlus size={18} strokeWidth={1.75} className={graphite2IconClass} /></>
-            {wide && <span className="text-content font-medium">New Task</span>}
-            <Tooltip left={tooltipLeft} bottom={-8} text="New Task" keyCombination={[isApple ? "CMD" : "CTRL", "J"]} />
-          </button>
-        )}
+        <button
+          type="button"
+          aria-label="New Task"
+          onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
+          className={`group relative hidden h-[34px] shrink-0 items-center gap-2 ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} ${
+            newTaskFill ? "bg-white-black text-white-black-inverted" : "bg-shadcn-primary text-primary-foreground"
+          } hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
+            wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
+          }`}
+        >
+          <><Plus size={18} strokeWidth={1.75} className={defaultIconClass} /><IconoirPlus size={18} strokeWidth={1.75} className={graphite2IconClass} /></>
+          {wide && <span className="text-content font-medium">New Task</span>}
+          <Tooltip left={tooltipLeft} bottom={-8} text="New Task" keyCombination={[isApple ? "CMD" : "CTRL", "J"]} />
+        </button>
       </div>
 
       <div className={`mt-auto flex flex-col gap-1 pb-1 ${wide ? "w-full" : "items-center"}`}>

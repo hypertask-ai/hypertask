@@ -19,13 +19,11 @@ function load(file, dependencies) {
   return exports;
 }
 
-const flagPath = "src/lib/flags/definitions/htpr-8035-sidebar-new-task.ts";
-const flag = load(flagPath, {}).default;
 const fillFlag = load("src/lib/flags/definitions/htpr-8035-new-task-fill.ts", {}).default;
 const { CommandMode } = load("src/models/enums.ts", {});
 const iconoir = load("src/components/Common/IconoirIcons.tsx", { "react/jsx-runtime": require("react/jsx-runtime") });
 
-function renderRail({ enabled = true, fill = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, inboxRowFill = true, pathname = "/my-tasks" } = {}) {
+function renderRail({ fill = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, inboxRowFill = true, pathname = "/my-tasks" } = {}) {
   const updates = [];
   const navigation = [];
   const icon = (props) => React.createElement("svg", props);
@@ -56,12 +54,11 @@ function renderRail({ enabled = true, fill = true, wide = false, apple = false, 
     "@/components/Modals/Settings/settingsNavigation": { useSettingsNavigation: () => ({ openSettings: () => navigation.push("settings") }) },
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "@/store/currentPageActions": { currentPageActionsAtom: "page-actions" },
-    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8264-inbox-row-fill" ? inboxRowFill : key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : key === fillFlag.key ? fill : false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8035-sidebar-new-task" ? false : key === "htpr-8264-inbox-row-fill" ? inboxRowFill : key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === fillFlag.key ? fill : false },
     "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "pages" },
     "@/lib/flags/definitions/htpr-7309-pages-screens": { HTPR_7309_PAGES_SCREENS_FLAG: "screens" },
     "@/lib/flags/definitions/htpr-8146-settings-name": { HTPR_8146_SETTINGS_NAME_FLAG: "htpr-8146-settings-name" },
     "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
-    "@/lib/flags/definitions/htpr-8035-sidebar-new-task": { HTPR_8035_SIDEBAR_NEW_TASK_FLAG: flag.key },
     "@/lib/flags/definitions/htpr-8035-new-task-fill": { HTPR_8035_NEW_TASK_FILL_FLAG: fillFlag.key },
     "@/lib/flags/definitions/htpr-8264-inbox-row-fill": { HTPR_8264_INBOX_ROW_FILL_FLAG: "htpr-8264-inbox-row-fill" },
     "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: () => {} },
@@ -161,9 +158,12 @@ test("rail keeps its existing glyphs until Graphite 2 replacements are enabled",
   }
 });
 
-test("feature off leaves no new entry", () => {
-  const rail = renderRail({ enabled: false });
-  assert.equal(rail.nodes.some((node) => node.props["aria-label"] === "New Task"), false);
+test("an old tab still holding the removed switch off shows New Task", () => {
+  const rail = renderRail({ wide: false });
+  const buttons = rail.nodes.filter((node) => node.type === "button" && node.props["aria-label"] === "New Task");
+  assert.equal(buttons.length, 1);
+  buttons[0].props.onClick();
+  assert.deepEqual(rail.updates, [{ atom: "commands", value: { show: true, mode: CommandMode.Command, paletteTab: "compose" } }]);
   assert.ok(rail.nodes.some((node) => node.props["aria-label"] === "Your Kanban boards"));
 });
 
@@ -173,11 +173,13 @@ test("New Task is available across sidebar routes with platform-correct tooltip"
   }
 });
 
-test("the improvement ships to Everyone with a small reversible risk", () => {
-  assert.equal(flag.key, "htpr-8035-sidebar-new-task");
-  assert.equal(flag.kind, "improvement");
-  assert.equal(flag.defaultMode, "EVERYONE");
-  assert.equal(flag.releaseRisk.risk, "small");
+test("the sidebar New Task switch is gone and its stored rollout is dropped", () => {
+  const key = "htpr-8035-sidebar-new-task";
+  const root = path.join(__dirname, "..");
+  assert.equal(fs.existsSync(path.join(root, "src/lib/flags/definitions", `${key}.ts`)), false);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(JSON.parse(fs.readFileSync(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8")).modes, key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261115130000_drop_htpr_8035_sidebar_new_task_flag/migration.sql"), "utf8"), `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
 });
 
 for (const wide of [false, true]) {

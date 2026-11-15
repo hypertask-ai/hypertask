@@ -1020,6 +1020,30 @@ test("the retired lazy emoji list flag is hidden, immutable and enabled for old 
   assert.equal((await flags.featureFlagsForUser(2343))[key], true);
 });
 
+test("the retired sidebar New Task flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-8035-sidebar-new-task";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [
+      { key, mode, updatedAt: new Date() },
+      { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
+    ];
+    row = { mode, updatedAt: new Date() };
+    const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
+    assert.ok(listedKeys.has("htpr-7058-flags-page-url-filters"), "positive control remains listed");
+    assert.equal(listedKeys.has(key), false);
+    for (const userId of [6, 985, 2343]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(2343))[key], true);
+});
+
 test("the retired comment shortcuts flag is hidden, immutable and enabled for old tabs", async () => {
   const key = "htpr-5913-consistent-comment-shortcuts";
   assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
