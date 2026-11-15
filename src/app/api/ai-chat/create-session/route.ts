@@ -6,8 +6,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { openAgentChat } from "@/lib/agents/chatService";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
 import { initialChatTitle } from "@/lib/ai/chatNames";
 import { taskAccessWhere } from "@/utils/controllers/tasks/assertTaskAccess";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -69,26 +67,23 @@ async function createSession(request: NextRequest) {
 
     let initialTitle: string | null = null;
     try {
-      const chatNames = await isFeatureEnabled(HTPR_7052_CHAT_NAMES_FLAG, userId);
-      if (chatNames) {
-        const [task, project] = await Promise.all([
-          parsed.data.taskId
-            ? prisma.task.findFirst({
-                where: {
-                  AND: [
-                    taskAccessWhere(userId, parsed.data.taskId, { agentId: actingAgentId }),
-                    { project: getProjectWhere(userId) },
-                  ],
-                },
-                select: { title: true },
-              })
-            : null,
-          parsed.data.projectId
-            ? prisma.project.findFirst({ where: { id: parsed.data.projectId, ...getProjectWhere(userId), AND: [getProjectWhere(userId, actingAgentId)] }, select: { name: true, title: true } })
-            : null,
-        ]);
-        initialTitle = initialChatTitle(true, { taskTitle: task?.title, boardName: project?.title || project?.name });
-      }
+      const [task, project] = await Promise.all([
+        parsed.data.taskId
+          ? prisma.task.findFirst({
+              where: {
+                AND: [
+                  taskAccessWhere(userId, parsed.data.taskId, { agentId: actingAgentId }),
+                  { project: getProjectWhere(userId) },
+                ],
+              },
+              select: { title: true },
+            })
+          : null,
+        parsed.data.projectId
+          ? prisma.project.findFirst({ where: { id: parsed.data.projectId, ...getProjectWhere(userId), AND: [getProjectWhere(userId, actingAgentId)] }, select: { name: true, title: true } })
+          : null,
+      ]);
+      initialTitle = initialChatTitle(true, { taskTitle: task?.title, boardName: project?.title || project?.name });
     } catch (error) {
       console.error("[ai-chat/create-session] chat name lookup failed", error);
     }

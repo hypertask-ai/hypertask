@@ -3,7 +3,7 @@ const test = require("node:test");
 const { NextRequest } = require("next/server");
 const { fixture, matches, hydrate } = require("./helpers/agent-board-scope.cjs");
 
-function harness({ actor = "agent", enforce = true, grant = "none", teamless = false, names = true, bearer = false, bypassTask = false, recentViewer = false, sessionAgent = false, authenticated = true, profile = true } = {}) {
+function harness({ actor = "agent", enforce = true, grant = "none", teamless = false, bearer = false, bypassTask = false, recentViewer = false, sessionAgent = false, authenticated = true, profile = true } = {}) {
   const f = fixture();
   f.state.enforce = enforce;
   if (actor !== "agent") f.state.ctx.agentId = null;
@@ -70,7 +70,7 @@ function harness({ actor = "agent", enforce = true, grant = "none", teamless = f
     "@/lib/agents/visibility": {},
     "@/utils/controllers/agents/boardMembers": {},
     "@/lib/agents/chatAccess": {},
-    "@/lib/flags": { isFeatureEnabled: async key => key === "htpr-7052-chat-names" && names },
+    "@/lib/flags": { isFeatureEnabled: async key => { if (key === "htpr-7052-chat-names") throw new Error("removed flag must not be read"); return false; } },
     "@/lib/errors/reportError": { reportError: async report => { throw new Error(`Unexpected report: ${report.message}`); } },
     "@/app/api/ai/_lib/modelProvider": modelProvider,
     "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => false },
@@ -198,12 +198,12 @@ for (const area of ["naming", "hyper", "questions", "editor"]) {
   }
 }
 
-test("naming: names flag Off keeps default title and performs no naming reads", async () => {
-  const h = harness({ actor: "owner", names: false });
+test("naming: title comes from the task without reading the removed chat-names flag", async () => {
+  const h = harness({ actor: "owner" });
   const response = await h.request("naming");
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).session.title, "New AI Chat");
-  assert.deepEqual(h.queries, []);
+  assert.equal((await response.json()).session.title, h.task.title);
+  assert.deepEqual(h.queries.map(query => query.model), ["task"]);
 });
 
 test("naming: project fallback is also scoped to the authenticated actor", async () => {

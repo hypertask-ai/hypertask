@@ -1,7 +1,7 @@
 import { HTPR_7736_CHAT_FOLLOWS_TASK_FLAG } from "@/lib/flags/definitions/htpr-7736-chat-follows-task";
 import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7783_REMEMBER_CHAT_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
+import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7783_REMEMBER_CHAT_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
@@ -46,7 +46,6 @@ export const useSessionAndChatHistory = (
   const rememberChat = useFlag(HTPR_7783_REMEMBER_CHAT_FLAG);
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
-  const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
   const noEmptyChats = useFlag(HTPR_9021_NO_EMPTY_CHATS_FLAG);
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
@@ -77,8 +76,7 @@ export const useSessionAndChatHistory = (
     if (dockedScope === null || dockedScope === "ticket") scopedBoardId = currentProject?.id;
     else scopedBoardId = dockedScope === "all" ? undefined : dockedScope;
   }
-  if (chatNames) nameBoardRef.current = scopedBoardId;
-  else nameBoardRef.current = undefined;
+  nameBoardRef.current = scopedBoardId;
   const navigationScope = chatNavigationKey(currentUser?.id, manualChat ? undefined : scopedBoardId, followsTaskNavigation ? undefined : taskId, pathname?.startsWith("/chat"));
   const navigationKey = rememberChat && !isDemo && navigationScope ? `${navigationScope}${manualChat ? `.team.${teamKey ?? "none"}` : ""}` : null;
   const [activeSession, setActiveSession] = useChatSessionSelection(`${navigationKey ?? "legacy"}:${followsTaskNavigation ? selectionScope : ""}`, pinnedSessionId ? null : navigationKey, !hasExplicitTask, pinnedSessionId);

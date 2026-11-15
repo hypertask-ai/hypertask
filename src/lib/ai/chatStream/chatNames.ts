@@ -1,6 +1,4 @@
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
 import { firstMessageChatTitle } from "@/lib/ai/chatNames";
 
 export async function nameChatFromFirstMessage(input: {
@@ -11,7 +9,6 @@ export async function nameChatFromFirstMessage(input: {
 }): Promise<string | null | undefined> {
   if (!input.enabled || !input.sessionId) return undefined;
   try {
-    if (!(await isFeatureEnabled(HTPR_7052_CHAT_NAMES_FLAG, input.userId))) return undefined;
     const session = await prisma.chatSession.findFirst({
       where: { id: input.sessionId, userId: input.userId },
       select: { title: true, taskId: true, projectId: true },
