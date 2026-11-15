@@ -1995,6 +1995,18 @@ const baseline = {
     ],
     "calls": [
       [
+        "scope",
+        [
+          985
+        ]
+      ],
+      [
+        "scope",
+        [
+          985
+        ]
+      ],
+      [
         "sessionCreate",
         [
           {
