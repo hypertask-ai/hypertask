@@ -2,6 +2,7 @@ import prisma from '@/lib/prisma'
 import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7536-plain-ai-feedback'
 import { HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG } from '@/lib/flags/definitions/htpr-8797-feedback-house-parts'
 import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
+import { HTPR_9244_LOST_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-9244-lost-feedback-note'
 import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
 import { accountCategory } from '@/lib/telemetry/accountCategory'
 import { PriorityConstants } from '@/lib/constants/constants'
@@ -89,6 +90,21 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
 
 function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
   return input.category === 'call_failed' && input.tool !== undefined && input.status === undefined && !input.errorCode && !input.field
+}
+
+function lostNoteReport(input: AutomaticFeedbackInput, stored?: StoredNote): boolean {
+  return input.kind !== undefined && input.status === undefined && !input.errorCode && !input.field && !stored?.note
+}
+
+async function lostNoteRefused(userId?: number): Promise<boolean> {
+  try {
+    const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
+    return userId === undefined
+      ? await featureFlagCandidateUserIds(HTPR_9244_LOST_FEEDBACK_NOTE_FLAG) === null
+      : await isFeatureEnabled(HTPR_9244_LOST_FEEDBACK_NOTE_FLAG, userId)
+  } catch {
+    return false
+  }
 }
 
 async function noEvidenceRefused(userId?: number): Promise<boolean> {
@@ -292,6 +308,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
+        }
+        if (reporter.origin === 'agent' && lostNoteReport(input, stored) && !existing && await lostNoteRefused(userId)) {
+          console.info('AI feedback not filed: the report names a kind but no status, error code, field or kept note', { surface: input.surface, tool: input.tool, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
+          return { success: false as const, filed: false as const, reason: 'no_evidence' as const, error: 'No ticket filed: the report had no HTTP status, error code or field, and its free text could not be kept. Report again with the status and error code of the failed call.' }
         }
         if (reporter.origin === 'agent' && toolOnlyFailure(input) && !existing && await noEvidenceRefused(userId)) {
           console.info('AI feedback not filed: the report names a tool but no status, error code or field', { surface: input.surface, tool: input.tool, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
