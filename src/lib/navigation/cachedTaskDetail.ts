@@ -69,6 +69,10 @@ export function openCachedTaskDetail({
   return true;
 }
 
+export function openSavedComposeTask(fastOpen: boolean, openCached: () => boolean): boolean {
+  return fastOpen && openCached();
+}
+
 export function cachedTaskDetailLocation(
   pathname: string | null,
   accountId: number | null,
