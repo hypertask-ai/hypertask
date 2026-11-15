@@ -1,19 +1,35 @@
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9064_LATEST_UPDATES_WEEK_FLAG } from "@/lib/flags/definitions/htpr-9064-latest-updates-week";
+import { LATEST_UPDATES_REACH_DAYS } from "@/lib/rocketDigest/panel";
 
-export const getUserAnnouncements = async (userId: number) => {
+const ANNOUNCEMENT_LIMIT = 15;
+const REACH_MS = LATEST_UPDATES_REACH_DAYS * 24 * 60 * 60 * 1000;
+
+export const getUserAnnouncements = async (
+  userId: number,
+  { now = new Date(), flagEnabled = isFeatureEnabled }: {
+    now?: Date;
+    flagEnabled?: (key: string, userId: number) => Promise<boolean>;
+  } = {},
+) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true },
   });
   if (!user) return null;
 
+  const weekOfUpdates = await flagEnabled(HTPR_9064_LATEST_UPDATES_WEEK_FLAG, userId).catch(() => false);
+  const since = new Date(now.getTime() - REACH_MS);
+
   const missing = await prisma.announcments.findMany({
     where: {
       isActive: true,
+      ...(weekOfUpdates ? { createdAt: { gte: since } } : {}),
       userAnnouncements: { none: { userId } },
     },
     orderBy: { createdAt: "desc" },
-    take: 15,
+    ...(weekOfUpdates ? {} : { take: ANNOUNCEMENT_LIMIT }),
     select: { id: true },
   });
   if (missing.length) {
@@ -27,9 +43,12 @@ export const getUserAnnouncements = async (userId: number) => {
   }
 
   return prisma.userAnnouncement.findMany({
-    where: { userId },
+    where: {
+      userId,
+      ...(weekOfUpdates ? { announcement: { createdAt: { gte: since } } } : {}),
+    },
     include: { announcement: true },
     orderBy: { announcement: { createdAt: "desc" } },
-    take: 15,
+    ...(weekOfUpdates ? {} : { take: ANNOUNCEMENT_LIMIT }),
   });
 };

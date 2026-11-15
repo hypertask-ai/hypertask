@@ -13,7 +13,10 @@ import {
 } from "@/models/Announcements/model";
 import { useAnnouncementMute } from "@/hooks/General/useGetUserPreferences";
 import { prefixUseGetAnnouncements } from "@/hooks/MultiPages/Sidebar/useGetAnnouncements";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9064_LATEST_UPDATES_WEEK_FLAG } from "@/lib/flags/definitions/htpr-9064-latest-updates-week";
+import { digestRunLabel, latestUpdatesDayGroups } from "@/lib/rocketDigest/panel";
 
 
 const YOUTUBE_URL = "https://www.youtube.com/@hypertasks";
@@ -106,6 +109,7 @@ export const AnnouncementPosts = ({
 }) => {
   const [currentUser] = useRecoilState(currentUserAtom);
   const queryClient = useQueryClient();
+  const weekOfUpdates = useFlag(HTPR_9064_LATEST_UPDATES_WEEK_FLAG);
 
   useEffect(() => {
     const markAllAsRead = async () => {
@@ -126,17 +130,42 @@ export const AnnouncementPosts = ({
     markAllAsRead();
   }, [allPosts?.length, currentUser, queryClient]);
 
-  return (
-    <div className="flex flex-col">
-      {allPosts?.map((post, index) => (
+  const rows: React.ReactNode[] = [];
+  if (weekOfUpdates) {
+    const datedNotes = (allPosts ?? []).map((post) => ({
+      post,
+      createdAt: post.announcement.createdAt,
+    }));
+    for (const group of latestUpdatesDayGroups(datedNotes, new Date())) {
+      rows.push(
+        <div key={`announcement-day-${group.key}`}>
+          <p className="sticky top-0 bg-sidebar pb-1 pt-3 text-micro uppercase tracking-wider text-text-light-gray">
+            {group.label}
+          </p>
+          {group.posts.map((entry) => (
+            <SinglePost
+              post={entry.post}
+              dateISO={entry.createdAt}
+              key={`announcement-sidebar-post-${entry.post.announcementId}`}
+              toggleSidebar={toggleSidebar}
+            />
+          ))}
+        </div>,
+      );
+    }
+  } else {
+    for (const post of allPosts ?? []) {
+      rows.push(
         <SinglePost
           post={post}
-          key={`announcement-sidebar-post-${index}`}
+          key={`announcement-sidebar-post-${post.announcementId}`}
           toggleSidebar={toggleSidebar}
-        />
-      ))}
-    </div>
-  );
+        />,
+      );
+    }
+  }
+
+  return <div className="flex flex-col">{rows}</div>;
 };
 
 const youtubeThumbnail = (slides?: ISlideAnnouncement[]) =>
@@ -163,8 +192,9 @@ const VideoThumbnail = ({ src }: { src: string }) => (
 
 const SinglePost: React.FC<{
   post: IAnnouncement;
+  dateISO?: string;
   toggleSidebar?: () => void;
-}> = ({ post, toggleSidebar }) => {
+}> = ({ post, dateISO, toggleSidebar }) => {
   const [, setShowAnnouncmentSlide] = useRecoilState(announcementSlideAtom);
   const { title, content, blogURL } = post.announcement.body;
   const level = resolveLevel(post.announcement.body);
@@ -186,7 +216,7 @@ const SinglePost: React.FC<{
             {title}
           </span>
           <span className="ml-auto shrink-0 text-micro text-text-light-gray">
-            {shortDate(post.createdAt)}
+            {shortDate(dateISO ?? post.createdAt)}
           </span>
         </div>
         {content && (
@@ -227,37 +257,58 @@ const SinglePost: React.FC<{
   );
 };
 
-const ChannelsFooter = () => (
-  <div className="border-t border-border xs:px-3 sm:px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-    <p className="mb-2 text-micro uppercase tracking-wider text-text-light-gray">
-      Follow along
-    </p>
-    <div className="flex flex-col">
-      <ChannelRow
-        href={YOUTUBE_URL}
-        label="YouTube"
-        sub="@hypertasks · feature demos"
-        iconBg="rgba(255,61,61,0.14)"
-        icon={
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF3D3D">
-            <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4l6.2 3.6z" />
-          </svg>
-        }
-      />
-      <ChannelRow
-        href={X_URL}
-        label="X"
-        sub="@hypertasks · follow updates"
-        iconBg="#000000"
-        icon={
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff">
-            <path d="M18.9 1.1h3.7l-8 9.1L24 22.9h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.1h7.6l5.2 6.9zM17.6 20.7h2L6.5 3.2H4.3z" />
-          </svg>
-        }
-      />
+const useLastDigestRun = (enabled: boolean) =>
+  useQuery<{ lastRunAt: string | null }>({
+    queryKey: ["announcements-last-digest-run"],
+    queryFn: async () =>
+      (await axios.get<{ lastRunAt: string | null }>(
+        "/api/users/announcements/getLastDigestRun",
+      )).data,
+    enabled,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+const ChannelsFooter = () => {
+  const weekOfUpdates = useFlag(HTPR_9064_LATEST_UPDATES_WEEK_FLAG);
+  const { data: lastRun } = useLastDigestRun(weekOfUpdates);
+  return (
+    <div className="border-t border-border xs:px-3 sm:px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      {weekOfUpdates && lastRun && (
+        <p className="mb-3 text-micro text-text-light-gray">
+          {digestRunLabel(lastRun.lastRunAt, new Date())}
+        </p>
+      )}
+      <p className="mb-2 text-micro uppercase tracking-wider text-text-light-gray">
+        Follow along
+      </p>
+      <div className="flex flex-col">
+        <ChannelRow
+          href={YOUTUBE_URL}
+          label="YouTube"
+          sub="@hypertasks · feature demos"
+          iconBg="rgba(255,61,61,0.14)"
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF3D3D">
+              <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4l6.2 3.6z" />
+            </svg>
+          }
+        />
+        <ChannelRow
+          href={X_URL}
+          label="X"
+          sub="@hypertasks · follow updates"
+          iconBg="#000000"
+          icon={
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff">
+              <path d="M18.9 1.1h3.7l-8 9.1L24 22.9h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.1h7.6l5.2 6.9zM17.6 20.7h2L6.5 3.2H4.3z" />
+            </svg>
+          }
+        />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ChannelRow = ({
   href,
