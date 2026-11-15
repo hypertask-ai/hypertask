@@ -388,7 +388,7 @@ def emergency_labels(incident):
     # qualifying check in a row. Once confirmed, the flag sticks even if the service recovers.
     if incident.get('test') or incident['bug_project'] != 15 or not incident.get('emergency'):
         return []
-    return ['incident', 'brain-hard']
+    return ['incident']
 
 
 def board_writer(env):

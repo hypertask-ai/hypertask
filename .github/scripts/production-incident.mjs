@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 const API = "https://app.hypertask.ai/api/mcp";
 const BOARD = 15;
 const BUGS_SECTION = 4389;
-const LABELS = ["incident", "brain-hard"];
+const LABELS = ["incident"];
 
 const WHAT = {
   "health-failure": "Live health checks failed",

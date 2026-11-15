@@ -176,12 +176,11 @@ test('label scoring ignores process labels and counts abstaining on a blank gold
   assert.equal(stats.abstainCount, 2);
   assert.equal(stats.abstainPrecision, 0.5);
   const fields = pinned.scoreFields(
-    { labels: ['Bug', 'brain-hard', 'flag:x'], priority: 2, estimate: null },
-    { labels: [{ id: 'a', name: 'Bug' }, { id: 'b', name: 'brain-hard' }, { id: 'c', name: 'Billing' }] },
+    { labels: ['Bug', 'flag:x'], priority: 2, estimate: null },
+    { labels: [{ id: 'a', name: 'Bug' }, { id: 'b', name: 'flag:x' }, { id: 'c', name: 'Billing' }] },
     { labelIds: ['a', 'b', 'c'], priority: 0, estimate: 4 }
   );
   assert.deepEqual(fields.labels, { gold: ['Bug'], predicted: ['Billing', 'Bug'] });
-  assert.deepEqual(fields.brain, { gold: 'brain-hard', predicted: 'brain-hard' });
   assert.deepEqual(fields.priority, { gold: 2, predicted: null });
   assert.deepEqual(fields.size, { gold: null, predicted: 4 });
 });

@@ -40,7 +40,7 @@ function harness({ existing = false, reserveFailure = false, lookupFailure = fal
         existing = data.title;
       }
     } else if (url.endsWith('/api/mcp/projects/11514/labels')) body = { labels: [{ id: 'ci', name: 'CI' }, { id: 'hyci', name: 'Hypertask CI' }] };
-    else if (url.endsWith('/api/mcp/projects/15/labels')) body = { labels: [{ id: 'inc', name: 'incident' }, { id: 'hard', name: 'brain-hard' }] };
+    else if (url.endsWith('/api/mcp/projects/15/labels')) body = { labels: [{ id: 'inc', name: 'incident' }, { id: 'bug', name: 'Bug' }] };
     else if (url.includes('/agent-activity?')) body = { activities: (notes.get(url.match(/tasks\/(\d+)\//)[1]) ?? []).map((text) => ({ text })) };
     else if (url.endsWith('/api/mcp/agents/runs')) body = { run: { id: `run-${JSON.parse(options.body).taskId}` } };
     else if (url.endsWith('/activities')) {
@@ -236,7 +236,7 @@ test('a live failure files one urgent incident ticket and still sends Telegram',
   assert.equal(payload.project_id, 15);
   assert.equal(payload.title, '[INCIDENT] Live health checks failed on app.hypertask.ai');
   assert.equal(payload.priority, 'urgent');
-  assert.deepEqual(payload.labels, ['inc', 'hard']);
+  assert.deepEqual(payload.labels, ['inc']);
   assert.match(payload.description, /seen at 2026-10-09 10:00 UTC/);
   assert.match(payload.description, /A guarded rollback was requested\./);
   assert.match(payload.description, /href="https:\/\/github\.com\/test\/repo\/actions\/runs\/42"/);

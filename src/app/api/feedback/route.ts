@@ -6,14 +6,11 @@ import { escapeHtml } from "@/utils/htmlEscape";
 import assigneesAssign from "@/utils/controllers/assignees/assign";
 import { createProvisionedTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { HYPERTASKS_STORAGE_PUBLIC_BASE_URL } from "@/lib/storage/hypertasksS3";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8887_FEEDBACK_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
 import { NextRequest, NextResponse } from "next/server";
 
 const FEEDBACK_PROJECT_ID = 15;
 const FEEDBACK_SECTION_ID = 4389;
 const FEEDBACK_LABEL_VALUE = "user-feedback";
-const BRAIN_LABEL_VALUE = "brain-medium";
 const FEEDBACK_PRIORITY_INDEX = 1;
 const MAX_FEEDBACK_LENGTH = 5000;
 const MAX_FEEDBACK_HTML_LENGTH = 20000;
@@ -207,10 +204,6 @@ export async function POST(request: NextRequest) {
   ) as FeedbackContext;
 
   try {
-    const brainTag = await isFeatureEnabled(
-      HTPR_8887_FEEDBACK_BRAIN_TAG_FLAG,
-      session.userId
-    );
     const [user, project, labelIds] = await Promise.all([
       prisma.user.findUnique({
         where: { id: session.userId },
@@ -233,7 +226,7 @@ export async function POST(request: NextRequest) {
         },
       }),
       Promise.all(
-        [FEEDBACK_LABEL_VALUE, ...(brainTag ? [BRAIN_LABEL_VALUE] : [])].map(
+        [FEEDBACK_LABEL_VALUE].map(
           labelIdFor
         )
       ),

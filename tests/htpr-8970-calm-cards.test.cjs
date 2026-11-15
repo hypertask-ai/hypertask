@@ -29,11 +29,11 @@ test("the flag ships at Owner + QA as an improvement with small risk", () => {
 });
 
 test("cards hide routing tags, put the type tag first and show at most two", () => {
-  const values = ["brain-medium", "🗺️ MOBILE", "IMPROVEMENT ⚒️", "design-pass", "DESIGN 🎨", "AI CHAT 💬"];
+  const values = ["🗺️ MOBILE", "IMPROVEMENT ⚒️", "design-pass", "DESIGN 🎨", "AI CHAT 💬"];
   const { shown, more } = cardLabels(values, (value) => value);
   assert.deepEqual(shown, ["IMPROVEMENT ⚒️", "🗺️ MOBILE"]);
   assert.equal(more, 2, "only hidden human tags count toward +N");
-  assert.deepEqual(cardLabels(["brain-hard", "design-pass"], (value) => value), { shown: [], more: 0 });
+  assert.deepEqual(cardLabels(["design-pass"], (value) => value), { shown: [], more: 0 });
   assert.deepEqual(cardLabels(["bugfix-notes", "BUG 🐛"], (value) => value).shown, ["BUG 🐛", "bugfix-notes"]);
 });
 

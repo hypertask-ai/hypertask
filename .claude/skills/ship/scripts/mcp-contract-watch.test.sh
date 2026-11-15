@@ -849,7 +849,7 @@ class WatcherTests(unittest.TestCase):
                     h.run()
                     bugs = h.records('bugs.json')
                     self.assertEqual(len(bugs), 1)
-                    self.assertEqual(bugs[0]['labels'], 'incident,brain-hard' if labelled else None)
+                    self.assertEqual(bugs[0]['labels'], 'incident' if labelled else None)
                     h.run()
                     self.assertEqual(h.records('bugs.json')[0].get('label_updates', 0), 1 if labelled else 0)
                 finally:
@@ -866,7 +866,7 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual(len(bugs), 1)
         self.assertIsNone(bugs[0]['labels'])
         self.h.run()
-        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident,brain-hard')
+        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident')
 
     def test_a_watcher_side_fault_between_server_breaks_does_not_confirm(self):
         self.h.fixture['mode'] = '500'
@@ -885,7 +885,7 @@ class WatcherTests(unittest.TestCase):
         self.assertNotIn(self.h.state().get('label_state'), ('done',))
         self.h.fixture.update(mode='green', update_fail=False)
         self.h.run()
-        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident,brain-hard')
+        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident')
         self.assert_secret_free()
 
     def test_failed_label_update_survives_incident_closing_and_is_retried(self):
@@ -899,7 +899,7 @@ class WatcherTests(unittest.TestCase):
         self.assertIsNone(self.h.records('bugs.json')[0]['labels'])
         self.h.fixture['update_fail'] = False
         self.h.run()
-        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident,brain-hard')
+        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident')
         self.h.run()
         self.assertEqual(self.h.records('bugs.json')[0]['label_updates'], 1)
         self.assert_secret_free()
@@ -926,7 +926,7 @@ class WatcherTests(unittest.TestCase):
         self.h.run()
         self.h.run()
         self.h.run('--dry-run')
-        self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], ['incident', 'brain-hard'])
+        self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], ['incident'])
         drill = Harness()
         try:
             drill.run('--force-fail', 'tools/list')

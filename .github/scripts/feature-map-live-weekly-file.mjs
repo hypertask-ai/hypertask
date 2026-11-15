@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 const APP = 'https://app.hypertask.ai'
 const PROJECT_ID = 11514
 const BACKLOG_SECTION_ID = 32923
-const LABELS = ['CI', 'Hypertask CI', 'brain-light']
+const LABELS = ['CI', 'Hypertask CI']
 
 export function isoWeek(now = new Date()) {
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))

@@ -14,7 +14,6 @@ const LABEL_RULE = "\n\nChoose the existing label for the project the ticket is 
 const PROMPT_FLAGS = ['HTPR-7500 old structure', 'HTPR-7977 short style', 'HTPR-7057 output language', 'board label rule'];
 const PROMPT_FLAGS_EXCLUDED = ['HTPR-7060 research and empty-draft retry', 'HTPR-7123 ticket type', 'HTPR-7054 due date', 'compose-task split output'];
 const PROCESS_LABEL = /^(?:brain-|flag:)/;
-const BRAIN_LABEL = /^brain-/;
 const CRITERIA = ['faithful', 'no_invented', 'board_style', 'actionable', 'length'];
 const WRITER_MAX_OUTPUT_TOKENS = 16000;
 const JUDGE_MAX_OUTPUT_TOKENS = 3000;
@@ -149,7 +148,6 @@ function scoreFields(goldEntry, board, properties) {
   const blank = (value) => (value ? value : null);
   return {
     labels: { gold: set(goldEntry.labels, (n) => !PROCESS_LABEL.test(n)), predicted: set(predicted, (n) => !PROCESS_LABEL.test(n)) },
-    brain: { gold: blank(set(goldEntry.labels, (n) => BRAIN_LABEL.test(n)).join(',')), predicted: blank(set(predicted, (n) => BRAIN_LABEL.test(n)).join(',')) },
     priority: { gold: goldEntry.priority ?? null, predicted: properties.priority > 0 ? properties.priority : null },
     size: { gold: goldEntry.estimate ?? null, predicted: properties.estimate > 0 ? properties.estimate : null },
   };
@@ -300,7 +298,6 @@ function aggregate(rows, referenceRows) {
     writerErrorSamples: rows.filter((r) => r.error).slice(0, 3).map((r) => `${r.id}: ${r.error}`),
     rules: { cleanRate: share(ok, (r) => r.rules.violations.length === 0), violations: ok.reduce((n, r) => n + r.rules.violations.length, 0), wordsP50: median(ok.map((r) => r.rules.words)) },
     labels: labelStats(scored.map((r) => r.fields.labels)),
-    brain: exactStats(scored.map((r) => r.fields.brain)),
     priority: exactStats(scored.map((r) => r.fields.priority)),
     size: exactStats(scored.map((r) => r.fields.size)),
     judge: {
@@ -351,7 +348,6 @@ function renderReport(result, previous) {
     `prompt sha256 ${result.promptSha.slice(0, 12)}, judge ${result.judgeLabel}, ${result.cases} cases per model, a few cases make every rate noisy`,
     header('Fields (scored on board 15 real cases)'),
     line('labels F1 (precision / recall)', (s, k) => `${pct(s.labels.f1)} (${pct(s.labels.precision)} / ${pct(s.labels.recall)}), abstain precision ${pct(s.labels.abstainPrecision)} (${s.labels.abstainCount} blank), n ${s.labels.n}${delta(k, 'labels.f1')}`),
-    field('brain label exact', 'brain'),
     field('priority exact', 'priority'),
     field('size exact', 'size'),
     header('Judge vs the real ticket (win / tie / loss, both orders must agree)'),

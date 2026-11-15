@@ -25,7 +25,7 @@ const iso = time => new Date(time).toISOString();
 const day = time => iso(time).slice(0, 10);
 const html = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const diagnostic = text => console.error(`error-collector: ${text}`);
-const refusedCreate = text => /project not found or access denied|label not found|rate limit exceeded|exactly one brain label/i.test(text)
+const refusedCreate = text => /project not found or access denied|label not found|rate limit exceeded/i.test(text)
   || /^vcc: (?:task create refused[: ]|Ticket description refused[: ]|not filed\. The same problem is already open)/im.test(text)
   || (/"success"\s*:\s*false/.test(text) && /"code"\s*:\s*"invalid_field"/.test(text));
 const occurrencePosted = (text, id) => typeof text === 'string' && (text.includes(`[error-occurrence:${id}]`) || text.includes(`[error-detail:${id}]`));
@@ -170,7 +170,7 @@ function titlePhrase(group) {
 }
 
 function ticketLabels(board) {
-  return `${board === PRODUCT_BOARD ? 'Error Log' : 'Infra'},brain-medium`;
+  return board === PRODUCT_BOARD ? 'Error Log' : 'Infra';
 }
 
 function ticketTitle(group) {

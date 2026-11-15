@@ -3,15 +3,13 @@
 ## Sub-features
 
 - `feature-map-in-app-feedback` Feature map: in-app feedback.
-- `htpr-8887-feedback-brain-tag` New feedback tickets also get `brain-medium`.
 
 ## How to get to it (user POV)
 
 The feedback form posts to `POST /api/feedback`.
 `src/components/Modals/Feedback/sendFeedbackRequest.ts` sends the text, kind,
 notify flag, and page context. The route in `src/app/api/feedback/route.ts`
-creates a board 15 ticket in section 4389 with the `user-feedback` label. When
-`htpr-8887-feedback-brain-tag` is on, the same create also adds `brain-medium`.
+creates a board 15 ticket in section 4389 with the `user-feedback` label.
 
 ## Driving it with agent-browser
 
@@ -20,15 +18,9 @@ with `text`, `kind`, and `notify: false`. Then find the new board 15 ticket by
 its title (`Bug: ` plus the first line) and read its labels. The response body is
 only `{ success: true }`, so the ticket read is the proof.
 
-The flag ships at `defaultMode: EVERYONE`, so flag off is UNREACHABLE in the
-declared mode: every account sees the brain tag. An authorized agent can prove
-the off path only during an Owner + QA hold with the flag Off; runners never
-switch a flag Off.
-
 ## Gotchas
 
-- The new ticket has `user-feedback` and no `brain-medium` while the flag is on.
-- `brain-medium` appears while the flag is off.
+- The new ticket carries `user-feedback` and no other labels.
 - Every post assigns every accepted human member of board 15, whether `notify`
   is true or false; `notify` only adds a Notify marker to the description.
   Expect the inbox assignment and archive the fixture ticket.

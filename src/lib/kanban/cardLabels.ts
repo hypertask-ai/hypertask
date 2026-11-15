@@ -1,4 +1,4 @@
-export const HIDDEN_CARD_LABELS: readonly RegExp[] = [/^brain-/i, /^design-pass$/i];
+export const HIDDEN_CARD_LABELS: readonly RegExp[] = [/^design-pass$/i];
 export const MAX_CARD_LABELS = 2;
 
 const TYPE_LABEL = /^\W*(bug|improvement|feature)\b/i;

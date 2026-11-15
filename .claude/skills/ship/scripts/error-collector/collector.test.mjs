@@ -328,7 +328,7 @@ check('tickets', 'creation options, redacted escaped HTML, atomic private state 
   h.events([event({ message: `Checkout failed ${unsafe}`, stack: Array.from({ length: 50 }, (_, i) => `${i}: ${unsafe}`).join('\n') })]);
   await h.run();
   const call = creates(h)[0];
-  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log,brain-medium', '--priority', 'high', '--title']);
+  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', '4389', '--labels', 'Error Log', '--priority', 'high', '--title']);
   assert.match(call.description, /^<p><strong>/);
   assert.match(call.description, /error-fingerprint:[a-f0-9]{16}(?![a-f0-9])/);
   for (const head of ['Problem', 'Fix', 'Done when', 'Risk', 'Decision']) assert.match(call.description, new RegExp(`<h2>${head}</h2>`));
@@ -380,7 +380,7 @@ check('tickets', 'routes 11514 to live Backlog, falls back to Todo and refuses a
     const args = creates(h)[0].args;
     assert.equal(args[args.indexOf('--project') + 1], '11514');
     assert.equal(args[args.indexOf('--section') + 1], '2');
-    assert.equal(args[args.indexOf('--labels') + 1], 'Infra,brain-medium');
+    assert.equal(args[args.indexOf('--labels') + 1], 'Infra');
     assert.ok(h.calls().some(c => c.name === 'ht' && c.args[1] === '/mcp/projects/11514/sections'));
   });
   await withHarness(async h => { h.events([event({ board: 11514 })]); h.config({ sections: [] }); await h.run(); assert.equal(creates(h).length, 0); assert.equal(Object.keys(h.state().pending).length, 1); });

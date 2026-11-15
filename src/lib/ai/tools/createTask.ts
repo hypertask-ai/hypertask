@@ -254,9 +254,6 @@ export function createCreateTaskTool(context: ToolContext) {
               if (!labels.length && draft.labelIds?.length &&
                   await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, user.id)) {
                 labels = draft.labelIds;
-              } else if (input.labels?.length && draft.brainLabelIds?.length && !input.labels.some((id) => draft.brainLabelIds!.includes(id))) {
-                const writerBrainLabel = draft.labelIds?.find((id) => draft.brainLabelIds!.includes(id));
-                if (writerBrainLabel) labels = [...labels, writerBrainLabel];
               }
               customFields = draft.customFields;
               title = draft.title;

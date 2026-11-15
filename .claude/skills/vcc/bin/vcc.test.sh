@@ -91,7 +91,7 @@ STUB
 chmod +x "$T/bin/filing-gate"
 export VCC_FILING_GATE="$T/bin/filing-gate"
 mkdir -p "$T/labels"
-printf '%s\n' '{"success":true,"labels":[{"id":"l1","name":"Infra"},{"id":"l2","name":"Agent Feedback"},{"id":"l3","name":"brain-medium"}]}' > "$T/labels/12057.json"
+printf '%s\n' '{"success":true,"labels":[{"id":"l1","name":"Infra"},{"id":"l2","name":"Agent Feedback"}]}' > "$T/labels/12057.json"
 printf '%s\n' '{"success":true,"labels":[{"id":"l4","name":"Bug"}]}' > "$T/labels/2101.json"
 printf '%s\n' '{"success":false}' > "$T/labels/12058.json"
 export VCC_TEST_LABELS="$T/labels"
@@ -562,7 +562,7 @@ for detail in 'tmux attach -t runner-8' 'claude --resume session' 'codex resume 
 done
 allowed bash "$vcc" comment add X-1 --kind question --text "$plain"
 allowed bash "$vcc" task update X-1 --description '<p>Settings now works.</p>'
-allowed bash "$vcc" task create --labels brain-medium --title 'Clearer settings' --description '<p>Nothing to decide.</p>'
+allowed bash "$vcc" task create --labels Bug --title 'Clearer settings' --description '<p>Nothing to decide.</p>'
 agent_detail_refused comment add X-1 --kind qa --text '<p><strong>Helpers</strong>: none</p>'
 agent_detail_refused --json comment add X-1 --kind qa --text 'tmux attach -t runner-8'
 agent_detail_refused --project 15 task update X-1 --description 'Outputs: private'
@@ -613,7 +613,7 @@ lint_refused 'Ticket description' task create --project 4060 --title T --descrip
 printf '<p>LINTFAIL</p>' > "$T/desc.md"
 lint_refused 'Ticket description' task create --project 4060 --title T --description-file "$T/desc.md"
 lint_refused 'Ticket description' task update YPER4-1 '--description=LINTFAIL'
-allowed bash "$vcc" task create --project 4060 --labels Bug,brain-light --title T --description '<p>Problem</p>'
+allowed bash "$vcc" task create --project 4060 --labels Bug --title T --description '<p>Problem</p>'
 [[ $(< "$VCC_TEST_TRACE") == *'ticket-lint --shape -'* ]] || fail 'description skipped shape lint'
 allowed bash "$vcc" task update YPER4-1 --title 'New title'
 [[ $(< "$VCC_TEST_TRACE") != *'ticket-lint'* ]] || fail 'title-only update ran description lint'
@@ -865,7 +865,7 @@ gate_refused task waiting-on X-1 --user me
 gate_refused task move X-1 --section 'Valentin Review'
 gate_refused task move X-1 'valentin review'
 gate_refused task update X-1 --section='Valentin Review'
-gate_refused task create --project 15 --labels brain-medium --title 'x' --section 'Valentin Review'
+gate_refused task create --project 15 --labels Bug --title 'x' --section 'Valentin Review'
 for who in 'Chief Of Staff' 'HT Product Lead'; do
   gate_allowed "$who" comment add X-1 --kind question --text "$question"
   gate_allowed "$who" task waiting-on X-1 --user 6
@@ -886,23 +886,6 @@ run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task update X-1 --section 31019
 [ "$status" = 0 ] || fail 'a move by section id to another column was refused'
 gate_allowed 'Chief Of Staff' task update X-1 --section 10412
 printf 'ok only Chief Of Staff and the board lead make Valentin the blocker\n'
-brain_refused() {
-  run bash "$vcc" "$@"
-  [ "$status" = 5 ] || fail "expected brain refusal (5), got $status: $*"
-  [[ $(< "$T/err") == 'vcc: task create refused: set exactly one of brain-light'*'brain-rules.md'* ]] || fail "wrong brain refusal: $(< "$T/err")"
-  [[ $(< "$VCC_TEST_TRACE") != *'task create'* ]] || fail "brain refusal reached the CLI: $*"
-}
-brain_refused task create --project 4060 --title T --description '<p>Problem</p>'
-brain_refused tasks create --project 4060 --labels Bug --title T --description '<p>Problem</p>'
-brain_refused --project 15 task create --labels brain-light,brain-hard --title T --description '<p>Problem</p>'
-brain_refused task create --project 4060 --labels brain-tiny --title T --description '<p>Problem</p>'
-brain_refused task create --project 4060 --labels=Bug --labels brain-light --labels brain-hard --title T --description '<p>Problem</p>'
-allowed bash "$vcc" task create --project 4060 --labels=Bug,brain-hard --title T --description '<p>Problem</p>'
-allowed bash "$vcc" task create --project 4060 --labels Bug --labels ' Brain-Medium ' --title T --description '<p>Problem</p>'
-allowed bash "$vcc" --project 15 --json tasks create --labels brain-extra-hard --title T --description '<p>Problem</p>'
-allowed bash "$vcc" task create --help
-allowed bash "$vcc" task update X-1 --title 'No brain label needed on update'
-printf 'ok task create needs exactly one brain label\n'
 filing_refused() {
   local code=$1 message=$2
   shift 2
@@ -911,34 +894,16 @@ filing_refused() {
   [[ $(< "$T/err") == *"$message"* ]] || fail "wrong filing-gate message: $(< "$T/err")"
   ! grep -qE '^hypertask (task|tasks) ' "$VCC_TEST_TRACE" && [[ $(< "$T/out") != stub:* ]] || fail "filing-gate refusal reached the CLI: $*"
 }
-filing_refused 5 'is full' task create --project 4060 --labels Infra,brain-light --title FULLBOARD
-filing_refused 6 'already open' --json tasks create --project=11514 --labels CI,brain-light --title SAMETITLE
-allowed bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
+filing_refused 5 'is full' task create --project 4060 --labels Infra --title FULLBOARD
+filing_refused 6 'already open' --json tasks create --project=11514 --labels CI --title SAMETITLE
+allowed bash "$vcc" task create --project 4060 --labels Infra --title T
 [[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- task create --project 4060'* ]] || fail "filing-gate not asked on 4060: $(< "$VCC_TEST_TRACE")"
-allowed bash "$vcc" task create --project 15 --labels brain-light --title FULLBOARD
+allowed bash "$vcc" task create --project 15 --labels Bug --title FULLBOARD
 [[ $(< "$VCC_TEST_TRACE") != *filing-gate* ]] || fail 'filing-gate asked for board 15'
-run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
+run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 4060 --labels Infra --title T
 [ "$status" = 5 ] && [[ $(< "$T/err") == *'filing-gate missing'*'house-rules-sync'* ]] || fail "missing filing-gate did not refuse: $status $(< "$T/err")"
-allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title T
+allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels Bug --title T
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task update X-1 --project 4060 --description 'please create this'
-allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title 'Board 4060 create note'
+allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels Bug --title 'Board 4060 create note'
 printf 'ok Fleet CI and Fleet Infra creates go through filing-gate\n'
-run bash "$vcc" task create --project 12057 --labels 'Infra,Agent Feedback,brain-light' --title T
-[ "$status" = 0 ] || fail "a board label swap did not reach the CLI: $(< "$T/err")"
-[[ $(< "$T/err") == *'offers no brain-light; using brain-medium'* ]] || fail "no board label swap warning: $(< "$T/err")"
-[[ $(< "$T/out") == *'<--labels> <Infra,Agent Feedback,brain-medium>'* ]] || fail "brain-light was not swapped: $(< "$T/out")"
-run bash "$vcc" task create --project 12057 --labels=Infra,brain-hard --title T
-[ "$status" = 0 ] || fail "an equals-form board label swap did not reach the CLI: $(< "$T/err")"
-[[ $(< "$T/out") == *'<--labels=Infra,brain-medium>'* ]] || fail "brain-hard was not swapped: $(< "$T/out")"
-run bash "$vcc" task create --project 2101 --labels 'Bug,brain-medium' --title T
-[ "$status" = 0 ] || fail "a board without brain labels refused a create: $(< "$T/err")"
-[[ $(< "$T/err") == *'has no brain labels; filing without one'* ]] || fail "no drop warning: $(< "$T/err")"
-[[ $(< "$T/out") == *'<--labels> <Bug>'* ]] || fail "brain label not dropped: $(< "$T/out")"
-run bash "$vcc" task create --project 2101 --labels brain-medium --title T
-[ "$status" = 0 ] || fail "a brain label alone was refused on a board without any: $(< "$T/err")"
-[[ $(< "$T/out") != *'--labels'* ]] || fail "an empty label list still reached the CLI: $(< "$T/out")"
-run bash "$vcc" task create --project 12058 --labels 'Infra,brain-light' --title T
-[ "$status" = 0 ] || fail "an unreadable label response blocked the create: $(< "$T/err")"
-[[ $(< "$T/out") == *'<--labels> <Infra,brain-light>'* ]] || fail "an unreadable label response changed the create: $(< "$T/out")"
-printf 'ok brain labels follow the board labels\n'
 printf 'vcc helper guard tests passed\n'

@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       ));
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, brainLabels, urgentNote, skills, composeSkillsEnabled } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, urgentNote, skills, composeSkillsEnabled } =
       await prepareTaskWriterRun(body, userId);
     let titleOnly = false;
     if (body.requestKind === "auto-title") {
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         const { customFields: modelCustomFields, labelIds: modelLabelIds, ...task } = draft as typeof draft & { customFields?: unknown; labelIds?: unknown };
         const customFields = customFieldDefinitions?.length
           ? fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, modelCustomFields) : [];
-        const fieldValues = { ...(customFields.length ? { customFields } : {}), ...(boardLabelIds ? { labelIds: finalizeTaskWriterLabelIds(modelLabelIds, boardLabelIds, brainLabels) } : {}) };
+        const fieldValues = { ...(customFields.length ? { customFields } : {}), ...(boardLabelIds ? { labelIds: finalizeTaskWriterLabelIds(modelLabelIds, boardLabelIds) } : {}) };
         const filtered = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
         const typedDescription = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
         const description = urgentNote ? forceUrgentPriorityMarker(typedDescription) : typedDescription;
@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
           if (titleOnly) {
             controller.enqueue(encoder.encode(draft));
           } else if (dueDateContext || boardLabelIds || urgentNote) {
-            const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds, brainLabels) : draft;
+            const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds) : draft;
             const urgent = urgentNote ? forceUrgentPriorityMarker(labeled) : labeled;
             const dated = dueDateContext ? applyTaskWriterDueDate(urgent, dueDateContext).html : urgent;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));

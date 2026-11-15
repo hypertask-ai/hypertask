@@ -230,7 +230,7 @@ test("labels decide what is internal and what kind of change it is", () => {
   assert.equal(isInternalLabel("agent-fleet"), true);
   assert.equal(isInternalLabel("Cursor runners 6 Nov"), true);
   assert.equal(isInternalLabel("FEATURE 💎"), false);
-  assert.equal(ticketKind(["Bug", "brain-medium"]), "fix");
+  assert.equal(ticketKind(["Bug"]), "fix");
   assert.equal(ticketKind(["FEATURE 💎"]), "feature");
   assert.equal(ticketKind(["Quick wins"]), "improvement");
 });

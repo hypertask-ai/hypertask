@@ -650,7 +650,7 @@ test('the red after that rerun files one urgent fixer ticket naming the smoke te
   await tick({ dir, api, now: Date.parse('2026-10-22T12:03:00Z') / 1000 });
   const create = api.writes.find(a => a[1] === 'create');
   assert.ok(create.includes('urgent'));
-  assert.ok(create.includes('Incident,CI,Hypertask CI,brain-medium'));
+  assert.ok(create.includes('Incident,CI,Hypertask CI'));
   assert.match(create[create.indexOf('--title') + 1], /layout baseline: ticket from board card/);
   assert.match(create[create.indexOf('--description') + 1],
     /layout baseline: ticket from board card \[Desktop\]: Test timeout of 50000ms exceeded/);
@@ -706,6 +706,6 @@ test('alerts without a single fixer enter the active fleet backlog unassigned', 
   const create = api.writes.find(args => args[1] === 'create');
   assert.equal(create[create.indexOf('--project') + 1], '11514');
   assert.equal(create[create.indexOf('--section') + 1], 'Backlog');
-  assert.ok(create.includes('Incident,CI,Hypertask CI,brain-medium'));
+  assert.ok(create.includes('Incident,CI,Hypertask CI'));
   assert.equal(api.writes.filter(args => args[1] === 'assign').length, 0);
 });

@@ -4,7 +4,6 @@ import {
   EstimateConstants,
   PriorityConstants,
 } from "@/lib/constants/constants";
-import { enforceBrainLabel, type TaskWriterBrainLabels } from "@/lib/ai/taskWriterBrainLabels";
 import {
   isDuplicateNoteTitle,
   repairDuplicateNote,
@@ -70,19 +69,15 @@ export function validateTaskWriterLabelIds(value: unknown, boardLabelIds: string
   return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === "string" && allowed.has(id)))] : [];
 }
 
-export function finalizeTaskWriterLabelIds(value: unknown, boardLabelIds: string[], brain?: TaskWriterBrainLabels | null): string[] {
-  return enforceBrainLabel(validateTaskWriterLabelIds(value, boardLabelIds), brain);
+export function finalizeTaskWriterLabelIds(value: unknown, boardLabelIds: string[]): string[] {
+  return validateTaskWriterLabelIds(value, boardLabelIds);
 }
 
-export function normalizeTaskWriterLabels(html: string, boardLabelIds: string[], brain?: TaskWriterBrainLabels | null): string {
+export function normalizeTaskWriterLabels(html: string, boardLabelIds: string[]): string {
   const root = parse(html);
   const markers = root.querySelectorAll("#ai-generated-task-tags");
   for (const marker of markers) {
-    marker.set_content(finalizeTaskWriterLabelIds(marker.textContent.split(",").map((id) => id.trim()), boardLabelIds, brain).join(","));
-  }
-  const defaultId = brain?.defaultId;
-  if (!markers.length && defaultId) {
-    root.insertAdjacentHTML("beforeend", `<span id="ai-generated-task-tags" style="display:none">${defaultId}</span>`);
+    marker.set_content(finalizeTaskWriterLabelIds(marker.textContent.split(",").map((id) => id.trim()), boardLabelIds).join(","));
   }
   return root.toString();
 }
@@ -102,7 +97,7 @@ export function forceUrgentPriorityMarker(html: string): string {
 
 export function extractTaskWriterProperties(
   html: string,
-  options: { fallbackTitle?: string | null; boardLabelIds?: string[]; brainLabels?: TaskWriterBrainLabels | null; forceUrgent?: boolean } = {}
+  options: { fallbackTitle?: string | null; boardLabelIds?: string[]; forceUrgent?: boolean } = {}
 ): TaskWriterProperties {
   const parsed = parse(repairDuplicateNote(html, options.fallbackTitle));
   const root = parsed.querySelector("body") ?? parsed;
@@ -125,7 +120,7 @@ export function extractTaskWriterProperties(
   );
   const tags = root.querySelector("#ai-generated-task-tags");
   const labelIds = options.boardLabelIds
-    ? finalizeTaskWriterLabelIds(tags?.textContent.split(",").map((id) => id.trim()), options.boardLabelIds, options.brainLabels)
+    ? finalizeTaskWriterLabelIds(tags?.textContent.split(",").map((id) => id.trim()), options.boardLabelIds)
     : undefined;
   tags?.remove();
   root.querySelector("#ai-generated-task-status")?.remove();

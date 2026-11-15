@@ -26,7 +26,6 @@ export async function generateTaskWriterDraft(
     validateDraft,
     customFieldDefinitions,
     boardLabelIds,
-    brainLabels,
     urgentNote,
   } = await prepareTaskWriterRun(body, userId, agentId, teamScope);
   const preparedAt = Date.now();
@@ -68,7 +67,6 @@ export async function generateTaskWriterDraft(
     body.aiMode === "AiTaskWriter"
       ? extractTaskWriterProperties(draftHtml, {
           boardLabelIds,
-          brainLabels,
           forceUrgent: urgentNote,
           fallbackTitle:
             body.taskTitle.trim() || taskTitleFromBrief(body.PROMPT),
@@ -95,7 +93,6 @@ export async function generateTaskWriterDraft(
     success: true as const,
     ...(fieldDraft && customFieldDefinitions?.length ? { customFields: fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, fieldDraft.customFields) } : {}),
     ...("labelIds" in properties && properties.labelIds ? { labelIds: properties.labelIds } : {}),
-    ...(brainLabels ? { brainLabelIds: [...brainLabels.ids] } : {}),
     html: properties.description,
     title: properties.title,
     priority: "priority" in properties ? properties.priority : undefined,

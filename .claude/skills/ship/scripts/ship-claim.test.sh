@@ -630,10 +630,6 @@ eq "full claim, own open PR, no flag -> hold" "$?" 4
 eq "full claim, own open PR, incident flag -> claimed" "$rc" 0
 grep -q '^task move HTPR-5000 --section In Progress' "$D/log" && ok "incident claim reaches the move" || bad "incident claim wrote no move: $out"
 [[ $out != *'Domain admission failed'* ]] && ok "incident claim skips the working-area check" || bad "incident claim hit the area check: $out"
-inc_task brain-extra-hard
-jq '.tasks[0].labels += [{name:"incident"}]' "$D/inc.json" > "$D/next"; mv "$D/next" "$D/inc.json"
-SHIP_SESSION_NAME='RUNNER 6' SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json ./ship-claim HTPR-5000 >/dev/null 2>&1
-eq "incident flag never overrides brain-extra-hard" "$?" 4
 prs 5; empty_infra
 prs 5; empty_infra
 prs 5; eq "PR read fails -> hold" "$(HOLD_OPEN_FAIL=1 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
@@ -676,28 +672,10 @@ for ticket in HTPR-8264 HYFA-1 YPER4-999 HYCI-30; do
     [[ $out == *'HT Design Builder owns it outside QA'* ]] && ok 'refusal names Design Builder' || bad "unclear refusal: $out"
     [ ! -s "$D/log" ] && [ ! -s "$HOLD_READS" ] && ok 'refusal precedes writes and hold reads' || bad 'ineligible claim reached hold or writes'
   done
-  eligible_task QA brain-extra-hard
-  : > "$D/log"; : > "$HOLD_READS"
-  out=$(SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1); rc=$?
-  eq "$ticket extra-hard refuses runner even in QA" "$rc" 4
-  [[ $out == *'brain-extra-hard'* ]] && ok 'refusal explains brain restriction' || bad "unclear brain refusal: $out"
-  [ ! -s "$D/log" ] && [ ! -s "$HOLD_READS" ] && ok 'brain refusal precedes writes and hold reads' || bad 'extra-hard claim reached hold or writes'
-  mkdir -p "$D/rstate"; echo claude > "$D/rstate/engine-6"
-  : > "$D/log"
-  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1)
-  [[ $out != *'is brain-extra-hard'* ]] && ok "$ticket extra-hard passes the brain gate on a claude runner" || bad "claude runner refused extra-hard: $out"
-  echo codex > "$D/rstate/engine-6"
-  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1)
-  [[ $out != *'is brain-extra-hard'* ]] && ok "$ticket extra-hard passes the brain gate on a codex runner" || bad "codex runner refused extra-hard: $out"
-  echo opencode > "$D/rstate/engine-6"
-  out=$(SHIP_CLAIM_RUNNER_STATE=$D/rstate SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1); rc=$?
-  eq "$ticket extra-hard still refuses an opencode runner" "$rc" 4
-  rm -rf "$D/rstate"
 done
 for identity in 'RUNNER 6' 'HT Design Builder' 'Infra Runner 2'; do
-  for label in design-pass brain-extra-hard; do
+  for label in design-pass; do
     eligible_task QA "$label"
-    [ "$identity" != 'RUNNER 6' ] || [ "$label" != brain-extra-hard ] || continue
     : > "$D/log"
     SHIP_SESSION_NAME="$identity" FAKE_TASK=$D/eligibility.json ./ship-claim YPER4-999 >/dev/null 2>&1
     eq "$identity may claim QA $label" "$?" 0
@@ -716,11 +694,6 @@ for attempt in first retry; do
   eq "QA design claim $attempt remains eligible" "$?" 0
   eq "QA design claim $attempt preserves QA" "$(jq -r '.tasks[0].section' "$D/eligibility.json")" QA
   grep -q '^task move YPER4-999 --section QA$' "$D/log" && ok 'QA claim does not become implementation work' || bad 'QA claim moved outside QA'
-done
-for label in brain-medium brain-hard; do
-  eligible_task 'In Progress' "$label"
-  SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim YPER4-999 >/dev/null 2>&1
-  eq "ordinary $label ticket remains claimable" "$?" 0
 done
 for payload in '{}' '{"success":true,"tasks":[]}' '{"success":true,"tasks":[{"section":"QA"}]}'; do
   printf '%s' "$payload" > "$D/eligibility.json"
