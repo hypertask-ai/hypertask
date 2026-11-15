@@ -11,6 +11,7 @@ const root = path.resolve(__dirname, "..");
 const dueDateFlag = "htpr-7054-ctrlj-due-date";
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
 const dates = jiti(path.join(root, "src/lib/ai/taskWriterDueDate.ts"));
+const cachedTaskDetail = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
 const ticketTypes = jiti(path.join(root, "src/lib/ai/taskWriterTicketType.ts"));
 const { escapeHtml } = jiti(path.join(root, "src/utils/htmlEscape.ts"));
 const multiPrompt = "Create three separate tasks: focus search with a shortcut, export CSV, and fix the settings typo.";
@@ -297,6 +298,7 @@ test("actual composer send caches every saved ticket and publishes the complete 
     enabled: true, targetBoardId: 15, waitingForBoards: false, queueEnterWhileBoardsLoad: true, textHeldUntilBoardsLoad: { current: null }, textBoardId: undefined, invokeSkills: false, aiStepTimingEnabled: false, completeTaskCreatePerformanceTrace() {}, completeTaskCreatePerformanceTraceAfterPaint() {}, sending: { current: false }, pendingImages: { current: 0 }, dictating: false, text: multiPrompt,
     files: [], showProgress: false, composer: { current: null }, setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {},
     setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null }, newTaskWindow: true, destinationProject: board,
+    fastComposeOpen: false, openSavedComposeTask: cachedTaskDetail.openSavedComposeTask,
     window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } }, inView: null,
     user: { id: 985 }, currentProject: board, mounted: { current: true }, writerModelPicker: true, writerModel: { id: "claude-sonnet-5-5-instant", source: "anthropic" }, writerReasonEnabled: false, inlineAgentImages: false, guaranteeScreenshots: false, applyWriterProperties: false, skillFollowupEnabled: false, actionChipsEnabled: true,
     createComposedTask: async () => result,
