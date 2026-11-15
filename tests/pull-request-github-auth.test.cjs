@@ -166,3 +166,50 @@ test("fetchGithubPullRequest uses a read-only token for public installation repo
     else process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = saved.key;
   }
 });
+
+test("fetchGithubPullRequest reads a private pull request with a supplied board token", async () => {
+  const calls = [];
+  const original = global.fetch;
+  const savedToken = process.env.GITHUB_TOKEN;
+  const savedId = process.env.GITHUB_PR_LINK_APP_ID;
+  const savedKey = process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+  delete process.env.GITHUB_TOKEN;
+  delete process.env.GITHUB_PR_LINK_APP_ID;
+  delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+  resetPullRequestGithubAuthCache();
+  global.fetch = async (url, init) => {
+    const authorization = init?.headers?.Authorization ?? null;
+    calls.push({ url: String(url), authorization });
+    if (authorization !== "Bearer board-token") {
+      return new Response("missing", { status: 404 });
+    }
+    if (String(url).includes("/check-runs")) {
+      return Response.json({
+        total_count: 1,
+        check_runs: [{ status: "completed", conclusion: "success" }],
+      });
+    }
+    return Response.json(pull(canonical, 110, "Private linked property"));
+  };
+  try {
+    const metadata = await fetchGithubPullRequest(
+      parseGithubPullRequestUrl(canonical),
+      "Bearer board-token",
+    );
+    assert.equal(metadata.title, "Private linked property");
+    assert.equal(metadata.checkState, "passing");
+    assert.deepEqual(
+      calls.map((call) => call.authorization),
+      [null, "Bearer board-token", "Bearer board-token"],
+    );
+  } finally {
+    global.fetch = original;
+    resetPullRequestGithubAuthCache();
+    if (savedToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = savedToken;
+    if (savedId === undefined) delete process.env.GITHUB_PR_LINK_APP_ID;
+    else process.env.GITHUB_PR_LINK_APP_ID = savedId;
+    if (savedKey === undefined) delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+    else process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = savedKey;
+  }
+});

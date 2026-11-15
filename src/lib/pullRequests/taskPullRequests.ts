@@ -71,8 +71,10 @@ interface LinkTaskPullRequestInput {
   agentId?: string | null;
   teamScope?: AgentTokenTeamScope | null;
   url: string;
+  authorization?: string | null;
   fetchMetadata?: (
     parsed: ParsedGithubPullRequestUrl,
+    authorization?: string | null,
   ) => Promise<GithubPullRequestMetadata>;
   db?: typeof prisma;
 }
@@ -105,26 +107,32 @@ export function toPublicTaskPullRequest(
   };
 }
 
-async function githubHeaders(): Promise<Record<string, string>> {
-  const authorization = await pullRequestGithubAuthorization();
+async function githubHeaders(
+  authorization?: string | null,
+): Promise<Record<string, string>> {
+  const resolved = authorization ?? (await pullRequestGithubAuthorization());
   return {
     Accept: "application/vnd.github+json",
     "User-Agent": "Hypertask-Pull-Request-Linker",
-    ...(authorization ? { Authorization: authorization } : {}),
+    ...(resolved ? { Authorization: resolved } : {}),
   };
 }
 
 function retryWithoutAuthorization(
   status: number,
   headers: Record<string, string>,
+  supplied: boolean,
 ): boolean {
-  if (!headers.Authorization) return false;
+  if (supplied || !headers.Authorization) return false;
   if (status === 401 || status === 403) return true;
   return status === 404 && !process.env.GITHUB_TOKEN;
 }
 
-async function fetchGithub(url: string): Promise<Response> {
-  const headers = await githubHeaders();
+async function fetchGithub(
+  url: string,
+  authorization?: string | null,
+): Promise<Response> {
+  const headers = await githubHeaders(authorization);
   const send = (requestHeaders: Record<string, string>) =>
     fetch(url, {
       headers: requestHeaders,
@@ -132,7 +140,7 @@ async function fetchGithub(url: string): Promise<Response> {
       signal: AbortSignal.timeout(3_000),
     });
   const response = await send(headers);
-  if (!retryWithoutAuthorization(response.status, headers)) return response;
+  if (!retryWithoutAuthorization(response.status, headers, Boolean(authorization))) return response;
   await response.body?.cancel().catch(() => undefined);
   const publicHeaders = { ...headers };
   delete publicHeaders.Authorization;
@@ -156,11 +164,15 @@ function githubId(value: unknown): string | null {
 async function fetchGithubCheckState(
   parsed: ParsedGithubPullRequestUrl,
   headSha: string,
+  authorization?: string | null,
 ): Promise<PullRequestCheckState | null> {
   try {
-    const response = await fetchGithub(
-      `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/commits/${encodeURIComponent(headSha)}/check-runs?per_page=100`,
-    );
+    const url = `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/commits/${encodeURIComponent(headSha)}/check-runs?per_page=100`;
+    let response = await fetchGithub(url, authorization);
+    if (!response.ok && authorization) {
+      await response.body?.cancel().catch(() => undefined);
+      response = await fetchGithub(url);
+    }
     if (!response.ok) return null;
     const value = await response.json();
     if (!isRecord(value) || !Array.isArray(value.check_runs)) return null;
@@ -181,12 +193,16 @@ async function fetchGithubCheckState(
 
 export async function fetchGithubPullRequest(
   parsed: ParsedGithubPullRequestUrl,
+  authorization?: string | null,
 ): Promise<GithubPullRequestMetadata> {
+  const url = `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/pulls/${parsed.number}`;
   let response: Response;
   try {
-    response = await fetchGithub(
-      `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/pulls/${parsed.number}`,
-    );
+    response = await fetchGithub(url);
+    if (authorization && response.status === 404) {
+      await response.body?.cancel().catch(() => undefined);
+      response = await fetchGithub(url, authorization);
+    }
   } catch {
     throw new PullRequestLinkError(
       "GitHub could not verify this pull request",
@@ -254,7 +270,7 @@ export async function fetchGithubPullRequest(
     title: value.title,
     lifecycle,
     headSha: head.sha,
-    checkState: await fetchGithubCheckState(parsed, head.sha),
+    checkState: await fetchGithubCheckState(parsed, head.sha, authorization),
     sourceUpdatedAt: updatedAt,
   };
 }
@@ -337,6 +353,7 @@ export async function linkTaskPullRequest({
   agentId = null,
   teamScope,
   url,
+  authorization = null,
   fetchMetadata = fetchGithubPullRequest,
   db = prisma,
 }: LinkTaskPullRequestInput): Promise<{
@@ -383,7 +400,7 @@ export async function linkTaskPullRequest({
     return { created: false, pullRequest: toPublicTaskPullRequest(existing) };
   }
 
-  const metadata = await fetchMetadata(parsed);
+  const metadata = await fetchMetadata(parsed, authorization);
 
   try {
     return await db.$transaction(async (transaction) => {
