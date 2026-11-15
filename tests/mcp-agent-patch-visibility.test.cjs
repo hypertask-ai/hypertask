@@ -127,6 +127,20 @@ function loadHandler({ user, visibilityResult, agentRow } = {}) {
     if (request === "./updateBoards") {
       return loadReal("src/lib/mcp/agents/updateBoards.ts");
     }
+    if (request === "@/lib/flags") {
+      return { __esModule: true, isFeatureEnabled: async () => true };
+    }
+    if (request === "./selfPicture") {
+      return {
+        __esModule: true,
+        parseAgentPicture: () => {
+          throw new Error("not exercised by these tests");
+        },
+        storeAgentPicture: async () => {
+          throw new Error("not exercised by these tests");
+        },
+      };
+    }
     if (request.startsWith("@/")) {
       const resolved = "src" + request.slice(1);
       return loadReal(resolved.endsWith(".ts") ? resolved : resolved + ".ts");
