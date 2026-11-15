@@ -3,7 +3,6 @@ import {
   setOwnedAgentVisibility,
 } from '@/lib/agents/visibility'
 import { clearAgentRuntimeSnapshot } from '@/lib/agents/runtimeState'
-import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_9364_AGENT_SELF_PROFILE_FLAG } from '@/lib/flags/definitions/htpr-9364-agent-self-profile'
 import {
   agentTokenCredentialFields,
@@ -33,7 +32,6 @@ import {
   type AgentLifecycleDeps,
   type AgentLifecycleRow,
 } from './lifecycle'
-import { parseAgentPicture, storeAgentPicture } from './selfPicture'
 
 type AgentPatchBody = {
   revoked?: unknown
@@ -229,6 +227,7 @@ export async function handlePatchAgentRequest(
     if (agentId !== ctx.agentId) {
       return NextResponse.json({ success: false, error: 'Agents can only update their own profile' }, { status: 403 })
     }
+    const { isFeatureEnabled } = require('@/lib/flags') as typeof import('@/lib/flags')
     const enabled = await isFeatureEnabled(HTPR_9364_AGENT_SELF_PROFILE_FLAG, ctx.user.id)
     if (!enabled) {
       return NextResponse.json({ success: false, error: 'Agents cannot manage agents' }, { status: 403 })
@@ -484,13 +483,13 @@ async function updateOwnAgentProfile(
     if (typeof parsedName !== 'string') return parsedName
     displayName = parsedName
   }
-  const parsedPicture =
-    body.picture === undefined ? null : parseAgentPicture(body.picture)
-  if (parsedPicture && !parsedPicture.ok) {
-    return NextResponse.json(buildFieldError('invalid_field', parsedPicture.field, parsedPicture.message), { status: 400 })
-  }
   let photoURL: string | undefined
-  if (parsedPicture && parsedPicture.ok) {
+  if (body.picture !== undefined) {
+    const { parseAgentPicture, storeAgentPicture } = require('./selfPicture') as typeof import('./selfPicture')
+    const parsedPicture = parseAgentPicture(body.picture)
+    if (!parsedPicture.ok) {
+      return NextResponse.json(buildFieldError('invalid_field', parsedPicture.field, parsedPicture.message), { status: 400 })
+    }
     try {
       photoURL = await storeAgentPicture(parsedPicture.picture)
     } catch (error) {
