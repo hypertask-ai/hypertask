@@ -1107,6 +1107,27 @@ test("the 19 retired infra flags are hidden, immutable and enabled for old tabs"
   }
 });
 
+test("chat history paging stays on after its safety switch is removed", async () => {
+  const key = "htpr-6971-chat-history-paging";
+  assert.equal(flags.HTPR_6971_CHAT_HISTORY_PAGING_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [
+      { key, mode, updatedAt: new Date() },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
+    ];
+    row = { mode, updatedAt: new Date() };
+    const listed = await flags.listFeatureFlagModes();
+    assert.equal(listed.some((entry) => entry.key === key), false);
+    assert.equal((await flags.featureFlagsForUser(42))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, false), /Unknown feature flag/);
+});
+
 test("the retired My Tasks overdue badges flag is hidden, immutable and enabled for old tabs", async () => {
   const key = "htpr-6459-my-tasks-overdue-badges";
   assert.equal(flags.MY_TASKS_OVERDUE_BADGES_FLAG, undefined);

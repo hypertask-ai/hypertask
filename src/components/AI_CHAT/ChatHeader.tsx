@@ -30,7 +30,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
 import { useAiChatOpenPreferences } from "@/hooks/General/useAiChatOpenPreferences";
 import { AI_CHAT_AUTO_OPEN_DEFAULTS, AI_CHAT_AUTO_OPEN_KEYS } from "@/lib/aiChat/autoOpenPreferences";
-import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7575_PHONE_CHAT_DELETE_FLAG } from "@/lib/flags/definitions/htpr-7575-phone-chat-delete";
 import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-7773-chat-header-name";
 import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
@@ -174,7 +173,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !w
   const pathname = usePathname();
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const chatCleanup = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG) && !isFullScreenChat;
-  const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const sessionPagingEnabled = useFlag("htpr-6971-chat-history-paging");
   const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
   const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
   const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);

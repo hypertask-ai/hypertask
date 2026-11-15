@@ -296,7 +296,7 @@ async function withCompose(options, check) {
   const state = { useRecoilValue: (atom) => React.useSyncExternalStore(subscribe, () => get(atom)), useSetRecoilState: (atom) => setters.get(atom), useRecoilState: (atom) => [React.useSyncExternalStore(subscribe, () => get(atom)), setters.get(atom)] };
   const flags = new Set([keys.HTPR_7736_CHAT_FOLLOWS_TASK_FLAG, keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7312_CTRLJ_SKILLS_FLAG, keys.HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, keys.HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG]);
   if (options.enabled !== false) flags.add(flag);
-  if (options.paged) flags.add(keys.HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  if (options.paged) flags.add("htpr-6971-chat-history-paging");
   for (const key of options.extraFlags ?? []) flags.add(key);
   for (const key of options.disabledFlags ?? []) flags.delete(key);
   if (options.existing) flags.add(keys.HTPR_6937_NEW_TASK_WINDOW_FLAG);

@@ -9,7 +9,6 @@ import { MessageList } from "@/components/AI_CHAT/MessageList";
 import { WelcomeScreen } from "@/components/AI_CHAT/WelcomeScreen";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
 import { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG } from "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
@@ -422,7 +421,7 @@ function CtrlTabSessionSwitch({
 
 export default function Chat({ initialSessionId }: ChatProps) {
   const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
-  const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const pagingRequested = useFlag("htpr-6971-chat-history-paging");
   const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
   const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);

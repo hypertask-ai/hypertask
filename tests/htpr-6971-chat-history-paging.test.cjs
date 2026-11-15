@@ -1109,14 +1109,6 @@ test('stream updates after an active refresh replace their message ID without er
   });
 });
 
-test('new feature flag defaults Owner + QA', () => {
-  const definition = require('./helpers/flag-files.cjs').load(require('node:path').resolve('src/lib/flags/definitions/htpr-6971-chat-history-paging.ts'));
-  assert.equal(definition.HTPR_6971_CHAT_HISTORY_PAGING_FLAG, flag);
-  assert.equal(definition.default.kind, 'feature');
-  assert.equal(definition.default.defaultMode, 'OWNER_AND_QA');
-  assert.ok(definition.default.releaseRisk.reason);
-});
-
 test('unavailable server paging falls back to the complete legacy cache without requesting transcripts', async () => {
   await withHistory({ legacyServer: true }, async ({ history, requests, flush }) => {
     assert.equal(history().sessionPagingEnabled, false);
