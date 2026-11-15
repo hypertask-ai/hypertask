@@ -1,5 +1,8 @@
 "use client";
 import { useContext, useEffect, useState } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7962_CALENDAR_CONTROL_STATE_FLAG } from "@/lib/flags/definitions/htpr-7962-calendar-control-state";
+import { sortingModeLabel } from "@/models/Views/model";
 import { MonthView } from "./month-view";
 import { WeekView } from "./week-view";
 import {
@@ -81,16 +84,31 @@ export function Calendar() {
     today: new Date(),
     weekStartsOn: calendarSettings.weekStartsOn === "monday" ? 1 : 0,
   });
-  const hasActiveTaskFilters =
-    taskFilters.assignedToMe ||
-    taskFilters.priority.length > 0 ||
-    taskFilters.assignees.length > 0 ||
-    taskFilters.assigneeAgents.length > 0 ||
-    taskFilters.updatedBy.length > 0 ||
-    taskFilters.createdBy.length > 0 ||
-    taskFilters.updatedByAgents.length > 0 ||
-    taskFilters.labels.length > 0 ||
-    taskFilters.size.length > 0;
+  const announceCalendarControlState = useFlag(HTPR_7962_CALENDAR_CONTROL_STATE_FLAG);
+  const activeFilterCount =
+    Number(taskFilters.assignedToMe) +
+    taskFilters.priority.length +
+    taskFilters.assignees.length +
+    taskFilters.assigneeAgents.length +
+    taskFilters.updatedBy.length +
+    taskFilters.createdBy.length +
+    taskFilters.updatedByAgents.length +
+    taskFilters.labels.length +
+    taskFilters.size.length;
+  const hasActiveTaskFilters = activeFilterCount > 0;
+  const filterName = announceCalendarControlState
+    ? hasActiveTaskFilters
+      ? `Filter, ${activeFilterCount} active`
+      : "Filter, off"
+    : "Show filter options";
+  const sortName = announceCalendarControlState
+    ? calendarSort
+      ? `Sort, by ${sortingModeLabel(calendarSort.mode).toLowerCase()}`
+      : "Sort, off"
+    : "Show sorting options";
+  const activeControlClass = announceCalendarControlState
+    ? "text-view-control-active"
+    : "text-[#51A4F1]";
 
   return (
     <div
@@ -289,10 +307,10 @@ export function Calendar() {
               <div className="relative group">
                 <button
                   onClick={toggleFilterModal}
-                  aria-label="Show filter options"
+                  aria-label={filterName}
                   className={`flex h-8 w-8 items-center justify-center bg-transparent p-0 ${
                     hasActiveTaskFilters
-                      ? "text-[#51A4F1]"
+                      ? activeControlClass
                       : "text-text-light-gray"
                   }`}
                 >
@@ -310,9 +328,9 @@ export function Calendar() {
                 <button
                   type="button"
                   onClick={() => setShowSortModal(true)}
-                  aria-label="Show sorting options"
+                  aria-label={sortName}
                   className={`flex h-8 w-8 items-center justify-center bg-transparent ${
-                    calendarSort ? "text-[#51A4F1]" : "text-text-light-gray"
+                    calendarSort ? activeControlClass : "text-text-light-gray"
                   }`}
                 >
                   <ArrowUpDown size={18} strokeWidth={1.75} />
