@@ -50,14 +50,16 @@ test('HYCI-416 the review counts only while the switch names it', () => {
   for (const reviewer of ['codex', undefined, 'deepseek', 'gpt']) {
     assert.equal(evaluate(pr({ comments: [claudeComment()], reviewer })).state, 'pending', String(reviewer));
   }
-  assert.equal(claudeResultFor([claudeComment({ model: 'deepseek-v4.1-flash' })], head, 'deepseek'), null);
+  assert.equal(claudeResultFor([claudeComment({ model: 'deepseek-v4.1-flash' })], head, 'deepseek').state, 'success');
   assert.equal(claudeResultFor([claudeComment({ model: 'deepseek-v4.1-flash' })], head, 'claude'), null);
 });
 
 test('HYCI-416 the switch is read only from the runner app issue and defaults to codex', () => {
   const issue = (reviewer, login = 'hypertask-runners[bot]', extra) => ({ user: { login }, body: `x <!-- review-switch:v1 ${JSON.stringify({ reviewer })} -->`, ...extra });
   assert.equal(reviewerFromIssues([issue('claude')]), 'claude');
-  assert.equal(reviewerFromIssues([issue('deepseek'), issue('claude')]), 'claude');
+  assert.equal(reviewerFromIssues([issue('deepseek')]), 'deepseek');
+  assert.equal(reviewerFromIssues([issue('deepseek'), issue('claude')]), 'deepseek');
+  assert.equal(reviewerFromIssues([issue('claude'), issue('deepseek')]), 'claude');
   assert.equal(reviewerFromIssues([issue('claude', 'someone-else')]), 'codex');
   assert.equal(reviewerFromIssues([issue('claude', 'hypertask-runners[bot]', { pull_request: {} })]), 'codex');
   assert.equal(reviewerFromIssues([issue('mystery')]), 'codex');

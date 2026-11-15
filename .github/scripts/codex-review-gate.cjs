@@ -8,8 +8,8 @@ const BADGES = [/\bP([0-9]) Badge/g, /badge\/P([0-9])-/g, /\[P([0-9])\]/g, /\bP(
 
 const isCodex = login => String(login ?? '').replace(/\[bot\]$/, '') === CODEX_LOGIN;
 
-const REVIEWER_MODELS = { claude: /^claude-sonnet/ };
-const REVIEWER_NAMES = { claude: 'Claude Sonnet' };
+const REVIEWER_MODELS = { claude: /^claude-sonnet/, deepseek: /^deepseek-v4\.1-flash$/ };
+const REVIEWER_NAMES = { claude: 'Claude Sonnet', deepseek: 'deepseek-v4.1-flash' };
 const SWITCH_AUTHOR = 'hypertask-runners';
 const CLAUDE_REVIEW_STATE = /<!-- claude-review:v1 (\{.*?\}) -->/s;
 const SWITCH_LABEL = 'review-switch';
@@ -23,7 +23,7 @@ function reviewerFromIssues(issues) {
     if (issue.pull_request || !isApp(issue.user?.login)) continue;
     try {
       const reviewer = JSON.parse(SWITCH_STATE.exec(String(issue.body ?? ''))?.[1] ?? 'null')?.reviewer;
-      if (reviewer === 'codex' || reviewer === 'claude') return reviewer;
+      if (reviewer === 'codex' || reviewer === 'claude' || reviewer === 'deepseek') return reviewer;
     } catch {}
   }
   return 'codex';

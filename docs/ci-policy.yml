@@ -1,5 +1,5 @@
 version: 15
-last_updated: 2026-11-02
+last_updated: 2026-11-15
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -15,6 +15,11 @@ topology:
   review_lane:
     reviewer: chatgpt-codex-connector
     workflow: .github/workflows/codex-review-gate.yml
+    hosted_review_workflow: .github/workflows/claude-review.yml
+    switch_issue_label: review-switch
+    switch_values: [codex, claude, deepseek]
+    deepseek_model: deepseek-v4.1-flash
+    deepseek_secret: OPENCODE_API_KEY
     runs_on: ubuntu-latest
     dedicated_runners: []
   production_branch: production
@@ -576,6 +581,8 @@ policies:
     required_check_name: ai-review
     legacy_check_name: claude-review
     status_writer: .github/workflows/codex-review-gate.yml
+    hosted_reviewers: [codex, claude, deepseek]
+    deepseek_model: deepseek-v4.1-flash
     execute_pull_request_code: false
     exact_head_commit_required: true
     approve_passes: true

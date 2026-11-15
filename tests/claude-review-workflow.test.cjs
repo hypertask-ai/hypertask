@@ -61,15 +61,27 @@ test('HYCI-456 one parallel run per pull request, a newer push cancels the older
   assert.equal(workflow.concurrency['cancel-in-progress'], true);
 });
 
-test('HYCI-456 only the subscription token is used, only in the steps that need it, never a paid API key', () => {
+test('HYCI-456 Claude uses only the subscription token; DeepSeek uses only OPENCODE_API_KEY in its own step', () => {
   assert.ok(parsed.includes('secrets.CLAUDE_CODE_OAUTH_TOKEN'));
-  for (const name of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER', 'OPENCODE']) assert.ok(!parsed.includes(name));
+  for (const name of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER']) assert.ok(!parsed.includes(name));
   assert.ok(job.steps.some(step => (step.run || '').includes('exit 1')));
   assert.equal(job.env, undefined);
   const holders = job.steps.filter(step => JSON.stringify(step.env || {}).includes('CLAUDE_CODE_OAUTH_TOKEN'));
   assert.deepEqual(holders.map(step => step.name), ['Require the Claude subscription token', 'Review the diff']);
+  assert.ok(!JSON.stringify(holders).includes('OPENCODE'));
+  const deepseek = job.steps.filter(step => JSON.stringify(step.env || {}).includes('OPENCODE_API_KEY'));
+  assert.deepEqual(deepseek.map(step => step.name), ['Review the diff with DeepSeek']);
+  assert.ok(!JSON.stringify(deepseek).includes('CLAUDE_CODE_OAUTH_TOKEN'));
+  assert.equal(deepseek[0].env.REVIEW_REVIEWER, 'deepseek');
+  assert.match(String(deepseek[0].if), /reviewer == 'deepseek'/);
+  assert.equal(job.steps.find(step => step.name === 'Review the diff').env.REVIEW_REVIEWER, 'claude');
+  assert.match(String(job.steps.find(step => step.name === 'Review the diff').if), /reviewer == 'claude'/);
   const install = job.steps.find(step => (step.run || '').includes('npm install'));
   assert.equal(install.env, undefined);
+  assert.match(String(install.if), /reviewer == 'claude'/);
+  const target = job.steps.find(step => step.id === 'target').with.script;
+  assert.match(target, /reviewer === 'claude' \|\| reviewer === 'deepseek'/);
+  assert.match(target, /setOutput\('reviewer', reviewer\)/);
 });
 
 test('HYCI-456 every action is pinned to a commit and the CLI to a version', () => {

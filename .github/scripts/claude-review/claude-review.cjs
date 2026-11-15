@@ -12,6 +12,9 @@ const MARKER_PREFIX = 'claude-review:v1';
 const MODEL_ALIAS = 'sonnet';
 const MAX_DIFF_CHARS = 180_000;
 const REVIEW_TIMEOUT_MS = 12 * 60 * 1000;
+const DEEPSEEK_MODEL = 'deepseek-v4.1-flash';
+const DEEPSEEK_URL = 'https://opencode.ai/inference/go/v1/chat/completions';
+const PLAN_OUT_STATUS = new Set([401, 402, 429]);
 
 const INSTRUCTIONS = `You are a code reviewer for a pull request against the production branch of a Next.js and TypeScript web app. The other reviewer is not available right now, so your verdict gates the merge.
 
@@ -100,10 +103,11 @@ function parseClaudeOutput(stdout) {
 const plain = text => String(text ?? '').replace(/</g, '&lt;');
 
 function buildComment(sha, review) {
+  const label = review.label || 'Claude Sonnet';
   const lines = [
     review.blocking > 0
-      ? `**Claude Sonnet review: ${review.blocking} blocker/major finding(s).**`
-      : '**Claude Sonnet review: no blocker or major findings.**',
+      ? `**${label} review: ${review.blocking} blocker/major finding(s).**`
+      : `**${label} review: no blocker or major findings.**`,
     '',
     plain(review.summary),
   ];
@@ -113,11 +117,11 @@ function buildComment(sha, review) {
   }
   const state = {
     sha, model: review.model, verdict: review.verdict, blocking: review.blocking, minor: review.minor,
-    auth: 'subscription', costUsd: review.costUsd, outputTokens: review.outputTokens,
+    auth: review.auth || 'subscription', costUsd: review.costUsd, outputTokens: review.outputTokens,
   };
   lines.push(
     '',
-    'Claude Sonnet reviews this head once on a GitHub-hosted runner while the review switch names claude (HYCI-416).',
+    `${label} reviews this head once on a GitHub-hosted runner while the review switch names ${review.reviewer || 'claude'} (${review.ticket || 'HYCI-416'}).`,
     '',
     `reviewed-commit: ${sha}`,
     `<!-- ${MARKER_PREFIX} ${JSON.stringify(state)} -->`,
@@ -127,11 +131,126 @@ function buildComment(sha, review) {
 
 const ghApi = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] });
 
+function deepseekRequest(apiKey, context) {
+  return {
+    url: DEEPSEEK_URL,
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+    body: {
+      model: DEEPSEEK_MODEL,
+      messages: [
+        { role: 'system', content: `${INSTRUCTIONS}\n\nRequired JSON schema:\n${JSON.stringify(SCHEMA)}` },
+        { role: 'user', content: context },
+      ],
+    },
+  };
+}
+
+function reviewFromModelJson(review) {
+  if (!review || typeof review !== 'object' || !['APPROVE', 'CONCERNS'].includes(review.verdict)
+      || !Array.isArray(review.findings) || typeof review.summary !== 'string' || !review.summary.trim()) {
+    return { ok: false, approval: false, reason: 'review does not match the schema' };
+  }
+  const findings = review.findings.filter(item => item && typeof item === 'object');
+  const blocking = findings.filter(isBlocking).length;
+  return {
+    ok: true,
+    approval: blocking === 0,
+    verdict: blocking > 0 ? 'CONCERNS' : 'APPROVE',
+    blocking,
+    minor: findings.length - blocking,
+    summary: review.summary.trim(),
+    findings,
+  };
+}
+
+function parseDeepSeekOutput(status, payload) {
+  const code = Number(status);
+  if (PLAN_OUT_STATUS.has(code)) {
+    return { ok: false, approval: false, reason: `DeepSeek plan is out (HTTP ${code}). No review and no approval.` };
+  }
+  if (code !== 200) return { ok: false, approval: false, reason: `DeepSeek call failed (HTTP ${code}). No approval.` };
+  const returned = payload?.model;
+  if (returned != null && returned !== '' && returned !== DEEPSEEK_MODEL) {
+    return { ok: false, approval: false, reason: 'response model is not deepseek-v4.1-flash. No approval.' };
+  }
+  let review;
+  try {
+    review = JSON.parse(payload?.choices?.[0]?.message?.content ?? '');
+  } catch {
+    return { ok: false, approval: false, reason: 'result is not JSON' };
+  }
+  const parsed = reviewFromModelJson(review);
+  if (!parsed.ok) return parsed;
+  return {
+    ...parsed,
+    model: DEEPSEEK_MODEL,
+    label: DEEPSEEK_MODEL,
+    reviewer: 'deepseek',
+    ticket: 'HTPR-9350',
+    auth: 'opencode',
+    costUsd: 0,
+    outputTokens: Number(payload?.usage?.completion_tokens) || 0,
+  };
+}
+
+function deepseekComment(status, payload, sha) {
+  const review = parseDeepSeekOutput(status, payload);
+  if (!review.ok) return { ok: false, approval: false, comment: null, reason: review.reason, review: null };
+  return { ok: true, approval: review.approval === true && review.verdict === 'APPROVE', comment: buildComment(sha, review), reason: '', review };
+}
+
+function assertWholeDiff(diff) {
+  const text = String(diff ?? '');
+  if (text.length > MAX_DIFF_CHARS) {
+    const error = new Error(`diff is ${text.length} characters, over the ${MAX_DIFF_CHARS} character limit for one call. Refusing to review a cut-off diff.`);
+    error.approval = false;
+    throw error;
+  }
+  return text;
+}
+
+async function callDeepSeek(context, fetchImpl = globalThis.fetch, sha = '') {
+  const key = process.env.OPENCODE_API_KEY || '';
+  if (!key) {
+    const error = new Error('The repo secret OPENCODE_API_KEY is empty or missing. No other key is used.');
+    error.approval = false;
+    throw error;
+  }
+  const request = deepseekRequest(key, context);
+  let response;
+  try {
+    response = await fetchImpl(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: JSON.stringify(request.body),
+      signal: AbortSignal.timeout(REVIEW_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const detail = String(error?.message ?? 'request failed').split(key).join('[redacted]');
+    const failure = new Error(`DeepSeek call failed before a response: ${detail}. No approval.`);
+    failure.approval = false;
+    throw failure;
+  }
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  return deepseekComment(response.status, payload, sha);
+}
+
 const reviewedAlready = (comments, sha) => comments.some(c =>
   ['github-actions', 'hypertask-runners'].includes(String(c.user?.login ?? '').replace(/\[bot\]$/, ''))
   && String(c.body ?? '').includes(`${MARKER_PREFIX} {`) && String(c.body).includes(`"sha":"${sha}"`));
 
-function reviewPr({ repo, number, sha }) {
+async function reviewPr({ repo, number, sha, reviewer = process.env.REVIEW_REVIEWER || 'claude', fetchImpl }) {
+  if (reviewer !== 'claude' && reviewer !== 'deepseek') {
+    const error = new Error(`refusing reviewer ${reviewer}`);
+    error.approval = false;
+    throw error;
+  }
   const pr = JSON.parse(ghApi(['api', `repos/${repo}/pulls/${number}`]));
   if (pr.state !== 'open' || pr.draft || pr.head.repo?.full_name !== repo || pr.base.repo?.full_name !== repo) {
     return { status: 'skipped', note: 'not an open same-repository non-draft PR' };
@@ -141,8 +260,22 @@ function reviewPr({ repo, number, sha }) {
   if (reviewedAlready(comments, sha)) return { status: 'skipped', note: 'this head already has a review comment' };
   let diff = ghApi(['pr', 'diff', String(number), '-R', repo]);
   if (!hasPatch(diff)) return { status: 'skipped', note: 'no patch text came back' };
-  if (diff.length > MAX_DIFF_CHARS) diff = `${diff.slice(0, MAX_DIFF_CHARS)}\n[DIFF CUT OFF AT ${MAX_DIFF_CHARS} CHARACTERS]`;
+  if (reviewer === 'deepseek') assertWholeDiff(diff);
+  else if (diff.length > MAX_DIFF_CHARS) diff = `${diff.slice(0, MAX_DIFF_CHARS)}\n[DIFF CUT OFF AT ${MAX_DIFF_CHARS} CHARACTERS]`;
   const context = `PR #${number} head ${sha}\nTitle: ${pr.title}\n\nDescription:\n${String(pr.body ?? '').slice(0, 6000)}\n\nDiff:\n${diff}`;
+  if (reviewer === 'deepseek') {
+    const decided = await callDeepSeek(context, fetchImpl, sha);
+    if (!decided.ok || !decided.comment || decided.approval === true && decided.review?.verdict !== 'APPROVE') {
+      const error = new Error(decided.reason || 'no review');
+      error.approval = false;
+      throw error;
+    }
+    const current = JSON.parse(ghApi(['api', `repos/${repo}/pulls/${number}`])).head.sha;
+    if (current !== sha) return { status: 'skipped', note: 'head moved while reviewing, dropping this review' };
+    if (process.env.REVIEW_DRY) return { status: 'dry', note: decided.comment };
+    ghApi(['api', '-X', 'POST', `repos/${repo}/issues/${number}/comments`, '-F', 'body=@-'], decided.comment);
+    return { status: 'posted', note: `${decided.review.verdict} blocking=${decided.review.blocking} model=${decided.review.model}` };
+  }
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-review-'));
   try {
     fs.writeFileSync(path.join(tmp, 'instructions.txt'), INSTRUCTIONS, { mode: 0o600 });
@@ -165,8 +298,9 @@ function reviewPr({ repo, number, sha }) {
 }
 
 module.exports = {
-  AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS,
+  AUTHOR, MARKER_PREFIX, SCHEMA, INSTRUCTIONS, DEEPSEEK_MODEL, DEEPSEEK_URL, MAX_DIFF_CHARS,
   isBlocking, hasPatch, parseClaudeOutput, buildComment, reviewedAlready, reviewPr,
+  deepseekRequest, parseDeepSeekOutput, deepseekComment, assertWholeDiff, callDeepSeek,
 };
 
 if (require.main === module) {
@@ -175,6 +309,10 @@ if (require.main === module) {
     console.error('claude-review: REVIEW_REPO, REVIEW_PR and REVIEW_SHA are required');
     process.exit(64);
   }
-  const outcome = reviewPr({ repo, number: Number(number), sha });
-  console.log(`claude-review: PR #${number} ${sha.slice(0, 7)} ${outcome.status}: ${outcome.note}`);
+  reviewPr({ repo, number: Number(number), sha }).then(outcome => {
+    console.log(`review: PR #${number} ${sha.slice(0, 7)} ${outcome.status}: ${outcome.note}`);
+  }).catch(error => {
+    console.error(`review: ${error.message}`);
+    process.exit(1);
+  });
 }
