@@ -76,31 +76,27 @@ test("opening the page signs out once without leaving the page, then offers Sign
   } finally { s.view.close(); }
 });
 
-function trackAssign(events) {
-  const realWindow = window;
-  const location = new Proxy(realWindow.location, {
-    get(target, key) {
-      if (key === "assign") return (url) => { events.assigned.push(String(url)); };
-      const value = Reflect.get(target, key, target);
-      return typeof value === "function" ? value.bind(target) : value;
+function installAssignRecorder(events) {
+  const realWindow = global.window;
+  global.window = {
+    document: realWindow.document,
+    location: {
+      href: realWindow.location.href,
+      assign(url) { events.assigned.push(String(url)); },
     },
-  });
-  global.window = new Proxy(realWindow, {
-    get(target, key) {
-      if (key === "location") return location;
-      const value = Reflect.get(target, key, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-  return () => { global.window = realWindow; };
+    addEventListener(...args) { return realWindow.addEventListener(...args); },
+    removeEventListener(...args) { return realWindow.removeEventListener(...args); },
+    dispatchEvent(...args) { return realWindow.dispatchEvent(...args); },
+  };
+  return realWindow;
 }
 
 test("Sign in again sends the person to Google with the account chooser", async () => {
   const s = screen();
-  const restore = [];
+  let realWindow;
   try {
     await s.mountScreen();
-    restore.push(trackAssign(s.events));
+    realWindow = installAssignRecorder(s.events);
     await s.click(0);
     assert.equal(s.events.social.length, 1);
     assert.equal(s.events.social[0].provider, "google");
@@ -111,21 +107,21 @@ test("Sign in again sends the person to Google with the account chooser", async 
     assert.equal(url.searchParams.get("prompt"), "select_account");
     assert.equal(url.searchParams.get("state"), "fixture");
   } finally {
-    restore.forEach((undo) => undo());
+    if (realWindow) global.window = realWindow;
     s.view.close();
   }
 });
 
 test("Sign in again falls back to the login page when no Google address comes back", async () => {
   const s = screen({ signInUrl: null });
-  const restore = [];
+  let realWindow;
   try {
     await s.mountScreen();
-    restore.push(trackAssign(s.events));
+    realWindow = installAssignRecorder(s.events);
     await s.click(0);
     assert.deepEqual(s.events.assigned, ["/login"]);
   } finally {
-    restore.forEach((undo) => undo());
+    if (realWindow) global.window = realWindow;
     s.view.close();
   }
 });
@@ -165,7 +161,7 @@ test("the shared sign-out hook stays on the page when asked not to redirect", as
         reset = load("src/hooks/MultiPages/HTC/useSignout.ts").useSignout(undefined, redirectTo === undefined ? undefined : { redirectTo }).handleHardReset;
         return null;
       }
-      view.render(React.createElement(Probe));
+      await view.render(React.createElement(Probe));
       const before = window.location.href;
       assert.equal(await reset(), true);
       if (redirectTo === null) {

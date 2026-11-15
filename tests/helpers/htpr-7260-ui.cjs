@@ -48,11 +48,14 @@ function mount() {
     container,
     render: element => React.act(() => reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, element))),
     close() {
-      React.act(() => reactRoot.unmount());
-      dom.window.close();
-      for (const [key, descriptor] of previous) {
-        if (descriptor) Object.defineProperty(global, key, descriptor);
-        else delete global[key];
+      try {
+        React.act(() => reactRoot.unmount());
+        dom.window.close();
+      } finally {
+        for (const [key, descriptor] of previous) {
+          if (descriptor) Object.defineProperty(global, key, descriptor);
+          else delete global[key];
+        }
       }
     },
   };
