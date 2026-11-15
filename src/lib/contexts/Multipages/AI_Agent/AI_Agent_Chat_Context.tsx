@@ -3,7 +3,6 @@ import type { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadH
 import { useAiChat } from "@/hooks/MultiPages/AIChat/useAiChat";
 import toast from "react-hot-toast";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { isNewChatWindowShortcut } from "@/lib/aiChat/chatShortcuts";
 import { useRecoilState } from "@/lib/state";
@@ -226,7 +225,6 @@ export const ChatRuntime = memo(function ChatRuntime({
   handleSendMessageRef.current = contextProps.handleSendMessage;
   const { editor, fileItems } = contextProps;
   const pathname = usePathname();
-  const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const [failedFullScreenQuery, setFailedFullScreenQuery] = useState<string | null>(null);
   useEffect(() => {
     if (!failedFullScreenQuery || !editor) return;
@@ -244,11 +242,6 @@ export const ChatRuntime = memo(function ChatRuntime({
   } | null>(null);
   useEffect(() => {
     if (windowScope) return;
-    if (pendingAiChatPrompt && typeof pendingAiChatPrompt !== "string" && !askAiFullscreenEnabled) {
-      pendingFullScreenSessionRef.current = null;
-      setPendingAiChatPrompt(null);
-      return;
-    }
     if (
       !pendingAiChatPrompt ||
       contextProps.isByokBlocked ||
@@ -316,7 +309,6 @@ export const ChatRuntime = memo(function ChatRuntime({
   }, [
     windowScope,
     pendingAiChatPrompt, contextProps.sessionPagingEnabled, contextProps.navigationKey,
-    askAiFullscreenEnabled,
     contextProps.isByokBlocked,
     contextProps.isTyping,
     contextProps.sendSettledVersion,

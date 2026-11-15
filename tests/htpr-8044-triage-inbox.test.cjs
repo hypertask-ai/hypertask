@@ -55,13 +55,11 @@ test("real command eligibility requires both flags and excludes demo/tutorial", 
   const expression = declaration.slice(declaration.indexOf("=") + 1);
   for (const triageInboxFlag of [false, true]) {
     for (const safeInboxBatches of [false, true]) {
-      for (const freshChatHandoff of [false, true]) {
       for (const isDemo of [false, true]) {
         for (const isInteractive of [false, true]) {
-          assert.equal(evaluate(expression, { triageInboxFlag, safeInboxBatches, freshChatHandoff, isDemo, isInteractive }),
-            triageInboxFlag && safeInboxBatches && freshChatHandoff && !isDemo && !isInteractive);
+          assert.equal(evaluate(expression, { triageInboxFlag, safeInboxBatches, isDemo, isInteractive }),
+            triageInboxFlag && safeInboxBatches && !isDemo && !isInteractive);
         }
-      }
       }
     }
   }
@@ -73,7 +71,6 @@ for (const removeImageGeneration of [false, true]) test(`choosing triage closes 
   const command = rows(true).find(row => row.key === "triageInbox");
   let triageInboxFlag = true;
   let safeInboxBatches = true;
-  let freshChatHandoff = true;
   let groups = [{ group: "Inbox", commandLists: [command] }];
   const choose = () => evaluate(handler, {
     writing: false, removeImageGeneration, findCommandPosition, filterCommands: groups, INBOX_TRIAGE_PROMPT,
@@ -81,7 +78,7 @@ for (const removeImageGeneration of [false, true]) test(`choosing triage closes 
     setFrequentlyUsed: () => {}, recordHTCCommandUsage: () => {},
     document: { activeElement: { blur() {} } },
     pagesEnabled: false, standalonePages: false,
-    triageInboxFlag, safeInboxBatches, freshChatHandoff,
+    triageInboxFlag, safeInboxBatches,
     rightColumnFlag: false, scope: undefined, addFieldPayload: undefined,
     resetShowCommands: () => calls.push("close"),
     setAiChatPendingPrompt: prompt => calls.push(prompt),
@@ -91,13 +88,13 @@ for (const removeImageGeneration of [false, true]) test(`choosing triage closes 
   })(command);
   choose();
   assert.deepEqual(calls, ["close", { query: INBOX_TRIAGE_PROMPT, fullScreen: true }, "/chat?return_to=%2Finbox%3Fsplit%3Dagents"]);
-  for (const flags of [[false, true, true], [true, false, true], [true, true, false]]) {
-    [triageInboxFlag, safeInboxBatches, freshChatHandoff] = flags;
+  for (const flags of [[false, true], [true, false]]) {
+    [triageInboxFlag, safeInboxBatches] = flags;
     calls.length = 0;
     choose();
     assert.deepEqual(calls, [], "a stale click after any prerequisite is revoked must not launch triage");
   }
-  triageInboxFlag = safeInboxBatches = freshChatHandoff = true;
+  triageInboxFlag = safeInboxBatches = true;
   groups = [];
   choose();
   assert.deepEqual(calls, [], "a command removed from the palette must not launch");

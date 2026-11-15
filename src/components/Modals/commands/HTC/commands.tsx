@@ -84,7 +84,6 @@ import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { INBOX_TRIAGE_PROMPT } from "@/lib/ai/prompts/inboxTriage";
 import { HTPR_8044_TRIAGE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8044-triage-inbox";
 import { HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8025-reactive-command-search";
@@ -151,8 +150,7 @@ const Commands = (props: Props) => {
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
-  const freshChatHandoff = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
-  const triageInboxEnabled = triageInboxFlag && safeInboxBatches && freshChatHandoff && !isDemo && !isInteractive;
+  const triageInboxEnabled = triageInboxFlag && safeInboxBatches && !isDemo && !isInteractive;
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   let selectedTasksFirst = false;
@@ -709,7 +707,7 @@ const Commands = (props: Props) => {
         return;
       }
       if (command.key === "triageInbox") {
-        if (triageInboxFlag && safeInboxBatches && freshChatHandoff) {
+        if (triageInboxFlag && safeInboxBatches) {
           resetShowCommands();
           setAiChatPendingPrompt({ query: INBOX_TRIAGE_PROMPT, fullScreen: true });
           router.push(buildFullScreenChatPath(`${window.location.pathname}${window.location.search}${window.location.hash}`));

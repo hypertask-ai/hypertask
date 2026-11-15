@@ -11,7 +11,6 @@ import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -53,9 +52,8 @@ const SearchComp = ({
   const commandFocusProxy = useRef<CommandFocusProxy>({ current: null, compose: true }).current;
   const setShowCommands = useSetRecoilState(showCommandsAtom);
   const isApple = useDeviceContext();
-  const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const searchParams = useSearchParams();
-  const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
+  const searchTerm = askAiFullscreenEnabled
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
   const rowsFitPane = useFlag(HTPR_7618_SEARCH_ROWS_FIT_PANE_FLAG);
@@ -117,7 +115,7 @@ const SearchComp = ({
   function openAskAi(readableQuery?: string) {
     const query = readableQuery !== undefined ? readableQuery : inputValue.trim();
     if (!query) return;
-    if (askAiFullscreenEnabled && askAiFullscreenFlagEnabled) {
+    if (askAiFullscreenEnabled) {
       const searchUrl = new URL(window.location.href);
       searchUrl.searchParams.set("searchTerm", inputValue);
       const returnPath = `${searchUrl.pathname}${searchUrl.search}${searchUrl.hash}`;

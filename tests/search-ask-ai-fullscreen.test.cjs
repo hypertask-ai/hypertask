@@ -5,7 +5,6 @@ const React = require('react')
 const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
-const flag = 'htpr-6936-ask-ai-fullscreen'
 
 async function withRuntime(config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
@@ -15,7 +14,6 @@ async function withRuntime(config, check) {
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
   let pathname = config.pathname ?? '/search'
-  let fullscreenEnabled = config.fullscreenEnabled ?? true
   let pending = config.prompt
   let setter
   const sent = []
@@ -31,7 +29,7 @@ async function withRuntime(config, check) {
   let reactRoot
   try {
     source('src/hooks/MultiPages/AIChat/useAiChat.ts', { useAiChat: () => context })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => { if (key === 'htpr-8334-multi-chat-windows' || key === 'htpr-8988-chat-window-layout') return false; assert.equal(key, flag); return fullscreenEnabled } })
+    source('src/hooks/useFlag.tsx', { useFlag: () => false })
     source('src/lib/state.tsx', { useRecoilState: () => {
       const pair = React.useState(config.prompt)
       pending = pair[0]
@@ -49,7 +47,6 @@ async function withRuntime(config, check) {
       sent, created: () => created, pending: () => pending,
       update: async (patch, route = pathname) => { context = { ...context, ...patch }; pathname = route; await render() },
       handoff: async (prompt) => React.act(async () => setter(prompt)),
-      setFlag: async (enabled) => { fullscreenEnabled = enabled; await render() },
     })
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
@@ -170,24 +167,6 @@ test('failed send preparation and a manually filled fresh session recover the qu
   }
 })
 
-test('fullscreen handoff is cancelled when the flag turns off before readiness or during session creation', async () => {
-  for (const duringCreation of [false, true]) {
-    const prompt = { query: 'Where is my work?', fullScreen: true }
-    await withRuntime({ prompt, pathname: '/chat', context: { chatHistoryReady: duringCreation, editor: { isEmpty: false }, fileItems: [{}] } }, async ({ update, setFlag, sent, created, pending, handoff }) => {
-      assert.equal(created(), duringCreation ? 1 : 0)
-      await setFlag(false)
-      assert.equal(pending(), null)
-      const newSession = { id: 'new', messages: [] }
-      await update({ chatHistoryReady: true, activeSession: 'new', currentSession: newSession, sessions: [newSession] })
-      assert.deepEqual(sent, [])
-      await setFlag(true)
-      assert.deepEqual(sent, [], 'enabling the flag must not revive a cancelled handoff')
-      await handoff(prompt)
-      assert.equal(created(), duringCreation ? 2 : 1, 'cancellation resets the session latch')
-    })
-  }
-})
-
 test('failed session creation recovers the question without replacing a draft or retrying automatically', async () => {
   for (const delayedEditor of [false, true]) {
     const inserted = []
@@ -214,7 +193,7 @@ test('failed session creation recovers the question without replacing a draft or
 })
 
 test('legacy prompt retains readiness guards and uses the existing conversation without starting a new one', async () => {
-  await withRuntime({ prompt: 'Legacy question', fullscreenEnabled: false, context: { isByokBlocked: true } }, async ({ update, sent, created, pending }) => {
+  await withRuntime({ prompt: 'Legacy question', context: { isByokBlocked: true } }, async ({ update, sent, created, pending }) => {
     assert.equal(pending(), 'Legacy question')
     await update({ isByokBlocked: false, isTyping: true })
     assert.deepEqual(sent, [])
@@ -248,7 +227,7 @@ test('legacy handoff does not wipe an unsent draft or send its attachments', asy
   }
 })
 
-test('search server gate uses the authenticated identity, fails closed and passes the flag to the existing component', async () => {
+test('search fullscreen gate follows the authenticated identity, fails closed and never reads the removed flag', async () => {
   const cached = new Map(Object.entries(require.cache))
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
@@ -262,20 +241,16 @@ test('search server gate uses the authenticated identity, fails closed and passe
     source('src/app/search/SearchComp.tsx', { default: () => null })
     source('src/app/search/startServerSearch.ts', { startServerSearch: async () => null })
     const Page = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })(path.join(root, 'src/app/search/page.tsx')).default
-    for (const value of [true, false]) {
-      enabled = value
-      const page = await Page({ searchParams: Promise.resolve({ searchTerm: 'my question' }) })
-      assert.equal(page.props.children.props.askAiFullscreenEnabled, value)
-      assert.equal(page.props.children.props._searchTerm, 'my question')
-      assert.deepEqual(calls.at(-1), [flag, 985])
-    }
-    const previousCalls = calls.length
+    const page = await Page({ searchParams: Promise.resolve({ searchTerm: 'my question' }) })
+    assert.equal(page.props.children.props.askAiFullscreenEnabled, true)
+    assert.equal(page.props.children.props._searchTerm, 'my question')
+    assert.equal(calls.some(([key]) => key === 'htpr-6936-ask-ai-fullscreen'), false, 'the removed fullscreen flag is never read')
     for (const identity of [7, null]) {
       userId = identity
-      const page = await Page({ searchParams: Promise.resolve({}) })
-      assert.equal(page.props.children.props.askAiFullscreenEnabled, false)
+      const other = await Page({ searchParams: Promise.resolve({}) })
+      assert.equal(other.props.children.props.askAiFullscreenEnabled, false)
     }
-    assert.equal(calls.length, previousCalls, 'a forged display cookie cannot authorize fullscreen behavior')
+    assert.equal(calls.some(([key]) => key === 'htpr-6936-ask-ai-fullscreen'), false, 'a forged display cookie cannot authorize fullscreen behavior')
   } finally {
     for (const key of Object.keys(require.cache)) if (!cached.has(key)) delete require.cache[key]
     for (const [key, value] of cached) require.cache[key] = value
