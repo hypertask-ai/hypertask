@@ -4,7 +4,7 @@ import type { SettingsSectionId } from "@/components/Modals/Settings/settingsNav
 export const settingsPages = {
   general: "Display name, profile picture, email and delete account",
   appearance: "Theme: Follow system, Light · Porcelain, Dark · Graphite, OLED black · AMOLED, Paper · Dia, Material",
-  notifications: "Mentions, comments, assignments, task updates and due dates, each by email and push; master email notifications and push notifications on this device (manual-only)",
+  notifications: "Mentions, comments, assignments, task updates and due dates, each by email and push; master email notifications. Push notifications on this device stay manual",
   calendar: "Week starts on, show weekends, Google Calendar connection, task sync and disconnect (manual-only)",
   inbox: "Archive and go to next task after sending a comment; display avatar in inbox (manual-only)",
   "task-page": "Collapse comments, play GIFs, suggest descriptions from titles, show task history, read receipts, scroll position, AI chat auto-open on new tickets, existing tickets and boards (manual-only)",
@@ -22,7 +22,7 @@ export const settingsPages = {
   "ai-features": "Team AI features",
   "default-models": "Default AI models",
   apiKeys: "Bring your own AI provider keys",
-  "board-general": "Board ticket prefix, board notifications, time tracking, show total task time, archive/restore/delete boards and per-column auto-assign (manual-only)",
+  "board-general": "Column visibility can be switched. Ticket prefix, board notifications, time tracking, archive, restore, delete, and per-column auto-assign stay manual",
   "board-planning": "Cycles, board target date, milestones, health updates (manual-only)",
   "board-staleness": "Staleness thresholds, stale reminders and auto-archive (manual-only)",
   "board-members": "People and their roles on the selected board",
@@ -46,6 +46,17 @@ export const settingsPages = {
   announcements: "Latest updates",
 } as const satisfies Record<SettingsSectionId, string>;
 
+export const teamAreas = ["column", "notification-default", "ai-model", "ai-key", "skill", "integration", "agent-token"] as const;
+export const teamAreaPages = {
+  column: "board-general",
+  "notification-default": "notifications",
+  "ai-model": "ai-models",
+  "ai-key": "apiKeys",
+  skill: "skills",
+  integration: "webhooks",
+  "agent-token": "management-keys",
+} as const satisfies Record<(typeof teamAreas)[number], SettingsSectionId>;
+
 export const settingsPageSchema = z.enum(Object.keys(settingsPages) as [keyof typeof settingsPages, ...(keyof typeof settingsPages)[]]);
 export const settingsScopeSchema = z.object({
   section: settingsPageSchema,
@@ -63,6 +74,12 @@ export const settingChangeSchema = z.discriminatedUnion("kind", [
     value: z.boolean(),
   }).strict(),
   z.object({ kind: z.literal("board-role"), targetUserId: z.number().int().positive(), value: z.enum(["Admin", "Member"]) }).strict(),
+  z.object({
+    kind: z.literal("team-area"),
+    area: z.enum(teamAreas),
+    target: z.string().trim().min(1).max(80),
+    value: z.boolean(),
+  }).strict(),
 ]);
 export type SettingChange = z.infer<typeof settingChangeSchema>;
 export type SettingValue = string | boolean;
@@ -86,12 +103,14 @@ export function settingsScopeFromPath(path: string | null | undefined, projectId
   if (path !== "/settings" && !path?.startsWith("/settings/")) return undefined;
   const section = settingsPageSchema.safeParse((path ?? "").split("/")[2] || "general");
   if (!section.success) return undefined;
-  return { section: section.data, ...(section.data.startsWith("board-") || section.data === "members" ? { projectId } : {}), ...(theme ? { theme } : {}) };
+  const sharesBoard = section.data.startsWith("board-") || section.data === "members" || section.data === "ai-models" || section.data === "apiKeys" || section.data === "skills" || section.data === "webhooks" || section.data === "management-keys";
+  return { section: section.data, ...(sharesBoard ? { projectId } : {}), ...(theme ? { theme } : {}) };
 }
 
 export function assertSettingPage(scope: SettingsScope, change: SettingChange) {
   const allowed = change.kind === "theme" ? scope.section === "appearance"
     : change.kind === "notification" ? scope.section === "notifications"
+      : change.kind === "team-area" ? scope.section === teamAreaPages[change.area] && (change.area === "notification-default" || !!scope.projectId)
       : (scope.section === "board-members" || scope.section === "members") && !!scope.projectId;
   if (!allowed) throw new Error("Open the setting's page before asking for this change.");
 }
@@ -104,7 +123,7 @@ export function settingProposalCard(proposal: SettingProposal): SettingProposalC
     after: proposal.after,
     status: proposal.status,
     path: `/settings/${proposal.scope.section}`,
-    accessChange: proposal.change.kind === "board-role",
+    accessChange: proposal.change.kind === "board-role" || (proposal.change.kind === "team-area" && (proposal.change.area === "ai-key" || proposal.change.area === "agent-token" || proposal.change.area === "integration")),
   };
 }
 

@@ -8,6 +8,7 @@ import setMemberRole from "@/utils/controllers/projects/setMemberRole";
 import { notificationCategories, notificationCellValue, updateNotificationMatrix } from "@/utils/controllers/notifications/updateNotificationMatrix";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { assertSettingPage, type SettingChange, type SettingProposal, type SettingsScope, type SettingValue } from "./catalog";
+import { applyTeamArea, readTeamArea, readTeamAreaPage } from "./teamAreas";
 
 export class SettingChangeRejectedError extends Error {}
 
@@ -54,6 +55,8 @@ export async function readSettingsPage(userId: number, scope: SettingsScope) {
     if (!project) throw new Error("Board not found or access denied.");
     return { board: project.title, ownerId: project.ownerId, canChangeRoles: project.ownerId === userId, members: project.members };
   }
+  const teamPage = await readTeamAreaPage(userId, scope);
+  if (teamPage) return teamPage;
   return { manualOnly: true };
 }
 
@@ -86,6 +89,7 @@ export async function readSettingChange(userId: number, scope: SettingsScope, ch
       value: notificationCellValue(settings.notificationMatrix, settings.notificationPreference ?? "all", change.category, change.channel),
     };
   }
+  if (change.kind === "team-area") return readTeamArea(userId, scope, change);
   const page = await readSettingsPage(userId, scope);
   if (!("canChangeRoles" in page) || !page.canChangeRoles) throw new Error("Only the board owner can change member roles. Open Board settings, Members.");
   if (change.targetUserId === userId || change.targetUserId === page.ownerId) throw new Error("You cannot change your own role or the board owner's role.");
@@ -112,6 +116,11 @@ export async function applySettingChange(proposal: SettingProposal, undo: boolea
     : undefined;
   if (change.kind === "notification") {
     await updateNotificationMatrix(proposal.userId, { category: change.category, channel: change.channel, expected: expected as boolean, value: next as boolean }, receipt);
+    return {};
+  }
+  if (change.kind === "team-area") {
+    await applyTeamArea(proposal.userId, scope, change, expected as boolean, next as boolean, receipt);
+    if (change.area === "column" && scope.projectId) void broadcastBoardChange(scope.projectId, { originUserId: proposal.userId });
     return {};
   }
   const result = await setMemberRole(proposal.userId, scope.projectId!, change.targetUserId, next as "Admin" | "Member", expected as "Admin" | "Member", receipt);

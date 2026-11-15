@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { readSettingsPage } from "@/lib/ai/settings/actions";
 import { assertSettingsEnabled, createSettingProposal } from "@/lib/ai/settings/proposals";
-import { settingChangeSchema, settingsPages, settingsPageSchema } from "@/lib/ai/settings/catalog";
+import { settingChangeSchema, settingsPages, settingsPageSchema, teamAreaPages } from "@/lib/ai/settings/catalog";
 import { withToolErrors } from "./execution";
 import type { ToolContext } from "./context";
 
@@ -10,7 +10,7 @@ export function createSettingsTool(context: ToolContext) {
   let proposalIssued = false;
   return {
     hypertask_settings: tool({
-      description: "Help with the currently open Settings page, using only the signed-in person's rights. Read first for current values and exact member IDs. Propose ONE theme, notification category/channel, or board member role change; this never applies it. The app shows From/To, Apply and Cancel, then Undo. Only the board owner can change roles. Never claim success before Apply. For any other setting, read the page catalog, explain where it lives, and use open to take the person there for the manual action. Settings outside the open page require opening that page first. Billing, keys, deletion, invitations and other settings are manual-only, never simulate them or use other tools to bypass confirmation.",
+      description: "Help with the currently open Settings page, using only the signed-in person's rights. Read first for current values and exact ids. Propose ONE change: theme, notification category or channel, email notification switch, board member role, column visibility, team AI provider, existing own-key switch, skill switch, webhook switch, or management-key switch. This never applies it. The app shows From and To, then Apply, Cancel, and Undo. Only the board owner can change roles. Only the team owner can change providers, keys, webhooks, and management keys. A person can change only their own skills and email switch. Never claim success before Apply. Billing, deletion, invitations, and new secrets stay manual. Never type a key or token into chat, and never use other tools to bypass the confirmation card. Settings outside the open page require opening that page first.",
       inputSchema: z.object({
         action: z.enum(["read", "propose", "open"]),
         change: settingChangeSchema.optional(),
@@ -38,7 +38,7 @@ export function createSettingsTool(context: ToolContext) {
           const proposal = await createSettingProposal(context.user.id, context.body.session_id, scope, input.change);
           return { success: true, proposal, message: "Nothing changed yet. Ask the person to review the app's confirmation card and press Apply or Cancel." };
         } catch (error) {
-          const section = input.change.kind === "theme" ? "appearance" : input.change.kind === "notification" ? "notifications" : "board-members";
+          const section = input.change.kind === "theme" ? "appearance" : input.change.kind === "notification" ? "notifications" : input.change.kind === "team-area" ? teamAreaPages[input.change.area] : "board-members";
           context.send("settings", { path: `/settings/${section}` });
           return { success: false, error: error instanceof Error ? error.message : "Could not propose setting change", path: `/settings/${section}` };
         }
