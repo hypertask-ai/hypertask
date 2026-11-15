@@ -33,7 +33,7 @@ function loadValidation(flagEnabled, flagReads = []) {
     },
     '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (input) => input },
     '@/utils/helperFunctions/markdownToHtml': { formatRichTextInput: (input) => input },
-  })
+  }).validateTaskUpdateFields
 }
 
 function loadPullRequestField() {
