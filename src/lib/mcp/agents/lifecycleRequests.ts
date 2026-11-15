@@ -3,6 +3,8 @@ import {
   setOwnedAgentVisibility,
 } from '@/lib/agents/visibility'
 import { clearAgentRuntimeSnapshot } from '@/lib/agents/runtimeState'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_9364_AGENT_SELF_PROFILE_FLAG } from '@/lib/flags/definitions/htpr-9364-agent-self-profile'
 import {
   agentTokenCredentialFields,
   checkMcpRateLimit,
@@ -31,14 +33,36 @@ import {
   type AgentLifecycleDeps,
   type AgentLifecycleRow,
 } from './lifecycle'
+import { parseAgentPicture, storeAgentPicture } from './selfPicture'
 
 type AgentPatchBody = {
   revoked?: unknown
   archived?: unknown
   display_name?: unknown
+  picture?: unknown
   add_project_ids?: unknown
   remove_project_ids?: unknown
   visibility?: unknown
+}
+
+function selfProfileOnly(body: AgentPatchBody): boolean {
+  const keys = Object.keys(body)
+  return (
+    keys.length > 0 &&
+    keys.every((key) => key === 'display_name' || key === 'picture') &&
+    (body.display_name !== undefined || body.picture !== undefined)
+  )
+}
+
+function readDisplayName(value: unknown): NextResponse | string {
+  if (typeof value !== 'string') {
+    return NextResponse.json(buildFieldError('invalid_field', 'display_name', 'display_name must be a string'), { status: 400 })
+  }
+  const displayName = value.trim()
+  if (displayName.length < 1 || displayName.length > 60) {
+    return NextResponse.json(buildFieldError('invalid_field', 'display_name', 'display_name must be between 1 and 60 characters'), { status: 400 })
+  }
+  return displayName
 }
 
 export const agentLifecycleDeps: AgentLifecycleDeps = {
@@ -195,10 +219,22 @@ export async function handlePatchAgentRequest(
   const wantsLaunch = body.revoked !== undefined
   const wantsArchive = body.archived !== undefined
   const wantsRename = body.display_name !== undefined
+  const wantsPicture = body.picture !== undefined
   const wantsVisibility = body.visibility !== undefined
   const wantsBoardUpdate =
     body.add_project_ids !== undefined || body.remove_project_ids !== undefined
-  const otherUpdates = wantsLaunch || wantsArchive || wantsRename || wantsVisibility
+  const otherUpdates =
+    wantsLaunch || wantsArchive || wantsRename || wantsVisibility || wantsPicture
+  if (ctx.agentId && selfProfileOnly(body)) {
+    if (agentId !== ctx.agentId) {
+      return NextResponse.json({ success: false, error: 'Agents can only update their own profile' }, { status: 403 })
+    }
+    const enabled = await isFeatureEnabled(HTPR_9364_AGENT_SELF_PROFILE_FLAG, ctx.user.id)
+    if (!enabled) {
+      return NextResponse.json({ success: false, error: 'Agents cannot manage agents' }, { status: 403 })
+    }
+    return updateOwnAgentProfile(ctx.user.id, ctx.agentId, body)
+  }
   if (ctx.agentId && (!wantsBoardUpdate || otherUpdates)) {
     return NextResponse.json(
       { success: false, error: 'Agents cannot manage agents' },
@@ -350,27 +386,9 @@ export async function handlePatchAgentRequest(
   }
   let displayName: string | undefined
   if (wantsRename) {
-    if (typeof body.display_name !== 'string') {
-      return NextResponse.json(
-        buildFieldError(
-          'invalid_field',
-          'display_name',
-          'display_name must be a string'
-        ),
-        { status: 400 }
-      )
-    }
-    displayName = body.display_name.trim()
-    if (displayName.length < 1 || displayName.length > 60) {
-      return NextResponse.json(
-        buildFieldError(
-          'invalid_field',
-          'display_name',
-          'display_name must be between 1 and 60 characters'
-        ),
-        { status: 400 }
-      )
-    }
+    const parsedName = readDisplayName(body.display_name)
+    if (typeof parsedName !== 'string') return parsedName
+    displayName = parsedName
   }
 
   const database = prisma as unknown as AgentLifecycleDatabase
@@ -453,4 +471,66 @@ function describe(agent: AgentLifecycleRow) {
     runtime_type: agent.runtimeType,
     has_token: Boolean(agent.mcpTokenJti),
   }
+}
+
+async function updateOwnAgentProfile(
+  userId: number,
+  agentId: string,
+  body: AgentPatchBody
+) {
+  let displayName: string | undefined
+  if (body.display_name !== undefined) {
+    const parsedName = readDisplayName(body.display_name)
+    if (typeof parsedName !== 'string') return parsedName
+    displayName = parsedName
+  }
+  const parsedPicture =
+    body.picture === undefined ? null : parseAgentPicture(body.picture)
+  if (parsedPicture && !parsedPicture.ok) {
+    return NextResponse.json(buildFieldError('invalid_field', parsedPicture.field, parsedPicture.message), { status: 400 })
+  }
+  let photoURL: string | undefined
+  if (parsedPicture && parsedPicture.ok) {
+    try {
+      photoURL = await storeAgentPicture(parsedPicture.picture)
+    } catch (error) {
+      console.error('[MCP Agent Self Profile] picture upload failed', error)
+      return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+    }
+  }
+
+  const database = prisma as unknown as AgentLifecycleDatabase
+  let current: AgentLifecycleRow | undefined
+  if (displayName !== undefined) {
+    const renamed = await renameOwnedAgent(database, userId, agentId, displayName)
+    if (renamed.status === 'not_found') return notFound()
+    current = renamed.agent
+  }
+  if (photoURL !== undefined) {
+    const transition = await database.agent.updateMany({
+      where: { id: agentId, userId },
+      data: { photoURL },
+    })
+    if (transition.count !== 1) return notFound()
+    const pictured = await database.agent.findFirst({
+      where: { id: agentId, userId },
+      select: {
+        id: true,
+        displayName: true,
+        photoURL: true,
+        revokedAt: true,
+        archivedAt: true,
+        runtimeType: true,
+        mcpTokenHash: true,
+        mcpTokenJti: true,
+      },
+    })
+    if (!pictured) return notFound()
+    current = pictured
+  }
+  if (!current) return notFound()
+  return NextResponse.json({
+    success: true,
+    agent: { ...describe(current), photo_url: current.photoURL },
+  })
 }
