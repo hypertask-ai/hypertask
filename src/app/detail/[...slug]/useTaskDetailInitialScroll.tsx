@@ -6,7 +6,7 @@ import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import type { TaskDetailKeyboardContext } from "./TaskDetailKeyboardContext";
 import { useFlag } from "@/hooks/useFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
-import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7395_CACHED_STATIC_FIRST_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7395_CACHED_STATIC_FIRST_FLAG } from "@/lib/flags/keys";
 import { getTiptapEditorForMode } from "@/lib/snippets";
 function deferredDescriptionEditorSettled(scope: ParentNode) {
   const editor = getTiptapEditorForMode("read-edit-description");
@@ -17,7 +17,6 @@ function deferredDescriptionEditorSettled(scope: ParentNode) {
 const deferredEditorReadyCheck = (applies: boolean | undefined) => applies ? deferredDescriptionEditorSettled : null;
 export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
-  const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
   const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
   const { cachedLayout, cachedEditorAfterPaint, newCommentsLastReadAt, liveRowsPendingFor, descriptionStart } = useTaskContext();
   const deferredEditorReady = deferredEditorReadyCheck(cachedStaticFirst && cachedEditorAfterPaint && !cachedLayout);
@@ -25,13 +24,13 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
   const { bottomScrollCancelRef, hasBottomScrolledRef, newCommentsSnapshotReady, newCommentIds, comments, visibleCommentIndices, virtualizer, virtualizeIndexes, setPriority_, priorityForTaskTQ, setEstimate_, estimateForTaskTQ, showCreateTaskModal, _parsedTask, initialScrollGenerationRef, scrollElementRef, initialScrollGuard, hasScrolledToUnreadRef, initialScrollViewportRef, _mbl, searchParams, scrollVirtualize, focusOn, scrollSetting, defaultCommentFocus } = context;
 
 
-  const position = unreadTicketOpensTop ? initialTicketPosition({
+  const position = initialTicketPosition({
     hasDeepLink: false,
     scrollSetting,
     fromInbox: !!searchParams?.get(taskDetailConfig.searchParams.inboxFlow),
     lastReadAt: newCommentsLastReadAt,
     firstUnreadCommentId: newCommentIds[0],
-  }) : null;
+  });
 
   useEffect(() => {
     setPriority_(priorityForTaskTQ);
@@ -154,49 +153,10 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
         );
         document.getElementById(`${taskDetailConfig.audioButtons.createComment}-${taskDetailConfig.audioButtons.suffix}`)?.click();
         return () => clearTimeout(timeout);
-      } else if (stableLayout && cachedLayout) {
-        return;
-      } else if (unreadTicketOpensTop) {
-        return;
-      } else if (searchParams?.get(taskDetailConfig.searchParams.inboxFlow)) {
-        if (scrollSetting === taskDetailConfig.scrollSettings.none) {
-          runInitialPositioning(() => focusOn(descriptionContainerId));
-        } else if (_mbl) {
-          runInitialPositioning(() =>
-            focusOn(taskDetailConfig.elementIds.comment, false, undefined, undefined, true)
-          );
-          return;
-        } else {
-          const timeout = setTimeout(
-            () => runInitialPositioning(defaultCommentFocus),
-            taskDetailConfig.delays.defaultCommentFocus
-          );
-          return () => clearTimeout(timeout);
-        }
-      } else {
-        if (_mbl) {
-          const timeout = setTimeout(
-            () =>
-              runInitialPositioning(() =>
-                focusOn(taskDetailConfig.elementIds.comment, false, undefined, undefined, true)
-              ),
-            taskDetailConfig.delays.mobileFocusComment
-          );
-          return () => clearTimeout(timeout);
-        } else {
-          if (scrollSetting !== taskDetailConfig.scrollSettings.bottom) {
-            runInitialPositioning(() => focusOn(descriptionContainerId));
-          } else {
-            const timeout = setTimeout(
-              () => runInitialPositioning(defaultCommentFocus),
-              taskDetailConfig.delays.defaultCommentFocus
-            );
-            return () => clearTimeout(timeout);
-          }
-        }
       }
+      return;
     }
-  }, [_parsedTask.id, stableLayout, cachedLayout, unreadTicketOpensTop]);
+  }, [_parsedTask.id]);
 
   useEffect(stableLayout && cachedLayout ? () => {} : () => {
     const generation = initialScrollGenerationRef.current;
@@ -218,43 +178,38 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
       searchParams?.get(taskDetailConfig.searchParams.reply) ||
       searchParams?.get(taskDetailConfig.searchParams.audio);
     const fromInbox = !!searchParams?.get(taskDetailConfig.searchParams.inboxFlow);
-    const shouldScrollToBottom = fromInbox
-      ? scrollSetting !== taskDetailConfig.scrollSettings.none
-      : scrollSetting === taskDetailConfig.scrollSettings.bottom;
     if (hasDeepLink) return;
-    if (unreadTicketOpensTop) {
-      if (position === "top") {
-        bottomScrollCancelRef.current?.();
-        bottomScrollCancelRef.current = null;
-        runInitialPositioning(() => {
-          hasScrolledToUnreadRef.current = true;
-          focusOn(descriptionContainerId, true, "auto", "start");
-          (scrollElementRef?.current ?? window).scrollTo({ top: 0, behavior: "auto" });
-        });
+    if (position === "top") {
+      bottomScrollCancelRef.current?.();
+      bottomScrollCancelRef.current = null;
+      runInitialPositioning(() => {
+        hasScrolledToUnreadRef.current = true;
+        focusOn(descriptionContainerId, true, "auto", "start");
+        (scrollElementRef?.current ?? window).scrollTo({ top: 0, behavior: "auto" });
+      });
+      return;
+    }
+    if (position === "bottom") {
+      const scrollToBottom = () => runInitialPositioning(() => {
+        hasScrolledToUnreadRef.current = true;
+        if (_mbl) {
+          focusOn(taskDetailConfig.elementIds.comment, false, undefined, undefined, true);
+          hasBottomScrolledRef.current = true;
+          bottomScrollCancelRef.current = scrollWindowToBottomMobile();
+        } else {
+          defaultCommentFocus();
+        }
+      });
+      if (_mbl && fromInbox) {
+        scrollToBottom();
         return;
       }
-      if (position === "bottom") {
-        const scrollToBottom = () => runInitialPositioning(() => {
-          hasScrolledToUnreadRef.current = true;
-          if (_mbl) {
-            focusOn(taskDetailConfig.elementIds.comment, false, undefined, undefined, true);
-            hasBottomScrolledRef.current = true;
-            bottomScrollCancelRef.current = scrollWindowToBottomMobile();
-          } else {
-            defaultCommentFocus();
-          }
-        });
-        if (_mbl && fromInbox) {
-          scrollToBottom();
-          return;
-        }
-        const timeout = setTimeout(
-          scrollToBottom,
-          _mbl ? taskDetailConfig.delays.mobileFocusComment : taskDetailConfig.delays.defaultCommentFocus
-        );
-        return () => clearTimeout(timeout);
-      }
-    } else if (!_mbl && shouldScrollToBottom) return;
+      const timeout = setTimeout(
+        scrollToBottom,
+        _mbl ? taskDetailConfig.delays.mobileFocusComment : taskDetailConfig.delays.defaultCommentFocus
+      );
+      return () => clearTimeout(timeout);
+    }
 
     const firstNewCommentIndex = newCommentIds.length
       ? comments.findIndex((comment) => Number(comment.id) === newCommentIds[0])
@@ -264,19 +219,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
         ? -1
         : visibleCommentIndices.indexOf(firstNewCommentIndex);
 
-    if (visiblePosition === -1) {
-      if (
-        !unreadTicketOpensTop &&
-        !newCommentIds.length &&
-        _mbl &&
-        shouldScrollToBottom &&
-        !hasBottomScrolledRef.current
-      ) {
-        hasBottomScrolledRef.current = true;
-        bottomScrollCancelRef.current = scrollWindowToBottomMobile();
-      }
-      return;
-    }
+    if (visiblePosition === -1) return;
 
     bottomScrollCancelRef.current?.();
     bottomScrollCancelRef.current = null;
@@ -310,7 +253,6 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     waitsForLiveRows,
     newCommentsLastReadAt,
     position,
-    unreadTicketOpensTop,
     defaultCommentFocus,
     cachedLayout,
     stableLayout,

@@ -87,6 +87,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6460-my-tasks-quick-add",
   "htpr-6461-my-tasks-snooze",
   "htpr-6938-my-tasks-icon-controls",
+  "htpr-7315-unread-ticket-opens-top",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-5913-consistent-comment-shortcuts": true,
@@ -121,6 +122,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6460-my-tasks-quick-add": true,
   "htpr-6461-my-tasks-snooze": true,
   "htpr-6938-my-tasks-icon-controls": true,
+  "htpr-7315-unread-ticket-opens-top": true,
 } as const;
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);

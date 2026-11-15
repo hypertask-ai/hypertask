@@ -1,6 +1,5 @@
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
 import {
@@ -155,7 +154,6 @@ const useDescriptionAndCommentsStates = () => {
     toggleEmojiPickerDescription,
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
-  const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
   const commentsStackedRef = useRef<boolean | undefined>(undefined);
   commentsStackedRef.current = foldCommentsFromFirstPaint ? stackData : undefined;
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
@@ -238,26 +236,19 @@ const useDescriptionAndCommentsStates = () => {
     preserveEditorContent,
   });
 
-  let readCacheQueryClient: typeof queryClient | undefined;
-  if (unreadTicketOpensTop) {
-    readCacheQueryClient = queryClient;
-  }
-
   const markTaskReadOnLeave = useCallback(
     (useBeacon = false) => {
       if (isShareView || !currentUser?.id || !currentTask?.id) return;
 
-      if (readCacheQueryClient) {
-        const lastReadAt = new Date().toISOString();
-        readCacheQueryClient.setQueryData(
-          [globalConstants.CommentsTQPrefixKey, currentTask.id],
-          (payload: any) => payload === undefined ? undefined : {
-            ...(Array.isArray(payload) ? {} : payload),
-            ...normalizeCommentsQueryPayload(payload),
-            lastReadAt,
-          }
-        );
-      }
+      const lastReadAt = new Date().toISOString();
+      queryClient.setQueryData(
+        [globalConstants.CommentsTQPrefixKey, currentTask.id],
+        (payload: any) => payload === undefined ? undefined : {
+          ...(Array.isArray(payload) ? {} : payload),
+          ...normalizeCommentsQueryPayload(payload),
+          lastReadAt,
+        }
+      );
 
       const body = JSON.stringify({ taskId: currentTask.id });
       if (
@@ -281,7 +272,7 @@ const useDescriptionAndCommentsStates = () => {
         console.log("🤔 ~ markTaskReadOnLeave ~ error:", error);
       });
     },
-    [currentTask?.id, currentUser?.id, isShareView, readCacheQueryClient]
+    [currentTask?.id, currentUser?.id, isShareView, queryClient]
   );
 
   useEffect(() => {

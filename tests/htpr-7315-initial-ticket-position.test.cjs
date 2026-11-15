@@ -9,7 +9,6 @@ const root = path.resolve(__dirname, "..");
 const load = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const { initialTicketPosition } = load(path.join(root, "src/lib/taskDetail/initialTicketPosition.ts"));
 const { createTaskDetailInitialScrollGuard } = load(path.join(root, "src/lib/taskDetailInitialScroll.ts"));
-const flag = load(path.join(root, "src/lib/flags/definitions/htpr-7315-unread-ticket-opens-top.ts"));
 const config = load(path.join(root, "src/lib/configs/taskDetail.config.ts")).default;
 const readAt = "2026-10-17T12:00:00.000Z";
 const defaults = { hasDeepLink: false, scrollSetting: "Bottom", fromInbox: false, lastReadAt: readAt };
@@ -29,15 +28,7 @@ for (const [name, input, expected] of [
   test(name, () => assert.equal(initialTicketPosition({ ...defaults, ...input }), expected));
 }
 
-test("flag is an Owner + QA improvement with release risk", () => {
-  assert.equal(flag.default.key, flag.HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
-  assert.equal(flag.default.kind, "improvement");
-  assert.equal(flag.default.defaultMode, "OWNER_AND_QA");
-  assert.equal(flag.default.shippedOn, "2026-10-18");
-  assert.ok(flag.default.releaseRisk.reason);
-});
-
-function scrollHarness({ mobile = false, enabled = true, fromInbox = false, scrollSetting = "Bottom", lastReadAt = readAt, unread = false, deepLink, embedded = false, cachedLayout = false } = {}) {
+function scrollHarness({ mobile = false, fromInbox = false, scrollSetting = "Bottom", lastReadAt = readAt, unread = false, deepLink, embedded = false, cachedLayout = false } = {}) {
   const effects = [];
   const layouts = [];
   const timers = new Map();
@@ -55,9 +46,8 @@ function scrollHarness({ mobile = false, enabled = true, fromInbox = false, scro
   if (deepLink && deepLink !== "hash") params.set(config.searchParams[deepLink], deepLink === "commentId" ? "comment-77" : "true");
   const mocks = {
     react: { useEffect: callback => effects.push(callback), useLayoutEffect: callback => layouts.push(callback), useCallback: callback => callback },
-    "@/hooks/useFlag": { useFlag: key => key === flag.HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG ? enabled : cachedLayout },
-    "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: flag.HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG },
-    "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": flag,
+    "@/hooks/useFlag": { useFlag: key => key === "stable" ? cachedLayout : false },
+    "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_7395_CACHED_STATIC_FIRST_FLAG: "static" },
     "@/lib/taskDetail/initialTicketPosition": { initialTicketPosition },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout, newCommentsLastReadAt: lastReadAt, descriptionStart: "live", liveRowsPendingFor: () => false }) },
     "@/lib/configs/taskDetail.config": { __esModule: true, default: config },
@@ -140,9 +130,9 @@ for (const mobile of [false, true]) {
     h.ready(); h.flush();
     assert.equal(h.movement[0][0], mobile ? "focus" : "bottom");
   });
-  test(`explicit links retain priority with flag on and off (mobile=${mobile})`, () => {
-    for (const enabled of [false, true]) for (const deepLink of ["hash", "commentId", "reply", "audio"]) {
-      const h = scrollHarness({ mobile, enabled, lastReadAt: null, unread: true, deepLink });
+  test(`explicit links retain priority (mobile=${mobile})`, () => {
+    for (const deepLink of ["hash", "commentId", "reply", "audio"]) {
+      const h = scrollHarness({ mobile, lastReadAt: null, unread: true, deepLink });
       h.ready(); h.flush();
       assert.deepEqual(h.movement, deepLink === "hash" || deepLink === "commentId"
         ? [["link", config.elementIds.comment, 77, undefined, true]]
@@ -156,14 +146,9 @@ for (const mobile of [false, true]) {
       assert.deepEqual(h.movement, []);
     }
   });
-  test(`flag off preserves immediate bottom positioning (mobile=${mobile})`, () => {
-    const h = scrollHarness({ mobile, enabled: false, lastReadAt: null });
-    h.flush();
-    assert.equal(h.movement[0][0], mobile ? "focus" : "bottom");
-  });
 }
 
-test("cached stable-layout opens remain untouched with the new flag on", () => {
+test("cached stable-layout opens remain untouched", () => {
   const h = scrollHarness({ cachedLayout: true, lastReadAt: null, unread: true });
   h.ready(); h.flush();
   assert.deepEqual(h.movement, []);
@@ -178,26 +163,24 @@ test("top positioning cancels an existing bottom scroll", () => {
   assert.equal(h.context.bottomScrollCancelRef.current, null);
 });
 
-test("mark-on-leave updates object and legacy-array caches only with the flag on, including beacon leave", () => {
+test("mark-on-leave updates object and legacy-array caches, including beacon leave", () => {
   const source = ts.createSourceFile("comments.ts", fs.readFileSync(path.join(root, "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts"), "utf8"), ts.ScriptTarget.Latest, true);
   let callback;
-  let readCacheGate;
   let normalize;
   const visit = node => {
-    if (ts.isIfStatement(node) && node.expression.getText(source) === "unreadTicketOpensTop") readCacheGate = node.getText(source);
     if (ts.isVariableDeclaration(node) && node.name.getText(source) === "markTaskReadOnLeave") callback = node.initializer.arguments[0].getText(source);
     if (ts.isVariableDeclaration(node) && node.name.getText(source) === "normalizeCommentsQueryPayload") normalize = node.initializer.getText(source);
     ts.forEachChild(node, visit);
   };
   visit(source);
-  const js = ts.transpileModule(`const normalizeCommentsQueryPayload = ${normalize}; let readCacheQueryClient; ${readCacheGate} return ${callback};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  for (const enabled of [false, true]) for (const beacon of [false, true]) for (const legacy of [false, true]) {
+  const js = ts.transpileModule(`const normalizeCommentsQueryPayload = ${normalize}; return ${callback};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const beacon of [false, true]) for (const legacy of [false, true]) {
     const comments = [{ id: "77" }];
     const original = legacy ? comments : { comments, lastReadAt: null, agentRunActivities: [], extra: "preserved" };
     let payload = original;
     const requests = [];
-    const markRead = new Function("isShareView", "currentUser", "currentTask", "unreadTicketOpensTop", "queryClient", "globalConstants", "EMPTY_AGENT_RUN_ACTIVITIES", "EMPTY_COMMENTS", "navigator", "fetch", js)(
-      false, { id: 985 }, { id: 42 }, enabled,
+    const markRead = new Function("isShareView", "currentUser", "currentTask", "queryClient", "globalConstants", "EMPTY_AGENT_RUN_ACTIVITIES", "EMPTY_COMMENTS", "navigator", "fetch", js)(
+      false, { id: 985 }, { id: 42 },
       { setQueryData: (key, update) => { assert.deepEqual(key, ["comments", 42]); payload = update(payload); } },
       { CommentsTQPrefixKey: "comments" }, [], [],
       { sendBeacon: (...args) => { requests.push(args); return true; } },
@@ -207,12 +190,10 @@ test("mark-on-leave updates object and legacy-array caches only with the flag on
     markRead(beacon);
     assert.equal(requests.length, 1);
     assert.equal(requests[0][0], "/api/tasks/markRead");
-    if (enabled) {
-      assert.equal(Array.isArray(payload), false);
-      assert.equal(payload.comments, comments);
-      assert.ok(new Date(payload.lastReadAt).getTime() >= before);
-      assert.equal(initialTicketPosition({ ...defaults, lastReadAt: payload.lastReadAt }), "bottom");
-      if (!legacy) assert.equal(payload.extra, "preserved");
-    } else assert.equal(payload, original);
+    assert.equal(Array.isArray(payload), false);
+    assert.equal(payload.comments, comments);
+    assert.ok(new Date(payload.lastReadAt).getTime() >= before);
+    assert.equal(initialTicketPosition({ ...defaults, lastReadAt: payload.lastReadAt }), "bottom");
+    if (!legacy) assert.equal(payload.extra, "preserved");
   }
 });

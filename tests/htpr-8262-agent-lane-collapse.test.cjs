@@ -192,7 +192,7 @@ test("the real thread hook toggles all rows across a refresh", async () => {
     "@/lib/constants/keyboard-handler": { KeyCodes: {} },
     "@/lib/constants/constants": {},
   }).default;
-  const queryClient = { getQueryData: () => ({}) };
+  const queryClient = { getQueryData: () => ({}), setQueryData: () => {} };
   let result;
   function Harness() {
     const [stacked, setStackedState] = React.useState({ 0: false, 1: false, 2: false });
