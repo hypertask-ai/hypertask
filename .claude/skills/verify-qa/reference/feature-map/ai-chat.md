@@ -189,9 +189,9 @@ Open chat from a task, use the overflow menu's **Toggle Floating View**, then
 navigate to Inbox and reopen chat if navigation closed it. In AMOLED the
 floating window has a quiet 1px outline and 5px corners, including the outer
 phone sheet. Capture 1440x900 and 390x844 over the inbox. Compare the window
-size with the outline disabled; it must not change. Porcelain, Graphite and
-Dia keep their existing outlines and corners. The rollback flag is
-`htpr-8042-amoled-chat-border`.
+size with the outline; it must not change. Porcelain, Graphite and Dia keep
+their existing outlines and corners. The outline is always on; the old
+rollback switch is gone.
 
 ### Running chat indicators
 

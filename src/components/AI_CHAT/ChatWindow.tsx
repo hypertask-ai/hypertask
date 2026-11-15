@@ -10,7 +10,6 @@ import { AI_Tiptap_Container } from "./AI_Tiptap_Container";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { Loader2, X } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
@@ -27,7 +26,6 @@ export const ChatWindow = ({ framed = false, primary = false }: { framed?: boole
     enabled: sharedShortcutsEnabled,
     ...(chatWindows?.enabled && !isMbl ? { onNewChat: chatWindows.openNewChatWindow } : {}),
   });
-  const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const windowFramed = framed && multiChatWindowsEnabled;
@@ -74,8 +72,8 @@ export const ChatWindow = ({ framed = false, primary = false }: { framed?: boole
       className={cn(
         "bg-ai-chat text-meta flex flex-col overflow-hidden chatwindow",
         !isMbl && multiChatWindowsEnabled && "[--bs-border-radius:4px]",
-        amoledChatBorder && !isMbl && "[outline:var(--outline-floating-panel)] [outline-offset:var(--offset-floating-panel-outline)]",
-        amoledChatBorder && !isMbl && !multiChatWindowsEnabled && "[--bs-border-radius:var(--radius-chat-window)]",
+        !isMbl && "[outline:var(--outline-floating-panel)] [outline-offset:var(--offset-floating-panel-outline)]",
+        !isMbl && !multiChatWindowsEnabled && "[--bs-border-radius:var(--radius-chat-window)]",
         isMbl || windowFramed
           ? "h-full min-h-0 w-full flex-1 rounded-none"
           : cn("h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)]", chatCleanupEnabled ? "rounded-[4px]" : "rounded"),

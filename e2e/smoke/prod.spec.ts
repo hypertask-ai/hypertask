@@ -274,7 +274,7 @@ test(`AI chat ${mode} opens by button, shortcut and fullscreen exit`, { tag: [`@
     await page.route('**/api/flags', async route => {
       const response = await route.fetch()
       const body = await response.json()
-      Object.assign(body.flags, { 'htpr-8334-multi-chat-windows': false, 'htpr-8042-amoled-chat-border': true })
+      Object.assign(body.flags, { 'htpr-8334-multi-chat-windows': false })
       await route.fulfill({ response, json: body })
     })
   }

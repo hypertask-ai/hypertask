@@ -2,13 +2,13 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 
-const flag = "htpr-8042-amoled-chat-border";
+const retiredSwitch = "htpr-8042-amoled-chat-border";
 
-function windowView({ enabled = true, multiChat = false, mobile = false, minimized = false } = {}) {
+function windowView({ multiChat = false, mobile = false, minimized = false } = {}) {
   const load = loader({
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
-    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === "htpr-8334-multi-chat-windows" && multiChat },
+    "@/hooks/useFlag": { useFlag: key => key === retiredSwitch ? false : key === "htpr-8334-multi-chat-windows" && multiChat },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {
       useAiChatContext: () => ({ showWelcomeScreen: true, minimized, currentSession: { title: "Saved conversation" } }),
@@ -27,25 +27,23 @@ function windowView({ enabled = true, multiChat = false, mobile = false, minimiz
   return view;
 }
 
-for (const enabled of [false, true]) {
-  test(`desktop outline is reversible: flag ${enabled}`, () => {
-    const view = windowView({ enabled });
-    try {
-      const panel = view.container.querySelector(".chatwindow");
-      assert.ok(panel);
-      assert.equal(panel.classList.contains("[outline:var(--outline-floating-panel)]"), enabled);
-      assert.equal(panel.classList.contains("[outline-offset:var(--offset-floating-panel-outline)]"), enabled);
-      assert.equal(panel.classList.contains("[--bs-border-radius:var(--radius-chat-window)]"), enabled);
-      assert.ok(panel.classList.contains("h-[70svh]"));
-      assert.ok(panel.classList.contains("w-[30vw]"));
-      assert.equal(view.container.querySelector("header").textContent, "Saved conversation");
-      assert.ok(view.container.querySelector('[aria-label="Message"]'));
-    } finally { view.close(); }
-  });
-}
+test("desktop outline stays on without its retired switch", () => {
+  const view = windowView();
+  try {
+    const panel = view.container.querySelector(".chatwindow");
+    assert.ok(panel);
+    assert.ok(panel.classList.contains("[outline:var(--outline-floating-panel)]"));
+    assert.ok(panel.classList.contains("[outline-offset:var(--offset-floating-panel-outline)]"));
+    assert.ok(panel.classList.contains("[--bs-border-radius:var(--radius-chat-window)]"));
+    assert.ok(panel.classList.contains("h-[70svh]"));
+    assert.ok(panel.classList.contains("w-[30vw]"));
+    assert.equal(view.container.querySelector("header").textContent, "Saved conversation");
+    assert.ok(view.container.querySelector('[aria-label="Message"]'));
+  } finally { view.close(); }
+});
 
 test("desktop multi-chat uses a 4px control radius and keeps the outline", () => {
-  const view = windowView({ enabled: true, multiChat: true });
+  const view = windowView({ multiChat: true });
   try {
     const panel = view.container.querySelector(".chatwindow");
     assert.equal(panel.classList.contains("[--bs-border-radius:4px]"), true);
@@ -66,7 +64,7 @@ test("phone content keeps its sizing; the surrounding sheet owns its outline", (
 });
 
 test("phone multi-chat leaves the desktop control radius off", () => {
-  const view = windowView({ mobile: true, multiChat: true, enabled: true });
+  const view = windowView({ mobile: true, multiChat: true });
   try {
     const panel = view.container.querySelector(".chatwindow");
     assert.equal(panel.classList.contains("[--bs-border-radius:4px]"), false);
@@ -80,12 +78,4 @@ test("minimized conversation remains available", () => {
     assert.equal(view.container.querySelector(".chatwindow"), null);
     assert.match(view.container.querySelector("button").textContent, /Saved conversation/);
   } finally { view.close(); }
-});
-
-test("Everyone improvement has a small reversible release", () => {
-  const definition = loader()("src/lib/flags/definitions/htpr-8042-amoled-chat-border.ts").default;
-  assert.equal(definition.key, flag);
-  assert.equal(definition.kind, "improvement");
-  assert.equal(definition.defaultMode, "EVERYONE");
-  assert.equal(definition.releaseRisk.risk, "small");
 });
