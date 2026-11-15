@@ -74,6 +74,45 @@ export function isCustomFieldFilled(
   return Boolean(values?.find((entry) => String(entry.fieldId) === id)?.value);
 }
 
+export interface RevealedCustomField {
+  taskId: number;
+  fieldId: string;
+}
+
+export type CustomFieldReveal = RevealedCustomField | null;
+
+export const revealCustomField = (
+  taskId: number,
+  fieldId: string,
+): RevealedCustomField => ({ taskId, fieldId });
+
+export const getRevealedCustomFieldId = (
+  reveal: CustomFieldReveal,
+  taskId: number,
+): string | null => (reveal?.taskId === taskId ? reveal.fieldId : null);
+
+export const closeCustomFieldReveal = (
+  reveal: CustomFieldReveal,
+  taskId: number,
+  fieldId: string,
+): CustomFieldReveal =>
+  getRevealedCustomFieldId(reveal, taskId) === fieldId ? null : reveal;
+
+export function visibleCustomFields<T extends CustomFieldEntry>(
+  customFields: ReadonlyArray<T>,
+  customValues: ReadonlyArray<CustomFieldValueEntry> | undefined,
+  customEdits: CustomFieldValueEdits,
+  revealedFieldId: string | null,
+  onlyFilled: boolean,
+): T[] {
+  if (!onlyFilled) return [...customFields];
+  return customFields.filter(
+    (field) =>
+      String(field.id) === revealedFieldId ||
+      isCustomFieldFilled(field.id, customValues, customEdits),
+  );
+}
+
 export interface AddFieldOption {
   key: string;
   label: string;
