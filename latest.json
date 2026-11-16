@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-09T15:06:55.817Z",
+  "generatedAt": "2026-11-16T14:43:57.470Z",
   "label": "weekly",
   "baseline": "weekly",
   "mode": "fixture",
@@ -11,7 +11,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 19,
+      "wallMs": 26,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -21,7 +21,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 9,
+      "wallMs": 13,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -31,7 +31,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 7,
+      "wallMs": 9,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -41,7 +41,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 7,
+      "wallMs": 9,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -51,13 +51,153 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 5,
+      "wallMs": 6,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
     },
     {
       "taskId": "move-to-qa",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 11,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "get-ticket",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 5,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "get-ticket",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 10,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "search-tickets",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 5,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "search-tickets",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 10,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "list-board-tasks",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 2,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "list-board-tasks",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 9,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "list-comments",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 5,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "list-comments",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 11,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "list-sections",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 9,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "list-sections",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 10,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "list-projects",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 4,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "list-projects",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 9,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "hello-context",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 3,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "hello-context",
       "transport": "cli",
       "pass": true,
       "reason": null,
@@ -67,7 +207,7 @@
       "executor": "cli"
     },
     {
-      "taskId": "get-ticket",
+      "taskId": "assign-self",
       "transport": "mcp",
       "pass": true,
       "reason": null,
@@ -77,27 +217,7 @@
       "executor": "mcp"
     },
     {
-      "taskId": "get-ticket",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 7,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
-      "taskId": "search-tickets",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 5,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "search-tickets",
+      "taskId": "assign-self",
       "transport": "cli",
       "pass": true,
       "reason": null,
@@ -107,126 +227,6 @@
       "executor": "cli"
     },
     {
-      "taskId": "list-board-tasks",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 3,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "list-board-tasks",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 7,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
-      "taskId": "list-comments",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 3,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "list-comments",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 6,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
-      "taskId": "list-sections",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 4,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "list-sections",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 6,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
-      "taskId": "list-projects",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 3,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "list-projects",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 6,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
-      "taskId": "hello-context",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 2,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "hello-context",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 5,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
-      "taskId": "assign-self",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 4,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "assign-self",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 6,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
       "taskId": "create-task",
       "transport": "mcp",
       "pass": true,
@@ -241,7 +241,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -261,7 +261,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -271,7 +271,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 2,
+      "wallMs": 3,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -281,7 +281,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 9,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -301,7 +301,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 7,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -311,7 +311,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 2,
+      "wallMs": 3,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -321,7 +321,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 5,
+      "wallMs": 9,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -331,7 +331,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 2,
+      "wallMs": 3,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -341,7 +341,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -361,7 +361,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -381,7 +381,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 7,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -391,7 +391,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 1,
+      "wallMs": 2,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -401,7 +401,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -504,7 +504,7 @@
         "passed": 20,
         "failed": 0,
         "successRate": 1,
-        "wallMs": 79,
+        "wallMs": 102,
         "toolCalls": 20
       },
       "cli": {
@@ -512,7 +512,7 @@
         "passed": 20,
         "failed": 0,
         "successRate": 1,
-        "wallMs": 130,
+        "wallMs": 182,
         "toolCalls": 20
       }
     },
