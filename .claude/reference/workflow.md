@@ -19,7 +19,7 @@ Every access or security fix adds a "still allowed" test next to its "now refuse
 
 ## Claude Code and Codex sessions
 
-- Claim before investigating or coding. Use `ship-claim` with the session's resume command; a competing claim means step back. Never work Abdul's tickets.
+- Claim before investigating or coding. Use `ship-claim` with the session's resume command; a competing claim means step back.
 - Keep the ticket In Progress through coding, review, merge, deployment, and live QA. The same session owns the whole path. Close only with production proof.
 - Use the current token ladder and explicit role models. Helpers never write to boards; the owner remains responsible for their work. Follow house rules for provider and delegation limits.
 - Check `ship-identity` before board writes. Use only that identity through `vcc`; never copy credentials or write as Valentin. Read through `hypertask`, approved MCP, or product APIs. Never use Prisma, SQL, or database clients for ticket content, even for reads.

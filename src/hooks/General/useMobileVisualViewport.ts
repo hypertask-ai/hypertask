@@ -21,13 +21,13 @@ export const useMobileVisualViewport = (enabled = true) => {
 
     const visualViewport = window.visualViewport;
     let animationFrameId: number | undefined;
+    const requestFrame = window.requestAnimationFrame?.bind(window);
+    const cancelFrame = window.cancelAnimationFrame?.bind(window);
 
     const measure = () => {
-      if (animationFrameId !== undefined) {
-        window.cancelAnimationFrame(animationFrameId);
-      }
+      if (animationFrameId !== undefined) cancelFrame?.(animationFrameId);
 
-      animationFrameId = window.requestAnimationFrame(() => {
+      const apply = () => {
         const layoutHeight = Math.max(
           window.innerHeight,
           document.documentElement.clientHeight
@@ -38,13 +38,16 @@ export const useMobileVisualViewport = (enabled = true) => {
           visualViewportOffsetTop: visualViewport?.offsetTop ?? 0,
         });
         const dockHeight = parseCssPixelLength(
-          getComputedStyle(document.documentElement).getPropertyValue(
+          window.getComputedStyle(document.documentElement).getPropertyValue(
             "--mobile-dock-h",
           ),
         );
 
         setViewport({ layoutHeight, dockHeight, ...geometry });
-      });
+      };
+
+      if (requestFrame) animationFrameId = requestFrame(apply);
+      else apply();
     };
 
     window.addEventListener("resize", measure);
@@ -53,9 +56,7 @@ export const useMobileVisualViewport = (enabled = true) => {
     measure();
 
     return () => {
-      if (animationFrameId !== undefined) {
-        window.cancelAnimationFrame(animationFrameId);
-      }
+      if (animationFrameId !== undefined) cancelFrame?.(animationFrameId);
       window.removeEventListener("resize", measure);
       visualViewport?.removeEventListener("resize", measure);
       visualViewport?.removeEventListener("scroll", measure);
