@@ -107,7 +107,7 @@ async function post() {
   });
   if (!response.ok) throw new Error(`status HTTP ${response.status}`);
   if (process.env.GITHUB_STEP_SUMMARY) writeFileSync(process.env.GITHUB_STEP_SUMMARY, `${payload.description}\n`, { flag: "a" });
-  if (payload.state === "failure") process.exitCode = 1;
+  if (payload.state === "failure") process.exitCode = 2;
 }
 async function main() {
   const command = process.argv[2];
