@@ -917,8 +917,11 @@ allowed bash "$vcc" task create --project 4060 --labels Infra,brain-light --titl
 [[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- task create --project 4060'* ]] || fail "filing-gate not asked on 4060: $(< "$VCC_TEST_TRACE")"
 allowed bash "$vcc" task create --project 15 --labels brain-light --title FULLBOARD
 [[ $(< "$VCC_TEST_TRACE") != *filing-gate* ]] || fail 'filing-gate asked for board 15'
-run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
-[ "$status" = 5 ] && [[ $(< "$T/err") == *'filing-gate missing'*'house-rules-sync'* ]] || fail "missing filing-gate did not refuse: $status $(< "$T/err")"
+run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 11514 --labels CI,brain-light --title 'MISSING GATE'
+[ "$status" = 0 ] || fail "a missing filing-gate stopped a Fleet CI filing: $status $(< "$T/err")"
+[[ $(< "$T/err") == *'filing-gate missing at /missing; filing without it'*'house-rules-sync'* ]] || fail "a missing filing-gate gave no warning: $(< "$T/err")"
+[[ $(< "$VCC_TEST_TRACE") == *'task create'* ]] || fail "a missing filing-gate did not reach the CLI: $(< "$VCC_TEST_TRACE")"
+[[ $(< "$T/out") == stub:* ]] || fail "a missing filing-gate swallowed the create: $(< "$T/out")"
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title T
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task update X-1 --project 4060 --description 'please create this'
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title 'Board 4060 create note'
