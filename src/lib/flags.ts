@@ -79,6 +79,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-7273-column-events",
   "htpr-7278-memory-only-tracking",
   "htpr-7284-activation-completed",
+  "htpr-7298-standalone-pages",
   "htpr-7367-server-description-first",
   "htpr-7133-mcp-ratelimit-fast",
   "htpr-6456-my-tasks-table-columns",
@@ -122,6 +123,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6460-my-tasks-quick-add": true,
   "htpr-6461-my-tasks-snooze": true,
   "htpr-6938-my-tasks-icon-controls": true,
+  "htpr-7298-standalone-pages": true,
   "htpr-7871-ctrlk-ellipsis": true,
 } as const;
 

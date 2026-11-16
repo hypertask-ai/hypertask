@@ -1,5 +1,4 @@
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
-import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -147,7 +146,7 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      const pages = await listPages({ taskId: task.id, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
+      const pages = await listPages({ taskId: task.id, userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
       return NextResponse.json({ pages })
     }
 
@@ -170,7 +169,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const pages = await listPages({ projectId, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
+    const pages = await listPages({ projectId, userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
     return NextResponse.json({ pages })
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')

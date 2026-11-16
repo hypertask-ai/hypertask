@@ -1,6 +1,5 @@
 import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
 import { isFeatureEnabled } from "@/lib/flags";
-import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 import {
@@ -21,7 +20,7 @@ const taskSearchByParam = async (
 ) => {
   try {
     const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332");
-    const [projectIds, owner_members, hyperAI, standaloneEnabled, removeImageGeneration] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, removeImageGeneration] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
@@ -44,7 +43,6 @@ const taskSearchByParam = async (
           id: hyperAiId,
         },
       }),
-      standalonePagesEnabled(userid),
       isFeatureEnabled(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG, userid),
     ]);
 
@@ -125,7 +123,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
-        fetchMentionPages(projectId, "", standaloneEnabled),
+        fetchMentionPages(projectId, ""),
       ]);
 
       const updatedtask = task?.map((item: any) => ({
@@ -226,7 +224,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
-        fetchMentionPages(projectId, param, standaloneEnabled),
+        fetchMentionPages(projectId, param),
       ]);
 
       const updatedProjects = projects?.map((item: any) => ({
@@ -292,17 +290,12 @@ interface MentionPage {
 const fetchMentionPages = async (
   projectId: number,
   titleQuery: string,
-  standaloneEnabled: boolean,
 ): Promise<MentionPage[]> => {
   try {
     const pages = await prisma.page.findMany({
       take: 5,
       where: {
         archived: false,
-        ...(standaloneEnabled ? {} : {
-          taskId: { not: null },
-          task: { projectId, deletedAt: null },
-        }),
         projectId,
         project: { status: "Normal" },
         ...(titleQuery

@@ -214,7 +214,6 @@ const baseline = {
         "list",
         {
           "taskId": 50,
-          "standalonePagesEnabled": true,
           "userId": 985,
           "agentId": null
         }
@@ -266,7 +265,6 @@ const baseline = {
         "search",
         {
           "query": "hello",
-          "standalonePagesEnabled": true,
           "userId": 985,
           "agentId": null,
           "projectIds": [
@@ -290,7 +288,6 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
-          "standalonePagesEnabled": true,
           "userId": 985
         }
       ]
@@ -314,7 +311,6 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
-          "standalonePagesEnabled": true,
           "userId": 985
         }
       ],
@@ -363,7 +359,6 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
-          "standalonePagesEnabled": true,
           "userId": 985
         }
       ],
@@ -391,7 +386,6 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
-          "standalonePagesEnabled": true,
           "userId": 985
         }
       ],
@@ -421,7 +415,6 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
-          "standalonePagesEnabled": true,
           "userId": 985
         }
       ],

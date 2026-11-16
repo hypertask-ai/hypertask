@@ -3,8 +3,6 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { loadCurrentUser } from '@/lib/auth/currentUser'
-import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7298_STANDALONE_PAGES_FLAG } from '@/lib/flags/definitions/htpr-7298-standalone-pages'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
 import prisma from '@/lib/prisma'
@@ -28,9 +26,6 @@ async function changeLink(request: NextRequest, { params }: RouteContext, remove
       userId = user.id
     }
 
-    if (!(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, userId))) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    }
     if (currentUser) {
       const limited = await checkRestRateLimit(currentUser.userId, 'write')
       if (limited) return limited

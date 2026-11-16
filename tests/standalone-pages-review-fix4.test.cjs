@@ -6,12 +6,11 @@ const ts = require('typescript');
 const { load } = require('./task-route-loader.cjs');
 const { harness } = require('./htpr-7298-browser.test.cjs');
 
-const flag = 'htpr-7298-standalone-pages';
 
 for (const query of ['all', 'Page']) {
-  test(`review 1 mentions ${query}: flag-off trashed/foreign-origin/taskless pages refused / legacy still works`, async () => {
-    for (const enabled of [false, true]) {
-      const h = harness({ userId: 3, flag: enabled });
+  test(`review 1 mentions ${query}: trashed/foreign-origin/taskless pages stay visible`, async () => {
+    {
+      const h = harness({ userId: 3 });
       h.state.tasks[0].projectId = 1;
       h.state.pages = [h.state.pages[0]];
       h.state.pages.push(...[
@@ -26,7 +25,6 @@ for (const query of ['all', 'Page']) {
       const mentions = load('src/utils/controllers/tasks/taskSearchByParam.ts', {
         '@/lib/prisma': { default: h.prisma },
         '@/app/api/ai/_lib/planGate': { haiku55ModelEnabled: async () => false },
-        '@/lib/flags': { isFeatureEnabled: async (key) => key === flag ? enabled : true },
         '@/lib/aiModelOptions': { aiImageModelDefinitions: [], aiModelDefinitions: [] },
         '@/utils/controllers/agents/boardMembers': { getBoardAgentMembers: async () => [] },
         '../search/document': { turbopufferFetchMentionTasks: async () => [] },
@@ -34,21 +32,15 @@ for (const query of ['all', 'Page']) {
       const result = await mentions(query, 3, 1);
       assert.equal(result.status, 200);
       const pages = result.json.filter((row) => row.type === 'page');
-      assert.deepEqual(pages.map((row) => row.id).sort(), enabled
-        ? ['foreign-origin', 'page', 'taskless', 'trashed-origin'] : ['page']);
+      assert.deepEqual(pages.map((row) => row.id).sort(), ['foreign-origin', 'page', 'taskless', 'trashed-origin']);
       assert.equal(result.json.find((row) => row.type === 'pageHeading').count, pages.length);
-      const where = h.queries.at(-1).where;
-      if (!enabled) {
-        assert.deepEqual(where.task, { projectId: 1, deletedAt: null });
-        assert.deepEqual(where.taskId, { not: null });
-      }
     }
   });
 }
 
-for (const enabled of [false, true]) {
-  test(`review 1 screen flag ${enabled}: new payload refused when off / legacy payload and one resolved flag still work`, async () => {
-    const h = harness({ userId: 3, flag: enabled });
+{
+  test('review 1 screen: new payload renders without a resolved flag', async () => {
+    const h = harness({ userId: 3 });
     h.state.pages.push({ ...h.state.pages[2], id: 98, publicId: 'legacy-child', taskId: 11 });
     let flagReads = 0;
     let rawOriginOnly = false;
@@ -57,17 +49,8 @@ for (const enabled of [false, true]) {
       'next/navigation': { redirect: () => { throw new Error('redirect'); } },
       './PageEditor': { default: () => null },
       '@/lib/auth/serverUser': { requireServerCookieUser: async () => ({ id: 3 }) },
-      '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
-        assert.equal(key, flag);
-        assert.equal(userId, 3);
-        flagReads++;
-        assert.equal(flagReads, 1, 'resolve exactly once even when checking a taskless origin');
-        return enabled;
-      } },
-      '@/lib/flags/keys': { HTPR_7298_STANDALONE_PAGES_FLAG: flag },
       '@/lib/prisma': { default: h.prisma },
       '@/utils/controllers/pages/pageService': { getPage: async (args) => {
-        assert.equal(args.standalonePagesEnabled, enabled);
         return rawOriginOnly ? payload : h.service.getPage(args);
       } },
       '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}) },
@@ -82,15 +65,13 @@ for (const enabled of [false, true]) {
     const screen = target.exports.default;
     const rendered = await screen({ params: Promise.resolve({ publicId: 'page' }) });
     payload = JSON.parse(rendered.props._page);
-    assert.deepEqual(payload.linkedTasks.map((task) => task.id), enabled ? [10, 11] : [10]);
-    assert.deepEqual(payload.subPages.map((page) => page.publicId).sort(), enabled ? ['legacy-child', 'visible-child'] : ['legacy-child']);
-    assert.equal(flagReads, 1);
+    assert.deepEqual(payload.linkedTasks.map((task) => task.id), [10, 11]);
+    assert.deepEqual(payload.subPages.map((page) => page.publicId).sort(), ['legacy-child', 'visible-child']);
+    assert.equal(flagReads, 0);
     h.prisma.page.findUnique = async () => ({ taskId: null });
     rawOriginOnly = true;
-    flagReads = 0;
-    if (enabled) await screen({ params: Promise.resolve({ publicId: 'page' }) });
-    else await assert.rejects(screen({ params: Promise.resolve({ publicId: 'page' }) }), /redirect/);
-    assert.equal(flagReads, 1);
+    await screen({ params: Promise.resolve({ publicId: 'page' }) });
+    assert.equal(flagReads, 0);
   });
 }
 
@@ -98,15 +79,15 @@ test('review 2 lists/metadata: unlinked origin refused when other links remain /
   const h = harness({ userId: 3 });
   assert.equal((await h.request('[publicId]/links', 'DELETE', { task_id: 10 })).status, 200);
   assert.equal(h.state.pages[0].taskId, 10);
-  for (const enabled of [false, true]) {
-    const originRows = await h.service.listPages({ taskId: 10, userId: 3, standalonePagesEnabled: enabled });
-    assert.equal(originRows.some((page) => page.publicId === 'page'), !enabled);
-    const linkedRows = await h.service.listPages({ taskId: 11, userId: 3, standalonePagesEnabled: enabled });
-    assert.deepEqual(linkedRows.map((page) => page.publicId).sort(), enabled ? ['old-writer-page', 'page'] : ['old-writer-page']);
+  {
+    const originRows = await h.service.listPages({ taskId: 10, userId: 3 });
+    assert.equal(originRows.some((page) => page.publicId === 'page'), false);
+    const linkedRows = await h.service.listPages({ taskId: 11, userId: 3 });
+    assert.deepEqual(linkedRows.map((page) => page.publicId).sort(), ['old-writer-page', 'page']);
     assert.deepEqual(linkedRows.find((page) => page.publicId === 'old-writer-page').linkedTasks.map((task) => task.id), [11]);
-    const page = await h.service.getPage({ publicId: 'page', userId: 3, standalonePagesEnabled: enabled });
-    assert.deepEqual(page.linkedTasks.map((task) => task.id), enabled ? [11] : [10]);
-    if (enabled) assert.deepEqual(linkedRows.find((page) => page.publicId === 'page').linkedTasks.map((task) => task.id), [11]);
+    const page = await h.service.getPage({ publicId: 'page', userId: 3 });
+    assert.deepEqual(page.linkedTasks.map((task) => task.id), [11]);
+    assert.deepEqual(linkedRows.find((page) => page.publicId === 'page').linkedTasks.map((task) => task.id), [11]);
   }
   assert.equal((await h.request('[publicId]/links', 'DELETE', { task_id: 11 })).status, 200);
   assert.equal(h.state.pages[0].taskId, 10);

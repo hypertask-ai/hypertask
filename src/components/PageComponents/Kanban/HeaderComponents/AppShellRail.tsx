@@ -65,7 +65,6 @@ import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavi
 import { useQueryClient } from "@tanstack/react-query";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
 import { HTPR_8035_SIDEBAR_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-8035-sidebar-new-task";
 import { HTPR_8146_SETTINGS_NAME_FLAG } from "@/lib/flags/definitions/htpr-8146-settings-name";
@@ -131,7 +130,6 @@ const AppShellRail = ({
   const newTaskFill = useFlag(HTPR_8035_NEW_TASK_FILL_FLAG);
   const inboxRowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
   const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
-  const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const pathname = usePathname();
   const pageActions = useRecoilValue(currentPageActionsAtom);
   const router = useRouter();
@@ -276,7 +274,7 @@ const AppShellRail = ({
             <Tooltip left={tooltipLeft} bottom={-8} text="Table layout" keyCombination={["3"]} />
           </button>
         </RailItem>
-        {pagesScreen && standalonePages && !isGuest && (
+        {pagesScreen && !isGuest && (
           <RailItem wide={wide} label="Pages">
             <Link href={boardProject ? `/pages?project_id=${boardProject.id}` : "/pages"}
               aria-label="Go to pages"

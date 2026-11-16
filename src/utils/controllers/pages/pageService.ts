@@ -200,7 +200,7 @@ const pageTaskSelect = {
   uniqueIndex: true,
 } as const
 
-export async function getPage(args: GetPageArgs & { userId?: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null; standalonePagesEnabled?: boolean }) {
+export async function getPage(args: GetPageArgs & { userId?: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null }) {
   const where = 'id' in args
     ? { id: args.id }
     : { publicId: args.publicId }
@@ -216,7 +216,6 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
     relationLoadStrategy: 'join',
     where: {
       ...where,
-      ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}),
       ...(args.userId === undefined ? {} : {
         project: { status: 'Normal', ...getProjectWhere(args.userId, args.agentId, args.teamScope) },
       }),
@@ -229,16 +228,14 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       },
       subPages: {
-        where: { archived: false, ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}) },
+        where: { archived: false },
         select: { id: true, title: true, publicId: true, projectId: true },
       },
     },
   })
   if (!page) return null
   const { links, subPages, ...visiblePage } = page
-  const linkedTasks = args.standalonePagesEnabled === false
-    ? (page.task ? [page.task] : [])
-    : links.map(({ task }) => task)
+  const linkedTasks = links.map(({ task }) => task)
   return {
     ...visiblePage,
     task: linkedTasks[0] ?? null,
@@ -338,7 +335,6 @@ export async function listPages({
   userId,
   agentId,
   teamScope,
-  standalonePagesEnabled = true,
   archived = false,
   query,
 }: {
@@ -347,7 +343,6 @@ export async function listPages({
   userId?: number
   agentId?: string | null
   teamScope?: AgentTokenTeamScope | null
-  standalonePagesEnabled?: boolean
   archived?: boolean
   query?: string
 }) {
@@ -376,15 +371,13 @@ export async function listPages({
   } satisfies Prisma.PageSelect
   const accessWhere: Prisma.PageWhereInput = {
     archived,
-    ...(standalonePagesEnabled
-      ? (taskId === undefined ? {} : { links: { some: { taskId, removedAt: null } } })
-      : { taskId: taskId ?? { not: null } }),
+    ...(taskId === undefined ? {} : { links: { some: { taskId, removedAt: null } } }),
     ...(projectId === undefined ? {} : { projectId }),
     project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)) },
   }
   type ListedPage = Prisma.PageGetPayload<{ select: typeof listSelect }>
   const toListed = (pages: ListedPage[]) => pages.map(({ links, task, parentPage, ...page }) => {
-    const linkedTasks = standalonePagesEnabled ? links.map(({ task }) => task) : (task ? [task] : [])
+    const linkedTasks = links.map(({ task }) => task)
     return { ...page, parentPageId: parentPage?.projectId === page.projectId ? page.parentPageId : null, linkedTasks }
   })
   const trimmedQuery = query?.trim() ?? ''
@@ -470,21 +463,18 @@ export async function searchPages({
   userId,
   agentId,
   teamScope,
-  standalonePagesEnabled = true,
 }: {
   query: string
   projectIds: number[]
   userId?: number
   agentId?: string | null
   teamScope?: AgentTokenTeamScope | null
-  standalonePagesEnabled?: boolean
 }) {
   const normalizedQuery = query.trim()
   if (!normalizedQuery || projectIds.length === 0) return []
 
   const accessiblePage = {
     archived: false,
-    ...(standalonePagesEnabled ? {} : { taskId: { not: null } }),
     projectId: { in: projectIds },
     project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)) },
   } satisfies Prisma.PageWhereInput

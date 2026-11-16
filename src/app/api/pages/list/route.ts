@@ -1,4 +1,3 @@
-import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -7,8 +6,6 @@ import prisma from '@/lib/prisma'
 import { isValidUser } from '@/utils/edgeHelpers'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
-import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7298_STANDALONE_PAGES_FLAG } from '@/lib/flags/definitions/htpr-7298-standalone-pages'
 import { listPages } from '@/utils/controllers/pages/pageService'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -41,9 +38,6 @@ export async function GET(request: NextRequest) {
 
     const scope = request.nextUrl.searchParams.get('scope')
     if (scope !== null) {
-      if (!(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, userId))) {
-        return NextResponse.json({ error: 'Not found' }, { status: 404 })
-      }
       if (scope !== 'all' && scope !== 'board') {
         return NextResponse.json({ error: 'scope must be all or board' }, { status: 400 })
       }
@@ -62,7 +56,6 @@ export async function GET(request: NextRequest) {
       const pages = await listPages({
         ...(scope === 'board' ? { projectId: projectId! } : {}),
         userId,
-        standalonePagesEnabled: true,
         agentId: null,
         archived: archived === '1',
         query,
@@ -87,7 +80,7 @@ export async function GET(request: NextRequest) {
     })
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
 
-    const pages = (await listPages({ taskId, userId, standalonePagesEnabled: await standalonePagesEnabled(userId), agentId: null })).map((page) => ({
+    const pages = (await listPages({ taskId, userId, agentId: null })).map((page) => ({
       publicId: page.publicId,
       id: page.id,
       title: page.title,

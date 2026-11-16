@@ -9,7 +9,6 @@ const access = load('src/utils/controllers/projects/getAllIncludes.ts', {
   '@/utils/controllers/notifications/visibleInboxScope': {},
 });
 const plain = (value) => JSON.parse(JSON.stringify(value));
-const flag = 'htpr-7298-standalone-pages';
 
 function matches(row, where = {}) {
   if (row == null) return false;
@@ -228,8 +227,7 @@ for (const [name, options, taskId, expected] of [
   ['same team allowed', { userId: 3 }, 11, 200],
   ['Deleted ticket refused', { userId: 3 }, 13, 404],
   ['Normal ticket allowed', { userId: 3 }, 11, 200],
-  ['flag off refused', { userId: 3, flag: false }, 11, 404],
-  ['flag on allowed', { userId: 3 }, 11, 200],
+  ['retired switch no longer refuses', { userId: 3, flag: false }, 11, 200],
 ]) {
   test(`link: ${name}`, async () => {
     const h = harness(options);
@@ -258,16 +256,14 @@ for (const [name, userId, expected] of [['ticket-board-only writer refused', 2, 
     }
   });
 }
-test('unlink flag off is refused without mutations / flag on is allowed', async () => {
-  for (const enabled of [false, true]) {
-    const h = harness({ flag: enabled });
-    const result = await h.request('[publicId]/links', 'DELETE', { task_id: 10 });
-    assert.equal(result.status, enabled ? 200 : 404);
-    assert.equal(h.state.links.length, 3);
-    assert.equal(h.state.links.filter((link) => link.pageId === 20 && link.removedAt === null).length, enabled ? 1 : 2);
-  }
+test('unlink works with no switch read', async () => {
+  const h = harness({ flag: false });
+  const result = await h.request('[publicId]/links', 'DELETE', { task_id: 10 });
+  assert.equal(result.status, 200);
+  assert.equal(h.state.links.length, 3);
+  assert.equal(h.state.links.filter((link) => link.pageId === 20 && link.removedAt === null).length, 1);
 });
-for (const [name, options, expected] of [['flag off refused', { flag: false }, 404], ['flag on board owner allowed', {}, 200], ['board outsider refused', { userId: 2 }, 404], ['board member allowed', { userId: 3 }, 200]]) {
+for (const [name, options, expected] of [['board owner allowed', {}, 200], ['retired switch still allowed', { flag: false }, 200], ['board outsider refused', { userId: 2 }, 404], ['board member allowed', { userId: 3 }, 200]]) {
   test(`standalone create: ${name}`, async () => {
     const h = harness(options);
     const result = await h.request('create', 'POST', { project_id: 1, content: '' });
@@ -282,15 +278,13 @@ test('create parent on another board refused / same owning board allowed', async
     assert.equal(result.status, allowed ? 200 : 404);
   }
 });
-test('ticket create writes link with page in same transaction regardless of flag', async () => {
-  for (const enabled of [false, true]) {
-    const h = harness({ flag: enabled });
-    const result = await h.request('create', 'POST', { task_id: 11, content: '' });
-    assert.equal(result.status, 200);
-    assert.equal(h.state.links.at(-1).pageId, h.state.pages.at(-1).id);
-    assert.equal(h.state.links.at(-1).taskId, 11);
-    assert.equal(h.state.pages.at(-1).projectId, 1);
-  }
+test('ticket create writes link with page in same transaction with no switch read', async () => {
+  const h = harness({ flag: false });
+  const result = await h.request('create', 'POST', { task_id: 11, content: '' });
+  assert.equal(result.status, 200);
+  assert.equal(h.state.links.at(-1).pageId, h.state.pages.at(-1).id);
+  assert.equal(h.state.links.at(-1).taskId, 11);
+  assert.equal(h.state.pages.at(-1).projectId, 1);
 });
 for (const [name, userId, agentId, moveBeforeLock, allowed] of [
   ['accessible original board still works', 1, undefined, false, true],
@@ -331,10 +325,10 @@ for (const [name, userId, agentId, moveBeforeLock, allowed] of [
   });
 }
 
-for (const enabled of [false, true]) {
-  test(`ticket create flag ${enabled}: unrelated parent refused / legacy or linked same-ticket parent allowed`, async () => {
+{
+  test('ticket create: unrelated parent refused / legacy or linked same-ticket parent allowed', async () => {
     for (const [kind, parentId, allowed] of [['unrelated', 22, false], ['legacy', 26, true], ['linked', 20, true], ['foreign-board linked', 21, false]]) {
-      const h = harness({ flag: enabled });
+      const h = harness({ flag: false });
       if (parentId === 21) h.state.links.push({ id: 9, pageId: 21, taskId: 11 });
       const before = plain(h.state);
       const result = await h.request('create', 'POST', { task_id: 11, parent_page_id: parentId, content: '' });
@@ -356,18 +350,14 @@ test('listPages foreign-board parent is null / same-board parent is retained', a
   }
 });
 
-for (const [name, enabled, expected] of [['flag off refused', false, 404], ['flag on allowed', true, 200]]) {
-  test(`board list: ${name}`, async () => {
-    const h = harness({ userId: 3, flag: enabled });
-    const result = await h.request('list', 'GET', undefined, 'scope=all');
-    assert.equal(result.status, expected);
-    if (enabled) {
-      assert.equal(result.body.count, result.body.pages.length);
-      assert.ok(result.body.pages.every((p) => [1, 2, 3].includes(p.projectId)));
-      assert.ok(result.body.pages.every((p) => p.project.title));
-    }
-  });
-}
+test('board list: switch removed still allowed', async () => {
+  const h = harness({ userId: 3, flag: false });
+  const result = await h.request('list', 'GET', undefined, 'scope=all');
+  assert.equal(result.status, 200);
+  assert.equal(result.body.count, result.body.pages.length);
+  assert.ok(result.body.pages.every((p) => [1, 2, 3].includes(p.projectId)));
+  assert.ok(result.body.pages.every((p) => p.project.title));
+});
 test('board list restricts accessible Normal boards, archived filter, query and visible linked tickets', async () => {
   const h = harness();
   const normal = await h.request('list', 'GET', undefined, 'scope=all');
@@ -401,20 +391,5 @@ test('link endpoint applies write rate limiting before mutation', async () => {
   assert.deepEqual(plain(h.state), before);
 });
 
-
-test('standalone flag defaults Owner + QA and all new APIs gate on the same server flag', () => {
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const root = path.resolve(__dirname, '..');
-  const definition = load('src/lib/flags/definitions/htpr-7298-standalone-pages.ts', {}).default;
-  assert.equal(definition.key, flag);
-  assert.equal(definition.kind, 'feature');
-  assert.equal(definition.defaultMode, 'OWNER_AND_QA');
-  assert.equal(definition.shippedOn, '2026-10-18');
-  assert.ok(definition.releaseRisk.risk && definition.releaseRisk.reason);
-  const runbook = fs.readFileSync(path.join(root, 'docs/standalone-pages-rollout.md'), 'utf8');
-  assert.match(runbook, /all old readers, writers, movers and task-delete workers/);
-  assert.match(runbook, /Never revert to task-owned authorization/);
-});
 
 module.exports = { harness };

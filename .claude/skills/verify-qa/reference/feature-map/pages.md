@@ -9,25 +9,24 @@
 Open a ticket, then "Add page" next to "Add sub-tasks", or "New page" in the
 ticket's "Pages (n)" list. The page opens at `https://app.hypertask.ai/page/<publicId>`
 with "Back to task", "Saved" and the version. Typing `@` in a description can
-mention a page. With `htpr-7298-standalone-pages` and `htpr-7309-pages-screens` enabled,
-the left rail's Pages row and Commands → Go to Pages open `/pages`.
+mention a page. With `htpr-7309-pages-screens` enabled, the left rail's Pages row
+and Commands → Go to Pages open `/pages`. Standalone pages have no switch.
 This board / All boards, search and Archived pages narrow the list.
 New page creates a standalone document on the selected board (or asks for a
 board). The editor shows Linked tickets, Link ticket and Unlink; a page
 with no visible ticket returns to Pages. A ticket offers Link page next to
 New page, using the existing Commands-style picker. Commands also offers
 New page, Link page on tickets and Link ticket in the page editor.
-The original standalone-pages flag retains its current audience; the new
-screen flag defaults to Everyone but cannot widen standalone-page access.
+Standalone pages are permanent after HTPR-9258; the screen flag defaults to
+Everyone but cannot widen standalone-page access.
 
 ## Driving it with agent-browser
 
-Headless Playwright or `phone-shot.sh` against production. Use the QA flag
-identity (`storageState-qa.json`, user 985) for the flagged API and the plain
-account (`storageState-qa-normal.json`, user 2343) for the flag-off path: the
-three flagged calls answer 404 for it, and its ticket pages behave as before.
-Call the API from the page context (`page.evaluate(fetch)`) so the session
-cookie is used. Work on a board the QA account owns.
+Headless Playwright or `phone-shot.sh` against production. Any signed-in
+account can use the standalone page calls; use the QA identity
+(`storageState-qa.json`, user 985). Call the API from the page context
+(`page.evaluate(fetch)`) so the session cookie is used. Work on a board the QA
+account owns.
 
 ## Gotchas
 

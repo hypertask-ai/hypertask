@@ -1,6 +1,6 @@
 # Standalone pages: step 1 rollout
 
-Flag: `htpr-7298-standalone-pages` (Owner + QA). This release adds only browser-session APIs; new screens and MCP/CLI/AI operations are out of scope. `Page.projectId` owns access; ticket links never grant page access. Existing nullable-page reads and editor safety are unconditional.
+No switch: browser-session APIs are permanently on for everyone since https://app.hypertask.ai/detail/project-15/9258 removed the flag. This release adds only browser-session APIs; new screens and MCP/CLI/AI operations are out of scope. `Page.projectId` owns access; ticket links never grant page access. Existing nullable-page reads and editor safety are unconditional.
 
 ## Activation barrier
 

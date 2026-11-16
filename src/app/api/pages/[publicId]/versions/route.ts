@@ -1,4 +1,3 @@
-import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -30,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     }
 
     const { publicId } = await params
-    const page = await getPage({ publicId, userId, standalonePagesEnabled: await standalonePagesEnabled(userId) })
+    const page = await getPage({ publicId, userId })
     if (!page) return NextResponse.json({ error: 'Page not found' }, { status: 404 })
 
     const versions = (await listPageVersions({ pageId: page.id })).map((version) => ({

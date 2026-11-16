@@ -73,14 +73,14 @@ function pagesRoute(enabledFlags) {
   return loadedModule.exports.default;
 }
 
-for (const flags of [[], ['htpr-7298-standalone-pages'], ['htpr-7309-pages-screens']]) {
-  test(`Pages server route is unavailable without both flags: ${flags.join(',') || 'neither'}`, async () => {
+for (const flags of [[], ['htpr-7298-standalone-pages']]) {
+  test(`Pages server route is unavailable without the screens flag: ${flags.join(',') || 'neither'}`, async () => {
     await assert.rejects(pagesRoute(flags)(), /not found/);
   });
 }
 
-test('Pages server route still renders for a signed-in user with both flags', async () => {
-  const view = await pagesRoute(['htpr-7298-standalone-pages', 'htpr-7309-pages-screens'])();
+test('Pages server route still renders for a signed-in user with the screens flag', async () => {
+  const view = await pagesRoute(['htpr-7309-pages-screens'])();
   assert.equal(view.type, 'PagesListScreen');
   assert.deepEqual(view.props.currentUser, { id: 985 });
 });

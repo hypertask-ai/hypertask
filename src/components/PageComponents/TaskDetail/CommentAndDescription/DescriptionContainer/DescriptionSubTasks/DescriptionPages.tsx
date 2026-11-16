@@ -9,7 +9,6 @@ import toast from "react-hot-toast";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
-import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import { HTPR_8241_PAGES_INTENT_HOLD_FLAG } from "@/lib/flags/definitions/htpr-8241-pages-intent-hold";
 import { listBrowserPages, changePageLink, type BrowserPage } from "@/lib/pages/browser";
 import {
@@ -31,7 +30,6 @@ const DescriptionPages = () => {
   const { editMode, currentTask } = useTaskContext();
   const { pages, loading, hasPages, createAndOpenPage, refetch } = useTaskPages();
   const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
-  const standalone = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const holdIntent = useFlag(HTPR_8241_PAGES_INTENT_HOLD_FLAG);
   const [pageOptions, setPageOptions] = useState<BrowserPage[] | null>(null);
   const mounted = useRef(true);
@@ -74,7 +72,7 @@ const DescriptionPages = () => {
     void createAndOpenPage();
   }, [createAndOpenPage]);
   useEffect(() => {
-    if (!pagesEnabled || !standalone) return;
+    if (!pagesEnabled) return;
     window.addEventListener(PAGES_INTENT_EVENTS.link, linkFromEvent);
     window.addEventListener(PAGES_INTENT_EVENTS.new, createPage);
     if (holdIntent && claimPagesIntent("link", surface)) void openLinkPicker();
@@ -83,7 +81,7 @@ const DescriptionPages = () => {
       window.removeEventListener(PAGES_INTENT_EVENTS.link, linkFromEvent);
       window.removeEventListener(PAGES_INTENT_EVENTS.new, createPage);
     };
-  }, [createAndOpenPage, createPage, holdIntent, linkFromEvent, pagesEnabled, standalone, surface]);
+  }, [createAndOpenPage, createPage, holdIntent, linkFromEvent, pagesEnabled, surface]);
   const linkPage = async (publicId: string) => {
     if (!currentTask) return;
     setPageOptions(null);
@@ -122,7 +120,7 @@ const DescriptionPages = () => {
     router.push(pageHref);
   };
 
-  const linkPicker = pagesEnabled && standalone && pageOptions && <OptionPickerModal header="Link page to ticket"
+  const linkPicker = pagesEnabled && pageOptions && <OptionPickerModal header="Link page to ticket"
         options={pageOptions.filter((page) => !pages.some((linked) => linked.id === page.id)).map((page) => ({ id: page.publicId, label: page.title || "Untitled", hint: page.project.title }))}
         onClose={() => setPageOptions(null)}
         onSelect={(option) => { if (typeof option.id === "string") void linkPage(option.id); }} />;
@@ -185,7 +183,7 @@ const DescriptionPages = () => {
           <Plus size={8} className="mr-1" strokeWidth={1.75} />
           New page
         </span>
-        {pagesEnabled && standalone && <button type="button" onClick={() => void openLinkPicker()}
+        {pagesEnabled && <button type="button" onClick={() => void openLinkPicker()}
           className="min-h-11 text-meta hover:text-white-black">+ Link page</button>}
       </div>
     </div>

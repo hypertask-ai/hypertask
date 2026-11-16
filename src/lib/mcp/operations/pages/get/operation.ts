@@ -1,5 +1,4 @@
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
-import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -50,7 +49,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const page = await getPage({ ...identifier, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
+    const page = await getPage({ ...identifier, userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
     if (!page || !(await canAccessProject(page.projectId, ctx))) {
       return NextResponse.json(
         buildFieldError('not_found', identifierField, 'Page not found'),

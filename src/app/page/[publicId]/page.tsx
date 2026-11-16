@@ -2,9 +2,6 @@ import { redirect } from "next/navigation";
 
 import PageEditor from "./PageEditor";
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component gates taskless page access.
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { getPage } from "@/utils/controllers/pages/pageService";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -19,18 +16,9 @@ export default async function Page(props: {
 }) {
   const { publicId } = await props.params;
   const currentUser = await requireServerCookieUser();
-  const standalonePagesEnabled = await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, currentUser.id);
-  const page = await getPage({ publicId, userId: currentUser.id, standalonePagesEnabled });
+  const page = await getPage({ publicId, userId: currentUser.id });
 
   if (!page) {
-    redirect("/");
-  }
-
-  const origin = await prisma.page.findUnique({
-    where: { id: page.id },
-    select: { taskId: true },
-  });
-  if (origin?.taskId == null && !standalonePagesEnabled) {
     redirect("/");
   }
 

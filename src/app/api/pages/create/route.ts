@@ -7,8 +7,6 @@ import { isValidUser } from '@/utils/edgeHelpers'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
-import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7298_STANDALONE_PAGES_FLAG } from '@/lib/flags/definitions/htpr-7298-standalone-pages'
 import { getProjectWhere, taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { storedPageContentType } from '@/utils/controllers/pages/standaloneContent'
 import {
@@ -64,9 +62,6 @@ export async function POST(request: NextRequest) {
 
     const taskId = typeof body.task_id === 'number' ? parsePositiveInt(body.task_id, { safe: false, max: Infinity }) : null
     const standalone = body.task_id === undefined && body.project_id !== undefined
-    if (standalone && !(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, userId))) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    }
     const projectId = standalone ? positiveInteger(body.project_id) : null
     if (standalone && projectId === null) {
       return NextResponse.json({ error: 'project_id must be a positive integer' }, { status: 400 })

@@ -1,4 +1,3 @@
-import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { tool } from "ai";
 import { z } from "zod";
 import { parsePageIdentifier } from "@/app/api/mcp/pages/_lib/routeUtils";
@@ -37,7 +36,7 @@ export function createPageHistoryTool(context: ToolContext) {
           return { success: false, error: "Invalid page identifier" };
         }
 
-        const existingPage = await getPage({ ...identifier, userId: user.id, standalonePagesEnabled: await standalonePagesEnabled(user.id), agentId: null });
+        const existingPage = await getPage({ ...identifier, userId: user.id, agentId: null });
         if (!existingPage) {
           return { success: false, error: "Page not found" };
         }

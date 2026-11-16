@@ -39,7 +39,7 @@ for (const source of ['task', 'description', 'comment']) {
   }
 }
 
-test('soft unlink final link: origin list resurrection refused / legacy zero-row page and flag-off origin still listed', async () => {
+test('soft unlink final link: origin list resurrection refused / legacy zero-row page still listed', async () => {
   const h = harness({ userId: 3 });
   for (const task_id of [10, 11]) {
     assert.equal((await h.request('[publicId]/links', 'DELETE', { task_id })).status, 200);
@@ -55,9 +55,6 @@ test('soft unlink final link: origin list resurrection refused / legacy zero-row
     assert.equal(response.status, 200);
     assert.deepEqual(response.body.pages.map((row) => row.publicId).sort(), rows.map((row) => row.publicId).sort());
   }
-  const legacy = await h.service.listPages({ taskId: 10, userId: 3, standalonePagesEnabled: false });
-  assert.ok(legacy.some((row) => row.publicId === 'page'));
-  assert.deepEqual(legacy.find((row) => row.publicId === 'page').linkedTasks.map((row) => row.id), [10]);
   assert.deepEqual((await h.service.getPage({ publicId: 'page', userId: 3 })).linkedTasks, []);
   const board = await h.request('list', 'GET', undefined, 'scope=board&project_id=1');
   assert.equal(board.status, 200);

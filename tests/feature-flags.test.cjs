@@ -633,6 +633,20 @@ test("the retired My Tasks table columns flag is hidden, immutable and enabled f
   assert.equal((await flags.featureFlagsForUser(2343))[key], true);
 });
 
+test("standalone pages flag is retired after becoming permanent", async () => {
+  const key = "htpr-7298-standalone-pages";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261114120000_drop_htpr_7298_standalone_pages_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  for (const userId of [6, 985, 2343]) assert.equal((await flags.featureFlagsForUser(userId))[key], true, "old tabs keep the released behaviour");
+});
+
 test("inbox next-open no longer has a feature flag", async () => {
   assert.equal(flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, undefined);
   assert.equal(definitions.some(entry => entry.key === "htpr-7000-inbox-next-open"), false);

@@ -14,8 +14,8 @@ const aiOperations = {
   search: ['searchPages', 'createSearchPagesTool', 'hypertask_search_pages'],
 };
 
-function fixture(enabled) {
-  const h = harness({ userId: 3, flag: enabled });
+function fixture() {
+  const h = harness({ userId: 3 });
   const flagCalls = [];
   const effects = [];
   for (const name of ['updatePage', 'restorePageVersion', 'archivePage', 'listPageVersions']) {
@@ -24,11 +24,10 @@ function fixture(enabled) {
   h.prisma.task.findUnique = async () => h.state.tasks.find((t) => t.id === 11);
   const mocks = {
     '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
-      if (key === 'htpr-8435-page-export-tables' || key === 'htpr-9017-smart-page-search') return false;
-      assert.equal(key, flag);
+      assert.notEqual(key, flag, 'the retired standalone switch is never read');
       assert.equal(userId, 3, 'evaluate the human credential owner, not agent id');
       flagCalls.push([key, userId]);
-      return enabled;
+      return key !== 'htpr-8435-page-export-tables' && key !== 'htpr-9017-smart-page-search';
     } },
     '@/lib/prisma': { default: h.prisma },
     '@/utils/controllers/pages/pageService': h.service,
@@ -75,61 +74,52 @@ function fixture(enabled) {
 
 for (const boundary of ['REST', 'MCP', 'AI']) {
   for (const operation of ['get', 'update', 'versions', 'restore', 'archive']) {
-    test(`${boundary} ${operation}: flag-off standalone refused / legacy and flag-on standalone still work`, async () => {
-      for (const [enabled, taskId, expected] of [[false, null, 404], [false, 10, 200], [true, null, 200]]) {
-        const h = fixture(enabled);
+    test(`${boundary} ${operation}: standalone and legacy pages both work`, async () => {
+      for (const [taskId, expected] of [[null, 200], [10, 200]]) {
+        const h = fixture();
         h.state.pages[0].taskId = taskId;
         const response = await h.call(boundary, operation);
-        assert.equal(response.status, expected, `${enabled}/${taskId}: ${JSON.stringify(response.body)}`);
+        assert.equal(response.status, expected, `taskId ${taskId}: ${JSON.stringify(response.body)}`);
         const effectCount = operation === 'get' ? 0 : expected === 200 ? 1 : 0;
         assert.equal(h.effects.length, effectCount, 'denied reads never reach mutations or history');
-        if (expected === 404) assert.doesNotMatch(JSON.stringify(response.body), /Page title|body|SECRET/);
-        if (boundary !== 'REST') assert.equal(h.flagCalls.length, 1);
+        assert.doesNotMatch(JSON.stringify(response.body), /SECRET/);
       }
     });
   }
-  test(`${boundary} ticket list: flag-off secondary link refused / legacy and flag-on links still work`, async () => {
-    for (const enabled of [false, true]) {
-      const h = fixture(enabled);
-      const response = await h.call(boundary, 'list', 'task_id=11', { task_id: 11 });
-      assert.equal(response.status, 200);
-      assert.deepEqual(response.body.pages.map((p) => p.publicId).sort(), enabled ? ['old-writer-page', 'page'] : ['old-writer-page']);
-    }
+  test(`${boundary} ticket list: linked and legacy pages both listed`, async () => {
+    const h = fixture();
+    const response = await h.call(boundary, 'list', 'task_id=11', { task_id: 11 });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.pages.map((p) => p.publicId).sort(), ['old-writer-page', 'page']);
   });
-  test(`${boundary} search: flag-off standalone refused / legacy and flag-on standalone still work`, async () => {
-    for (const enabled of [false, true]) {
-      const h = fixture(enabled);
-      h.state.pages.push({ ...h.state.pages[0], id: 99, publicId: 'standalone', taskId: null });
-      const response = await h.call(boundary, 'search', 'q=body', { query: 'body' });
-      assert.equal(response.status, 200);
-      assert.deepEqual(response.body.pages.map((p) => p.publicId).sort(), enabled ? ['page', 'standalone'] : ['page']);
-    }
+  test(`${boundary} search: standalone and legacy pages both found`, async () => {
+    const h = fixture();
+    h.state.pages.push({ ...h.state.pages[0], id: 99, publicId: 'standalone', taskId: null });
+    const response = await h.call(boundary, 'search', 'q=body', { query: 'body' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.pages.map((p) => p.publicId).sort(), ['page', 'standalone']);
   });
-  test(`${boundary} get: flag-off linkedTasks contains only legacy ticket / flag-on retains both`, async () => {
-    for (const enabled of [false, true]) {
-      const h = fixture(enabled);
-      const response = await h.call(boundary, 'get');
-      assert.equal(response.status, 200);
-      assert.deepEqual(response.body.page.linkedTasks.map((t) => t.id).sort(), enabled ? [10, 11] : [10]);
-    }
+  test(`${boundary} get: linkedTasks retains every linked ticket`, async () => {
+    const h = fixture();
+    const response = await h.call(boundary, 'get');
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.page.linkedTasks.map((t) => t.id).sort(), [10, 11]);
   });
 }
 for (const boundary of ['MCP', 'AI']) {
-  test(`${boundary} board list: flag-off standalone excluded / legacy and flag-on standalone still work`, async () => {
-    for (const enabled of [false, true]) {
-      const h = fixture(enabled);
-      const response = await h.call(boundary, 'list', 'project_id=1', { project_id: 1 });
-      assert.equal(response.status, 200);
-      assert.deepEqual(response.body.pages.map((p) => p.publicId).sort(), enabled ? ['old-writer-page', 'page', 'visible-child'] : ['old-writer-page', 'page']);
-      assert.deepEqual(response.body.pages.find((p) => p.publicId === 'page').linkedTasks.map((t) => t.id).sort(), enabled ? [10, 11] : [10]);
-    }
+  test(`${boundary} board list: standalone and legacy pages both listed`, async () => {
+    const h = fixture();
+    const response = await h.call(boundary, 'list', 'project_id=1', { project_id: 1 });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.pages.map((p) => p.publicId).sort(), ['old-writer-page', 'page', 'visible-child']);
+    assert.deepEqual(response.body.pages.find((p) => p.publicId === 'page').linkedTasks.map((t) => t.id).sort(), [10, 11]);
   });
 }
 
 for (const query of ['all', 'Page']) {
-  test(`mentions ${query}: flag-off standalone excluded / legacy and flag-on standalone still work`, async () => {
-    for (const enabled of [false, true]) {
-      const h = fixture(enabled);
+  test(`mentions ${query}: standalone and legacy pages both matched`, async () => {
+    {
+      const h = fixture();
       h.state.tasks[0].projectId = 1;
       h.state.pages.find((p) => p.id === 22).title = 'Page standalone';
       h.prisma.task.findMany = async () => [];
@@ -137,7 +127,7 @@ for (const query of ['all', 'Page']) {
       const mentions = load('src/utils/controllers/tasks/taskSearchByParam.ts', {
         '@/lib/prisma': { default: h.prisma },
         '@/app/api/ai/_lib/planGate': { haiku55ModelEnabled: async () => false },
-        '@/lib/flags': { isFeatureEnabled: async (key, userId) => { assert.equal(userId, 3); return key === flag ? enabled : true; } },
+        '@/lib/flags': { isFeatureEnabled: async (key, userId) => { assert.equal(userId, 3); assert.notEqual(key, flag); return true; } },
         '@/lib/aiModelOptions': { aiImageModelDefinitions: [], aiModelDefinitions: [] },
         '@/utils/controllers/agents/boardMembers': { getBoardAgentMembers: async () => [] },
         '../search/document': { turbopufferFetchMentionTasks: async () => [] },
@@ -145,46 +135,42 @@ for (const query of ['all', 'Page']) {
       const response = await mentions(query, 3, 1);
       assert.equal(response.status, 200);
       const rows = response.json.filter((p) => p.type === 'page');
-      assert.deepEqual(rows.map((p) => p.id).sort(), enabled ? (query === 'all' ? ['old-writer-page', 'page', 'visible-child'] : ['page', 'visible-child']) : (query === 'all' ? ['old-writer-page', 'page'] : ['page']));
+      assert.deepEqual(rows.map((p) => p.id).sort(), query === 'all' ? ['old-writer-page', 'page', 'visible-child'] : ['page', 'visible-child']);
       assert.equal(response.json.find((p) => p.type === 'pageHeading').count, rows.length);
     }
   });
 }
 
 
-test('flag-off metadata never substitutes a visible secondary ticket for an inaccessible legacy ticket', async () => {
-  for (const enabled of [false, true]) {
-    const h = harness({ userId: 1, flag: enabled });
-    const result = await h.request('[publicId]');
-    assert.equal(result.status, 200);
-    assert.equal(result.body.page.task?.id ?? null, enabled ? 11 : null);
-    assert.equal(result.body.page.taskId, null);
-    assert.deepEqual(result.body.page.linkedTasks.map((task) => task.id), enabled ? [11] : []);
-    assert.doesNotMatch(JSON.stringify(result.body), /SECRET|987/);
-  }
+test('metadata never substitutes a visible secondary ticket for an inaccessible legacy ticket', async () => {
+  const h = harness({ userId: 1 });
+  const result = await h.request('[publicId]');
+  assert.equal(result.status, 200);
+  assert.equal(result.body.page.task?.id ?? null, 11);
+  assert.equal(result.body.page.taskId, null);
+  assert.deepEqual(result.body.page.linkedTasks.map((task) => task.id), [11]);
+  assert.doesNotMatch(JSON.stringify(result.body), /SECRET|987/);
 });
 
 for (const boundary of ['REST', 'MCP', 'AI']) {
   test(`${boundary} get: removed or hidden origin refused as navigation / active visible secondary link still works`, async () => {
-    for (const enabled of [false, true]) {
-      const h = fixture(enabled);
-      h.state.links[0].removedAt = new Date();
-      const response = await h.call(boundary, 'get');
-      assert.equal(response.status, 200);
-      assert.equal(response.body.page.task.id, enabled ? 11 : 10);
-      assert.equal(response.body.page.taskId, 10);
-      h.state.projects[1].members = [];
-      const filtered = await h.call(boundary, 'get');
-      assert.equal(filtered.status, 200);
-      assert.equal(filtered.body.page.task?.id ?? null, enabled ? 11 : null);
-      assert.equal(filtered.body.page.taskId, null);
-      assert.doesNotMatch(JSON.stringify(filtered.body), /SECRET|987/);
-    }
+    const h = fixture();
+    h.state.links[0].removedAt = new Date();
+    const response = await h.call(boundary, 'get');
+    assert.equal(response.status, 200);
+    assert.equal(response.body.page.task.id, 11);
+    assert.equal(response.body.page.taskId, 10);
+    h.state.projects[1].members = [];
+    const filtered = await h.call(boundary, 'get');
+    assert.equal(filtered.status, 200);
+    assert.equal(filtered.body.page.task?.id ?? null, 11);
+    assert.equal(filtered.body.page.taskId, null);
+    assert.doesNotMatch(JSON.stringify(filtered.body), /SECRET|987/);
   });
 }
 
 test('AI history: removed or inaccessible origin does not block page-board access / inaccessible page board remains refused', async () => {
-  const h = fixture(true);
+  const h = fixture();
   h.state.links.forEach((link) => { link.removedAt = new Date(); });
   h.state.projects[1].members = [];
   assert.equal((await h.call('AI', 'versions')).status, 200);

@@ -108,10 +108,10 @@ test('a literal match that has not reached the index is still returned, last fir
   assert.deepEqual((await service.searchPages(args)).map((page) => page.id), [12, 17, 31]);
 });
 
-test('standalone pages stay excluded when the standalone switch is off', async () => {
+test('standalone pages are always searched without a ticket filter', async () => {
   const { service, calls } = loadPageService({ indexRows: [{ id: '5' }], findMany: () => [pageRow({ id: 5 })] });
-  await service.searchPages({ ...args, standalonePagesEnabled: false });
-  assert.deepEqual(calls.findMany[0].where.taskId, { not: null });
+  await service.searchPages(args);
+  assert.equal(calls.findMany[0].where.taskId, undefined);
 });
 
 test('an empty index answer or fully filtered hits fall back to todays literal page search', async () => {
