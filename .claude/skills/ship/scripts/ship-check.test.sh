@@ -813,11 +813,16 @@ unset -f gh
 sha=$(gh pr view 809 -R hypertask-ai/hypertask --json mergeCommit --jq .mergeCommit.oid)
 R=$E/HTPR-6570/2026-10-01-qa-run-1; mkdir -p "$R"; : > "$R/a.png"
 T() { if ./ship-check proof HTPR-6570 >/dev/null; then [ "$1" = pass ] && ok "$2" || bad "$2"; else [ "$1" = fail ] && ok "$2" || bad "$2"; fi; }
-printf 'Feature map: .claude/skills/verify-qa/reference/feature-map/my-tasks.md\nDoctor: sha deadbeef0 deployment success\nRun: 2026-10-01-qa-run-1\n## Cases\n- PASS: x -> a.png\n' > "$E/HTPR-6570/proof.md"
+printf 'Feature map: .claude/skills/verify-qa/reference/feature-map/my-tasks.md\nDoctor: sha deadbeef0 deployment success\nRun: 2026-10-01-qa-run-1\nLeftovers: none\n## Cases\n- PASS: x -> a.png\n' > "$E/HTPR-6570/proof.md"
 T fail "stale proof rejected"
 sed -i "s/deadbeef0/${sha:0:9}/" "$E/HTPR-6570/proof.md"
 T fail "empty screenshot rejected"
 printf 'png' > "$R/a.png"; T pass "fresh proof accepted"
+cp "$E/HTPR-6570/proof.md" "$E/HTPR-6570/proof.md.with-leftovers"
+grep -v '^Leftovers: ' "$E/HTPR-6570/proof.md" > "$E/HTPR-6570/proof.md.no-leftovers"
+mv "$E/HTPR-6570/proof.md.no-leftovers" "$E/HTPR-6570/proof.md"
+T fail "proof without leftovers rejected"
+mv "$E/HTPR-6570/proof.md.with-leftovers" "$E/HTPR-6570/proof.md"
 sed -i 's@feature-map/my-tasks.md@feature-map/public-sites.md@' "$E/HTPR-6570/proof.md"
 T pass "public-site proof accepted"
 echo '- PASS: y -> missing output.png' >> "$E/HTPR-6570/proof.md"; T fail "malformed PASS line rejected"
@@ -1383,6 +1388,40 @@ if [ "$got" = 0 ] && [ -z "$out" ]; then ok 'no ci-tests in other repo passes si
 else bad "other repo: $got $out"; fi
 unset -f gh hypertask
 unset CI_FIXTURE_DIR CI_CALL_LOG CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
+
+leftovers_proof_tests() {
+  local bin=$E/left-bin run=$E/HTPR-9360/2026-11-16-qa-run-1
+  local head tail out got
+  mkdir -p "$bin" "$run"
+  printf 'png' > "$run/a.png"
+  echo 4242 > "$E/HTPR-9360/pr"
+  cat > "$bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == pr && $2 == view && $3 == 4242 ]] || exit 1
+printf '%s\n' '{"number":4242,"title":"HTPR-9360 [INFRA] Leftovers proof","state":"MERGED","mergeCommit":{"oid":"0123456789abcdef0123456789abcdef01234567"},"baseRefName":"production"}'
+MOCK
+  chmod +x "$bin/gh"
+  head=$'Feature map: .claude/skills/verify-qa/reference/feature-map/inbox.md\nDoctor: sha 012345678 deployment success\nRun: 2026-11-16-qa-run-1\n'
+  tail=$'## Cases\n- PASS: open -> a.png\n'
+  P() {
+    local want=$1 label=$2
+    out=$(PATH="$bin:$PATH" ./ship-check proof HTPR-9360 2>&1); got=$?
+    if [ "$want" = 0 ]; then
+      [ "$got" = 0 ] && [ "$out" = "proof ok" ] && ok "$label" || bad "$label: got $got $out"
+    else
+      [ "$got" = 1 ] && [[ $out == *"Leftovers:"* ]] && ok "$label" || bad "$label: got $got $out"
+    fi
+  }
+  printf '%s%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 1 "proof without a leftovers line fails"
+  printf '%sLeftovers:\n%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 1 "an empty leftovers line fails"
+  printf '%sLeftovers: none\n%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 0 "leftovers none passes"
+  printf '%sLeftovers: test login, label qa-tmp, dark mode on\n%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 0 "a leftovers list passes"
+}
+leftovers_proof_tests
 
 if [ "${1:-}" = --premerge-only ]; then
   echo "$passes passed, $fails failed"
