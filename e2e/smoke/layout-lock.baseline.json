@@ -775,6 +775,7 @@
   "flagMode": "live-like",
   "flagSnapshotSha256": "364d4e12afe353ccc15903bb443b975c2c55e4688aca5f06750d6e8c8b7d8ddb",
   "approvedIn": {
+    "ticket/Mobile": "https://app.hypertask.ai/detail/project-15/8991",
     "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-15/6940",
     "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-15/6940",
     "ticket/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
