@@ -120,6 +120,14 @@ required_checks:
   # skipped result is not green. Docs-only PRs succeed via conditional steps,
   # not job skips; existing guards remain mandatory.
 
+pstack_verifier:
+  ticket: https://app.hypertask.ai/detail/project-15/9381
+  request_workflow: .github/workflows/pstack-verifier-request.yml
+  workflow: .github/workflows/pstack-verifier.yml
+  status_context: pstack-verifier
+  required: false
+  model: deepseek/deepseek-v4.1-flash
+
 pr_size_observation:
   ticket: https://app.hypertask.ai/detail/project-11514/29
   workflow: .github/workflows/pr-size-observation.yml

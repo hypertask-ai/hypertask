@@ -1,0 +1,86 @@
+name: pstack-verifier
+on:
+  workflow_run:
+    workflows: ["Pstack Verifier Request"]
+    types: [completed]
+permissions: {}
+concurrency:
+  group: pstack-verifier-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+jobs:
+  pstack-verifier:
+    name: pstack-verifier
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Check out the production harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Resolve the pull request
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REQUEST_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          REQUEST_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REQUEST_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          WORK: ${{ runner.temp }}/pstack-verifier
+        run: node scripts/pstack-verifier.mjs resolve
+      - name: Check out the candidate without executing it
+        if: steps.resolve.outputs.skip != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ steps.resolve.outputs.repository }}
+          ref: ${{ steps.resolve.outputs.sha }}
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: steps.resolve.outputs.skip != 'true'
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Install production harness dependencies
+        if: steps.resolve.outputs.skip != 'true'
+        run: npm ci --no-audit --no-fund && npx prisma generate
+      - name: Authenticate CI image pulls
+        if: steps.resolve.outputs.skip != 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Boot the candidate and let DeepSeek flash drive it
+        if: steps.resolve.outputs.skip != 'true'
+        env:
+          OPENROUTER_EVAL_KEY: ${{ secrets.OPENROUTER_EVAL_KEY }}
+          CORE_SMOKE_TRUSTED_DEPENDENCIES: "true"
+          WORK: ${{ runner.temp }}/pstack-verifier
+        run: bash scripts/pstack-verifier-job.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/candidate" "$WORK"
+      - name: Upload screenshots
+        if: always() && steps.resolve.outputs.skip != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pstack-verifier-${{ steps.resolve.outputs.pr }}
+          path: ${{ runner.temp }}/pstack-verifier/shots
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Post the verdict
+        if: always() && steps.resolve.outputs.skip != 'true' && steps.resolve.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.resolve.outputs.sha }}
+          PR: ${{ steps.resolve.outputs.pr }}
+          WORK: ${{ runner.temp }}/pstack-verifier
+        run: node scripts/pstack-verifier.mjs post
