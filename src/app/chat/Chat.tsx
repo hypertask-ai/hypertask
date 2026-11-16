@@ -19,6 +19,10 @@ import {
   FULL_SCREEN_CHAT_RETURN_PARAM,
   resolveFullScreenChatReturnPath,
 } from "@/lib/aiChatDisplayMode";
+import {
+  nextCollapsedRailSections,
+  railCollapsedSections,
+} from "@/lib/aiChat/railSectionFold";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { IProject, ITeam } from "@/models/model";
 import {
@@ -47,6 +51,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer";
 import { HTPR_8963_SIDEBAR_SECTIONS_FLAG } from "@/lib/flags/definitions/htpr-8963-sidebar-sections";
+import { HTPR_9079_OLDER_RAIL_FOLDED_FLAG } from "@/lib/flags/definitions/htpr-9079-older-rail-folded";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const FULL_SCREEN_CHAT_RAIL_MIN_PX = 200;
@@ -428,6 +433,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const oneComposerFlag = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
   const sectionsEnabled = useFlag(HTPR_8963_SIDEBAR_SECTIONS_FLAG);
+  const olderStartsShut = useFlag(HTPR_9079_OLDER_RAIL_FOLDED_FLAG);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -443,9 +449,12 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const [aiChatPinnedSessionIds, setAiChatPinnedSessionIds] = useRecoilState(
     aiChatPinnedSessionIdsAtom
   );
-  const [collapsedRailSections, setCollapsedRailSections] = useRecoilState(
+  const [storedCollapsedRailSections, setCollapsedRailSections] = useRecoilState(
     aiChatCollapsedRailSectionsAtom
   );
+  const collapsedRailSections = olderStartsShut
+    ? railCollapsedSections(storedCollapsedRailSections, true)
+    : railCollapsedSections(storedCollapsedRailSections, false);
   const fullScreenChatScope =
     typeof fullScreenChatScopeState === "number"
       ? fullScreenChatScopeState
@@ -637,8 +646,12 @@ export default function Chat({ initialSessionId }: ChatProps) {
   });
 
   const toggleRailSection = (title: string) => {
+    const wasShut =
+      sectionsEnabled &&
+      searchQuery.trim().length === 0 &&
+      collapsedRailSections.includes(title);
     setCollapsedRailSections((current) =>
-      current.includes(title) ? current.filter((item) => item !== title) : [...current, title]
+      nextCollapsedRailSections(current, title, wasShut, olderStartsShut)
     );
   };
   const sectionLabelClass = `flex w-full items-center gap-1 rounded-[4px] pb-1 pt-2 text-left text-micro font-medium text-icon-dark-gray ${cleanupEnabled ? "px-1" : "px-3"}`;
