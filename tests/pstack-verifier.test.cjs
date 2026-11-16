@@ -64,7 +64,7 @@ test("the seeded cookie becomes a browser cookie and a click is recorded from th
   assert.deepEqual([cookies[0].httpOnly, cookies[1].httpOnly, cookies[1].secure, readSmokeEnv("CORE_SMOKE_COOKIE=nookies_user=abc; ht_session=signed\nCORE_SMOKE_PROJECT_ID=9\n").CORE_SMOKE_PROJECT_ID], [false, true, false, "9"]);
   const shots = [];
   const page = { url: () => `${base}/project?id=9`, async goto() { this.url = () => `${base}/detail/project-9/1`; }, getByText(text, options) { if (options?.exact !== true) throw new Error("inexact"); return { first: () => ({ click: async () => { shots.push(text); } }) }; }, getByLabel() { return { fill: async () => {} }; }, keyboard: { press: async () => {} }, async screenshot({ path: file }) { shots.push(file); }, locator() { return { innerText: async () => "Add field" }; } };
-  const result = await performOnPage(page, [allowAction({ op: "click", text: "Add field" })], "/tmp", 1, base);
+  const result = await performOnPage(page, [allowAction({ op: "click", text: "Add field" })], "/tmp", 1, base, smoke);
   assert.deepEqual(result.clicked, ["Add field"]);
   assert.equal(result.loggedIn, true);
   assert.equal((await performOnPage({ ...page, url: () => "about:blank", locator() { return { innerText: async () => "" }; } }, [], "/tmp", 1, base)).loggedIn, false);
@@ -107,7 +107,7 @@ test("a malformed reply keeps the post-action snapshot", async () => {
 test("pass acceptance matches the rule on seeded runs", async () => {
   const { acceptPass } = await load();
   const origin = new URL(base).origin;
-  const allowed = (pathname) => [["board", "/project"], ["task", "/detail/"], ["inbox", "/inbox"], ["settings", "/settings"]].some(([, prefix]) => prefix.endsWith("/") ? pathname.startsWith(prefix) : pathname === prefix || pathname.startsWith(`${prefix}/`));
+  const allowed = (value) => { let where; try { where = new URL(value); } catch { return false; } const path = where.pathname; if (path === "/inbox" || path.startsWith("/inbox/") || path === "/settings" || path.startsWith("/settings/")) return true; return (path === "/project" && where.searchParams.get("id") === "9") || path === "/detail/project-9/1"; };
   const place = (url) => { try { return new URL(url); } catch { return null; } };
   const reference = (events) => {
     for (let i = 0; i < events.length; i += 1) {
@@ -115,14 +115,14 @@ test("pass acceptance matches the rule on seeded runs", async () => {
       if (event.t !== "reply" || event.bad || event.actions || (event.verdict !== "PASS" && event.verdict !== "PASS+NOTES")) continue;
       const lastShow = prior.findLastIndex((item) => item.t === "show"), lastLand = prior.findLastIndex((item) => item.t === "land"), where = lastShow < 0 ? null : place(prior[lastShow].url);
       const stayed = prior.every((item) => (item.t !== "nav" && item.t !== "land") || place(item.url)?.origin === origin);
-      if (lastLand >= 0 && lastShow > lastLand && where?.origin === origin && allowed(where.pathname) && stayed) return event.verdict;
+      if (lastLand >= 0 && lastShow > lastLand && where?.origin === origin && allowed(prior[lastShow].url) && stayed) return event.verdict;
     }
     return "";
   };
   const app = `${base}/project?id=9`;
   const show = (url, extra = []) => [{ t: "land", url: app }, { t: "show", url: app }, ...extra, { t: "reply", verdict: "PASS" }];
   const fixed = [[show(app), "PASS"], [show(app, [{ t: "reply", actions: 1, verdict: "PASS" }]).slice(0, -1), ""], [[{ t: "land", url: app }, { t: "show", url: app }, { t: "land", url: `${base}/login` }, { t: "show", url: `${base}/login` }, { t: "reply", verdict: "PASS" }], ""], [show(app, [{ t: "nav", url: "https://127.0.0.1:3100/x" }]), ""], [[{ t: "land", url: app }, { t: "show", url: app }, { t: "reply", bad: true }, { t: "reply", verdict: "PASS+NOTES" }], "PASS+NOTES"], [[{ t: "land", url: "http://127.0.0.1:31001/x" }, { t: "show", url: "http://127.0.0.1:31001/x" }, { t: "reply", verdict: "PASS" }], ""], [[{ t: "land", url: `${base}/onboarding` }, { t: "show", url: `${base}/onboarding` }, { t: "reply", verdict: "PASS" }], ""], [[{ t: "land", url: `${base}/inbox` }, { t: "show", url: `${base}/inbox` }, { t: "reply", verdict: "PASS" }], "PASS"], [[{ t: "land", url: `${base}/settings` }, { t: "show", url: `${base}/settings` }, { t: "reply", verdict: "PASS" }], "PASS"], [[{ t: "land", url: `${base}/detail/project-9/1` }, { t: "show", url: `${base}/detail/project-9/1` }, { t: "reply", verdict: "PASS" }], "PASS"], [[{ t: "land", url: `${base}/interactive-onboarding/inbox` }, { t: "show", url: `${base}/interactive-onboarding/inbox` }, { t: "reply", verdict: "PASS" }], ""]];
-  for (const [events, want] of fixed) { assert.equal(reference(events), want); assert.equal(acceptPass(events, base), want); }
+  for (const [events, want] of fixed) { assert.equal(reference(events), want); assert.equal(acceptPass(events, base, smoke), want); }
   const urls = [app, `${base}/onboarding`, `${base}/login`, `${base}/unauthorized`, `${base}/inbox`, `${base}/settings`, `${base}/detail/project-9/1`, `${base}/interactive-onboarding/inbox`, "http://127.0.0.1:3101/project?id=9", "https://127.0.0.1:3100/project?id=9", "http://127.0.0.1:31001/x", "http://evil.example/x", "about:blank", ""];
   const verdicts = ["", "PASS", "PASS+NOTES", "FAIL"];
   let seed = 9381;
@@ -130,7 +130,7 @@ test("pass acceptance matches the rule on seeded runs", async () => {
   for (let i = 0; i < 500; i += 1) {
     const events = [];
     for (let n = 0, count = 1 + Math.floor(rand() * 14); n < count; n += 1) { const roll = rand(); events.push(roll < 0.3 ? { t: "show", url: pick(urls) } : roll < 0.55 ? { t: "land", url: pick(urls) } : roll < 0.7 ? { t: "nav", url: pick(urls) } : { t: "reply", bad: rand() < 0.25, actions: rand() < 0.45 ? 0 : 1, verdict: pick(verdicts) }); }
-    assert.equal(acceptPass(events, base), reference(events));
+    assert.equal(acceptPass(events, base, smoke), reference(events));
   }
 });
 test("the verifier seed satisfies the proxy onboarding check", async () => {
@@ -153,17 +153,7 @@ test("a pass on /onboarding is not a pass", async () => {
 });
 test("a redirect during the model call is not a pass", async () => {
   const { verifyLoop, performOnPage } = await load();
-  const run = async (flip) => {
-    const prompts = [];
-    let step = 0, hot = false;
-    const page = { url: () => `${base}${hot ? "/login" : "/project?id=9"}`, async screenshot() {}, getByText() { return { first: () => ({ click: async () => {} }) }; }, locator: () => ({ innerText: async () => (hot ? "Sign in" : "board") }) };
-    const result = await verifyLoop({
-      meta: { title: "t", body: "" }, diff: "", smoke, maxTurns: 3,
-      complete: async (prompt) => { prompts.push(prompt); step += 1; if (flip && step === 2) hot = true; return JSON.stringify(step < 2 ? { actions: [{ op: "click", text: "Cancel" }] } : { actions: [], verdict: step === 2 ? "PASS" : "FAIL" }); },
-      perform: (actions) => performOnPage(page, actions, "/tmp", step, base),
-    });
-    return { result, prompts };
-  };
+  const run = async (flip) => { const prompts = []; let step = 0, hot = false; const page = { url: () => `${base}${hot ? "/login" : "/project?id=9"}`, async screenshot() {}, getByText() { return { first: () => ({ click: async () => {} }) }; }, locator: () => ({ innerText: async () => (hot ? "Sign in" : "board") }) }; const result = await verifyLoop({ meta: { title: "t", body: "" }, diff: "", smoke, maxTurns: 3, complete: async (prompt) => { prompts.push(prompt); step += 1; if (flip && step === 2) hot = true; return JSON.stringify(step < 2 ? { actions: [{ op: "click", text: "Cancel" }] } : { actions: [], verdict: step === 2 ? "PASS" : "FAIL" }); }, perform: (actions) => performOnPage(page, actions, "/tmp", step, base) }); return { result, prompts }; };
   const moved = await run(true);
   assert.equal(moved.result.verdict, "FAIL");
   assert.deepEqual([/click ok/.test(moved.prompts[1]), /\/project\?id=9/.test(moved.prompts[1]), /\/login[\s\S]*Sign in/.test(moved.prompts[2])], [false, true, true]);
@@ -171,22 +161,15 @@ test("a redirect during the model call is not a pass", async () => {
 });
 test("a pass re-reads the live page before it is accepted", async () => {
   const { verifyLoop, performOnPage } = await load();
-  const run = async (move) => {
-    let step = 0, waits = 0, settled = false;
-    const page = { url: () => `${base}${settled ? "/login" : "/project?id=9"}`, async waitForLoadState() { waits += 1; if (move && waits >= 2) settled = true; }, async screenshot() {}, getByText: () => ({ first: () => ({ click: async () => {} }) }), locator: () => ({ innerText: async () => (settled ? "Sign in" : "board") }) };
-    return verifyLoop({ meta: { title: "t", body: "" }, diff: "", smoke, maxTurns: 2, complete: async () => JSON.stringify(++step < 2 ? { actions: [{ op: "click", text: "Cancel" }] } : { actions: [], verdict: "PASS" }), perform: (actions) => performOnPage(page, actions, "/tmp", step, base) });
-  };
+  const run = async (move) => { let step = 0, waits = 0, settled = false; const page = { url: () => `${base}${settled ? "/login" : "/project?id=9"}`, async waitForLoadState() { waits += 1; if (move && waits >= 2) settled = true; }, async screenshot() {}, getByText: () => ({ first: () => ({ click: async () => {} }) }), locator: () => ({ innerText: async () => (settled ? "Sign in" : "board") }) }; return verifyLoop({ meta: { title: "t", body: "" }, diff: "", smoke, maxTurns: 2, complete: async () => JSON.stringify(++step < 2 ? { actions: [{ op: "click", text: "Cancel" }] } : { actions: [], verdict: "PASS" }), perform: (actions) => performOnPage(page, actions, "/tmp", step, base) }); };
   assert.equal((await run(true)).verdict, "FAIL");
   assert.equal((await run(false)).verdict, "PASS");
 });
 test("a cookie refreshed from the seeded database user stays onboarded", async () => {
-  const { coreSmokeUserSetting } = await load();
-  const { loadModule } = require("./helpers/loadModule.cjs");
+  const { coreSmokeUserSetting } = await load(), { loadModule } = require("./helpers/loadModule.cjs");
   const { checkIfOnboarded } = loadModule("src/proxy.ts", { "./utils/edgeHelpers": {}, "./utils/helperFunctions/helperFunctions": {}, "./utils/serverActions": {}, "@/lib/auth/agentCookieBridgeRoutes": {}, "@/lib/auth/cookieIdentity": {}, "@/lib/auth/safeReturnTo": {}, "@/lib/auth/sessionEdge": {}, "@/lib/auth/sessionRevocation": {}, "@/lib/net/contentEncoding": {}, "@/lib/routing/detailWithoutTicket": {}, "@/lib/telemetry/signupAnalytics": {}, "@/lib/tutorial/keyboardShortcutTutorial": {}, "next/server": {} });
-  const { slimUserForCookie } = loadModule("src/lib/auth/slimUserCookie.ts");
-  const stored = (setting) => ({ id: 7, email: "core-smoke@example.invalid", displayName: "Core smoke user", photoURL: null, UserSetting: setting });
-  assert.equal(checkIfOnboarded(slimUserForCookie(stored(coreSmokeUserSetting))), true);
-  assert.equal(Boolean(checkIfOnboarded(slimUserForCookie(stored({ notification: false })))), false);
+  const { slimUserForCookie } = loadModule("src/lib/auth/slimUserCookie.ts"), stored = (setting) => ({ id: 7, email: "core-smoke@example.invalid", displayName: "Core smoke user", photoURL: null, UserSetting: setting });
+  assert.deepEqual([checkIfOnboarded(slimUserForCookie(stored(coreSmokeUserSetting))), Boolean(checkIfOnboarded(slimUserForCookie(stored({ notification: false }))))], [true, false]);
 });
 test("a click that opens a new page is judged on that page", async () => {
   const { performOnPage, verifyLoop } = await load();
@@ -195,9 +178,28 @@ test("a click that opens a new page is judged on that page", async () => {
   const opened = await performOnPage(opener(true), [{ op: "click", text: "Pull request" }], "/tmp", 1, base);
   assert.deepEqual([opened.url, opened.page, opened.loggedIn, opened.snapshot.endsWith("Welcome"), opened.snapshot.includes("Seeded column")], [popupUrl, popup, false, true, false]);
   const missed = await performOnPage(opener(false), [{ op: "click", text: "Pull request" }], "/tmp", 1, base);
-  assert.equal(missed.url, "about:blank");
-  assert.equal(missed.snapshot.includes("Seeded column"), false);
+  assert.deepEqual([missed.url, missed.snapshot.includes("Seeded column")], ["about:blank", false]);
   let step = 0;
-  const judged = await verifyLoop({ meta: { title: "t", body: "" }, diff: "", smoke, maxTurns: 2, complete: async () => JSON.stringify(++step < 2 ? { actions: [{ op: "click", text: "Pull request" }] } : { actions: [], verdict: "PASS" }), perform: (actions) => performOnPage(opener(true), actions, "/tmp", step, base) });
-  assert.equal(judged.verdict, "FAIL");
+  assert.equal((await verifyLoop({ meta: { title: "t", body: "" }, diff: "", smoke, maxTurns: 2, complete: async () => JSON.stringify(++step < 2 ? { actions: [{ op: "click", text: "Pull request" }] } : { actions: [], verdict: "PASS" }), perform: (actions) => performOnPage(opener(true), actions, "/tmp", step, base) })).verdict, "FAIL");
+});
+test("a 404 or unseeded route is not a pass", async () => {
+  const run = async (snapshot, status) => { let step = 0; return drive(async () => (++step < 3 ? JSON.stringify({ actions: [{ op: "click", text: "Cancel" }] }) : JSON.stringify({ actions: [], verdict: "PASS" })), async () => ({ clicked: ["Cancel"], shots: [], status, snapshot })); };
+  assert.equal((await run(`${base}/project/not-a-route\n404\nThis page could not be found.`, 404)).verdict, "FAIL"); assert.equal((await run(`${base}/project?id=9\nThis page could not be found.`)).verdict, "FAIL");
+  assert.equal((await run(`${base}/project?id=9\nSomething went wrong`, 500)).verdict, "FAIL"); assert.equal((await run(`${base}/project?id=9\nboard`, 404)).verdict, "FAIL");
+  assert.equal((await run(`${base}/project?id=8\nboard`)).verdict, "FAIL");
+  assert.equal((await run(`${base}/detail/project-8/1\nboard`)).verdict, "FAIL");
+  assert.equal((await run(`${base}/project?id=9\nboard`)).verdict, "PASS");
+  assert.equal((await run(`${base}/detail/project-9/1\nboard`)).verdict, "PASS");
+});
+test("a thrown blank-target click settles the popup waiter", async () => {
+  const { performOnPage } = await load(), unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    let rejectWaiter; const waiter = new Promise((_, reject) => { rejectWaiter = reject; });
+    const page = { url: () => `${base}/project?id=9`, context: () => ({ waitForEvent: () => waiter }), getByText: () => ({ first: () => ({ getAttribute: async () => "_blank", click: async () => { rejectWaiter(new Error("popup waiter timed out")); throw new Error("element is detached"); } }) }), async screenshot() {}, locator: () => ({ innerText: async () => "board" }) };
+    const result = await performOnPage(page, [{ op: "click", text: "Pull request" }], "/tmp", 1, base);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual([unhandled.length, /click failed: element is detached/.test(result.snapshot)], [0, true]);
+  } finally { process.off("unhandledRejection", onUnhandled); }
 });
