@@ -26,13 +26,15 @@ export function finish(area, steps, broken, targetName) {
 }
 
 export function readArgs(argv) {
-  const args = { breakStep: "", base: "", state: "", board: "", dir: "" };
+  const args = { breakStep: "", base: "", state: "", board: "", dir: "", phone: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--break") args.breakStep = argv[index += 1] ?? "";
     else if (arg === "--base") args.base = argv[index += 1] ?? "";
     else if (arg === "--state") args.state = argv[index += 1] ?? "";
     else if (arg === "--board") args.board = argv[index += 1] ?? "";
+    else if (arg === "--page") index += 1;
+    else if (arg === "--phone") args.phone = true;
     else if (!arg.startsWith("--") && !args.dir) args.dir = arg;
   }
   return args;

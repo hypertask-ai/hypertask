@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { access, appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { access, appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { AREA_CLICKS, clickExpect, matchClickPlans } from '../../.claude/skills/verify-qa/scripts/area-clicks.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const FEATURE_MAP_DIR = '.claude/skills/verify-qa/reference/feature-map'
@@ -74,12 +75,29 @@ export function selectJourney(files, catalog = FEATURE_MAP_CATALOG) {
   if (ranked.length === 0) reason = 'no feature-map page matched the diff'
   else if (tied) reason = `tie: ${leaders.join(', ')}`
   else if (!journey) reason = `no premerge driver for ${matched}`
-  return {
+  const base = {
     matchedPage: matched,
     journey,
     reason,
     featureMap: matched ? `${FEATURE_MAP_DIR}/${matched}` : null,
     counts: Object.fromEntries(ranked),
+    click: null,
+  }
+  if (journey || catalog !== FEATURE_MAP_CATALOG) return base
+  const planned = matched ? AREA_CLICKS.find((plan) => plan.page === matched) : null
+  if (planned) {
+    return { ...base, click: planned, reason: planned.kind === 'none' ? planned.reason : 'click script' }
+  }
+  if (ranked.length > 0) return base
+  const picked = matchClickPlans(files, AREA_CLICKS)
+  if (!picked || picked.tie) return base
+  return {
+    matchedPage: picked.plan.page,
+    journey: null,
+    reason: picked.plan.kind === 'none' ? picked.plan.reason : 'click script',
+    featureMap: `${FEATURE_MAP_DIR}/${picked.plan.page}`,
+    counts: picked.counts,
+    click: picked.plan,
   }
 }
 
@@ -361,6 +379,25 @@ async function loadInboxFixture(fixturePath) {
   return items
 }
 
+export async function runAreaClick({ base, plan, outDir, stateFile }, execute = spawnSync) {
+  const script = plan.script || 'area-click-drive.mjs'
+  const expect = clickExpect(plan)
+  const args = [path.join(root, '.claude/skills/verify-qa/scripts', script), outDir, '--base', base, '--state', stateFile]
+  if (!plan.script) args.push('--page', plan.page)
+  if (plan.phone) args.push('--phone')
+  const child = execute(process.execPath, args, { cwd: root, encoding: 'utf8', timeout: 150_000 })
+  if (child.error) throw new Error(`click script: ${child.error.message}`)
+  const output = `${child.stdout || ''}${child.stderr || ''}`
+  const pass = child.status === 0 && output.includes(expect)
+  const screenshots = (await readdir(outDir).catch(() => [])).filter((name) => name.endsWith('.png') || name.endsWith('.webm'))
+  return {
+    steps: [{ name: plan.page, pass, detail: { exit: child.status, expected: expect } }],
+    screenshots,
+    verdict: pass ? 'PASS' : 'FAIL',
+    failure: pass ? null : `click script failed for ${plan.page}`,
+  }
+}
+
 export async function runTaggedJourneys({ base, journey, outDir }, execute = spawnSync) {
   const reportFile = path.join(outDir, 'journeys.json')
   const run = execute(process.execPath, [
@@ -436,6 +473,16 @@ async function main() {
   try {
     await mkdir(outDir, { recursive: true })
     if (namedJourney && namedJourney !== 'inbox-cycle') throw new Error('Unknown named verify-qa journey')
+    if (!choice.journey && choice.click?.kind === 'screen') {
+      result.base = assertLoopback(baseRaw)
+      const stateFile = process.env.VERIFY_QA_STATE_FILE
+      if (!stateFile) throw new Error('VERIFY_QA_STATE_FILE is required')
+      await access(stateFile)
+      Object.assign(result, await runAreaClick({ base: result.base, plan: choice.click, outDir, stateFile }))
+      await writeEvidence(outDir, result)
+      finish(result)
+      return
+    }
     if (!choice.journey) {
       result.verdict = 'UNREACHABLE'
       result.failure = `no driver: ${choice.reason}`

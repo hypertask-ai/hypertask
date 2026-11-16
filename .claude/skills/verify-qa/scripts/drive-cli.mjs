@@ -6,6 +6,15 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { finish, readArgs, requireLoopback } from "./drive-grade.mjs";
 
+export function browserContextOptions(base, state, dir, viewport = { width: 1440, height: 900 }) {
+  return {
+    baseURL: base,
+    storageState: state,
+    viewport,
+    recordVideo: { dir, size: viewport },
+  };
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 export async function driveMain(area, argv, breaks, run) {
@@ -28,7 +37,8 @@ export async function driveMain(area, argv, breaks, run) {
   const browser = await chromium.launch();
   let task;
   try {
-    const context = await browser.newContext({ baseURL: base, storageState: state, viewport: { width: 1440, height: 900 } });
+    const viewport = args.phone ? { width: 390, height: 844 } : { width: 1440, height: 900 };
+    const context = await browser.newContext(browserContextOptions(base, state, dir, viewport));
     const page = await context.newPage();
     const fixture = JSON.parse(await fs.readFile(path.join(root, "e2e/smoke/.state/card-fixture.json"), "utf8").catch(() => "{}"));
     const board = args.board || fixture.boardPath || `/project?id=${/^\/detail\/project-(\d+)\//.exec(fixture.detailPath || "")?.[1]}&surface=board`;

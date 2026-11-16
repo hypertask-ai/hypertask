@@ -1,0 +1,80 @@
+const test = require("node:test")
+const assert = require("node:assert/strict")
+const fs = require("node:fs")
+const os = require("node:os")
+const path = require("node:path")
+
+const root = path.resolve(__dirname, "..")
+const clicks = path.join(root, ".claude/skills/verify-qa/scripts/area-clicks.mjs")
+const premerge = path.join(root, ".github/scripts/verify-qa-premerge.mjs")
+const drive = path.join(root, ".claude/skills/verify-qa/scripts/drive-cli.mjs")
+
+test("a screen is ready only on its own path and title", async () => {
+  const { screenReady, openedPath, planForPage } = await import(clicks)
+  const plan = planForPage("my-tasks.md")
+  assert.equal(screenReady({ url: "http://127.0.0.1:3100/my-tasks?realtime=on", title: "My Tasks" }, plan), true)
+  assert.equal(screenReady({ url: "http://127.0.0.1:3100/my-tasks", title: "Inbox" }, plan), false)
+  assert.equal(screenReady({ url: "http://127.0.0.1:3100/inbox", title: "My Tasks" }, plan), false)
+  assert.equal(openedPath("http://127.0.0.1:3100/settings/billing", "/settings/webhooks"), false)
+  assert.equal(openedPath("http://127.0.0.1:3100/agents/chat?view=rooms&realtime=on", "/agents/chat?view=rooms"), true)
+  const rooms = planForPage("agent-rooms.md")
+  assert.equal(screenReady({ url: "http://127.0.0.1:3100/agents/chat?view=rooms", title: "Agent Chat", text: "Board rooms" }, rooms), true)
+  assert.equal(screenReady({ url: "http://127.0.0.1:3100/agents/chat", title: "Agent Chat", text: "Board rooms" }, rooms), false)
+  const share = planForPage("task-share-links.md")
+  assert.equal(screenReady({ url: "http://127.0.0.1:3100/detail/project-7/9?realtime=on", selector: true }, { ...share, path: "/detail/project-7/9" }), true)
+  assert.equal(screenReady({ url: "http://127.0.0.1:3100/detail/project-7/9", selector: true }, share), false)
+})
+
+test("every feature area has a click plan or an existing smoke journey, and stale plans fail", async () => {
+  const { clickCoverage, missingPrefixPaths, AREA_CLICKS } = await import(clicks)
+  const { FEATURE_MAP_CATALOG } = await import(premerge)
+  const pages = fs.readdirSync(path.join(root, ".claude/skills/verify-qa/reference/feature-map")).filter((name) => name.endsWith(".md"))
+  const smoke = FEATURE_MAP_CATALOG.filter((entry) => entry.journey).map((entry) => entry.page)
+  assert.deepEqual(clickCoverage(pages, AREA_CLICKS, smoke), { missing: [], stale: [] })
+  assert.equal(AREA_CLICKS.every((plan) => plan.prefixes.length === 1 && plan.prefixes[0]), true)
+  assert.deepEqual(missingPrefixPaths(root, AREA_CLICKS), [])
+  const extra = clickCoverage([...pages, "gone.md"], [...AREA_CLICKS, { page: "retired.md", kind: "none", prefixes: [] }], smoke)
+  assert.deepEqual(extra.missing, ["gone.md"])
+  assert.deepEqual(extra.stale, ["retired.md"])
+})
+
+test("a pull request for an area without a smoke journey runs that area click script", async () => {
+  const { selectJourney, runAreaClick } = await import(premerge)
+  const mine = selectJourney(["src/app/my-tasks/page.tsx"])
+  assert.equal(mine.reason, "click script")
+  assert.equal(mine.click.page, "my-tasks.md")
+  const starred = selectJourney(["src/app/starred/StarredComp.tsx"])
+  assert.equal(starred.matchedPage, "starred.md")
+  assert.equal(starred.click.path, "/starred")
+  const flags = selectJourney(["src/app/api/mcp/flags/route.ts"])
+  assert.equal(flags.click.script, "flags-drive-live.mjs")
+  assert.equal(flags.reason, "click script")
+  const ci = selectJourney([".github/workflows/ci-tests.yml"])
+  assert.equal(ci.matchedPage, "ci-tests.md")
+  assert.equal(ci.click.kind, "none")
+  assert.equal(ci.journey, null)
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "area-click-"))
+  const result = await runAreaClick({
+    base: "http://127.0.0.1:3100", plan: mine.click, outDir: out, stateFile: path.join(out, "state.json"),
+  }, (command, args) => {
+    assert.equal(command, process.execPath)
+    assert.equal(args[0], path.join(root, ".claude/skills/verify-qa/scripts/area-click-drive.mjs"))
+    assert.equal(args.at(-2), "--page")
+    assert.equal(args.at(-1), "my-tasks.md")
+    return { status: 0, stdout: "my-tasks ok\n", stderr: "" }
+  })
+  assert.equal(result.verdict, "PASS")
+  const missed = await runAreaClick({
+    base: "http://127.0.0.1:3100", plan: mine.click, outDir: out, stateFile: path.join(out, "state.json"),
+  }, () => ({ status: 1, stdout: "my-tasks FAIL: screen ready\n", stderr: "" }))
+  assert.equal(missed.verdict, "FAIL")
+  fs.rmSync(out, { recursive: true, force: true })
+})
+
+test("the shared driver records a short video beside the screenshots", async () => {
+  const { browserContextOptions } = await import(drive)
+  const options = browserContextOptions("http://127.0.0.1:3100", "/tmp/state.json", "/tmp/evidence", { width: 390, height: 844 })
+  assert.deepEqual(options.recordVideo, { dir: "/tmp/evidence", size: { width: 390, height: 844 } })
+  assert.deepEqual(options.viewport, { width: 390, height: 844 })
+  assert.equal(browserContextOptions("http://127.0.0.1:3100", "/tmp/state.json", "/tmp/evidence").recordVideo.dir, "/tmp/evidence")
+})

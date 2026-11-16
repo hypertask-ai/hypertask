@@ -38,13 +38,15 @@ test('changed pages select their own drivers, never an inbox fallback', async ()
   }
   for (const files of [[], ['docs/ci.md'], ['.github/scripts/verify-qa-premerge.mjs']]) {
     assert.deepEqual(selectJourney(files), {
-      matchedPage: null, journey: null, reason: 'no feature-map page matched the diff', featureMap: null, counts: {},
+      matchedPage: null, journey: null, reason: 'no feature-map page matched the diff', featureMap: null, counts: {}, click: null,
     })
   }
   const unsupported = selectJourney(['src/app/my-tasks/page.tsx'])
   assert.equal(unsupported.matchedPage, 'my-tasks.md')
   assert.equal(unsupported.journey, null)
-  assert.equal(unsupported.reason, 'no premerge driver for my-tasks.md')
+  assert.equal(unsupported.reason, 'click script')
+  assert.equal(unsupported.click.path, '/my-tasks')
+  assert.equal(unsupported.click.ready, 'My Tasks')
   const tie = selectJourney(['src/app/inbox/page.tsx', 'src/app/my-tasks/page.tsx'])
   assert.equal(tie.matchedPage, null)
   assert.equal(tie.journey, null)
@@ -125,10 +127,10 @@ test('tagged runner passes selected IDs, PR base and opt-in to Playwright and ev
 test('unmatched, unsupported and tied diffs write UNREACHABLE without loading a browser or fixture', (t) => {
   const dir = tempDir(t)
   const changed = path.join(dir, 'changed.txt')
-  for (const [index, files] of [
-    ['unmatched', ['docs/ci.md']],
-    ['unsupported', ['src/app/my-tasks/page.tsx']],
-    ['tie', ['src/app/inbox/page.tsx', 'src/app/my-tasks/page.tsx']],
+  for (const [index, files, verdict, warning] of [
+    ['unmatched', ['docs/ci.md'], 'UNREACHABLE', /::warning::verify-qa UNREACHABLE: no driver:/],
+    ['click', ['src/app/my-tasks/page.tsx'], 'FAIL', /::warning::verify-qa FAIL: verify-qa base is not a URL/],
+    ['tie', ['src/app/inbox/page.tsx', 'src/app/my-tasks/page.tsx'], 'UNREACHABLE', /::warning::verify-qa UNREACHABLE: no driver:/],
   ]) {
     fs.writeFileSync(changed, files.join('\n'))
     const out = path.join(dir, index)
@@ -139,12 +141,12 @@ test('unmatched, unsupported and tied diffs write UNREACHABLE without loading a 
       VERIFY_QA_STATE_FILE: path.join(dir, 'missing-state'), VERIFY_QA_FIXTURE: path.join(dir, 'missing-fixture'),
     } })
     assert.equal(child.status, 0, child.stderr)
-    assert.match(child.stdout, /::warning::verify-qa UNREACHABLE: no driver:/)
+    assert.match(child.stdout, warning)
     const result = JSON.parse(fs.readFileSync(path.join(out, 'result.json'), 'utf8'))
-    assert.equal(result.verdict, 'UNREACHABLE')
+    assert.equal(result.verdict, verdict)
     assert.equal(result.journey, null)
-    assert.deepEqual(result.steps, [])
-    assert.match(fs.readFileSync(summary, 'utf8'), /Verdict: \*\*UNREACHABLE\*\*/)
+    if (verdict === 'UNREACHABLE') assert.deepEqual(result.steps, [])
+    assert.match(fs.readFileSync(summary, 'utf8'), new RegExp(`Verdict: \\*\\*${verdict}\\*\\*`))
     assert.doesNotMatch(child.stdout, /verify-qa ok/)
   }
 })
