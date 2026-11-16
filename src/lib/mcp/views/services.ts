@@ -8,6 +8,7 @@ import { unresolvedLabelMessage } from '@/lib/mcp/labelMessages';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_8135_VIEW_LABEL_ERROR_FLAG } from '@/lib/flags/definitions/htpr-8135-view-label-error';
 import { HTPR_8171_HIDE_TAGS_FLAG } from '@/lib/flags/definitions/htpr-8171-hide-tags';
+import { HTPR_9371_VIEW_ME_ASSIGNEE_FLAG } from '@/lib/flags/definitions/htpr-9371-view-me-assignee';
 import { broadcastBoardChange } from '@/lib/realtime/server';
 import { sanitizeBoardFilters } from '@/utils/helperFunctions/Views/BoardFilterSanitizer';
 import { EmptySections, Prisma, SortingMode, SortingOrder, SubtaskSetting, ViewVisibility } from '@prisma/client';
@@ -118,13 +119,30 @@ async function buildLabelsFilterEntry(
     }, labelMatch);
 }
 
+const SELF_ASSIGNEE = 'me';
+
+async function resolveSelfAssignee(
+    assigneeId: number | string,
+    userId?: number,
+    agentId?: string | null,
+): Promise<number | string> {
+    if (typeof assigneeId !== 'string' || assigneeId.trim().toLowerCase() !== SELF_ASSIGNEE) return assigneeId;
+    if (userId === undefined) return assigneeId;
+    if (!await isFeatureEnabled(HTPR_9371_VIEW_ME_ASSIGNEE_FLAG, userId).catch(() => false)) return assigneeId;
+    return agentId ?? userId;
+}
+
 async function buildAssigneesFilterEntry(
     projectId: number,
-    assigneeIds?: Array<number | string>
+    assigneeIds?: Array<number | string>,
+    userId?: number,
+    agentId?: string | null,
 ): Promise<BoardFilterEntry | undefined> {
     if (!assigneeIds?.length) return undefined;
 
-    const uniqueAssigneeIds = [...new Set(assigneeIds)];
+    const uniqueAssigneeIds = [...new Set(
+        await Promise.all(assigneeIds.map((assigneeId) => resolveSelfAssignee(assigneeId, userId, agentId)))
+    )];
     const userIds = uniqueAssigneeIds.filter(
         (assigneeId): assigneeId is number => typeof assigneeId === 'number'
     );
@@ -172,7 +190,12 @@ async function buildAssigneesFilterEntry(
     };
 }
 
-async function buildValidatedNativeBoardFilters(projectId: number, value: unknown) {
+async function buildValidatedNativeBoardFilters(
+    projectId: number,
+    value: unknown,
+    userId?: number,
+    agentId?: string | null,
+) {
     const normalized = normalizeNativeBoardFilters(value);
     const entries = normalized.addedFilters as Array<{
         type: string;
@@ -184,7 +207,9 @@ async function buildValidatedNativeBoardFilters(projectId: number, value: unknow
 
     const canonical = await buildAssigneesFilterEntry(
         projectId,
-        assignees.searchPayload.map((item) => item.id!).filter((id) => id !== undefined)
+        assignees.searchPayload.map((item) => item.id!).filter((id) => id !== undefined),
+        userId,
+        agentId,
     );
     return {
         ...normalized,
@@ -212,6 +237,7 @@ async function applyLegacyFiltersToBoardFilters(
     baseBoardFilters: unknown,
     filters: CreateViewFilters,
     userId: number | undefined,
+    agentId?: string | null,
 ) {
     const base = baseBoardFilters && typeof baseBoardFilters === 'object' && !Array.isArray(baseBoardFilters)
         ? baseBoardFilters as { matchFilters?: unknown }
@@ -239,7 +265,7 @@ async function applyLegacyFiltersToBoardFilters(
     const assigneesEntry = filters.assignee_ids === undefined
         ? storedEntry('Assignees')
         : keepMatch(
-              await buildAssigneesFilterEntry(projectId, filters.assignee_ids),
+              await buildAssigneesFilterEntry(projectId, filters.assignee_ids, userId, agentId),
               'Assignees',
           );
     const existingMatchFilters =
@@ -253,7 +279,12 @@ async function applyLegacyFiltersToBoardFilters(
     });
 }
 
-async function buildBoardFilters(projectId: number, filters?: CreateViewFilters, userId?: number) {
+async function buildBoardFilters(
+    projectId: number,
+    filters?: CreateViewFilters,
+    userId?: number,
+    agentId?: string | null,
+) {
     const addedFilters: BoardFilterEntry[] = [];
 
     const labelsEntry = await buildLabelsFilterEntry(
@@ -264,7 +295,7 @@ async function buildBoardFilters(projectId: number, filters?: CreateViewFilters,
     );
     if (labelsEntry) addedFilters.push(labelsEntry);
 
-    const assigneesEntry = await buildAssigneesFilterEntry(projectId, filters?.assignee_ids);
+    const assigneesEntry = await buildAssigneesFilterEntry(projectId, filters?.assignee_ids, userId, agentId);
     if (assigneesEntry) addedFilters.push(assigneesEntry);
 
     return {
@@ -294,8 +325,8 @@ export async function createView(input: CreateViewInput) {
     }
 
     const board_filters = input.board_filters === undefined
-        ? sanitizeBoardFilters(await buildBoardFilters(projectId, input.filters, userId))
-        : await buildValidatedNativeBoardFilters(projectId, input.board_filters);
+        ? sanitizeBoardFilters(await buildBoardFilters(projectId, input.filters, userId, input.agentId))
+        : await buildValidatedNativeBoardFilters(projectId, input.board_filters, userId, input.agentId);
     const boardColumns = input.visible_section_ids === undefined
         ? await allBoardColumns(projectId)
         : await canonicalBoardColumns(projectId, input.visible_section_ids);
@@ -414,10 +445,10 @@ export async function updateView(input: UpdateViewInput) {
     const data: Prisma.ViewUpdateInput = {};
 
     if (input.board_filters !== undefined) {
-        const nativeBoardFilters = await buildValidatedNativeBoardFilters(projectId, input.board_filters);
+        const nativeBoardFilters = await buildValidatedNativeBoardFilters(projectId, input.board_filters, userId, agentId);
         data.board_filters = (input.filters === undefined
             ? nativeBoardFilters
-            : await applyLegacyFiltersToBoardFilters(projectId, nativeBoardFilters, input.filters, userId)
+            : await applyLegacyFiltersToBoardFilters(projectId, nativeBoardFilters, input.filters, userId, agentId)
         ) as Prisma.InputJsonValue;
     }
     if (input.visible_section_ids !== undefined) {
@@ -458,6 +489,7 @@ export async function updateView(input: UpdateViewInput) {
             view.board_filters,
             input.filters,
             userId,
+            agentId,
         ) as Prisma.InputJsonValue;
     }
 
