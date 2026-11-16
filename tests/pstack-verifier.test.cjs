@@ -5,10 +5,12 @@ const base = "http://127.0.0.1:3100";
 const smoke = { cookie: "nookies_user=secret-cookie-value; ht_session=second-cookie-value", key: "secret-model-key", boardPath: "/project?id=9", taskPath: "/detail/project-9/1", base };
 const drive = async (complete, perform, maxTurns = 3) => (await load()).verifyLoop({ meta: { title: "t", body: "" }, diff: "", smoke, maxTurns, complete, perform });
 test("the verifier model is DeepSeek flash and never Pro or Claude", async () => {
-  const { MODEL, assertFlashModel, chatBody } = await load();
-  assert.equal(assertFlashModel(MODEL), "deepseek/deepseek-v4.1-flash");
+  const { PSTACK_VERIFIER, assertFlashModel, chatBody } = await load();
+  assert.deepEqual([assertFlashModel(PSTACK_VERIFIER.model), PSTACK_VERIFIER.endpoint], ["deepseek/deepseek-v4.1-flash", "https://openrouter.ai/api/v1/chat/completions"]);
+  assert.match(require("node:fs").readFileSync("docs/ci-policy.yml", "utf8"), /pstack_verifier:\n  model: deepseek\/deepseek-v4\.1-flash/);
+  assert.match(require("node:fs").readFileSync("docs/ci.md", "utf8"), /The CI verifier calls DeepSeek Flash through OpenRouter with OPENROUTER_EVAL_KEY; agent-session harness rules do not apply to CI jobs\./);
   for (const model of ["deepseek/deepseek-v4-pro", "deepseek/deepseek-v4.1-pro", "anthropic/claude-opus-4.5", "openai/gpt-4.1"]) assert.throws(() => assertFlashModel(model), /refusing model/);
-  assert.equal(chatBody(MODEL, "drive").model, MODEL);
+  assert.equal(chatBody(PSTACK_VERIFIER.model, "drive").model, PSTACK_VERIFIER.model);
 });
 test("actions stay on the seeded app and a pass names the clicks", async () => {
   const { allowPath, allowAction, parseAnswer, statusPayload } = await load();
@@ -110,7 +112,7 @@ test("the model request uses the flash model and does not put the key in the bod
     fetchImpl: async (url, init) => { seen = { url, init }; return { ok: true, json: async () => ({ choices: [{ message: { content: "{\"verdict\":\"FAIL\"}" } }] }) }; },
   });
   assert.equal(content, "{\"verdict\":\"FAIL\"}");
-  assert.equal(seen.url, "https://openrouter.ai/api/v1/chat/completions");
+  assert.equal(seen.url, (await load()).PSTACK_VERIFIER.endpoint);
   assert.equal(seen.init.headers.Authorization, "Bearer test-openrouter-key");
   assert.doesNotMatch(seen.init.body, /test-openrouter-key/);
   assert.match(seen.init.body, /deepseek\/deepseek-v4\.1-flash/);
@@ -150,7 +152,7 @@ test("a malformed reply keeps the post-action snapshot", async () => {
 test("pass acceptance matches the rule on seeded runs", async () => {
   const { acceptPass } = await load();
   const origin = new URL(base).origin;
-  const login = /\/(login|unauthorized)(?:$|\/)/;
+  const allowed = (pathname) => [["board", "/project"], ["task", "/detail/"], ["inbox", "/inbox"], ["settings", "/settings"]].some(([, prefix]) => prefix.endsWith("/") ? pathname.startsWith(prefix) : pathname === prefix || pathname.startsWith(`${prefix}/`));
   const place = (url) => { try { return new URL(url); } catch { return null; } };
   const reference = (events) => {
     for (let i = 0; i < events.length; i += 1) {
@@ -161,15 +163,15 @@ test("pass acceptance matches the rule on seeded runs", async () => {
       const lastLand = prior.findLastIndex((item) => item.t === "land");
       const where = lastShow < 0 ? null : place(prior[lastShow].url);
       const stayed = prior.every((item) => (item.t !== "nav" && item.t !== "land") || place(item.url)?.origin === origin);
-      if (lastLand >= 0 && lastShow > lastLand && where?.origin === origin && !login.test(where.pathname) && stayed) return event.verdict;
+      if (lastLand >= 0 && lastShow > lastLand && where?.origin === origin && allowed(where.pathname) && stayed) return event.verdict;
     }
     return "";
   };
   const app = `${base}/project?id=9`;
   const show = (url, extra = []) => [{ t: "land", url: app }, { t: "show", url: app }, ...extra, { t: "reply", verdict: "PASS" }];
-  const fixed = [[show(app), "PASS"], [show(app, [{ t: "reply", actions: 1, verdict: "PASS" }]).slice(0, -1), ""], [[{ t: "land", url: app }, { t: "show", url: app }, { t: "land", url: `${base}/login` }, { t: "show", url: `${base}/login` }, { t: "reply", verdict: "PASS" }], ""], [show(app, [{ t: "nav", url: "https://127.0.0.1:3100/x" }]), ""], [[{ t: "land", url: app }, { t: "show", url: app }, { t: "reply", bad: true }, { t: "reply", verdict: "PASS+NOTES" }], "PASS+NOTES"], [[{ t: "land", url: "http://127.0.0.1:31001/x" }, { t: "show", url: "http://127.0.0.1:31001/x" }, { t: "reply", verdict: "PASS" }], ""]];
+  const fixed = [[show(app), "PASS"], [show(app, [{ t: "reply", actions: 1, verdict: "PASS" }]).slice(0, -1), ""], [[{ t: "land", url: app }, { t: "show", url: app }, { t: "land", url: `${base}/login` }, { t: "show", url: `${base}/login` }, { t: "reply", verdict: "PASS" }], ""], [show(app, [{ t: "nav", url: "https://127.0.0.1:3100/x" }]), ""], [[{ t: "land", url: app }, { t: "show", url: app }, { t: "reply", bad: true }, { t: "reply", verdict: "PASS+NOTES" }], "PASS+NOTES"], [[{ t: "land", url: "http://127.0.0.1:31001/x" }, { t: "show", url: "http://127.0.0.1:31001/x" }, { t: "reply", verdict: "PASS" }], ""], [[{ t: "land", url: `${base}/onboarding` }, { t: "show", url: `${base}/onboarding` }, { t: "reply", verdict: "PASS" }], ""], [[{ t: "land", url: `${base}/inbox` }, { t: "show", url: `${base}/inbox` }, { t: "reply", verdict: "PASS" }], "PASS"], [[{ t: "land", url: `${base}/settings` }, { t: "show", url: `${base}/settings` }, { t: "reply", verdict: "PASS" }], "PASS"], [[{ t: "land", url: `${base}/detail/project-9/1` }, { t: "show", url: `${base}/detail/project-9/1` }, { t: "reply", verdict: "PASS" }], "PASS"], [[{ t: "land", url: `${base}/interactive-onboarding/inbox` }, { t: "show", url: `${base}/interactive-onboarding/inbox` }, { t: "reply", verdict: "PASS" }], ""]];
   for (const [events, want] of fixed) { assert.equal(reference(events), want); assert.equal(acceptPass(events, base), want); }
-  const urls = [app, `${base}/login`, `${base}/unauthorized`, "http://127.0.0.1:3101/project?id=9", "https://127.0.0.1:3100/project?id=9", "http://127.0.0.1:31001/x", "http://evil.example/x", "about:blank", ""];
+  const urls = [app, `${base}/onboarding`, `${base}/login`, `${base}/unauthorized`, `${base}/inbox`, `${base}/settings`, `${base}/detail/project-9/1`, `${base}/interactive-onboarding/inbox`, "http://127.0.0.1:3101/project?id=9", "https://127.0.0.1:3100/project?id=9", "http://127.0.0.1:31001/x", "http://evil.example/x", "about:blank", ""];
   const verdicts = ["", "PASS", "PASS+NOTES", "FAIL"];
   let seed = 9381;
   const rand = () => (seed = (Math.imul(1664525, seed) + 1013904223) >>> 0) / 4294967296;
@@ -181,6 +183,13 @@ test("pass acceptance matches the rule on seeded runs", async () => {
       events.push(roll < 0.3 ? { t: "show", url: pick(urls) } : roll < 0.55 ? { t: "land", url: pick(urls) } : roll < 0.7 ? { t: "nav", url: pick(urls) } : { t: "reply", bad: rand() < 0.25, actions: rand() < 0.45 ? 0 : 1, verdict: pick(verdicts) });
     }
     assert.equal(acceptPass(events, base), reference(events));
+  }
+});
+test("a pass on /onboarding is not a pass", async () => {
+  for (const [path, want] of [["/onboarding", "FAIL"], ["/login", "FAIL"], ["/unauthorized", "FAIL"], ["/interactive-onboarding", "FAIL"], ["/interactive-onboarding/inbox", "FAIL"], ["/project?id=9", "PASS"], ["/detail/project-9/1", "PASS"], ["/inbox", "PASS"], ["/settings", "PASS"]]) {
+    let step = 0;
+    const result = await drive(async () => (++step < 3 ? JSON.stringify({ actions: [{ op: "click", text: "Cancel" }] }) : JSON.stringify({ actions: [], verdict: "PASS" })), async () => ({ clicked: ["Cancel"], shots: [], loggedIn: true, snapshot: `${base}${path}\nscreen` }));
+    assert.equal(result.verdict, want, path);
   }
 });
 test("a redirect during the model call is not a pass", async () => {

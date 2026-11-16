@@ -1,12 +1,12 @@
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-export const MODEL = "deepseek/deepseek-v4.1-flash";
+export const PSTACK_VERIFIER = { model: "deepseek/deepseek-v4.1-flash", endpoint: "https://openrouter.ai/api/v1/chat/completions" };
 export const CONTEXT = "pstack-verifier";
-export const CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 const KEYS = new Set(["Escape", "Enter", "Tab", "Backspace", "ArrowDown", "ArrowUp"]);
 const APP = "http://127.0.0.1:3100";
-const LOGIN = /\/(login|unauthorized)(?:$|\/)/;
-export function assertFlashModel(model = MODEL) {
+export const SURFACE_ROUTES = [["board", "/project"], ["task", "/detail/"], ["inbox", "/inbox"], ["settings", "/settings"]];
+const onSurface = (pathname) => { const value = String(pathname ?? ""); return SURFACE_ROUTES.some(([, prefix]) => prefix.endsWith("/") ? value.startsWith(prefix) : value === prefix || value.startsWith(`${prefix}/`)); };
+export function assertFlashModel(model = PSTACK_VERIFIER.model) {
   const id = String(model); if (!id.startsWith("deepseek/") || !id.includes("flash") || /pro|claude|anthropic|opus|sonnet|haiku/i.test(id)) throw new Error(`refusing model ${id}`); return id;
 }
 export function redact(text, secrets) {
@@ -87,7 +87,7 @@ export function acceptPass(events, base = APP) {
     else if (event.t === "land" || event.t === "nav") { if (event.t === "land") lands += 1; try { if (new URL(event.url).origin !== origin) left = true; } catch { left = true; } }
     else if (!event.bad && !event.actions && (event.verdict === "PASS" || event.verdict === "PASS+NOTES")) {
       let where = null; try { where = new URL(shown); } catch { where = null; }
-      if (where && lands > 0 && at === lands && where.origin === origin && !LOGIN.test(where.pathname) && !left) return event.verdict;
+      if (where && lands > 0 && at === lands && where.origin === origin && onSurface(where.pathname) && !left) return event.verdict;
     }
   }
   return "";
@@ -130,7 +130,7 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
   }
   if (!clicked.length) { verdict = "FAIL"; notes = `${notes} No click, fill or key landed.`.trim(); }
   else if (!verdict) {
-    let home = false; try { const where = new URL(url); home = where.origin === new URL(base).origin && !LOGIN.test(where.pathname); } catch { home = false; }
+    let home = false; try { const where = new URL(url); home = where.origin === new URL(base).origin && onSurface(where.pathname); } catch { home = false; }
     verdict = "FAIL";
     notes = home ? (notes || "The model did not return PASS, PASS+NOTES or FAIL.") : `${notes} Seeded login did not open the app.`.trim();
   }
@@ -157,12 +157,12 @@ export async function performOnPage(page, actions, shotsDir, turn, base) {
   try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
   const url = urls.at(-1) || page.url();
   let loggedIn = false;
-  try { const current = new URL(url); loggedIn = current.origin === new URL(base).origin && !LOGIN.test(current.pathname); } catch { loggedIn = false; }
+  try { const current = new URL(url); loggedIn = current.origin === new URL(base).origin && onSurface(current.pathname); } catch { loggedIn = false; }
   return { clicked, shots, loggedIn, url, urls, page, snapshot: `${url}\n${lines.join("\n")}\n${text.slice(0, 2500)}` };
 }
-export async function completeWithOpenRouter(prompt, { key, model = MODEL, fetchImpl = globalThis.fetch } = {}) {
+export async function completeWithOpenRouter(prompt, { key, model = PSTACK_VERIFIER.model, fetchImpl = globalThis.fetch } = {}) {
   if (!key) throw new Error("model login is missing");
-  const response = await fetchImpl(CHAT_URL, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(chatBody(model, prompt)), signal: AbortSignal.timeout(60000) });
+  const response = await fetchImpl(PSTACK_VERIFIER.endpoint, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(chatBody(model, prompt)), signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error(`model HTTP ${response.status}`);
   const content = (await response.json()).choices?.[0]?.message?.content;
   if (!content) throw new Error("model returned nothing");
