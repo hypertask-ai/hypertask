@@ -11,7 +11,6 @@ import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal"
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
-import { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG } from "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { useAiChatContext, type ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
@@ -424,7 +423,6 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
-  const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
   const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const oneComposerFlag = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
   const sectionsEnabled = useFlag(HTPR_8963_SIDEBAR_SECTIONS_FLAG);
@@ -742,7 +740,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   return (
     <main ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "fullscreen" : undefined} onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined} tabIndex={shortcuts.enabled ? -1 : undefined} className="flex h-SVH-full min-h-0 w-full overflow-hidden bg-ai-chat text-white-black">
       {shortcuts.modal}
-      {ctrlTabSessionSwitchEnabled && !shortcuts.enabled && (
+      {!shortcuts.enabled && (
         <CtrlTabSessionSwitch
           groups={displayedSessionGroups}
           currentSessionId={currentSession?.id}

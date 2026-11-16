@@ -7,7 +7,6 @@ const { JSDOM } = require("jsdom");
 
 const root = path.resolve(__dirname, "..");
 const noop = () => {};
-const FLAG = "htpr-7763-ctrl-tab-session-switch";
 
 function load(file, mocks = {}) {
   const loaded = { exports: {} };
@@ -23,7 +22,6 @@ function load(file, mocks = {}) {
   return loaded.exports;
 }
 
-const flag = load("src/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch.ts");
 const displayMode = load("src/lib/aiChatDisplayMode.ts");
 
 function elements(tree, predicate) {
@@ -49,7 +47,7 @@ function fixture() {
   ];
 }
 
-function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE", paging = true, width = 1440, current = "today", rows = fixture() } = {}) {
+function chat({ shared = false, paging = true, width = 1440, current = "today", rows = fixture() } = {}) {
   const dom = new JSDOM('<input id="search"><textarea id="composer"></textarea>', { url: "https://app.hypertask.ai/chat" });
   dom.window.innerWidth = width;
   const savedGlobals = ["window", "document", "setTimeout", "clearTimeout"].map(key => [key, Object.getOwnPropertyDescriptor(global, key)]);
@@ -67,7 +65,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     if (index >= 0) timers.splice(index, 1);
   };
   const composer = document.getElementById("composer");
-  const slots = [], effects = [], routes = [], selections = [], mounted = [];
+  const slots = [], effects = [], routes = [], selections = [], mounted = [], flagReads = [];
   let cursor = 0, tree, activeSlots = slots;
   const react = {
     useMemo: callback => callback(),
@@ -110,11 +108,10 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     "@/components/AI_CHAT/MessageList": { MessageList: "MessageList" },
     "@/components/AI_CHAT/WelcomeScreen": { WelcomeScreen: "WelcomeScreen" },
     "@/hooks/MultiPages/useGetAllTeamsMinimal": { useGetAllTeamsMinimal: () => ({ data: [] }) },
-    "@/hooks/useFlag": { useFlag: key => key === "htpr-8963-sidebar-sections" ? false : key === FLAG ? enabled : paging },
+    "@/hooks/useFlag": { useFlag: key => { flagReads.push(key); return key === "htpr-8963-sidebar-sections" ? false : paging; } },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/ai/composeIntroTaskId": { composeIntroTaskId: () => undefined },
     "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "paging" },
-    "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch": flag,
     "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
     "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
     "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer": { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: "htpr-8824-ai-chat-one-composer" },
@@ -173,7 +170,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
   }
   render();
   return {
-    context, routes, selections, composer, dom,
+    context, routes, selections, composer, dom, flagReads,
     searchKey(overrides = {}) {
       const event = { key: "Enter", keyCode: 13, nativeEvent: { isComposing: false }, preventDefault: noop, stopPropagation: noop, ...overrides };
       elements(tree, node => node.type === "input")[0].props.onKeyDown(event);
@@ -181,7 +178,6 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     },
     get ids() { return elements(tree, node => node.type === "li").map(node => node.key); },
     get groups() { return elements(tree, node => node.type === "h2").map(node => node.props.children); },
-    setFlag(value) { enabled = value; render(); },
     search(value) {
       elements(tree, node => node.type === "input")[0].props.onChange({ target: { value } });
       render();
@@ -298,8 +294,8 @@ test("missing, hidden and single active sessions never jump to a different sessi
   }
 });
 
-test("flag Off and phone widths keep their keys; desktop starts at the visible rail breakpoint", () => {
-  for (const config of [{ enabled: false }, { width: 390 }, { width: 767 }, { width: 768 }]) {
+test("phone widths keep their keys; desktop starts at the visible rail breakpoint", () => {
+  for (const config of [{ width: 390 }, { width: 767 }, { width: 768 }]) {
     const view = chat(config);
     try {
       const event = view.press();
@@ -331,25 +327,16 @@ test("other chat shortcuts and modifier combinations pass through without select
   } finally { view.close(); }
 });
 
-test("Everyone default enables switching and switching the flag Off removes the live listener", () => {
+test("session switching runs without its own switch and reads no retired flag", () => {
   const view = chat();
   try {
-    assert.equal(flag.HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG, FLAG);
-    assert.equal(flag.default.key, FLAG);
-    assert.equal(flag.default.kind, "feature");
-    assert.equal(flag.default.shippedOn, "2026-10-24");
-    assert.equal(flag.default.releaseRisk.risk, "small");
-    assert.ok(flag.default.releaseRisk.reason.trim());
+    assert.equal(view.flagReads.includes("htpr-7763-ctrl-tab-session-switch"), false);
     view.press();
     assert.equal(view.context.currentSession.id, "hidden");
-    view.setFlag(false);
-    assert.equal(view.press().defaultPrevented, false);
-    assert.equal(view.context.currentSession.id, "hidden");
-    assert.equal(document.activeElement.id, "search");
-    view.setFlag(true);
     view.press();
     assert.equal(view.context.currentSession.id, "week");
     assert.deepEqual(view.selections, ["hidden", "week"]);
+    assert.equal(view.flagReads.includes("htpr-7763-ctrl-tab-session-switch"), false);
   } finally { view.close(); }
 });
 

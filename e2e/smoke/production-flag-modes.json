@@ -237,7 +237,6 @@
     "htpr-7760-chat-surface": "EVERYONE",
     "htpr-7761-chat-image-urls": "EVERYONE",
     "htpr-7762-chat-new-session-focus": "EVERYONE",
-    "htpr-7763-ctrl-tab-session-switch": "EVERYONE",
     "htpr-7764-chat-running": "EVERYONE",
     "htpr-7765-parallel-chats": "EVERYONE",
     "htpr-7766-chat-shortcuts": "OWNER_AND_QA",
