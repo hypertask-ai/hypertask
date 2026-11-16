@@ -284,6 +284,16 @@ required_check_settings_monitor:
   per_push_settings_api_reads: 0
   successful_monitor_settings_api_reads: 3
   fail_closed_on: [settings_drift, unreadable_settings, rate_limit_budget_exceeded]
+  publishers:
+    job: publishers
+    script: .github/scripts/required-check-publishers.mjs
+    required: false
+    reads: [live_ruleset, recent_pull_request_check_runs, recent_pull_request_commit_statuses]
+    stale_minutes: 240
+    lookback_hours: 24
+    reports_to: board_11514_ticket
+    comment_cadence: one_per_day_per_silent_set
+    mutates: nothing
   runner_ci_watch:
     token_helper: gh-app-token
     user_login_fallback: false

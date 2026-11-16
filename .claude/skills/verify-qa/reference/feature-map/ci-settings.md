@@ -3,6 +3,7 @@
 ## Sub-features
 
 - `required-check-settings-monitoring` Required-check settings monitoring.
+  Its `publishers` job also reports a required check that stopped publishing results.
 
 ## How to get to it (user POV)
 
@@ -46,6 +47,10 @@ Short samples are not fleet-wide hourly measurements.
 `node --test tests/verify-required-check-settings.test.cjs tests/app-smoke-workflow.test.cjs` exercises the real verifier and workflow wiring.
 It covers scheduled verification and rejected settings drift.
 It does not prove production scheduling or quota recovery.
+
+`node --test tests/required-check-publishers.test.cjs` runs the publisher check
+that sits beside it against fixed GitHub reads and board responses.
+It covers a silent required check, a healthy set, a quiet repository and the refusals.
 
 `node --test tests/ci-review-precheck.test.cjs` executes the CI review
 precheck with isolated GitHub responses. Ten consecutive rate-limit refusals

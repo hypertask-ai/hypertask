@@ -338,6 +338,20 @@ compare observed request counts over equal windows before claiming a fleet-wide
 reduction. The installation allowance used by `github.token` in Actions is a
 different quota from the runner app; moving runner watches does not replenish it.
 
+A required check can also lose the thing that publishes it, and the settings
+verifier still passes, because the ruleset lists a context that nothing posts
+any more. The same workflow runs a `publishers` job beside the verifier. It
+reads the required contexts from the live ruleset, then reads the check runs and
+commit statuses of the pull requests updated in the last day. When at least one
+result arrived in the last four hours, a required context with no result in that
+window is silent: the job comments on the monitoring ticket on
+[board 11514](https://app.hypertask.ai/project?id=11514) and names the context in
+the step summary. The comment is idempotent per day and per set of silent
+contexts, so an unfixed check adds one comment a day, not one an hour. A quiet
+repository reports nothing, because no result at all cannot tell a broken
+publisher from a day without pull requests. Removing a required check stays
+Valentin's call; the monitor reads the ruleset and never writes it.
+
 ## CI App API pool (YPER4-881)
 
 Selected GitHub reads and App Smoke cancellations use the `hypertask-ci` App's
