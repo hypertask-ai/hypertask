@@ -118,6 +118,11 @@ jobs:
       - name: Guard session ledgers
         run: node scripts/check-session-ledgers.mjs
 
+      - name: Guard the agent rule map
+        run: |
+          node scripts/check-rule-map.mjs
+          node --test tests/rule-map-check.test.cjs
+
       # Never build a commit whose review already failed (owner, 2026-08-26).
       # This does NOT wait: a pending or absent verdict builds in parallel as
       # normal; only an existing red verdict stops the build before it starts.

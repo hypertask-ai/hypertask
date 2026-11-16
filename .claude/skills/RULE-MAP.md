@@ -76,10 +76,17 @@ ones, so older comments that cite them still point at the same rule.
 | 123 | A scanner finding is a candidate until you confirm it by reading the route or curling a local build. A confirmed security fix uses `--lane valentin-review`. | fix-bug, `reference/security-findings.md` |
 | 126 | Before the pull request, a UI change matches the style guide and `node scripts/design-lint.mjs` exits 0. | design-compliance |
 
+## Enforced
+
+| Check |
+|---|
+| `eslint-local-rules/no-comments.mjs` |
+| `scripts/check-no-comments.mjs` |
+
 ## Pstack additions
 
-These rules live in skill text only. No hook or CI check enforces runner
-compliance. The upkeep test checks the script, not the truth of its reports.
+Rows marked "Skill text, not enforced" have no check yet.
+`scripts/check-rule-map.mjs` fails when that count changes without a new ceiling.
 
 | Rule | Skill | Enforcement |
 |---|---|---|
@@ -89,7 +96,6 @@ compliance. The upkeep test checks the script, not the truth of its reports.
 | Prove material safety facts beyond the diff by running real code before the PR. | blast-radius, ship | Skill text, not enforced |
 | Check measured numbers under matching conditions with repeated runs, variance and baseline vs after. | fix-slow-page | Skill text, not enforced |
 | Before coding in valentin-review, judge design reviews from all three named Codex models. Ordinary ai-review must not use interrogate. | interrogate, ship | Skill text, not enforced |
-| Keep code comments only for non-obvious reasons; remove code restatements. | simplify-before-pr | Skill text, not enforced |
 | Weekly feature-map upkeep is source-only, files at most one drift ticket a week, never drives the app or acts as Valentin. | maintain-verification-skill, scripts/maintain-verification-weekly, feature-map-check.mjs | Checker enforced by the weekly feature-map-check workflow; timer installs and files the ticket |
 | Deeper names what the change breaks (`breaks if:`) and the proof gate must fail on that harm. | ship, ship-check deeper | `ship-check deeper` requires the `breaks if:` part; gate honesty is skill text |
 | Run each shared cache, global layer or state file with its other users, in CI or app order. | blast-radius | Skill text, not enforced |

@@ -1,0 +1,14 @@
+{
+  "map": ".claude/skills/RULE-MAP.md",
+  "unenforcedMarker": "Skill text, not enforced",
+  "unenforcedCeiling": 7,
+  "enforcedHeading": "## Enforced",
+  "checks": [
+    "eslint-local-rules/no-comments.mjs",
+    "scripts/check-no-comments.mjs"
+  ],
+  "retiredInMap": [
+    "Keep code comments only for non-obvious reasons",
+    "No hook or CI check enforces runner"
+  ]
+}
