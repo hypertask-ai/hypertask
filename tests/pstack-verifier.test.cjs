@@ -1,11 +1,9 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-import {
-  MODEL, allowAction, allowPath, assertFlashModel, chatBody, completeWithOpenRouter,
-  cookiesFromHeader, parseAnswer, performOnPage, readSmokeEnv, statusPayload, verifyLoop,
-} from "../scripts/pstack-verifier-protocol.mjs";
+const assert = require("node:assert/strict");
+const test = require("node:test");
+const load = () => import("../scripts/pstack-verifier-protocol.mjs");
 
-test("the verifier model is DeepSeek flash and never Pro or Claude", () => {
+test("the verifier model is DeepSeek flash and never Pro or Claude", async () => {
+  const { MODEL, assertFlashModel, chatBody } = await load();
   assert.equal(assertFlashModel(MODEL), "deepseek/deepseek-v4.1-flash");
   for (const model of ["deepseek/deepseek-v4-pro", "deepseek/deepseek-v4.1-pro", "anthropic/claude-opus-4.5", "openai/gpt-4.1"]) {
     assert.throws(() => assertFlashModel(model), /refusing model/);
@@ -13,7 +11,8 @@ test("the verifier model is DeepSeek flash and never Pro or Claude", () => {
   assert.equal(chatBody(MODEL, "drive").model, MODEL);
 });
 
-test("actions stay on the seeded app and a pass names the clicks", () => {
+test("actions stay on the seeded app and a pass names the clicks", async () => {
+  const { allowPath, allowAction, parseAnswer, statusPayload } = await load();
   assert.throws(() => allowPath("https://app.hypertask.ai/project"), /not on this app/);
   assert.throws(() => allowPath("//evil"), /not on this app/);
   assert.deepEqual(allowAction({ op: "click", text: "Add field" }), { op: "click", text: "Add field" });
@@ -27,9 +26,12 @@ test("actions stay on the seeded app and a pass names the clicks", () => {
   assert.match(status.description, /^PASS: clicked Add field, Cancel/);
   assert.ok(status.description.length <= 140);
   assert.equal(statusPayload({ verdict: "FAIL", clicked: [], notes: "the row stayed" }).state, "failure");
+  for (const verdict of ["", "fail", "MAYBE", "pass", "PASS "]) assert.equal(statusPayload({ verdict, clicked: ["Cancel"] }).state, "failure");
+  assert.equal(statusPayload({ verdict: "PASS+NOTES", clicked: ["Cancel"] }).state, "success");
 });
 
 test("a pass without a landed click or a seeded login becomes FAIL", async () => {
+  const { verifyLoop } = await load();
   const smoke = { cookie: "secret-cookie-value", key: "secret-model-key", boardPath: "/project?id=9", taskPath: "/detail/project-9/1" };
   const prompts = [];
   const noClick = await verifyLoop({
@@ -77,6 +79,7 @@ test("a pass without a landed click or a seeded login becomes FAIL", async () =>
 });
 
 test("the seeded cookie becomes a browser cookie and a click is recorded from the page", async () => {
+  const { cookiesFromHeader, readSmokeEnv, allowAction, performOnPage } = await load();
   const cookies = cookiesFromHeader("nookies_user=abc%3D; ht_session=signed", "http://127.0.0.1:3100");
   assert.equal(cookies[0].httpOnly, false);
   assert.equal(cookies[1].httpOnly, true);
@@ -100,6 +103,7 @@ test("the seeded cookie becomes a browser cookie and a click is recorded from th
 });
 
 test("the model request uses the flash model and does not put the key in the body", async () => {
+  const { completeWithOpenRouter } = await load();
   let seen;
   const content = await completeWithOpenRouter("drive the cancel", {
     key: "test-openrouter-key",

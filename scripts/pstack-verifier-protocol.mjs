@@ -115,7 +115,8 @@ export function buildPrompt({ title, body, diff, boardPath, taskPath, snapshot, 
 export function statusPayload({ verdict, clicked = [], notes = "" }) {
   const actions = clicked.filter(Boolean).slice(0, 8).join(", ");
   const description = `${verdict}: ${actions ? `clicked ${actions}` : notes || "no clicks"}`.replace(/\s+/g, " ").trim().slice(0, 140);
-  return { state: verdict === "FAIL" ? "failure" : "success", context: CONTEXT, description };
+  const state = verdict === "PASS" || verdict === "PASS+NOTES" ? "success" : "failure";
+  return { state, context: CONTEXT, description };
 }
 
 export function chatBody(model, prompt) {
