@@ -418,11 +418,38 @@ const useKanbanViews = (project: IProject | null) => {
     project,
   );
 
+  const personalTableSettingsViewId = (source: IProject): string | undefined =>
+    source.project_view?.user_project_views?.[0]?.appliedView?.id ??
+    source.project_view?.default_view?.id;
+
+  const singleSortLevels = (tableSort: TTableSort): TableSortLevel[] =>
+    tableSort && (tableSort.direction === "asc" || tableSort.direction === "desc")
+      ? [{ column: tableSort.column, direction: tableSort.direction }]
+      : [];
+
+  const setPersonalTableSettings = async (
+    project: IProject,
+    settings: { table_sort_stack?: TableSortLevel[]; table_columns?: TableColumnSettings | null },
+  ) => {
+    const viewId = personalTableSettingsViewId(project);
+    if (!viewId) return;
+    await enqueueBoardViewMutation(project.id, () => apiAndCacheHandler(updateViewAPIRoute, {
+      projectId: project.id,
+      viewId,
+      updateMode: "personal-table-settings",
+      view_settings: settings,
+    }, { call: "update" }));
+  };
+
   const setTableSortViewAndReturn = async (
     project: IProject,
     tableSort: TTableSort,
     stack?: TableSortLevel[] | null,
-  ) => apiHandler(
+  ) => tableSortColumnsEnabled && personalTableSettingsViewId(project)
+    ? setPersonalTableSettings(project, {
+        table_sort_stack: stack ?? singleSortLevels(tableSort),
+      })
+    : apiHandler(
     (queuedProject) => buildUnsavedBody(queuedProject, {
       table_sort_column: tableSort?.column ?? null,
       table_sort_direction: tableSort?.direction ?? null,
@@ -434,7 +461,9 @@ const useKanbanViews = (project: IProject | null) => {
   const setTableColumnsViewAndReturn = async (
     project: IProject,
     columns: TableColumnSettings | null,
-  ) => apiHandler(
+  ) => tableSortColumnsEnabled && personalTableSettingsViewId(project)
+    ? setPersonalTableSettings(project, { table_columns: columns })
+    : apiHandler(
     (queuedProject) => buildUnsavedBody(queuedProject, {
       table_columns: columns,
     }),

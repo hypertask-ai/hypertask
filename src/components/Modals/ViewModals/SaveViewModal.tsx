@@ -115,6 +115,8 @@ const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
     }
     const buildCreateBody = (sourceProject: IProject): TCreate_view_body => {
         const activeTableSort = getActiveTableSortFromProject(sourceProject)
+        const activeTableStack = tableSortColumnsEnabled ? getActiveTableSortStackFromProject(sourceProject) : []
+        const activeTableHead = activeTableStack[0]
         return {
         setAsDefault: true,
         view_settings: {
@@ -127,10 +129,10 @@ const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
             board_empty_sections: getActiveEmptySectionSettingFromProject(sourceProject),
             board_staleness: getActiveStalenessOverrideFromProject(sourceProject),
             board_show_archived: getActiveShowArchivedOverrideFromProject(sourceProject),
-            table_sort_column: activeTableSort?.column ?? null,
-            table_sort_direction: activeTableSort?.direction ?? null,
+            table_sort_column: tableSortColumnsEnabled ? activeTableHead?.column ?? null : activeTableSort?.column ?? null,
+            table_sort_direction: tableSortColumnsEnabled ? activeTableHead?.direction ?? null : activeTableSort?.direction ?? null,
             ...(tableSortColumnsEnabled ? {
-                table_sort_stack: getActiveTableSortStackFromProject(sourceProject),
+                table_sort_stack: activeTableStack,
                 table_columns: getActiveTableColumnsFromProject(sourceProject),
             } : {}),
             board_layout: getExplicitBoardLayout() ?? getActiveBoardLayoutPreferenceFromProject(sourceProject),

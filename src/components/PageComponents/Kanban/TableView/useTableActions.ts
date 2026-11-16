@@ -73,9 +73,9 @@ export function useTableActions(context: Context) {
       setSortState(next);
       if (tableSortColumnsEnabled && _currentProject) {
         const viewId =
-          _currentProject.project_view?.user_project_views?.[0]?.unsavedView?.id ??
           _currentProject.project_view?.user_project_views?.[0]?.appliedView?.id ??
-          _currentProject.project_view?.default_view?.id;
+          _currentProject.project_view?.default_view?.id ??
+          _currentProject.project_view?.user_project_views?.[0]?.unsavedView?.id;
         if (viewId) setSortAccount({ viewId, sort: next });
       }
       if (_currentProject) {

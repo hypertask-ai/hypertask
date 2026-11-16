@@ -646,13 +646,21 @@ export const getActiveBoardLayoutPreferenceFromProject = (
     return sanitizeBoardLayout(activeView?.board_layout);
 };
 
-const activeTableView = (project?: IProject | null) => {
-    const view = project?.project_view?.user_project_views?.[0]
-    return view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view
-}
+export const getTableSettingsViewFromProject = (project?: IProject | null): IView | undefined | null =>
+    project?.project_view?.user_project_views?.[0]?.appliedView ?? project?.project_view?.default_view
+
+const personalTableSettings = (project?: IProject | null) =>
+    getTableSettingsViewFromProject(project)?.ViewLastUsed?.[0]
+
+const unsavedTableView = (project?: IProject | null) =>
+    project?.project_view?.user_project_views?.[0]?.unsavedView
 
 export const getActiveTableSortStackFromProject = (project?: IProject | null): { column: string; direction: "asc" | "desc" }[] => {
-    const stored = activeTableView(project)?.table_sort_stack
+    const personal = personalTableSettings(project)?.table_sort_stack
+    if (Array.isArray(personal)) return personal as { column: string; direction: "asc" | "desc" }[]
+    const unsaved = unsavedTableView(project)?.table_sort_stack
+    if (Array.isArray(unsaved) && unsaved.length) return unsaved as { column: string; direction: "asc" | "desc" }[]
+    const stored = getTableSettingsViewFromProject(project)?.table_sort_stack
     if (Array.isArray(stored) && stored.length) return stored as { column: string; direction: "asc" | "desc" }[]
     const single = getActiveTableSortFromProject(project)
     if (!single?.column || (single.direction !== "asc" && single.direction !== "desc")) return []
@@ -660,7 +668,9 @@ export const getActiveTableSortStackFromProject = (project?: IProject | null): {
 }
 
 export const getActiveTableColumnsFromProject = (project?: IProject | null) => {
-    const saved = activeTableView(project)?.table_columns
+    const saved = personalTableSettings(project)?.table_columns
+        ?? unsavedTableView(project)?.table_columns
+        ?? getTableSettingsViewFromProject(project)?.table_columns
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) return null
     return saved
 }

@@ -85,9 +85,9 @@ const TableColumnsPicker = ({
   const setColumnWidths = useSetRecoilState(tableColumnWidthsAtom);
   const [accountColumns, setAccountColumns] = useRecoilState(tableColumnsAccountAtom);
   const viewId =
-    currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
     currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
-    currentProject?.project_view?.default_view?.id;
+    currentProject?.project_view?.default_view?.id ??
+    currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id;
   const savedColumns = tableSortColumnsEnabled && !controlled
     ? getActiveTableColumnsFromProject(currentProject)
     : null;

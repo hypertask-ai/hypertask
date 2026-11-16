@@ -5,6 +5,9 @@ import prisma from "@/lib/prisma";
 import { savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { acquireBoardFilterWriteLock } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
+import { isFeatureEnabled } from "@/lib/flags";
+import { toJsonField } from "./gate-table-view-settings";
+import { sanitizeTableColumns, sanitizeTableSortStack } from "@/lib/table-view/tableViewSettings";
 
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -31,6 +34,10 @@ const route = taskWriteRoute({
         if (!view) return false;
         const pv = view.project_view;
         const appliedViewId = pv.default_view_id === newViewId ? null : newViewId;
+        const previous = await tx.user_Project_View.findUnique({
+          where: { user_project: { userId, project_view_id: pv.id } },
+          include: { unsavedView: { select: { table_sort_stack: true, table_columns: true } } },
+        });
         const state = await tx.user_Project_View.upsert({
           create: { userId, project_view_id: pv.id, appliedViewId },
           update: { appliedViewId },
@@ -45,6 +52,30 @@ const route = taskWriteRoute({
         });
         if (state.unsavedViewId) {
           const draft = await tx.view.findFirst({ where: { id: state.unsavedViewId, userId, project_view_id: pv.id } });
+          const draftSettings = previous?.unsavedView;
+          const draftViewId = previous?.appliedViewId ?? pv.default_view_id;
+          if (draft && draftSettings && draftViewId && await isFeatureEnabled("htpr-8973-table-sort-columns", userId)) {
+            const existing = await tx.view_Last_Used.findUnique({
+              where: { user_view_last_used: { userId, viewId: draftViewId } },
+              select: { table_sort_stack: true, table_columns: true },
+            });
+            const data: Record<string, unknown> = {};
+            if (existing?.table_sort_stack == null && Array.isArray(draftSettings.table_sort_stack)) {
+              const stack = sanitizeTableSortStack(draftSettings.table_sort_stack);
+              if (stack.length) data.table_sort_stack = toJsonField(stack);
+            }
+            if (existing?.table_columns == null) {
+              const columns = sanitizeTableColumns(draftSettings.table_columns);
+              if (columns) data.table_columns = toJsonField(columns);
+            }
+            if (Object.keys(data).length) {
+              await tx.view_Last_Used.upsert({
+                where: { user_view_last_used: { userId, viewId: draftViewId } },
+                create: { userId, viewId: draftViewId, ...data },
+                update: data,
+              });
+            }
+          }
           if (draft) await tx.view.delete({ where: { id: draft.id, userId, project_view_id: pv.id, project_view: { project: savedViewBoardAccessWhere(userId) } } });
         }
         return true;

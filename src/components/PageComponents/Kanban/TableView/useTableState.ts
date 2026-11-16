@@ -47,9 +47,9 @@ export function useTableState(context: Context) {
   const tableSortColumnsEnabled =
     useFlag("htpr-8973-table-sort-columns");
   const tableViewId =
-    _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
     _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
-    _currentProject?.project_view?.default_view?.id;
+    _currentProject?.project_view?.default_view?.id ??
+    _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id;
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
@@ -249,12 +249,12 @@ export function useTableState(context: Context) {
   ]);
   useEffect(() => () => {
     if (tableSortColumnsEnabled) pendingColumnsWrite.current?.();
-  }, [tableSortColumnsEnabled]);
+  }, [tableSortColumnsEnabled, tableViewId]);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
   const lastGAt = useRef<number | null>(null);
   const activeSortViewId =
-    _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
+    (!tableSortColumnsEnabled ? _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id : null) ??
     _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
     _currentProject?.project_view?.default_view?.id;
   useEffect(() => {
