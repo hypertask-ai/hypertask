@@ -46,7 +46,6 @@ import type { BlockerUser } from "./BlockerChip";
 import { splitAssignees } from "@/lib/assignees";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-8625-board-inbox-archive";
 import { HTPR_7263_PHONE_HOLD_SELECT_FLAG } from "@/lib/flags/keys";
 import type {
   DraggableProvided,
@@ -98,7 +97,6 @@ const TaskContent = ({
   phoneHoldSelect,
   hasDraft,
 }: TaskContentProps) => {
-  const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
   const isApple = useDeviceContext();
   const {
     selectedCount: bulkSelectedCount,
@@ -192,11 +190,7 @@ const TaskContent = ({
 
   const eHandler = () => {
     if (lastgClick.current === null) {
-      if (
-        boardInboxArchive
-          ? (task._count?.notifications ?? 0) <= 0
-          : task._count?.notifications || task._count?.notifications == 0
-      ) {
+      if ((task._count?.notifications ?? 0) <= 0) {
         toast("This task is not in inbox");
         return;
       }
@@ -234,7 +228,6 @@ const TaskContent = ({
     taskRef,
     toggleDeleteModal,
     markAsDone,
-    boardInboxArchive,
     eHandler,
     setShowAssignModal,
     setShowCommands,
@@ -271,7 +264,6 @@ const TaskContent = ({
     taskRef,
     toggleDeleteModal,
     markAsDone,
-    boardInboxArchive,
     eHandler,
     setShowAssignModal,
     setShowCommands,
@@ -310,7 +302,6 @@ const TaskContent = ({
       taskRef,
       toggleDeleteModal,
       markAsDone,
-      boardInboxArchive,
       eHandler,
       setShowAssignModal,
       setShowCommands,
@@ -407,10 +398,8 @@ const TaskContent = ({
     }
 
     if (taskShortcutAction === "edit") {
-      if (boardInboxArchive) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      e.preventDefault();
+      e.stopPropagation();
       eHandler();
     }
 

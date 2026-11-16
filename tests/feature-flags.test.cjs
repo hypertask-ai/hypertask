@@ -633,6 +633,21 @@ test("the retired My Tasks table columns flag is hidden, immutable and enabled f
   assert.equal((await flags.featureFlagsForUser(2343))[key], true);
 });
 
+test("the board inbox archive flag is retired after release", async () => {
+  const key = "htpr-8625-board-inbox-archive";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261114110000_drop_htpr_8625_board_inbox_archive_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  for (const userId of [6, 985, 2343]) {
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+});
+
 test("inbox next-open no longer has a feature flag", async () => {
   assert.equal(flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, undefined);
   assert.equal(definitions.some(entry => entry.key === "htpr-7000-inbox-next-open"), false);
