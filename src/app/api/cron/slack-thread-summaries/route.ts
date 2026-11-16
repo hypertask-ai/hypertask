@@ -10,16 +10,12 @@ import {
   needsSlackThreadSummary,
   slackIdleCutoffTs,
 } from "@/lib/slack/idle";
-import { batchBackgroundAiEnabled } from "@/app/api/ai/_lib/planGate";
 import {
   prepareSlackSummaryForBatch,
   submitSlackSummaryBatches,
   type SlackBatchEntry,
 } from "@/lib/slack/threadSummaryBatch";
-import {
-  buildSlackThreadSummaryComment,
-  type SlackThreadSource,
-} from "@/lib/slack/threadSummary";
+import { buildSlackThreadSummaryComment } from "@/lib/slack/threadSummary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,20 +109,16 @@ export async function GET(request: NextRequest) {
         threadTs: thread.threadTs,
         userNameCache,
       };
-      let source: SlackThreadSource | undefined;
-      if (await batchBackgroundAiEnabled(thread.install.installedByUserId)) {
-        const prepared = await prepareSlackSummaryForBatch(summaryContext, thread, tasks.map((task) => task.id));
-        if (prepared.type === "empty") {
-          await markThreadSummarized(thread.id, thread.lastMessageTs);
-          continue;
-        }
-        if (prepared.type === "batch") {
-          batchEntries.push(prepared.entry);
-          continue;
-        }
-        source = prepared.source;
+      const prepared = await prepareSlackSummaryForBatch(summaryContext, thread, tasks.map((task) => task.id));
+      if (prepared.type === "empty") {
+        await markThreadSummarized(thread.id, thread.lastMessageTs);
+        continue;
       }
-      const commentText = await buildSlackThreadSummaryComment({ ...summaryContext, source });
+      if (prepared.type === "batch") {
+        batchEntries.push(prepared.entry);
+        continue;
+      }
+      const commentText = await buildSlackThreadSummaryComment({ ...summaryContext, source: prepared.source });
       if (!commentText) {
         await markThreadSummarized(thread.id, thread.lastMessageTs);
         continue;

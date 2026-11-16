@@ -6,7 +6,6 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const load = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false, interopDefault: true });
-const FLAG = "htpr-7098-batch-background-ai";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const jobs = load(path.join(root, "src/lib/ai/batch/batchJobs.ts"));
@@ -15,27 +14,6 @@ const { modelCostUsd } = load(path.join(root, "src/app/api/ai/_lib/sharedAllowan
 
 const SUMMARY_JSON = JSON.stringify({ outcome: "Ship on Friday", bullets: ["Docs first", "QA signs off"] });
 const succeeded = (id, text, usage = {}) => ({ id, status: "succeeded", text, usage: { inputTokens: 1000, outputTokens: 100, inputTokenDetails: usage } });
-
-test("flag: feature kind, release risk, default Owner + QA, key exported", () => {
-  const keys = load(path.join(root, "src/lib/flags/keys.ts"));
-  assert.equal(keys.HTPR_7098_BATCH_BACKGROUND_AI_FLAG, FLAG);
-  const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7098-batch-background-ai.ts"));
-  assert.equal(definition.default?.key ?? definition.key, FLAG);
-  const source = read("src/lib/flags/definitions/htpr-7098-batch-background-ai.ts");
-  assert.match(source, /kind: "feature"/);
-  assert.match(source, /shippedOn: "2026-10-11"/);
-  assert.match(source, /releaseRisk/);
-  assert.doesNotMatch(source, /defaultMode/);
-  assert.match(read("src/lib/flags.ts"), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-});
-
-test("flag gate reads the flag for the real user and counts a failed read as Off", () => {
-  const source = read("src/app/api/ai/_lib/planGate.ts");
-  assert.match(source, /isFeatureEnabled\(HTPR_7098_BATCH_BACKGROUND_AI_FLAG, userId \?\? 0\)/);
-  assert.match(source, /batchBackgroundAiEnabled[\s\S]*?catch \{\s*return false;/);
-  assert.match(read("src/app/api/cron/slack-thread-summaries/route.ts"), /batchBackgroundAiEnabled\(thread\.install\.installedByUserId\)/);
-  assert.match(read("src/lib/ai/labelClassifier.ts"), /batchBackgroundAiEnabled\(userId\)/);
-});
 
 test("slack request: same prompt as the instant path plus a JSON instruction, no per-request gateway options", () => {
   const { SLACK_SUMMARY_SYSTEM, slackSummaryPrompt } = load(path.join(root, "src/lib/slack/threadSummaryPrompt.ts"));

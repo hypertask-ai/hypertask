@@ -13,8 +13,7 @@ function harness({ flagOn, rows }) {
     "@/lib/flags": { HTPR_7127_SLACK_SUMMARY_QUERY_FLAG: "htpr-7127-slack-summary-query", isFeatureEnabled: async () => flagOn },
     "@/utils/controllers/comments/createCommentService": { createCommentService: async () => {} },
     "@/lib/slack/threadSummary": { buildSlackThreadSummaryComment: async () => "Summary" },
-    "@/app/api/ai/_lib/planGate": { batchBackgroundAiEnabled: async () => false },
-    "@/lib/slack/threadSummaryBatch": { prepareSlackSummaryForBatch: async () => { throw new Error("batch is off"); }, submitSlackSummaryBatches: async () => ({ queued: [], failed: [] }) },
+    "@/lib/slack/threadSummaryBatch": { prepareSlackSummaryForBatch: async () => ({ type: "instant", source: undefined }), submitSlackSummaryBatches: async () => ({ queued: [], failed: [] }) },
     "@/lib/prisma": { __esModule: true, default: {
       slackWatchedThread: { fields: { lastMessageTs: FIELD_REF }, findMany: async (query) => { queries.push(query); return rows; }, update: async () => {} },
       user: { findUnique: async () => ({ id: 77 }) },

@@ -10,7 +10,6 @@ import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
 
 import { getTeamGatewayApiKey, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
-import { batchBackgroundAiEnabled } from "@/app/api/ai/_lib/planGate";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import { batchEligibleFunding, batchEligibleModel, labelTaskContentHash } from "@/lib/ai/batch/batchJobs";
 import { submitSmartLabelBatch } from "@/lib/ai/labelClassifierBatch";
@@ -518,7 +517,7 @@ async function trySmartLabelBatch(
   }>,
 ): Promise<boolean> {
   try {
-    if (userId == null || !(await batchBackgroundAiEnabled(userId))) return false;
+    if (userId == null) return false;
     const teamId = tasks[0]?.project.teamId;
     if (!teamId) return false;
     const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: teamId });

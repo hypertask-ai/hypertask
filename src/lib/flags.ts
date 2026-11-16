@@ -87,6 +87,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6460-my-tasks-quick-add",
   "htpr-6461-my-tasks-snooze",
   "htpr-6938-my-tasks-icon-controls",
+  "htpr-7098-batch-background-ai",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-5913-consistent-comment-shortcuts": true,
