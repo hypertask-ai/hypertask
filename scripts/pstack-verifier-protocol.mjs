@@ -4,8 +4,8 @@ export const PSTACK_VERIFIER = { model: "deepseek/deepseek-v4.1-flash", endpoint
 export const CONTEXT = "pstack-verifier";
 const KEYS = new Set(["Escape", "Enter", "Tab", "Backspace", "ArrowDown", "ArrowUp"]);
 const APP = "http://127.0.0.1:3100";
-const badDoc = (status, text) => Number(status) >= 400 || /This page could not be found|Something went wrong/.test(String(text ?? ""));
-const onSurface = (url, seed = {}) => { let where; try { where = new URL(url); } catch { return false; } const path = where.pathname; if (path === "/inbox" || path.startsWith("/inbox/") || path === "/settings" || path.startsWith("/settings/")) return true; let board, task; try { board = new URL(String(seed.boardPath || "/"), where.origin); task = new URL(String(seed.taskPath || "/"), where.origin); } catch { return false; } return (path === "/project" && !!board.searchParams.get("id") && where.searchParams.get("id") === board.searchParams.get("id")) || (task.pathname.startsWith("/detail/") && path === task.pathname); };
+export const coreSmokeBoardTitle = "Core actions smoke", coreSmokeTaskTitle = "Core actions smoke fixture";
+const seededPage = (url, text, status, seed = {}) => { let where; try { where = new URL(url); } catch { return false; } if ((Number(status) || 0) >= 400 || ![coreSmokeBoardTitle, coreSmokeTaskTitle].some((mark) => String(text ?? "").includes(mark))) return false; const path = where.pathname; let board, task; try { board = new URL(String(seed.boardPath || "/"), where.origin); task = new URL(String(seed.taskPath || "/"), where.origin); } catch { return false; } return (path === "/project" && board.searchParams.get("id") && where.searchParams.get("id") === board.searchParams.get("id")) || (task.pathname.startsWith("/detail/") && path === task.pathname); };
 export function assertFlashModel(model = PSTACK_VERIFIER.model) {
   const id = String(model); if (!id.startsWith("deepseek/") || !id.includes("flash") || /pro|claude|anthropic|opus|sonnet|haiku/i.test(id)) throw new Error(`refusing model ${id}`); return id;
 }
@@ -100,7 +100,7 @@ export function acceptPass(events, base = APP, seed) {
     else if (event.t === "land" || event.t === "nav") { if (event.t === "land") lands += 1; try { if (new URL(event.url).origin !== origin) left = true; } catch { left = true; } }
     else if (!event.bad && !event.actions && (event.verdict === "PASS" || event.verdict === "PASS+NOTES")) {
       let where = null; try { where = new URL(shown); } catch { where = null; }
-      if (where && lands > 0 && at === lands && where.origin === origin && onSurface(shown, seed) && !badDoc(status, text) && !left) return event.verdict;
+      if (where && lands > 0 && at === lands && where.origin === origin && seededPage(shown, text, status, seed) && !left) return event.verdict;
     }
   }
   return "";
@@ -143,7 +143,7 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
   }
   if (!clicked.length) { verdict = "FAIL"; notes = `${notes} No click, fill or key landed.`.trim(); }
   else if (!verdict) {
-    let home = false; try { const where = new URL(url); home = where.origin === new URL(base).origin && onSurface(url, smoke) && !badDoc(status, snapshot); } catch { home = false; }
+    let home = false; try { const where = new URL(url); home = where.origin === new URL(base).origin && seededPage(url, snapshot, status, smoke); } catch { home = false; }
     verdict = "FAIL"; notes = home ? (notes || "The model did not return PASS, PASS+NOTES or FAIL.") : `${notes} Seeded login did not open the app.`.trim();
   }
   return { verdict, notes: redact(notes, secrets), clicked, shots };
@@ -167,7 +167,7 @@ export async function performOnPage(page, actions, shotsDir, turn, base, seed) {
   try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
   const url = urls.at(-1) || page.url();
   let loggedIn = false;
-  try { const current = new URL(url); loggedIn = current.origin === new URL(base).origin && onSurface(url, seed) && !badDoc(status, text); } catch { loggedIn = false; }
+  try { const current = new URL(url); loggedIn = current.origin === new URL(base).origin && seededPage(url, text, status, seed); } catch { loggedIn = false; }
   if (typeof page.off === "function") page.off("response", see); return { clicked, shots, loggedIn, url, urls, page, status, snapshot: `${url}\n${lines.join("\n")}\n${text.slice(0, 2500)}` };
 }
 export async function completeWithOpenRouter(prompt, { key, model = PSTACK_VERIFIER.model, fetchImpl = globalThis.fetch } = {}) {

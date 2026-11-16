@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { coreSmokeUserSetting } from "./pstack-verifier-protocol.mjs";
+import { coreSmokeBoardTitle, coreSmokeTaskTitle, coreSmokeUserSetting } from "./pstack-verifier-protocol.mjs";
 
 const envFile = process.env.CORE_SMOKE_ENV_FILE;
 if (!envFile) throw new Error("CORE_SMOKE_ENV_FILE is required");
@@ -51,7 +51,7 @@ try {
   const project = await prisma.project.create({
     data: {
       name: `core-smoke-${runKey}`,
-      title: "Core actions smoke",
+      title: coreSmokeBoardTitle,
       ownerId: user.id,
       teamId: team.id,
       sections: ["Baseline", "Alternate"],
@@ -83,7 +83,7 @@ try {
     data: {
       uniqueIndex: 1,
       ticketNumber: "SMOKE-1",
-      title: "Core actions smoke fixture",
+      title: coreSmokeTaskTitle,
       description: "",
       projectId: project.id,
       userId: user.id,
