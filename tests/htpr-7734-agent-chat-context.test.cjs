@@ -484,12 +484,14 @@ for (const [scope, projectId, taskId] of [["ticket", 15, 42], [null, 15, undefin
   });
 }
 
-test("flag is registered as an Owner + QA feature dated 2026-10-24 with smoke coverage", () => {
+test("flag is registered as an Everyone feature dated 2026-11-16 with smoke coverage", () => {
   const definition = load(`src/lib/flags/definitions/${flag}.ts`, {}).default;
   assert.equal(definition.key, flag); assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA"); assert.equal(definition.shippedOn, "2026-10-24");
+  assert.equal(definition.defaultMode, "EVERYONE"); assert.equal(definition.shippedOn, "2026-11-16");
+  assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason);
+  assert.equal(definition.releaseRisk.highRisk, undefined);
   const modes = JSON.parse(fs.readFileSync(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"));
-  assert.equal(modes.modes[flag], "OWNER_AND_QA");
+  assert.equal(modes.modes[flag], "EVERYONE");
   assert.equal(load("src/lib/flags/definitions.ts", {}).FEATURE_FLAG_DEFINITIONS.filter((entry) => entry.key === flag).length, 1);
 });
