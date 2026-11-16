@@ -87,6 +87,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6460-my-tasks-quick-add",
   "htpr-6461-my-tasks-snooze",
   "htpr-6938-my-tasks-icon-controls",
+  "htpr-7871-ctrlk-ellipsis",
   "htpr-8042-amoled-chat-border",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
@@ -122,6 +123,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6460-my-tasks-quick-add": true,
   "htpr-6461-my-tasks-snooze": true,
   "htpr-6938-my-tasks-icon-controls": true,
+  "htpr-7871-ctrlk-ellipsis": true,
   "htpr-8042-amoled-chat-border": true,
 } as const;
 
