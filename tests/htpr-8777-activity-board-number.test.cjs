@@ -51,7 +51,6 @@ function fixture({ enabled = true, flagError = false, rows = [report, hiddenId] 
   }
   const route = load('src/lib/mcp/operations/agents/[agentId]/operation.ts', {
     '@/lib/flags': {
-      HTPR_6868_TICKET_PREFIX_FLAG: 'htpr-6868-ticket-prefix',
       isFeatureEnabled: async (key, userId) => {
         flagReads.push({ key, userId })
         if (flagError) throw new Error('flag store unavailable')

@@ -26,7 +26,6 @@ test("the real task page sends task and comments snapshots once, preserving thei
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => { throw new Error("Unexpected metadata access lookup"); } },
     "@/lib/prisma": { default: {} },
     "@/lib/flags": {
-      HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix",
       isFeatureEnabled: async () => false,
     },
     "@/utils/controllers/taskDetail/load": {

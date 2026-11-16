@@ -3,7 +3,6 @@ import { SortingMode } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
 import { upsertAllCommentsToTurbopuffer, upsertTaskToTurbopuffer } from "../turbopuffer/turbopufferHelper";
 import prisma from "@/lib/prisma";
-import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { normalizeProjectPrefix } from "@/lib/projectPrefix";
 import { IUser } from "@/models/model";
 import { taskWriteAccessWhere } from "./getAllIncludes";
@@ -16,9 +15,6 @@ export async function changeProjectPrefix(
   settings: { title?: string; sorting_mode?: SortingMode } = {},
   teamScope?: AgentTokenTeamScope | null,
 ) {
-  if (!(await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, currentUser.id))) {
-    return { status: 403, json: { message: "Ticket prefix changes are not enabled" } };
-  }
   const prefix = normalizeProjectPrefix(input);
   const accessWhere = taskWriteAccessWhere(currentUser.id, agentId, teamScope);
   const project = await prisma.$transaction(async (tx) => {

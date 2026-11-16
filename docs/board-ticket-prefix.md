@@ -2,7 +2,7 @@
 
 Feature: https://app.hypertask.ai/detail/project-15/6868
 
-Flag: `htpr-6868-ticket-prefix`, default Owner + QA. Both controls and custom-prefix writes are gated. Existing board renames and automatic-prefix creation remain available with the flag off.
+Ticket prefix controls and custom-prefix writes are always available. Existing board renames and automatic-prefix creation are unchanged.
 
 In Settings > Board > General, Ticket prefix appears above Board notifications. Board owners and existing board editors can change it. Enter or leaving the field saves it. The helper previews the typed prefix and explains that historical IDs still resolve. Errors use the existing toast.
 

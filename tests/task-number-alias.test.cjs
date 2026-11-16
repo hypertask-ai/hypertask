@@ -125,7 +125,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
     ...base,
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix", isFeatureEnabled: async () => true },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
   });
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {

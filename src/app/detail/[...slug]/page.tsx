@@ -10,7 +10,7 @@ import {
 import { Metadata } from "next";
 import { getServerCookieUser, requireServerCookieUser } from "@/lib/auth/serverUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, HTPR_7848_SUMMARY_ON_VIEW_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, HTPR_7848_SUMMARY_ON_VIEW_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
 import { redirect } from "next/navigation";
@@ -65,11 +65,9 @@ export default async function Page(
 
   if (/^[A-Za-z0-9][A-Za-z0-9_-]*-\d+$/.test(params.slug?.[1] ?? "")) {
     const user = await requireServerCookieUser();
-    if (await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, user.id)) {
-      const task = await findTaskByTicketNumber(params.slug[1], user.id, parseProjectSlug(params.slug[0]));
-      if (!task) return <Unauthorized />;
-      redirect(`/detail/project-${task.projectId}/${task.uniqueIndex}`);
-    }
+    const task = await findTaskByTicketNumber(params.slug[1], user.id, parseProjectSlug(params.slug[0]));
+    if (!task) return <Unauthorized />;
+    redirect(`/detail/project-${task.projectId}/${task.uniqueIndex}`);
   }
   const detailSlug = parseDetailSlug(params.slug);
   if (!detailSlug) {

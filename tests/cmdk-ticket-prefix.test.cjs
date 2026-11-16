@@ -34,8 +34,8 @@ function evaluate(source, bindings) {
   return new Function(...Object.keys(bindings), `${js}; return result;`)(...Object.values(bindings));
 }
 
-function flagBindings(file, enabled, githubEnabled = false) {
-  const bindings = { ...flags, useFlag: (key) => (enabled && key === flags.HTPR_6868_TICKET_PREFIX_FLAG) || (githubEnabled && key === flags.HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG) };
+function flagBindings(file, githubEnabled = false) {
+  const bindings = { ...flags, useFlag: (key) => githubEnabled && key === flags.HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG };
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const result = {};
   function visit(node) {
@@ -48,9 +48,9 @@ function flagBindings(file, enabled, githubEnabled = false) {
   return result;
 }
 
-function paletteGroups(enabled, frequent = {}, contextOptions, githubEnabled = false) {
+function paletteGroups(frequent = {}, contextOptions, githubEnabled = false) {
   const bindings = {
-    ...registry, ...flagBindings(palette, enabled, githubEnabled), CommandMode, getBoardCommands,
+    ...registry, ...flagBindings(palette, githubEnabled), CommandMode, getBoardCommands,
     useMemo: (callback) => callback(),
     boardLayout: "board", calendarSettings: { showWeekends: true },
     currentProject: { id: 15 }, frequentlyUsed: frequent, projects: [],
@@ -64,17 +64,17 @@ function paletteGroups(enabled, frequent = {}, contextOptions, githubEnabled = f
     getHTCFrecencyScore: () => 0,
   };
   const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible", "hiddenBasetenCommandKey", "hiddenAlwaysUseCommandKey", "hiddenXaiCommandKeys", "hiddenGithubCommandKey"]);
+  const names = new Set(["hiddenBasetenCommandKey", "hiddenAlwaysUseCommandKey", "hiddenXaiCommandKeys", "hiddenGithubCommandKey"]);
   const statements = [];
   function visit(node) {
     if ((ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => names.has(declaration.name.getText(source)))) ||
-        (ts.isIfStatement(node) && ["ticketPrefixEnabled", "!basetenByokEnabled", "!alwaysUseThisKeyEnabled", "!grokGemini4Enabled", "githubConnectEnabled"].includes(node.expression.getText(source)))) {
+        (ts.isIfStatement(node) && ["!basetenByokEnabled", "!alwaysUseThisKeyEnabled", "!grokGemini4Enabled", "githubConnectEnabled"].includes(node.expression.getText(source)))) {
       statements.push(node.getText(source));
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  Object.assign(bindings, evaluate(`(() => { ${statements.join("\n")} return { isTicketPrefixCommandVisible, hiddenBasetenCommandKey, hiddenAlwaysUseCommandKey, hiddenXaiCommandKeys, hiddenGithubCommandKey }; })()`, {
+  Object.assign(bindings, evaluate(`(() => { ${statements.join("\n")} return { hiddenBasetenCommandKey, hiddenAlwaysUseCommandKey, hiddenXaiCommandKeys, hiddenGithubCommandKey }; })()`, {
     ...bindings, useCallback: (callback) => callback,
   }));
   bindings.getCommands = registry.getAllCommands;
@@ -102,12 +102,12 @@ function searchCommands(groups, query) {
   return result.flatMap((group) => group.commandLists);
 }
 
-function prefixResult(enabled, query = "ticket prefix") {
-  return searchCommands(paletteGroups(enabled), query).find((command) => command.key === prefixKey);
+function prefixResult(query = "ticket prefix") {
+  return searchCommands(paletteGroups(), query).find((command) => command.key === prefixKey);
 }
 
 test("retired inbox archives stay absent from palette search and remembered commands", () => {
-  const groups = paletteGroups(false, {
+  const groups = paletteGroups({
     "archiveInboxCluster-10": { frequency: 100, lastUsedAt: Date.now() },
     createTask: { frequency: 1, lastUsedAt: Date.now() },
   }, {
@@ -121,42 +121,23 @@ test("retired inbox archives stay absent from palette search and remembered comm
   assert.ok(searchCommands(groups, "archive").every(({ name }) => !name.startsWith("Archive cluster:")));
 });
 
-test("flag on: ticket prefix search finds the board-general settings command", () => {
-  const command = prefixResult(true);
+test("ticket prefix search finds the board-general settings command", () => {
+  const command = prefixResult();
   assert.ok(command, "Ticket prefix command must be searchable");
   assert.equal(command.name, "Settings: Ticket prefix (board)");
   assert.equal(command.commandMode, CommandMode.Setting);
   assert.equal(command.payload, "board-general");
 });
 
-test("flag off: ticket prefix is absent from search and remembered commands", () => {
-  assert.ok(prefixResult(true), "Positive control must find Ticket prefix");
-  assert.equal(prefixResult(false), undefined);
-  const groups = paletteGroups(false, { [prefixKey]: { frequency: 100, lastUsedAt: Date.now() } });
-  assert.equal(groups.flatMap((group) => group.commandLists).some((command) => command.key === prefixKey), false);
-  assert.ok(searchCommands(groups, "time tracking").some((command) => command.key === "settingsBoardGeneral"));
-});
-
-test("flag on: Ticket prefix aliases and partial case-insensitive queries are searchable", () => {
+test("Ticket prefix aliases and partial case-insensitive queries are searchable", () => {
   for (const query of ["TICKET PREFIX", "ticket pre", "identifier", "id", "key", "code", "letters", "rename"]) {
-    assert.ok(prefixResult(true, query), `Missing Ticket prefix result for ${query}`);
-  }
-});
-
-
-test("the command search memo re-evaluates when the Ticket prefix flag changes", () => {
-  for (const [file, name, dependency] of [
-    [palette, "allCommands_", "isTicketPrefixCommandVisible"],
-  ]) {
-    const source = ts.createSourceFile(file, initializer(file, name), ts.ScriptTarget.Latest, true);
-    const expression = source.statements[0].expression;
-    assert.ok(expression.arguments[1].elements.some((element) => element.getText(source) === dependency));
+    assert.ok(prefixResult(query), `Missing Ticket prefix result for ${query}`);
   }
 });
 
 test("GitHub command visibility includes remembered commands only when enabled", () => {
   for (const enabled of [false, true]) {
-    const groups = paletteGroups(false, { settingsGithub: { frequency: 100, lastUsedAt: Date.now() }, createTask: { frequency: 1, lastUsedAt: Date.now() } }, {}, enabled);
+    const groups = paletteGroups({ settingsGithub: { frequency: 100, lastUsedAt: Date.now() }, createTask: { frequency: 1, lastUsedAt: Date.now() } }, {}, enabled);
     const all = groups.flatMap((group) => group.commandLists);
     assert.equal(all.some((command) => command.key === "settingsGithub"), enabled);
     assert.equal(groups.find((group) => group.group === "Frequently used").commandLists.some((command) => command.key === "settingsGithub"), enabled);

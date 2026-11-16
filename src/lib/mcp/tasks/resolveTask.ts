@@ -3,7 +3,7 @@ import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
-import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
+import { isFeatureEnabled } from '@/lib/flags';
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/projects/getAllIncludes';
 
@@ -183,7 +183,7 @@ export async function findTaskByIdentifier(
   const availableAliases = aliases.filter(alias => !reusedNumbers.some(
     task => task.projectId === alias.projectId && task.uniqueIndex === alias.uniqueIndex
   ));
-  const prefixTasks = ticket_number && await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, user.id)
+  const prefixTasks = ticket_number
     ? await findPrefixAliasTasks(ticket_number, projectFilter, project_id)
     : [];
   const tasks = [...new Map([

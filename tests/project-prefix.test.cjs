@@ -63,7 +63,6 @@ const prefix = load("src/lib/projectPrefix.ts", {
   "@/utils/helperFunctions/helperFunctions": { getSequentialLetters },
 });
 const flagKey = "htpr-6868-ticket-prefix";
-const agentPulseDotKey = "htpr-7339-agent-pulse-dot";
 function matches(row, where) {
   if (!row) return false;
   return Object.entries(where).every(([key, value]) => {
@@ -80,7 +79,7 @@ function matches(row, where) {
   });
 }
 const access = { taskWriteAccessWhere: userId => ({ OR: [{ ownerId: userId }, { members: { some: { userId, agentId: null } } }] }) };
-function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, loseAccess = false } = {}) {
+function writes({ ownerId = 6, boards = [], failSql = false, loseAccess = false } = {}) {
   const board = { id: 15, teamId: "team-1", title: "Board", uniqueIdentifier: "OLD", ownerId, members: [], status: "Normal", tasks: [] };
   const rows = [board, ...boards];
   const aliases = [];
@@ -136,7 +135,6 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
   const controller = load("src/utils/controllers/projects/update.ts", {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/projectPrefix": prefix,
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { assert.equal(key, flagKey); assert.equal(id, 6); return enabled; } },
     "./getAllIncludes": access,
     "@vercel/functions": { waitUntil: promise => { assert.ok(committed); scheduled.push(promise); } },
     "../turbopuffer/turbopufferHelper": {
@@ -190,14 +188,6 @@ test("permission rejection and changed access write nothing", async () => {
     assert.ok(!f.events.includes("project"));
   }
 });
-test("flag off rejects prefix changes but still permits an ordinary rename", async () => {
-  const f = writes({ enabled: false });
-  assert.equal((await f.update("NEW")).status, 403);
-  assert.equal(f.transactions(), 0);
-  assert.equal((await f.update(undefined)).status, 200);
-  assert.equal((await f.update("OLD")).status, 200);
-  assert.equal(f.board.uniqueIdentifier, "OLD");
-});
 test("transaction writes an alias then the project then one SQL ticket rewrite", async () => {
   const f = writes();
   f.board.tasks = [{ uniqueIndex: 1, ticketNumber: "OLD-1" }, { uniqueIndex: 99, ticketNumber: "OLD-99", status: "Deleted" }];
@@ -246,7 +236,7 @@ test("update route uses the safe controller with the authenticated caller", asyn
   assert.equal(f.aliases.length, 1);
 });
 
-function lookups({ enabled = true, visible = true, live = false, liveAccess = true, deleted = false, deletedBoard = false, agentId = null, ambiguous = false, moved = false, destinationOwnerId = 6, sourceOwnerId, members = [], prefixAliases = [{ prefix: "OLD", projectId: 15 }] } = {}) {
+function lookups({ visible = true, live = false, liveAccess = true, deleted = false, deletedBoard = false, agentId = null, ambiguous = false, moved = false, destinationOwnerId = 6, sourceOwnerId, members = [], prefixAliases = [{ prefix: "OLD", projectId: 15 }] } = {}) {
   const board = { id: 15, ownerId: sourceOwnerId ?? (visible ? 6 : 9), members, status: deletedBoard ? "Deleted" : "Normal", teamId: "team-1" };
   const current = { id: 101, projectId: 15, uniqueIndex: 123, ticketNumber: "NEW-123", status: deleted ? "Deleted" : "Normal", project: board };
   const tasks = [current];
@@ -262,7 +252,6 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     moveAliases.push({ projectId: 15, uniqueIndex: 123, ticketNumber: "NEW-123", task: current });
   }
   let aliasQueries = 0;
-  const flagCalls = [];
   const taskQueries = [];
   const rawQueries = [];
   const prisma = {
@@ -289,20 +278,12 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
     ...base,
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix", isFeatureEnabled: async () => enabled },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
   });
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
-    "@/lib/flags/keys": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey },
     ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {},
-    "@/lib/flags": {
-      HTPR_6868_TICKET_PREFIX_FLAG: flagKey,
-      isFeatureEnabled: async (key, id) => {
-        flagCalls.push([key, id]);
-        if (key === agentPulseDotKey) return false;
-        return key === flagKey && enabled;
-      },
-    },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
   });
@@ -315,7 +296,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/keys": { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer" }, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
     "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
-  return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, rawQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
+  return { resolver, detail, prisma, tasks, moveAliases, taskQueries, rawQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
 }
 test("old prefix alias lookup resolves in MCP, CLI batch and detail", async () => {
   const f = lookups();
@@ -378,7 +359,7 @@ test("detail lookup is wired before numeric parsing and canonicalizes ticket URL
   assert.match(page, /redirect\(`\/detail\/project-\$\{task.projectId\}\/\$\{task.uniqueIndex\}`\)/);
 });
 
-function creation({ enabled = true, clash = false, boards = [] } = {}) {
+function creation({ clash = false, boards = [] } = {}) {
   let created = null;
   const prisma = {
     section: { findMany: async () => [] },
@@ -399,7 +380,6 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/projectPrefix": prefix,
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (_key, id) => { assert.equal(id, 6); return enabled; } },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": {}, "@/utils/helperFunctions/Views/FilterHelperFunctions": {},
     "./boardQuota": { isBoardLimitReached: async () => false },
   });
@@ -412,8 +392,8 @@ test("create uses a supplied validated unique prefix", async () => {
   assert.equal(result.json.uniqueIdentifier, "AB");
   assert.equal(f.created().uniqueIdentifier, "AB");
 });
-test("create with prefix rejects flag off, invalid prefixes and uniqueness conflicts before creation", async () => {
-  for (const [options, input, status] of [[{ enabled: false }, "NEW", 403], [{}, "1AB", 400], [{}, null, 400], [{ clash: true }, "NEW", 400]]) {
+test("create with prefix rejects invalid prefixes and uniqueness conflicts before creation", async () => {
+  for (const [options, input, status] of [[{}, "1AB", 400], [{}, null, 400], [{ clash: true }, "NEW", 400]]) {
     const f = creation(options);
     assert.equal((await f.controller.default(6, "Release Plan", "team-1", "account-1", input)).status, status);
     assert.equal(f.created(), null);
@@ -426,7 +406,7 @@ test("create unique prefix rejects legacy lowercase and mixed-case board prefixe
     assert.equal(f.created(), null);
   }
 });
-test("create route cannot spoof an enabled user's identity to bypass the flag", async () => {
+test("create route cannot spoof a user's identity to attach a prefix", async () => {
   const calls = [];
   const route = loadPagesRoute("src/lib/api/project-writes/create.ts", {
     "@/utils/controllers/projects/create": { __esModule: true, default: async (...args) => { calls.push(args); return { status: 200, json: {} }; } },
@@ -464,7 +444,7 @@ test("transaction locks and fresh prefix reads protect concurrent create and mov
   assert.doesNotMatch(single, /ticketNumber: currentState.ticketNumber,\s+parentTaskId/);
 });
 
-function ui({ enabled = true, ownerId = 6, members = [], mutations = [], posts = [] } = {}) {
+function ui({ ownerId = 6, members = [], mutations = [], posts = [] } = {}) {
   const project = { id: 15, title: "Hypertask", uniqueIdentifier: "HTPR", ownerId, members };
   const shell = load("src/components/Modals/Settings/SettingsSectionShell.tsx", {
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
@@ -473,8 +453,6 @@ function ui({ enabled = true, ownerId = 6, members = [], mutations = [], posts =
     axios: { post: async (...args) => { posts.push(args); return { data: { uniqueIdentifier: "NEW" } }; }, isAxiosError: () => false },
     "@tanstack/react-query": { useQueryClient: () => ({ invalidateQueries: async () => {} }), useQuery: () => ({ data: {}, isLoading: false }), useMutation: options => { mutations.push(options); return { isPending: false, mutate: () => {} }; } },
     "react-hot-toast": { error: () => {} },
-    "@/hooks/useFlag": { useFlag: key => { assert.equal(key, flagKey); return enabled; } },
-    "@/lib/flags/keys": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey },
     "@/lib/state": { useRecoilValue: () => ({ id: 6 }), useSetRecoilState: () => () => {} },
     "@/store": {}, "./SettingsSectionShell": shell,
     "./SettingsToggle": { __esModule: true, default: () => null },
@@ -503,16 +481,14 @@ test("UI settings row is first, uses the source input pattern and mirrors edit p
   assert.match(settings, /event.key === "Enter"\) event.currentTarget.blur/);
   assert.match(settings, /toast.error/);
 });
-test("UI hides the new settings control when the flag is off", () => assert.ok(!ui({ enabled: false }).includes("Ticket prefix")));
 test("UI create reuses ModalInput, keeps manual edits and threads the prefix through both create paths", () => {
   const source = read("src/components/Modals/commands/createBoard.tsx");
   assert.match(source, /prefixDraft \?\? suggestProjectPrefix\(title\)/);
-  assert.match(source, /ticketPrefixEnabled &&/);
+  assert.doesNotMatch(source, /ticketPrefixEnabled/);
   assert.match(source, /<ModalInput\s+aria-label="Ticket prefix"/);
   assert.match(source, /setPrefixDraft\(event.target.value.toUpperCase\(\)\)/);
-  assert.equal((source.match(/ticketPrefixEnabled \? ticketPrefix : undefined/g) ?? []).length, 3);
   const actions = read("src/components/generalCommandActions.ts");
-  assert.equal((actions.match(/ticketPrefixEnabled && ticketPrefix !== undefined \? \{ ticketPrefix \} : \{\}/g) ?? []).length, 2);
+  assert.equal((actions.match(/ticketPrefix !== undefined \? \{ ticketPrefix \} : \{\}/g) ?? []).length, 2);
 });
 test("UI create updates the automatic suggestion until edited and submits the override", async () => {
   const { JSDOM } = require("jsdom");
@@ -546,8 +522,6 @@ test("UI create updates the automatic suggestion until edited and submits the ov
     "@/store": {},
     "@/lib/constants/keyboard-handler": { KeyCodes: { ENTER: 13, TAB: 9, J: 74, K: 75, ARROW_DOWN: 40, ARROW_UP: 38 } },
     "react-hot-toast": { error: message => { throw new Error(message); } },
-    "@/hooks/useFlag": { useFlag: () => true },
-    "@/lib/flags/keys": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey },
     "@/lib/projectPrefix": prefix,
     "./createBoardStatus": { getCreateBoardPendingHeader: title => `Creating ${title}` },
   }).default;
@@ -583,7 +557,7 @@ test("UI create updates the automatic suggestion until edited and submits the ov
 });
 
 const foldCommentsKey = "htpr-7611-comments-fold-from-first-paint";
-function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueIndex: 7 }, projectId = 15, userId = 6 } = {}) {
+function detailPage({ task = { id: 101, projectId: 20, uniqueIndex: 7 }, projectId = 15, userId = 6 } = {}) {
   const calls = [];
   const detail = lookups().detail;
   const page = load("src/app/detail/[...slug]/page.tsx", {
@@ -595,7 +569,7 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
     },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => { throw new Error("Unexpected metadata access lookup"); } },
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG: foldCommentsKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
+    "@/lib/flags": { HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG: foldCommentsKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return true; } },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
     "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
@@ -639,39 +613,26 @@ test("production: prefixed ticket URLs pass the proxy before page flag and acces
       assert.rejects(on.page(identifier), /REDIRECT \/detail\/project-7049\/33/),
       on.metadata(identifier).then(metadata => assert.deepEqual(metadata, { title: "Hypertask" })),
     ]);
-    assert.deepEqual(on.calls, [["flag", flagKey, 985], ["lookup", identifier, 985, 7049]]);
-    const off = detailPage({ enabled: false, projectId: 7049, userId: 985 });
-    await assert.rejects(off.page(identifier), /REDIRECT \/project\?id=7049/);
-    assert.deepEqual(off.calls, [["flag", flagKey, 985]]);
+    assert.deepEqual(on.calls, [["lookup", identifier, 985, 7049]]);
   }
   for (const identifier of ["ZZZZ-33", "QASA-33"]) {
     const unavailable = detailPage({ task: null, projectId: 7049, userId: 985 });
     assert.equal((await unavailable.page(identifier)).type, "Unauthorized");
-    assert.deepEqual(unavailable.calls, [["flag", flagKey, 985], ["lookup", identifier, 985, 7049]]);
+    assert.deepEqual(unavailable.calls, [["lookup", identifier, 985, 7049]]);
   }
-  for (const enabled of [false, true]) {
-    const numeric = detailPage({ enabled, projectId: 7049, userId: 985 });
-    assert.equal((await numeric.page("33")).type, "Unauthorized");
-    assert.deepEqual(numeric.calls, [["flag", foldCommentsKey, 985]], "numeric ids never read the prefix flag; only the comment-fold read runs beside the task fetch");
-  }
+  const numeric = detailPage({ projectId: 7049, userId: 985 });
+  assert.equal((await numeric.page("33")).type, "Unauthorized");
+  assert.deepEqual(numeric.calls, [["flag", foldCommentsKey, 985]], "numeric ids never resolve a prefix; only the comment-fold read runs beside the task fetch");
 });
 
-test("review: detail URLs check the server flag before resolving and redirecting", async () => {
+test("review: detail URLs resolve prefixed ticket numbers before redirecting", async () => {
   for (const identifier of ["OLD-123", "old-123", "OlD-123"]) {
     const f = detailPage();
     await assert.rejects(f.page(identifier), /REDIRECT \/detail\/project-20\/7/);
-    assert.deepEqual(f.calls, [["flag", flagKey, 6], ["lookup", identifier, 6, 15]]);
-    const off = detailPage({ enabled: false });
-    await assert.rejects(off.page(identifier), /REDIRECT \/project\?id=15/);
-    assert.deepEqual(off.calls, [["flag", flagKey, 6]]);
+    assert.deepEqual(f.calls, [["lookup", identifier, 6, 15]]);
   }
   const missing = detailPage({ task: null });
   assert.equal((await missing.page("OLD-123")).type, "Unauthorized");
-  for (const enabled of [false, true]) {
-    const numeric = detailPage({ enabled });
-    assert.equal((await numeric.page("123")).type, "Unauthorized");
-    assert.deepEqual(numeric.calls, [["flag", foldCommentsKey, 6]], "numeric ids never read the prefix flag; only the comment-fold read runs beside the task fetch");
-  }
 });
 
 test("review: rename then move resolves historical prefixes on the destination board", async () => {
@@ -787,7 +748,7 @@ test("review: prefix-only patch submits no title and preserves a concurrent rena
   assert.equal(res.code, 200);
   assert.equal(f.board.title, "Renamed by another user");
   assert.deepEqual(f.updates, [{ uniqueIdentifier: "NEW" }]);
-  for (const options of [{ enabled: false }, { ownerId: 9 }, { loseAccess: true }]) {
+  for (const options of [{ ownerId: 9 }, { loseAccess: true }]) {
     const rejected = writes(options);
     assert.equal((await rejected.controller.default(15, undefined, undefined, "NEW", { id: 6 })).status, 403);
     assert.deepEqual(rejected.updates, []);
@@ -803,31 +764,25 @@ test("review: compact radius is 4px on the new prefix input", () => {
   assert.match(read("src/components/Modals/Settings/GeneralSection.tsx"), /rounded-\[5px\]/, "positive control: the old copied pattern used 5px");
 });
 
-test("review: feature flag payload is omitted in both command create paths when off", async () => {
-  const source = read("src/components/commands.tsx");
-  assert.match(source, /useFlag\(HTPR_6868_TICKET_PREFIX_FLAG\)/);
-  for (const ticketPrefixEnabled of [false, true]) {
-    for (const mode of ["Create Board", "CreateTeamBoard"]) {
-      const posts = [];
-      const actions = load("src/components/generalCommandActions.ts", {
-        "@/lib/api/typedClient": {},
-        "@/models/enums": {},
-        axios: { post: async (url, body) => { posts.push([url, body]); return { data: { id: 15 } }; } },
-        "react-hot-toast": { error: message => { throw new Error(message); } },
-        "@/utils/api/Homepage": { createTeam: async () => ({ data: { id: "new-team", googleAccountId: "new-account" } }) },
-        "@/utils/api/Inbox": {}, "@/lib/tutorial/learnTutorialState": {}, "@/lib/constants": {},
-        "@/utils/helperFunctions/Views/ViewsHelperFunctions": {}, "@/hooks/Task Detail/useTimeTracking": {},
-        "@/utils/branchName": {}, "@/lib/utils/clipboard": {},
-      }).createGeneralCommandActions({
-        currentUser: { id: 6 }, _currentProject: { id: 15 }, ticketPrefixEnabled,
-        boardCloseHandler: () => {}, setCurrentProject: () => {}, router: { refresh: () => {} },
-        queryClient: { refetchQueries: async () => {} }, goToProjectShortcut: () => {},
-      });
-      await actions.createBoard(mode, "Release Plan", "team-1", "account-1", "Team", "NEW");
-      assert.equal(posts.length, 1);
-      assert.equal(Object.hasOwn(posts[0][1], "ticketPrefix"), ticketPrefixEnabled);
-      if (ticketPrefixEnabled) assert.equal(posts[0][1].ticketPrefix, "NEW");
-    }
+test("review: the prefix reaches both command create paths without a flag", async () => {
+  for (const mode of ["Create Board", "CreateTeamBoard"]) {
+    const posts = [];
+    const actions = load("src/components/generalCommandActions.ts", {
+      "@/lib/api/typedClient": {},
+      "@/models/enums": {},
+      axios: { post: async (url, body) => { posts.push([url, body]); return { data: { id: 15 } }; } },
+      "react-hot-toast": { error: message => { throw new Error(message); } },
+      "@/utils/api/Homepage": { createTeam: async () => ({ data: { id: "new-team", googleAccountId: "new-account" } }) },
+      "@/utils/api/Inbox": {}, "@/lib/tutorial/learnTutorialState": {}, "@/lib/constants": {},
+      "@/utils/helperFunctions/Views/ViewsHelperFunctions": {}, "@/hooks/Task Detail/useTimeTracking": {},
+      "@/utils/branchName": {}, "@/lib/utils/clipboard": {},
+    }).createGeneralCommandActions({
+      currentUser: { id: 6 }, _currentProject: { id: 15 },
+      boardCloseHandler: () => {}, setCurrentProject: () => {}, router: { refresh: () => {} },
+      queryClient: { refetchQueries: async () => {} }, goToProjectShortcut: () => {},
+    });
+    await actions.createBoard(mode, "Release Plan", "team-1", "account-1", "Team", "NEW");
+    assert.equal(posts[0][1].ticketPrefix, "NEW");
   }
 });
 
@@ -839,7 +794,7 @@ test("review: bulk reindex schedules tasks and comments only after successful co
   assert.equal(f.scheduled.length, 1);
   assert.deepEqual(f.reindexed, [["task", 101], ["comments", 101], ["task", 102], ["comments", 102]]);
   assert.equal(f.sql.filter(row => row.text.startsWith("UPDATE")).length, 1);
-  for (const options of [{ failSql: true }, { enabled: false }, { loseAccess: true }]) {
+  for (const options of [{ failSql: true }, { loseAccess: true }]) {
     const failed = writes(options);
     await failed.update("NEW");
     assert.deepEqual(failed.scheduled, []);
@@ -847,34 +802,6 @@ test("review: bulk reindex schedules tasks and comments only after successful co
   }
 });
 
-test("round 2: shared detail loader gates ticket identifiers but preserves numeric lookup", async () => {
-  for (const enabled of [false, true]) {
-    for (const identifier of ["OLD-123", "old-123", "OlD-123", "NEW-123"]) {
-      const f = lookups({ enabled });
-      f.tasks[0].pullRequests = [];
-      const task = await f.detail.fetchTaskDetail("project-15", identifier, 6);
-      assert.equal(task?.id ?? null, enabled ? 101 : null);
-      assert.deepEqual(f.flagCalls, enabled ? [[flagKey, 6], [agentPulseDotKey, 6]] : [[flagKey, 6]]);
-      if (!enabled) {
-        assert.deepEqual(f.taskQueries, []);
-        assert.equal(f.aliasQueries(), 0);
-      }
-    }
-    for (const identifier of [123, "123"]) {
-      const f = lookups({ enabled });
-      f.tasks[0].pullRequests = [];
-      assert.equal((await f.detail.fetchTaskDetail("project-15", identifier, 6)).id, 101);
-      assert.deepEqual(f.flagCalls, [[agentPulseDotKey, 6]]);
-      assert.equal(f.taskQueries.length, 1);
-      assert.equal(f.aliasQueries(), 0);
-    }
-    const moved = lookups({ enabled, moved: true });
-    moved.tasks[0].pullRequests = [];
-    assert.equal((await moved.detail.fetchTaskDetail("project-15", "OLD-123", 6))?.projectId ?? null, enabled ? 20 : null);
-    const denied = lookups({ enabled, visible: false });
-    assert.equal(await denied.detail.fetchTaskDetail("project-15", "OLD-123", 6), null);
-  }
-});
 
 test("round 2: combined move and prefix history is ambiguous across teams until scoped", async () => {
   const f = lookups();
@@ -951,17 +878,15 @@ test("round 2: bulk prefix rewrite advances updatedAt in the same parameterized 
   assert.match(read("src/lib/mcp/operations/tasks/operation.ts"), /where.updatedAt = \{ gte: new Date\(updatedSince\) \}/);
 });
 
-test("registry defines one ticket-specific flag with Owner + QA default", () => {
+test("the ticket prefix flag is retired and absent from the registry", () => {
   const keys = load("src/lib/flags/keys.ts");
-  assert.equal(keys.HTPR_6868_TICKET_PREFIX_FLAG, flagKey);
+  assert.equal(keys.HTPR_6868_TICKET_PREFIX_FLAG, undefined);
   const registry = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
-  assert.equal((registry.match(/key: HTPR_6868_TICKET_PREFIX_FLAG/g) ?? []).length, 1);
-  assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+  assert.equal((registry.match(/key: HTPR_6868_TICKET_PREFIX_FLAG/g) ?? []).length, 0);
+  assert.equal((registry.match(new RegExp(`"${flagKey}"`, "g")) ?? []).length, 2);
 });
 
-test("round 3: MCP prefix history needs the flag, keeps legacy prefixes, and ID-only lookup ignores history", async () => {
-  const off = lookups({ enabled: false });
-  assert.equal(await off.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" }), null);
+test("round 3: MCP prefix history keeps legacy prefixes and ID-only lookup ignores history", async () => {
   for (const prefix of ["TEAM_A", "TEAM-OPS"]) {
     const f = lookups({ prefixAliases: [{ projectId: 15, prefix }] });
     assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: `${prefix}-123` })).id, 101);
@@ -982,15 +907,10 @@ test("round 4: an indexed miss does not scan Task again", async () => {
 
 test("round 4: a wildcard identifier keeps the old case-insensitive match", async () => {
   const indexed = lookups({ prefixAliases: [] });
-  const legacy = lookups({ enabled: false, prefixAliases: [] });
   for (const number of ["NEW_123", "TEAM%A-1", "OLD\\-123"]) {
     const resolved = await indexed.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number });
     assert.match(indexed.rawQueries.at(-1).text, /"ticketNumber" ILIKE \?/, `${number} must keep the wildcard predicate`);
-    assert.deepEqual(
-      resolved,
-      await legacy.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number }),
-      `${number} must resolve the way it did before the index`,
-    );
+    assert.equal(resolved, null, `${number} must fall back to the case-insensitive scan`);
   }
 });
 

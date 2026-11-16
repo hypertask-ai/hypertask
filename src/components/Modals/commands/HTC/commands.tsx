@@ -95,7 +95,6 @@ import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HT
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
-  HTPR_6868_TICKET_PREFIX_FLAG,
 } from "@/lib/flags/keys";
 import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
 import Tooltip from "@/components/Common/Tooltip";
@@ -197,7 +196,6 @@ const Commands = (props: Props) => {
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
-  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   let blockerCommentEnabled = false;
   if (blockerCommentFlag) blockerCommentEnabled = true;
@@ -222,15 +220,6 @@ const Commands = (props: Props) => {
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled || graphite2Enabled || visibility.restore || !visibility.loaded) getCommands = getThemeCommands;
-  const excludeTicketPrefixCommand = useCallback(
-    (command: ICommandList) => command.key !== "settingsBoardTicketPrefix",
-    []
-  );
-  const includeTicketPrefixCommand = useCallback(() => true, []);
-  let isTicketPrefixCommandVisible = excludeTicketPrefixCommand;
-  if (ticketPrefixEnabled) {
-    isTicketPrefixCommandVisible = includeTicketPrefixCommand;
-  }
   const buildId = process.env.NEXT_PUBLIC_BUILD_ID?.slice(0, 7) || "dev";
   const buildTime = new Date(process.env.NEXT_PUBLIC_BUILD_TIME || "");
   const buildTimeLabel = buildId !== "dev" && !Number.isNaN(buildTime.getTime())
@@ -303,7 +292,6 @@ const Commands = (props: Props) => {
             command.key !== hiddenGithubCommandKey &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
-            isTicketPrefixCommandVisible(command) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
@@ -465,7 +453,6 @@ const Commands = (props: Props) => {
     onMyTasks,
     projects,
     showByokApiKeys,
-    isTicketPrefixCommandVisible,
   ])
 
   const addFieldPayload = showCommands.payload as AddFieldPalettePayload | undefined;

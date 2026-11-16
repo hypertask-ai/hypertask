@@ -1,8 +1,6 @@
 "use client";
 
 import axios from "axios";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -463,11 +461,10 @@ const BoardAutoAssignSetting = ({ project }: { project: IProject }) => {
 
 const BoardGeneralSection = () => {
   const { project } = useSettingsTeam();
-  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
 
   return (
     <SettingsSectionShell title="General">
-      {project && ticketPrefixEnabled && <BoardTicketPrefixSetting key={project.id} project={project} />}
+      {project && <BoardTicketPrefixSetting key={project.id} project={project} />}
       {project && <BoardNotificationSetting project={project} />}
       {project && <BoardTimeTrackingSetting project={project} />}
       <BoardLifecycleSettings />

@@ -16,7 +16,6 @@ import {
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -491,7 +490,6 @@ export async function fetchTaskDetail(
 ) {
   const ticketNumber = typeof uniqueIndex === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*-\d+$/.test(uniqueIndex)
     ? uniqueIndex : null;
-  if (ticketNumber && !(await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, userId))) return null;
   const slug = ticketNumber
     ? await findTaskByTicketNumber(ticketNumber, userId, parseProjectSlug(projectSlug))
     : parseDetailSlug([projectSlug, String(uniqueIndex)]);

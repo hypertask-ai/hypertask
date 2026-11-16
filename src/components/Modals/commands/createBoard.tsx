@@ -18,8 +18,6 @@ import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import toast from "react-hot-toast";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
 import { normalizeProjectPrefix, suggestProjectPrefix } from "@/lib/projectPrefix";
 import { getCreateBoardPendingHeader } from "./createBoardStatus";
 
@@ -42,7 +40,6 @@ const CreateBoard = (props: Props) => {
   const currentUser = useRecoilValue(currentUserAtom);
   const { createBoard, payload } = props;
   const [title, setTitle] = useState("");
-  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const [prefixDraft, setPrefixDraft] = useState<string | null>(null);
   const ticketPrefix = prefixDraft ?? suggestProjectPrefix(title);
   const [currentScreen, setCurrentScreen] = useState<
@@ -85,10 +82,10 @@ const CreateBoard = (props: Props) => {
         selectedTeam.id,
         selectedTeam.googleAccountId,
         undefined,
-        ticketPrefixEnabled ? ticketPrefix : undefined
+        ticketPrefix
       );
     else if (filteredTeams.length === 0)
-      createBoard("CreateTeamBoard", title, null, null, keyword, ticketPrefixEnabled ? ticketPrefix : undefined);
+      createBoard("CreateTeamBoard", title, null, null, keyword, ticketPrefix);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -96,7 +93,7 @@ const CreateBoard = (props: Props) => {
       (item) => item.id === selectedTeam.id
     );
 
-    const editingBoardFields = ticketPrefixEnabled && currentScreen === "Create Board";
+    const editingBoardFields = currentScreen === "Create Board";
     if (e.keyCode === KeyCodes.TAB && !editingBoardFields) {
       e.preventDefault();
       return;
@@ -127,11 +124,9 @@ const CreateBoard = (props: Props) => {
 
     if (e.keyCode === KeyCodes.ENTER) {
       if (currentScreen === "Create Board") {
-        if (ticketPrefixEnabled) {
-          try { normalizeProjectPrefix(ticketPrefix); } catch (error) {
-            toast.error((error as Error).message);
-            return;
-          }
+        try { normalizeProjectPrefix(ticketPrefix); } catch (error) {
+          toast.error((error as Error).message);
+          return;
         }
         if (payload) {
           setCreatingTeam(true);
@@ -141,7 +136,7 @@ const CreateBoard = (props: Props) => {
             payload.teamId,
             payload.googleAccountId,
             undefined,
-            ticketPrefixEnabled ? ticketPrefix : undefined
+            ticketPrefix
           );
         } else {
           if (title.length < 4) {
@@ -195,7 +190,7 @@ const CreateBoard = (props: Props) => {
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [title, keyword, selectedTeam, filteredTeams, currentScreen, ticketPrefix, ticketPrefixEnabled]);
+  }, [title, keyword, selectedTeam, filteredTeams, currentScreen, ticketPrefix]);
 
   useLayoutEffect(() => {
     handleGetTeams();
@@ -231,18 +226,14 @@ const CreateBoard = (props: Props) => {
             value={title}
             placeholder="Board name"
           />
-          {ticketPrefixEnabled && (
-            <>
-              <ModalHeaderComp className="px-[20px]" header="Ticket prefix" />
-              <ModalInput
-                aria-label="Ticket prefix"
-                autofocus={false}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setPrefixDraft(event.target.value.toUpperCase())}
-                value={ticketPrefix}
-                placeholder="Ticket prefix"
-              />
-            </>
-          )}
+          <ModalHeaderComp className="px-[20px]" header="Ticket prefix" />
+          <ModalInput
+            aria-label="Ticket prefix"
+            autofocus={false}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setPrefixDraft(event.target.value.toUpperCase())}
+            value={ticketPrefix}
+            placeholder="Ticket prefix"
+          />
         </div>
       ) : (
 

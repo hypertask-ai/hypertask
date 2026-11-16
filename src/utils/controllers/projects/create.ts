@@ -6,7 +6,6 @@ import { CreateLogInput } from "@/models/model";
 import prisma from "@/lib/prisma";
 import { assertBoardRoom, isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { normalizeProjectPrefix, suggestProjectPrefix } from "@/lib/projectPrefix";
-import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { buildDefaultTitle } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { defaultFilterSettings } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { FREE_BOARD_LIMIT_MESSAGE, isBoardLimitReached } from "./boardQuota";
@@ -73,9 +72,6 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
     let project : any = undefined
 
     const hasPrefix = ticketPrefix !== undefined;
-    if (hasPrefix && !(await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, userId))) {
-      return { status: 403, json: { message: "Custom ticket prefixes are not enabled" } };
-    }
     const prefix = hasPrefix ? normalizeProjectPrefix(ticketPrefix) : undefined;
     const committed = await prisma.$transaction(async (tx) => {
       await assertBoardRoom(tx, { kind: "team", teamId }, 1, { actorUserId: userId, entryPoint: "projects.create" });

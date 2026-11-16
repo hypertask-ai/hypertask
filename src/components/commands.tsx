@@ -16,7 +16,7 @@ import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
-import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
+import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7260_KANBAN_SELECT_ALL_FLAG } from "@/lib/flags/keys";
 
 
 
@@ -77,7 +77,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const bulkMoveBoardFlag = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
   const newTaskWindow = true;
-  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
   queryClient, myTasksViewsEnabled,
   myTasksSnoozeEnabled, activeSectionId, updateTaskInCache, moveItem,
@@ -145,7 +144,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     _activeItem, activeSectionId, setBoardColumnsViewAPI, getProjectIdxAndAllData, updateProjectView,
     renameBoard, removeMemberFromBoard, addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard,
     setShowCommands, setCommandMode,
-    ...(ticketPrefixEnabled ? { ticketPrefixEnabled: true } : {}),
   });
   let switchCommandTheme = switchToTheme;
   if (!roundedEnabled || !graphite2Enabled) {
