@@ -677,6 +677,22 @@ test("prompt cache flag is retired after becoming permanent", async () => {
   listedRows = [];
 });
 
+test("inbox selected count flag is retired after release for everyone", async () => {
+  const key = "htpr-7111-inbox-selected-count";
+  assert.equal(flags.HTPR_7111_INBOX_SELECTED_COUNT_FLAG, undefined);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261116180000_drop_htpr_7111_inbox_selected_count_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  for (const userId of [6, 985, 2343]) {
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+});
+
 test("column analytics flag is retired and column events stay server-side", async () => {
   const key = "htpr-7273-column-events";
   assert.equal(flags.HTPR_7273_COLUMN_EVENTS_FLAG, undefined);

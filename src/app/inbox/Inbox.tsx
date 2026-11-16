@@ -76,7 +76,7 @@ import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
 import RemindMeInbox from "@/components/notifications/inboxSplit/RemindMeInbox";
 import { InboxSelectedCount } from "@/app/inbox/InboxSelectedCount";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7111_INBOX_SELECTED_COUNT_FLAG, HTPR_7841_INBOX_KEEPS_SCROLL_FLAG } from "@/lib/flags/keys";
+import { HTPR_7841_INBOX_KEEPS_SCROLL_FLAG } from "@/lib/flags/keys";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useInboxZeroStyling } from "@/hooks/Inbox/useInboxZeroStyling";
@@ -129,7 +129,6 @@ const Inbox = ({
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
   const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
-  const showSelectedCount = useFlag(HTPR_7111_INBOX_SELECTED_COUNT_FLAG);
   const inboxKeepsScroll = useFlag(HTPR_7841_INBOX_KEEPS_SCROLL_FLAG);
   const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
   const inboxFirstRow = useFlag(HTPR_8868_INBOX_FIRST_ROW_FLAG);
@@ -881,7 +880,6 @@ const Inbox = ({
               contentGap={appShellRailOn && !isInboxZero}
               narrowLayout={narrowInboxTabs}
               hidden={narrowInboxTabs && isMbl}
-              SelectedCount={showSelectedCount ? InboxSelectedCount : null}
               trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
             >
               {_notificationsTQ?.structuredData?.tabs.map(
@@ -1067,7 +1065,6 @@ interface IProps {
   contentGap?: boolean;
   narrowLayout?: boolean;
   hidden?: boolean;
-  SelectedCount?: typeof InboxSelectedCount | null;
   trailingAction?: ReactNode;
 }
 const SplitTitlesContainer: FC<IProps> = ({
@@ -1075,7 +1072,6 @@ const SplitTitlesContainer: FC<IProps> = ({
   contentGap = false,
   narrowLayout = false,
   hidden = false,
-  SelectedCount = null,
   trailingAction,
 }) => {
   const stickySplits = useFlag(HTPR_9029_STICKY_SPLITS_FLAG);
@@ -1176,21 +1172,17 @@ const SplitTitlesContainer: FC<IProps> = ({
         </button>
       )}
       {trailingAction}
-      <ButtonGroup SelectedCount={SelectedCount} />
+      <ButtonGroup />
     </div>
   );
 };
 
-const ButtonGroup = ({
-  SelectedCount,
-}: {
-  SelectedCount: typeof InboxSelectedCount | null;
-}) => {
+const ButtonGroup = () => {
   const { selectedIdsArray, handleBulkArchive } = useBulkSelectionContext();
 
   return (
     <div className="flex items-center gap-2">
-      {SelectedCount && <SelectedCount count={selectedIdsArray.length} />}
+      <InboxSelectedCount count={selectedIdsArray.length} />
       <div
         className={`transition-all duration-75 ${
           selectedIdsArray.length > 0 ? "flex items-center gap-2" : "hidden"
