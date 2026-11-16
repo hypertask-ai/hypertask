@@ -241,11 +241,18 @@ eq "when the owner is gone the session takes the slot over" "$(undelivered runne
 sleep 300 & PA=$!; sleep 300 & PB=$!
 race() { # mode: both sessions start at once on a free slot with one pending event
   rm -f "$RUNNER_INBOX_DIR/runner-3.hook-alive"; : > "$RUNNER_INBOX_DIR/runner-3.events.jsonl"; ev runner-3 race "race-$1"
-  local oa ob
+  local oa ob first second first_rc=0 second_rc=0
   oa=$T/oa; ob=$T/ob
-  echo "$pl" | SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$PA" "$HOOK" "$1" > "$oa" 2>/dev/null &
-  echo "$pl" | SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$PB" "$HOOK" "$1" > "$ob" 2>/dev/null &
-  wait
+  SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$PA" timeout --kill-after=1s 10s "$HOOK" "$1" <<< "$pl" > "$oa" 2>/dev/null &
+  first=$!
+  SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$PB" timeout --kill-after=1s 10s "$HOOK" "$1" <<< "$pl" > "$ob" 2>/dev/null &
+  second=$!
+  wait "$first" || first_rc=$?
+  wait "$second" || second_rc=$?
+  if [ "$first_rc" -ne 0 ] || [ "$second_rc" -ne 0 ]; then
+    echo "hook exit codes: $first_rc|$second_rc"
+    return 1
+  fi
   local n=0; [ -s "$oa" ] && n=$((n+1)); [ -s "$ob" ] && n=$((n+1))
   echo "$n|$(jq -r .pid "$RUNNER_INBOX_DIR/runner-3.hook-alive")|$(undelivered runner-3)"
 }
