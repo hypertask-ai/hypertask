@@ -127,7 +127,7 @@ pstack_verifier:
   status_context: pstack-verifier
   required: false
   model: deepseek/deepseek-v4.1-flash
-  client_javascript: "Candidate page script runs in the trusted browser on the runner. The smoke cookie dies with the job, and forks are rejected."
+  client_javascript: "Candidate page script runs in the unprivileged drive job browser. The model key stays in the model job, which never checks out the pull request. The smoke cookie dies with the drive job, and forks are rejected."
 
 pr_size_observation:
   ticket: https://app.hypertask.ai/detail/project-11514/29
