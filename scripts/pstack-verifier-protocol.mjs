@@ -73,6 +73,12 @@ export function statusPayload({ verdict, clicked = [] }) {
 export function chatBody(model, prompt) {
   return { model: assertFlashModel(model), temperature: 0, max_tokens: 1200, messages: [{ role: "system", content: "You drive a browser. Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content: prompt }] };
 }
+async function readLive(page, secrets) {
+  let url = "", text = "";
+  try { url = page.url(); } catch { url = ""; }
+  try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
+  return { url, snapshot: redact(`${url}\n${String(text).slice(0, 2500)}`, secrets) };
+}
 export function acceptPass(events, base = APP) {
   const origin = new URL(base).origin;
   let shown = "", lands = 0, at = -1, left = false;
@@ -90,9 +96,10 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
   const base = smoke.base || APP;
   const pairs = String(smoke.cookie ?? "").split(";").map((part) => part.trim()).filter(Boolean);
   const secrets = [smoke.cookie, smoke.key, ...pairs, ...pairs.map((pair) => pair.slice(pair.indexOf("=") + 1))].filter(Boolean);
-  let screen = "The browser is open on the seeded board.", snapshot = screen, url = "", notes = "", verdict = "", landed = false;
+  let screen = "The browser is open on the seeded board.", snapshot = screen, url = "", notes = "", verdict = "", landed = false, watch = null;
   const events = [], clicked = [], shots = [];
   for (let turn = 1; turn <= maxTurns && !verdict; turn += 1) {
+    if (watch) { const now = await readLive(watch, secrets); url = now.url; screen = snapshot = now.snapshot; }
     events.push({ t: "show", url });
     const prompt = redact(buildPrompt({ title: meta.title, body: meta.body, diff, boardPath: smoke.boardPath, taskPath: smoke.taskPath, snapshot, turn, last: turn === maxTurns }), secrets);
     let parsed;
@@ -105,6 +112,7 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
     }
     if (parsed.actions.length) {
       const result = await perform(parsed.actions);
+      watch = result.page ?? watch;
       clicked.push(...result.clicked);
       shots.push(...result.shots);
       url = result.url || String(result.snapshot ?? "").split("\n")[0];
@@ -114,6 +122,7 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
       landed = true;
       screen = snapshot = redact(result.snapshot, secrets);
     } else {
+      if (watch) { const now = await readLive(watch, secrets); if (now.url !== url || now.snapshot !== snapshot) { events.push({ t: "land", url: now.url }); url = now.url; screen = snapshot = now.snapshot; } }
       events.push({ t: "reply", actions: 0, verdict: parsed.verdict });
       verdict = acceptPass(events, base) || (parsed.verdict === "FAIL" && landed ? "FAIL" : "");
     }
@@ -149,7 +158,7 @@ export async function performOnPage(page, actions, shotsDir, turn, base) {
   const url = urls.at(-1) || page.url();
   let loggedIn = false;
   try { const current = new URL(url); loggedIn = current.origin === new URL(base).origin && !LOGIN.test(current.pathname); } catch { loggedIn = false; }
-  return { clicked, shots, loggedIn, url, urls, snapshot: `${url}\n${lines.join("\n")}\n${text.slice(0, 2500)}` };
+  return { clicked, shots, loggedIn, url, urls, page, snapshot: `${url}\n${lines.join("\n")}\n${text.slice(0, 2500)}` };
 }
 export async function completeWithOpenRouter(prompt, { key, model = MODEL, fetchImpl = globalThis.fetch } = {}) {
   if (!key) throw new Error("model login is missing");

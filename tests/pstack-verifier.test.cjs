@@ -183,3 +183,28 @@ test("pass acceptance matches the rule on seeded runs", async () => {
     assert.equal(acceptPass(events, base), reference(events));
   }
 });
+test("a redirect during the model call is not a pass", async () => {
+  const { verifyLoop, performOnPage } = await load();
+  const run = async (flip) => {
+    const prompts = [];
+    let step = 0, hot = false;
+    const page = {
+      url: () => `${base}${hot ? "/login" : "/project?id=9"}`,
+      async screenshot() {},
+      getByText() { return { first: () => ({ click: async () => {} }) }; },
+      locator: () => ({ innerText: async () => (hot ? "Sign in" : "board") }),
+    };
+    const result = await verifyLoop({
+      meta: { title: "t", body: "" }, diff: "", smoke, maxTurns: 3,
+      complete: async (prompt) => { prompts.push(prompt); step += 1; if (flip && step === 2) hot = true; return JSON.stringify(step < 2 ? { actions: [{ op: "click", text: "Cancel" }] } : { actions: [], verdict: step === 2 ? "PASS" : "FAIL" }); },
+      perform: (actions) => performOnPage(page, actions, "/tmp", step, base),
+    });
+    return { result, prompts };
+  };
+  const moved = await run(true);
+  assert.equal(moved.result.verdict, "FAIL");
+  assert.doesNotMatch(moved.prompts[1], /click ok/);
+  assert.match(moved.prompts[1], /\/project\?id=9/);
+  assert.match(moved.prompts[2], /\/login[\s\S]*Sign in/);
+  assert.equal((await run(false)).result.verdict, "PASS");
+});
