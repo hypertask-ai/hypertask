@@ -228,3 +228,18 @@ export const getActiveBoardViewId = (
     project.project_view?.default_view_id
   );
 };
+
+export const getViewToActivateWhenHidden = (
+  project: IProject | null | undefined,
+  activeBuiltinViews: Record<number, string>,
+  views: readonly BoardView[],
+  hiddenViewId: string,
+): BoardView | undefined => {
+  if (!project) return undefined;
+  if (getActiveBoardViewId(project, activeBuiltinViews) !== hiddenViewId) {
+    return undefined;
+  }
+  const defaultViewId = project.project_view?.default_view_id;
+  if (!defaultViewId || defaultViewId === hiddenViewId) return undefined;
+  return views.find((view) => view.id === defaultViewId);
+};
