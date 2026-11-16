@@ -87,9 +87,7 @@ export function chatBody(model, prompt) {
   return { model: assertFlashModel(model), temperature: 0, max_tokens: 1200, messages: [{ role: "system", content: "You drive a browser. Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content: prompt }] };
 }
 async function readLive(page, secrets) {
-  let url = "", text = "";
-  try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} try { url = page.url(); } catch { url = ""; }
-  try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
+  let url = "", text = ""; try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} try { url = page.url(); } catch { url = ""; } try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
   return { url, snapshot: redact(`${url}\n${String(text).slice(0, 2500)}`, secrets) };
 }
 export function acceptPass(events, base = APP, seed) {
@@ -98,10 +96,7 @@ export function acceptPass(events, base = APP, seed) {
   for (const event of events) {
     if (event.t === "show") { shown = String(event.url ?? ""); at = lands; text = String(event.text ?? ""); status = Number(event.status) || 0; }
     else if (event.t === "land" || event.t === "nav") { if (event.t === "land") lands += 1; try { if (new URL(event.url).origin !== origin) left = true; } catch { left = true; } }
-    else if (!event.bad && !event.actions && (event.verdict === "PASS" || event.verdict === "PASS+NOTES")) {
-      let where = null; try { where = new URL(shown); } catch { where = null; }
-      if (where && lands > 0 && at === lands && where.origin === origin && seededPage(shown, text, status, seed) && !left) return event.verdict;
-    }
+    else if (!event.bad && !event.actions && (event.verdict === "PASS" || event.verdict === "PASS+NOTES")) { let where = null; try { where = new URL(shown); } catch { where = null; } if (where && lands > 0 && at === lands && where.origin === origin && seededPage(shown, text, status, seed) && !left) return event.verdict; }
   }
   return "";
 }
@@ -149,26 +144,27 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
   return { verdict, notes: redact(notes, secrets), clicked, shots };
 }
 export async function performOnPage(page, actions, shotsDir, turn, base, seed) {
-  const clicked = [], shots = [], lines = [], urls = []; let status = 0; const see = (response) => { try { const request = response?.request?.(); if (request?.resourceType?.() === "document" && request.frame?.() === page.mainFrame?.()) status = Number(typeof response.status === "function" ? response.status() : response.status) || status; } catch {} }; if (typeof page.on === "function") page.on("response", see);
+  const clicked = [], shots = [], lines = [], urls = []; let status = 0, bound = null; const origin = new URL(base).origin;
+  const main = () => bound?.mainFrame?.() ?? page.mainFrame?.();
+  const see = (response) => { try { const request = response?.request?.(); const frame = request?.frame?.(); if (request?.resourceType?.() !== "document" || (frame !== main() && !(frame == null && request.isNavigationRequest?.()))) return; status = Number(typeof response.status === "function" ? response.status() : response.status) || status; const hop = typeof response.url === "function" ? response.url() : ""; if (hop) urls.push(hop); } catch {} };
+  const move = (frame) => { try { if (frame === main()) { const hop = typeof frame.url === "function" ? frame.url() : ""; if (hop) urls.push(hop); } } catch {} };
+  const arm = (target) => { if (!target || target === bound || typeof target.on !== "function") return; if (typeof bound?.off === "function") { bound.off("response", see); bound.off("framenavigated", move); } bound = target; target.on("response", see); target.on("framenavigated", move); }; arm(page);
   for (const [index, action] of actions.entries()) {
+    const from = urls.length;
     try {
       if (action.op === "goto") { const response = await page.goto(new URL(allowPath(action.path, base), base).toString(), { waitUntil: "domcontentloaded", timeout: 20000 }); see(response); }
-      if (action.op === "click") { const handle = page.getByText(action.text, { exact: true }).first(); const target = typeof handle.getAttribute === "function" ? await handle.getAttribute("target") : null; if (target === "_blank") { const context = typeof page.context === "function" ? page.context() : null; let opened = typeof context?.waitForEvent === "function" ? context.waitForEvent("page", { timeout: 8000 }) : null; if (opened && typeof opened.catch === "function") opened = opened.catch(() => null); await handle.click({ timeout: 8000 }); const popup = opened ? await opened : null; if (!popup) throw new Error("popup was not followed"); page = popup; try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} } else await handle.click({ timeout: 8000 }); clicked.push(action.text); }
+      if (action.op === "click") { const handle = page.getByText(action.text, { exact: true }).first(); const target = typeof handle.getAttribute === "function" ? await handle.getAttribute("target") : null; if (target === "_blank") { const context = typeof page.context === "function" ? page.context() : null; let opened = typeof context?.waitForEvent === "function" ? context.waitForEvent("page", { timeout: 8000 }) : null; if (opened && typeof opened.catch === "function") opened = opened.catch(() => null); await handle.click({ timeout: 8000 }); const popup = opened ? await opened : null; if (!popup) throw new Error("popup was not followed"); page = popup; arm(page); try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} } else await handle.click({ timeout: 8000 }); clicked.push(action.text); }
       if (action.op === "fill") { await page.getByLabel(action.label).fill(action.value, { timeout: 8000 }); clicked.push(action.label); }
       if (action.op === "press") { await page.keyboard.press(action.key); clicked.push(action.key); }
-      const name = `${turn}-${index}-${action.op}.png`;
-      await page.screenshot({ path: path.join(shotsDir, name) });
-      shots.push(name);
-      lines.push(`${action.op} ok`);
+      try { const settled = page.url(); if (settled && urls.at(-1) !== settled) urls.push(settled); } catch {}
+      if (urls.slice(from).some((hop) => { try { return new URL(hop).origin !== origin; } catch { return true; } })) throw new Error("off-origin");
+      const name = `${turn}-${index}-${action.op}.png`; await page.screenshot({ path: path.join(shotsDir, name) }); shots.push(name); lines.push(`${action.op} ok`);
     } catch (error) { const message = String(error.message ?? error).split("\n")[0]; lines.push(`${action.op} failed: ${message}`); if (message.includes("popup")) page = { url: () => "about:blank", async screenshot() {}, locator: () => ({ innerText: async () => "" }) }; }
-    try { urls.push(page.url()); } catch { urls.push(""); }
+    try { const settled = page.url(); if (urls.at(-1) !== settled) urls.push(settled || ""); } catch { if (urls.at(-1) !== "") urls.push(""); }
   }
-  let text = "";
-  try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
-  const url = urls.at(-1) || page.url();
-  let loggedIn = false;
-  try { const current = new URL(url); loggedIn = current.origin === new URL(base).origin && seededPage(url, text, status, seed); } catch { loggedIn = false; }
-  if (typeof page.off === "function") page.off("response", see); return { clicked, shots, loggedIn, url, urls, page, status, snapshot: `${url}\n${lines.join("\n")}\n${text.slice(0, 2500)}` };
+  let text = ""; try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
+  const url = urls.at(-1) || page.url(); let loggedIn = false; try { const current = new URL(url); loggedIn = current.origin === new URL(base).origin && seededPage(url, text, status, seed); } catch { loggedIn = false; }
+  if (typeof bound?.off === "function") { bound.off("response", see); bound.off("framenavigated", move); } return { clicked, shots, loggedIn, url, urls, page, status, snapshot: `${url}\n${lines.join("\n")}\n${text.slice(0, 2500)}` };
 }
 export async function completeWithOpenRouter(prompt, { key, model = PSTACK_VERIFIER.model, fetchImpl = globalThis.fetch } = {}) {
   if (!key) throw new Error("model login is missing");
