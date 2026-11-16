@@ -3,6 +3,7 @@ import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7
 import { HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG } from '@/lib/flags/definitions/htpr-8797-feedback-house-parts'
 import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
 import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
+import { HTPR_9366_AUTOMATIC_AUTH_REFUSAL_FLAG } from '@/lib/flags/definitions/htpr-9366-automatic-auth-refusal'
 import { accountCategory } from '@/lib/telemetry/accountCategory'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
@@ -147,7 +148,7 @@ function withCommand(note: string, command?: string): string {
   return !command || short.toLowerCase().includes(command.toLowerCase()) ? short : `${short} (${command})`
 }
 
-export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }, stored?: StoredNote, shape: 'plain' | 'house' = 'plain') {
+export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }, stored?: StoredNote, shape: 'plain' | 'house' = 'plain', automaticRefusal = false) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
   const failureKind = input.category ?? 'other'
@@ -158,7 +159,7 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
   let reading: string
   let action: string
   const subject = houseSubject(input, surface)
-  if (reporter?.origin !== 'automatic' && scopeRefusal(input)) {
+  if ((reporter?.origin !== 'automatic' || automaticRefusal) && scopeRefusal(input)) {
     const signIn = !membershipRefusal(input) && (input.status === 401 || input.errorCode?.toLowerCase() === 'unauthorized' || input.category === 'auth_failed')
     happened = signIn ? `An agent was refused when it signed in through ${surface}` : `${call} was refused because the agent may not use that board or action`
     problem = signIn ? happened : `${subject} was refused`
@@ -229,6 +230,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
   const input: AutomaticFeedbackInput = { ...parsed.data, client: parsed.data.client?.toLowerCase() }
   let plain = false
   let house = false
+  let automaticRefusal = false
   try {
     const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
     plain = userId === undefined
@@ -238,6 +240,11 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
       house = userId === undefined
         ? await featureFlagCandidateUserIds(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG) === null
         : await isFeatureEnabled(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG, userId)
+    }
+    if (reporter.origin === 'automatic' && scopeRefusal(input)) {
+      automaticRefusal = userId === undefined
+        ? await featureFlagCandidateUserIds(HTPR_9366_AUTOMATIC_AUTH_REFUSAL_FLAG) === null
+        : await isFeatureEnabled(HTPR_9366_AUTOMATIC_AUTH_REFUSAL_FLAG, userId)
     }
   } catch {}
   const noteAllowed = reporter.origin === 'agent' && (input.kind !== undefined || input.note !== undefined) && await agentNoteAllowed(userId)
@@ -371,7 +378,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
           ownerName: displayName,
           origin: reporter.origin,
-        }, stored, house ? 'house' : 'plain') : undefined
+        }, stored, house ? 'house' : 'plain', automaticRefusal) : undefined
         const { task } = await createProvisionedTaskCore({
           creationChannel: "agent",
           title: readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
