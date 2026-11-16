@@ -1543,7 +1543,7 @@ test("Ctrl+K ellipsis flag is retired and the placeholder stays on for old tabs"
 
 for (const [key, risk] of [
   ["htpr-7982-cancelled-free", "money"],
-  ["htpr-8215-agent-archive-delete", "data-deletion"],
+  ["htpr-7575-phone-chat-delete", "data-deletion"],
   ["yper4-651-self-follow-quiet", "customer-email"],
 ]) {
   test(`owner-authorized changes support all modes for ${risk}`, async () => {
