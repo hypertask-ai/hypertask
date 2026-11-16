@@ -218,7 +218,7 @@
     "htpr-7730-deepseek-flash-fast": "EVERYONE",
     "htpr-7732-baseten-byok": "OWNER_AND_QA",
     "htpr-7733-person-assignment-filter": "EVERYONE",
-    "htpr-7734-agent-chat-context": "EVERYONE",
+    "htpr-7734-agent-chat-context": "OWNER_AND_QA",
     "htpr-7736-chat-follows-task": "OFF",
     "htpr-7737-agent-hover-chat": "OFF",
     "htpr-7740-create-response": "EVERYONE",
