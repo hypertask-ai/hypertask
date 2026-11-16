@@ -8,6 +8,7 @@ import { callerCanFixRefusal, quietFixableReports } from './callerFixable'
 import { deferFailure, failureKey, noteSuccess } from './retryQuiet'
 import { HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7838-conflict-no-feedback'
 import { HTPR_7819_NOT_FOUND_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7819-not-found-no-feedback'
+import { HTPR_9391_TOOL_REFUSAL_CODE_FLAG } from '@/lib/flags/definitions/htpr-9391-tool-refusal-code'
 
 const EXPECTED_ANSWER_FLAGS: Record<number, string> = {
   409: HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG,
@@ -132,6 +133,24 @@ function feedbackErrorDetails(value: unknown, depth = 0): Pick<AutomaticFeedback
   }
 }
 
+const MCP_REFUSAL_ERROR_CODES: Record<number, string> = { [-32001]: 'unauthorized' }
+
+function mcpRefusalCode(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const code = (value as Record<string, unknown>).code
+  return typeof code === 'number' ? MCP_REFUSAL_ERROR_CODES[code] : undefined
+}
+
+async function namedRefusalCode(value: unknown, userId: number): Promise<string | undefined> {
+  try {
+    const { isFeatureEnabled } = await import('@/lib/flags')
+    if (!await isFeatureEnabled(HTPR_9391_TOOL_REFUSAL_CODE_FLAG, userId)) return undefined
+    return mcpRefusalCode(value)
+  } catch {
+    return undefined
+  }
+}
+
 function deferAutomaticFeedback(key: string, input: AutomaticFeedbackInput, userId?: number): void {
   try {
     waitUntil(deferFailure(key, () => fileAutomaticFeedback(input, userId)))
@@ -162,7 +181,8 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
         if (status !== 403 && !await answerIsExpected(status, userId)) {
           const details = feedbackErrorDetails(error)
-          const input: AutomaticFeedbackInput = { surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...details }
+          const refusalCode = await namedRefusalCode(error, userId)
+          const input: AutomaticFeedbackInput = { surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...details, ...(refusalCode ? { errorCode: refusalCode } : {}) }
           const quiet = await quietFixableReports(userId)
           if (quiet && callerCanFixRefusal(details && { code: details.errorCode, field: details.field }, status)) {
             console.info('AI feedback not filed: the refusal tells the caller what to fix', { tool: tool.name })

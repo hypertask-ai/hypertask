@@ -510,6 +510,7 @@
     "htpr-9076-narrow-inbox-layout": "OWNER_AND_QA",
     "htpr-9080-split-overflow": "OWNER_AND_QA",
     "htpr-9274-board-default-subtasks": "OWNER_AND_QA",
+    "htpr-9391-tool-refusal-code": "EVERYONE",
     "yper4-651-self-follow-quiet": "OWNER_AND_QA",
     "yper4-801-manager-lease-flag-switch": "OWNER_AND_QA",
     "yper4-910-agent-writing": "EVERYONE",
