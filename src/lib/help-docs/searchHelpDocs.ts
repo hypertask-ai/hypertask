@@ -1,4 +1,5 @@
 import { HTPR_7825_WHOLE_HELP_ARTICLES_FLAG } from "@/lib/flags/definitions/htpr-7825-whole-help-articles";
+import { HTPR_9388_LOG_FAILED_HELP_ARTICLES_FLAG } from "@/lib/flags/definitions/htpr-9388-log-failed-help-articles";
 import { isFeatureEnabled } from "@/lib/flags";
 
 export const HELP_DOCS_BASE_URL = "https://help.hypertask.ai";
@@ -70,6 +71,11 @@ export async function searchHelpDocs(
       HELP_DOCS_FLAG_USER_ID,
       db,
     ).catch(() => true);
+    const logFailedArticles = await isFeatureEnabled(
+      HTPR_9388_LOG_FAILED_HELP_ARTICLES_FLAG,
+      HELP_DOCS_FLAG_USER_ID,
+      db,
+    ).catch(() => true);
     const res = await fetchImpl(
       `${HELP_DOCS_BASE_URL}/api/articles/search/${encodeURIComponent(input.query)}`,
       { signal: AbortSignal.timeout(HELP_DOCS_FETCH_TIMEOUT_MS) }
@@ -80,10 +86,12 @@ export async function searchHelpDocs(
 
     const hits = (await res.json()) as HelpDocsSearchHit[];
     const top = (Array.isArray(hits) ? hits : []).slice(0, input.limit);
+    const failedArticles: string[] = [];
     const articles = await Promise.all(
       top.map(async (hit) => {
         let content = hit.excerpt ?? "";
         if (hit.slug) {
+          const slug = hit.slug;
           try {
             const full = await fetchImpl(
               `${HELP_DOCS_BASE_URL}/api/articles/${hit.slug}`,
@@ -93,8 +101,11 @@ export async function searchHelpDocs(
               const doc = (await full.json()) as HelpDocsArticleResponse;
               const html = doc.content ?? doc.article?.content;
               if (html) content = helpArticleText(html, wholeArticle);
+            } else {
+              failedArticles.push(slug);
             }
           } catch {
+            failedArticles.push(slug);
           }
         }
 
@@ -107,6 +118,14 @@ export async function searchHelpDocs(
         };
       })
     );
+
+    if (logFailedArticles) {
+      for (const slug of failedArticles) {
+        console.warn(
+          `[help-docs] help article failed to load, answered from its excerpt: ${slug}`,
+        );
+      }
+    }
 
     return {
       success: true,
