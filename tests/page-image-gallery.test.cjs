@@ -8,8 +8,6 @@ const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const flagKey = "htpr-6872-page-image-gallery";
-let enabled = true;
 let pathname = "/page/example";
 let editor;
 let galleryProps;
@@ -21,7 +19,7 @@ const mocks = {
   "lucide-react": { ChevronLeft: () => null, Trash2: () => null },
   "next/navigation": { useRouter: () => ({}), usePathname: () => pathname },
   "react-hot-toast": { default: { error: noop } },
-  "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
+  "@/hooks/useFlag": { useFlag: () => false },
   "@/hooks/General/useContentZoom": { useContentZoom: () => ({ zoom: 1, showIndicator: false }) },
   "@/hooks/General/useDebounceWithCancel": { default: () => [noop, noop, noop] },
   "@/lib/constants/APIRouteConstants": { pageRoute: () => "/api/pages/example" },
@@ -86,7 +84,6 @@ async function withPage(options, run) {
   const names = ["window", "document", "Element", "HTMLImageElement", "HTMLIFrameElement", "DOMParser", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = names.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]);
   for (const name of names) global[name] = name === "IS_REACT_ACT_ENVIRONMENT" ? true : dom.window[name];
-  enabled = options.enabled ?? true;
   pathname = options.pathname ?? "/page/example";
   focusCount = 0;
   returnCount = 0;
@@ -134,16 +131,6 @@ for (const editable of [false, true]) {
   });
 }
 
-test("flag off keeps editor focus and omits gallery and canvas click bridge", async () => {
-  await withPage({ enabled: false }, async ({ click, message }) => {
-    await click('[data-image="first"]');
-    await message({ __htPageImage: 1, images: ["https://files.hypertask.app/canvas-one.png"], index: 0 });
-    assert.equal(galleryProps, undefined);
-    assert.equal(focusCount, 1);
-    assert.doesNotMatch(document.querySelector("iframe").srcdoc, /__htPageImage/);
-  });
-});
-
 test("resize handles, editing controls, Figma previews and modified image clicks do not open the gallery", async () => {
   await withPage({}, async ({ click }) => {
     await click(".horizontal-resize-handle");
@@ -182,7 +169,7 @@ test("canvas clicks join the page gallery and reject foreign sources and malform
   });
 });
 
-test("canvas bridge is page-only and flag-off output remains the original document", async () => {
+test("canvas bridge stays page-only and the default output stays the original document", async () => {
   assert.equal(buildHtmlBlockSrcDoc(canvasHtml), buildHtmlBlockSrcDoc(canvasHtml, false));
   await withPage({ pathname: "/detail/project-15/6872" }, async () => {
     assert.doesNotMatch(document.querySelector("iframe").srcdoc, /__htPageImage/);

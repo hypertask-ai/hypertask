@@ -344,8 +344,7 @@ test("page index includes, rows, schema and namespace contain only page-owned me
   assert.doesNotMatch(JSON.stringify(pageSeed), /task/);
 });
 
-for (const flagsEnabled of [false, true]) {
-  for (const [scenario, origin, linkedTask] of [
+for (const [scenario, origin, linkedTask] of [
     ["standalone linked B", null, task],
     ["standalone unlinked B", null, null],
     ["origin A active", task, task],
@@ -353,7 +352,7 @@ for (const flagsEnabled of [false, true]) {
     ["origin A unlinked and C active", task, { ...task, id: 123, projectId: 10, uniqueIndex: 123 }],
   ]) {
     for (const mobile of [false, true]) {
-      test(`editor back and gallery are safe (${scenario}, flags ${flagsEnabled}, mobile ${mobile})`, async () => {
+      test(`editor back and gallery are safe (${scenario}, mobile ${mobile})`, async () => {
         const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/page/page-fixture" });
         const globals = ["window", "document", "Element", "HTMLImageElement", "HTMLIFrameElement", "DOMParser", "IS_REACT_ACT_ENVIRONMENT"];
         const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]);
@@ -365,10 +364,10 @@ for (const flagsEnabled of [false, true]) {
           "next/navigation": { useRouter: () => ({ replace: (href) => calls.push(href) }) },
           "next/dynamic": { default: (loader) => loader.toString().includes("AttachmentsCarousel") ? (props) => { gallery = props; return null; } : () => null },
           "react-hot-toast": { default: { error: noop } },
-          "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6872-page-image-gallery" && flagsEnabled },
+          "@/hooks/useFlag": { useFlag: () => false },
           "@/hooks/General/useContentZoom": { useContentZoom: () => ({ zoom: 1 }) },
           "@/hooks/General/useDebounceWithCancel": { default: () => [noop, noop, noop] },
-          "@/lib/flags/keys": { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG: "htpr-6872-page-image-gallery" },
+          "@/lib/flags/keys": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages", HTPR_7309_PAGES_SCREENS_FLAG: "htpr-7309-pages-screens" },
           "@/lib/configs/general.config": {}, "@/utils/undoActions/helperFuncs": { cn: noop },
           "@/lib/constants/APIRouteConstants": { pageRoute: noop },
           "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
@@ -399,11 +398,9 @@ for (const flagsEnabled of [false, true]) {
           const back = [...document.querySelectorAll("button")].find((button) => button.textContent.includes("Back to"));
           assert.equal(back.textContent.trim(), linkedTask ? "Back to task" : "Back to board");
           await React.act(async () => document.querySelector("img").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true })));
-          if (flagsEnabled) {
-            assert.equal(gallery.attachments.length, 1);
-            assert.equal(gallery.attachments[0].taskId, origin?.id ?? undefined);
-            assert.equal(gallery.attachments[0].fileSource, fileSource);
-          } else assert.equal(gallery, undefined);
+          assert.equal(gallery.attachments.length, 1);
+          assert.equal(gallery.attachments[0].taskId, origin?.id ?? undefined);
+          assert.equal(gallery.attachments[0].fileSource, fileSource);
           await React.act(async () => back.click());
           assert.deepEqual(calls, [linkedTask ? `/detail/project-${linkedTask.projectId}/${linkedTask.uniqueIndex}` : "/project?id=10"]);
         } finally {
@@ -417,4 +414,3 @@ for (const flagsEnabled of [false, true]) {
       });
     }
   }
-}

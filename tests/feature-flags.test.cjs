@@ -780,6 +780,23 @@ test("the retired My Tasks snooze flag is hidden, immutable and enabled for old 
   assert.equal((await flags.featureFlagsForUser(42))[key], true);
 });
 
+test("the retired page image gallery flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6872-page-image-gallery";
+  assert.equal(flags.HTPR_6872_PAGE_IMAGE_GALLERY_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  listedRows = [];
+  row = null;
+  for (const userId of [6, 985, 42]) {
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+});
+
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
   assert.equal(flags.HTPR_6899_STABLE_LAYOUT_FLAG, "htpr-6899-stable-layout");
   const listed = await flags.listFeatureFlagModes();

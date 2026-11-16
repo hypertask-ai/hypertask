@@ -25,7 +25,7 @@ import useDebounceWithCancel from "@/hooks/General/useDebounceWithCancel";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG, HTPR_7298_STANDALONE_PAGES_FLAG, HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7298_STANDALONE_PAGES_FLAG, HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/keys";
 import { isContentCarouselImage } from "@/utils/helperFunctions/isContentCarouselImage";
 import { pageRoute } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -89,7 +89,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
-  const galleryEnabled = useFlag(HTPR_6872_PAGE_IMAGE_GALLERY_FLAG);
   const [galleryItems, setGalleryItems] = useState<TCarousalItems>();
   const railOn = useRecoilValue(appShellRailAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
@@ -121,7 +120,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     frameImages?: string[],
     frameIndex = 0,
   ) => {
-    if (!galleryEnabled || !contentRef.current) return;
+    if (!contentRef.current) return;
 
     const media = Array.from(contentRef.current.querySelectorAll<HTMLImageElement | HTMLIFrameElement>(
       ".ProseMirror img, .ProseMirror .ht-html-block iframe",
@@ -151,10 +150,10 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       })),
       currentIndex,
     });
-  }, [galleryEnabled, page.taskId]);
+  }, [page.taskId]);
 
   const handleContentClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (galleryEnabled && !event.defaultPrevented && event.button === 0 &&
+    if (!event.defaultPrevented && event.button === 0 &&
         !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
         event.target instanceof HTMLImageElement && isPageGalleryImage(event.target)) {
       event.preventDefault();
@@ -165,7 +164,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   };
 
   useEffect(() => {
-    if (!galleryEnabled) return;
     const handleMessage = (event: MessageEvent) => {
       const frames = contentRef.current?.querySelectorAll<HTMLIFrameElement>(".ht-html-block iframe");
       const frame = Array.from(frames ?? []).find((item) => item.contentWindow === event.source);
@@ -177,7 +175,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [galleryEnabled, openImageGallery]);
+  }, [openImageGallery]);
 
   const taskHref = page.task
     ? `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`
@@ -325,7 +323,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((galleryEnabled && galleryItems) || !shouldReturnFromPageOnEscape(event, showCommands.show)) return;
+      if (galleryItems || !shouldReturnFromPageOnEscape(event, showCommands.show)) return;
       if (document.querySelector(
         '.modal, [role="dialog"], [role="menu"], [role="listbox"], .tippy-box[data-state="visible"], [data-radix-popper-content-wrapper]',
       )) return;
@@ -357,7 +355,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       editor?.unregisterPlugin(escapePluginKey);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [editor, galleryEnabled, galleryItems, returnToTask, showCommands.show]);
+  }, [editor, galleryItems, returnToTask, showCommands.show]);
 
   useEffect(() => {
     if (!editor) return;
@@ -434,7 +432,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       aria-label={`Page editor for ${currentUser.displayName || "current user"}`}
       className="min-h-SVH-full bg-taskDetailPage text-white-black"
     >
-      {galleryEnabled && galleryItems && (
+      {galleryItems && (
         <AttachmentCarousel
           attachments={galleryItems.attachments}
           currentIndex={galleryItems.currentIndex}

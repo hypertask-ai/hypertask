@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG, HTPR_7321_CANVAS_LINKS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7321_CANVAS_LINKS_FLAG } from "@/lib/flags/keys";
 import { buildHtmlBlockSrcDoc } from "./buildSrcDoc";
 import { LINK_READY_MESSAGE, openLinksClickedIn } from "./canvasLinks";
 
@@ -23,8 +23,7 @@ export function HtmlCanvasFrame({
   const [height, setHeight] = useState(MIN_HEIGHT);
   const pathname = usePathname();
   const linksOpenInNewTab = useFlag(HTPR_7321_CANVAS_LINKS_FLAG);
-  const galleryEnabled = useFlag(HTPR_6872_PAGE_IMAGE_GALLERY_FLAG);
-  const pageGalleryEnabled = galleryEnabled && Boolean(pathname?.startsWith("/page/"));
+  const pageGalleryEnabled = Boolean(pathname?.startsWith("/page/"));
   const srcDoc = useMemo(
     () => buildHtmlBlockSrcDoc(html, pageGalleryEnabled, linksOpenInNewTab),
     [html, pageGalleryEnabled, linksOpenInNewTab],
