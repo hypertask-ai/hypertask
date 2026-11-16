@@ -42,7 +42,6 @@ async function fixture(run) {
   try { await run({ dom, reactRoot, press }); }
   finally {
     quickAddShortcutsEnabled = false;
-    quickEntryFocusEnabled = false;
     await React.act(async () => reactRoot.unmount());
     dom.window.close();
     for (const [name, descriptor] of previous) {
@@ -53,16 +52,14 @@ async function fixture(run) {
 }
 
 let quickAddShortcutsEnabled = false;
-let quickEntryFocusEnabled = false;
 
 function commonMocks(calls) {
   return {
     "@/lib/flags/definitions/htpr-7865-agent-creator-filter": load("src/lib/flags/definitions/htpr-7865-agent-creator-filter.ts"),
-    "@/lib/flags/definitions/htpr-8716-quick-entry-focus": { HTPR_8716_QUICK_ENTRY_FOCUS_FLAG: "htpr-8716-quick-entry-focus" },
     "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model": { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG: "htpr-8265-task-shortcuts-writer-model" },
     "@/hooks/useFlag": { useFlag: (key) => {
       if (key === "htpr-6175-quick-entry-cards") throw new Error("Removed flag must not be read");
-      if (key === "htpr-8716-quick-entry-focus") return quickEntryFocusEnabled;
+      if (key === "htpr-8716-quick-entry-focus") throw new Error("Removed flag must not be read");
       if (key === "htpr-8265-task-shortcuts-writer-model") return quickAddShortcutsEnabled;
       return false;
     }, useFlagLoaded: () => true },
@@ -443,18 +440,17 @@ test("flag on: N opens the hovered column, Shift+C is cut, hints read N", async 
   document.querySelector('[data-column="10"]').focus();
   await React.act(async () => document.querySelector('[data-column="20"]').dispatchEvent(new dom.window.MouseEvent("mouseover", { bubbles: true })));
   await press("n");
-  assert.equal(document.querySelector("[data-quick]").dataset.quick, "20", "the pointer beats a stale focused column");
+  assert.equal(document.querySelector("[data-quick]").dataset.quick, "10", "the focused column beats the pointer");
   await React.act(async () => reactRoot.render(null));
   await React.act(async () => reactRoot.render(React.createElement(Harness)));
   document.querySelector('[data-column="10"]').focus();
   await React.act(async () => document.body.dispatchEvent(new dom.window.MouseEvent("mouseover", { bubbles: true })));
   await press("n");
   assert.equal(document.querySelector("[data-quick]").dataset.quick, "10", "with the pointer off the board the focused column wins");
-  quickEntryFocusEnabled = true;
   await React.act(async () => reactRoot.render(null));
   await React.act(async () => reactRoot.render(React.createElement(Harness)));
   await press("c");
-  assert.equal(calls.length, 1, "C opens the full editor with focus flag enabled");
+  assert.equal(calls.length, 1, "C opens the full editor");
   assert.equal(calls[0][0].sectionId, 10);
   assert.equal(document.querySelector("[data-quick]"), null);
   calls.length = 0;

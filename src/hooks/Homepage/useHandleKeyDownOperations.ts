@@ -1,7 +1,6 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
 import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
-import { HTPR_8716_QUICK_ENTRY_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8716-quick-entry-focus";
 import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
 
 import { ISection, ITask } from '@/models/model'
@@ -114,7 +113,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       }
     };
 
-    const quickEntryFocusEnabled = useFlag(HTPR_8716_QUICK_ENTRY_FOCUS_FLAG)
     const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG)
     const hoveredColumn = useRef<Element | null>(null);
     const quickAddShortcuts = quickAddShortcutsEnabled ? quickAddShortcutsWithPointer() : quickAddShortcutsFromFocus();
@@ -141,7 +139,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
           section.items.some(task => task.id === activeItem)
         );
         const hoveredColumnIndex = shortcuts.useHoveredColumn ? columnIndex(hoveredColumn.current) : -1;
-        const targetIndex = quickEntryFocusEnabled && focusedColumnIndex >= 0
+        const targetIndex = focusedColumnIndex >= 0
           ? focusedColumnIndex
           : hoveredColumnIndex >= 0
           ? hoveredColumnIndex
@@ -158,7 +156,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
         document.removeEventListener("mouseover", trackHoveredColumn);
       };
     };
-    useEffect(() => registerQuickAdd(quickAddShortcuts), [showCommands.show, filteredSections, store, quickAddShortcutsEnabled, quickEntryFocusEnabled]);
+    useEffect(() => registerQuickAdd(quickAddShortcuts), [showCommands.show, filteredSections, store, quickAddShortcutsEnabled]);
 
     const handleKeyDown = (e: any) => {
     let cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;

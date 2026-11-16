@@ -16,7 +16,6 @@ const RELEASED = [
   "htpr-6921-slack-marketplace",
   "htpr-7363-chat-task-writer",
   "htpr-7977-short-task-writer",
-  "htpr-8716-quick-entry-focus",
   "htpr-8804-visible-links-first",
   "htpr-8826-blocked-by-me-list",
   "htpr-8881-board-view-filters",
