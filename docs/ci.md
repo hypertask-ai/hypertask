@@ -1870,7 +1870,3 @@ workflow gets no allowance and fails on its first comment. Unused allowances do 
 fail, so cleaning a file is safe, and `node scripts/check-no-comments.mjs
 --write-baseline` shrinks the baseline to the current counts when that cleanup
 lands. No new required check is added.
-
-## CI verifier
-
-The CI verifier calls DeepSeek Flash through OpenRouter with OPENROUTER_EVAL_KEY; agent-session harness rules do not apply to CI jobs.

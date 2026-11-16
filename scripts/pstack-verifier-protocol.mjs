@@ -5,7 +5,7 @@ export const CONTEXT = "pstack-verifier";
 const KEYS = new Set(["Escape", "Enter", "Tab", "Backspace", "ArrowDown", "ArrowUp"]);
 const APP = "http://127.0.0.1:3100";
 export const coreSmokeBoardTitle = "Core actions smoke", coreSmokeTaskTitle = "Core actions smoke fixture";
-export const CONTENT = "#body, #sectionsContainer", CLICK_ROLES = ["link", "button", "menuitem", "menuitemcheckbox", "checkbox", "radio", "tab", "option", "switch", "combobox"];
+export const CONTENT = "#body, #sectionsContainer", CLICK_ROLES = ["link", "button", "menuitem", "menuitemcheckbox", "checkbox", "radio", "tab", "option", "switch", "combobox"], LAND_ROLES = [...CLICK_ROLES, "textbox"];
 const seededPage = (url, text, status, seed = {}) => { let where; try { where = new URL(url); } catch { return false; } if ((Number(status) || 0) >= 400) return false; const body = String(text ?? ""); let board, task; try { board = new URL(String(seed.boardPath || "/"), where.origin); task = new URL(String(seed.taskPath || "/"), where.origin); } catch { return false; } if (where.pathname === "/project" && board.searchParams.get("id") && where.searchParams.get("id") === board.searchParams.get("id")) return body.includes(coreSmokeBoardTitle); return task.pathname.startsWith("/detail/") && where.pathname === task.pathname && body.includes(coreSmokeTaskTitle); };
 async function contentText(page) { try { const found = page.locator(CONTENT); return await (typeof found?.first === "function" ? found.first() : found).innerText({ timeout: 8000 }) ?? ""; } catch { return ""; } }
 async function control(page, name, roles) { for (const role of roles) { const found = page.getByRole(role, { name, exact: true }); if ((await found.count()) > 0) return found.first(); } return null; }
@@ -147,16 +147,18 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
   }
   return { verdict, notes: redact(notes, secrets), clicked, shots };
 }
+async function applyAction(view, action, base, status) { if (action.op === "goto") { const response = await view.goto(new URL(allowPath(action.path, base), base).toString(), { waitUntil: "domcontentloaded", timeout: 20000 }); return { status: Number(typeof response?.status === "function" ? response.status() : response?.status) || status, label: "" }; }
+  if (action.op === "click" || action.op === "fill") { const name = action.op === "click" ? action.text : action.label; const handle = await control(view, name, action.op === "click" ? CLICK_ROLES : ["textbox"]); if (!handle) throw new Error("not actionable"); if (action.op === "click") await handle.click({ timeout: 8000 }); else await handle.fill(action.value, { timeout: 8000 }); return { status, label: name }; }
+  if (action.op === "press") { const role = await view.evaluate(() => { const el = document.activeElement; if (!el || el === document.body || el === document.documentElement) return ""; const named = String(el.getAttribute?.("role") || "").toLowerCase(); if (named) return named; const tag = el.tagName, type = String(el.type || "").toLowerCase(); if (tag === "BUTTON" || (tag === "INPUT" && (type === "button" || type === "submit" || type === "reset"))) return "button"; if (tag === "A" && el.hasAttribute?.("href")) return "link"; if (tag === "SELECT") return "combobox"; if (tag === "INPUT" && type === "checkbox") return "checkbox"; if (tag === "INPUT" && type === "radio") return "radio"; if (tag === "TEXTAREA" || el.isContentEditable || (tag === "INPUT" && !["hidden", "file", "range", "color", "image"].includes(type))) return "textbox"; return ""; }); if (!LAND_ROLES.includes(role)) throw new Error("not actionable"); await view.keyboard.press(action.key); return { status, label: action.key }; }
+  if (action.op === "shot") return { status, label: "" }; throw new Error("not actionable");
+}
 export async function performOnPage(page, actions, shotsDir, turn, base, seed, run) {
   const clicked = [], shots = [], lines = []; let status = 0;
   const live = () => run?.page || page;
   for (const [index, action] of actions.entries()) {
     try {
       const view = live();
-      if (action.op === "goto") { const response = await view.goto(new URL(allowPath(action.path, base), base).toString(), { waitUntil: "domcontentloaded", timeout: 20000 }); status = Number(typeof response?.status === "function" ? response.status() : response?.status) || status; }
-      if (action.op === "click") { const handle = await control(view, action.text, CLICK_ROLES); if (!handle) throw new Error("not actionable"); await handle.click({ timeout: 8000 }); clicked.push(action.text); }
-      if (action.op === "fill") { const handle = await control(view, action.label, ["textbox"]); if (!handle) throw new Error("not actionable"); await handle.fill(action.value, { timeout: 8000 }); clicked.push(action.label); }
-      if (action.op === "press") { await view.keyboard.press(action.key); clicked.push(action.key); }
+      const hit = await applyAction(view, action, base, status); status = hit.status; if (hit.label) clicked.push(hit.label);
       if (run?.failed) throw new Error("off-origin");
       const name = `${turn}-${index}-${action.op}.png`; await live().screenshot({ path: path.join(shotsDir, name) }); shots.push(name); lines.push(`${action.op} ok`);
     } catch (error) { lines.push(`${action.op} failed: ${String(error.message ?? error).split("\n")[0]}`); }
