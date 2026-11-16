@@ -18,6 +18,8 @@ import { TBoardSortingLevel } from "@/models/Views/model";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { getViewUrl } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { isViewCallerError, plainViewError, viewMutationRefusal } from "@/lib/mcp/views/viewRefusal";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-9369-view-empty-columns";
 import { isSubtaskSetting } from "@/models/Views/model";
 
 export interface AppliedViewItem extends ListViewItem {
@@ -266,7 +268,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
       sorting_order: body.sorting_order,
       sorting_stack: body.sorting_stack,
       subtask_setting: body.subtask_setting,
-      board_empty_sections: body.board_empty_sections,
+      board_empty_sections: (await isFeatureEnabled(HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG, ctx.user.id))
+        ? body.board_empty_sections
+        : undefined,
       setAsDefault: body.set_as_default,
     })
     return NextResponse.json({ success: true, view: updated })

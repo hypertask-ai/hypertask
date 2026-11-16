@@ -23,6 +23,7 @@ function fixture({ update, remove, create } = {}) {
       readMcpRouteJsonBody: async () => ({ ok: true, body: { project_id: 15, title: 'Renamed' } }),
     },
     '@/lib/prisma': {},
+    '@/lib/flags': { isFeatureEnabled: async () => true },
     '@/utils/controllers/projects/getAllIncludes': {},
     '@/lib/mcp/views/services': {
       createView: create ?? (async () => ({ id: viewId })),

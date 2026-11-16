@@ -88,6 +88,7 @@ test('duplicate view title maps to a field-specific refusal', async () => {
       readMcpRouteJsonBody: async () => ({ ok: true, body: { project_id: 15, title: 'Onboarding' } }),
     },
     '@/lib/prisma': {},
+    '@/lib/flags': { isFeatureEnabled: async () => true },
     '@/utils/controllers/projects/getAllIncludes': {},
     '@/lib/mcp/views/services': {
       createView: async () => {

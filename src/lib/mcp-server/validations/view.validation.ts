@@ -77,6 +77,9 @@ const viewSortingOrderSchema = z.enum(['Ascending', 'Descending']);
 const viewSubtaskSettingSchema = z.enum(SUBTASK_SETTINGS).describe(
   'None hides subtasks and their count; Parent shows parent tasks with a subtask count; Flattened shows subtasks as rows; Card shows subtasks on parent cards; Flattened_Card does both.',
 );
+const viewEmptySectionsSchema = z.enum(['Show', 'Hidden']).describe(
+  'Show keeps every board column; Hidden drops columns that hold no tickets in this view.',
+);
 const viewSortingStackSchema = z
   .array(
     z
@@ -116,6 +119,7 @@ export function getCreateViewInputSchema() {
       sorting_order: viewSortingOrderSchema.optional(),
       sorting_stack: viewSortingStackSchema.optional(),
       subtask_setting: viewSubtaskSettingSchema.optional(),
+      board_empty_sections: viewEmptySectionsSchema.optional(),
       set_as_default: z.boolean().optional(),
     })
     .strict();
@@ -140,6 +144,7 @@ export function getUpdateViewBaseSchema() {
       sorting_order: viewSortingOrderSchema.optional(),
       sorting_stack: viewSortingStackSchema.optional(),
       subtask_setting: viewSubtaskSettingSchema.optional(),
+      board_empty_sections: viewEmptySectionsSchema.optional(),
       set_as_default: z.boolean().optional(),
     })
     .strict();
@@ -160,6 +165,7 @@ export function getUpdateViewInputSchema() {
       data.sorting_order !== undefined ||
       data.sorting_stack !== undefined ||
       data.subtask_setting !== undefined ||
+      data.board_empty_sections !== undefined ||
       data.set_as_default !== undefined,
     {
       message: 'At least one view field must be provided',
@@ -176,6 +182,7 @@ export function getUpdateViewInputSchema() {
         'sorting_order',
         'sorting_stack',
         'subtask_setting',
+        'board_empty_sections',
         'set_as_default',
       ],
     },

@@ -56,6 +56,7 @@ function pipeline(create, filters) {
       readMcpRouteJsonBody: async () => ({ ok: true, body: { project_id: 15, title: 'Onboarding', filters } }),
     },
     '@/lib/prisma': {},
+    '@/lib/flags': { isFeatureEnabled: async () => true },
     '@/utils/controllers/projects/getAllIncludes': {},
     '@/lib/mcp/views/services': { createView: create },
     '@/lib/mcp/tasks/services': { validateProjectAccess: async () => ({}) },

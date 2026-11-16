@@ -16,6 +16,7 @@ function fixture(body) {
   };
   const stubs = {
     '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },
+    '@/lib/flags': { isFeatureEnabled: async () => true },
     '@/lib/mcp/operationCrashReport': {},
     '@/lib/mcp/routeWrapper': {
       wrapMcpRoute: handler => handler,

@@ -12,6 +12,8 @@ import { getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfun
 import { isSubtaskSetting } from '@/models/Views/model'
 import { sanitizeBoardFilters, projectVisibleViewRelations } from '@/utils/helperFunctions/Views/BoardFilterSanitizer'
 import { isViewCallerError, plainViewError, viewInputRefusal, viewListSortFields, viewMutationRefusal } from '@/lib/mcp/views/viewRefusal'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG } from '@/lib/flags/definitions/htpr-9369-view-empty-columns'
 
 
 type CreateViewRequestBody = Partial<
@@ -338,7 +340,9 @@ export async function POST(request: NextRequest) {
       sorting_order: body.sorting_order,
       sorting_stack: body.sorting_stack,
       subtask_setting: body.subtask_setting,
-      board_empty_sections: body.board_empty_sections,
+      board_empty_sections: (await isFeatureEnabled(HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG, user.id))
+        ? body.board_empty_sections
+        : undefined,
       setAsDefault: body.set_as_default ?? false,
     })
 
