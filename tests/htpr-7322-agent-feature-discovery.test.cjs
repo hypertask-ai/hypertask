@@ -10,7 +10,6 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const { DECISIONS_GUIDANCE } = load('src/lib/mcp/decisionsGuidance.ts', {})
 const discoveryKey = 'htpr-7322-agent-feature-discovery'
 const decisionsKey = 'htpr-7092-decisions'
-const mappedKey = decisionsKey
 const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns']
 const definitions = definitionKeys.map((key) => ({
   key,
@@ -64,13 +63,13 @@ function endpoint(ctx, mod, limited = null, discoveryEnabled = true) {
 const request = () => new NextRequest('https://app.hypertask.ai/api/mcp/features')
 
 test('catalog includes every enabled feature kind without requiring a destination and excludes off and non-feature kinds', async () => {
-  const mod = catalog({ [mappedKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
+  const mod = catalog({ [decisionsKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
   const rows = await mod.getFeatureCatalog(reader.user.id)
   assert.deepEqual(rows.filter(({ key }) => !key.startsWith('core-')), [
-    { key: mappedKey, description: definitions.find(({ key }) => key === mappedKey).description, shippedOn: definitions.find(({ key }) => key === mappedKey).shippedOn, available: true, name: 'Decisions', url: 'https://app.hypertask.ai/inbox?split=Decisions' },
+    { key: decisionsKey, description: definitions.find(({ key }) => key === decisionsKey).description, shippedOn: definitions.find(({ key }) => key === decisionsKey).shippedOn, available: true, name: 'decisions' },
     { key: 'htpr-998-unmapped-product', name: 'unmapped product', description: 'No verified destination', shippedOn: '2026-10-11', available: true },
   ])
-  for (const key of ['htpr-7064-inbox-remind-returns', 'htpr-999-improvement', 'core-decisions']) {
+  for (const key of ['htpr-7064-inbox-remind-returns', 'htpr-999-improvement']) {
     assert.equal(rows.some((row) => row.key === key), false)
   }
   assert.ok(rows.every(({ name }) => typeof name === 'string' && name.trim().length > 0))
@@ -83,7 +82,7 @@ test('catalog projects registry descriptions and shipped dates with optional ver
   assert.ok(rows.every(({ name }) => typeof name === 'string' && name.trim().length > 0))
   assert.equal(rows.filter(({ name }) => name === 'Decisions').length, 1)
   assert.equal(rows.filter(({ url }) => url === 'https://app.hypertask.ai/inbox?split=Decisions').length, 1)
-  assert.equal(rows.some(({ key }) => key === 'core-decisions'), false)
+  assert.equal(rows.some(({ key }) => key === 'core-decisions'), true)
   const features = rows.filter(({ key }) => !key.startsWith('core-'))
   assert.equal(features.length, definitions.filter(({ kind }) => kind === 'feature').length)
   for (const row of features) {
@@ -102,7 +101,7 @@ test('catalog projects registry descriptions and shipped dates with optional ver
   assert.deepEqual(mod.users, [985])
 })
 
-test('core destinations survive removed definitions and Decisions remains gated on effective availability', async () => {
+test('core destinations always include Decisions', async () => {
   const expected = [
     ['Inbox', 'https://app.hypertask.ai/inbox'],
     ['Decisions', 'https://app.hypertask.ai/inbox?split=Decisions'],
@@ -110,14 +109,15 @@ test('core destinations survive removed definitions and Decisions remains gated 
     ['Search', 'https://app.hypertask.ai/search'],
     ['Reports', 'https://app.hypertask.ai/report'],
   ]
-  const rows = await catalog({ [decisionsKey]: true }, []).getFeatureCatalog(47)
-  assert.deepEqual(rows.map(({ name, url }) => [name, url]), expected)
-  for (const row of rows) {
-    assert.equal(row.available, true)
-    assert.ok(row.name)
-    assert.ok(row.description)
+  for (const availability of [{}, { [decisionsKey]: true }]) {
+    const rows = await catalog(availability, []).getFeatureCatalog(47)
+    assert.deepEqual(rows.map(({ name, url }) => [name, url]), expected)
+    for (const row of rows) {
+      assert.equal(row.available, true)
+      assert.ok(row.name)
+      assert.ok(row.description)
+    }
   }
-  assert.deepEqual((await catalog({}).getFeatureCatalog(47)).map(({ name, url }) => [name, url]), expected.filter(([name]) => name !== 'Decisions'))
 })
 
 test('unauthorized catalog reads are now refused without loading feature data', async () => {
@@ -153,7 +153,7 @@ test('a valid read-role agent is still allowed through the same catalog boundary
 })
 
 test('human and OAuth-style user contexts can read, and rate limiting stops catalog reads', async () => {
-  const route = endpoint({ ...reader, agentId: null }, catalog({ [mappedKey]: true }))
+  const route = endpoint({ ...reader, agentId: null }, catalog({ [decisionsKey]: true }))
   assert.equal((await route.GET(request())).status, 200)
   const limited = endpoint(reader, catalog(), NextResponse.json({ error: 'Rate limited' }, { status: 429 }))
   assert.equal((await limited.GET(request())).status, 429)
@@ -342,23 +342,24 @@ test('human callers and unrelated titles or partial words have no warnings', asy
   }
 })
 
-test('unavailable Decisions falls back to the Inbox warning without Decisions guidance', async () => {
+test('Decisions is always a real destination for agent page warnings', async () => {
   const route = pageEndpoint('write-agent', catalog({}))
   const response = await route.post('Decision inbox')
   assert.equal(response.status, 200)
   const receipt = await response.json()
-  assert.equal(receipt.warnings[0].url, 'https://app.hypertask.ai/inbox')
-  assert.doesNotMatch(receipt.warnings[0].message, /Question:|@mention|split=Decisions/)
+  assert.equal(receipt.warnings[0].url, 'https://app.hypertask.ai/inbox?split=Decisions')
+  assert.ok(receipt.warnings[0].message.endsWith(DECISIONS_GUIDANCE))
 })
 
-test('unavailable Decisions and failed advisory lookups never prevent agent page creation', async () => {
-  for (const mod of [catalog({}), { getFeaturePageWarnings: async () => { throw new Error('Flag lookup unavailable') } }]) {
-    const route = pageEndpoint('write-agent', mod)
-    const response = await route.post('Decisions')
-    assert.equal(response.status, 200)
-    assert.deepEqual(Object.keys(await response.json()), ['page'])
-    assert.equal(route.creates(), 1)
-  }
+test('Decisions and failed advisory lookups never prevent agent page creation', async () => {
+  const available = await pageEndpoint('write-agent', catalog({})).post('Decisions')
+  assert.equal(available.status, 200)
+  assert.equal((await available.json()).warnings[0].code, 'existing_feature')
+  const route = pageEndpoint('write-agent', { getFeaturePageWarnings: async () => { throw new Error('Flag lookup unavailable') } })
+  const response = await route.post('Decisions')
+  assert.equal(response.status, 200)
+  assert.deepEqual(Object.keys(await response.json()), ['page'])
+  assert.equal(route.creates(), 1)
 })
 
 test('disabling discovery suppresses all page warnings, including an idempotent replay, without blocking creation', async () => {

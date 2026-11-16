@@ -3,10 +3,6 @@ import { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG } from '@/lib/flags/definitions/
 import { DECISIONS_GUIDANCE } from '@/lib/mcp/decisionsGuidance'
 import { FEATURE_FLAG_DEFINITIONS } from '@/lib/flags/definitions'
 
-const FEATURE_DESTINATIONS: Record<string, { name: string; url: string }> = {
-  'htpr-7092-decisions': { name: 'Decisions', url: 'https://app.hypertask.ai/inbox?split=Decisions' },
-}
-
 const CORE_DESTINATIONS = [
   { key: 'core-inbox', name: 'Inbox', url: 'https://app.hypertask.ai/inbox', description: 'Read and manage your notifications.' },
   { key: 'core-decisions', name: 'Decisions', url: 'https://app.hypertask.ai/inbox?split=Decisions', description: 'Find tickets waiting on your answer to a Question: mention.' },
@@ -19,14 +15,11 @@ export async function getFeatureCatalog(userId: number) {
   const availability = await featureFlagsForUser(userId)
   const features = FEATURE_FLAG_DEFINITIONS.flatMap(({ key, kind, description, shippedOn }) => {
     if (kind !== 'feature' || !availability[key]) return []
-    const destination = Object.hasOwn(FEATURE_DESTINATIONS, key) ? FEATURE_DESTINATIONS[key] : undefined
-    return [{ key, name: destination?.name ?? key.replace(/^htpr-\d+-/, '').replace(/-/g, ' '), description, shippedOn, available: true as const, ...destination }]
+    return [{ key, name: key.replace(/^htpr-\d+-/, '').replace(/-/g, ' '), description, shippedOn, available: true as const }]
   })
   return [
     ...features,
-    ...CORE_DESTINATIONS
-      .filter(({ key }) => key !== 'core-decisions' || (availability['htpr-7092-decisions'] && !features.some(({ key }) => key === 'htpr-7092-decisions')))
-      .map((destination) => ({ ...destination, available: true as const })),
+    ...CORE_DESTINATIONS.map((destination) => ({ ...destination, available: true as const })),
   ]
 }
 

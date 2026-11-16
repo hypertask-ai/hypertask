@@ -104,17 +104,15 @@ test("server scopes mentions to any viewer, ignores agent replies, and uses only
       return replies.filter((reply) => reply.creatorId === args.where.creatorId && reply.agentId === args.where.agentId && reply.activity === null);
     } },
   };
+  const flagReads = [];
   const { getDecisionComments } = loadTsModule("src/utils/controllers/notifications/decisionTasks.ts", {
     "@/lib/prisma": { __esModule: true, default: db },
-    "@/lib/flags": { isFeatureEnabled: async (key) => key !== "htpr-8205-agent-clear-blocker" },
-    "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: "htpr-7092-decisions" },
+    "@/lib/flags": { isFeatureEnabled: async (key) => { flagReads.push(key); return key !== "htpr-8205-agent-clear-blocker"; } },
   });
   const decisions = await getDecisionComments(viewer, { userId: viewer });
   assert.deepEqual([...decisions].map(([taskId, comment]) => [taskId, comment.commentId]), [[1, 30], [3, 50]]);
   assert.deepEqual(calls, ["mentions", "replies"]);
-  calls.length = 0;
-  assert.equal((await getDecisionComments(viewer, {}, async () => false)).size, 0);
-  assert.deepEqual(calls, []);
+  assert.deepEqual(flagReads, ["htpr-8205-agent-clear-blocker"]);
 });
 
 for (const enabled of [true, false]) {

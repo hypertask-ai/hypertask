@@ -3,7 +3,6 @@ const test = require("node:test");
 const { load } = require("./task-route-loader.cjs");
 
 const FLAG = "htpr-8205-agent-clear-blocker";
-const DECISIONS_FLAG = "htpr-7092-decisions";
 const at = (minute) => new Date(`2026-10-30T10:${String(minute).padStart(2, "0")}:00Z`);
 const questionAt = (minute, commentId = 100 + minute) => ({
   taskId: 42, commentId, text: "<p>Question: ship?</p>", commentText: "Question: ship?", createdAt: at(minute),
@@ -50,8 +49,7 @@ function decisionsWorld({ clearFlag }) {
   };
   const { getDecisionComments } = load("src/utils/controllers/notifications/decisionTasks.ts", {
     "@/lib/prisma": { default: db },
-    "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: DECISIONS_FLAG },
-    "@/lib/flags": { isFeatureEnabled: async (key) => key === DECISIONS_FLAG || (key === FLAG && clearFlag) },
+    "@/lib/flags": { isFeatureEnabled: async (key) => key === FLAG && clearFlag },
   });
   return { getDecisionComments, queries };
 }

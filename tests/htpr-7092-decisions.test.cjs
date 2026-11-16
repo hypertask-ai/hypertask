@@ -27,7 +27,6 @@ function loadTsModule(relativePath, stubs = {}) {
   return loaded.exports;
 }
 
-const FLAG = "htpr-7092-decisions";
 const { isQuestionComment, pickDecisionComments } = loadTsModule("src/lib/inboxDecisions.ts");
 const builtin = loadTsModule("src/lib/constants/builtinViews.ts");
 const { getInboxTabs } = loadTsModule("src/utils/helperFunctions/inboxHelpers.ts");
@@ -38,14 +37,6 @@ const jiti = require("jiti")(path.join(root, "tests/builtin-views-jiti-entry.cjs
 const { getFilteredSections } = jiti(path.join(root, "src/utils/helperFunctions/Views/FilterHelperFunctions.ts"));
 
 const at = (hoursAgo) => new Date(Date.now() - hoursAgo * 3600_000);
-
-test("flag file registers htpr-7092-decisions as Owner + QA", () => {
-  const def = loadTsModule("src/lib/flags/definitions/htpr-7092-decisions.ts");
-  assert.equal(def.HTPR_7092_DECISIONS_FLAG, FLAG);
-  assert.equal(def.default.key, FLAG);
-  assert.equal(def.default.defaultMode, "OWNER_AND_QA");
-  assert.equal(def.default.kind, "feature");
-});
 
 test("Question detection accepts bold and plain Question: only at the start", () => {
   assert.equal(isQuestionComment("<p><strong>Question:</strong> ship it?</p>"), true);
@@ -95,7 +86,7 @@ test("Decisions split lists only marked rows and sits right after Important", ()
   assert.ok(result.data[important.idx].includes(0));
 });
 
-test("flag off: no marked rows means no Decisions tab", () => {
+test("no marked rows means no Decisions tab", () => {
   const result = getInboxTabs([row(1, 101), row(2, 102)], [], true, Date.now());
   assert.equal(names(result).includes("Decisions"), false);
 });
@@ -144,8 +135,8 @@ test("Decisions is a built-in view available on every board", () => {
   assert.equal(builtin.isBuiltinViewId("builtin:decisions"), true);
 });
 
-test("flag off hides the board view: the view list drops it unless the flag is on", () => {
-  const loadViews = (decisionsEnabled) =>
+test("the board view list always includes Decisions, with no flag read", () => {
+  const loadViews = () =>
     loadModule("src/hooks/Homepage/Views/useOrderedViews.ts", {
       react: { useMemo: (fn) => fn(), useEffect: () => {} },
       "@/lib/state": { useRecoilValue: () => ({}), useSetRecoilState: () => () => {} },
@@ -159,8 +150,7 @@ test("flag off hides the board view: the view list drops it unless the flag is o
         savedBoardLayoutToClient: () => null,
         replaceProjectSurface: () => {},
       },
-      "@/hooks/useFlag": { useFlag: (key) => key === FLAG && decisionsEnabled, useFlagLoaded: () => true },
-      "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
+      "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => true },
     }).default;
   const project = {
     id: 15,
@@ -168,32 +158,27 @@ test("flag off hides the board view: the view list drops it unless the flag is o
     tasks: [],
     project_view: { default_view_id: "home", allViews: [{ id: "home", title: "Home" }], user_project_views: [] },
   };
-  const ids = (views) => views.map((view) => view.id);
-  const on = ids(loadViews(true)(project));
-  const off = ids(loadViews(false)(project));
-  assert.ok(on.includes("builtin:decisions"));
-  assert.deepEqual(off, on.filter((id) => id !== "builtin:decisions"));
+  assert.ok(loadViews()(project).map((view) => view.id).includes("builtin:decisions"));
 });
 
-const loadServer = (enabled, db) =>
+const loadServer = (db) =>
   loadTsModule("src/utils/controllers/notifications/decisionTasks.ts", {
     "@/lib/prisma": { __esModule: true, default: db },
-    "@/lib/flags": { isFeatureEnabled: async (key) => enabled && key === FLAG },
-    "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
   }).getDecisionComments;
 
-test("server: flag off returns no decisions and runs no query", async () => {
+test("server: decisions are read with no feature flag gate", async () => {
   let queries = 0;
   const db = {
     notification: { findMany: async () => { queries++; return []; } },
     comment: { findMany: async () => { queries++; return []; } },
   };
-  const ids = await loadServer(false, db)(6, {});
+  const ids = await loadServer(db)(6, {});
   assert.equal(ids.size, 0);
-  assert.equal(queries, 0);
+  assert.equal(queries, 1);
 });
 
-test("server: flag on returns unanswered Question tasks with two queries", async () => {
+test("server: unanswered Question tasks come back with two queries", async () => {
   const calls = [];
   const db = {
     notification: {
@@ -212,7 +197,7 @@ test("server: flag on returns unanswered Question tasks with two queries", async
       },
     },
   };
-  const ids = await loadServer(true, db)(6, { userId: 6 });
+  const ids = await loadServer(db)(6, { userId: 6 });
   assert.deepEqual([...ids.keys()], [1]);
   assert.deepEqual(calls, [["notification", "Mentioned"], ["comment", 6]]);
 });
@@ -251,8 +236,7 @@ test("server: activity-only viewer entries never count as an answer", async () =
   const { getDecisionComments } = loadTsModule("src/utils/controllers/notifications/decisionTasks.ts", {
     "@prisma/client": { Prisma: { DbNull } },
     "@/lib/prisma": { __esModule: true, default: db },
-    "@/lib/flags": { isFeatureEnabled: async (key) => key === FLAG },
-    "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/flags/definitions/htpr-8205-agent-clear-blocker": { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG: "htpr-8205-agent-clear-blocker" },
   });
   const decisions = await getDecisionComments(6, {});

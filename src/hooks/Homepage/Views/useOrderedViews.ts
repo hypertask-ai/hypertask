@@ -8,7 +8,7 @@ import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, buildBuiltinViewContext, type BoardVie
 import { useRouter } from 'next/navigation'
 import { getActiveBoardLayoutPreferenceFromProject, replaceProjectSurface, savedBoardLayoutToClient } from '@/utils/helperFunctions/Views/ViewsHelperFunctions'
 import { useFlag, useFlagLoaded } from '@/hooks/useFlag'
-import { HTPR_7092_DECISIONS_FLAG, HTPR_7804_BLOCKED_BY_ME_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
+import { HTPR_7804_BLOCKED_BY_ME_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
 
 const localOrderMigrations = new Set<number>()
 
@@ -21,7 +21,6 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
   const setBoardLayout = useSetRecoilState(boardLayoutAtom)
   const boardLayoutPreference = useRecoilValue(boardLayoutPreferenceAtom)
   const router = useRouter()
-  const decisionsEnabled = useFlag(HTPR_7092_DECISIONS_FLAG)
   const viewOrder = useRecoilValue(viewTabsOrderAtom)
   const optimisticViewOrder = useRecoilValue(optimisticViewTabsOrderAtom)
   const defaultViewId = project?.project_view?.default_view_id
@@ -84,12 +83,7 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
     () => availableViews.filter((view) => view.id !== BUILTIN_VIEW_IDS.blockedByMe),
     [availableViews],
   )
-  const allViews = blockedByMeEnabled ? availableViews : viewsWithoutBlockedByMe
-  const viewsWithoutDecisions = useMemo(
-    () => allViews.filter((view) => view.id !== BUILTIN_VIEW_IDS.decisions),
-    [allViews],
-  )
-  return decisionsEnabled ? allViews : viewsWithoutDecisions
+  return blockedByMeEnabled ? availableViews : viewsWithoutBlockedByMe
 }
 
 export default useOrderedViews

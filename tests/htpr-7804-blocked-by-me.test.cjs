@@ -44,7 +44,7 @@ function orderedHarness(enabled, active = {}, loaded = true, react) {
     "@/utils/helperFunctions/Views/ViewOrderHelperFunctions": order,
     "@/lib/constants/builtinViews": builtin,
     "@/hooks/useFlag": { useFlagLoaded: () => loaded, useFlag: (key) => key === flag.HTPR_7804_BLOCKED_BY_ME_FLAG ? enabled : true },
-    "@/lib/flags/keys": { HTPR_7804_BLOCKED_BY_ME_FLAG: flag.HTPR_7804_BLOCKED_BY_ME_FLAG, HTPR_7092_DECISIONS_FLAG: "decisions" },
+    "@/lib/flags/keys": { HTPR_7804_BLOCKED_BY_ME_FLAG: flag.HTPR_7804_BLOCKED_BY_ME_FLAG },
   });
   return {
     hook,
