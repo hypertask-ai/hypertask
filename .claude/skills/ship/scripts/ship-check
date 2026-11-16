@@ -9,8 +9,9 @@
 #                                closed as outdated, and the ticket carries a comment opening "Resolved without a change:" that
 #                                links that PR. Then pr, merged, deployed and proof pass; docs keeps its own rule.
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
-#                                with evidence (an https URL or a <pre>/<code> block), no open PR titled with T, no bound PR, and no origin
-#                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
+#                                with evidence (an https URL or a <pre>/<code> block) and a Control: line naming the check that found the fault
+#                                on a known bad build, no open PR titled with T, no bound PR, and no origin branch named *<t lowercased>*
+#                                with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     test click removed for every PR (hookless sessions)
 #   ship-check premerge-status <pr> publish the required current-head GitHub status
@@ -315,33 +316,42 @@ nochange_origin_branches() {
 
 # The closing record: one comment whose visible text (tags removed, leading space dropped) opens with
 # "Resolved without a change:" and carries evidence in that same comment: an https URL, or a <pre>/<code>
-# block whose visible inner text is not blank. Returns 2 when the comments cannot be read.
+# block whose visible inner text is not blank. When control is asked for, the same comment also needs a
+# "Control:" line with content. Returns 2 when the comments cannot be read.
 resolution_comment() {
-  local t=$1 repo=${2:-} pr=${3:-} cmts
+  local t=$1 repo=${2:-} pr=${3:-} control=${4:-} cmts
   cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || return 2
-  jq -e --arg repo "$repo" --arg pr "$pr" '
+  jq -e --arg repo "$repo" --arg pr "$pr" --arg control "$control" '
     ($repo | gsub("\\."; "\\.")) as $r
     | .comments | any(.[]; (.text // "") as $x
       | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
       and (($x | test("https://[A-Za-z0-9][^\\s\"<>]*"))
         or ([$x | scan("(?s)<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>") | .[0]
              | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0))
+      and ($control == "" or ($x
+        | gsub("(?i)</p>|<br[[:space:]]*/?>|</li>|</div>|</h[1-6]>"; "\n")
+        | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; " ")
+        | test("(?im)^[ \\t]*control:[ \\t]*\\S")))
       and ($pr == "" or ($x | test("github\\.com/" + $r + "/pull/" + $pr + "([^0-9]|$)"))))' >/dev/null <<<"$cmts"
 }
 
 resolution_comment_reason() {
+  if [ -n "${2:-}" ]; then
+    echo "$1 has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output) and a Control: line naming the check that found the fault on a known bad build"
+    return
+  fi
   echo "$1 has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output)"
 }
 
 nochange_verify() {
-  local t=${1:-} open b ahead rc
+  local t=${1:-} open b ahead rc control=1
   [[ $t =~ ^($PREFIXES)-[0-9]+$ ]] || { echo "nochange needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"; return 1; }
   if [ -n "$(bound_pr "$t")" ] || [ -s "$EVID/$t/duplicate-of" ] || [ -s "$EVID/$t/dropped" ]; then
     echo "$t has a bound PR (or a duplicate/dropped record); use the normal path"; return 1
   fi
-  resolution_comment "$t"; rc=$?
+  resolution_comment "$t" "" "" control; rc=$?
   [ "$rc" = 2 ] && { echo "cannot read comments of $t"; return 1; }
-  [ "$rc" = 0 ] || { resolution_comment_reason "$t"; return 1; }
+  [ "$rc" = 0 ] || { resolution_comment_reason "$t" control; return 1; }
   open=$(gh pr list -R "$REPO" --state open --search "$t in:title" --limit 50 --json number,title 2>/dev/null) \
     || { echo "cannot read open PRs of $REPO"; return 1; }
   if jq -e --arg t "$t " 'any(.[]; .title | startswith($t))' >/dev/null <<<"$open"; then echo "$t has an open PR; use the normal path"; return 1; fi
