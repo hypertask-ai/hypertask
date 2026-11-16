@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { identity } = require("../scripts/model-diff");
+const { identity, readCatalog } = require("../scripts/model-diff");
 const { readAllowlist, versionAtLeast, watched, selectWatched, worthFiling } = require("../.github/scripts/model-watch-allowlist.cjs");
 const { fileReport, rollupTicket } = require("../.github/scripts/ai-model-watch.cjs");
 
@@ -79,6 +79,27 @@ test("only a watched family at or above its floor is filed", () => {
     "nvidia/nemotron-3-ultra-550b-a55b",
     "meta/muse-spark-1.3",
   ]), []);
+});
+
+test("a model the catalog already replaced is never filed as a new class", () => {
+  assert.deepEqual(kept(["alibaba/qwen3.7-plus"]), []);
+  assert.deepEqual(kept(["alibaba/qwen3.8-plus", "alibaba/qwen3.8-max"]), ["alibaba/qwen3.8-plus"]);
+});
+
+test("every watched family floor is at the version the catalog ships today", () => {
+  const root = path.resolve(__dirname, "..");
+  const { definitions } = readCatalog(fs.readFileSync(path.join(root, "src/lib/aiModelOptions.ts"), "utf8"));
+  const gatewayProvider = { moonshot: "moonshotai", zhipu: "zai", xai: "spacexai" };
+  for (const [provider, families] of Object.entries(watch)) {
+    for (const [family, floor] of Object.entries(families)) {
+      const shipped = definitions.filter((row) =>
+        (gatewayProvider[row.provider] ?? row.provider) === provider && row.modelClass === family);
+      for (const definition of shipped) {
+        assert.ok(versionAtLeast(floor.split(".").map(Number), identity(definition.key).version.join(".")),
+          `${provider}/${family} floor ${floor} is behind the shipped ${definition.key}`);
+      }
+    }
+  }
 });
 
 test("the families reported on HTPR-8876 file nothing, which is the whole point of the ticket", () => {

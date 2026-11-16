@@ -18,7 +18,7 @@
       "gemini-flash": "3.8",
       "gemini-flash-lite": "3.5",
       "gemini-argon": "4",
-      "gemini-pro": "3"
+      "gemini-pro": "3.1"
     },
     "spacexai": {
       "grok": "4.7"
@@ -34,7 +34,7 @@
     },
     "alibaba": {
       "qwen": "3.8",
-      "qwen-plus": "3.7"
+      "qwen-plus": "3.8"
     },
     "zai": {
       "glm-flash": "5.3",
