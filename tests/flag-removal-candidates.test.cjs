@@ -32,7 +32,7 @@ test("dry run lists flags past their window and a rerun files nothing new", () =
     modes: {
       "htpr-3533-google-calendar": "EVERYONE",
       "htpr-7308-phone-layout-width": "EVERYONE",
-      "htpr-7324-plan-ai-caps": "EVERYONE",
+      "htpr-7982-cancelled-free": "EVERYONE",
       "htpr-7350-card-title-wrap": "OWNER_AND_QA",
       "htpr-7702-phone-chat-list": "EVERYONE",
       "htpr-7755-bulk-preview-confirmation": "EVERYONE",
@@ -41,7 +41,7 @@ test("dry run lists flags past their window and a rerun files nothing new", () =
   }));
   fs.writeFileSync(sinceFile, JSON.stringify({
     "htpr-3533-google-calendar": "2026-10-16T00:00:00.000Z",
-    "htpr-7324-plan-ai-caps": "2026-10-09T00:00:00.000Z",
+    "htpr-7982-cancelled-free": "2026-10-09T00:00:00.000Z",
     "htpr-7350-card-title-wrap": "2026-09-01T00:00:00.000Z",
     "htpr-7702-phone-chat-list": "2026-10-16T00:00:00.000Z",
     "htpr-7755-bulk-preview-confirmation": "2026-10-16T00:00:00.000Z",
@@ -61,7 +61,7 @@ test("dry run lists flags past their window and a rerun files nothing new", () =
   assert.equal(report.ticketsPerRun, 10);
   assert.deepEqual(report.missingSince, ["htpr-7308-phone-layout-width"]);
   assert.deepEqual(report.wouldFile.map((item) => [item.key, item.windowDays]), [
-    ["htpr-7324-plan-ai-caps", 14],
+    ["htpr-7982-cancelled-free", 14],
     ["htpr-7702-phone-chat-list", 7],
     ["yper4-651-self-follow-quiet", 7],
   ]);

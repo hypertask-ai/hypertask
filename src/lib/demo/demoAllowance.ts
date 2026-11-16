@@ -12,10 +12,6 @@ import {
   FREE_TEAM_DAILY_AI_ALLOWANCE_USD,
   type TeamAllowancePolicy,
 } from "@/lib/aiAllowancePolicy";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7324_PLAN_AI_CAPS_FLAG } from "@/lib/flags/definitions/htpr-7324-plan-ai-caps";
-
-export const demoCapsEnabled = () => isFeatureEnabled(HTPR_7324_PLAN_AI_CAPS_FLAG, 0);
 
 const GUEST_POLICY: TeamAllowancePolicy = {
   mode: "plan",

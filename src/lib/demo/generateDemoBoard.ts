@@ -3,7 +3,7 @@ import { createGateway, generateText, Output, type LanguageModelUsage } from "ai
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { z } from "zod";
 
-import { cappedDemoModel, demoCapsEnabled } from "./demoAllowance";
+import { cappedDemoModel } from "./demoAllowance";
 import { backgroundClaudeModelEnabled } from "@/app/api/ai/_lib/planGate";
 
 const DEMO_MODEL = "openai/gpt-6-luna";
@@ -93,15 +93,9 @@ export async function generateDemoBoard(purpose: string, teamId?: string): Promi
   }
 
   const claude = await backgroundClaudeModelEnabled(null);
-  let capsEnabled: boolean;
-  try {
-    capsEnabled = await demoCapsEnabled();
-  } catch {
-    throw new DemoBoardGenerationUnavailableError();
-  }
   const modelSlug = claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL;
   const rawModel = createGateway({ apiKey })(modelSlug);
-  const model = capsEnabled ? cappedDemoModel(rawModel, modelSlug, apiKey, teamId) : rawModel;
+  const model = cappedDemoModel(rawModel, modelSlug, apiKey, teamId);
   const startedAt = Date.now();
   let usage: LanguageModelUsage | undefined;
   let succeeded = false;
@@ -114,7 +108,7 @@ export async function generateDemoBoard(purpose: string, teamId?: string): Promi
       maxRetries: 2,
       providerOptions: {
         ...(claude ? {} : { openai: { reasoningEffort: "low" } }),
-        gateway: { tags: ["demo-board", ...(capsEnabled && teamId ? [`team:${teamId}`] : [])] },
+        gateway: { tags: ["demo-board", ...(teamId ? [`team:${teamId}`] : [])] },
       },
       system: SYSTEM,
       prompt: `Board purpose: ${purpose}`,
@@ -123,9 +117,8 @@ export async function generateDemoBoard(purpose: string, teamId?: string): Promi
     usage = result.totalUsage;
     succeeded = true;
     return ensureMinimumDueDates(result.output);
-  } catch (error) {
-    if (capsEnabled) throw new DemoBoardGenerationUnavailableError();
-    throw error;
+  } catch {
+    throw new DemoBoardGenerationUnavailableError();
   } finally {
     await logAiUsage({
       userId: null, teamId, provider: "gateway-demo", model: modelSlug, feature: "demo-board",

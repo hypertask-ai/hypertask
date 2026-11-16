@@ -1,7 +1,6 @@
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7324_PLAN_AI_CAPS_FLAG } from "@/lib/flags/definitions/htpr-7324-plan-ai-caps";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { isTeamComped, teamCompPlan } from "@/lib/teamComp";
@@ -37,17 +36,8 @@ async function teamOwner(teamId: string): Promise<{ userId: number; uid?: string
   return owner;
 }
 
-async function planMode(teamId: string): Promise<"legacy" | "plan" | "strict"> {
-  try {
-    return await isFeatureEnabled(HTPR_7324_PLAN_AI_CAPS_FLAG, (await teamOwner(teamId)).userId)
-      ? "plan" : "legacy";
-  } catch {
-    return "strict";
-  }
-}
-
-export async function teamPlanAllowanceEnabled(teamId: string): Promise<boolean> {
-  return await planMode(teamId) !== "legacy";
+export async function teamPlanAllowanceEnabled(_teamId: string): Promise<boolean> {
+  return true;
 }
 
 export async function remainingSpendPathEnabled(teamId: string): Promise<boolean> {
@@ -138,9 +128,7 @@ export async function resolveTeamAllowancePolicy(
   teamId: string,
   fundingSource: FundingSource,
 ): Promise<TeamAllowancePolicy> {
-  const mode = await planMode(teamId);
   const legacyMonthly = fundingSource === "managed" ? PAID_TEAM_AI_ALLOWANCE_USD : FREE_TEAM_AI_ALLOWANCE_USD;
-  if (mode === "legacy") return { mode, monthlyUsd: legacyMonthly, dailyUsd: null, demoGlobal: false };
   let monthlyUsd = FREE_TEAM_AI_ALLOWANCE_USD;
   let dailyUsd: number | null = fundingSource === "managed" ? null : FREE_TEAM_DAILY_AI_ALLOWANCE_USD;
   let demoGlobal = false;
@@ -196,7 +184,7 @@ export async function resolveTeamAllowancePolicy(
   }
   return {
     mode: "plan",
-    monthlyUsd: mode === "strict" ? Math.min(monthlyUsd, legacyMonthly) : monthlyUsd,
+    monthlyUsd,
     dailyUsd: demoGlobal ? FREE_TEAM_DAILY_AI_ALLOWANCE_USD : dailyUsd,
     demoGlobal,
   };

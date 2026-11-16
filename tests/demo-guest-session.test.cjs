@@ -68,6 +68,7 @@ require.cache[nextServerPath] = {
 };
 
 stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
+stubModule("src/lib/demo/slidingWindow.ts", { consumeDemoWindow: async () => ({ allowed: true, retryAfter: 0 }) });
 stubModule("src/lib/auth/betterAuth.ts", {
   auth: { handler: async () => new Response(null, { status: 204 }) },
 });

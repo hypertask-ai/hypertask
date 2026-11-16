@@ -192,7 +192,7 @@ test("the demo board generator uses Haiku 5.5 with the flag on and Luna with it 
     const seen = [];
     const api = moduleWithStubs("src/lib/demo/generateDemoBoard.ts", {
       "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
-      "./demoAllowance": { demoCapsEnabled: async () => false },
+      "./demoAllowance": { cappedDemoModel: (model) => model },
       zod: require("zod"),
       ai: {
         createGateway: () => (id) => { seen.push(id); return { id }; },

@@ -160,7 +160,7 @@ for (const failure of [false, true]) test(`demo board uses the dedicated gateway
   const model = languageModel(h, JSON.stringify(board));
   if (failure) model.doGenerate = async () => { throw new ai.NoContentGeneratedError({ message: 'No fixture output' }); };
   h.stubs.ai = { ...ai, createGateway: ({ apiKey }) => { assert.equal(apiKey, 'private-demo-key'); return (id) => { assert.equal(id, 'openai/gpt-6-luna'); return model; }; } };
-  h.stubs['@/lib/demo/demoAllowance'] = { demoCapsEnabled: async () => false };
+  h.stubs['@/lib/demo/demoAllowance'] = { cappedDemoModel: (model) => model };
   h.stubs['./demoAllowance'] = h.stubs['@/lib/demo/demoAllowance'];
   process.env.DEMO_AI_GATEWAY_API_KEY = 'private-demo-key';
   const generate = h.load('src/lib/demo/generateDemoBoard.ts').generateDemoBoard;

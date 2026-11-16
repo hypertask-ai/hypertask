@@ -147,7 +147,7 @@ test("bugfix flags are due after 7 days while money and data-deletion stay at 14
   const daysAgo = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   dueFlags = [
     { key: "htpr-3533-google-calendar", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
-    { key: "htpr-7324-plan-ai-caps", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
+    { key: "htpr-7982-cancelled-free", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
     { key: "htpr-7350-card-title-wrap", mode: "EVERYONE", keep: true, removalTaskId: null, releasedAt: daysAgo(30) },
     { key: "htpr-7702-phone-chat-list", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
     { key: "htpr-7755-bulk-preview-confirmation", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(8) },
@@ -175,7 +175,7 @@ test("money and data-deletion flags file after 14 days and a 6 day bugfix does n
   const daysAgo = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   dueFlags = [
     { key: "htpr-3533-google-calendar", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(15) },
-    { key: "htpr-7324-plan-ai-caps", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(15) },
+    { key: "htpr-7982-cancelled-free", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(15) },
     { key: "htpr-7702-phone-chat-list", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(6) },
     { key: "htpr-7755-bulk-preview-confirmation", mode: "EVERYONE", keep: false, removalTaskId: null, releasedAt: daysAgo(15) },
   ];
@@ -185,8 +185,8 @@ test("money and data-deletion flags file after 14 days and a 6 day bugfix does n
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).keys, [
     "htpr-3533-google-calendar",
-    "htpr-7324-plan-ai-caps",
     "htpr-7755-bulk-preview-confirmation",
+    "htpr-7982-cancelled-free",
   ]);
   assert.ok(filed.every((ticket) => ticket.description.includes("more than 14 days")));
   assert.equal(filed.some((ticket) => ticket.title.includes("htpr-7702-phone-chat-list")), false);

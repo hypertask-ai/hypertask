@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { demoCapsEnabled } from "@/lib/demo/demoAllowance";
 import { consumeDemoWindow } from "@/lib/demo/slidingWindow";
 import { prepareAgentScope, withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -31,12 +30,8 @@ import prisma from "@/lib/prisma";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT_MAX_GUESTS = 5;
 const RATE_LIMIT_MAX_REGENERATIONS = 3;
-
-const guestCreationsByIp = new Map<string, number[]>();
-const boardRegenerationsByGuest = new Map<number, number[]>();
 
 function requestIp(request: NextRequest): string {
   return (
@@ -44,46 +39,6 @@ function requestIp(request: NextRequest): string {
     request.headers.get("x-real-ip")?.trim() ||
     "unknown"
   );
-}
-
-function consumeGuestCreation(ip: string): { allowed: boolean; retryAfter: number } {
-  const now = Date.now();
-  const recent = (guestCreationsByIp.get(ip) ?? []).filter(
-    (timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS,
-  );
-  if (recent.length >= RATE_LIMIT_MAX_GUESTS) {
-    guestCreationsByIp.set(ip, recent);
-    return {
-      allowed: false,
-      retryAfter: Math.max(1, Math.ceil((RATE_LIMIT_WINDOW_MS - (now - recent[0])) / 1000)),
-    };
-  }
-  recent.push(now);
-  guestCreationsByIp.set(ip, recent);
-  return { allowed: true, retryAfter: 0 };
-}
-
-function consumeBoardRegeneration(userId: number): {
-  allowed: boolean;
-  retryAfter: number;
-} {
-  const now = Date.now();
-  const recent = (boardRegenerationsByGuest.get(userId) ?? []).filter(
-    (timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS,
-  );
-  if (recent.length >= RATE_LIMIT_MAX_REGENERATIONS) {
-    boardRegenerationsByGuest.set(userId, recent);
-    return {
-      allowed: false,
-      retryAfter: Math.max(
-        1,
-        Math.ceil((RATE_LIMIT_WINDOW_MS - (now - recent[0])) / 1000),
-      ),
-    };
-  }
-  recent.push(now);
-  boardRegenerationsByGuest.set(userId, recent);
-  return { allowed: true, retryAfter: 0 };
 }
 
 async function appendBetterAuthCookies(
@@ -287,17 +242,11 @@ async function guest(request: NextRequest) {
     );
   }
 
-  let capsEnabled: boolean;
   let rateLimit: { allowed: boolean; retryAfter: number };
   try {
-    capsEnabled = await demoCapsEnabled();
     rateLimit = existingGuest
-      ? capsEnabled
-        ? await consumeDemoWindow(`demo:guest:regenerate:${existingGuest.owner.userId}`, RATE_LIMIT_MAX_REGENERATIONS)
-        : consumeBoardRegeneration(existingGuest.owner.userId)
-      : capsEnabled
-        ? await consumeDemoWindow(`demo:guest:ip:${createHash("sha256").update(requestIp(request)).digest("hex")}`, RATE_LIMIT_MAX_GUESTS)
-        : consumeGuestCreation(requestIp(request));
+      ? await consumeDemoWindow(`demo:guest:regenerate:${existingGuest.owner.userId}`, RATE_LIMIT_MAX_REGENERATIONS)
+      : await consumeDemoWindow(`demo:guest:ip:${createHash("sha256").update(requestIp(request)).digest("hex")}`, RATE_LIMIT_MAX_GUESTS);
   } catch {
     return NextResponse.json({ error: "demo generation unavailable" }, { status: 503 });
   }

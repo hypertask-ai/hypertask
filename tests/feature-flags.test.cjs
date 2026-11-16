@@ -1541,6 +1541,16 @@ test("Ctrl+K ellipsis flag is retired and the placeholder stays on for old tabs"
   listedRows = [];
 });
 
+test("AI spend cap flag is retired and the cap stays for every team", async () => {
+  const key = "htpr-7324-plan-ai-caps";
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261116120000_drop_htpr_7324_plan_ai_caps_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  assert.equal((await flags.featureFlagsForUser(42))[key], true);
+});
+
 for (const [key, risk] of [
   ["htpr-7982-cancelled-free", "money"],
   ["htpr-7575-phone-chat-delete", "data-deletion"],

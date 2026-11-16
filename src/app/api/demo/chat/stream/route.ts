@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { modelCostUsd, modelPricing, sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
-import { cappedDemoModel, demoCapsEnabled } from "@/lib/demo/demoAllowance";
+import { cappedDemoModel } from "@/lib/demo/demoAllowance";
 import { consumeDemoWindow } from "@/lib/demo/slidingWindow";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
@@ -13,12 +13,9 @@ import { getAiModelOptionById } from "@/lib/aiModelOptions";
 import { SESSION_COOKIE } from "@/lib/auth/session";
 import { resolveGuestSession } from "@/lib/demo/guestGuard";
 import {
-  estimateDemoUsd,
-  GUEST_AI_BUDGET_USD,
   GUEST_ALLOWED_GATEWAY_MODELS,
   GUEST_DEFAULT_GATEWAY_MODEL,
 } from "@/lib/demo/guestModels";
-import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -120,17 +117,6 @@ function sseErrorResponse(message: string, status = 200) {
   );
 }
 
-function sseSignupRequired() {
-  return new Response(
-    sseFrame("error", {
-      content:
-        "You've used up the free demo AI. Sign up to keep chatting — it's free.",
-      code: "guest_budget_exhausted",
-    }) + sseFrame("done", { status: "error" }),
-    { status: 200, headers: SSE_HEADERS },
-  );
-}
-
 function fallbackTitle(message: string) {
   return message
     .replace(/<[^>]+>/g, " ")
@@ -190,17 +176,13 @@ export async function POST(request: NextRequest) {
   const guest = await resolveGuestSession(
     request.cookies.get(SESSION_COOKIE)?.value,
   ).catch(() => null);
-  let capsEnabled: boolean;
   try {
-    capsEnabled = await demoCapsEnabled();
-    if (capsEnabled) {
-      if (!guest?.teamId) return sseErrorResponse("Please start the demo again to keep chatting.", 401);
-      const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-        request.headers.get("x-real-ip")?.trim() || "unknown";
-      const key = `demo:chat:ip:${createHash("sha256").update(ip).digest("hex")}`;
-      if (!(await consumeDemoWindow(key, 20)).allowed) {
-        return sseErrorResponse("Too many demo messages from your network. Try again in a few minutes.");
-      }
+    if (!guest?.teamId) return sseErrorResponse("Please start the demo again to keep chatting.", 401);
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip")?.trim() || "unknown";
+    const key = `demo:chat:ip:${createHash("sha256").update(ip).digest("hex")}`;
+    if (!(await consumeDemoWindow(key, 20)).allowed) {
+      return sseErrorResponse("Too many demo messages from your network. Try again in a few minutes.");
     }
   } catch (error) {
     await reportError({
@@ -212,18 +194,10 @@ export async function POST(request: NextRequest) {
     });
     return sseErrorResponse("Demo chat is unavailable. Please try again later.", 503);
   }
-  if (!capsEnabled && guest?.teamId) {
-    const spent = await prisma.aiUsage
-      .aggregate({ where: { teamId: guest.teamId }, _sum: { totalTokens: true } })
-      .catch(() => null);
-    if (estimateDemoUsd(spent?._sum.totalTokens ?? 0) >= GUEST_AI_BUDGET_USD) {
-      return sseSignupRequired();
-    }
-  }
 
   const encoder = new TextEncoder();
   const rawModel = createGateway({ apiKey })(gatewayModel);
-  const model = capsEnabled ? cappedDemoModel(rawModel, gatewayModel, apiKey, guest!.teamId!) : rawModel;
+  const model = cappedDemoModel(rawModel, gatewayModel, apiKey, guest!.teamId!);
   const firstTurn = history.length === 0;
 
   const stream = new ReadableStream<Uint8Array>({
@@ -242,7 +216,7 @@ export async function POST(request: NextRequest) {
       };
       const fail = (error: unknown) => {
         if (finished) return;
-        if (capsEnabled && sharedAiAllowanceErrorMessage(error)) {
+        if (sharedAiAllowanceErrorMessage(error)) {
           send("error", {
             content: "You've used up the free demo AI. Sign up to keep chatting — it's free.",
             code: "guest_budget_exhausted",
@@ -262,7 +236,7 @@ export async function POST(request: NextRequest) {
           temperature: 0.3,
           maxOutputTokens: 600,
           maxRetries: 1,
-          providerOptions: { gateway: { tags: ["demo-chat", ...(capsEnabled ? [`team:${guest!.teamId}`] : [])] } },
+          providerOptions: { gateway: { tags: ["demo-chat", `team:${guest!.teamId}`] } },
           onFinish: async ({ usage }) => {
             if (!guest) return;
             const inputTokens = usage.inputTokens ?? 0;
@@ -273,8 +247,8 @@ export async function POST(request: NextRequest) {
               provider: "gateway",
               model: gatewayModel,
               feature: "demo-chat",
-              ...(capsEnabled ? { costUsd: modelCostUsd(await modelPricing(gatewayModel), inputTokens, outputTokens,
-                usage.inputTokenDetails?.cacheReadTokens, usage.inputTokenDetails?.cacheWriteTokens) } : {}),
+              costUsd: modelCostUsd(await modelPricing(gatewayModel), inputTokens, outputTokens,
+                usage.inputTokenDetails?.cacheReadTokens, usage.inputTokenDetails?.cacheWriteTokens),
               inputTokens,
               outputTokens,
               totalTokens: usage.totalTokens ?? inputTokens + outputTokens,

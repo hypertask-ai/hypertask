@@ -65,6 +65,7 @@ stubModule("src/lib/auth/betterAuth.ts", {
   },
 });
 stubModule("src/lib/redis.ts", { getRedis: async () => ({ get: async () => null }) });
+stubModule("src/lib/demo/slidingWindow.ts", { consumeDemoWindow: async () => ({ allowed: true, retryAfter: 0 }) });
 stubModule("src/lib/demo/guest.ts", {
   GUEST_SESSION_TTL_SECONDS: 86_400,
   isGuestUser: (user) => user?.uid?.startsWith("guest_") ?? false,

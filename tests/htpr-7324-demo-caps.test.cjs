@@ -10,7 +10,7 @@ const stub = (file, exports) => {
   const filename = path.join(root, file);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
-let redis, flag, guest, flagCalls, modelCalls, logs, provisionCalls, gatewayKeys;
+let redis, guest, modelCalls, logs, provisionCalls, gatewayKeys;
 let monthSpend, daySpend, demoSpend, redisFailure, aggregateCalls, reports;
 let identity, generationFailure;
 let errorReports = [];
@@ -63,12 +63,6 @@ class NextResponse {
 }
 const next = require.resolve("next/server");
 require.cache[next] = { id: next, filename: next, loaded: true, exports: { NextRequest, NextResponse } };
-stub("src/lib/flags.ts", { isFeatureEnabled: async (key, userId) => {
-  if (key !== "htpr-7324-plan-ai-caps") return false;
-  flagCalls.push(userId);
-  if (flag instanceof Error) throw flag;
-  return flag;
-} });
 stub("src/lib/redis.ts", { getRedis: async () => {
   if (redisFailure) throw new Error("Redis unavailable");
   return redis;
@@ -188,8 +182,8 @@ function request(body = { message: "What should I do next?" }, ip = "203.0.113.1
   });
 }
 test.beforeEach(() => {
-  redis = fakeRedis(); flag = true; guest = { userId: 900, teamId: "guest-team" };
-  flagCalls = []; modelCalls = []; logs = []; provisionCalls = []; gatewayKeys = [];
+  redis = fakeRedis(); guest = { userId: 900, teamId: "guest-team" };
+  modelCalls = []; logs = []; provisionCalls = []; gatewayKeys = [];
   monthSpend = 0; daySpend = 0; demoSpend = 0; redisFailure = false; aggregateCalls = 0; reports = [];
   identity = false; generationFailure = null;
   process.env.DEMO_AI_GATEWAY_API_KEY = "demo-test-key";
@@ -222,7 +216,6 @@ for (const invalid of [null, { userId: 900, teamId: null }, new Error("lookup fa
     assert.match(await response.text(), /start the demo again/);
     assert.equal(modelCalls.length, 0);
     assert.equal(gatewayKeys.length, 0);
-    assert.deepEqual(flagCalls, [0]);
   });
 }
 test("a valid guest is admitted, tagged and charged actual cost in every scope and usage log", async () => {
@@ -300,27 +293,6 @@ for (const entryPoint of ["chat", "board"]) {
     assert.equal(modelCalls.length, 0);
   });
 }
-test("flag lookup error fails closed for chat, guest creation and board generation", async () => {
-  flag = new Error("flag unavailable");
-  assert.equal((await chat(request())).status, 503);
-  assert.equal((await provision(request({ purpose: "Launch a project" }))).status, 503);
-  await assert.rejects(generateDemoBoard("Launch a project"), DemoBoardGenerationUnavailableError);
-  assert.equal(modelCalls.length, 0);
-  assert.deepEqual(provisionCalls, []);
-});
-test("flag off preserves anonymous chat, raw tags, legacy token cap, and no Redis or cost logging", async () => {
-  flag = false; guest = null; redisFailure = true;
-  assert.match(await (await chat(request())).text(), /status.*complete/);
-  assert.equal(modelCalls.length, 1);
-  assert.deepEqual(modelCalls[0].providerOptions.gateway.tags, ["demo-chat"]);
-  assert.deepEqual(logs, []);
-  guest = { userId: 900, teamId: "guest-team" };
-  monthSpend = 0.1;
-  assert.match(await (await chat(request())).text(), /guest_budget_exhausted/);
-  assert.equal(modelCalls.length, 1);
-  assert.equal(aggregateCalls, 1);
-  assert.deepEqual(flagCalls, [0, 0]);
-});
 test("first board reserves and settles only demo-global, with no team month or day bootstrap", async () => {
   const generated = await generateDemoBoard("Launch a project");
   assert.equal(generated.name, board.name);
@@ -354,13 +326,6 @@ test("failed first-board inference conservatively settles reserved cost", async 
   assert.ok(Number(await redis.get(`ai-allowance:demo:${aiAllowancePeriod().key}:committed`)) > 0);
   for (const set of redis.sets.values()) assert.equal(set.size, 0);
 });
-test("flag-off board generation preserves raw model tags and never touches Redis", async () => {
-  flag = false; redisFailure = true;
-  await generateDemoBoard("Launch a project", "guest-team");
-  assert.deepEqual(modelCalls[0].providerOptions.gateway.tags, ["demo-board"]);
-  assert.deepEqual(reports, []);
-  assert.deepEqual(flagCalls, [0]);
-});
 test("guest creation admits five per extracted IP and refuses the sixth, with Retry-After", async () => {
   for (let i = 0; i < 5; i++) assert.equal((await provision(request({ purpose: "Launch a project" }, "198.51.100.1, 10.0.0.1"))).status, 200);
   const response = await provision(request({ purpose: "Launch a project" }, "198.51.100.1"));
@@ -378,14 +343,10 @@ test("guest regeneration admits three per guest regardless of IP, then refuses t
   assert.equal(provisionCalls.length, 3);
   assert.ok(redis.sets.has("demo:guest:regenerate:900"));
 });
-test("guest limiters fail closed on Redis outage and preserve legacy Maps with flag off", async () => {
+test("guest limiters fail closed on Redis outage", async () => {
   redisFailure = true;
   assert.equal((await provision(request({}))).status, 503);
   assert.deepEqual(provisionCalls, []);
-  flag = false;
-  for (let i = 0; i < 5; i++) assert.equal((await provision(request({}, "198.51.100.90"))).status, 200);
-  assert.equal((await provision(request({}, "198.51.100.90"))).status, 429);
-  assert.equal(provisionCalls.length, 5);
 });
 test("sliding window rejects malformed Redis responses rather than allowing traffic", async () => {
   for (const invalid of [null, undefined, "invalid", -1, 0.5]) {
