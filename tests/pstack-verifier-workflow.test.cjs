@@ -19,7 +19,7 @@ test("the boot holds for the verifier and the job strips the model key before co
   assert.match(job, /env -u OPENROUTER_EVAL_KEY -u OPENCODE_API_KEY/);
 });
 
-test("pstack-verifier posts FAIL unless the verdict is already PASS or FAIL", () => {
+test("pstack-verifier posts FAIL on a crash, a timeout, and a failed request", () => {
   const request = read(".github/workflows/pstack-verifier-request.yml");
   const trusted = read(".github/workflows/pstack-verifier.yml");
   const policy = read("docs/ci-policy.yml");
@@ -36,13 +36,13 @@ test("pstack-verifier posts FAIL unless the verdict is already PASS or FAIL", ()
   assert.match(trusted, /outputs\.sha \|\| github\.event\.workflow_run\.head_sha/);
   assert.match(script, /process\.exitCode = 2/);
   const postAt = trusted.indexOf("pstack-verifier.mjs post && exit 0 || code=$?");
-  const cancelAt = trusted.indexOf("needs.pstack-verifier.result == 'cancelled'");
+  const cancelAt = trusted.indexOf("  pstack-verifier-cancel:");
   assert.ok(postAt > 0 && cancelAt > postAt);
   assert.match(trusted.slice(postAt, cancelAt), /state=failure/);
   assert.match(trusted.slice(postAt, cancelAt), /The verifier did not finish/);
-  assert.match(trusted.slice(cancelAt), /\[ "\$state" = "success" \] \|\| \[ "\$state" = "failure" \]/);
-  assert.match(trusted.slice(cancelAt), /state=failure/);
-  assert.match(policy, /pstack_verifier:[\s\S]*required: false/);
+  assert.match(trusted.slice(cancelAt), /result != 'success'[\s\S]*timeout-minutes: 10[\s\S]*\[ "\$state" = "success" \] \|\| \[ "\$state" = "failure" \][\s\S]*state=failure/);
+  assert.doesNotMatch(trusted.slice(cancelAt), /result == 'cancelled'/);
+  assert.match(policy, /pstack_verifier:[\s\S]*required: false[\s\S]*Candidate page script runs in the trusted browser on the runner/);
   const required = policy.slice(policy.indexOf("required_checks:"), policy.indexOf("pstack_verifier:"));
   assert.doesNotMatch(required, /pstack-verifier/);
 });
