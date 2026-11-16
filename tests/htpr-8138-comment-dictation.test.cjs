@@ -40,33 +40,28 @@ function fakeAudioContext() {
   };
 }
 
-test("routed capture records the graph output and an unrouted capture records the microphone", () => {
+test("the capture graph records its own output so the level bar and the recording hear the same input", () => {
   const mic = { id: "mic", getTracks: () => [] };
-  const routed = fakeAudioContext();
-  const routedGraph = openDictationGraph(routed, mic, true);
-  assert.deepEqual(routed.links, [["source", "analyser"], ["analyser", "destination"]]);
-  assert.equal(routedGraph.recordStream.id, "graph");
-  assert.equal(routedGraph.analyser.fftSize, 1024);
-
-  const direct = fakeAudioContext();
-  const directGraph = openDictationGraph(direct, mic, false);
-  assert.deepEqual(direct.links, [["source", "analyser"]]);
-  assert.equal(directGraph.recordStream, mic);
+  const context = fakeAudioContext();
+  const graph = openDictationGraph(context, mic);
+  assert.deepEqual(context.links, [["source", "analyser"], ["analyser", "destination"]]);
+  assert.equal(graph.recordStream.id, "graph");
+  assert.equal(graph.analyser.fftSize, 1024);
 });
 
-test("a missing current board still sends the open ticket board when capture is routed", () => {
-  assert.equal(resolveDictationProjectId(undefined, null, 42, true), 42);
-  assert.equal(resolveDictationProjectId(undefined, 7, 42, true), 7);
-  assert.equal(resolveDictationProjectId(undefined, null, 42, false), undefined);
-  assert.equal(resolveDictationProjectId(9, null, 42, true), 9);
-  assert.equal(resolveDictationProjectId(null, 7, 42, true), undefined);
+test("a missing current board still sends the open ticket board", () => {
+  assert.equal(resolveDictationProjectId(undefined, null, 42), 42);
+  assert.equal(resolveDictationProjectId(undefined, 7, 42), 7);
+  assert.equal(resolveDictationProjectId(9, null, 42), 9);
+  assert.equal(resolveDictationProjectId(null, 7, 42), undefined);
 });
 
-test("the comment microphone records the graph stream on a timeslice", async () => {
+test("the comment microphone records the graph stream when every switch reads off", async () => {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/" });
   const globals = ["window", "document", "HTMLElement", "navigator", "localStorage", "IS_REACT_ACT_ENVIRONMENT", "requestAnimationFrame", "cancelAnimationFrame", "AudioContext", "MediaRecorder"];
   const previous = new Map(globals.map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]));
   const recorders = [];
+  const flagKeys = [];
   let reactRoot;
   try {
     global.window = dom.window;
@@ -130,7 +125,12 @@ test("the comment microphone records the graph stream on a timeslice", async () 
     dom.window.MediaRecorder = MediaRecorder;
 
     const { AudioButton } = loadModule("src/components/RTE/Components/AudioButton.tsx", {
-      "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8138-comment-dictation" },
+      "@/hooks/useFlag": {
+        useFlag: (key) => {
+          flagKeys.push(key);
+          return false;
+        },
+      },
       "@/lib/state": {
         useRecoilValue: (atom) => atom.key === "currentProject" ? null : { taskProjectId: 42 },
       },
@@ -163,6 +163,7 @@ test("the comment microphone records the graph stream on a timeslice", async () 
     assert.equal(recorders.length, 1);
     assert.equal(recorders[0].stream.id, "graph");
     assert.equal(recorders[0].timeslice, DICTATION_CAPTURE_TIMESLICE_MS);
+    assert.equal(flagKeys.includes("htpr-8138-comment-dictation"), false);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     for (const [key, descriptor] of previous) {
@@ -171,8 +172,4 @@ test("the comment microphone records the graph stream on a timeslice", async () 
     }
     dom.window.close();
   }
-});
-
-test("capture graph ok", () => {
-  console.log("capture graph ok");
 });

@@ -5,7 +5,6 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
-import { HTPR_8138_COMMENT_DICTATION_FLAG } from "@/lib/flags/definitions/htpr-8138-comment-dictation";
 import { useFlag } from "@/hooks/useFlag";
 import type { Editor } from "@tiptap/react";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
@@ -134,9 +133,6 @@ export const AudioButton = ({
     isMobileView && id === "create-task-modal-audio-button";
   const isAiChat = id === "ai-chat-audio-button" || id.startsWith("ai-chat-audio-button-");
   const chatCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
-  const routedCapture = useFlag(HTPR_8138_COMMENT_DICTATION_FLAG);
-  const routedCaptureRef = useRef(routedCapture);
-  routedCaptureRef.current = routedCapture;
   const isMobileAiChat = isMobileView && isAiChat;
   const isKeyboardAccessible =
     isMobileTaskWriter || Boolean(ariaLabel || idleLabel);
@@ -157,7 +153,6 @@ export const AudioButton = ({
     projectIdProp,
     currentProject?.id,
     inView?.taskProjectId,
-    routedCapture,
   );
 
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -226,7 +221,7 @@ export const AudioButton = ({
       }
       const ac = audioContextRef.current;
       if (ac.state === "suspended") await ac.resume();
-      const graph = openDictationGraph(ac, stream, routedCaptureRef.current);
+      const graph = openDictationGraph(ac, stream);
       analyserRef.current = graph.analyser;
       recordStreamRef.current = graph.recordStream;
     } else {
@@ -365,11 +360,7 @@ export const AudioButton = ({
       mediaRecorder.addEventListener("dataavailable", (event) => {
         if (event.data.size > 0) audioChunksRef.current.push(event.data);
       });
-      if (routedCaptureRef.current) {
-        mediaRecorder.start(DICTATION_CAPTURE_TIMESLICE_MS);
-      } else {
-        mediaRecorder.start();
-      }
+      mediaRecorder.start(DICTATION_CAPTURE_TIMESLICE_MS);
 
       barsRef.current = [];
       gainRef.current = 3;
@@ -409,7 +400,7 @@ export const AudioButton = ({
       stopStream();
 
       if (!send || audioBlob.size < MIN_BLOB_BYTES) {
-        if (send && routedCaptureRef.current && audioBlob.size < MIN_BLOB_BYTES) {
+        if (send) {
           toast.error("No speech captured. Check the microphone and try again.");
         }
         onProcessingChange?.(false);
@@ -508,7 +499,7 @@ export const AudioButton = ({
           const prefix =
             textContent && textContent.length > 0 ? " " : "";
           callbackHandler(prefix + transcript);
-        } else if (routedCaptureRef.current && canDeliver()) {
+        } else if (canDeliver()) {
           toast.error("No speech captured. Check the microphone and try again.");
         }
       }
