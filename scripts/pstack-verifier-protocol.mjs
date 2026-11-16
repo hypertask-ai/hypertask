@@ -49,11 +49,23 @@ export function readSmokeEnv(text) {
   for (const line of String(text).split("\n")) { const index = line.indexOf("="); if (index > 0) values[line.slice(0, index)] = line.slice(index + 1); }
   return values;
 }
+export function verifierSmokeUser(user) {
+  if (!user || typeof user !== "object" || Array.isArray(user)) return null;
+  const setting = user.UserSetting && typeof user.UserSetting === "object" && !Array.isArray(user.UserSetting) ? { ...user.UserSetting } : {};
+  return { ...user, UserSetting: { ...setting, onboardingTourStatus: true } };
+}
+function onboardVerifierCookieValue(value) {
+  const read = (text) => { try { const parsed = JSON.parse(text); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null; } catch { return null; } };
+  const raw = String(value ?? ""), plain = read(raw);
+  if (plain) return JSON.stringify(verifierSmokeUser(plain));
+  try { const decoded = decodeURIComponent(raw), user = decoded === raw ? null : read(decoded); return user ? encodeURIComponent(JSON.stringify(verifierSmokeUser(user))) : raw; } catch { return raw; }
+}
 export function cookiesFromHeader(header, base) {
   const host = new URL(base).hostname;
   return String(header).split(";").flatMap((part) => {
-    const index = part.indexOf("="), name = part.slice(0, index).trim(), value = part.slice(index + 1).trim();
+    const index = part.indexOf("="), name = part.slice(0, index).trim(); let value = part.slice(index + 1).trim();
     if (index < 1 || !name || !value) return [];
+    if (name === "nookies_user") value = onboardVerifierCookieValue(value);
     return [{ name, value, domain: host, path: "/", httpOnly: name !== "nookies_user", secure: false, sameSite: "Lax" }];
   });
 }
@@ -131,8 +143,7 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
   if (!clicked.length) { verdict = "FAIL"; notes = `${notes} No click, fill or key landed.`.trim(); }
   else if (!verdict) {
     let home = false; try { const where = new URL(url); home = where.origin === new URL(base).origin && onSurface(where.pathname); } catch { home = false; }
-    verdict = "FAIL";
-    notes = home ? (notes || "The model did not return PASS, PASS+NOTES or FAIL.") : `${notes} Seeded login did not open the app.`.trim();
+    verdict = "FAIL"; notes = home ? (notes || "The model did not return PASS, PASS+NOTES or FAIL.") : `${notes} Seeded login did not open the app.`.trim();
   }
   return { verdict, notes: redact(notes, secrets), clicked, shots };
 }
@@ -148,9 +159,7 @@ export async function performOnPage(page, actions, shotsDir, turn, base) {
       await page.screenshot({ path: path.join(shotsDir, name) });
       shots.push(name);
       lines.push(`${action.op} ok`);
-    } catch (error) {
-      lines.push(`${action.op} failed: ${String(error.message ?? error).split("\n")[0]}`);
-    }
+    } catch (error) { lines.push(`${action.op} failed: ${String(error.message ?? error).split("\n")[0]}`); }
     try { urls.push(page.url()); } catch { urls.push(""); }
   }
   let text = "";

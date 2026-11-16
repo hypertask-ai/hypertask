@@ -26,10 +26,8 @@ test("actions stay on the seeded app and a pass names the clicks", async () => {
   assert.equal(parsed.verdict, "PASS+NOTES");
   assert.equal(parsed.actions[0].text, "Cancel");
   const status = statusPayload({ verdict: "PASS", clicked: ["Add field", "Cancel"], notes: "" });
-  assert.equal(status.context, "pstack-verifier");
-  assert.equal(status.state, "success");
+  assert.deepEqual([status.context, status.state, status.description.length <= 140], ["pstack-verifier", "success", true]);
   assert.match(status.description, /^PASS: clicked Add field, Cancel/);
-  assert.ok(status.description.length <= 140);
   assert.deepEqual([statusPayload({ verdict: "FAIL", clicked: [], notes: "leak-this-note" }).state, statusPayload({ verdict: "FAIL", clicked: [], notes: "leak-this-note" }).description.includes("leak-this-note")], ["failure", false]);
   for (const verdict of ["", "fail", "MAYBE", "pass", "PASS "]) assert.equal(statusPayload({ verdict, clicked: ["Cancel"] }).state, "failure");
   assert.equal(statusPayload({ verdict: "PASS+NOTES", clicked: ["Cancel"] }).state, "success");
@@ -46,8 +44,7 @@ test("a pass without a landed click or a seeded login becomes FAIL", async () =>
   assert.equal(noClick.verdict, "FAIL");
   assert.match(noClick.notes, /No click, fill or key landed/);
   const fence = prompts[0].match(/<<<[0-9a-f]{16}>>>/);
-  assert.ok(fence);
-  assert.equal(prompts[0].split(fence[0]).filter((_, index) => index % 2 === 0).join("").includes("BREAK_OUT"), false);
+  assert.deepEqual([Boolean(fence), prompts[0].split(fence[0]).filter((_, index) => index % 2 === 0).join("").includes("BREAK_OUT")], [true, false]);
   assert.match(prompts[0], /untrusted/);
   const seen = [];
   const driven = await verifyLoop({
@@ -81,19 +78,13 @@ test("a pass without a landed click or a seeded login becomes FAIL", async () =>
 test("the seeded cookie becomes a browser cookie and a click is recorded from the page", async () => {
   const { cookiesFromHeader, readSmokeEnv, allowAction, performOnPage } = await load();
   const cookies = cookiesFromHeader("nookies_user=abc%3D; ht_session=signed", base);
-  assert.equal(cookies[0].httpOnly, false);
-  assert.equal(cookies[1].httpOnly, true);
-  assert.equal(cookies[1].secure, false);
-  assert.equal(readSmokeEnv("CORE_SMOKE_COOKIE=nookies_user=abc; ht_session=signed\nCORE_SMOKE_PROJECT_ID=9\n").CORE_SMOKE_PROJECT_ID, "9");
+  assert.deepEqual([cookies[0].httpOnly, cookies[1].httpOnly, cookies[1].secure, readSmokeEnv("CORE_SMOKE_COOKIE=nookies_user=abc; ht_session=signed\nCORE_SMOKE_PROJECT_ID=9\n").CORE_SMOKE_PROJECT_ID], [false, true, false, "9"]);
   const shots = [];
   const page = {
-    url: () => `${base}/project?id=9`,
-    async goto() { this.url = () => `${base}/detail/project-9/1`; },
+    url: () => `${base}/project?id=9`, async goto() { this.url = () => `${base}/detail/project-9/1`; },
     getByText(text, options) { if (options?.exact !== true) throw new Error("inexact"); return { first: () => ({ click: async () => { shots.push(text); } }) }; },
-    getByLabel() { return { fill: async () => {} }; },
-    keyboard: { press: async () => {} },
-    async screenshot({ path: file }) { shots.push(file); },
-    locator() { return { innerText: async () => "Add field" }; },
+    getByLabel() { return { fill: async () => {} }; }, keyboard: { press: async () => {} },
+    async screenshot({ path: file }) { shots.push(file); }, locator() { return { innerText: async () => "Add field" }; },
   };
   const result = await performOnPage(page, [allowAction({ op: "click", text: "Add field" })], "/tmp", 1, base);
   assert.deepEqual(result.clicked, ["Add field"]);
@@ -112,9 +103,7 @@ test("the model request uses the flash model and does not put the key in the bod
     fetchImpl: async (url, init) => { seen = { url, init }; return { ok: true, json: async () => ({ choices: [{ message: { content: "{\"verdict\":\"FAIL\"}" } }] }) }; },
   });
   assert.equal(content, "{\"verdict\":\"FAIL\"}");
-  assert.equal(seen.url, (await load()).PSTACK_VERIFIER.endpoint);
-  assert.equal(seen.init.headers.Authorization, "Bearer test-openrouter-key");
-  assert.doesNotMatch(seen.init.body, /test-openrouter-key/);
+  assert.deepEqual([seen.url, seen.init.headers.Authorization, /test-openrouter-key/.test(seen.init.body)], [(await load()).PSTACK_VERIFIER.endpoint, "Bearer test-openrouter-key", false]);
   assert.match(seen.init.body, /deepseek\/deepseek-v4\.1-flash/);
 });
 test("the latest action batch must still be logged in", async () => {
@@ -156,12 +145,9 @@ test("pass acceptance matches the rule on seeded runs", async () => {
   const place = (url) => { try { return new URL(url); } catch { return null; } };
   const reference = (events) => {
     for (let i = 0; i < events.length; i += 1) {
-      const event = events[i];
+      const event = events[i], prior = events.slice(0, i);
       if (event.t !== "reply" || event.bad || event.actions || (event.verdict !== "PASS" && event.verdict !== "PASS+NOTES")) continue;
-      const prior = events.slice(0, i);
-      const lastShow = prior.findLastIndex((item) => item.t === "show");
-      const lastLand = prior.findLastIndex((item) => item.t === "land");
-      const where = lastShow < 0 ? null : place(prior[lastShow].url);
+      const lastShow = prior.findLastIndex((item) => item.t === "show"), lastLand = prior.findLastIndex((item) => item.t === "land"), where = lastShow < 0 ? null : place(prior[lastShow].url);
       const stayed = prior.every((item) => (item.t !== "nav" && item.t !== "land") || place(item.url)?.origin === origin);
       if (lastLand >= 0 && lastShow > lastLand && where?.origin === origin && allowed(where.pathname) && stayed) return event.verdict;
     }
@@ -174,16 +160,29 @@ test("pass acceptance matches the rule on seeded runs", async () => {
   const urls = [app, `${base}/onboarding`, `${base}/login`, `${base}/unauthorized`, `${base}/inbox`, `${base}/settings`, `${base}/detail/project-9/1`, `${base}/interactive-onboarding/inbox`, "http://127.0.0.1:3101/project?id=9", "https://127.0.0.1:3100/project?id=9", "http://127.0.0.1:31001/x", "http://evil.example/x", "about:blank", ""];
   const verdicts = ["", "PASS", "PASS+NOTES", "FAIL"];
   let seed = 9381;
-  const rand = () => (seed = (Math.imul(1664525, seed) + 1013904223) >>> 0) / 4294967296;
-  const pick = (list) => list[Math.floor(rand() * list.length)];
+  const rand = () => (seed = (Math.imul(1664525, seed) + 1013904223) >>> 0) / 4294967296, pick = (list) => list[Math.floor(rand() * list.length)];
   for (let i = 0; i < 500; i += 1) {
     const events = [];
-    for (let n = 0, count = 1 + Math.floor(rand() * 14); n < count; n += 1) {
-      const roll = rand();
-      events.push(roll < 0.3 ? { t: "show", url: pick(urls) } : roll < 0.55 ? { t: "land", url: pick(urls) } : roll < 0.7 ? { t: "nav", url: pick(urls) } : { t: "reply", bad: rand() < 0.25, actions: rand() < 0.45 ? 0 : 1, verdict: pick(verdicts) });
-    }
+    for (let n = 0, count = 1 + Math.floor(rand() * 14); n < count; n += 1) { const roll = rand(); events.push(roll < 0.3 ? { t: "show", url: pick(urls) } : roll < 0.55 ? { t: "land", url: pick(urls) } : roll < 0.7 ? { t: "nav", url: pick(urls) } : { t: "reply", bad: rand() < 0.25, actions: rand() < 0.45 ? 0 : 1, verdict: pick(verdicts) }); }
     assert.equal(acceptPass(events, base), reference(events));
   }
+});
+test("the verifier seed satisfies the proxy onboarding check", async () => {
+  const { cookiesFromHeader } = await load();
+  const checkIfOnboarded = (user) => user.UserSetting?.onboardingTourStatus;
+  assert.match(require("node:fs").readFileSync("src/proxy.ts", "utf8"), /const checkIfOnboarded = \(user: any\) => \{\n  return user\.UserSetting\?\.onboardingTourStatus;\n\}/);
+  const bare = { id: 7, email: "core-smoke@example.invalid", displayName: "Core smoke user", photoURL: null };
+  const seeded = { ...bare, UserSetting: { notification: false, onboardingTourStatus: false } };
+  assert.equal(Boolean(checkIfOnboarded(bare)) || Boolean(checkIfOnboarded(seeded)), false);
+  const header = (user) => `nookies_user=${encodeURIComponent(JSON.stringify(user))}; ht_session=signed-session`;
+  for (const user of [bare, seeded]) {
+    const cookies = cookiesFromHeader(header(user), base), sent = JSON.parse(decodeURIComponent(cookies[0].value));
+    assert.equal(checkIfOnboarded(sent), true);
+    assert.deepEqual([sent.id, sent.email, sent.displayName, cookies[1].name, cookies[1].value], [7, bare.email, bare.displayName, "ht_session", "signed-session"]);
+  }
+  const sentRow = JSON.parse(decodeURIComponent(cookiesFromHeader(header(seeded), base)[0].value));
+  assert.deepEqual(sentRow.UserSetting, { notification: false, onboardingTourStatus: true });
+  assert.equal(cookiesFromHeader("nookies_user=abc%3D; ht_session=signed", base)[0].value, "abc%3D");
 });
 test("a pass on /onboarding is not a pass", async () => {
   for (const [path, want] of [["/onboarding", "FAIL"], ["/login", "FAIL"], ["/unauthorized", "FAIL"], ["/interactive-onboarding", "FAIL"], ["/interactive-onboarding/inbox", "FAIL"], ["/project?id=9", "PASS"], ["/detail/project-9/1", "PASS"], ["/inbox", "PASS"], ["/settings", "PASS"]]) {
@@ -197,12 +196,7 @@ test("a redirect during the model call is not a pass", async () => {
   const run = async (flip) => {
     const prompts = [];
     let step = 0, hot = false;
-    const page = {
-      url: () => `${base}${hot ? "/login" : "/project?id=9"}`,
-      async screenshot() {},
-      getByText() { return { first: () => ({ click: async () => {} }) }; },
-      locator: () => ({ innerText: async () => (hot ? "Sign in" : "board") }),
-    };
+    const page = { url: () => `${base}${hot ? "/login" : "/project?id=9"}`, async screenshot() {}, getByText() { return { first: () => ({ click: async () => {} }) }; }, locator: () => ({ innerText: async () => (hot ? "Sign in" : "board") }) };
     const result = await verifyLoop({
       meta: { title: "t", body: "" }, diff: "", smoke, maxTurns: 3,
       complete: async (prompt) => { prompts.push(prompt); step += 1; if (flip && step === 2) hot = true; return JSON.stringify(step < 2 ? { actions: [{ op: "click", text: "Cancel" }] } : { actions: [], verdict: step === 2 ? "PASS" : "FAIL" }); },
@@ -212,8 +206,6 @@ test("a redirect during the model call is not a pass", async () => {
   };
   const moved = await run(true);
   assert.equal(moved.result.verdict, "FAIL");
-  assert.doesNotMatch(moved.prompts[1], /click ok/);
-  assert.match(moved.prompts[1], /\/project\?id=9/);
-  assert.match(moved.prompts[2], /\/login[\s\S]*Sign in/);
+  assert.deepEqual([/click ok/.test(moved.prompts[1]), /\/project\?id=9/.test(moved.prompts[1]), /\/login[\s\S]*Sign in/.test(moved.prompts[2])], [false, true, true]);
   assert.equal((await run(false)).result.verdict, "PASS");
 });
