@@ -156,6 +156,9 @@ test("pending AI header is quiet on ticket routes; resolved titles and other rou
     "@/hooks/useFlag": { useFlag: () => false },
     "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, values: {}, setPreference() {} }) }, "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: [], AI_CHAT_AUTO_OPEN_DEFAULTS: {} },
     "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: "htpr-7575-phone-chat-delete" },
+    "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen": { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG: "htpr-8032-phone-chat-fullscreen" },
+    "@/lib/flags/definitions/htpr-7316-chat-scope-ticket": { HTPR_7316_CHAT_SCOPE_TICKET_FLAG: "htpr-7316-chat-scope-ticket" },
+    "./AI_Tiptap_Container": { AI_Tiptap_Container: () => null, ChatScopeControl: () => null },
 
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], currentSession, isSessionPending: true, isSidebarMode: true }) },
     "lucide-react": Object.fromEntries(["Check", "ChevronDown", "ChevronRight", "Ellipsis", "History", "Maximize2", "Minus", "PanelRight", "Pencil", "PictureInPicture2", "Pin", "PinOff", "SquarePen", "Trash2", "X"].map((name) => [name, noop])),
