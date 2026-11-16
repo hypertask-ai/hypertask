@@ -80,6 +80,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-7278-memory-only-tracking",
   "htpr-7284-activation-completed",
   "htpr-7367-server-description-first",
+  "htpr-7687-allowance-resync",
   "htpr-7133-mcp-ratelimit-fast",
   "htpr-6456-my-tasks-table-columns",
   "htpr-6457-my-tasks-scopes",

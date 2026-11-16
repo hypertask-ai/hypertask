@@ -17,7 +17,7 @@ const NativeDate = Date;
 const nativeFetch = global.fetch;
 const nativeInfo = console.info;
 const nativeDemoKey = process.env.DEMO_AI_GATEWAY_API_KEY;
-let now, redis, enabled, restricted, resync, drift, policy, funding, fundingReads;
+let now, redis, enabled, restricted, drift, policy, funding, fundingReads;
 let reports, failReport, reportHook, evalHook, logs, alerts, flagActors, evals, spend, daySpend, systemSpend, demoSpend;
 const stub = (file, exports) => {
   const filename = fs.realpathSync(path.join(root, file));
@@ -28,7 +28,6 @@ stub("src/lib/flags.ts", { featureFlagCandidateUserIds: async (key) => {
   assert.equal(key, FLAG); return enabled ? restricted ? [6, 985] : null : [];
 }, isFeatureEnabled: async (key, actor) => {
   if (key === FLAG) { flagActors.push(actor); return enabled && (!restricted || actor === 985); }
-  if (key === "htpr-7687-allowance-resync") return resync;
   if (key === "htpr-7692-allowance-drift-check") return drift;
   return false;
 } });
@@ -289,7 +288,7 @@ for (const backend of ["fake", "real Redis"]) {
       global.Date = class extends NativeDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
       redis = backend === "fake" ? fakeRedis() : connection;
       if (connection) await connection.flushall();
-      enabled = true; restricted = false; resync = false; drift = false;
+      enabled = true; restricted = false; drift = false;
       policy = { mode: "plan", monthlyUsd: 1, dailyUsd: null, demoGlobal: false };
       funding = { source: "managed", apiKey: "fixture-private-gateway-credential", managedKeyId: "managed-row-7", managedKeyUpdatedAt: "2026-10-01T00:00:00Z" };
       fundingReads = []; reports = []; logs = []; alerts = []; flagActors = []; evals = [];
@@ -573,7 +572,7 @@ for (const backend of ["fake", "real Redis"]) {
       assert.equal(await settingsUsed(), 912_345); assert.equal(decisions().at(-1).billed, 912_345);
     });
 
-    test("T8/V5: flag Off retains estimate/plan/demo semantics and writes no billed keys; QA/system actor policy matches resync", async () => {
+    test("T8/V5: flag Off retains estimate/plan/demo semantics and writes no billed keys; QA/system actor policy stays scoped", async () => {
       enabled = false;
       await assert.rejects(plan(200_000), (error) => error.reason === "month");
       const reservation = await plan(20_000); await allowance.settlePlanAllowance(reservation, 0.01);

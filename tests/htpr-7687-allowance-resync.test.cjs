@@ -16,14 +16,12 @@ function stubModule(relativePath, exports) {
 }
 
 let client;
-let resyncFlagOn = true;
+const flagKeysRead = [];
 stubModule("src/lib/redis.ts", { getRedis: async () => client });
-const resyncFlagUsers = [];
 stubModule("src/lib/flags.ts", {
-  isFeatureEnabled: async (key, userId) => {
-    if (key !== "htpr-7687-allowance-resync") return key === "htpr-7079-failed-ai-allowance";
-    resyncFlagUsers.push(userId);
-    return resyncFlagOn;
+  isFeatureEnabled: async (key) => {
+    flagKeysRead.push(key);
+    return key === "htpr-7079-failed-ai-allowance";
   },
 });
 
@@ -133,7 +131,7 @@ test.after(async () => {
 });
 
 test.beforeEach(() => {
-  resyncFlagOn = true;
+  flagKeysRead.length = 0;
 });
 
 test("refused: a counter at the cap with the gateway also at the cap stays refused", async () => {
@@ -251,7 +249,7 @@ test("refused: a journal younger than the report delay never lowers the counter"
   assert.equal(await committed(), CAP_MICRO_USD);
 });
 
-test("refused: the first resync after switching on only starts the journal and keeps pre-flag spend", async () => {
+test("refused: a first resync with no journal only starts the journal and keeps spend it cannot attribute", async () => {
   await freshTeam(CAP_MICRO_USD, { journalAgeMs: null });
   gateway.teamSpendUsd = CAP_USD * 0.4;
   await assert.rejects(answer(), /used its included AI allowance/);
@@ -265,11 +263,12 @@ test("a finished answer still counts its real usage", async () => {
   assert.equal(await committed(), Math.ceil((2 * 0.000001 + 1_000 * 0.00005) * 1_000_000));
 });
 
-test("with the flag off a refusal never asks the gateway", async () => {
-  resyncFlagOn = false;
+test("a refusal always asks the gateway, with no safety switch left to read", async () => {
   await freshTeam(CAP_MICRO_USD);
+  gateway.teamSpendUsd = CAP_USD;
   await assert.rejects(answer(), /used its included AI allowance/);
-  assert.equal(gateway.reportCalls, 0);
+  assert.equal(gateway.reportCalls, 1);
+  assert.equal(flagKeysRead.includes("htpr-7687-allowance-resync"), false);
   assert.equal(await committed(), CAP_MICRO_USD);
 });
 
@@ -290,12 +289,10 @@ test("allowed: reported legacy pending spend is not counted twice by a resync", 
   assert.ok(after >= 1_500_000 && after < 1_510_000, `committed ${after}`);
 });
 
-test("refused: spend settled while the flag is off is journaled too, so a lagging gateway cannot erase it", async () => {
+test("refused: a settled answer is journaled, so a lagging gateway cannot erase it", async () => {
   await freshTeam(CAP_MICRO_USD - 1_300_000);
-  resyncFlagOn = false;
   await answer(26_000);
   assert.equal(await client.zcard(`${prefix}:recent-settled`), 1);
-  resyncFlagOn = true;
   gateway.teamSpendUsd = (CAP_MICRO_USD - 1_300_000) / 1_000_000;
   await assert.rejects(answer(20_000), /used its included AI allowance/);
   assert.ok(await committed() >= CAP_MICRO_USD);
@@ -398,17 +395,4 @@ test("plan demo refusal never resyncs or calls the gateway", async () => {
   assert.equal(await client.exists(`${prefix}:system:gateway-resync-lock`), 0);
   assert.equal(await client.zcard(reservationsKey), 0);
   assert.equal(await client.zcard(`${demoPrefix}:reservations`), 0);
-});
-
-test("the flag is read for the user who makes the call, so Owner + QA reaches Valentin and QA", async () => {
-  await freshTeam(0);
-  resyncFlagUsers.length = 0;
-  await middleware().wrapGenerate({
-    params: { ...params, providerOptions: { gateway: { tags: [`team:${TEAM}`, "user:985"] } } },
-    model: {},
-    doStream: async () => { throw new Error("unused"); },
-    doGenerate: async () => ({ content: [], usage: { inputTokens: { total: 2 }, outputTokens: { total: 1 } } }),
-  });
-  await answer();
-  assert.deepEqual(resyncFlagUsers, [985, 0]);
 });

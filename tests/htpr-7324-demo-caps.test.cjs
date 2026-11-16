@@ -172,6 +172,19 @@ function fakeRedis() {
         set.set(args[3], now);
         return 0;
       }
+      if (script.includes('local resynced =')) {
+        const committed = get(keys[0]);
+        const observed = Math.max(Number(args[0]) - (keys[3] ? get(keys[3]) : 0), 0);
+        if (!values.has(keys[2])) values.set(keys[2], args[4]);
+        let recent = 0;
+        for (const [member, score] of [...zset(keys[1])]) {
+          if (score < Number(args[1])) zset(keys[1]).delete(member);
+          else recent += Number(member.split("|").at(-1));
+        }
+        const next = get(keys[2]) <= Number(args[2]) ? Math.max(observed, Math.min(committed, observed + recent)) : Math.max(observed, committed);
+        values.set(keys[0], String(next));
+        return committed - next;
+      }
       throw new Error(`Unexpected fake Redis script: ${script.slice(0, 60)}`);
     },
   };

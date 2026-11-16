@@ -31,7 +31,6 @@ let funding;
 let alerts;
 let deliveries;
 let teamTitle;
-let resyncEnabled;
 let hourlyRows;
 let hourlyFails;
 let hourlyCalls;
@@ -40,7 +39,7 @@ let hourlyParams;
 stub("src/lib/redis.ts", { getRedis: async () => redis });
 stub("src/lib/flags.ts", { isFeatureEnabled: async (key) => {
   if (key === FLAG) { flagReads++; return enabled; }
-  return key === "htpr-7687-allowance-resync" && resyncEnabled;
+  return false;
 } });
 stub("src/app/api/ai/_lib/byokKeys.ts", { getTeamGatewayFunding: async (lookup) => { assert.equal(typeof lookup.trustedTeamId, "string"); assert.equal(lookup.teamId, undefined); return funding; } });
 stub("src/lib/prisma.ts", { default: { team: { findUnique: async () => ({ title: teamTitle }) } } });
@@ -154,9 +153,18 @@ function fakeRedis() {
       }
       if (script.includes('local resynced =')) {
         const committed = getNumber(keys[0]);
-        const observed = Number(args[0]);
-        values.set(keys[0], String(observed));
-        return committed - observed;
+        const observed = Math.max(Number(args[0]) - (keys[3] ? getNumber(keys[3]) : 0), 0);
+        if (!values.has(keys[2])) values.set(keys[2], args[4]);
+        let recent = 0;
+        for (const [member, score] of [...zset(keys[1])]) {
+          if (score < Number(args[1])) zset(keys[1]).delete(member);
+          else recent += Number(String(member).split("|").at(-1));
+        }
+        const next = getNumber(keys[2]) <= Number(args[2])
+          ? Math.max(observed, Math.min(committed, observed + recent))
+          : Math.max(observed, committed);
+        values.set(keys[0], String(next));
+        return committed - next;
       }
       if (script.includes('~= ARGV[1]')) {
         if (values.get(keys[0]) !== args[0]) return 0;
@@ -212,7 +220,7 @@ test.beforeEach(() => {
     static now() { return now; }
   };
   redis = fakeRedis(); enabled = true; flagReads = 0; reportFails = false; reporterFails = false;
-  gatewayUsd = 2; systemUsd = 0; reportCalls = 0; reportPeriods = []; duringReport = null; resyncEnabled = false;
+  gatewayUsd = 2; systemUsd = 0; reportCalls = 0; reportPeriods = []; duringReport = null;
   funding = { source: "managed", apiKey: "fixture-platform-credential" };
   hourlyRows = null; hourlyFails = false; hourlyCalls = 0; hourlyParams = [];
   alerts = []; deliveries = 0; teamTitle = "Acme <script> token_abcdefghijklmnop";
@@ -245,7 +253,8 @@ test("legacy and daily prebound refusals capture one event each without calling 
 });
 
 test("final refusal only: successful resync retry records nothing", async () => {
-  await fresh(); resyncEnabled = true;
+  await fresh();
+  await redis.set(`${PREFIX}:recent-settled-since`, String(now - 26 * 60 * 1000));
   await plan();
   assert.equal((await refusalEvents()).length, 0);
   assert.equal(await redis.get(`${PREFIX}:committed`), "2000000");

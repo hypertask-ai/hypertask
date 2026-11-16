@@ -6,7 +6,6 @@ import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7079_FAILED_AI_ALLOWANCE_FLAG } from "@/lib/flags/definitions/htpr-7079-failed-ai-allowance";
 import { HTPR_7692_ALLOWANCE_DRIFT_CHECK_FLAG } from "@/lib/flags/definitions/htpr-7692-allowance-drift-check";
-import { HTPR_7687_ALLOWANCE_RESYNC_FLAG } from "@/lib/flags/definitions/htpr-7687-allowance-resync";
 import { isHaiku55Model } from "@/lib/aiModelOptions";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import {
@@ -454,14 +453,6 @@ function inputOnlyMicroUsd(pricing: ModelPricing, prompt: unknown): number {
 async function failedCallsCountInputOnly(): Promise<boolean> {
   try {
     return await isFeatureEnabled(HTPR_7079_FAILED_AI_ALLOWANCE_FLAG, 0);
-  } catch {
-    return false;
-  }
-}
-
-async function allowanceFollowsRealSpend(userId: number | null): Promise<boolean> {
-  try {
-    return await isFeatureEnabled(HTPR_7687_ALLOWANCE_RESYNC_FLAG, userId ?? 0);
   } catch {
     return false;
   }
@@ -924,7 +915,6 @@ async function reserveSharedAllowance(args: {
     : `${id}|${amountMicroUsd}`;
   const expiresAt = Date.now() + RESERVATION_TTL_MS;
   const lanePrefix = committedKey.replace(/:committed$/, "");
-  const followsRealSpend = await allowanceFollowsRealSpend(args.userId);
   const recentSettledKey = `${lanePrefix}:recent-settled`;
   const journalStartedKey = `${recentSettledKey}-since`;
   const reserve = async () => {
@@ -973,7 +963,6 @@ async function reserveSharedAllowance(args: {
   let accepted = Number(Array.isArray(decision) ? decision[0] : decision) === 1;
   if (
     !accepted &&
-    followsRealSpend &&
     (!billed || source?.mode === "v1") &&
     (await resyncToGatewaySpend({
       committedKey,
@@ -1425,7 +1414,6 @@ export async function reservePlanAllowance(args: {
   const id = `${reservationId}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds, ...(call ? [amount, call] : [])]))}|${amount}`;
   const holdUntilMs = args.holdUntilMs ?? Date.now() + RESERVATION_TTL_MS;
   const redis = await getRedis();
-  const followsRealSpend = await allowanceFollowsRealSpend(args.userId ?? null);
   const reserve = async () => {
     const decision = await redis.eval(RESERVE_SCOPES_SCRIPT, keys.length, ...keys,
       JSON.stringify(encoded), String(Date.now()), String(amount), String(holdUntilMs), id, ...(observe ? ["1"] : []));
@@ -1441,7 +1429,7 @@ export async function reservePlanAllowance(args: {
   }
   let decision = billedDecision?.decision ?? await reserve();
   let accepted = Number(Array.isArray(decision) ? decision[0] : decision);
-  if (accepted !== 1 && scopes[-accepted - 1]?.reason === "month" && args.teamId && followsRealSpend && (!billed || scopes[-accepted - 1].source?.mode === "v1")) {
+  if (accepted !== 1 && scopes[-accepted - 1]?.reason === "month" && args.teamId && (!billed || scopes[-accepted - 1].source?.mode === "v1")) {
     const scope = scopes[-accepted - 1];
     let resynced = false;
     for (const [index, { committedKey }] of scope.pairs.entries()) {
