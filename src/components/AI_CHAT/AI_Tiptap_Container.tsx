@@ -57,10 +57,10 @@ import { AiComposerTextarea } from "./AiComposerTextarea";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-9004-thinking-effort";
-import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
-import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
+import { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
 export { SendMessageButton } from "./SendMessageButton";
@@ -116,6 +116,7 @@ export function AI_Tiptap_Container({
   const cleanupFlag = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const chatCleanupFlag = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const oneComposerFlag = useFlag(HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG);
+  const phoneChatFullscreen = useFlag(HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG);
   const thinkingControlsFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
@@ -303,11 +304,11 @@ export function AI_Tiptap_Container({
     />
   );
   const scopePicker = controlledComposer ? null : (
-    <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />
+    <ChatScopeControl onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />
   );
 
   return (
-    <div className="p-2 relative" ref={focusRootRef} data-ai-chat-composer-root data-sidebar-agent={agentSessionsEnabled ? sidebarAgent : undefined} inert={disabled || !active || undefined}
+    <div className={`p-2 relative${phoneChatFullscreen && isMbl ? " shrink-0" : ""}`} ref={focusRootRef} data-ai-chat-composer-root data-sidebar-agent={agentSessionsEnabled ? sidebarAgent : undefined} inert={disabled || !active || undefined}
       onKeyDownCapture={controlledComposer ? (event) => {
         if (isMbl || !active || disabled || !(event.metaKey || event.ctrlKey) || !event.shiftKey || event.keyCode !== 68) return;
         const recorder = focusRootRef.current?.querySelector<HTMLElement>(`[id="${audioButtonId}"]`);
@@ -330,7 +331,7 @@ export function AI_Tiptap_Container({
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
         >
-          {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} mobile ticketScopeEnabled={ticketScopeEnabled} />}
+          {!(phoneChatFullscreen && isMbl && !controlledComposer) && !pathname?.startsWith("/chat") && <ChatScopeControl onRestoreFocus={restoreComposerFocus} mobile ticketScopeEnabled={ticketScopeEnabled} />}
           {!controlledComposer && <div
             data-ai-chat-mobile-context-scroll
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
@@ -446,7 +447,7 @@ export function AI_Tiptap_Container({
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
           leadingControls={
-            controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
+            controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeControl onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
                 {modelPicker}
                 {!pathname?.startsWith("/chat") && scopePicker}
@@ -615,7 +616,9 @@ export function AI_Tiptap_Container({
   );
 }
 
-function ChatScopeDropdown({ mobile = false, ticketScopeEnabled = false, onRestoreFocus }: { mobile?: boolean; ticketScopeEnabled?: boolean; onRestoreFocus: () => void }) {
+export function ChatScopeControl({ mobile = false, compact = false, ticketScopeEnabled = false, onRestoreFocus }: { mobile?: boolean; compact?: boolean; ticketScopeEnabled?: boolean; onRestoreFocus: () => void }) {
+  const phoneChatFullscreen = useFlag(HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG);
+  const smallChip = compact && phoneChatFullscreen;
   const requestedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const sharedShortcuts = requestedShortcuts && !mobile;
   const pathname = usePathname();
@@ -676,10 +679,11 @@ function ChatScopeDropdown({ mobile = false, ticketScopeEnabled = false, onResto
     <div
       data-ai-chat-mobile-scope={mobile || undefined}
       data-ai-chat-scope
-      className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
+      data-ai-chat-phone-board-chip={smallChip || undefined}
+      className={`relative inline-block min-w-0 shrink-0 text-left ${smallChip ? "max-w-32" : "max-w-full"}`}
     >
       <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={sharedShortcuts ? `${scopeChip.title} · ${chatShortcutHint("scope")}` : scopeChip.title}
-        mobile={mobile} isOpen={isOpen} aria-haspopup="dialog" onClick={() => setIsOpen((open) => !open)} />
+        mobile={mobile} compact={smallChip} isOpen={isOpen} aria-haspopup="dialog" onClick={() => setIsOpen((open) => !open)} />
 
       {isOpen && (
         <OptionPickerModal
