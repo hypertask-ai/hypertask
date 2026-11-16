@@ -96,8 +96,7 @@ function block(label, text, limit) {
 
 export function buildPrompt({ title, body, diff, boardPath, taskPath, snapshot, turn, last }) {
   return [
-    "Drive this pull request in the seeded browser like a user.",
-    "Reply with one JSON object and nothing else.",
+    "Drive this pull request in the seeded browser like a user. Reply with one JSON object and nothing else.",
     'Shape: {"actions":[{"op":"goto","path":"/detail/project-1/1"},{"op":"click","text":"Add field"},{"op":"press","key":"Escape"}],"verdict":"","notes":"what you clicked"}',
     "ops are goto, click, fill, press and shot. A goto path starts with one slash.",
     "verdict is PASS, PASS+NOTES, FAIL, or empty while you are still driving.",
@@ -112,9 +111,9 @@ export function buildPrompt({ title, body, diff, boardPath, taskPath, snapshot, 
   ].join("\n");
 }
 
-export function statusPayload({ verdict, clicked = [], notes = "" }) {
+export function statusPayload({ verdict, clicked = [] }) {
   const actions = clicked.filter(Boolean).slice(0, 8).join(", ");
-  const description = `${verdict}: ${actions ? `clicked ${actions}` : notes || "no clicks"}`.replace(/\s+/g, " ").trim().slice(0, 140);
+  const description = `${verdict}: ${actions ? `clicked ${actions}` : "no clicks"}`.replace(/\s+/g, " ").trim().slice(0, 140);
   const state = verdict === "PASS" || verdict === "PASS+NOTES" ? "success" : "failure";
   return { state, context: CONTEXT, description };
 }
@@ -132,7 +131,8 @@ export function chatBody(model, prompt) {
 }
 
 export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurns = 4 }) {
-  const secrets = [smoke.cookie, smoke.key].filter(Boolean);
+  const pairs = String(smoke.cookie ?? "").split(";").map((part) => part.trim()).filter(Boolean);
+  const secrets = [smoke.cookie, smoke.key, ...pairs, ...pairs.map((pair) => pair.slice(pair.indexOf("=") + 1))].filter(Boolean);
   let snapshot = "The browser is open on the seeded board.";
   const clicked = [];
   const shots = [];
@@ -182,7 +182,7 @@ export async function performOnPage(page, actions, shotsDir, turn, base) {
     try {
       if (action.op === "goto") await page.goto(new URL(action.path, base).toString(), { waitUntil: "domcontentloaded", timeout: 20000 });
       if (action.op === "click") {
-        await page.getByText(action.text, { exact: false }).first().click({ timeout: 8000 });
+        await page.getByText(action.text, { exact: true }).first().click({ timeout: 8000 });
         clicked.push(action.text);
       }
       if (action.op === "fill") {
