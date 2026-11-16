@@ -306,9 +306,6 @@ export function Calendar() {
                   onClick={toggleFilterModal}
                   aria-label={filterName}
                   className={`flex h-8 w-8 items-center justify-center bg-transparent p-0 ${
-                    announceCalendarControlState && hasActiveTaskFilters
-                      ? "text-view-control-active"
-                      :
                     hasActiveTaskFilters
                       ? "text-[#51A4F1]"
                       : "text-text-light-gray"
@@ -330,9 +327,6 @@ export function Calendar() {
                   onClick={() => setShowSortModal(true)}
                   aria-label={sortName}
                   className={`flex h-8 w-8 items-center justify-center bg-transparent ${
-                    announceCalendarControlState && calendarSort
-                      ? "text-view-control-active"
-                      :
                     calendarSort ? "text-[#51A4F1]" : "text-text-light-gray"
                   }`}
                 >

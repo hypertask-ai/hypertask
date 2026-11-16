@@ -83,12 +83,21 @@ const { Calendar } = loadModule(
   },
 );
 
-function controlNames() {
+function controlState() {
   const html = renderToStaticMarkup(React.createElement(Calendar));
-  const labels = [...html.matchAll(/aria-label="([^"]*)"/g)].map((match) => match[1]);
+  const buttons = [...html.matchAll(/<button\b([^>]*)>/g)].map((match) => {
+    const label = match[1].match(/aria-label="([^"]*)"/);
+    const className = match[1].match(/\bclass="([^"]*)"/);
+    return {
+      label: label ? label[1] : "",
+      className: className ? className[1] : "",
+    };
+  });
+  const filter = buttons.find((button) => button.label === "Show filter options" || button.label.startsWith("Filter,"));
+  const sort = buttons.find((button) => button.label === "Show sorting options" || button.label.startsWith("Sort,"));
   return {
-    filter: labels.find((label) => label === "Show filter options" || label.startsWith("Filter,")),
-    sort: labels.find((label) => label === "Show sorting options" || label.startsWith("Sort,")),
+    names: { filter: filter?.label, sort: sort?.label },
+    classes: { filter: filter?.className, sort: sort?.className },
   };
 }
 
@@ -96,25 +105,34 @@ test("calendar filter and sort names say on and off", () => {
   state.flag = false;
   state.taskFilters = emptyFilters();
   state.calendarSort = null;
-  assert.deepEqual(controlNames(), {
+  const idleOff = controlState();
+  assert.deepEqual(idleOff.names, {
     filter: "Show filter options",
     sort: "Show sorting options",
   });
 
   state.flag = true;
-  assert.deepEqual(controlNames(), {
+  const idleOn = controlState();
+  assert.deepEqual(idleOn.names, {
     filter: "Filter, off",
     sort: "Sort, off",
   });
+  assert.deepEqual(idleOn.classes, idleOff.classes);
 
+  state.flag = false;
   state.taskFilters = {
     ...emptyFilters(),
     priority: [1, 2],
     assignees: [9],
   };
   state.calendarSort = { mode: "DueDate", order: "Ascending" };
-  assert.deepEqual(controlNames(), {
+  const activeOff = controlState();
+
+  state.flag = true;
+  const activeOn = controlState();
+  assert.deepEqual(activeOn.names, {
     filter: "Filter, 3 active",
     sort: "Sort, by due date",
   });
+  assert.deepEqual(activeOn.classes, activeOff.classes);
 });
