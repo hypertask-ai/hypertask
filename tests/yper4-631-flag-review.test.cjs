@@ -31,7 +31,6 @@ const evidence = {
 };
 let ctx;
 let limited;
-let roleRefusal;
 let persistedRole;
 let reviews;
 let stored;
@@ -195,11 +194,13 @@ stubModule("src/lib/mcp/auth.ts", {
 });
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const { getAgentRole, roleMeets, insufficientScopeResponse } = jiti(path.join(root, "src/lib/mcp/agents/scopes.ts"));
-stubModule("src/lib/mcp/agents/readRoleGuard.ts", { requireAgentWriteRole: async (ctx, options) => {
-  if (!options?.alwaysEnforce) return roleRefusal?.clone() ?? null;
+stubModule("src/lib/mcp/agents/readRoleGuard.ts", { requireAgentWriteRole: async (ctx) => {
   if (!ctx.agentId) return null;
   const role = ctx.agentRole ?? await getAgentRole(ctx);
-  return roleMeets(role, "write") ? null : insufficientScopeResponse(role, "write");
+  if (roleMeets(role, "write")) return null;
+  const refusal = insufficientScopeResponse(role, "write");
+  refusal.headers.set("cache-control", "private, no-store");
+  return refusal;
 } });
 stubModule("src/lib/mcp/routeWrapper.ts", { wrapMcpRoute: (callback) => { wrapped++; return callback; } });
 stubModule("src/lib/realtime/server.ts", { broadcastFeatureFlagsChange: async () => { broadcasts++; } });
@@ -235,7 +236,7 @@ function assertNoChange() {
 }
 test.beforeEach(() => {
   ctx = { user: { id: 6 }, agentId: "agent-b", agentRole: "write" };
-  limited = null; roleRefusal = null; persistedRole = "write"; ownerEmail = "valentin.yeo@gmail.com";
+  limited = null; persistedRole = "write"; ownerEmail = "valentin.yeo@gmail.com";
   reviews = new Map(); stored = new Map([[key, { key, mode: "OWNER_AND_QA" }]]); changes = [];
   locks = []; broadcasts = 0; writeFails = false; consumeFails = false; legacyAllowed = true; legacyKey = key; legacyMode = "Off"; wrapped = 0;
   delete process.env.VERCEL_GIT_COMMIT_SHA;
@@ -400,7 +401,6 @@ for (const role of ["read", "write", "admin"]) {
     test(`failure-Owner + QA unconditionally enforces ${role} from ${fromContext ? "auth context" : "persisted permissions"}`, async () => {
       ctx.agentRole = fromContext ? role : undefined;
       persistedRole = role;
-      roleRefusal = null;
       policy = null;
       stored.get(key).mode = "EVERYONE";
       const response = await switchFlag({ key, mode: "OWNER_AND_QA", failure });
@@ -440,7 +440,7 @@ for (const [name, setup] of [
   ["management key", () => { ctx.management = { keyId: "test" }; }],
   ["mismatched owner email", () => { ownerEmail = "other@test.invalid"; }],
   ["no auth", () => { ctx = null; }],
-  ["read role", () => { ctx.agentRole = "read"; roleRefusal = NextResponse.json({ error: "write required" }, { status: 403, headers: { "cache-control": "private, no-store" } }); }],
+  ["read role", () => { ctx.agentRole = "read"; }],
 ]) {
   test(`record and switch refuse ${name}`, async () => {
     setup();

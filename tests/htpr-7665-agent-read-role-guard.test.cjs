@@ -5,7 +5,6 @@ const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const FLAG_KEY = "htpr-7665-agent-read-role-guard";
 const compiled = new Map();
 
 function compile(relPath) {
@@ -57,13 +56,11 @@ function recorder(label, sink) {
 }
 
 const ROLE_ERROR = new Error("agent row unavailable");
-const FLAG_ERROR = new Error("flag store unavailable");
 
-function world({ agentId = "agent-1", ctxRole, dbRole, flag = "on" }) {
+function world({ agentId = "agent-1", ctxRole, dbRole }) {
   const sideEffects = [];
   const guardResults = [];
-  const counters = { agentReads: 0, flagReads: 0 };
-  const warnings = [];
+  const counters = { agentReads: 0 };
   const ctx = { user: { id: 7, email: "owner@example.invalid" }, agentId, teamScope: null, ...(ctxRole ? { agentRole: ctxRole } : {}) };
   const prisma = {
     agent: {
@@ -74,16 +71,8 @@ function world({ agentId = "agent-1", ctxRole, dbRole, flag = "on" }) {
       },
     },
   };
-  const flags = {
-    isFeatureEnabled: async (key, userId) => {
-      if (key !== FLAG_KEY) return false;
-      counters.flagReads += 1;
-      assert.equal(userId, 7, "the flag is evaluated for the owner user id");
-      if (flag === "throw") throw FLAG_ERROR;
-      return flag === "on";
-    },
-  };
-  const flagKeys = { HTPR_7665_AGENT_READ_ROLE_GUARD_FLAG: FLAG_KEY };
+  const flags = { isFeatureEnabled: async () => false };
+  const flagKeys = {};
   const scopes = load("src/lib/mcp/agents/scopes.ts", (request) => {
     if (request === "@/lib/prisma") return prisma;
     if (request === "next/server") return nextServer;
@@ -91,8 +80,6 @@ function world({ agentId = "agent-1", ctxRole, dbRole, flag = "on" }) {
   });
   const realGuard = load("src/lib/mcp/agents/readRoleGuard.ts", (request) => {
     if (request === "@/lib/mcp/agents/scopes") return scopes;
-    if (request === "@/lib/flags") return flags;
-    if (request === "@/lib/flags/keys") return flagKeys;
     throw new Error(`Unexpected guard import: ${request}`);
   });
   const guard = {
@@ -119,11 +106,8 @@ function world({ agentId = "agent-1", ctxRole, dbRole, flag = "on" }) {
     "@/lib/flags": flags,
     "@/lib/flags/keys": flagKeys,
   });
-  const quiet = console.warn;
   return {
-    ctx, sideEffects, guardResults, counters, warnings, scopes, guard, flags, flagKeys, prisma, auth, wrapper,
-    muteWarnings: () => { console.warn = (...args) => warnings.push(args); },
-    restoreWarnings: () => { console.warn = quiet; },
+    ctx, sideEffects, guardResults, counters, scopes, guard, flags, flagKeys, prisma, auth, wrapper,
     mockRequire(extra = {}) {
       const mocks = {
         "@/lib/mcp/routeWrapper": wrapper,
@@ -151,15 +135,13 @@ function httpRequest(url, method, body) {
   };
 }
 
-const READ_REFUSED = { agentId: "agent-read", ctxRole: "read", flag: "on" };
+const READ_REFUSED = { agentId: "agent-read", ctxRole: "read" };
 const SCENARIOS_STILL_ALLOWED = {
-  "write agent": { agentId: "agent-write", ctxRole: "write", flag: "on" },
-  "admin agent": { agentId: "agent-admin", ctxRole: "admin", flag: "on" },
-  "agent with no stored role": { agentId: "agent-default", ctxRole: "write", dbRole: undefined, flag: "on" },
-  "agent with no stored role and no carried role": { agentId: "agent-default", ctxRole: undefined, dbRole: undefined, flag: "on" },
-  "human": { agentId: null, flag: "on" },
-  "read agent with the flag off": { agentId: "agent-read", ctxRole: "read", flag: "off" },
-  "read agent when the flag lookup fails": { agentId: "agent-read", ctxRole: "read", flag: "throw" },
+  "write agent": { agentId: "agent-write", ctxRole: "write" },
+  "admin agent": { agentId: "agent-admin", ctxRole: "admin" },
+  "agent with no stored role": { agentId: "agent-default", ctxRole: "write", dbRole: undefined },
+  "agent with no stored role and no carried role": { agentId: "agent-default", ctxRole: undefined, dbRole: undefined },
+  "human": { agentId: null },
 };
 
 const OPS = "src/lib/mcp/operations";
@@ -264,7 +246,7 @@ async function run(spec, scenario) {
 }
 
 for (const spec of CASES) {
-  test(`${spec.area}: ${spec.name} now refuses a read agent with the flag on`, async () => {
+  test(`${spec.area}: ${spec.name} refuses a read agent`, async () => {
     const { w, response, error } = await run(spec, READ_REFUSED);
     assert.equal(error, null);
     assert.ok(isRoleRefusal(response), `expected 403 insufficient_scope, got ${JSON.stringify(response)}`);
@@ -275,7 +257,7 @@ for (const spec of CASES) {
   });
 
   test(`${spec.area}: ${spec.name} refuses a read agent whose role comes from the agent row`, async () => {
-    const { w, response } = await run(spec, { agentId: "agent-read", ctxRole: undefined, dbRole: "read", flag: "on" });
+    const { w, response } = await run(spec, { agentId: "agent-read", ctxRole: undefined, dbRole: "read" });
     assert.ok(isRoleRefusal(response));
     assert.deepEqual(writeEffects(w), []);
     assert.equal(w.counters.agentReads, 1);
@@ -292,7 +274,7 @@ for (const spec of CASES) {
   }
 
   test(`${spec.area}: ${spec.name} never runs when the role lookup fails`, async () => {
-    const { w, response, error } = await run(spec, { agentId: "agent-read", ctxRole: undefined, dbRole: "throw", flag: "on" });
+    const { w, response, error } = await run(spec, { agentId: "agent-read", ctxRole: undefined, dbRole: "throw" });
     assert.deepEqual(writeEffects(w), [], "no write ran");
     assert.ok(error === ROLE_ERROR || !response || response.status >= 400, "never reported as success");
     assert.ok(!(response && response.status < 300));
@@ -300,63 +282,43 @@ for (const spec of CASES) {
   });
 }
 
-test("helper: no agent id returns immediately without reading the flag or the agent row", async () => {
+test("helper: no agent id returns immediately without reading the agent row", async () => {
   const w = world({ agentId: null });
   assert.equal(await w.guard.requireAgentWriteRole(w.ctx), null);
-  assert.deepEqual(w.counters, { agentReads: 0, flagReads: 0 });
+  assert.deepEqual(w.counters, { agentReads: 0 });
 });
 
-test("helper: a carried write or admin role skips the flag lookup and the agent query", async () => {
+test("helper: a carried write or admin role skips the agent query", async () => {
   for (const role of ["write", "admin"]) {
     const w = world({ ctxRole: role });
     assert.equal(await w.guard.requireAgentWriteRole(w.ctx), null);
-    assert.deepEqual(w.counters, { agentReads: 0, flagReads: 0 });
+    assert.deepEqual(w.counters, { agentReads: 0 });
   }
 });
 
-test("helper: flag off returns null before any role lookup", async () => {
-  const w = world({ ctxRole: "read", flag: "off" });
-  assert.equal(await w.guard.requireAgentWriteRole(w.ctx), null);
-  assert.deepEqual(w.counters, { agentReads: 0, flagReads: 1 });
-});
-
-test("helper: a flag lookup error is logged and treated as off, so old behaviour stays", async () => {
-  const w = world({ ctxRole: "read", flag: "throw" });
-  w.muteWarnings();
-  try {
-    assert.equal(await w.guard.requireAgentWriteRole(w.ctx), null);
-  } finally {
-    w.restoreWarnings();
-  }
-  assert.equal(w.warnings.length, 1);
-  assert.equal(w.counters.agentReads, 0);
-});
-
-for (const flag of ["off", "throw"]) {
-  for (const role of ["read", "write", "admin"]) {
-    for (const carried of [true, false]) {
-      test(`helper: strict mode ${role === "read" ? "refuses" : "allows"} ${carried ? "carried" : "stored"} ${role} with flag ${flag}`, async () => {
-        const w = world({ ctxRole: carried ? role : undefined, dbRole: role, flag });
-        const response = await w.guard.requireAgentWriteRole(w.ctx, { alwaysEnforce: true });
-        if (role === "read") {
-          assert.equal(response.status, 403);
-          assert.equal(response.body.code, "insufficient_scope");
-        } else {
-          assert.equal(response, null);
-        }
-        assert.deepEqual(w.counters, { agentReads: carried ? 0 : 1, flagReads: 0 });
-      });
-    }
+for (const role of ["read", "write", "admin"]) {
+  for (const carried of [true, false]) {
+    test(`helper: ${role === "read" ? "refuses" : "allows"} ${carried ? "carried" : "stored"} ${role}`, async () => {
+      const w = world({ ctxRole: carried ? role : undefined, dbRole: role });
+      const response = await w.guard.requireAgentWriteRole(w.ctx);
+      if (role === "read") {
+        assert.equal(response.status, 403);
+        assert.equal(response.body.code, "insufficient_scope");
+      } else {
+        assert.equal(response, null);
+      }
+      assert.deepEqual(w.counters, { agentReads: carried ? 0 : 1 });
+    });
   }
 }
 
 test("helper: a role lookup error propagates and never defaults to write", async () => {
-  const w = world({ ctxRole: undefined, dbRole: "throw", flag: "on" });
+  const w = world({ ctxRole: undefined, dbRole: "throw" });
   await assert.rejects(w.guard.requireAgentWriteRole(w.ctx), ROLE_ERROR);
 });
 
 test("helper: the refusal body is the one requireRole returns", async () => {
-  const w = world({ ctxRole: "read", flag: "on" });
+  const w = world({ ctxRole: "read" });
   const fromGuard = await w.guard.requireAgentWriteRole(w.ctx);
   const fromRequireRole = await w.scopes.requireRole({ ...w.ctx, agentRole: undefined }, "write").catch(() => null);
   assert.equal(fromGuard.status, 403);
@@ -372,15 +334,14 @@ test("helper: the refusal body is the one requireRole returns", async () => {
 });
 
 test("helper: an unknown stored role is treated like read, as requireRole does", async () => {
-  const w = world({ ctxRole: undefined, dbRole: "READ", flag: "on" });
+  const w = world({ ctxRole: undefined, dbRole: "READ" });
   assert.equal((await w.guard.requireAgentWriteRole(w.ctx)).status, 403);
 });
 
-test("existing requireRole call sites keep their behaviour with the flag off", async () => {
-  const w = world({ ctxRole: undefined, dbRole: "read", flag: "off" });
+test("existing requireRole call sites keep their behaviour", async () => {
+  const w = world({ ctxRole: undefined, dbRole: "read" });
   const refusal = await w.scopes.requireRole(w.ctx, "write");
   assert.equal(refusal.status, 403);
-  assert.equal(w.counters.flagReads, 0);
 });
 
 const ALLOWED_FOR_READ_AGENTS = [
@@ -413,11 +374,10 @@ const ALLOWED_FOR_READ_AGENTS = [
 ];
 
 for (const spec of ALLOWED_FOR_READ_AGENTS) {
-  test(`still allowed for a read agent with the flag on: ${spec.name} never reaches the guard and the flag is never read`, async () => {
+  test(`still allowed for a read agent: ${spec.name} never reaches the guard`, async () => {
     const { w, response } = await run(spec, READ_REFUSED);
     assert.ok(!isRoleRefusal(response));
     assert.equal(w.guardResults.length, 0);
-    assert.equal(w.counters.flagReads, 0);
   });
 }
 
@@ -431,7 +391,6 @@ for (const spec of READ_HANDLERS) {
     const { w, response } = await run(spec, READ_REFUSED);
     assert.ok(!isRoleRefusal(response));
     assert.equal(w.guardResults.length, 0);
-    assert.equal(w.counters.flagReads, 0);
   });
 }
 
@@ -536,7 +495,7 @@ test("7673 native tools: the read-only set holds exactly the tools that cannot w
   assert.deepEqual(writeNamed, []);
 });
 
-test("7673 native tools: a read agent with the flag on is refused every write tool and keeps every read tool", async () => {
+test("7673 native tools: a read agent is refused every write tool and keeps every read tool", async () => {
   const n = nativeWorld(READ_REFUSED);
   const refused = [];
   for (const [name, tool] of Object.entries(n.tools)) {
@@ -585,40 +544,24 @@ test("7673 native tools: the refused tool list is the reviewed one", () => {
 for (const [label, scenario] of Object.entries(SCENARIOS_STILL_ALLOWED)) {
   test(`7673 native tools: a ${label} still runs write tools`, async () => {
     const n = nativeWorld(scenario);
-    n.w.muteWarnings();
-    try {
-      for (const name of ["hypertask_create_task", "hypertask_update_task", "hypertask_add_comment", "hypertask_section", "hypertask_project_admin"]) {
-        const result = await n.tools[name].execute({ action: "create" });
-        assert.equal(result.success, true, `${name} runs`);
-        assert.equal(result.code, undefined);
-      }
-    } finally {
-      n.w.restoreWarnings();
+    for (const name of ["hypertask_create_task", "hypertask_update_task", "hypertask_add_comment", "hypertask_section", "hypertask_project_admin"]) {
+      const result = await n.tools[name].execute({ action: "create" });
+      assert.equal(result.success, true, `${name} runs`);
+      assert.equal(result.code, undefined);
     }
     assert.equal(n.executed.length, 5);
   });
 }
 
 test("7673 native tools: a role lookup error stops the tool instead of running it", async () => {
-  const n = nativeWorld({ agentId: "agent-read", ctxRole: undefined, dbRole: "throw", flag: "on" });
+  const n = nativeWorld({ agentId: "agent-read", ctxRole: undefined, dbRole: "throw" });
   await assert.rejects(n.tools.hypertask_create_task.execute({}), ROLE_ERROR);
   assert.deepEqual(n.executed, []);
 });
 
-test("7673 native tools: read tools never touch the flag or the agent row", async () => {
-  const n = nativeWorld({ agentId: "agent-read", ctxRole: undefined, dbRole: "read", flag: "on" });
+test("7673 native tools: read tools never touch the agent row", async () => {
+  const n = nativeWorld({ agentId: "agent-read", ctxRole: undefined, dbRole: "read" });
   await n.tools.hypertask_search_tasks.execute({});
   await n.tools.hypertask_section.execute({ action: "list" });
-  assert.deepEqual(n.w.counters, { agentReads: 0, flagReads: 0 });
-});
-
-test("the flag is defined as a high-risk access kill switch defaulting to Owner and QA", () => {
-  const definition = load("src/lib/flags/definitions/htpr-7665-agent-read-role-guard.ts", (request) => {
-    if (request === "../definitions") return {};
-    throw new Error(`Unexpected definition import: ${request}`);
-  });
-  assert.equal(definition.HTPR_7665_AGENT_READ_ROLE_GUARD_FLAG, FLAG_KEY);
-  assert.equal(definition.default.key, FLAG_KEY);
-  assert.equal(definition.default.defaultMode, "OWNER_AND_QA");
-  assert.equal(definition.default.releaseRisk.highRisk, "access");
+  assert.deepEqual(n.w.counters, { agentReads: 0 });
 });

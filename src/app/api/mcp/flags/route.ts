@@ -69,7 +69,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
-    const refusal = await requireAgentWriteRole(ctx, { alwaysEnforce: true });
+    const refusal = await requireAgentWriteRole(ctx);
     if (refusal) {
       refusal.headers.set("Cache-Control", "private, no-store");
       return refusal;

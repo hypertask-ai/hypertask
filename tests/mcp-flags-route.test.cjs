@@ -69,7 +69,6 @@ stubModule("src/lib/flags.ts", {
     legacyFlagReads++;
     if (legacyFlagsFail) throw new Error("legacy flag unavailable");
     assert.equal(userId, 6);
-    if (flagKey === "htpr-7665-agent-read-role-guard") return false;
     if (flagKey === "htpr-8339-template-switch-question") return templateQuestionFlagOn;
     assert.equal(flagKey, "htpr-7727-plain-yes-flag-approval");
     return plainYesFlagOn;
@@ -1064,7 +1063,7 @@ for (const scenario of ["role", "agent", "revoked", "owner-link", "source-author
 
 for (const flagFails of [false, true]) {
   for (const role of ["read", "write"]) {
-    test(`PATCH ${role === "read" ? "refuses" : "allows"} stored ${role} when the legacy guard flag ${flagFails ? "throws" : "is off"}`, async () => {
+    test(`PATCH ${role === "read" ? "refuses" : "allows"} stored ${role} without reading any legacy flag`, async () => {
       const body = ownerBody();
       ctx.agentRole = undefined;
       storedRole = role;

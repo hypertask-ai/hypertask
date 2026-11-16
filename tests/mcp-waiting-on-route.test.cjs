@@ -60,14 +60,13 @@ function fixture(options = {}) {
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       flags.push({ key, userId });
       assert.equal(userId, ctx.user.id);
-      if (key === "htpr-7665-agent-read-role-guard") return true;
       if (key === "htpr-7724-blocker-comment") return options.blockerFlagEnabled !== false;
       if (key === "htpr-8205-agent-clear-blocker") return options.clearFlagEnabled === true;
       if (key === "htpr-8917-agent-waiting-person") return options.agentWaitingFlag === true;
       assert.equal(key, "htpr-7723-task-waiting-on");
       return options.flagEnabled !== false;
     } },
-    "@/lib/flags/keys": { HTPR_7665_AGENT_READ_ROLE_GUARD_FLAG: "htpr-7665-agent-read-role-guard" },
+    "@/lib/flags/keys": {},
     "@/lib/mcp/auth": {
       checkMcpRateLimit: async () => options.limited ? NextResponse.json({ success: false, error: "Rate limited" }, { status: 429 }) : null,
       validateMcpAuth: async () => options.noAuth ? null : ctx,
