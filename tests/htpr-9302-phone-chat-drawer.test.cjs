@@ -63,6 +63,7 @@ async function mount({ mobile, drawer }) {
     "react-hot-toast": { __esModule: true, default: { error: noop } },
     "../Common/Tooltip": { __esModule: true, default: () => null },
     "./AgentSidebarChatCommands": { AgentSidebarChatCommands: () => null },
+    "./AI_Tiptap_Container": { AI_Tiptap_Container: () => null, ChatScopeControl: () => null },
   });
   const container = document.getElementById("root");
   const renderer = createRoot(container);

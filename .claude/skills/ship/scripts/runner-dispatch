@@ -219,7 +219,6 @@ def free_tickets(boards, comments, claim_dir):
             assignees = task.get("assignees") or []
             if (claims(comments[ticket]) or task.get("agents")
                     or any(a.get("agent") for a in assignees)
-                    or "abdul" in json.dumps(assignees, ensure_ascii=False).casefold()
                     or os.path.lexists(claim_dir / f"{ticket}.json")):
                 continue
             free.append(ticket)
