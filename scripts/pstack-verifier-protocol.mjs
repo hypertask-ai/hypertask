@@ -5,7 +5,15 @@ export const CONTEXT = "pstack-verifier";
 const KEYS = new Set(["Escape", "Enter", "Tab", "Backspace", "ArrowDown", "ArrowUp"]);
 const APP = "http://127.0.0.1:3100";
 export const coreSmokeBoardTitle = "Core actions smoke", coreSmokeTaskTitle = "Core actions smoke fixture";
-const seededPage = (url, text, status, seed = {}) => { let where; try { where = new URL(url); } catch { return false; } if ((Number(status) || 0) >= 400 || ![coreSmokeBoardTitle, coreSmokeTaskTitle].some((mark) => String(text ?? "").includes(mark))) return false; const path = where.pathname; let board, task; try { board = new URL(String(seed.boardPath || "/"), where.origin); task = new URL(String(seed.taskPath || "/"), where.origin); } catch { return false; } return (path === "/project" && board.searchParams.get("id") && where.searchParams.get("id") === board.searchParams.get("id")) || (task.pathname.startsWith("/detail/") && path === task.pathname); };
+export const CONTENT = "#body, #sectionsContainer", CLICK_ROLES = ["link", "button", "menuitem", "menuitemcheckbox", "checkbox", "radio", "tab", "option", "switch", "combobox"];
+const seededPage = (url, text, status, seed = {}) => { let where; try { where = new URL(url); } catch { return false; } if ((Number(status) || 0) >= 400) return false; const body = String(text ?? ""); let board, task; try { board = new URL(String(seed.boardPath || "/"), where.origin); task = new URL(String(seed.taskPath || "/"), where.origin); } catch { return false; } if (where.pathname === "/project" && board.searchParams.get("id") && where.searchParams.get("id") === board.searchParams.get("id")) return body.includes(coreSmokeBoardTitle); return task.pathname.startsWith("/detail/") && where.pathname === task.pathname && body.includes(coreSmokeTaskTitle); };
+async function contentText(page) { try { const found = page.locator(CONTENT); return await (typeof found?.first === "function" ? found.first() : found).innerText({ timeout: 8000 }) ?? ""; } catch { return ""; } }
+async function control(page, name, roles) { for (const role of roles) { const found = page.getByRole(role, { name, exact: true }); if ((await found.count()) > 0) return found.first(); } return null; }
+export function guardContext(context, base) {
+  const origin = new URL(base).origin, run = { failed: false, page: null };
+  context.route("**/*", async (route) => { const request = route.request(); let block = false; if (request.isNavigationRequest()) { try { block = new URL(request.url()).origin !== origin; } catch { block = true; } } if (block) { run.failed = true; await route.abort(); return; } await route.continue(); });
+  context.on("page", (page) => { run.page = page; }); return run;
+}
 export function assertFlashModel(model = PSTACK_VERIFIER.model) {
   const id = String(model); if (!id.startsWith("deepseek/") || !id.includes("flash") || /pro|claude|anthropic|opus|sonnet|haiku/i.test(id)) throw new Error(`refusing model ${id}`); return id;
 }
@@ -87,11 +95,11 @@ export function chatBody(model, prompt) {
   return { model: assertFlashModel(model), temperature: 0, max_tokens: 1200, messages: [{ role: "system", content: "You drive a browser. Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content: prompt }] };
 }
 async function readLive(page, secrets) {
-  let url = "", text = ""; try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} try { url = page.url(); } catch { url = ""; } try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
-  return { url, snapshot: redact(`${url}\n${String(text).slice(0, 2500)}`, secrets) };
+  let url = ""; try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} try { url = page.url(); } catch { url = ""; }
+  return { url, snapshot: redact(`${url}\n${String(await contentText(page)).slice(0, 2500)}`, secrets) };
 }
-export function acceptPass(events, base = APP, seed) {
-  const origin = new URL(base).origin;
+export function acceptPass(events, base = APP, seed, run) {
+  if (run?.failed) return ""; const origin = new URL(base).origin;
   let shown = "", lands = 0, at = -1, left = false, text = "", status = 0;
   for (const event of events) {
     if (event.t === "show") { shown = String(event.url ?? ""); at = lands; text = String(event.text ?? ""); status = Number(event.status) || 0; }
@@ -100,14 +108,14 @@ export function acceptPass(events, base = APP, seed) {
   }
   return "";
 }
-export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurns = 4 }) {
+export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurns = 4, run }) {
   const base = smoke.base || APP;
   const pairs = String(smoke.cookie ?? "").split(";").map((part) => part.trim()).filter(Boolean);
   const secrets = [smoke.cookie, smoke.key, ...pairs, ...pairs.map((pair) => pair.slice(pair.indexOf("=") + 1))].filter(Boolean);
   let screen = "The browser is open on the seeded board.", snapshot = screen, url = "", notes = "", verdict = "", landed = false, watch = null, status = 0;
   const events = [], clicked = [], shots = [];
   for (let turn = 1; turn <= maxTurns && !verdict; turn += 1) {
-    if (watch) { const now = await readLive(watch, secrets); url = now.url; screen = snapshot = now.snapshot; }
+    if (run?.page) watch = run.page; if (watch) { const now = await readLive(watch, secrets); url = now.url; screen = snapshot = now.snapshot; }
     events.push({ t: "show", url, text: snapshot, status });
     const prompt = redact(buildPrompt({ title: meta.title, body: meta.body, diff, boardPath: smoke.boardPath, taskPath: smoke.taskPath, snapshot, turn, last: turn === maxTurns }), secrets);
     let parsed;
@@ -115,56 +123,47 @@ export async function verifyLoop({ meta, diff, smoke, complete, perform, maxTurn
       events.push({ t: "reply", bad: true });
       const problem = redact(`The last answer was not usable: ${error.message}`, secrets);
       notes ||= problem;
-      snapshot = `${screen}\n${problem}`;
-      continue;
+      snapshot = `${screen}\n${problem}`; if (run?.failed) { verdict = "FAIL"; break; } continue;
     }
     if (parsed.actions.length) {
       const result = await perform(parsed.actions);
-      watch = result.page ?? watch;
+      watch = run?.page || result.page || watch;
       clicked.push(...result.clicked);
       shots.push(...result.shots);
       url = result.url || String(result.snapshot ?? "").split("\n")[0]; if (result.status != null) status = Number(result.status) || 0;
-      events.push({ t: "reply", actions: parsed.actions.length, verdict: parsed.verdict });
-      for (const hop of result.urls || []) if (hop !== url) events.push({ t: "nav", url: hop });
-      events.push({ t: "land", url });
-      landed = true;
+      events.push({ t: "reply", actions: parsed.actions.length, verdict: parsed.verdict }); events.push({ t: "land", url }); landed = true;
       screen = snapshot = redact(result.snapshot, secrets);
     } else {
       if (watch) { const now = await readLive(watch, secrets); if (now.url !== url || now.snapshot !== snapshot) { events.push({ t: "land", url: now.url }); url = now.url; screen = snapshot = now.snapshot; } }
       events.push({ t: "reply", actions: 0, verdict: parsed.verdict });
-      verdict = acceptPass(events, base, smoke) || (parsed.verdict === "FAIL" && landed ? "FAIL" : "");
+      verdict = acceptPass(events, base, smoke, run) || (parsed.verdict === "FAIL" && landed ? "FAIL" : "");
     }
-    if (parsed.notes) notes = parsed.notes;
+    if (parsed.notes) notes = parsed.notes; if (run?.failed) { verdict = "FAIL"; break; }
   }
-  if (!clicked.length) { verdict = "FAIL"; notes = `${notes} No click, fill or key landed.`.trim(); }
+  if (run?.failed) { verdict = "FAIL"; notes = `${notes} Off-origin navigation was blocked.`.trim(); } else if (!clicked.length) { verdict = "FAIL"; notes = `${notes} No click, fill or key landed.`.trim(); }
   else if (!verdict) {
     let home = false; try { const where = new URL(url); home = where.origin === new URL(base).origin && seededPage(url, snapshot, status, smoke); } catch { home = false; }
     verdict = "FAIL"; notes = home ? (notes || "The model did not return PASS, PASS+NOTES or FAIL.") : `${notes} Seeded login did not open the app.`.trim();
   }
   return { verdict, notes: redact(notes, secrets), clicked, shots };
 }
-export async function performOnPage(page, actions, shotsDir, turn, base, seed) {
-  const clicked = [], shots = [], lines = [], urls = []; let status = 0, bound = null; const origin = new URL(base).origin;
-  const main = () => bound?.mainFrame?.() ?? page.mainFrame?.();
-  const see = (response) => { try { const request = response?.request?.(); const frame = request?.frame?.(); if (request?.resourceType?.() !== "document" || (frame !== main() && !(frame == null && request.isNavigationRequest?.()))) return; status = Number(typeof response.status === "function" ? response.status() : response.status) || status; const hop = typeof response.url === "function" ? response.url() : ""; if (hop) urls.push(hop); } catch {} };
-  const move = (frame) => { try { if (frame === main()) { const hop = typeof frame.url === "function" ? frame.url() : ""; if (hop) urls.push(hop); } } catch {} };
-  const arm = (target) => { if (!target || target === bound || typeof target.on !== "function") return; if (typeof bound?.off === "function") { bound.off("response", see); bound.off("framenavigated", move); } bound = target; target.on("response", see); target.on("framenavigated", move); }; arm(page);
+export async function performOnPage(page, actions, shotsDir, turn, base, seed, run) {
+  const clicked = [], shots = [], lines = []; let status = 0;
+  const live = () => run?.page || page;
   for (const [index, action] of actions.entries()) {
-    const from = urls.length;
     try {
-      if (action.op === "goto") { const response = await page.goto(new URL(allowPath(action.path, base), base).toString(), { waitUntil: "domcontentloaded", timeout: 20000 }); see(response); }
-      if (action.op === "click") { const handle = page.getByText(action.text, { exact: true }).first(); const target = typeof handle.getAttribute === "function" ? await handle.getAttribute("target") : null; if (target === "_blank") { const context = typeof page.context === "function" ? page.context() : null; let opened = typeof context?.waitForEvent === "function" ? context.waitForEvent("page", { timeout: 8000 }) : null; if (opened && typeof opened.catch === "function") opened = opened.catch(() => null); await handle.click({ timeout: 8000 }); const popup = opened ? await opened : null; if (!popup) throw new Error("popup was not followed"); page = popup; arm(page); try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} } else await handle.click({ timeout: 8000 }); clicked.push(action.text); }
-      if (action.op === "fill") { await page.getByLabel(action.label).fill(action.value, { timeout: 8000 }); clicked.push(action.label); }
-      if (action.op === "press") { await page.keyboard.press(action.key); clicked.push(action.key); }
-      try { const settled = page.url(); if (settled && urls.at(-1) !== settled) urls.push(settled); } catch {}
-      if (urls.slice(from).some((hop) => { try { return new URL(hop).origin !== origin; } catch { return true; } })) throw new Error("off-origin");
-      const name = `${turn}-${index}-${action.op}.png`; await page.screenshot({ path: path.join(shotsDir, name) }); shots.push(name); lines.push(`${action.op} ok`);
-    } catch (error) { const message = String(error.message ?? error).split("\n")[0]; lines.push(`${action.op} failed: ${message}`); if (message.includes("popup")) page = { url: () => "about:blank", async screenshot() {}, locator: () => ({ innerText: async () => "" }) }; }
-    try { const settled = page.url(); if (urls.at(-1) !== settled) urls.push(settled || ""); } catch { if (urls.at(-1) !== "") urls.push(""); }
+      const view = live();
+      if (action.op === "goto") { const response = await view.goto(new URL(allowPath(action.path, base), base).toString(), { waitUntil: "domcontentloaded", timeout: 20000 }); status = Number(typeof response?.status === "function" ? response.status() : response?.status) || status; }
+      if (action.op === "click") { const handle = await control(view, action.text, CLICK_ROLES); if (!handle) throw new Error("not actionable"); await handle.click({ timeout: 8000 }); clicked.push(action.text); }
+      if (action.op === "fill") { const handle = await control(view, action.label, ["textbox"]); if (!handle) throw new Error("not actionable"); await handle.fill(action.value, { timeout: 8000 }); clicked.push(action.label); }
+      if (action.op === "press") { await view.keyboard.press(action.key); clicked.push(action.key); }
+      if (run?.failed) throw new Error("off-origin");
+      const name = `${turn}-${index}-${action.op}.png`; await live().screenshot({ path: path.join(shotsDir, name) }); shots.push(name); lines.push(`${action.op} ok`);
+    } catch (error) { lines.push(`${action.op} failed: ${String(error.message ?? error).split("\n")[0]}`); }
   }
-  let text = ""; try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
-  const url = urls.at(-1) || page.url(); let loggedIn = false; try { const current = new URL(url); loggedIn = current.origin === new URL(base).origin && seededPage(url, text, status, seed); } catch { loggedIn = false; }
-  if (typeof bound?.off === "function") { bound.off("response", see); bound.off("framenavigated", move); } return { clicked, shots, loggedIn, url, urls, page, status, snapshot: `${url}\n${lines.join("\n")}\n${text.slice(0, 2500)}` };
+  const view = live(), text = await contentText(view), url = view.url();
+  let loggedIn = false; try { loggedIn = !run?.failed && new URL(url).origin === new URL(base).origin && seededPage(url, text, status, seed); } catch { loggedIn = false; }
+  return { clicked, shots, loggedIn, url, page: view, status, snapshot: `${url}\n${lines.join("\n")}\n${String(text).slice(0, 2500)}` };
 }
 export async function completeWithOpenRouter(prompt, { key, model = PSTACK_VERIFIER.model, fetchImpl = globalThis.fetch } = {}) {
   if (!key) throw new Error("model login is missing");
