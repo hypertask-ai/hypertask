@@ -166,11 +166,9 @@ export function createDocumentContext(body: ChatRequest) {
 export function createUserPrompt(
   body: ChatRequest,
   authedUser: AuthedUser,
-  currentTaskContext: string,
-  promptCachingEnabled = false
+  currentTaskContext: string
 ) {
-  if (promptCachingEnabled) {
-    return `
+  return `
                 IMPORTANT: Analyze the history and provide a complete, context-aware HTML body response.
                 IMPORTANT: Follow the tool selection hierarchy strictly.
                 IMPORTANT: User context is provided already. If you want to know more about the user's boards, then use the list_boards tool.
@@ -196,33 +194,6 @@ export function createUserPrompt(
                 ${formatTemporalContext()}
                 === CURRENT TIME CONTEXT ===
                 [Current Time: ${new Date().toISOString()}]
-            `;
-  }
-  return `
-                ${formatTemporalContext()}
-                ${currentTaskContext
-      ? `\n                CURRENT TICKET CONTEXT (the ticket the user is viewing — read this before answering questions about "this ticket"; do NOT search for it):\n${currentTaskContext}\n`
-      : ""
-    }
-                ${body.default_context?.scope === "ticket"
-      ? "SCOPE: Current ticket only. Use only the current ticket title, description and comments as ticket context. Do not search or load other tickets or board-wide context. This explicit scope overrides the default task_id navigation guidance."
-      : ""
-    }
-                User query: ${body.message}
-                CHAT HISTORY: ${formatChatHistory(body.chat_history)}
-                context_list: ${stringifyForPrompt(body.context_list)}
-                default_context: ${stringifyForPrompt(body.default_context)}
-                user_context: ${stringifyForPrompt({
-      id: authedUser.id,
-      email: authedUser.email,
-      displayName: authedUser.displayName,
-    })}
-                document_context: ${createDocumentContext(body)}
-
-                IMPORTANT: Analyze the history and provide a complete, context-aware HTML body response.
-                IMPORTANT: Follow the tool selection hierarchy strictly.
-                IMPORTANT: User context is provided already. If you want to know more about the user's boards, then use the list_boards tool.
-                IMPORTANT: Take into account the documents and images provided by the user.
             `;
 }
 
@@ -266,10 +237,9 @@ export function filePartFromAttachment(
 export function createUserContent(
   body: ChatRequest,
   authedUser: AuthedUser,
-  currentTaskContext: string,
-  promptCachingEnabled = false
+  currentTaskContext: string
 ): UserContent {
-  const prompt = createUserPrompt(body, authedUser, currentTaskContext, promptCachingEnabled);
+  const prompt = createUserPrompt(body, authedUser, currentTaskContext);
   const fileParts = [
     ...(body.images64 ?? []),
     ...(body.pdfs64 ?? []),
@@ -287,8 +257,7 @@ export async function createImageAwareUserContent(
   authedUser: AuthedUser,
   currentTaskContext: string,
   modelId: string,
-  signal: AbortSignal,
-  promptCachingEnabled = false
+  signal: AbortSignal
 ): Promise<UserContent> {
   const supportsImages = /^(?:[^/]+\/)?(?:gpt-|claude-|gemini-|kimi-)/i.test(modelId);
   const textOnly = /^(?:[^/]+\/)?deepseek-/i.test(modelId);
@@ -312,7 +281,6 @@ export async function createImageAwareUserContent(
     textOnly ? { ...body, images64: [] } : body,
     authedUser,
     currentTaskContext,
-    promptCachingEnabled,
   );
   const parts: Exclude<UserContent, string> = typeof content === "string"
     ? [{ type: "text", text: content }]

@@ -318,7 +318,6 @@ type ModelUsageContext = Partial<Pick<AiUsageRecord,
 >> & {
   initiatingUserId?: number | null;
   trustedChatSessionId?: string | null;
-  promptCachingEnabled?: Promise<boolean>;
   directPromptCachingEnabled?: Promise<boolean>;
   reasoningFeature?: string | null;
   reasoningEffort?: ReasoningEffort | null;
@@ -363,10 +362,7 @@ export async function aiPromptCachingEnabled(model: LanguageModel): Promise<bool
       .catch(() => false);
   }
   if (model.provider !== "gateway") return false;
-  return context.promptCachingEnabled ??= import("@/lib/flags/definitions/htpr-7689-prompt-caching")
-    .then(({ HTPR_7689_PROMPT_CACHING_FLAG }) => import("@/lib/flags")
-      .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, context.initiatingUserId!)))
-    .catch(() => false);
+  return true;
 }
 
 function createPromptCachingMiddleware(model: LanguageModel, context: ModelUsageContext, enabled: () => Promise<boolean>): LanguageModelMiddleware {

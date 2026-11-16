@@ -28,7 +28,7 @@ import { ToolExecution } from "@/lib/ai/chatStream/types";
 import { AGENT_SYSTEM_PROMPT, LEAN_AGENT_SYSTEM_PROMPT, CHAT_REQUEST_WRITING_STYLE, PRODUCT_ANSWERS_FROM_DOCS_PROMPT, chatSurfacePrompt } from "@/lib/ai/chatStream/prompt";
 import { HTPR_7861_CHAT_PROMPT_LEAN_FLAG } from "@/lib/flags/definitions/htpr-7861-chat-prompt-lean";
 import { HTPR_7780_DOCS_ROUTING_FLAG } from "@/lib/flags/definitions/htpr-7780-docs-routing";
-import { aiPromptCachingEnabled, configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { createUserContent, createImageAwareUserContent } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
 import { generateConversationTitle } from "@/lib/ai/chatStream/title";
@@ -92,13 +92,12 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     trustedChatSessionId: state.trustedChatSessionId,
     feature: "chat",
   });
-  const promptCachingEnabled = await aiPromptCachingEnabled(state.selected.model);
   const messages: ModelMessage[] = [
     {
       role: "user",
       content: await isFeatureEnabled(HTPR_7761_CHAT_IMAGE_URLS_FLAG, dbUser.id)
-        ? await createImageAwareUserContent(resolvedBody, dbUser, currentTaskContext, state.selected.resolvedModelId, state.providerAbort.signal, promptCachingEnabled)
-        : createUserContent(resolvedBody, dbUser, currentTaskContext, promptCachingEnabled),
+        ? await createImageAwareUserContent(resolvedBody, dbUser, currentTaskContext, state.selected.resolvedModelId, state.providerAbort.signal)
+        : createUserContent(resolvedBody, dbUser, currentTaskContext),
     },
   ];
   const toolExecutions: ToolExecution[] = [];

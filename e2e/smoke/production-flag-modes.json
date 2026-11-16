@@ -199,7 +199,6 @@
     "htpr-7686-free-plan-limits": "EVERYONE",
     "htpr-7687-allowance-resync": "EVERYONE",
     "htpr-7688-past-chats-first": "EVERYONE",
-    "htpr-7689-prompt-caching": "EVERYONE",
     "htpr-7690-inbox-hydration-floor": "EVERYONE",
     "htpr-7691-idempotent-archive": "EVERYONE",
     "htpr-7692-allowance-drift-check": "OFF",

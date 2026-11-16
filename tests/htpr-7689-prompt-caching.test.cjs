@@ -3,14 +3,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const test = require("node:test");
-const { createHmac, createHash } = require("node:crypto");
+const { createHmac } = require("node:crypto");
 const { createJiti } = require("jiti");
 const ai = require("ai");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { fsCache: false });
-const flagPath = "src/lib/flags/definitions/htpr-7689-prompt-caching.ts";
-const flag = jiti(path.join(root, flagPath));
 const fixtureSecret = "offline-fixture-signing-secret";
 
 function load(file, stubs = {}, globals = {}) {
@@ -35,7 +33,7 @@ function load(file, stubs = {}, globals = {}) {
   return mod.exports;
 }
 
-function harness({ enabled = true, flagError = false, secret = fixtureSecret } = {}) {
+function harness({ secret = fixtureSecret } = {}) {
   const checks = [], middlewares = [], sent = [];
   const factory = (provider) => {
     const create = (modelId) => ({
@@ -53,11 +51,9 @@ function harness({ enabled = true, flagError = false, secret = fixtureSecret } =
   };
   const modelApi = load("src/app/api/ai/_lib/modelProvider.ts", {
     "@/lib/net/fetchWithoutBrotli": {},
-    "@/lib/flags/definitions/htpr-7689-prompt-caching": flag,
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      if (flagError) throw new Error("Offline flag failure");
-      return enabled;
+      return true;
     } },
     "@vercel/functions": { waitUntil: () => {} },
     "./aiUsage": { logAiUsage: async () => {} },
@@ -113,23 +109,6 @@ function params() {
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-for (const [name, slug, options] of [
-  ["gateway Claude", "anthropic/claude-sonnet-fixture", {}],
-  ["gateway OpenAI", "openai/gpt-fixture", {}],
-  ["direct BYOK", "anthropic/claude-sonnet-fixture", { direct: true }],
-]) {
-  test(`Off keeps the exact params object and keys for ${name}`, async () => {
-    const h = harness({ enabled: false });
-    const { transform } = h.resolve(slug, options);
-    const input = params(), before = structuredClone(input);
-    assert.equal(await transform(input), input);
-    assert.deepEqual(input, before);
-    const minimal = { prompt: [] };
-    assert.equal(await transform(minimal), minimal);
-    assert.deepEqual(Object.keys(minimal), ["prompt"]);
-  });
-}
-
 test("On gateway Claude deep-merges auto caching and removes only the legacy system marker", async () => {
   const h = harness();
   const { transform } = h.resolve();
@@ -140,9 +119,8 @@ test("On gateway Claude deep-merges auto caching and removes only the legacy sys
   delete expected.prompt[0].providerOptions.anthropic.cacheControl;
   assert.deepEqual(output, expected);
   assert.deepEqual(input, before);
-  assert.deepEqual(h.checks, [[flag.HTPR_7689_PROMPT_CACHING_FLAG, 985]]);
+  assert.deepEqual(h.checks, []);
   assert.deepEqual(plain(await transform(input, "stream")), expected);
-  assert.equal(h.checks.length, 1);
 });
 
 test("actual gateway transport enables caching even when usage attribution says Claude", async () => {
@@ -206,12 +184,10 @@ test("background attribution to an eligible task creator does not supply an init
   assert.equal((await trusted.transform(input)).providerOptions.gateway.caching, "auto");
 });
 
-test("flag lookup failure and other gateway vendors fail closed", async () => {
-  const h = harness({ flagError: true });
+test("other gateway vendors leave params unchanged", async () => {
+  const h = harness();
   const input = params();
-  assert.equal(await h.resolve().transform(input), input);
-  assert.deepEqual(h.checks, [[flag.HTPR_7689_PROMPT_CACHING_FLAG, 985]]);
-  assert.equal(await harness().resolve("google/gemini-fixture").transform(input), input);
+  assert.equal(await h.resolve("google/gemini-fixture").transform(input), input);
 });
 
 test("fallback models inherit the evaluated flag, trusted initiator and session", async () => {
@@ -223,7 +199,6 @@ test("fallback models inherit the evaluated flag, trusted initiator and session"
   const next = await fallback.transform(params());
   assert.match(next.providerOptions.openai.promptCacheKey, /^[A-Za-z0-9_-]{32}$/);
   assert.equal(next.providerOptions.openai.promptCacheKey, first.providerOptions.openai.promptCacheKey);
-  assert.equal(h.checks.length, 1);
 });
 
 test("the central wrapper applies the policy to generate and stream sends", async () => {
@@ -248,14 +223,8 @@ const body = {
 };
 const user = { id: 985, email: "qa@example.invalid", displayName: "QA" };
 
-test("chat Off matches the frozen original byte snapshot, including both clocks", () => {
-  const output = content.createUserPrompt(body, user, "Ticket snapshot", false);
-  assert.equal(createHash("sha256").update(output).digest("hex"), "42b74ddbb2c8344d8c413d5e1b0763448d80f25539df705b53b9e981269f717a");
-  assert.equal(content.createUserContent(body, user, "Ticket snapshot"), output);
-});
-
-test("chat On keeps stable rules first and query, selection and both clocks at the end", () => {
-  const output = content.createUserPrompt(body, user, "Ticket snapshot", true);
+test("chat keeps stable rules first and query, selection and both clocks at the end", () => {
+  const output = content.createUserPrompt(body, user, "Ticket snapshot");
   const history = output.indexOf("CHAT HISTORY:");
   assert.ok(output.indexOf("IMPORTANT: Analyze") < history);
   assert.ok(output.indexOf("SCOPE:") < history);
@@ -266,59 +235,45 @@ test("chat On keeps stable rules first and query, selection and both clocks at t
   assert.ok(output.indexOf("User query: Current question") < output.indexOf("[Current Time:"));
   assert.equal((output.match(/\[Current Time:/g) ?? []).length, 1);
   assert.equal((output.match(/Today's Date & Time:/g) ?? []).length, 1);
-  assert.equal(content.createUserContent(body, user, "Ticket snapshot", true), output);
-});
-
-test("the ticket flag remains an improvement restricted to Owner and QA for money risk", () => {
-  assert.equal(flag.default.key, "htpr-7689-prompt-caching");
-  assert.equal(flag.default.kind, "improvement");
-  assert.equal(flag.default.defaultMode, "OWNER_AND_QA");
-  assert.equal(flag.default.releaseRisk.highRisk, "money");
+  assert.equal(content.createUserContent(body, user, "Ticket snapshot"), output);
 });
 
 test("chat uses one server-evaluated decision for prompt ordering and provider caching", async () => {
-  for (const enabled of [false, true]) {
-    const h = harness({ enabled });
-    const { model, transform } = h.resolve("openai/gpt-fixture", { context: { initiatingUserId: null } });
-    let userPrompt;
-    const turn = load("src/lib/ai/chatStream/modelTurn.ts", {
-      "@/lib/ai/prompts/registry": {},
-      "@/lib/flags/keys": {},
-      "@/lib/prisma": {},
-      "@/lib/flags": { isFeatureEnabled: async () => false },
-      "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "Ticket snapshot" },
-      "@/app/api/ai/chat/stream/streamLease": {},
-      "@/app/api/ai/_lib/heartbeatExecution": {},
-      "@/app/api/ai/chat/stream/persistAssistantMessage": {},
-      "@/utils/controllers/comments/linkifyTicketRefs": {},
-      "@/lib/ai/chatStream/prompt": { AGENT_SYSTEM_PROMPT: "Fixed system rules", LEAN_AGENT_SYSTEM_PROMPT: "Lean system rules", CHAT_REQUEST_WRITING_STYLE: "writing style" },
-      "@/lib/flags/definitions/htpr-7861-chat-prompt-lean": { HTPR_7861_CHAT_PROMPT_LEAN_FLAG: "htpr-7861-chat-prompt-lean" },
-      "@/lib/ai/tools/compactSchemas": { compactChatToolSchemas: (tools) => tools },
-      "@/app/api/ai/_lib/modelProvider": h,
-      "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
-      "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
-      "@/lib/flags/definitions/htpr-7780-docs-routing": { HTPR_7780_DOCS_ROUTING_FLAG: "htpr-7780-docs-routing" },
-      "@/lib/ai/settings/catalog": { settingsPages: {}, settingProposalCard: () => ({}) },
-      "./ticketGroups": {},
-      "@/lib/ai/tools/showTicketRows": { TICKET_ROWS_PROMPT: "rows prompt" },
-      "@/lib/ai/chatStream/content": content,
-      "@/lib/ai/tools/metadata": {},
-      "@/lib/ai/chatStream/title": {},
-      "@/lib/ai/tools": { buildTools: () => ({}) },
-      "./modelReply": { generateModelReply: async (_state, inputs) => { userPrompt = inputs.messages[0].content; } },
-      "./chatNames": { nameChatFromFirstMessage: async () => null },
-    });
-    await turn.runModelTurn({ body, dbUser: user, selected: { model }, trustedChatSessionId: "owned-session", providerAbort: new AbortController() }, body, {});
-    assert.equal(userPrompt, content.createUserPrompt(body, user, "Ticket snapshot", enabled));
-    const input = params();
-    const output = await transform(input);
-    if (enabled) {
-      assert.match(output.providerOptions.openai.promptCacheKey, /^[A-Za-z0-9_-]{32}$/);
-    } else {
-      assert.equal(output, input);
-    }
-    assert.deepEqual(h.checks, [[flag.HTPR_7689_PROMPT_CACHING_FLAG, 985]]);
-  }
+  const h = harness();
+  const { model, transform } = h.resolve("openai/gpt-fixture", { context: { initiatingUserId: null } });
+  let userPrompt;
+  const turn = load("src/lib/ai/chatStream/modelTurn.ts", {
+    "@/lib/ai/prompts/registry": {},
+    "@/lib/flags/keys": {},
+    "@/lib/prisma": {},
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "Ticket snapshot" },
+    "@/app/api/ai/chat/stream/streamLease": {},
+    "@/app/api/ai/_lib/heartbeatExecution": {},
+    "@/app/api/ai/chat/stream/persistAssistantMessage": {},
+    "@/utils/controllers/comments/linkifyTicketRefs": {},
+    "@/lib/ai/chatStream/prompt": { AGENT_SYSTEM_PROMPT: "Fixed system rules", LEAN_AGENT_SYSTEM_PROMPT: "Lean system rules", CHAT_REQUEST_WRITING_STYLE: "writing style" },
+    "@/lib/flags/definitions/htpr-7861-chat-prompt-lean": { HTPR_7861_CHAT_PROMPT_LEAN_FLAG: "htpr-7861-chat-prompt-lean" },
+    "@/lib/ai/tools/compactSchemas": { compactChatToolSchemas: (tools) => tools },
+    "@/app/api/ai/_lib/modelProvider": h,
+    "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
+    "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
+    "@/lib/flags/definitions/htpr-7780-docs-routing": { HTPR_7780_DOCS_ROUTING_FLAG: "htpr-7780-docs-routing" },
+    "@/lib/ai/settings/catalog": { settingsPages: {}, settingProposalCard: () => ({}) },
+    "./ticketGroups": {},
+    "@/lib/ai/tools/showTicketRows": { TICKET_ROWS_PROMPT: "rows prompt" },
+    "@/lib/ai/chatStream/content": content,
+    "@/lib/ai/tools/metadata": {},
+    "@/lib/ai/chatStream/title": {},
+    "@/lib/ai/tools": { buildTools: () => ({}) },
+    "./modelReply": { generateModelReply: async (_state, inputs) => { userPrompt = inputs.messages[0].content; } },
+    "./chatNames": { nameChatFromFirstMessage: async () => null },
+  });
+  await turn.runModelTurn({ body, dbUser: user, selected: { model }, trustedChatSessionId: "owned-session", providerAbort: new AbortController() }, body, {});
+  assert.equal(userPrompt, content.createUserPrompt(body, user, "Ticket snapshot"));
+  const output = await transform(params());
+  assert.match(output.providerOptions.openai.promptCacheKey, /^[A-Za-z0-9_-]{32}$/);
+  assert.deepEqual(h.checks, []);
 });
 
 test("legacy promptCache instructions retain their boundary and content on the auto path", async () => {
@@ -393,12 +348,9 @@ test("On direct OpenAI never receives a prompt cache key even with a trusted ses
   assert.deepEqual(h.checks, []);
 });
 
-test("chat reordering preserves attachment parts and leaves the default Off path unchanged", () => {
+test("chat reordering preserves attachment parts", () => {
   const request = { ...body, images64: [{ url: "data:image/png;base64,YQ==", fileName: "fixture.png", mimeType: "image/png" }] };
-  const off = plain(content.createUserContent(request, user, "Ticket snapshot"));
-  const on = plain(content.createUserContent(request, user, "Ticket snapshot", true));
-  assert.equal(off[0].text, content.createUserPrompt(request, user, "Ticket snapshot", false));
-  assert.equal(on[0].text, content.createUserPrompt(request, user, "Ticket snapshot", true));
-  assert.deepEqual(off.slice(1), [{ type: "file", mediaType: "image/png", filename: "fixture.png", data: { type: "data", data: "YQ==" } }]);
-  assert.deepEqual(on.slice(1), off.slice(1));
+  const attached = plain(content.createUserContent(request, user, "Ticket snapshot"));
+  assert.equal(attached[0].text, content.createUserPrompt(request, user, "Ticket snapshot"));
+  assert.deepEqual(attached.slice(1), [{ type: "file", mediaType: "image/png", filename: "fixture.png", data: { type: "data", data: "YQ==" } }]);
 });

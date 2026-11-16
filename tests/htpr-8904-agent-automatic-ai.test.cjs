@@ -28,7 +28,6 @@ function scheduler(relativePath, enabledFor) {
   const loaded = loadModule(relativePath, {
     "@/lib/qstash": { scheduleJobById: async (job) => { jobs.push(job); return { messageId: "job" }; } },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { checks.push({ key, userId }); return enabledFor.includes(userId); } },
-    "@/lib/flags/definitions/htpr-7689-prompt-caching": { HTPR_7689_PROMPT_CACHING_FLAG: "htpr-7689-prompt-caching" },
     "@/lib/flags/definitions/htpr-8904-agent-automatic-ai": { HTPR_8904_AGENT_AUTOMATIC_AI_FLAG: flagKey },
     "@/lib/prisma": { __esModule: true, default: { task: { findFirst: async () => ({ userId: 6 }) } } },
     "@/app/api/ai/_lib/taskSummaryFreshness": {

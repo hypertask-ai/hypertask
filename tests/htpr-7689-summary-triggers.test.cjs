@@ -3,13 +3,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const test = require("node:test");
-const { createHash } = require("node:crypto");
 const { createJiti } = require("jiti");
 const { Prisma } = require("@prisma/client");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { fsCache: false });
-const flag = jiti(path.join(root, "src/lib/flags/definitions/htpr-7689-prompt-caching.ts"));
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function load(file, stubs = {}) {
@@ -78,7 +76,6 @@ function harness({ enabled = true, comments = [comment(1)] } = {}) {
       checks.push([key, userId]);
       return enabled;
     } },
-    "@/lib/flags/definitions/htpr-7689-prompt-caching": flag,
     "@/app/api/ai/_lib/taskSummaryFreshness": {
       readTaskSummaryStaleMarker: async () => null,
       clearTaskSummaryStaleMarker: async () => {},
@@ -126,19 +123,6 @@ function source(row, index) {
   };
 }
 
-function legacyFingerprint(task, sources) {
-  return createHash("sha256").update(JSON.stringify({
-    promptVersion: "task-summary-v2-one-call-2026-08-08",
-    teamId: task.project.teamId,
-    title: task.title,
-    ticketNumber: task.ticketNumber,
-    description: "Original description",
-    sources,
-    provider: "google",
-    model: "google/gemini-fixture",
-  })).digest("hex");
-}
-
 function formattedSources(sources) {
   return sources.map((row) => `[${row.index}] comment_creator: ${row.creator}\ncreated_at: ${row.createdAt}\ntext: ${row.text}`).join("\n\n");
 }
@@ -150,26 +134,7 @@ const activity = (id, type = "TaskMove", agent = false) => comment(id, {
   ...(agent ? { agent: { displayName: "Runner" }, agentDisplayName: "Runner" } : {}),
 });
 
-test("Off preserves exact legacy sources, fingerprint and duplicate detection, including agent activity", async () => {
-  const h = harness({ enabled: false, comments: [comment(1), activity(2, "TaskAssigned", true), activity(3)] });
-  assert.equal(await h.generateAndStoreTaskSummary(42), "Fixture summary");
-  const sources = [...h.task.comments].reverse().map((row, index) => source(row, index + 1));
-  assert.equal(Object.hasOwn(h.queries[0], "where"), false);
-  assert.equal(h.queries[0].take, 200);
-  assert.equal(h.requests[0].prompt, JSON.stringify([
-    "task-summaries-prompt-3", h.task.title, h.task.ticketNumber,
-    "Original description", formattedSources(sources),
-  ]));
-  assert.equal(h.writes[0].update.content, `Fixture summary\n\n[hypertask-summary-fingerprint]: # (${legacyFingerprint(h.task, sources)})`);
-  await h.generateAndStoreTaskSummary(42);
-  assert.equal(h.requests.length, 1);
-  h.task.comments.push(activity(4, "TaskPriority", true));
-  await h.generateAndStoreTaskSummary(42);
-  assert.equal(h.requests.length, 2);
-  assert.match(h.requests[1].prompt, /TaskPriority/);
-});
-
-test("On filters agent and human activity before the 200-source limit and ignores later activity", async () => {
+test("Summary sources filter agent and human activity before the 200-source limit and ignores later activity", async () => {
   const h = harness({ comments: [comment(1), ...Array.from({ length: 201 }, (_, i) => activity(i + 2, "TaskMove", true))] });
   await h.generateAndStoreTaskSummary(42);
   assert.deepEqual(JSON.parse(h.requests[0].prompt), [
@@ -182,12 +147,12 @@ test("On filters agent and human activity before the 200-source limit and ignore
   assert.equal(h.requests.length, 1);
   assert.equal(h.writes.length, 1);
   assert.equal(h.writes[0].update.content, persisted);
-  assert.deepEqual(h.checks, Array(2).fill([flag.HTPR_7689_PROMPT_CACHING_FLAG, 985]));
+  assert.deepEqual(h.checks, []);
 });
 
-for (const enabled of [false, true]) {
-  test(`${enabled ? "On" : "Off"} still regenerates for human comments, descriptions and titles`, async () => {
-    const h = harness({ enabled });
+test.describe("the released prompt caching summary path", () => {
+  test("still regenerates for human comments, descriptions and titles", async () => {
+    const h = harness();
     await h.generateAndStoreTaskSummary(42);
     h.task.comments.push(comment(2));
     await h.scheduler({ taskId: 42, agentId: null });
@@ -209,8 +174,8 @@ for (const enabled of [false, true]) {
     assert.deepEqual(plain(h.jobs[0].body), { taskId: 42, agentId: null });
   });
 
-  test(`${enabled ? "On skips" : "Off keeps"} activity scheduling for the task owner, not the actor`, async () => {
-    const h = harness({ enabled });
+  test("still skips activity scheduling for the task owner, not the actor", async () => {
+    const h = harness();
     h.task.userId = 123;
     const pending = [];
     const schedule = (input) => {
@@ -234,11 +199,11 @@ for (const enabled of [false, true]) {
       } });
     }
     await Promise.all(pending);
-    assert.equal(h.jobs.length, enabled ? 0 : 4);
-    assert.deepEqual(h.checks, Array(4).fill([flag.HTPR_7689_PROMPT_CACHING_FLAG, 123]));
+    assert.equal(h.jobs.length, 0);
+    assert.deepEqual(h.checks, []);
     await createActivity({ taskId: 42, activityBody: { type: "TaskDescriptionUpdate", data: { fromUserId: 6 } } });
     await Promise.all(pending);
-    assert.equal(h.jobs.length, enabled ? 1 : 5);
+    assert.equal(h.jobs.length, 1);
     for (const job of h.jobs) {
       assert.deepEqual(plain(job.body), { taskId: 42 });
       assert.equal(job.path, "/api/queues/FAST/generateSummaryQueue");
@@ -246,9 +211,9 @@ for (const enabled of [false, true]) {
       assert.ok(Math.abs(job.notBefore - Math.floor(Date.now() / 1000) - 300) <= 1);
     }
   });
-}
+});
 
-test("On preserves person-facing agent comments instead of excluding every agent author", async () => {
+test("Preserves person-facing agent comments instead of excluding every agent author", async () => {
   const h = harness();
   await h.generateAndStoreTaskSummary(42);
   h.task.comments.push(comment(2, { agent: { displayName: "Runner" }, text: "<p>Release verified; ready for you</p>" }));

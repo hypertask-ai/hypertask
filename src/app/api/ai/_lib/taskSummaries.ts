@@ -8,8 +8,6 @@ import { z } from "zod";
 
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7689_PROMPT_CACHING_FLAG } from "@/lib/flags/definitions/htpr-7689-prompt-caching";
 import { scheduleJobById } from "@/lib/qstash";
 import { getRedis } from "@/lib/redis";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -138,8 +136,6 @@ async function generateAndStoreTaskSummaryWithLease(
     select: { userId: true },
   });
   if (!owner) return null;
-  const contentOnly = await isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, owner.userId);
-
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: {
@@ -161,7 +157,7 @@ async function generateAndStoreTaskSummaryWithLease(
         select: { content: true },
       },
       comments: {
-        ...(contentOnly ? { where: { activity: { equals: Prisma.DbNull } } } : {}),
+        where: { activity: { equals: Prisma.DbNull } },
         orderBy: { createdAt: "desc" },
         take: MAX_COMMENT_SOURCES,
         select: {

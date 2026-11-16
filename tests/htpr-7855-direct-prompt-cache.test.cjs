@@ -38,7 +38,6 @@ function harness({ enabled = true, flagError = false } = {}) {
     "@/lib/aiUsageClassification": { isSystemAiFeature: () => false },
     "@/lib/ai/customEndpoint": { isCustomEndpointConfig: () => false },
     "@/lib/flags/definitions/htpr-7855-direct-prompt-cache": { HTPR_7855_DIRECT_PROMPT_CACHE_FLAG: FLAG },
-    "@/lib/flags/definitions/htpr-7689-prompt-caching": { HTPR_7689_PROMPT_CACHING_FLAG: "htpr-7689-prompt-caching" },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
       if (flagError) throw new Error("Flag service unavailable");
@@ -110,7 +109,7 @@ test("direct cache decision does not leak through fallback into gateway caching"
   const gateway = h.api.resolveGatewayModel("anthropic/claude-sonnet-5-5", "vck_fixture");
   h.api.inheritAiModelUsage(gateway, h.model);
   await h.api.aiPromptCachingEnabled(gateway);
-  assert.deepEqual(h.checks.map(([key]) => key), [FLAG, "htpr-7689-prompt-caching"]);
+  assert.deepEqual(h.checks.map(([key]) => key), [FLAG]);
 });
 
 test("chat assembly keeps real clock, user and ticket changes beyond the cached prefix", async (t) => {
