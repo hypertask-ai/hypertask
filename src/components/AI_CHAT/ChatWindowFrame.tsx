@@ -96,7 +96,8 @@ export function ChatWindowFrame({
     <div
       role="dialog"
       aria-label="AI chat window"
-      onPointerDownCapture={onFocus}
+      onPointerDownCapture={sideBySide ? undefined : onFocus}
+      onClickCapture={sideBySide ? onFocus : undefined}
       className={`fixed ${sideBySide && !inFront ? "z-floating" : "z-popup"} flex flex-col overflow-hidden rounded-[4px] border border-border-light-gray-thin bg-ai-chat text-meta ${floatingElevation ? "shadow-floating" : "shadow-customshadow-4"}`}
       style={{
         left: state.x,
