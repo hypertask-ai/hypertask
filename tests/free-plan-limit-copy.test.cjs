@@ -43,7 +43,7 @@ function freeAmounts(flags) {
 test("free plan lines stay hidden until the copy flag is on", () => {
   assert.deepEqual(limits.visibleFreePlanCopy(false, legacy), []);
   assert.deepEqual(limits.visibleFreePlanCopy(false, capped), []);
-  assert.equal(text(capped, false).includes("Up to 2 boards"), false);
+  assert.equal(text(capped, false).includes("Unlimited boards"), false);
   assert.equal(text(legacy, false).includes("Unlimited tickets"), false);
   assert.deepEqual(limits.visibleFreePlanCopy(true, legacy), limits.freePlanLimitCopy(legacy));
 });
@@ -62,20 +62,20 @@ test("free plan copy with the limits flag off matches the legacy rule and states
   assert.deepEqual(freeAmounts({ planLimits: false, unlimitedTickets: true }), lines);
 });
 
-test("free plan copy with the limits flag on uses the enforced board, ticket and file values", () => {
+test("free plan copy with the limits flag on uses the enforced ticket and file values and unlimited boards", () => {
   const lines = limits.freePlanLimitCopy(capped);
   const megabytes = limits.FREE_PLAN_MAX_FILE_BYTES / (1024 * 1024);
   assert.deepEqual(lines.slice(0, 3), [
-    `Up to ${limits.FREE_PLAN_MAX_BOARDS} boards (archived don't count)`,
+    "Unlimited boards",
     `Up to ${limits.FREE_PLAN_MAX_TICKETS} open tickets`,
     `Up to ${megabytes} MB each on tickets and comments`,
   ]);
-  assert.equal(lines[0], "Up to 2 boards (archived don't count)");
+  assert.equal(lines[0], "Unlimited boards");
   assert.equal(lines[1], "Up to 250 open tickets");
   assert.equal(lines[2], "Up to 10 MB each on tickets and comments");
   assert.equal(lines.includes("Unlimited tickets"), false);
   const shown = text(capped);
-  assert.equal(shown.includes("Up to 2 boards (archived don't count)"), true);
+  assert.equal(shown.includes("Unlimited boards"), true);
   assert.equal(shown.includes("Up to 250 open tickets"), true);
   assert.equal(shown.includes("Up to 10 MB each on tickets and comments"), true);
   assert.equal(shown.includes("Unlimited tickets"), false);
@@ -99,9 +99,9 @@ test("the file line uses freeFileByteLimit: 10 MB, or 25 MB when that flag is on
   assert.deepEqual(freeAmounts({ ...capped, raisedFileLimit: true }).includes(twentyFive), true);
 });
 
-test("an enabled ticket-cap bypass keeps board and file limits and says tickets are unlimited", () => {
+test("an enabled ticket-cap bypass keeps file limits and says boards and tickets are unlimited", () => {
   const lines = limits.freePlanLimitCopy(boardsAndFilesOnly);
-  assert.equal(lines[0], "Up to 2 boards (archived don't count)");
+  assert.equal(lines[0], "Unlimited boards");
   assert.equal(lines[1], "Unlimited tickets");
   assert.equal(lines[2], "Up to 10 MB each on tickets and comments");
   assert.equal(lines.some((line) => line.includes("250")), false);

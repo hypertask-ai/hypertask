@@ -44,11 +44,9 @@ for (const kind of ["team", "personal"]) {
   });
 }
 
-test("unlimited tickets do not remove board or file limits", async () => {
+test("unlimited tickets do not remove file limits and boards stay unlimited", async () => {
   const h = fixture(true);
-  await assert.rejects(h.policy.assertBoardRoom(h.db, scope, 1, actor), {
-    code: "PLAN_LIMIT_REACHED", limit: "boards", max: 2,
-  });
+  assert.equal(h.policy.assertBoardRoom, undefined);
   await assert.rejects(h.policy.assertFileSizeForProject(15, 11 * 1024 * 1024, actor), {
     code: "PLAN_LIMIT_REACHED", limit: "file_size", max: 10 * 1024 * 1024,
   });

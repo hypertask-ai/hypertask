@@ -10,7 +10,6 @@ const plans = load("src/lib/subscriptionPlans.ts", {
 const generousOn = {
   planLimits: true,
   unlimitedTickets: true,
-  unlimitedBoards: true,
   raisedFileLimit: true,
   storageCap: true,
 };

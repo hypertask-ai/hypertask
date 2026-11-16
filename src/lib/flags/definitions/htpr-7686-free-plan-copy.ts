@@ -15,7 +15,6 @@ export default {
   },
   related: [
     "htpr-7686-free-plan-limits",
-    "htpr-7922-unlimited-free-boards",
     "htpr-7923-unlimited-free-tickets",
     "htpr-7924-free-file-25mb",
     "htpr-7924-free-storage-2gb",

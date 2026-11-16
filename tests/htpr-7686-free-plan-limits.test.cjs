@@ -23,7 +23,6 @@ const sourceModules = [
   "src/lib/planLimits.ts",
   "src/lib/freePlanLimits.ts",
   "src/lib/flags/definitions/htpr-7923-unlimited-free-tickets.ts",
-  "src/lib/flags/definitions/htpr-7922-unlimited-free-boards.ts",
   "src/lib/flags/definitions/htpr-7982-cancelled-free.ts",
   "src/lib/freeTier.ts",
   "src/app/api/ai/_lib/planGate.ts",
@@ -268,14 +267,6 @@ test("named limits and rollout flag match the approved Free plan", () => {
   assert.equal(definition.default.releaseRisk.highRisk, "money");
 });
 
-test("third Free board is refused across owners; only Normal boards in the destination team count", async () => {
-  const h = fixture();
-  await refused(h, h.policy.assertBoardRoom(h.db, teamScope, 1, actor), "boards");
-  assert.deepEqual(h.calls.find(([kind]) => kind === "project.count")[1], { where: { teamId: "destination", status: "Normal" } });
-  assertLockBeforeCount(h, "project");
-  assert.deepEqual(h.calls.filter(([kind]) => kind === "flag").map((call) => call.slice(1)), [[flag, actor.actorUserId], ["htpr-7922-unlimited-free-boards", actor.actorUserId]]);
-});
-
 test("251st Free ticket is refused; subtasks count, archived/deleted tickets and boards do not", async () => {
   const h = fixture();
   await refused(h, h.policy.assertTicketRoom(h.db, teamScope, 1, actor), "tickets");
@@ -287,7 +278,6 @@ test("251st Free ticket is refused; subtasks count, archived/deleted tickets and
 
 test("the second board, 250th ticket, and exactly 25 MiB file are allowed", async () => {
   const h = fixture({ oneBoard: true, tickets: 249 });
-  await h.policy.assertBoardRoom(h.db, teamScope, 1, actor);
   await h.policy.assertTicketRoom(h.db, teamScope, 1, actor);
   await h.policy.assertFileSizeForProject(15, 25 * MiB, actor);
   assert.deepEqual(h.logs, []);
@@ -297,7 +287,6 @@ for (const entitlement of ["paid", "comped", "past_due"]) {
   test(`${entitlement} uses real isPaidTeam and allows boards, tickets and 26 MiB files`, async () => {
     const h = fixture({ entitlement });
     assert.equal(await h.policy.isFreeScope(teamScope), false);
-    await h.policy.assertBoardRoom(h.db, teamScope, 10, actor);
     await h.policy.assertTicketRoom(h.db, teamScope, 500, actor);
     await h.policy.assertFileSizeForProject(15, 26 * MiB, actor);
     assert.deepEqual(h.logs, []);
@@ -309,13 +298,11 @@ for (const entitlement of ["paid", "comped", "past_due"]) {
 test("personal scope stays Free even when its owner belongs to a paid team; owners never pool", async () => {
   const h = fixture({ entitlement: "paid" });
   assert.equal(await h.policy.isFreeScope(personalScope), true);
-  await refused(h, h.policy.assertBoardRoom(h.db, personalScope, 1, actor), "boards", personalScope);
-  assert.deepEqual(h.calls.find(([kind]) => kind === "project.count")[1], { where: { teamId: null, ownerId: 7, status: "Normal" } });
+  const { createProjectWithStableName } = h.load("src/utils/controllers/projects/createProjectWithStableName.ts");
+  await createProjectWithStableName({ title: "Personal third", ownerId: 7, teamId: null, status: "Normal" }, actor);
+  assert.equal(h.calls.some(([kind]) => kind === "project.count"), false);
   assert.equal(h.calls.some(([kind]) => kind === "team.read"), false);
-  assertLockBeforeCount(h, "project", "personal:7");
-  const other = fixture();
-  await other.policy.assertBoardRoom(other.db, { kind: "personal", ownerId: 9 }, 1, actor);
-  assert.deepEqual(other.logs, []);
+  assert.deepEqual(h.logs, []);
 });
 
 test("personal ticket counts include only that owner's Normal tasks on Normal personal boards", async () => {
@@ -337,17 +324,13 @@ test("26 MiB is refused with one safe structured log; a throwing logger cannot r
   }
 });
 
-for (const limit of ["boards", "tickets"]) {
-  test(`${limit} logger failure still throws the original plan refusal exactly once`, async () => {
-    const h = fixture({ loggerThrows: true });
-    const guard = limit === "boards" ? h.policy.assertBoardRoom : h.policy.assertTicketRoom;
-    await refused(h, guard(h.db, teamScope, 1, actor), limit);
-  });
-}
+test("tickets logger failure still throws the original plan refusal exactly once", async () => {
+  const h = fixture({ loggerThrows: true });
+  await refused(h, h.policy.assertTicketRoom(h.db, teamScope, 1, actor), "tickets");
+});
 
 test("flag Off adds no scope, plan, count or locking queries on any shared guard", async () => {
   const h = fixture({ enabled: false });
-  await h.policy.assertBoardRoom(h.db, teamScope, 1, actor);
   await h.policy.assertTicketRoom(h.db, teamScope, 1, actor);
   await h.policy.assertProjectTicketRoom(h.db, 15, 1, actor);
   await h.policy.assertTaskCountTransition(h.db, { projectId: 20, status: "Normal" }, { projectId: 15, status: "Normal" }, actor);
@@ -425,7 +408,6 @@ test("the per-file limit still wins over the storage cap and the storage query n
 test("zero/negative deltas and grandfathered edits/archives do not inspect quotas", async () => {
   const h = fixture({ tickets: 600 });
   for (const delta of [0, -1]) {
-    await h.policy.assertBoardRoom(h.db, teamScope, delta, actor);
     await h.policy.assertTicketRoom(h.db, teamScope, delta, actor);
   }
   for (const after of [{ projectId: 15, status: "Normal" }, { projectId: 15, status: "Archive" }, { projectId: 15, status: "Deleted" }]) {
@@ -473,11 +455,11 @@ test("ticket creation on an archived board does not consume the Normal-board all
   assert.deepEqual(h.logs, []);
 });
 
-test("board unarchive is refused for the third board before changing status", async () => {
-  const h = fixture();
-  await refused(h, h.boards.updateProjectStatus(17, "Normal", actor), "boards");
-  assert.deepEqual(h.writes, []);
-  assert.equal(h.projects.find((p) => p.id === 17).status, "Archive");
+test("board unarchive no longer refuses the third board", async () => {
+  const h = fixture({ tickets: 249 });
+  await h.boards.updateProjectStatus(17, "Normal", actor);
+  assert.equal(h.projects.find((p) => p.id === 17).status, "Normal");
+  assert.deepEqual(h.logs, []);
 });
 
 test("board unarchive charges all its Normal tickets, not archived/deleted tickets", async () => {
@@ -504,11 +486,12 @@ test("board archive and already-Normal board edits remain possible when grandfat
 });
 
 test("board restore controller preserves the exact 402 HTTP JSON contract with one guard log", async () => {
-  const h = fixture();
+  const h = fixture({ tickets: 249 });
+  h.tasks.push({ id: 510, projectId: 17, status: "Normal" }, { id: 511, projectId: 17, status: "Normal" });
   const archive = h.load("src/utils/controllers/projects/archiveProject.ts").default;
   const result = await archive(17, actor.actorUserId);
   assert.equal(result.status, 402);
-  assert.deepEqual(plain(result.json), responseBody("boards"));
+  assert.deepEqual(plain(result.json), responseBody("tickets"));
   assert.equal(h.logs.length, 1);
   assert.equal(h.logs[0][0], "[plan-limit] refused");
   assert.equal(h.logs[0][1].actorUserId, actor.actorUserId);
@@ -594,12 +577,13 @@ test("enabled legacy precheck makes no old owner-quota or unrelated-membership q
   assert.equal(h.calls.some(([kind]) => kind === "legacy.teams"), false);
 });
 
-test("ordinary board constructor refuses the third board before any insert", async () => {
+test("ordinary board constructor creates the third board without counting boards", async () => {
   const h = fixture();
   const { createProjectWithStableName } = h.load("src/utils/controllers/projects/createProjectWithStableName.ts");
-  await refused(h, createProjectWithStableName({ title: "Third", ownerId: 7, teamId: "destination", status: "Normal" }, actor), "boards");
-  assert.deepEqual(h.writes, []);
-  assertLockBeforeCount(h, "project");
+  const board = await createProjectWithStableName({ title: "Third", ownerId: 7, teamId: "destination", status: "Normal" }, actor);
+  assert.equal(board.name, `project-${board.id}`);
+  assert.equal(h.calls.some(([kind]) => kind === "project.count" || kind === "scope.lock"), false);
+  assert.deepEqual(h.logs, []);
 });
 
 test("trusted board provisioning is separate and allowed at quota", async () => {
@@ -943,28 +927,6 @@ test("manifest preflights the full seed allowance before the first board insert"
   const guard = source.indexOf("await assertTicketRoom(tx, scope, manifest.tasks.length, context)");
   const insert = source.indexOf("await createProjectWithStableName(", guard);
   assert.ok(guard >= 0 && insert > guard);
-});
-
-test("manual board create controller returns exact 402 for the third destination-team board", async () => {
-  const h = fixture({ legacyTeams: [{ id: "unrelated-paid", subscriptionPlan: [{ subscriptionStatus: "active" }] }] });
-  h.db.user = { findUnique: async () => ({ id: 985, accountId: "account" }) };
-  h.db.team.findFirst = async () => ({ googleAccountId: "account" });
-  Object.assign(h.stubs, {
-    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => { h.effects.push("board-analytics"); }, processAnalyticsIntentSoon: () => {} },
-    "../logs/createLog": { default: () => { h.effects.push("board-log"); } },
-    "@/lib/projectPrefix": {},
-    "@/utils/helperFunctions/Views/ViewsHelperFunctions": {},
-    "@/utils/helperFunctions/Views/FilterHelperFunctions": {},
-  });
-  const create = h.load("src/utils/controllers/projects/create.ts").default;
-  const response = await create(985, "Third board", "destination", "account");
-  assert.equal(response.status, 402);
-  assert.deepEqual(plain(response.json), responseBody("boards"));
-  assert.deepEqual(h.writes, []);
-  assert.deepEqual(h.effects, []);
-  assert.equal(h.logs.length, 1);
-  assert.equal(h.logs[0][1].entryPoint, "projects.create");
-  assert.equal(h.calls.some(([kind]) => kind === "legacy.teams"), false);
 });
 
 test("recurring/agent-created tickets evaluate and log the acting user rather than the task author", async () => {

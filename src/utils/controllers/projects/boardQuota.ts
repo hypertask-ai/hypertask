@@ -6,7 +6,7 @@ import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7982_CANCELLED_FREE_FLAG } from "@/lib/flags/definitions/htpr-7982-cancelled-free";
 import { FREE_BOARD_LIMIT } from "@/lib/freePlanLimits";
 import { subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
-import { assertBoardRoom, assertTicketRoom, isFreeScope, isPlanLimitsEnabled, lockPlanLimitScope, scopeForProject, type PlanLimitContext } from "@/lib/planLimits";
+import { assertTicketRoom, isFreeScope, isPlanLimitsEnabled, lockPlanLimitScope, scopeForProject, type PlanLimitContext } from "@/lib/planLimits";
 import { isTeamComped } from "@/lib/teamComp";
 
 export { FREE_BOARD_LIMIT };
@@ -105,7 +105,6 @@ export async function updateProjectStatus(
     });
     if (project.status !== Status.Normal) {
       const scope = scopeForProject(project);
-      await assertBoardRoom(tx, scope, 1, context);
       const normalTickets = await tx.task.count({ where: { projectId, status: Status.Normal } });
       await assertTicketRoom(tx, scope, normalTickets, context);
     }

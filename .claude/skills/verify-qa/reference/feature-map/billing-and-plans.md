@@ -75,7 +75,7 @@ Switching the duration flag off must keep historical checkout reconciliation int
 
 For ticket-admission changes, do not enter checkout or change a plan. The existing `htpr-7686-free-plan-limits` rollout remains unchanged. `htpr-7923-unlimited-free-tickets` bypasses only ticket admission when enabled; Off restores the older admission path while the original rollout is enabled. Both default to Owner + QA.
 
-Use an owned Free QA team or personal scope with at least 300 Normal tickets. Create a ticket from the app, Slack, AI chat and MCP/API; read it back after creation. Restore an archived ticket and move a ticket into the scope. Verify attachment limits still reject an over-limit write. Board admission remains limited unless `htpr-7922-unlimited-free-boards` is also enabled. Do not populate a customer board or change either switch for a live test. If the designated Free fixture cannot see both switches, record that exact flag limitation and cover the shared guard in CI instead of widening access. Existing rollback tests execute both branches at 350 tickets and preserve board/file refusals: `tests/htpr-7923-unlimited-free-tickets.test.cjs` and `tests/htpr-7686-free-plan-limits.test.cjs`.
+Use an owned Free QA team or personal scope with at least 300 Normal tickets. Create a ticket from the app, Slack, AI chat and MCP/API; read it back after creation. Restore an archived ticket and move a ticket into the scope. Verify attachment limits still reject an over-limit write. Board admission stays unlimited for Free scopes. Do not populate a customer board or change either switch for a live test. If the designated Free fixture cannot see both switches, record that exact flag limitation and cover the shared guard in CI instead of widening access. Existing rollback tests execute both branches at 350 tickets and preserve board/file refusals: `tests/htpr-7923-unlimited-free-tickets.test.cjs` and `tests/htpr-7686-free-plan-limits.test.cjs`.
 
 Record the account, scope, existing ticket count, returned ticket identifiers and read-back results. Archive only test tickets created during this run. Slack or AI paths without configured credentials must be recorded as UNREACHABLE, not counted as exercised by a shared-guard unit test.
 
@@ -89,9 +89,9 @@ Live QA remains read-only: record actual plan snapshots and reload persistence. 
 
 ### Free board admission
 
-`htpr-7922-unlimited-free-boards` removes only board admission within the existing Free-plan rollout. Both switches remain Owner + QA. Off restores the two-board cap without deleting existing boards; the legacy three-board rule remains when the original rollout is Off.
+Free board admission has no switch and no board cap. The two-board cap was removed permanently by [HTPR-9293](https://app.hypertask.ai/detail/project-15/9293) and its saved setting is dropped. The legacy three-board rule remains only when the Free-plan rollout itself is Off.
 
-On an owned Free QA scope with both switches enabled, create the third and twentieth board through the app and MCP/API; read each back after creation. Restore an empty archived test board. Check Slack and AI board creation only with configured QA integrations; otherwise record UNREACHABLE with the reason. Verify a ticket or attachment refusal still applies when its respective bypass is Off. Never alter a rollout or plan to manufacture a live path.
+On an owned Free QA scope, create the third and twentieth board through the app and MCP/API; read each back after creation. Restore an empty archived test board. Check Slack and AI board creation only with configured QA integrations; otherwise record UNREACHABLE with the reason. Verify a ticket or attachment refusal still applies when its respective bypass is Off. Never alter a rollout or plan to manufacture a live path.
 
 Settings > Team > Plans must show Unlimited boards, retaining the correct ticket and file lines. Capture desktop and phone in all themes, reload, and compare paid plan prices against baseline. Archive only boards created during this run.
 

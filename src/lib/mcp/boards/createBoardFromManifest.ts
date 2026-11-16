@@ -8,7 +8,7 @@ import {
 } from '@/utils/controllers/projects/create'
 import { enqueueBoardCreated, processAnalyticsIntentSoon, type CreationChannel } from '@/lib/telemetry/savedWork'
 import { createProjectWithStableName } from '@/utils/controllers/projects/createProjectWithStableName'
-import { assertBoardRoom, assertTicketRoom, isPlanLimitsEnabled } from '@/lib/planLimits'
+import { assertTicketRoom, isPlanLimitsEnabled } from '@/lib/planLimits'
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants'
 import { persistTaskCreatedWebhook } from '@/lib/mcp/webhooks/taskEvents'
 import { publishBoardWebhookDeliveries } from '@/lib/mcp/webhooks/outbox'
@@ -299,7 +299,6 @@ async function createManifestBoardAtomically(
   const actor = { userId, agentId: creation.agentId ?? null }
   const taskAuthorId = creation.method === 'seeded' ? generalConfig.hyperAiId : userId
   const committed = await prisma.$transaction(async (tx) => {
-    await assertBoardRoom(tx, scope, 1, context)
     await assertTicketRoom(tx, scope, manifest.tasks.length, context)
     let previousRank: string | undefined
     const project = await createProjectWithStableName({

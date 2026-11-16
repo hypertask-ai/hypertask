@@ -4,7 +4,7 @@ import createLog from "../logs/createLog";
 import { CreateLogInput } from "@/models/model";
 
 import prisma from "@/lib/prisma";
-import { assertBoardRoom, isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { normalizeProjectPrefix, suggestProjectPrefix } from "@/lib/projectPrefix";
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { buildDefaultTitle } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -78,7 +78,6 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
     }
     const prefix = hasPrefix ? normalizeProjectPrefix(ticketPrefix) : undefined;
     const committed = await prisma.$transaction(async (tx) => {
-      await assertBoardRoom(tx, { kind: "team", teamId }, 1, { actorUserId: userId, entryPoint: "projects.create" });
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
       if (prefix && await tx.project.findFirst({
         where: { teamId, OR: [

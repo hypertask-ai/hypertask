@@ -1,7 +1,7 @@
 import { Prisma, type Project } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import prisma from '@/lib/prisma'
-import { assertBoardRoom, isPlanLimitsEnabled, scopeForProject, type PlanLimitContext } from '@/lib/planLimits'
+import { isPlanLimitsEnabled, type PlanLimitContext } from '@/lib/planLimits'
 import { assertBoardQuota } from './boardQuota'
 
 const PROJECT_NAME_CREATE_MAX_ATTEMPTS = 5
@@ -22,13 +22,8 @@ export async function createProjectWithStableName(
 ): Promise<Project> {
   if (!(await isPlanLimitsEnabled(context.actorUserId))) {
     await assertBoardQuota(data.ownerId)
-    return createProvisionedProjectWithStableName(data, transaction)
   }
-  if (transaction) {
-    await assertBoardRoom(transaction, scopeForProject({ teamId: data.teamId ?? null, ownerId: data.ownerId }), data.status && data.status !== 'Normal' ? 0 : 1, context)
-    return createProvisionedProjectWithStableName(data, transaction)
-  }
-  return prisma.$transaction((tx) => createProjectWithStableName(data, context, tx))
+  return createProvisionedProjectWithStableName(data, transaction)
 }
 
 export async function createProvisionedProjectWithStableName(
