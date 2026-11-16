@@ -75,6 +75,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6320-ai-observability",
   "htpr-6673-capture-user-signed-up-in-posthog",
   "htpr-7076-prompt-cache",
+  "htpr-7260-kanban-select-all",
   "htpr-7269-signup-identity-link",
   "htpr-7273-column-events",
   "htpr-7278-memory-only-tracking",
@@ -121,6 +122,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6460-my-tasks-quick-add": true,
   "htpr-6461-my-tasks-snooze": true,
   "htpr-6938-my-tasks-icon-controls": true,
+  "htpr-7260-kanban-select-all": true,
 } as const;
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);

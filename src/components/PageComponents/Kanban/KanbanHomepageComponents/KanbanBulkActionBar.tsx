@@ -1,6 +1,5 @@
 import React, { useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7260_KANBAN_SELECT_ALL_FLAG } from "@/lib/flags/keys";
 import { HTPR_8961_SELECTION_BAR_BUTTON_FLAG } from "@/lib/flags/definitions/htpr-8961-selection-bar-button";
 import { BulkActionButtons } from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -20,7 +19,6 @@ const phoneBarStyle = { bottom: "calc(var(--mobile-dock-h, 0px) + 16px + env(saf
 
 const KanbanBulkActionBar = () => {
   const isMobile = useContext(MobileViewContext);
-  const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const neutralOpenActions = useFlag(HTPR_8961_SELECTION_BAR_BUTTON_FLAG);
   const {
     selectedCount,
@@ -33,10 +31,8 @@ const KanbanBulkActionBar = () => {
 
   if (selectedCount === 0) return null;
 
-  const phoneBar = selectAllEnabled && isMobile;
-  let barStyle: React.CSSProperties | undefined;
-  if (phoneBar) barStyle = phoneBarStyle;
-  else if (selectAllEnabled) barStyle = desktopFlaggedBarStyle;
+  const phoneBar = isMobile;
+  const barStyle: React.CSSProperties = isMobile ? phoneBarStyle : desktopFlaggedBarStyle;
 
   return (
     <div
@@ -49,14 +45,12 @@ const KanbanBulkActionBar = () => {
         {selectedCount} selected
         {failedIds.size > 0 ? ` · ${failedIds.size} failed` : ""}
       </span>
-      {selectAllEnabled && (
-        <BulkActionButtons
-          isProcessing={isProcessing}
-          archiveSelected={archiveSelected}
-          openBulkCommand={openBulkCommand}
-          buttonClassName={`${ghostIconButtonClass} ${isMobile ? MOBILE_TARGET : ""}`}
-        />
-      )}
+      <BulkActionButtons
+        isProcessing={isProcessing}
+        archiveSelected={archiveSelected}
+        openBulkCommand={openBulkCommand}
+        buttonClassName={`${ghostIconButtonClass} ${isMobile ? MOBILE_TARGET : ""}`}
+      />
       <button
         type="button"
         className={neutralOpenActions
@@ -67,17 +61,13 @@ const KanbanBulkActionBar = () => {
       >
         Open actions
       </button>
-      {selectAllEnabled ? (
-        <button
-          type="button"
-          className="ml-1 text-meta text-text-light-gray hover:text-white-black"
-          onClick={clearSelection}
-        >
-          Esc
-        </button>
-      ) : (
-        <span className="text-meta text-text-light-gray">Esc to clear</span>
-      )}
+      <button
+        type="button"
+        className="ml-1 text-meta text-text-light-gray hover:text-white-black"
+        onClick={clearSelection}
+      >
+        Esc
+      </button>
     </div>
   );
 };

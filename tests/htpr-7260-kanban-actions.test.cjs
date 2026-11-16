@@ -4,13 +4,13 @@ const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 const { load: loadRoute } = require("./task-route-loader.cjs");
 const { CommandMode } = loadRoute("src/models/enums.ts", {});
 
-for (const enabled of [false, true]) test(`Kanban bulk bar ${enabled ? "reuses working quick actions and clickable Esc" : "is unchanged with flag off"}`, () => {
+test("Kanban bulk bar reuses working quick actions and clickable Esc", () => {
   const ui = mount();
   const calls = [];
   let processing = false;
   let count = 2;
   const load = loader({
-    "@/hooks/useFlag": { useFlag: () => enabled },
+    "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/contexts/Kanban/BulkSelectionContext": { useKanbanBulkSelection: () => ({
       selectedCount: count, failedIds: new Set(), isProcessing: processing,
       archiveSelected: async () => calls.push("archive"),
@@ -23,16 +23,15 @@ for (const enabled of [false, true]) test(`Kanban bulk bar ${enabled ? "reuses w
   try {
     render();
     const buttons = [...ui.container.querySelectorAll("button")];
-    assert.deepEqual(buttons.map(button => button.getAttribute("aria-label") || button.textContent), enabled ?
-      ["Archive selected", "Assign selected", "Label selected", "Move selected", "Open actions", "Esc"] : ["Open actions"]);
+    assert.deepEqual(buttons.map(button => button.getAttribute("aria-label") || button.textContent),
+      ["Archive selected", "Assign selected", "Label selected", "Move selected", "Open actions", "Esc"]);
     for (const button of buttons) React.act(() => button.click());
-    assert.deepEqual(calls, enabled ? ["archive", CommandMode.OpenAssignModal, CommandMode.LabelModal,
-      CommandMode.MoveToColumn, "actions", "clear"] : ["actions"]);
-    if (!enabled) assert.ok(ui.container.textContent.includes("Esc to clear"));
-    else assert.equal(ui.container.querySelectorAll("svg").length, 4);
+    assert.deepEqual(calls, ["archive", CommandMode.OpenAssignModal, CommandMode.LabelModal,
+      CommandMode.MoveToColumn, "actions", "clear"]);
+    assert.equal(ui.container.querySelectorAll("svg").length, 4);
     processing = true;
     render();
-    assert.equal(ui.container.querySelector('button[aria-label="Archive selected"]')?.disabled, enabled ? true : undefined);
+    assert.equal(ui.container.querySelector('button[aria-label="Archive selected"]')?.disabled, true);
     assert.equal([...ui.container.querySelectorAll("button")].find(button => button.textContent === "Open actions").disabled, true);
     count = 0;
     render();
@@ -40,11 +39,11 @@ for (const enabled of [false, true]) test(`Kanban bulk bar ${enabled ? "reuses w
   } finally { ui.close(); }
 });
 
-for (const enabled of [false, true]) for (const mobile of [false, true]) {
-  test(`bulk bar footer clearance: flag ${enabled}, phone ${mobile}`, () => {
+for (const mobile of [false, true]) {
+  test(`bulk bar footer clearance: phone ${mobile}`, () => {
     const ui = mount();
     const load = loader({
-      "@/hooks/useFlag": { useFlag: () => enabled },
+      "@/hooks/useFlag": { useFlag: () => false },
       "@/lib/contexts/MyTasks/BulkSelectionContext": { useMyTasksBulkSelection: () => { throw new Error("My Tasks context must not be used by Kanban"); } },
       "@/lib/contexts/Kanban/BulkSelectionContext": { useKanbanBulkSelection: () => ({
         selectedCount: 2, failedIds: new Set(), isProcessing: false,
@@ -59,10 +58,7 @@ for (const enabled of [false, true]) for (const mobile of [false, true]) {
         else document.documentElement.style.removeProperty("--quick-tips-clearance");
         ui.render(React.createElement(MobileViewContext.Provider, { value: mobile }, React.createElement(Bar)));
         const bar = ui.container.querySelector('[role="status"]');
-        if (!enabled) {
-          assert.equal(bar.getAttribute("style"), null);
-          assert.equal(bar.className, "fixed bottom-5 left-1/2 z-menu flex -translate-x-1/2 items-center gap-3 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4");
-        } else if (mobile) {
+        if (mobile) {
           assert.equal(bar.style.bottom, "calc(var(--mobile-dock-h, 0px) + 16px + env(safe-area-inset-bottom))");
           assert.match(bar.className, /inset-x-2 z-menu/);
         } else {

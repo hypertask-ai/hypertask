@@ -94,7 +94,6 @@ import { HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG } from "@/lib/flags/definitions
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
-  HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
 } from "@/lib/flags/keys";
 import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
@@ -154,9 +153,8 @@ const Commands = (props: Props) => {
   const freshChatHandoff = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const triageInboxEnabled = triageInboxFlag && safeInboxBatches && freshChatHandoff && !isDemo && !isInteractive;
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
-  const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   let selectedTasksFirst = false;
-  if (kanbanSelectAllEnabled && contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
+  if (contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
     selectedTasksFirst = true;
   }
   const ctrlJSkillMenuFlag = useFlag(HTPR_7656_CTRLJ_SKILL_MENU_FLAG);
@@ -289,7 +287,7 @@ const Commands = (props: Props) => {
         stalenessViewEnabled: getActiveStalenessFromProject(currentProject),
         autoArchiveEnabled: currentProject?.autoArchiveAfterDays != null,
       },
-      kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!contextOptions?.kanbanSelectAllEnabled,
+      kanbanSelectAllEnabled: !!contextOptions?.kanbanSelectAllEnabled,
     }).map((group) => ({
       ...group,
       commandLists: group.commandLists
@@ -379,11 +377,9 @@ const Commands = (props: Props) => {
         .map((command) => [command.key, command])
     );
     let suggestableFrequentlyUsed = Object.entries(frequentlyUsed)
-      .filter(([key]) => canonicalCommands.has(key));
-    if (kanbanSelectAllEnabled) {
-      suggestableFrequentlyUsed = suggestableFrequentlyUsed.filter(([key]) =>
+      .filter(([key]) => canonicalCommands.has(key))
+      .filter(([key]) =>
         !DESTRUCTIVE_COMMAND_MODES.includes(canonicalCommands.get(key)!.commandMode));
-    }
     const topCommands = suggestableFrequentlyUsed
       .sort(
         (left, right) =>
@@ -440,7 +436,6 @@ const Commands = (props: Props) => {
     columnArchiveEnabled,
     triageInboxEnabled,
     appShellRailOn,
-    kanbanSelectAllEnabled,
     selectedTasksFirst,
     boardLayout,
     calendarSettings.showWeekends,

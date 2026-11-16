@@ -16,7 +16,7 @@ import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
-import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
+import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
 
 
 
@@ -74,7 +74,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
-  const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const bulkMoveBoardFlag = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
   const newTaskWindow = true;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
@@ -104,7 +103,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   boardCloseHandler, refreshRowTaskList, taskTemplatePickerForCurrentProject,
   } = useCommandsState({
     contextOptions, callbackHandler,
-    ...(kanbanSelectAllEnabled ? { kanbanSelectAllEnabled: true } : {}),
   });
   let gatedKanbanBulkSelection = kanbanBulkSelection;
   if (!bulkMoveBoardFlag && gatedKanbanBulkSelection) {

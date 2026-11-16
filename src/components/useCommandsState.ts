@@ -39,19 +39,16 @@ import { HTPR_8929_COLUMN_SELECT_ALL_FLAG } from "@/lib/flags/definitions/htpr-8
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
 
-type Context = Pick<IHTCProps, "contextOptions" | "callbackHandler"> & {
-  kanbanSelectAllEnabled?: boolean;
-};
+type Context = Pick<IHTCProps, "contextOptions" | "callbackHandler">;
 
 export function useCommandsState(context: Context) {
-  const {
-  contextOptions, callbackHandler, kanbanSelectAllEnabled = false,
-  } = context;
+  const { contextOptions, callbackHandler } = context;
 
   const queryClient = useQueryClient();
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   const bulkMoveBoardFlag = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
   const columnSelectAllHintEnabled = useFlag(HTPR_8929_COLUMN_SELECT_ALL_FLAG);
+  const kanbanSelectAllEnabled = true;
   const myTasksViewsEnabled = true;
   const myTasksSnoozeEnabled = true;
   const activeSectionId = useRecoilValue(activeSectionIdAtom);

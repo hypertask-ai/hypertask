@@ -671,7 +671,6 @@
   "tests/htpr-7259-share-link-shortcut.test.cjs": 140,
   "tests/htpr-7260-kanban-actions.test.cjs": 1713,
   "tests/htpr-7260-kanban-commands.test.cjs": 2120,
-  "tests/htpr-7260-kanban-select-all.test.cjs": 95,
   "tests/htpr-7260-kanban-selection.test.cjs": 2049,
   "tests/htpr-7263-phone-card-gesture.test.cjs": 289,
   "tests/htpr-7263-phone-hold-select-flag.test.cjs": 365,

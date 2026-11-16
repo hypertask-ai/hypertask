@@ -22,7 +22,7 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { BULK_MOVE_BOARD_LIMIT, getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
+import { HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
 import { HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG } from "@/lib/flags/definitions/htpr-8928-bulk-archive-instant-hide";
 import { HTPR_8929_COLUMN_SELECT_ALL_FLAG } from "@/lib/flags/definitions/htpr-8929-column-select-all";
 
@@ -105,7 +105,6 @@ export const KanbanBulkSelectionProvider = ({
   onAssignTask,
   onLabelTask,
 }: KanbanBulkSelectionProviderProps) => {
-  const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const bulkMoveBoardEnabled = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
   const queryClient = useQueryClient();
   const focusedTaskId = useRecoilValue(activeItemAtom);
@@ -164,13 +163,11 @@ export const KanbanBulkSelectionProvider = ({
   }, []);
 
   const selectAll = useCallback(() => {
-    if (!selectAllEnabled) return;
     setSelectedIds(new Set(items.map((task) => task.id)));
     setFailedIds(new Set());
-  }, [items, selectAllEnabled]);
+  }, [items]);
 
   const selectColumn = useCallback((sectionId?: number) => {
-    if (!selectAllEnabled) return;
     const latestTask = items.find((task) => task.id === latestTaskIdRef.current)
       ?? selectedTasks.at(-1);
     const targetSectionId = sectionId
@@ -180,7 +177,7 @@ export const KanbanBulkSelectionProvider = ({
     if (targetSectionId == null) return;
     setSelectedIds(new Set(taskIdsBySection.get(targetSectionId) ?? []));
     setFailedIds(new Set());
-  }, [items, selectAllEnabled, selectedTasks, taskIdsBySection]);
+  }, [items, selectedTasks, taskIdsBySection]);
 
   const toggleTaskSelection = useCallback(
     (
@@ -420,7 +417,6 @@ export const KanbanBulkSelectionProvider = ({
       const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
 
       if (
-        selectAllEnabled &&
         event.keyCode === KeyCodes.A &&
         cmdControl &&
         !event.shiftKey &&
@@ -517,7 +513,6 @@ export const KanbanBulkSelectionProvider = ({
       openBulkCommand,
       selectedTasks,
       selectAll,
-      selectAllEnabled,
       selectColumn,
       toggleTaskSelection,
     ],
@@ -533,7 +528,6 @@ export const KanbanBulkSelectionProvider = ({
 
     const onSelectAllKeyDown = (event: KeyboardEvent) => {
       if (
-        selectAllEnabled &&
         event.keyCode === KeyCodes.A &&
         (event.ctrlKey || event.metaKey) &&
         handleBulkKeyDown(event)
@@ -546,7 +540,7 @@ export const KanbanBulkSelectionProvider = ({
       document.removeEventListener("keydown", onSelectAllKeyDown, true);
       document.removeEventListener("keydown", onDocumentKeyDown);
     };
-  }, [handleBulkKeyDown, selectAllEnabled]);
+  }, [handleBulkKeyDown]);
 
   const value = useMemo<KanbanBulkSelectionContextValue>(
     () => ({
