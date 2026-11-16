@@ -144,6 +144,12 @@ allowed env VCC_TEST_IDENTITY='RUNNER 5' SHIP_SESSION_NAME='cursor-grok-runner-5
 login_refused env VCC_TEST_IDENTITY='RUNNER 6' SHIP_SESSION_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
 login_refused env VCC_TEST_IDENTITY='Fixture' SHIP_SESSION_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
 printf 'ok runner slot names write as that runner, another slot or no slot is refused\n'
+login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' SHIP_SESSION_NAME='HT Pstack Boss' bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' SHIP_SESSION_NAME='HTPR-1 | fix' bash "$vcc" task move X-1 --section 'In Progress'
+allowed env VCC_TEST_IDENTITY='HT Pstack Boss' SHIP_SESSION_NAME='HT Pstack Boss | HTPR-9359' bash "$vcc" comment add X-1 --text hi
+login_refused env HOME="$T/no-identity" bash "$vcc" comment add X-1 --text hi
+grep -q 'is missing; refusing to write as Valentins Claude Code' "$T/err" || fail "missing login lookup message unclear: $(cat "$T/err")"
+printf 'ok a named session without its own login is refused\n'
 printf ' \n\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 run env SHIP_SESSION_NAME='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
 [ "$status" = 2 ] || fail 'empty board login was not refused'
