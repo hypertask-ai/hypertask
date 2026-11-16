@@ -24,4 +24,4 @@ Use either plain text or complete HTML, not mixed formatting. Links need HTML an
 
 Before investigating or coding, check `ship-identity`, then run `ship-claim <PREFIX-NNN> "<resume command>"`. Use the session's identity for board writes through `vcc`; never write as Valentin. Proceed only when the claim succeeds. Respect competing claims and step back if another runner claimed first.
 
-Preserve human assignees and moves. Only Valentin assigns himself; a ticket he assigned himself or moved by hand stays exactly as he left it. Never work a ticket assigned to Abdul; leave it and pick another.
+Preserve human assignees and moves. Only Valentin assigns himself; a ticket he assigned himself or moved by hand stays exactly as he left it.
