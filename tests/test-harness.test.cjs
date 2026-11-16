@@ -93,6 +93,20 @@ test("legacy budget permits existing debt but not an additional loader", async (
   assert.equal(settings.rules["hypertask-tests/no-new-harness"][0], 2);
 });
 
+test("migrated flag tests keep no private cache write", async () => {
+  for (const file of [
+    "tests/htpr-5908-retype-lowercase.test.cjs",
+    "tests/htpr-7194-task-box-outlines.test.cjs",
+    "tests/htpr-8015-amoled-mode-outline.test.cjs",
+  ]) {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.deepEqual(await lint(source, file), [], file);
+    const messages = await lint('require.cache["src/lib/prisma.ts"] = {};', file);
+    assert.equal(messages.length, 1, file);
+    assert.equal(messages[0].ruleId, "hypertask-tests/no-new-harness");
+  }
+});
+
 test("rejects the duplicated component harness from PR 1993", async () => {
   const source = fs.readFileSync(path.join(__dirname, "fixtures/test-harness/pr-1993.cjs.txt"), "utf8");
   const messages = await lint(source);
