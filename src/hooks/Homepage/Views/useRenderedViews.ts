@@ -1,5 +1,6 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
+import { HTPR_9361_BLOCKED_SKIPS_DONE_FLAG } from "@/lib/flags/definitions/htpr-9361-blocked-skips-done";
 import { useMemo } from 'react'
 import { useRecoilValue } from '@/lib/state'
 import { IProject, ISection, IView } from '@/models/model'
@@ -27,6 +28,7 @@ const useRenderedViews = (project: IProject | null) => {
   const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
   const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG)
+  const blockedSkipsDone = useFlag(HTPR_9361_BLOCKED_SKIPS_DONE_FLAG)
   let tagHideOn = false
   if (tagHideFilterEnabled) tagHideOn = true
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
@@ -69,7 +71,10 @@ const useRenderedViews = (project: IProject | null) => {
 
   const viewTaskCounts = useMemo(() => {
     const tasks = project?.tasks ?? []
-    const builtinContext = buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName)
+    const builtinContext = {
+      ...buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName),
+      excludeDoneFromBlocked: blockedSkipsDone,
+    }
     return new Map<string, number>([
       ...savedViewTaskCounts,
       ...BUILTIN_VIEWS.map((view) => [
@@ -79,7 +84,7 @@ const useRenderedViews = (project: IProject | null) => {
           : tasks.filter((task) => view.predicate(task, builtinContext)).length,
       ] as const),
     ])
-  }, [blockedByMeListEnabled, currentUser?.id, currentUser?.displayName, project, savedViewTaskCounts])
+  }, [blockedByMeListEnabled, blockedSkipsDone, currentUser?.id, currentUser?.displayName, project, savedViewTaskCounts])
 
   const renderedViews: BoardView[] = useMemo(() => {
     if (showEmptyViewTabs) return views

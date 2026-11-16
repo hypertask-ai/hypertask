@@ -1,5 +1,6 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
+import { HTPR_9361_BLOCKED_SKIPS_DONE_FLAG } from "@/lib/flags/definitions/htpr-9361-blocked-skips-done";
 import { IFavorites, IProject, ISection } from "@/models/model";
 import { activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -39,6 +40,7 @@ const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
 const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
+const blockedSkipsDone = useFlag(HTPR_9361_BLOCKED_SKIPS_DONE_FLAG);
 const router = useRouter();
 const queryClient = useQueryClient();
 const {
@@ -109,7 +111,10 @@ const subtaskSectionsForActiveView = useMemo(() => {
     boardSections,
     _currentProject,
     isBuiltinViewId(activeViewId) ? activeViewId : undefined,
-    buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
+    {
+      ...buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
+      excludeDoneFromBlocked: blockedSkipsDone,
+    },
     filterRuntimeContext,
   );
   return blockedByMeListEnabled && activeViewId === BUILTIN_VIEW_IDS.blockedByMe
@@ -122,6 +127,7 @@ const subtaskSectionsForActiveView = useMemo(() => {
   _projectIndex,
   activeBuiltinViews,
   blockedByMeListEnabled,
+  blockedSkipsDone,
   filterRuntimeContext,
   boardSections,
 ]);

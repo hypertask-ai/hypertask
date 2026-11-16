@@ -1,5 +1,6 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide-tags";
+import { HTPR_9361_BLOCKED_SKIPS_DONE_FLAG } from "@/lib/flags/definitions/htpr-9361-blocked-skips-done";
 
 import { useRef } from "react";
 import { IAiCustomInstructions, IProject, IProjectsAll, IProjectView, ISection, ITask } from "@/models/model";
@@ -164,13 +165,17 @@ const applyProjectFilters = (
   builtinViewId?: BuiltinViewId,
   currentUser?: { id?: number; displayName?: string },
   runtimeContext?: IFilterRuntimeContext,
+  excludeDoneFromBlocked?: boolean,
 ) => {
   let filteredSections = getAppliedSubtaskSections(project.sections, project);
   filteredSections = getFilteredSections(
     filteredSections,
     project,
     builtinViewId,
-    buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName),
+    {
+      ...buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName),
+      excludeDoneFromBlocked,
+    },
     runtimeContext,
   );
 
@@ -193,6 +198,7 @@ const UpdateKanban = () => {
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
   const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
+  const blockedSkipsDone = useFlag(HTPR_9361_BLOCKED_SKIPS_DONE_FLAG);
   const setactiveitem = useSetRecoilState(activeItemAtom);
   const setInViewObject = useSetRecoilState(inViewObjectAtom);
   const [_currentProject, __] = useRecoilState(currentProjectAtom)
@@ -284,6 +290,7 @@ const UpdateKanban = () => {
       isBuiltinViewId(activeBuiltinView) ? activeBuiltinView : undefined,
       _currentUser,
       filterRuntimeContext,
+      blockedSkipsDone,
     );
     const filteredSections = reconcileSections(
       previousProject.filteredSections,

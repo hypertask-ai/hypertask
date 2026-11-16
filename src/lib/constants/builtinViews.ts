@@ -24,6 +24,7 @@ export interface BuiltinViewContext {
   nextCycleId?: number | null;
   cyclesEnabled?: boolean;
   currentUserNames?: string[];
+  excludeDoneFromBlocked?: boolean;
 }
 
 export interface BuiltinView {
@@ -33,6 +34,7 @@ export interface BuiltinView {
   predicate: (task: ITask, context: BuiltinViewContext) => boolean;
   sectionPredicate?: (sectionTitle: string, context: BuiltinViewContext) => boolean;
   hideEmptySections?: boolean;
+  rule?: string;
   available?: (context: BuiltinViewContext) => boolean;
 }
 
@@ -58,11 +60,16 @@ export const overduePredicate: BuiltinView["predicate"] = (task, context) =>
   isPastDate(task.dueDate, context.now) &&
   !isDoneColumn(task.section, context.doneSectionTitles);
 
-export const blockedPredicate: BuiltinView["predicate"] = (task) =>
-  task.waitingOnUserId != null || (task.blockingTasks?.length ?? 0) > 0;
+export const blockedPredicate: BuiltinView["predicate"] = (task, context) =>
+  (task.waitingOnUserId != null || (task.blockingTasks?.length ?? 0) > 0) &&
+  !(context.excludeDoneFromBlocked &&
+    isDoneColumn(task.section, context.doneSectionTitles));
 
 export const blockedByMePredicate: BuiltinView["predicate"] = (task, context) =>
-  context.currentUserId != null && task.waitingOnUserId === context.currentUserId;
+  context.currentUserId != null &&
+  task.waitingOnUserId === context.currentUserId &&
+  !(context.excludeDoneFromBlocked &&
+    isDoneColumn(task.section, context.doneSectionTitles));
 
 export const getBlockedByMeSections = (
   project: IProject,
@@ -133,12 +140,14 @@ export const BUILTIN_VIEWS: readonly BuiltinView[] = [
     title: "Blocked",
     builtin: true,
     predicate: blockedPredicate,
+    rule: "Tickets waiting on a person or blocked by another ticket. Finished tickets stay out.",
   },
   {
     id: BUILTIN_VIEW_IDS.blockedByMe,
     title: "Blocked by me",
     builtin: true,
     predicate: blockedByMePredicate,
+    rule: "Tickets waiting on you. Finished tickets stay out.",
   },
   {
     id: BUILTIN_VIEW_IDS.agents,

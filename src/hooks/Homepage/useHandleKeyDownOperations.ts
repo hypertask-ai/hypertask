@@ -3,6 +3,7 @@ import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide
 import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
 import { HTPR_8716_QUICK_ENTRY_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8716-quick-entry-focus";
 import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
+import { HTPR_9361_BLOCKED_SKIPS_DONE_FLAG } from "@/lib/flags/definitions/htpr-9361-blocked-skips-done";
 
 import { ISection, ITask } from '@/models/model'
 import  { useContext, useEffect, useRef, useState } from 'react'
@@ -58,6 +59,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
     const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
+    const blockedSkipsDone = useFlag(HTPR_9361_BLOCKED_SKIPS_DONE_FLAG);
     const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
     const boardLayout = useRecoilValue(boardLayoutAtom)
     const queryClient = useQueryClient();   
@@ -530,7 +532,10 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       newSections,
       _currentProject,
       isBuiltinViewId(activeBuiltinViewId) ? activeBuiltinViewId : undefined,
-      buildBuiltinViewContext(_currentProject, currentUser?.id, undefined, currentUser?.displayName),
+      {
+        ...buildBuiltinViewContext(_currentProject, currentUser?.id, undefined, currentUser?.displayName),
+        excludeDoneFromBlocked: blockedSkipsDone,
+      },
       filterRuntimeContext,
     )
     const filteredEmptySections = showEmptyViewColumns
