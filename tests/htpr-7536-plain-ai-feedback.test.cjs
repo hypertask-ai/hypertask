@@ -98,7 +98,7 @@ for (const input of [unauthorized, { ...serverError, tool: 'tasks', errorCode: '
     assert.equal(f.created[0].description, legacyDescription(input, fingerprint))
     assert.deepEqual(result, { success: true, ticketNumber: 'HTPR-8001', url: 'https://app.hypertask.ai/detail/project-15/8001', deduped: false, count: 1 })
     const noteLookups = input.note === undefined ? [] : [{ flag: 'htpr-8275-agent-feedback-note', userId: 42 }]
-    assert.deepEqual(f.lookups, [{ flag: key, userId: 42 }, ...noteLookups])
+    assert.deepEqual(f.lookups, [{ flag: key, userId: 42 }, { flag: 'htpr-9372-feedback-command', userId: 42 }, ...noteLookups])
   })
 }
 
@@ -392,7 +392,7 @@ for (const [mode, expectedPlain] of [['EVERYONE', true], ['OFF', false]]) {
       await f.fileAiFeedback(serverError, undefined, { origin: 'automatic' })
       assert.equal(f.created[0].title.startsWith('AI feedback:'), !expectedPlain)
       const houseLookups = expectedPlain ? [{ flag: 'htpr-8797-feedback-house-parts', userId: undefined }] : []
-      assert.deepEqual(f.lookups, [{ flag: key, userId: undefined }, ...houseLookups, { flag: 'htpr-7941-quiet-fixable-reports', userId: 42 }])
+      assert.deepEqual(f.lookups, [{ flag: key, userId: undefined }, ...houseLookups, { flag: 'htpr-9372-feedback-command', userId: undefined }, { flag: 'htpr-7941-quiet-fixable-reports', userId: 42 }])
     } finally {
       if (previous === undefined) delete process.env.AI_FEEDBACK_AGENT_USER_ID
       else process.env.AI_FEEDBACK_AGENT_USER_ID = previous

@@ -3,6 +3,8 @@ import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7
 import { HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG } from '@/lib/flags/definitions/htpr-8797-feedback-house-parts'
 import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
 import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
+import { HTPR_9372_FEEDBACK_COMMAND_FLAG } from '@/lib/flags/definitions/htpr-9372-feedback-command'
+import { featureFlagCandidateUserIds, isFeatureEnabled } from '@/lib/flags'
 import { accountCategory } from '@/lib/telemetry/accountCategory'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
@@ -114,8 +116,15 @@ async function agentNoteAllowed(userId?: number): Promise<boolean> {
   }
 }
 
-function shortNote(note: string): string {
-  return note.length <= 64 ? note : `${note.slice(0, 61).replace(/\s\S*$/, '')}...`
+function shortNote(note: string, keepLongWord = false): string {
+  if (note.length <= 64) return note
+  const sliced = note.slice(0, 61)
+  const atWord = sliced.replace(/\s\S*$/, '')
+  if (!keepLongWord) return `${atWord}...`
+  const partial = sliced.slice(atWord.length).trim()
+  const fullWord = note.slice(atWord.length).trim().split(/\s/)[0] ?? ''
+  if (partial && fullWord.length > partial.length) return `${sliced.replace(/\s+$/, '')}...`
+  return `${atWord}...`
 }
 
 function houseReading(reading: string) {
@@ -147,7 +156,7 @@ function withCommand(note: string, command?: string): string {
   return !command || short.toLowerCase().includes(command.toLowerCase()) ? short : `${short} (${command})`
 }
 
-export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }, stored?: StoredNote, shape: 'plain' | 'house' = 'plain') {
+export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }, stored?: StoredNote, shape: 'plain' | 'house' = 'plain', keepCommand = false) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
   const failureKind = input.category ?? 'other'
@@ -184,7 +193,8 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
     ? `${reporter.agentName}${reporter.ownerName ? `, owned by ${reporter.ownerName}` : ''}`
     : reporter?.ownerName ? `an agent owned by ${reporter.ownerName}` : 'unknown agent'
   const command = input.tool && input.tool !== input.surface ? input.tool : undefined
-  const note = shortNote(stored?.note ?? happened)
+  const note = shortNote(stored?.note ?? happened, keepCommand)
+  const lead = keepCommand ? happened : problem
   const title = stored?.kind ? `Agent feedback, ${stored.kind}: ${stored.kind === 'missing' ? withCommand(note, command) : note}` : `${happened} (${date})`
   if (shape !== 'house') {
     return {
@@ -202,7 +212,7 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
   return {
     title,
     description: '<h2>Problem</h2>' +
-      `<p>${escapeHtml(problem)}.</p>` +
+      `<p>${escapeHtml(lead)}.</p>` +
       `<p><strong>Who hit it</strong>: ${escapeHtml(who)}.</p>` +
       `<p>${escapeHtml(houseReading(reading))}</p>` +
       kept +
@@ -240,6 +250,16 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         : await isFeatureEnabled(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG, userId)
     }
   } catch {}
+  let keepCommand = false
+  try {
+    if (userId !== undefined && await isFeatureEnabled(HTPR_9372_FEEDBACK_COMMAND_FLAG, userId)) {
+      keepCommand = true
+    } else if (userId === undefined && await featureFlagCandidateUserIds(HTPR_9372_FEEDBACK_COMMAND_FLAG) === null) {
+      keepCommand = true
+    }
+  } catch {
+    keepCommand = false
+  }
   const noteAllowed = reporter.origin === 'agent' && (input.kind !== undefined || input.note !== undefined) && await agentNoteAllowed(userId)
   const stored: StoredNote | undefined = noteAllowed
     ? { kind: input.kind, note: scrubFeedbackNote(input.note ?? '') || undefined }
@@ -371,7 +391,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
           ownerName: displayName,
           origin: reporter.origin,
-        }, stored, house ? 'house' : 'plain') : undefined
+        }, stored, house ? 'house' : 'plain', keepCommand) : undefined
         const { task } = await createProvisionedTaskCore({
           creationChannel: "agent",
           title: readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
