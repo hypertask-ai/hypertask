@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   advanceIndexDrift,
+  commentCopyDriftedByEditClock,
   emptyDriftState,
   recordDriftPass,
   type DriftFailure,
@@ -37,6 +38,16 @@ type DriftDeps = {
   reindexComments: (taskId: number) => Promise<unknown>;
   today: () => string;
   now?: () => number;
+  commentDrift?: (task: DriftTask, indexed: IndexedCommentCopy | null) => boolean;
+};
+
+const DEFAULT_DEPS: DriftDeps = {
+  loadPage: loadIndexDriftPage,
+  reindexTask: (taskId) => upsertTaskToTurbopuffer(taskId, { strict: true }),
+  reindexComments: (taskId) => upsertAllCommentsToTurbopuffer(taskId, { strict: true }),
+  today: () => new Date().toISOString().slice(0, 10),
+  now: () => Date.now(),
+  commentDrift: commentCopyDriftedByEditClock,
 };
 
 function textAttr(row: { [key: string]: unknown } | undefined, key: string) {
@@ -54,7 +65,10 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
     where: { id: { gt: afterId } },
     orderBy: { id: "asc" },
     take,
-    select: { id: true, title: true, updatedAt: true },
+    select: {
+      id: true, title: true, status: true, ticketNumber: true,
+      uniqueIndex: true, projectId: true, updatedAt: true,
+    },
   });
   const ids = rows.map((row) => row.id);
   const groups = ids.length
@@ -68,6 +82,10 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
   const tasks: DriftTask[] = rows.map((row) => ({
     id: row.id,
     title: row.title ?? "",
+    status: row.status,
+    ticketNumber: row.ticketNumber,
+    uniqueIndex: row.uniqueIndex,
+    projectId: row.projectId,
     updatedAt: row.updatedAt?.toISOString() ?? "",
     commentCount: counts.get(row.id) ?? 0,
   }));
@@ -94,11 +112,18 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
       filters: ["taskId", "Eq", String(task.id)],
       rank_by: ["taskUpdatedAt", "asc"],
       top_k: 1,
-      include_attributes: ["taskTitle", "taskUpdatedAt"],
+      include_attributes: ["taskTitle", "taskStatus", "taskTicketNumber", "taskUniqueIndex", "taskProjectId", "taskUpdatedAt"],
       consistency: { level: "strong" },
     });
     indexedComments.set(task.id, row
-      ? { taskTitle: textAttr(row, "taskTitle"), taskUpdatedAt: textAttr(row, "taskUpdatedAt") }
+      ? {
+          taskTitle: textAttr(row, "taskTitle"),
+          taskStatus: textAttr(row, "taskStatus"),
+          taskTicketNumber: textAttr(row, "taskTicketNumber"),
+          taskUniqueIndex: textAttr(row, "taskUniqueIndex"),
+          taskProjectId: textAttr(row, "taskProjectId"),
+          taskUpdatedAt: textAttr(row, "taskUpdatedAt"),
+        }
       : null);
   }
   return { tasks, indexedTasks, indexedComments, batchFull: rows.length === take };
@@ -106,14 +131,9 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
 
 export async function runIndexDriftRepair(
   state: DriftState = emptyDriftState(),
-  deps: DriftDeps = {
-    loadPage: loadIndexDriftPage,
-    reindexTask: (taskId) => upsertTaskToTurbopuffer(taskId, { strict: true }),
-    reindexComments: (taskId) => upsertAllCommentsToTurbopuffer(taskId, { strict: true }),
-    today: () => new Date().toISOString().slice(0, 10),
-    now: () => Date.now(),
-  },
+  overrides: Partial<DriftDeps> = {},
 ) {
+  const deps: DriftDeps = { ...DEFAULT_DEPS, ...overrides };
   const clock = deps.now ?? (() => Date.now());
   const deadline = clock() + DRIFT_TIME_BUDGET_MS;
   let current = { afterId: state.afterId, found: state.found, results: state.results ?? [] };
@@ -133,6 +153,7 @@ export async function runIndexDriftRepair(
       state: current,
       reindexTask: deps.reindexTask,
       reindexComments: deps.reindexComments,
+      commentDrift: deps.commentDrift,
     });
     current = outcome.state;
     reindexed += outcome.reindexed;

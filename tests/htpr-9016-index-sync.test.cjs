@@ -10,6 +10,32 @@ function deferred() {
   return { promise, resolve };
 }
 
+function driftTask(id, extra = {}) {
+  return {
+    id,
+    title: `T${id}`,
+    status: "Normal",
+    ticketNumber: `HTPR-${id}`,
+    uniqueIndex: id,
+    projectId: 15,
+    updatedAt: "2026-11-10T12:00:00.000Z",
+    commentCount: 1,
+    ...extra,
+  };
+}
+
+function commentCopy(task, extra = {}) {
+  return {
+    taskTitle: task.title,
+    taskStatus: task.status,
+    taskTicketNumber: task.ticketNumber,
+    taskUniqueIndex: String(task.uniqueIndex),
+    taskProjectId: String(task.projectId),
+    taskUpdatedAt: task.updatedAt,
+    ...extra,
+  };
+}
+
 function drift() {
   return load("src/lib/search/indexDrift.ts", {
     "@/utils/controllers/turbopuffer/turbopufferHelper": {},
@@ -33,19 +59,64 @@ test("a title edit waits for the task index before comment copies update", async
   assert.equal(drift().commentsFollowTaskEdit({ titleChanged: false, status: "Archive" }), true);
 });
 
+test("an unrelated ticket edit leaves comment copies alone", async () => {
+  const lib = drift();
+  const task = driftTask(11, { updatedAt: "2026-11-12T09:00:00.000Z", commentCount: 3 });
+  const copy = commentCopy(driftTask(11, { updatedAt: "2026-11-10T09:00:00.000Z" }));
+  assert.equal(lib.commentCopyDrifted(task, copy), false);
+  const comments = [];
+  const outcome = await lib.advanceIndexDrift({
+    tasks: [task],
+    indexedTasks: new Map([[11, { updatedAt: "2026-11-12T09:00:00.000Z" }]]),
+    indexedComments: new Map([[11, copy]]),
+    batchFull: false,
+    maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async () => {},
+    reindexComments: async (id) => comments.push(id),
+  });
+  assert.deepEqual(comments, []);
+  assert.equal(outcome.passFound, 0);
+});
+
+test("a changed comment label is repaired", async () => {
+  const lib = drift();
+  const task = driftTask(12, { status: "Archive", commentCount: 2 });
+  const copy = commentCopy(driftTask(12, { status: "Normal" }));
+  assert.equal(lib.commentCopyDrifted(task, copy), true);
+  const comments = [];
+  await lib.advanceIndexDrift({
+    tasks: [task],
+    indexedTasks: new Map([[12, { updatedAt: task.updatedAt }]]),
+    indexedComments: new Map([[12, copy]]),
+    batchFull: false,
+    maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async () => {},
+    reindexComments: async (id) => comments.push(id),
+  });
+  assert.deepEqual(comments, [12]);
+});
+
+test("a comment copy missing from the index is repaired", () => {
+  const lib = drift();
+  assert.equal(lib.commentCopyDrifted(driftTask(13), null), true);
+  assert.equal(lib.commentCopyDrifted(driftTask(14, { commentCount: 0 }), null), false);
+});
+
 test("a stale comment title is repaired", async () => {
   const lib = drift();
   const at = "2026-11-10T12:00:00.000Z";
   const comments = [];
   const outcome = await lib.advanceIndexDrift({
     tasks: [
-      { id: 7, title: "New title", updatedAt: at, commentCount: 2 },
-      { id: 8, title: "Same", updatedAt: at, commentCount: 1 },
+      driftTask(7, { title: "New title", updatedAt: at, commentCount: 2 }),
+      driftTask(8, { updatedAt: at }),
     ],
     indexedTasks: new Map([[7, { updatedAt: at }], [8, { updatedAt: at }]]),
     indexedComments: new Map([
-      [7, { taskTitle: "Old title", taskUpdatedAt: at }],
-      [8, { taskTitle: "Same", taskUpdatedAt: at }],
+      [7, commentCopy(driftTask(7, { title: "Old title" }))],
+      [8, commentCopy(driftTask(8))],
     ]),
     batchFull: false,
     maxReindex: 10,
@@ -62,8 +133,8 @@ test("a failed write names the task and the scan keeps moving", async () => {
   const at = "2026-11-10T12:00:00.000Z";
   const outcome = await lib.advanceIndexDrift({
     tasks: [
-      { id: 3, title: "A", updatedAt: at, commentCount: 0 },
-      { id: 4, title: "B", updatedAt: at, commentCount: 0 },
+      driftTask(3, { title: "A", updatedAt: at, commentCount: 0 }),
+      driftTask(4, { title: "B", updatedAt: at, commentCount: 0 }),
     ],
     indexedTasks: new Map([[3, null], [4, null]]),
     indexedComments: new Map(),
@@ -87,7 +158,7 @@ test("a run stops once writes keep failing", async () => {
   const lib = drift();
   const at = "2026-11-10T12:00:00.000Z";
   const outcome = await lib.advanceIndexDrift({
-    tasks: [3, 4, 5].map((id) => ({ id, title: `T${id}`, updatedAt: at, commentCount: 0 })),
+    tasks: [3, 4, 5].map((id) => driftTask(id, { updatedAt: at, commentCount: 0 })),
     indexedTasks: new Map([[3, null], [4, null], [5, null]]),
     indexedComments: new Map(),
     batchFull: false,
@@ -133,12 +204,9 @@ test("a finished pass records one drift count for that date", async () => {
 });
 
 function totalTasks(count) {
-  return Array.from({ length: count }, (_, index) => ({
-    id: index + 1,
-    title: `T${index + 1}`,
-    updatedAt: "2026-11-10T12:00:00.000Z",
-    commentCount: 0,
-  }));
+  return Array.from({ length: count }, (_, index) =>
+    driftTask(index + 1, { commentCount: 0 }),
+  );
 }
 
 test("one run scans past the old 400-row budget until the pass finishes", async () => {

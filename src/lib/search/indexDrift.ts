@@ -4,9 +4,29 @@ import {
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 export type DriftPass = { date: string; found: number };
 export type DriftState = { afterId: number; found: number; results: DriftPass[] };
-export type DriftTask = { id: number; title: string; updatedAt: string; commentCount: number };
+export type DriftTask = {
+  id: number; title: string; status: string; ticketNumber: string | null;
+  uniqueIndex: number | null; projectId: number; updatedAt: string; commentCount: number;
+};
 export type IndexedTaskTime = { updatedAt: string };
-export type IndexedCommentCopy = { taskTitle: string; taskUpdatedAt: string };
+export type CommentCopyLabels = {
+  taskTitle: string; taskStatus: string; taskTicketNumber: string;
+  taskUniqueIndex: string; taskProjectId: string;
+};
+export type IndexedCommentCopy = CommentCopyLabels & { taskUpdatedAt: string };
+export const COMMENT_COPY_LABELS = ["taskTitle", "taskStatus", "taskTicketNumber", "taskUniqueIndex", "taskProjectId"] as const;
+function label(value: unknown): string {
+  return value == null ? "" : String(value);
+}
+export function commentCopyLabels(task: DriftTask): CommentCopyLabels {
+  return {
+    taskTitle: label(task.title),
+    taskStatus: label(task.status),
+    taskTicketNumber: label(task.ticketNumber),
+    taskUniqueIndex: label(task.uniqueIndex),
+    taskProjectId: label(task.projectId),
+  };
+}
 export function emptyDriftState(): DriftState {
   return { afterId: 0, found: 0, results: [] };
 }
@@ -22,8 +42,13 @@ export function taskRowDrifted(task: { updatedAt: string }, indexed: IndexedTask
 }
 export function commentCopyDrifted(task: DriftTask, indexed: IndexedCommentCopy | null): boolean {
   if (task.commentCount === 0) return false;
-  if (!indexed || indexed.taskTitle !== task.title) return true;
-  return laterEdit(task.updatedAt, indexed.taskUpdatedAt);
+  if (!indexed) return true;
+  const copied = commentCopyLabels(task);
+  return COMMENT_COPY_LABELS.some((key) => copied[key] !== indexed[key]);
+}
+export function commentCopyDriftedByEditClock(task: DriftTask, indexed: IndexedCommentCopy | null): boolean {
+  if (commentCopyDrifted(task, indexed)) return true;
+  return indexed !== null && task.commentCount > 0 && laterEdit(task.updatedAt, indexed.taskUpdatedAt);
 }
 export function commentsFollowTaskEdit(args: {
   titleChanged: boolean; status?: unknown; ticketNumber?: unknown; uniqueIndex?: unknown; projectId?: unknown;
@@ -56,9 +81,11 @@ export async function advanceIndexDrift(args: {
   indexedComments: Map<number, IndexedCommentCopy | null>; batchFull: boolean; maxReindex: number;
   state: DriftState; reindexTask: (taskId: number) => Promise<unknown>;
   reindexComments: (taskId: number) => Promise<unknown>; maxFailures?: number;
+  commentDrift?: (task: DriftTask, indexed: IndexedCommentCopy | null) => boolean;
 }): Promise<{ state: DriftState; reindexed: number; passComplete: boolean; stopped: boolean; passFound: number | null; failed: DriftFailure[] }> {
   const state = { afterId: args.state.afterId, found: args.state.found, results: args.state.results };
   const maxFailures = args.maxFailures ?? 20;
+  const commentDrift = args.commentDrift ?? commentCopyDrifted;
   const failed: DriftFailure[] = [];
   let reindexed = 0;
   if (args.tasks.length === 0) {
@@ -66,8 +93,8 @@ export async function advanceIndexDrift(args: {
   }
   for (const task of args.tasks) {
     const taskDrift = taskRowDrifted(task, args.indexedTasks.get(task.id) ?? null);
-    const commentDrift = commentCopyDrifted(task, args.indexedComments.get(task.id) ?? null);
-    const drifted = taskDrift || commentDrift;
+    const commentDrifted = commentDrift(task, args.indexedComments.get(task.id) ?? null);
+    const drifted = taskDrift || commentDrifted;
     if (drifted && reindexed >= args.maxReindex) {
       return { state, reindexed, passComplete: false, stopped: true, passFound: null, failed };
     }
@@ -79,7 +106,7 @@ export async function advanceIndexDrift(args: {
         failed.push({ id: task.id, stage: "task", message: String((error as Error)?.message ?? error).slice(0, 200) });
       }
     }
-    if (commentDrift) {
+    if (commentDrifted) {
       try {
         await args.reindexComments(task.id);
         reindexed += 1;

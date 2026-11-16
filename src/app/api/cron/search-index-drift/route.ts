@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9016_COMMENT_COPY_LABELS_FLAG } from "@/lib/flags/definitions/htpr-9016-comment-copy-labels";
 import { getRedis } from "@/lib/redis";
-import { emptyDriftState, driftPassRecorded, type DriftState } from "@/lib/search/indexDrift";
+import {
+  commentCopyDrifted,
+  commentCopyDriftedByEditClock,
+  emptyDriftState,
+  driftPassRecorded,
+  type DriftState,
+} from "@/lib/search/indexDrift";
 import { DRIFT_STATE_KEY, runIndexDriftRepair } from "@/lib/search/runIndexDriftRepair";
 
 export const runtime = "nodejs";
@@ -35,7 +43,14 @@ export async function GET(request: NextRequest) {
     console.log(`[search-index-drift] pass complete drift ${recorded} already recorded for ${today}`);
     return NextResponse.json({ skipped: "pass recorded today", today, drift: recorded, results: state.results });
   }
-  const result = await runIndexDriftRepair(state);
+  const result = await runIndexDriftRepair(state, {
+    commentDrift: (await isFeatureEnabled(
+      HTPR_9016_COMMENT_COPY_LABELS_FLAG,
+      FEATURE_FLAG_OWNER_USER_ID,
+    ))
+      ? commentCopyDrifted
+      : commentCopyDriftedByEditClock,
+  });
   await redis.set(DRIFT_STATE_KEY, JSON.stringify(result.state));
   const progress = `scanned ${result.scanned} reindexed ${result.reindexed} cursor ${result.state.afterId} found ${result.state.found} failed ${result.failed.length}`;
   console.log(result.passComplete
