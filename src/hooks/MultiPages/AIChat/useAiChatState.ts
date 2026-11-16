@@ -20,7 +20,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
-import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { defaultAiModelOption, toAutoModelOption } from "@/lib/aiModelOptions";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
@@ -40,7 +40,6 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const windowSecondary = multiChatWindowsEnabled && Boolean(windowScope);
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
-  const agentSidebarEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
 
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
@@ -224,8 +223,8 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
     }
     contextCallback(mentionData);
   }
-  const contextCallbackRef = useRef(agentSessionsEnabled && agentSidebarEnabled ? agentContextCallback : contextCallback);
-  contextCallbackRef.current = agentSessionsEnabled && agentSidebarEnabled ? agentContextCallback : contextCallback;
+  const contextCallbackRef = useRef(agentSessionsEnabled ? agentContextCallback : contextCallback);
+  contextCallbackRef.current = agentSessionsEnabled ? agentContextCallback : contextCallback;
   const stableContextCallback = useCallback(
     (node: any) => contextCallbackRef.current(node),
     []

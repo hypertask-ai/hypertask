@@ -217,9 +217,9 @@ test("sidebar headers follow only active selection; clearing and replacement can
   assert.deepEqual(captured, { "x-hypertask-sidebar-project": "15" }, "operation snapshots survive selection cleanup");
 });
 
-test("leaving native chat, flag Off, project/account change and unmount all clear sidebar registration", () => {
+test("leaving native chat, project/account change and unmount all clear sidebar registration", () => {
   const source = read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx");
-  assert.match(source, /const sidebarEnabled = enabled && !!projectId && !!currentUser/);
+  assert.match(source, /const sidebarEnabled = !!projectId && !!currentUser/);
   assert.match(source, /\} else \{\s*setNativeSidebarChat\(null\);\s*if \(leaving\.kind === "native-agent"/);
   assert.match(source, /useEffect\(\(\) => \{\s*\+\+intentRef\.current;\s*setNativeSidebarChat\(null\);[^]*?return \(\) => \{[^]*?setNativeSidebarChat\(null\);\s*\};\s*\}, \[sidebarEnabled, projectId, currentUser\?\.id\]\)/);
 });
@@ -287,7 +287,7 @@ test("old agent links redirect only to an eligible board and otherwise retain th
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     fileName: "page.tsx",
   }).outputText;
-  for (const { query, board, enabled = true, agentId = null, expected } of [
+  for (const { query, board, agentId = null, expected } of [
     { query: { agent: "agent-a" }, board: { id: 15 }, expected: "/project?agentSidebar=1&sidebarAgent=agent-a&id=15" },
     { query: { agent: "known" }, board: { id: 15 }, expected: "/project?agentSidebar=1&sidebarAgent=agent-a&id=15" },
     { query: { agent: "agent-a", projectId: "15" }, board: { id: 15 }, expected: "/project?agentSidebar=1&sidebarAgent=agent-a&id=15" },
@@ -295,7 +295,6 @@ test("old agent links redirect only to an eligible board and otherwise retain th
     { query: { agent: "known" }, board: null, expected: "legacy-agent-chat" },
     { query: { agent: "unknown", projectId: "15" }, board: { id: 15 }, expected: "legacy-agent-chat" },
     { query: { agent: "agent-a", projectId: "15" }, board: null, expected: "legacy-agent-chat" },
-    { query: { agent: "agent-a" }, board: { id: 15 }, enabled: false, expected: "legacy-agent-chat" },
     { query: { agent: "agent-a" }, board: { id: 15 }, agentId: "acting-agent", expected: "legacy-agent-chat" },
     { query: { agent: "agent-a", view: "rooms" }, board: { id: 15 }, expected: "legacy-agent-rooms" },
     { query: {}, board: null, expected: "/project?agentSidebar=1" },
@@ -312,8 +311,6 @@ test("old agent links redirect only to an eligible board and otherwise retain th
       "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({ scope: "human" }) },
       "next/headers": { headers: async () => new Headers(), cookies: async () => ({ get: () => ({ value: JSON.stringify(currentUser) }) }) },
       "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6, agentId }) },
-      "@/lib/flags": { isFeatureEnabled: async (key) => key === "sidebar" ? enabled : true },
-      "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
       "next/navigation": { redirect: (url) => { redirects.push(url); return url; } },
       "./AgentChatClient": "legacy-agent-chat",
       "./AgentRoomClient": "legacy-agent-rooms",
@@ -335,7 +332,7 @@ test("old agent links redirect only to an eligible board and otherwise retain th
         assert.equal(result.props.roomsEnabled, true);
       }
     }
-    const resolvesBoard = enabled && !agentId && query.view !== "rooms" && query.agent && query.agent !== "unknown";
+    const resolvesBoard = !agentId && query.view !== "rooms" && query.agent && query.agent !== "unknown";
     assert.equal(boardQueries.length, resolvesBoard ? 1 : 0);
     if (resolvesBoard) {
       const { where } = boardQueries[0];
@@ -433,7 +430,6 @@ test("native switching snapshots the latest draft and attachments after open, tr
   let html = "<p>Before loading</p>", text = "Before loading";
   let files = [{ name: "before.txt" }];
   const writes = [];
-  let sidebarFlag = true;
   let sidebarTree;
   let chat = {
     currentSession: { id: "general", agentId: null }, fileItems: files,
@@ -447,7 +443,7 @@ test("native switching snapshots the latest draft and attachments after open, tr
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     react: { ...react, default: react },
     "react-hot-toast": { default: { error: assert.fail } },
-    "@/hooks/useFlag": { useFlag: key => key !== "htpr-8048-agent-sessions" && key !== "htpr-9021-no-empty-chats" && key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
+    "@/hooks/useFlag": { useFlag: key => key !== "htpr-8048-agent-sessions" && key !== "htpr-9021-no-empty-chats" && key !== "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
     "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
@@ -511,9 +507,6 @@ test("native switching snapshots the latest draft and attachments after open, tr
     render().onSelect({ kind: "external-agent", agent: { id: "external", displayName: "External", runtimeType: "EXTERNAL" } });
     render();
     assert.equal(findElement(sidebarTree, "Composer").props.active, false, "external selection disables the retained general composer");
-    sidebarFlag = false;
-    render();
-    assert.equal(findElement(sidebarTree, "Composer").props.active, true, "Flag Off restores the legacy active composer");
   } finally { viewer.setNativeSidebarChat(null); global.fetch = originalFetch; dom.window.close(); }
 });
 
@@ -538,7 +531,7 @@ test("sidebar command rows forward mobile context to the shared CommandList", ()
   }
 });
 
-test("a flagged sidebar deep link wakes the lazy runtime before the chat layout mounts on phones", () => {
+test("a sidebar deep link wakes the lazy runtime before the chat layout mounts on phones", () => {
   const source = read("src/components/ProviderGlobal/GloablProviders.tsx");
   assert.doesNotMatch(source, /useSearchParams/);
   assert.match(source, /const shouldMountChatRuntime =\s*chatRuntimeMounted \|\|\s*sidebarRequested \|\|/);
@@ -547,64 +540,38 @@ test("a flagged sidebar deep link wakes the lazy runtime before the chat layout 
   let effect;
   const visit = (node) => {
     if (ts.isCallExpression(node) && node.expression.getText(parsed) === "useEffect" &&
-      node.arguments[0]?.getText(parsed).startsWith("agentSidebarChatsEnabled ?")) effect = node.arguments[0].getText(parsed);
+      node.arguments[0]?.getText(parsed).includes('has("agentSidebar")')) effect = node.arguments[0].getText(parsed);
     ts.forEachChild(node, visit);
   };
   visit(parsed);
-  assert.ok(effect, "the parent provider must own the flagged cold-open effect");
-  for (const enabled of [false, true]) {
-    for (const search of ["", "?agentSidebar=1"]) {
-      const writes = [];
-      const callback = new Function("agentSidebarChatsEnabled", "window", "setSidebarRequested", "setSidebarMode", "setAiChatAutoOpenSuppressed", "setShowAiChatInterface", `return (${effect})`)(
-        enabled, { location: { search } },
-        (value) => writes.push(["runtime", value]), (value) => writes.push(["sidebar", value]),
-        (value) => writes.push(["suppressed", value]), (value) => writes.push(["open", value]),
-      );
-      callback();
-      assert.deepEqual(writes, enabled && search
-        ? [["runtime", true], ["sidebar", true], ["suppressed", false], ["open", true]]
-        : [["runtime", false]], "opening must not depend on the closed phone panel mounting; Off and unrequested routes stay closed");
-    }
+  assert.ok(effect, "the parent provider must own the cold-open effect");
+  for (const search of ["", "?agentSidebar=1"]) {
+    const writes = [];
+    const callback = new Function("window", "setSidebarRequested", "setSidebarMode", "setAiChatAutoOpenSuppressed", "setShowAiChatInterface", `return (${effect})`)(
+      { location: { search } },
+      (value) => writes.push(["runtime", value]), (value) => writes.push(["sidebar", value]),
+      (value) => writes.push(["suppressed", value]), (value) => writes.push(["open", value]),
+    );
+    callback();
+    assert.deepEqual(writes, search
+      ? [["runtime", true], ["sidebar", true], ["suppressed", false], ["open", true]]
+      : [["runtime", false]], "opening must not depend on the closed phone panel mounting; unrequested routes stay closed");
   }
 });
 
-test("flag Off ignores a stale native-sidebar registration when resolving the general board chat", async () => {
+test("a native-sidebar registration resolves the general board chat in paged and unpaged history", async () => {
   const mapped = { id: "mapped", userId: 6, agentId: "native-agent", projectId: 15, taskId: null, messages: [] };
   for (const paging of [false, true]) {
-    const { context, state, created } = boardContext(mapped, paging);
-    context.agentSidebarChatsEnabled = false;
+    const { context, state } = boardContext(mapped, paging);
     viewer.setNativeSidebarChat({ sessionId: mapped.id, projectId: 15 });
     try {
-      assert.equal((await sessionsHook(context).ensureSessionForCurrentBoard()).id, created.id);
-      assert.equal(state.created, 1);
+      assert.equal((await sessionsHook(context).ensureSessionForCurrentBoard()).id, mapped.id);
+      assert.equal(state.created, 0);
     } finally { viewer.setNativeSidebarChat(null); }
   }
 });
 
-test("chat orchestration forwards the sidebar flag without coupling it to history paging", () => {
-  const flag = "htpr-7518-agent-sidebar-chats";
-  for (const enabled of [false, true]) {
-    let resolution;
-    const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
-      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
-      react: { useState: (value) => [value, noop], useEffect: noop },
-      "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
-      "@/lib/ai/chipEvents": { signalAiChip: () => {} },
-      "@/lib/state": { useRecoilState: () => [null, noop] }, "@/store": {},
-      "./useAiChatState": { useAiChatState: () => ({ sessionPagingEnabled: true }) },
-      "./useAiChatSessions": { useAiChatSessions: (context) => { resolution = context; return {}; } },
-      "./aiChatSend": { createAiChatSend: () => ({}) },
-      "./useAiChatAttachments": { useAiChatAttachments: () => ({}) },
-      "./aiChatKeyboard": { createAiChatKeyboard: () => ({}) },
-      "./useAiChatPresentation": { useAiChatPresentation: () => ({}) },
-    });
-    useAiChat();
-    assert.equal(resolution.agentSidebarChatsEnabled, enabled);
-    assert.equal(resolution.sessionPagingEnabled, false);
-  }
-});
-
-test("Go to Agent Chat opens the board sidebar only with the ticket flag and a board; Off keeps the old route", () => {
+test("Go to Agent Chat opens the board sidebar when a board is open and keeps the old route otherwise", () => {
   const originalWindow = global.window;
   const { CommandMode } = load("src/models/enums.ts", {});
   const { createCommandDispatcher } = load("src/components/commandDispatcher.ts", {
@@ -615,11 +582,11 @@ test("Go to Agent Chat opens the board sidebar only with the ticket flag and a b
     "@/lib/aiChatDisplayMode": {},
   });
   try {
-    for (const enabled of [false, true]) for (const project of [undefined, { id: 15 }]) {
+    for (const project of [undefined, { id: 15 }]) {
       const changes = [], pushes = [], replacements = [], events = [];
       global.window = { location: { pathname: "/project", search: "?id=15&surface=board" }, dispatchEvent: (event) => events.push(event.type) };
       createCommandDispatcher({
-        agentSidebarChatsEnabled: enabled, _currentProject: project,
+        _currentProject: project,
         setShowCommands: noop, setCommandMode: noop, boardCloseHandler: noop,
         setIsSidebarMode: (value) => changes.push(["sidebar", value]),
         setAiChatAutoOpenSuppressed: (value) => changes.push(["suppressed", value]),
@@ -627,7 +594,7 @@ test("Go to Agent Chat opens the board sidebar only with the ticket flag and a b
         setShowAiChatInterface: (value) => changes.push(["open", value]),
         router: { push: (url) => pushes.push(url), replace: (url) => replacements.push(url) },
       }).handleAction(CommandMode.GoToAgentChat);
-      if (enabled && project) {
+      if (project) {
         assert.deepEqual(changes, [["sidebar", true], ["suppressed", false], ["open", true]]);
         assert.deepEqual(replacements, ["/project?id=15&surface=board&agentSidebar=1"]);
         assert.deepEqual(events, ["ht-agent-sidebar-open"]);

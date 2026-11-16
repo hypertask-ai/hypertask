@@ -11,7 +11,6 @@ import { useSetRecoilState } from "@/lib/state";
 import { aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, isAiChatSidebarModeAtom, showAIChatInterfaceAtom } from "@/store";
 import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8964_REMOVE_PERSON_HOVER_FLAG } from "@/lib/flags/definitions/htpr-8964-remove-person-hover";
 import {
   autoUpdate,
@@ -119,7 +118,6 @@ const PersonHovercardSurfaceContent = ({
   const pathname = usePathname();
   const router = useRouter();
   const agentHoverChat = useFlag(HTPR_7737_AGENT_HOVER_CHAT_FLAG);
-  const agentSidebarChats = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
   const setChatSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
   const setExplicitOpenAt = useSetRecoilState(aiChatExplicitOpenAtAtom);
@@ -191,7 +189,7 @@ const PersonHovercardSurfaceContent = ({
               <p id={headingId} className="truncate text-content font-semibold">
                 {profile.displayName}
               </p>
-              {agentHoverChat && agentSidebarChats && projectId && profile.kind === "agent" && (
+              {agentHoverChat && projectId && profile.kind === "agent" && (
                 <button
                   type="button"
                   aria-label={`Chat with ${profile.displayName}`}

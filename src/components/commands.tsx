@@ -1,6 +1,5 @@
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_8737_BULK_MOVE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8737-bulk-move-board";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { renderCommandModals1 } from "./commandModalPanels1";
 import { renderCommandModals2 } from "./commandModalPanels2";
 
@@ -69,9 +68,6 @@ import "./Modals/commands/HTC/AllCommands";
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
-  const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
-  let agentSidebarChatsEnabled = false;
-  if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
@@ -164,7 +160,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const {
   handleAction,
   } = createCommandDispatcher({
-    agentSidebarChatsEnabled, newTaskWindow,
+    newTaskWindow,
     boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
     _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
     switchToTheme: switchCommandTheme,

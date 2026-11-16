@@ -2425,19 +2425,19 @@ export default { key: NEW_FLAG, kind: "feature", defaultMode: "OWNER_AND_QA", sh
   }
 });
 
-test("sidebar lazy-runtime gating is visible at the exported entry, not hidden inside an effect callback", async (t) => {
-  const provider = fs.readFileSync(path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
-  const effect = provider.slice(provider.indexOf("  useEffect(agentSidebarChatsEnabled ?"), provider.indexOf("  const [chatRuntimeMounted"));
+test("live gated effect selects its callback at the top level, not inside the callback", async (t) => {
+  const windows = fs.readFileSync(path.join(root, "src/hooks/MultiPages/AIChat/useChatWindows.ts"), "utf8");
+  const effect = windows.slice(windows.indexOf("  useEffect(sideBySide ? () => {"), windows.indexOf("  const focus = useCallback("));
   for (const [name, source, expected] of [
-    ["current provider effect", effect, true],
-    ["old hidden effect branch", 'useEffect(() => { if (!agentSidebarChatsEnabled) return; setSidebarRequested(new URLSearchParams(window.location.search).has("agentSidebar")); }, [agentSidebarChatsEnabled]);', false],
+    ["current window effect", effect, true],
+    ["old hidden effect branch", 'useEffect(() => { if (!sideBySide) return; setStored((previous) => arrangeChatWindowsForUser(previous, userId, viewport)); }, [sideBySide]);', false],
   ]) {
     const fixture = makeRepo(t), base = commit(fixture.git, "base");
     writeFile(fixture.dir, "src/components/Provider.tsx", `import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { OTHER_FLAG } from "@/lib/flags/keys";
 export function Provider() {
-  const agentSidebarChatsEnabled = useFlag(OTHER_FLAG);
+  const sideBySide = useFlag(OTHER_FLAG);
   ${source}
   return <div />;
 }`);

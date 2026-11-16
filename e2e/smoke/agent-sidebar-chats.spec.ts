@@ -6,7 +6,6 @@ import { randomUUID } from 'node:crypto'
 import { withRealtime } from './lib/realtime'
 import { waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
-const FLAG = 'htpr-7518-agent-sidebar-chats'
 const PAST_CHATS_FLAG = 'htpr-7688-past-chats-first'
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
 const readFixture = (): Fixture => JSON.parse(readFileSync(path.join(path.dirname(stateFile), 'agent-sidebar-fixture.json'), 'utf8'))
@@ -58,7 +57,7 @@ async function readSidebarResponse(response: Response) {
     const body = await response.json().catch(() => null)
     console.log(`[sidebar response] ${response.request().method()} ${url.pathname} status=${response.status()} ${JSON.stringify({
       success: body?.success, error: body?.error, sessionId: body?.session?.id,
-      sidebarFlag: body?.flags?.[FLAG], agents: body?.agents?.map((agent: { id: string; sessionId: string }) => ({ id: agent.id, sessionId: agent.sessionId })),
+      agents: body?.agents?.map((agent: { id: string; sessionId: string }) => ({ id: agent.id, sessionId: agent.sessionId })),
       messages: body?.messages?.length,
     })}`)
   } catch (error) {
@@ -98,7 +97,6 @@ async function open(page: Page, lane: string) {
   await expect(page.getByTestId('ai-sidebar')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toBeVisible()
   const enabledFlags = (await (await flags).json()).flags
-  expect(enabledFlags[FLAG], 'server sidebar flag in disposable fixture').toBe(true)
   expect(enabledFlags[PAST_CHATS_FLAG], 'past chats flag in disposable fixture').toBe(true)
   await expect(page.getByTestId('agent-sidebar-conversations')).toBeVisible()
   await choose(page, fixture.personalChats.find(chat => chat.lane === lane)!.title)
@@ -511,29 +509,6 @@ test('open error retries the same selected agent; outside click and native trans
   await expect(page.locator('#ai-chat-tiptap-editor .ProseMirror:visible')).toHaveText(aiDraft)
 })
 
-test('flag-off client comparison restores the legacy title/history and never requests the new roster', async ({ page }, info) => {
-  let rosterRequests = 0
-  await page.route('**/api/flags', async (route) => {
-    const response = await route.fetch()
-    const body = await response.json()
-    await route.fulfill({ response, json: { ...body, flags: { ...body.flags, [FLAG]: false } } })
-  })
-  page.on('request', (request) => { if (request.url().includes('/api/agent-sidebar-chats')) rosterRequests++ })
-  const flagResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
-  await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board`))
-  await flagResponse
-  await expect(page.getByRole('button', { name: 'Switch conversation' })).toHaveCount(0)
-  const sidebar = page.getByTestId('ai-sidebar')
-  const opener = page.getByRole('button', { name: info.project.name === 'Desktop' ? 'Open AI chat' : 'AI', exact: true })
-  await expect(sidebar.or(opener).first()).toBeVisible()
-  if (!(await sidebar.isVisible())) await opener.click()
-  await expect(sidebar).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Switch conversation' })).toHaveCount(0)
-  await expect(page.getByTestId('agent-sidebar-conversations')).toHaveCount(0)
-  await expect(page.locator('#ai-chat-tiptap-editor .ProseMirror:visible')).toBeVisible()
-  expect(rosterRequests).toBe(0)
-})
-
 test('switching chats does not move the ticket, its comments or its comment composer', async ({ page }, info) => {
   await pinLegacyHeader(page)
   await page.goto(withRealtime(`/detail/project-${fixture.projectId}/1?agentSidebar=1`))
@@ -563,12 +538,12 @@ test('switching chats does not move the ticket, its comments or its comment comp
   await expect(page.getByTestId('ai-sidebar')).toBeHidden()
 })
 
-test('new flag On keeps activity hidden with parked fullscreen flag Off', async ({ page }, info) => {
+test('sidebar keeps activity hidden with parked fullscreen flag Off', async ({ page }, info) => {
   await page.route('**/api/flags', async (route) => {
     const response = await route.fetch()
     const body = await response.json()
     await route.fulfill({ response, json: { ...body, flags: { ...body.flags,
-      [FLAG]: true, 'htpr-6476-mobile-agent-chat-fullscreen': false,
+      'htpr-6476-mobile-agent-chat-fullscreen': false,
     } } })
   })
   await open(page, info.project.name)

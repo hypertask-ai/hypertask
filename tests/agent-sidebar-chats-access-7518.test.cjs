@@ -4,8 +4,7 @@ const path = require("node:path");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-const FLAG = "htpr-7518-agent-sidebar-chats";
-let viewer, enabled, agent, board, session, writes, messages, participants, activityReads;
+let viewer, agent, board, session, writes, messages, participants, activityReads;
 const stub = (file, exports) => {
   const id = path.join(root, file);
   require.cache[id] = { id, filename: id, loaded: true, exports };
@@ -68,7 +67,7 @@ stub("src/lib/agents/runtimeState.ts", {
 stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => viewer });
 stub("src/lib/flags.ts", {
-  isFeatureEnabled: async (key) => key === FLAG ? enabled : false,
+  isFeatureEnabled: async () => false,
 });
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: (userId) => ({ __visibleTo: userId }) });
 stub("src/utils/controllers/projects/getAllIncludes.ts", {
@@ -109,7 +108,7 @@ const routes = {
   stop: load("src/app/api/agent-chat/[sessionId]/stop/route.ts"),
 };
 function reset() {
-  viewer = { userId: 6, source: "legacy" }; enabled = true; writes = []; messages = []; participants = {}; activityReads = 0;
+  viewer = { userId: 6, source: "legacy" }; writes = []; messages = []; participants = {}; activityReads = 0;
   board = { id: 15, ownerId: 6, teamId: "team-a", status: "Normal", members: [{ userId: 7, agentId: null, status: "Accepted" }] };
   agent = { id: "agent-1", userId: 6, displayName: "Runner", photoURL: null, visibility: "TEAM", runtimeType: "EXTERNAL", revokedAt: null, archivedAt: null, crossTeamHomeTeamId: null,
     heartbeatAt: new Date(), agentWebhookSubscription: null, members: [{ projectId: 15, status: "Accepted", project: board }] };
@@ -154,7 +153,6 @@ for (const name of operations) {
     "wrong agent cookie": () => { viewer.agentId = "another-agent"; },
     "own agent cookie": () => { viewer.agentId = "agent-1"; },
     "agent bearer without human session": () => { viewer = null; },
-    "flag Off": () => { enabled = false; },
     "canonical team mismatch": () => { viewer.userId = 7; session.teamId = "team-old"; },
   };
   for (const [scenario, change] of Object.entries(denied)) test(`${name}: now refused ${scenario}`, async () => {
@@ -165,15 +163,6 @@ for (const name of operations) {
     assert.equal(writes.length, 0, "Refusal cannot mutate a thread or participant");
   });
 }
-for (const name of ["read", "send", "stop", "draft"]) test(`${name}: flag Off preserves legacy owner calls without sidebar context`, async () => {
-  reset(); enabled = false;
-  const response = await operation(name, false);
-  assert.equal(response.status, 200);
-  if (name === "read") {
-    assert.deepEqual((await response.json()).activity, [{ id: "activity-1", kind: "event", text: "Fixture activity" }]);
-    assert.equal(activityReads, 1);
-  }
-});
 test("an own agent token still reads its thread and refuses another agent's thread", async () => {
   reset();
   assert.equal((await access.loadAgentTokenChatSession({ sessionId: session.id, agentId: agent.id, select: {} })).ok, true);

@@ -10,7 +10,6 @@ import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021
 import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
 import { HTPR_7318_TICKET_CHAT_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import AgentChatClient from "@/app/agents/chat/AgentChatClient";
 import type { TAgent } from "@/app/agents/AgentsRegister";
 import type { SidebarChatAgent, SidebarChatTarget } from "@/app/agents/chat/agentChatTypes";
@@ -45,7 +44,6 @@ export const AI_Chat_Sidebar = ({
   const { showWelcomeScreen, minimized } = chat;
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const agentHoverChat = useFlag(HTPR_7737_AGENT_HOVER_CHAT_FLAG);
-  const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
   const noEmptyChats = useFlag(HTPR_9021_NO_EMPTY_CHATS_FLAG);
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
@@ -72,12 +70,12 @@ export const AI_Chat_Sidebar = ({
   chatRef.current = chat;
   const targetRef = useRef(target);
   targetRef.current = target;
-  const generalChatPending = enabled && !!projectId && target.kind === "ai" && !!chat.currentSession?.agentId;
+  const generalChatPending = !!projectId && target.kind === "ai" && !!chat.currentSession?.agentId;
   const drafts = useRef(new Map<string, { html: string; files: typeof chat.fileItems }>());
-  const sidebarEnabled = enabled && !!projectId && !!currentUser;
+  const sidebarEnabled = !!projectId && !!currentUser;
 
   const loadRoster = useCallback(async () => {
-    if (!enabled || !projectId) return;
+    if (!projectId) return;
     const generation = ++rosterGeneration.current;
     try {
       const response = await fetch(`/api/agent-sidebar-chats?projectId=${projectId}`, { cache: "no-store" });
@@ -110,7 +108,7 @@ export const AI_Chat_Sidebar = ({
       setAgents([]);
       setRosterError(error instanceof Error ? error.message : "Could not load agents");
     }
-  }, [enabled, projectId, agentSessionsEnabled]);
+  }, [projectId, agentSessionsEnabled]);
 
   const loadingAgentPages = useRef(new Set<string>());
   const loadMoreAgentSessions = async (agent: SidebarChatAgent) => {
@@ -379,7 +377,7 @@ export const AI_Chat_Sidebar = ({
           "flex min-h-0 min-w-0 flex-1 flex-col border-l-thin border-[#434343]"
         )}
       >
-        <ChatHeader sidebarChats={enabled && sidebarEnabled ? { projectId: projectId!, target, agents, error: rosterError,
+        <ChatHeader sidebarChats={sidebarEnabled ? { projectId: projectId!, target, agents, error: rosterError,
           onSelect: (next) => void selectTarget(next), onSelectSession: pastChatsFirst ? (id) => void selectTarget({ kind: "ai" }, id) : chat.selectSession, onRetry: () => void loadRoster(),
           ...(agentSessionsEnabled ? {
             onSelectAgentSession: (agent: SidebarChatAgent, sessionId: string) => void selectTarget({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent }, undefined, { sessionId }),

@@ -4,7 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@
 import type { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { AI_Chat_API, isPagedChatSessions, mergeSessionHistory, mergeSessionTranscript, type ChatSessionScope, type ChatSessionSummary, type TPagedChatSessionsResponse } from "@/utils/api/ai_chat";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 
 import { useChatSessionSelection } from "./useChatSessionSelection";
@@ -19,9 +19,8 @@ const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSumma
 const staleTime = 1000 * 60 * 3;
 
 export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined; restoreSelection?: boolean }, navigationKey?: string | null, navigationBoardId?: number, pinnedSessionId?: string | null) {
-  const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const noEmptyChats = useFlag(HTPR_9021_NO_EMPTY_CHATS_FLAG);
-  const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
+  const sidebarChat = getNativeSidebarChat();
   const queryClient = useQueryClient();
   const summaryKey = ["chat-session-summaries", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, "history"];
   const transcriptPrefix = ["aiChatTranscript", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG];

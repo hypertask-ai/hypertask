@@ -1,11 +1,9 @@
 import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
 import { chatAudienceWhere, chatContentScopeWhere } from "./chatContentScope";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/definitions/htpr-7518-agent-sidebar-chats";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
-import { isFeatureEnabled } from "@/lib/flags";
 
 
 export const AGENT_CHAT_SESSION_NOT_FOUND = "Session not found";
@@ -141,8 +139,7 @@ export async function loadSidebarChatBoard(
   projectId: number,
   actingAgentId?: string | null,
 ) {
-  if (actingAgentId || !Number.isSafeInteger(projectId) || projectId <= 0 ||
-      !(await isFeatureEnabled(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, userId))) return null;
+  if (actingAgentId || !Number.isSafeInteger(projectId) || projectId <= 0) return null;
   return prisma.project.findFirst({
     where: {
       ...getProjectWhere(userId, actingAgentId),

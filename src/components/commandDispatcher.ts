@@ -16,7 +16,7 @@ import type { createBoardCommandActions } from "./boardCommandActions";
 import type { createGeneralCommandActions } from "./generalCommandActions";
 import type { createCommandModalCallbacks } from "./commandModalCallbacks";
 
-type Context = { newTaskWindow?: boolean; agentSidebarChatsEnabled: boolean } & Pick<IHTCProps, "callbackHandler"> &
+type Context = { newTaskWindow?: boolean } & Pick<IHTCProps, "callbackHandler"> &
   Pick<ReturnType<typeof useCommandsState>, "boardCloseHandler" | "setShowCommands" | "setCommandMode" | "undoLatest" | "_currentProject" | "setBoardZoomedOutByProject" | "currentUser" | "openSettings" | "setShowShortcuts" | "switchToTheme" | "followTaskHandler" | "unFollowTaskHandler" | "hasBulkSelection" | "bulkSelection" | "archiveHandler" | "removeNotificationHandler" | "setShowQuickTips" | "openAnnouncements" | "setShowTaskHistory" | "setToggleAllCommentsSignal" | "saveEmptySectionsAPI" | "toggleShowArchivedOnBoard" | "paletteContextOptions" | "setArchiveBoardScope" | "toggleBoardLayout" | "onMyTasks" | "myTasksViewsEnabled" | "setMyTasksColumnsPickerRequest" | "changeBoardLayout" | "pathname" | "goToProjectShortcut" | "router" | "setRailExpanded" | "setAppShellRail" | "inViewObject" | "toggleCreateTaskGlobally" | "duplicateTaskHandler" | "openAiWriterHandler" | "summarizeTicketHandler" | "viewSubTasksHandler" | "commentFunctionHandler" | "isMbl" | "setShowAiChatInterface" | "showAiChatInterface" | "setAiChatAutoOpenSuppressed" | "setAiChatExplicitOpenAt" | "setAiChatPinned" | "aiChatPinned" | "setIsSidebarMode" | "copyURLFunctionHandler" | "moveTaskToInboxHandler" | "starTaskHandler" | "setReminderHandler" | "myTasksSnoozeEnabled" | "removeParentHandler" | "removeSubtaskHandler" | "commentAudioSpeechToText" | "toggleTimeTrackingHandler" | "setCalendarSettings" | "endTour" | "setSelectedTourId" | "startTour"> &
   Pick<ReturnType<typeof createBoardCommandActions>, "acceptTaskHandler" | "saveTaskTemplateHandler" | "generateStatusUpdateHandler" | "toggleStalenessHandler" | "toggleStalenessViewHandler" | "toggleAutoArchiveHandler" | "sortByStalenessHandler"> &
   Pick<ReturnType<typeof createGeneralCommandActions>, "hideActiveColumn" | "markUnread" | "GoToHandler" | "toggleBoardTimeTrackingHandler" | "redirectToTrash" | "GoToOnboarding" | "copyCurrentPageURL" | "subscribeGoogleCalendar" | "copyBranchNameHandler" | "assignToMeHandler" | "deleteAllChats"> &
@@ -833,7 +833,7 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
         return;
       case CommandMode.GoToAgentChat:
         boardCloseHandler();
-        if (context.agentSidebarChatsEnabled && _currentProject?.id) {
+        if (_currentProject?.id) {
           setIsSidebarMode(true);
           setAiChatAutoOpenSuppressed(false);
           setAiChatExplicitOpenAt(Date.now());

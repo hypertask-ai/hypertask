@@ -182,7 +182,6 @@ import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { useKeepChatClosed } from "@/hooks/General/useKeepChatClosed";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 import { HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG } from "@/lib/flags/keys";
@@ -477,22 +476,19 @@ export default function GlobalProvider({
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
   const shouldMountAgentChatRuntime =
     isAgentChatPage && mbl;
-  const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const [sidebarRequested, setSidebarRequested] = useState(false);
   const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
-  useEffect(agentSidebarChatsEnabled ? () => {
+  useEffect(() => {
     const requested = new URLSearchParams(window.location.search).has("agentSidebar");
     setSidebarRequested(requested);
     if (!requested) return;
     setSidebarMode(true);
     setAiChatAutoOpenSuppressed(false);
     setShowAiChatInterface(true);
-  } : () => {
-    setSidebarRequested(false);
-  }, [agentSidebarChatsEnabled, pathname, setSidebarMode, setAiChatAutoOpenSuppressed, setShowAiChatInterface]);
+  }, [pathname, setSidebarMode, setAiChatAutoOpenSuppressed, setShowAiChatInterface]);
   const [chatRuntimeMounted, setChatRuntimeMounted] = useState(
     isFullScreenChat || showAiChatInterface,
   );

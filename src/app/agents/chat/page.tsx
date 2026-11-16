@@ -5,15 +5,12 @@ import { looksLikeAgentId } from "@/lib/agents/slug";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { headers } from "next/headers";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import type { IUser } from "@/models/model";
 import AgentChatClient from "./AgentChatClient";
 import AgentRoomClient from "./AgentRoomClient";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
-import { isFeatureEnabled } from "@/lib/flags";
 
 export const metadata: Metadata = {
   title: "Agent Chat",
@@ -26,8 +23,7 @@ export default async function AgentChatPage({
 }) {
   const query = await searchParams;
   const sessionUser = await getSessionUser(await headers());
-  if (query.view !== "rooms" && sessionUser && !sessionUser.agentId &&
-      await isFeatureEnabled(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, sessionUser.userId)) {
+  if (query.view !== "rooms" && sessionUser && !sessionUser.agentId) {
     const target = new URLSearchParams({ agentSidebar: "1" });
     const agentId = query.agent && (looksLikeAgentId(query.agent) ? query.agent : (await resolveOwnedAgent(sessionUser.userId, query.agent))?.id);
     if (agentId) target.set("sidebarAgent", agentId);

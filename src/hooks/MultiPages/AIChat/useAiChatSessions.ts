@@ -14,7 +14,7 @@ import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/h
 import { HTPR_9021_NO_EMPTY_CHATS_FLAG } from "@/lib/flags/definitions/htpr-9021-no-empty-chats";
 import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sessionMessageQueue";
 
-type Context = { navigationKey?: string | null; parallelStreams?: SessionStreams; agentSidebarChatsEnabled: boolean; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "showGeneralChatInHistory" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "manualChat" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
+type Context = { navigationKey?: string | null; parallelStreams?: SessionStreams; persistentQueue?: SessionMessageQueue } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "showGeneralChatInHistory" | "editor" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "manualChat" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
 
 export function useAiChatSessions(context: Context) {
   const followsTaskNavigation = useFlag(HTPR_7736_CHAT_FOLLOWS_TASK_FLAG);
@@ -187,7 +187,7 @@ export function useAiChatSessions(context: Context) {
   const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000, allowCreate = true) => {
     const projectId = currentProject?.id;
     const userId = currentUser?.id;
-    const sidebarNative = context.agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
+    const sidebarNative = getNativeSidebarChat();
     if (sidebarNative && sidebarNative.projectId === projectId) {
       return sessionPagingEnabled
         ? await resolveHistorySession(sidebarNative.sessionId)
@@ -382,7 +382,6 @@ export function useAiChatSessions(context: Context) {
   }, [
     aiChatBoardSessionMap,
     navigationKey,
-    context.agentSidebarChatsEnabled,
     createSession,
     currentProject?.id,
     currentUser?.id,

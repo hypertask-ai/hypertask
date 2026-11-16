@@ -3,13 +3,12 @@ const test = require("node:test");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 
 const FLAG = "htpr-7737-agent-hover-chat";
-const SIDEBAR = "htpr-7518-agent-sidebar-chats";
 const noop = () => {};
 const agent = { kind: "agent", id: "agent-one", displayName: "Runner", runtimeType: "EXTERNAL", sessionId: "agent-session" };
 
 test("hover chat is reversible and preserves profile links, human contacts and loading/error states", async () => {
   const view = mount();
-  let enabled = true, sidebarEnabled = true;
+  let enabled = true;
   let query = { data: agent };
   const writes = [], navigations = [], events = [], closed = [];
   const pass = ({ children }) => children;
@@ -25,8 +24,7 @@ test("hover chat is reversible and preserves profile links, human contacts and l
     "@/hooks/MultiPages/usePersonHovercard": { usePersonHovercard: () => query },
     "next/link": { default: "a" },
     "next/navigation": { usePathname: () => "/detail/project-7049/42", useRouter: () => ({ replace: (...args) => navigations.push(args) }) },
-    "@/hooks/useFlag": { useFlag: key => key === FLAG ? enabled : key === SIDEBAR && sidebarEnabled },
-    "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: SIDEBAR },
+    "@/hooks/useFlag": { useFlag: key => key === FLAG },
     "@/lib/state": { useSetRecoilState: atom => value => writes.push([atom, value]) },
     "@/store": { isAiChatSidebarModeAtom: "sidebar", aiChatAutoOpenSuppressedAtom: "suppressed", aiChatExplicitOpenAtAtom: "explicit", showAIChatInterfaceAtom: "open" },
     "@floating-ui/react": floating,
@@ -51,9 +49,7 @@ test("hover chat is reversible and preserves profile links, human contacts and l
     enabled = false; render();
     assert.equal(view.container.querySelector('button'), null);
     assert.equal(view.container.querySelector('a').getAttribute("href"), "/agents/agent-one");
-    enabled = true; sidebarEnabled = false; render();
-    assert.equal(view.container.querySelector('button'), null);
-    sidebarEnabled = true;
+    enabled = true;
     query = { data: { kind: "user", id: 985, displayName: "Human", email: "qa@example.test" } }; render();
     assert.equal(view.container.querySelector('a'), null);
     assert.equal(view.container.querySelector('button').getAttribute("aria-label"), "Copy qa@example.test");
@@ -75,9 +71,8 @@ for (const deepLink of [null, "agent-other"]) for (const sessions of [false, tru
   const chat = { currentSession: { id: "general", agentId: null }, fileItems: [], resetFiles: noop, selectSession: noop, startNewSession: assert.fail };
   const source = loader({
     "react-hot-toast": { default: { error: assert.fail } },
-    "@/hooks/useFlag": { useFlag: key => [FLAG, SIDEBAR, ...(sessions ? ["htpr-8048-agent-sessions"] : [])].includes(key) },
+    "@/hooks/useFlag": { useFlag: key => [FLAG, ...(sessions ? ["htpr-8048-agent-sessions"] : [])].includes(key) },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
-    "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: SIDEBAR },
     "@/app/agents/chat/AgentChatClient": { default: () => null },
     "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: noop },
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null, setNativeSidebarChat: noop },
@@ -139,7 +134,6 @@ test("a tap keeps the person card open; a mouse hover still closes on leave", as
     "next/link": { default: "a" },
     "next/navigation": { usePathname: () => "/detail/project-7049/42", useRouter: () => ({ replace: noop }) },
     "@/hooks/useFlag": { useFlag: key => key === FLAG },
-    "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: SIDEBAR },
     "@/lib/state": { useSetRecoilState: () => noop },
     "@/store": { isAiChatSidebarModeAtom: "sidebar", aiChatAutoOpenSuppressedAtom: "suppressed", aiChatExplicitOpenAtAtom: "explicit", showAIChatInterfaceAtom: "open" },
     "@floating-ui/react": floating,
