@@ -168,7 +168,7 @@ test("pass acceptance matches the rule on seeded runs", async () => {
   }
 });
 test("the verifier seed satisfies the proxy onboarding check", async () => {
-  const { cookiesFromHeader } = await load(), { checkIfOnboarded } = await import("../src/lib/auth/checkIfOnboarded.ts");
+  const { cookiesFromHeader } = await load(), exported = {}, checkIfOnboarded = (new Function("exports", "require", require("typescript").transpileModule(require("node:fs").readFileSync(require("node:path").join(__dirname, "../src/proxy.ts"), "utf8"), { compilerOptions: { module: require("typescript").ModuleKind.CommonJS, target: require("typescript").ScriptTarget.ES2022, esModuleInterop: true } }).outputText)(exported, () => ({})), exported.checkIfOnboarded);
   const bare = { id: 7, email: "core-smoke@example.invalid", displayName: "Core smoke user", photoURL: null };
   const seeded = { ...bare, UserSetting: { notification: false, onboardingTourStatus: false } }, header = (user) => `nookies_user=${encodeURIComponent(JSON.stringify(user))}; ht_session=signed-session`;
   assert.deepEqual([Boolean(checkIfOnboarded(bare)), Boolean(checkIfOnboarded(seeded))], [false, false]);

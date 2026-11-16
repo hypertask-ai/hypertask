@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isValidUser } from './utils/edgeHelpers';
 import { isMobileDevice } from './utils/serverActions';
 import { canAccessTrialPage } from './utils/helperFunctions/helperFunctions';
-import { checkIfOnboarded } from '@/lib/auth/checkIfOnboarded';
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo';
 import { verifySessionEdge } from '@/lib/auth/sessionEdge';
 import { refusedContentEncoding } from '@/lib/net/contentEncoding';
@@ -495,6 +494,10 @@ export const config = {
     '/api/:path*'
   ]
 };
+
+export const checkIfOnboarded = (user: any) => {
+  return user.UserSetting?.onboardingTourStatus;
+}
 
 const checkIfTutorialCompleted = (user: any) => {
   return user.UserSetting?.onboardingTutorialStatus;
