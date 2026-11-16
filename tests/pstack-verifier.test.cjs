@@ -168,20 +168,14 @@ test("pass acceptance matches the rule on seeded runs", async () => {
   }
 });
 test("the verifier seed satisfies the proxy onboarding check", async () => {
-  const { cookiesFromHeader } = await load();
-  const checkIfOnboarded = (user) => user.UserSetting?.onboardingTourStatus;
-  assert.match(require("node:fs").readFileSync("src/proxy.ts", "utf8"), /const checkIfOnboarded = \(user: any\) => \{\n  return user\.UserSetting\?\.onboardingTourStatus;\n\}/);
+  const { cookiesFromHeader } = await load(), { checkIfOnboarded } = await import("../src/lib/auth/checkIfOnboarded.ts");
   const bare = { id: 7, email: "core-smoke@example.invalid", displayName: "Core smoke user", photoURL: null };
-  const seeded = { ...bare, UserSetting: { notification: false, onboardingTourStatus: false } };
-  assert.equal(Boolean(checkIfOnboarded(bare)) || Boolean(checkIfOnboarded(seeded)), false);
-  const header = (user) => `nookies_user=${encodeURIComponent(JSON.stringify(user))}; ht_session=signed-session`;
+  const seeded = { ...bare, UserSetting: { notification: false, onboardingTourStatus: false } }, header = (user) => `nookies_user=${encodeURIComponent(JSON.stringify(user))}; ht_session=signed-session`;
+  assert.deepEqual([Boolean(checkIfOnboarded(bare)), Boolean(checkIfOnboarded(seeded))], [false, false]);
   for (const user of [bare, seeded]) {
     const cookies = cookiesFromHeader(header(user), base), sent = JSON.parse(decodeURIComponent(cookies[0].value));
-    assert.equal(checkIfOnboarded(sent), true);
-    assert.deepEqual([sent.id, sent.email, sent.displayName, cookies[1].name, cookies[1].value], [7, bare.email, bare.displayName, "ht_session", "signed-session"]);
+    assert.deepEqual([checkIfOnboarded(sent), sent.id, sent.email, sent.displayName, cookies[1].name, cookies[1].value, user.UserSetting ? sent.UserSetting : null], [true, 7, bare.email, bare.displayName, "ht_session", "signed-session", user.UserSetting ? { notification: false, onboardingTourStatus: true } : null]);
   }
-  const sentRow = JSON.parse(decodeURIComponent(cookiesFromHeader(header(seeded), base)[0].value));
-  assert.deepEqual(sentRow.UserSetting, { notification: false, onboardingTourStatus: true });
   assert.equal(cookiesFromHeader("nookies_user=abc%3D; ht_session=signed", base)[0].value, "abc%3D");
 });
 test("a pass on /onboarding is not a pass", async () => {
