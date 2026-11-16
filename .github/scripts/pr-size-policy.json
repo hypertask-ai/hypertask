@@ -19,6 +19,6 @@
     "Cargo.lock",
     "eslint-local-rules/style-guide-suppressions.json"
   ],
-  "excludedDirectories": ["src/generated/", "tests/fixtures/", ".claude/skills/ship/scripts/fixtures/", "e2e/smoke/__snapshots__/"],
+  "excludedDirectories": ["src/generated/", "tests/fixtures/", ".claude/skills/ship/scripts/fixtures/", "e2e/smoke/__snapshots__/", "e2e/smoke/flag-modes/"],
   "excludedSuffixes": [".snap", ".generated.ts", ".generated.tsx"]
 }

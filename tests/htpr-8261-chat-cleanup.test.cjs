@@ -210,6 +210,7 @@ test("chat header corners follow cleanup only outside full-screen chat", () => {
     "@/lib/aiModelOptions": { getMobileAiChatModelLabel: () => "GPT" },
     "@/lib/configs/aiTaskWriter.config": { aiTaskWriterConfig: { shortcutsAndTooltips: { ai_chat: { new_chat_button: () => ({}), minimize_button: () => ({}) } } } },
     "./AgentSidebarChatCommands": { AgentSidebarChatCommands: () => null },
+    "./AI_Tiptap_Container": { AI_Tiptap_Container: () => null, ChatScopeControl: () => null },
   });
   const Header = source("src/components/AI_CHAT/ChatHeader.tsx").ChatHeader;
   try {
