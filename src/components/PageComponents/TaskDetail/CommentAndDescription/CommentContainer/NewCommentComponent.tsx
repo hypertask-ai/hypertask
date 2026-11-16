@@ -39,7 +39,7 @@ import { usePathname } from "next/navigation";
 import { getTaskDraftContent } from "@/components/RTE/draftSync";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6555_IDLE_COMMENT_MIC_FLAG, HTPR_7379_INBOX_ACTIONS_NO_OUTLINE_FLAG, HTPR_8139_COMMENT_DICTATION_SCROLL_FLAG } from "@/lib/flags/keys";
+import { HTPR_7379_INBOX_ACTIONS_NO_OUTLINE_FLAG, HTPR_8139_COMMENT_DICTATION_SCROLL_FLAG } from "@/lib/flags/keys";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
 
@@ -103,7 +103,6 @@ const NewCommentComponent = (
         hasDraftContent ||
         Boolean(replyQuote);
       const [hasMountedCommentEditor, setHasMountedCommentEditor] = useState(shouldMountCommentEditor);
-      const idleCommentMicEnabled = useFlag(HTPR_6555_IDLE_COMMENT_MIC_FLAG);
       const dictationScrollEnabled = useFlag(HTPR_8139_COMMENT_DICTATION_SCROLL_FLAG);
       const [idleRecording, setIdleRecording] = useState(false);
       const pendingIdleDictationRef = useRef<{
@@ -552,16 +551,13 @@ const NewCommentComponent = (
                         reply={replyQuote}
                         createNewComment={editMode==="comment" || editMode === "new-comment-ai"}
                       />
-                      ) : idleCommentMicEnabled ? (
+                      ) : (
                         <NewCommentPlaceholder
                           isMbl={_mbl}
-                          showIdleMic
                           idleRecording={idleRecording}
                           onIdleRecordingChange={setIdleRecording}
                           onIdleDictation={handleIdleDictation}
                         />
-                      ) : (
-                        <NewCommentPlaceholder isMbl={_mbl} />
                       )}
                       </div>
 
@@ -576,13 +572,11 @@ const NewCommentComponent = (
 
   const NewCommentPlaceholder = ({
     isMbl,
-    showIdleMic = false,
     idleRecording = false,
     onIdleRecordingChange = () => {},
     onIdleDictation = () => {},
   }:{
     isMbl:boolean;
-    showIdleMic?:boolean;
     idleRecording?:boolean;
     onIdleRecordingChange?:(recording: boolean) => void;
     onIdleDictation?:(text: string, setContent?: boolean) => void;
@@ -613,7 +607,7 @@ const NewCommentComponent = (
         </p>
       </div>
       )}
-      {isMbl && showIdleMic && (
+      {isMbl && (
         <div
           className={idleRecording ? "min-w-0 flex-1" : "ml-auto shrink-0"}
           onClick={(event) => event.stopPropagation()}

@@ -604,6 +604,24 @@ test("subtask-link is absent from the registry after becoming permanent", async 
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6972-subtask-link"), false);
 });
 
+test("the retired idle comment microphone flag stays on for open tabs", async () => {
+  const key = "htpr-6555-idle-comment-mic";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261116200000_drop_htpr_6555_idle_comment_mic_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  for (const userId of [6, 985, 2343]) {
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
+});
+
 test("the retired My Tasks table columns flag is hidden, immutable and enabled for old tabs", async () => {
   const key = "htpr-6456-my-tasks-table-columns";
   assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
