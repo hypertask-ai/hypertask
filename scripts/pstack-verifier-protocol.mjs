@@ -54,6 +54,7 @@ export function verifierSmokeUser(user) {
   const setting = user.UserSetting && typeof user.UserSetting === "object" && !Array.isArray(user.UserSetting) ? { ...user.UserSetting } : {};
   return { ...user, UserSetting: { ...setting, onboardingTourStatus: true } };
 }
+export const coreSmokeUserSetting = { notification: false, onboardingTourStatus: true };
 function onboardVerifierCookieValue(value) {
   const read = (text) => { try { const parsed = JSON.parse(text); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null; } catch { return null; } };
   const raw = String(value ?? ""), plain = read(raw);
@@ -87,7 +88,7 @@ export function chatBody(model, prompt) {
 }
 async function readLive(page, secrets) {
   let url = "", text = "";
-  try { url = page.url(); } catch { url = ""; }
+  try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} try { url = page.url(); } catch { url = ""; }
   try { text = await page.locator("body").innerText({ timeout: 8000 }); } catch { text = ""; }
   return { url, snapshot: redact(`${url}\n${String(text).slice(0, 2500)}`, secrets) };
 }
@@ -152,14 +153,14 @@ export async function performOnPage(page, actions, shotsDir, turn, base) {
   for (const [index, action] of actions.entries()) {
     try {
       if (action.op === "goto") await page.goto(new URL(allowPath(action.path, base), base).toString(), { waitUntil: "domcontentloaded", timeout: 20000 });
-      if (action.op === "click") { await page.getByText(action.text, { exact: true }).first().click({ timeout: 8000 }); clicked.push(action.text); }
+      if (action.op === "click") { const handle = page.getByText(action.text, { exact: true }).first(); const target = typeof handle.getAttribute === "function" ? await handle.getAttribute("target") : null; if (target === "_blank") { const context = typeof page.context === "function" ? page.context() : null; const opened = typeof context?.waitForEvent === "function" ? context.waitForEvent("page", { timeout: 8000 }) : null; await handle.click({ timeout: 8000 }); let popup = null; try { popup = opened ? await opened : null; } catch { popup = null; } if (!popup) throw new Error("popup was not followed"); page = popup; try { await page.waitForLoadState?.("domcontentloaded", { timeout: 8000 }); } catch {} } else await handle.click({ timeout: 8000 }); clicked.push(action.text); }
       if (action.op === "fill") { await page.getByLabel(action.label).fill(action.value, { timeout: 8000 }); clicked.push(action.label); }
       if (action.op === "press") { await page.keyboard.press(action.key); clicked.push(action.key); }
       const name = `${turn}-${index}-${action.op}.png`;
       await page.screenshot({ path: path.join(shotsDir, name) });
       shots.push(name);
       lines.push(`${action.op} ok`);
-    } catch (error) { lines.push(`${action.op} failed: ${String(error.message ?? error).split("\n")[0]}`); }
+    } catch (error) { const message = String(error.message ?? error).split("\n")[0]; lines.push(`${action.op} failed: ${message}`); if (message.includes("popup")) page = { url: () => "about:blank", async screenshot() {}, locator: () => ({ innerText: async () => "" }) }; }
     try { urls.push(page.url()); } catch { urls.push(""); }
   }
   let text = "";
