@@ -780,6 +780,25 @@ test("the retired My Tasks snooze flag is hidden, immutable and enabled for old 
   assert.equal((await flags.featureFlagsForUser(42))[key], true);
 });
 
+test("the retired Kanban sticky header flag is hidden, immutable and on for old tabs", async () => {
+  const key = "htpr-8628-kanban-sticky-header";
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [{ key, mode, updatedAt: new Date() }];
+    row = { mode, updatedAt: new Date() };
+    assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+    for (const userId of [6, 985, 42]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(42))[key], true);
+});
+
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
   assert.equal(flags.HTPR_6899_STABLE_LAYOUT_FLAG, "htpr-6899-stable-layout");
   const listed = await flags.listFeatureFlagModes();

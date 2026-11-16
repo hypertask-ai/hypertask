@@ -81,6 +81,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-7284-activation-completed",
   "htpr-7367-server-description-first",
   "htpr-7133-mcp-ratelimit-fast",
+  "htpr-8628-kanban-sticky-header",
   "htpr-6456-my-tasks-table-columns",
   "htpr-6457-my-tasks-scopes",
   "htpr-6459-my-tasks-overdue-badges",
@@ -121,6 +122,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6460-my-tasks-quick-add": true,
   "htpr-6461-my-tasks-snooze": true,
   "htpr-6938-my-tasks-icon-controls": true,
+  "htpr-8628-kanban-sticky-header": true,
 } as const;
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
