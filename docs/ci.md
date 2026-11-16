@@ -82,7 +82,7 @@ Small guards share scanner work and trusted metadata:
 Static gates inside `ci-checks` share one job and run as concurrent lanes (HYCI-8):
 agent board scope, TypeScript, Oxlint, ESLint, the lint overlap guard, board
 registration boundaries, the board-filter/Ctrl+K/source-text contracts, changed
-style tokens and paid API cost notes.
+style tokens, paid API cost notes, and risky pattern counts.
 None reads another's output, so the job costs its slowest lane instead of their sum.
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
@@ -1870,3 +1870,9 @@ workflow gets no allowance and fails on its first comment. Unused allowances do 
 fail, so cleaning a file is safe, and `node scripts/check-no-comments.mjs
 --write-baseline` shrinks the baseline to the current counts when that cleanup
 lands. No new required check is added.
+
+## Risky pattern counts (HTPR-9384)
+
+New code was copying effect hooks, quick timers, `as any` casts, and eslint-disable comments because those patterns were already common and nothing failed. `scripts/check-risky-patterns.mjs` counts them under `src` on the existing `ci-checks` lane `risky-patterns`. The required `ci-tests` check fails when a count goes above `scripts/risky-pattern-baseline.json`. Old uses stay. A lower count does not fail.
+
+The failure names the shape to use instead. A real exception is one object in `scripts/risky-pattern-exceptions.json` with `pattern`, a reason, and `ticket` set to a full `https://app.hypertask.ai/detail/project-<board>/<number>` link. Raising the baseline is not the exception. Files over 1,500 lines stay on the existing file size check.

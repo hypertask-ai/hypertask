@@ -16,9 +16,10 @@ const lanes = [
   "lint-overlap-guard",
   "oxlint",
   "paid-api-cost-notes",
+  "risky-patterns",
   "typescript",
 ];
-const launchedBeforeTests = ["board-registration-boundaries", "github-comments"];
+const launchedBeforeTests = ["board-registration-boundaries", "github-comments", "risky-patterns"];
 const formerSteps = [
   "Board filter and sort contracts",
   "Changed style tokens",
