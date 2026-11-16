@@ -1,4 +1,6 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef } from "react";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen";
 import { signalAiChip } from "@/lib/ai/chipEvents";
 import { composeIntroTaskId } from "@/lib/ai/composeIntroTaskId";
 import { MessageItem } from "./MessageItem";
@@ -38,6 +40,8 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const messages = currentSession?.messages ?? [];
   const lastMessage = messages[messages.length - 1];
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
+  const phoneChatFullscreen = useFlag(HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG);
+  const isMbl = useContext(MobileViewContext);
   const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
   const originalNoteState = useRecoilValue(composeTaskOriginalNoteAtom);
   const lastMessageLooksLikeIntro = lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
@@ -140,9 +144,11 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
           scrollAway: !nearBottom && (movedUp || Boolean(saved?.away)) });
         handleMessageListScroll(element);
       }}
-      className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto p-2 max-h-full scrollbar-thin hover:scrollbar-thumb-list-scroll-hover scrollbar-thumb-list-scroll scrollbar-track-kanban-column-scrollbar"
+      className={phoneChatFullscreen && isMbl
+        ? "flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto px-3 py-2 max-h-full scrollbar-thin hover:scrollbar-thumb-list-scroll-hover scrollbar-thumb-list-scroll scrollbar-track-kanban-column-scrollbar"
+        : "flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto p-2 max-h-full scrollbar-thin hover:scrollbar-thumb-list-scroll-hover scrollbar-thumb-list-scroll scrollbar-track-kanban-column-scrollbar"}
     >
-      <div ref={messagesContentRef} className="space-y-2">
+      <div ref={messagesContentRef} className={phoneChatFullscreen && isMbl ? "space-y-3" : "space-y-2"}>
         {messages.map((message) => (
           <MessageItem
             key={message.id}

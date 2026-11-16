@@ -4,6 +4,7 @@ import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions
 import AiChatTicketRows from "./AiChatTicketRows";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
 import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
+import { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen";
 import { HTPR_7751_OWN_KEY_REJECTED_FLAG } from "@/lib/flags/definitions/htpr-7751-own-key-rejected";
 import AttachmentView from "@/components/Common/AttachmentsView";
 import { IMessageItemProps } from "@/models/AICHATMODELS";
@@ -136,6 +137,8 @@ export const MessageItem: FC<IMessageItemProps> = ({
 }) => {
   const ticketRowsEnabled = useFlag(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG);
   const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
+  const phoneChatFullscreen = useFlag(HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG);
+  const isMbl = useContext(MobileViewContext);
   const [carouselItems, setCarouselItems] = useState<TCarousalItems>(undefined);
   const attachments = message.attachments;
   const hasAttachments = Boolean(attachments?.length);
@@ -166,7 +169,9 @@ export const MessageItem: FC<IMessageItemProps> = ({
           </div>
         )}
         <div
-          className={`flex flex-col min-w-0 max-w-full py-1 px-2 ${cleanupEnabled ? "rounded-[4px]" : "rounded"} gap-2 w-full ${
+          className={phoneChatFullscreen && isMbl && message.role === "human"
+            ? `flex flex-col min-w-0 w-fit max-w-xs py-2 px-3 ${cleanupEnabled ? "rounded-[4px]" : "rounded"} gap-2 bg-ai-tiptap text-white-black`
+            : `flex flex-col min-w-0 max-w-full py-1 px-2 ${cleanupEnabled ? "rounded-[4px]" : "rounded"} gap-2 w-full ${
             message.role === "human"
               ? "bg-ai-tiptap text-white-black"
               : " text-white-black w-full "

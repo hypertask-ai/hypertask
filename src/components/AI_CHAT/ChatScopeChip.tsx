@@ -1,5 +1,7 @@
 import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { ChevronDown, Layers, ListTodo, SquareKanban } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen";
 
 export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<"button"> & {
   kind: "task" | "board" | "boards";
@@ -7,8 +9,11 @@ export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithout
   mobile?: boolean;
   isOpen: boolean;
   compose?: boolean;
-}>(function ChatScopeChip({ kind, label, mobile = false, isOpen, compose = false, ...props }, ref) {
-  const chatMobile = mobile && !compose;
+  compact?: boolean;
+}>(function ChatScopeChip({ kind, label, mobile = false, isOpen, compose = false, compact = false, ...props }, ref) {
+  const phoneChatFullscreen = useFlag(HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG);
+  const small = compact && phoneChatFullscreen;
+  const chatMobile = mobile && !compose && !small;
   const iconSize = compose ? 14 : 13;
   return (
     <button
@@ -17,7 +22,9 @@ export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithout
       aria-haspopup="menu"
       aria-expanded={isOpen}
       {...props}
-      className={`inline-flex w-full min-w-0 items-center text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active ${
+      className={small
+        ? "inline-flex w-auto max-w-32 min-w-0 items-center rounded-[4px] px-2 py-1 text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active"
+        : `inline-flex w-full min-w-0 items-center text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active ${
         chatMobile
           ? "h-11 max-w-[65vw] rounded-[4px] bg-ai-tiptap px-3"
           : `rounded-[4px] px-2 py-1${compose && mobile ? " min-h-11" : ""}`
