@@ -7,8 +7,6 @@ import checkReminderAndCreateNotification from "./check-reminder_create-notifica
 import { sendEmailNotification } from "../sendNotification";
 import { shouldNotify } from "../shouldNotify";
 import { format, isValid } from "date-fns";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8143_QUIET_AGENT_UPDATES_FLAG } from "@/lib/flags/keys";
 interface ICreateNotification {
   taskId: number;
   projectId: number;
@@ -73,14 +71,7 @@ async function notifyUsers(
   type: NotificationType,
 ) {
   if (fromAgentId && (type === "TaskMoved" || type === "TaskUpdateDescription")) {
-    const recipients = [];
-    for (const userId of userIds) {
-      if (!await isFeatureEnabled(HTPR_8143_QUIET_AGENT_UPDATES_FLAG, userId)) {
-        recipients.push(userId);
-      }
-    }
-    userIds = recipients;
-    if (userIds.length === 0) return true;
+    return true;
   }
 
   const spamming = await avoidSpamNotification(userIds, task.id);
