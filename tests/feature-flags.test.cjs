@@ -97,6 +97,17 @@ test("flags page dropdown filters are permanent and no longer registered", async
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
+test("agent chatter routing is permanent and its stored rollout is retired", async () => {
+  const key = "htpr-7341-agent-chatter-to-log";
+  assert.equal(flags.HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
 test("Ctrl+J split tasks are permanent and their flag is gone", async () => {
   assert.equal(flags.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, undefined);
   assert.equal(definitions.some((entry) => entry.key === "htpr-7056-ctrlj-split-tasks"), false);

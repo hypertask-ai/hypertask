@@ -16,10 +16,10 @@ export function parseCommentKind(value: unknown): CommentKind | undefined {
 export function routeComment({ agentId, kind, legacy }: {
   agentId?: string | null
   kind?: CommentKind
-  legacy?: { flagEnabled: boolean; replyToCommentId?: number; replyToInvocationId?: number; mentionsPerson: boolean; hasImages: boolean }
+  legacy?: { replyToCommentId?: number; replyToInvocationId?: number; mentionsPerson: boolean; hasImages: boolean }
 }): 'comments' | 'log' {
   if (legacy) {
-    return legacy.flagEnabled && agentId && kind === undefined && legacy.replyToCommentId === undefined &&
+    return agentId && kind === undefined && legacy.replyToCommentId === undefined &&
       legacy.replyToInvocationId === undefined && !legacy.mentionsPerson && !legacy.hasImages
       ? 'log'
       : 'comments'

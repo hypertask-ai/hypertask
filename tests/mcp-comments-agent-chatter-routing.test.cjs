@@ -2,7 +2,6 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { load } = require('./task-route-loader.cjs')
 const fixture = require('./fixtures/htpr-7341-igsh-266.json')
-const flag = 'htpr-7341-agent-chatter-to-log'
 const routing = load('src/lib/mcp/operations/comments/agentChatterRouting.ts', {})
 
 const { setup } = require('./helpers/comment-routing.cjs')
@@ -18,7 +17,7 @@ function assertComment(response, calls, kind) {
   assert.equal(calls.broadcasts.length, 1)
 }
 
-test('flag on refuses chatter as a comment and writes a parsed thought without comment notifications', async () => {
+test('untyped agent chatter is refused as a comment and written as a parsed thought without comment notifications', async () => {
   const { post, calls } = setup()
   const response = await post()
   assert.equal(response.status, 201)
@@ -41,14 +40,14 @@ test('flag on refuses chatter as a comment and writes a parsed thought without c
 })
 
 for (const kind of routing.COMMENT_KINDS) {
-  test(`flag on still allows agent kind ${kind} as a persisted comment`, async () => {
+  test(`agent kind ${kind} is still a persisted comment`, async () => {
     const { post, calls } = setup()
     assertComment(await post({ kind }), calls, kind)
     assert.equal(calls.runs.length, 0)
   })
 }
 
-test('human posts remain comments with flag on', async () => {
+test('human posts remain comments', async () => {
   const { post, calls } = setup({ human: true })
   assertComment(await post(), calls)
 })
@@ -73,8 +72,8 @@ test('explicit agent post with a mentions list stays a comment', async () => {
   assert.equal(calls.runs.length, 0)
 })
 
-test('old flag off cannot expose untyped agent notes', async () => {
-  const { post, calls } = setup({ flag: false })
+test('an agent without the writing policy cannot expose untyped notes', async () => {
+  const { post, calls } = setup({ writing: false })
   assert.equal((await post()).body.routedTo, 'log')
   assert.equal(calls.comments.length, 0)
 })
@@ -110,7 +109,7 @@ test('without kind, agent progress stays in the log', async () => {
 })
 
 test('dry run reports routing without run, activity or comment writes', async () => {
-  for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ flag: false }, {}, 'log'], [{}, { kind: 'question' }, 'comments']]) {
+  for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ writing: false }, {}, 'log'], [{}, { kind: 'question' }, 'comments']]) {
     const { post, calls } = setup(options)
     const response = await post({ ...body, dry_run: true })
     assert.equal(response.status, 200)
@@ -179,10 +178,12 @@ test('all six real IGSH-266 texts replay to the log, never comments', async () =
 test('pure routing requires a declared kind for people comments', () => {
   assert.equal(routing.parseCommentKind(undefined), undefined)
   assert.throws(() => routing.parseCommentKind('chatter'), /question, qa, done/)
-  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { flagEnabled: true, mentionsPerson: false, hasImages: false } }), 'log')
-  assert.equal(routing.routeComment({ agentId: 'agent', kind: 'qa', legacy: { flagEnabled: true, mentionsPerson: false, hasImages: false } }), 'comments')
-  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { flagEnabled: true, mentionsPerson: true, hasImages: false } }), 'comments')
-  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { flagEnabled: false, mentionsPerson: false, hasImages: false } }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { mentionsPerson: false, hasImages: false } }), 'log')
+  assert.equal(routing.routeComment({ agentId: 'agent', kind: 'qa', legacy: { mentionsPerson: false, hasImages: false } }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { mentionsPerson: true, hasImages: false } }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { mentionsPerson: false, hasImages: true } }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { replyToCommentId: 12, mentionsPerson: false, hasImages: false } }), 'comments')
+  assert.equal(routing.routeComment({ agentId: null, legacy: { mentionsPerson: false, hasImages: false } }), 'comments')
   assert.equal(routing.routeComment({ agentId: 'agent', kind: 'qa' }), 'comments')
   assert.equal(routing.routeComment({ agentId: 'agent' }), 'log')
   assert.equal(routing.routeComment({ agentId: null }), 'comments')
@@ -226,17 +227,6 @@ test('real add-comment MCP tool forwards kind to its service', async () => {
   })
   await addCommentTool.execute({ action: 'add', task_id: 99, text: 'Decision?', kind: 'question' }, 'token')
   assert.equal(params.kind, 'question')
-})
-
-test('ticket flag is registered by generated keys and definitions with the requested metadata', () => {
-  const keys = require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts')
-  const definitions = require('./helpers/flag-files.cjs').definitions()
-  assert.equal(keys.HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, flag)
-  const definition = definitions.find(({ key }) => key === flag)
-  assert.equal(definition.kind, 'feature')
-  assert.equal(definition.defaultMode, undefined)
-  assert.equal(definition.shippedOn, '2026-10-19')
-  assert.ok(definition.releaseRisk.reason)
 })
 
 for (const enabled of [false, true]) {
