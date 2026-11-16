@@ -11,7 +11,10 @@ import type {
 import type { ListTasksResponse } from './task.service';
 import type { TaskListItem } from './task.service';
 import { buildPaginationMetadata } from '../../utils/pagination';
+import { ValidationError } from '../../utils/errors';
 import { appendListQueryParams } from '@/lib/mcp/listQuery';
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_9109_SECTION_REFUSAL_STATUS_FLAG } from '@/lib/flags/definitions/htpr-9109-section-refusal-status';
 
 export interface GetSectionResponse {
   success: boolean;
@@ -45,9 +48,10 @@ export type SectionCrudResponse =
 export class SectionService {
   constructor(private readonly apiClient: IApiClient) {}
 
-  async manageSection(params: unknown, options?: { roleEnabled?: boolean }): Promise<SectionCrudResponse> {
+  async manageSection(params: unknown, options?: { roleEnabled?: boolean; userId?: number }): Promise<SectionCrudResponse> {
     const validatedInput = SectionCrudInputSchema.parse(params);
     const roleEnabled = options?.roleEnabled === true;
+    const userId = options?.userId;
 
     switch (validatedInput.action) {
       case 'list':
@@ -61,6 +65,7 @@ export class SectionService {
           offset: validatedInput.offset,
           role: roleEnabled ? validatedInput.role : undefined,
           roleEnabled,
+          userId,
         });
       case 'create':
         return this.createSection({
@@ -129,8 +134,11 @@ export class SectionService {
     offset?: number;
     role?: BoardColumnRole;
     roleEnabled?: boolean;
+    userId?: number;
   }): Promise<GetSectionResponse> {
     const correlationId = generateCorrelationId();
+    const structuredRefusal = params.userId !== undefined
+      && await isFeatureEnabled(HTPR_9109_SECTION_REFUSAL_STATUS_FLAG, params.userId).catch(() => false);
     const includeTasks = params.include_tasks !== false;
 
     const sectionsResponse = await this.apiClient.makeRequest<ListSectionsResponse>(
@@ -141,14 +149,18 @@ export class SectionService {
 
     const section = sectionsResponse.sections.find((s) => s.id === params.section_id);
     if (!section) {
-      throw new Error(`Section ${params.section_id} not found in project ${params.project_id}`);
+      const message = `Section ${params.section_id} not found in project ${params.project_id}`;
+      throw structuredRefusal
+        ? new ValidationError(message, { field: 'section_id', code: 'not_found' })
+        : new Error(message);
     }
 
     const resolved = params.roleEnabled ? withRole(section) : section;
     if (params.role !== undefined && resolved.role !== params.role) {
-      throw new Error(
-        `Section ${params.section_id} has role ${resolved.role}, not ${params.role}. Roles follow the column title; use action list with role to find the column.`
-      );
+      const message = `Section ${params.section_id} has role ${resolved.role}, not ${params.role}. Roles follow the column title; use action list with role to find the column.`;
+      throw structuredRefusal
+        ? new ValidationError(message, { field: 'role', code: 'invalid_value' })
+        : new Error(message);
     }
 
     const result: GetSectionResponse = {

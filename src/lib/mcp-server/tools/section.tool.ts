@@ -17,7 +17,7 @@ export const sectionTool = {
     return executeWithService(
       context,
       SectionService,
-      (service, input: unknown) => service.manageSection(input, { roleEnabled }),
+      (service, input: unknown) => service.manageSection(input, { roleEnabled, userId }),
       validatedInput
     );
   },
