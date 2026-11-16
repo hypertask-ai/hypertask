@@ -424,6 +424,7 @@ for (const mobile of [false, true]) for (const enabled of [false, true]) {
         new_chat_button: () => ({}), minimize_button: () => ({}),
       } } } },
       "./AgentSidebarChatCommands": { AgentSidebarChatCommands: ({ agentsOnly }) => React.createElement("ul", { "data-testid": agentsOnly ? "agents" : "conversations" }) },
+      "./AI_Tiptap_Container": { AI_Tiptap_Container: () => null, ChatScopeControl: () => null },
     });
     const Header = source("src/components/AI_CHAT/ChatHeader.tsx").ChatHeader;
     try {
