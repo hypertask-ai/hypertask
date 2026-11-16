@@ -1523,7 +1523,7 @@ test("server description in the first page load is permanent and no longer regis
 
 for (const [key, risk] of [
   ["htpr-7982-cancelled-free", "money"],
-  ["htpr-8215-agent-archive-delete", "data-deletion"],
+  ["htpr-7575-phone-chat-delete", "data-deletion"],
   ["yper4-651-self-follow-quiet", "customer-email"],
 ]) {
   test(`owner-authorized changes support all modes for ${risk}`, async () => {
