@@ -8,6 +8,8 @@ import { HTPR_8994_CLEAR_WAITING_AGENT_FLAG } from "@/lib/flags/definitions/htpr
 import { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-8804-visible-links-first";
 import { applyWaitingOnWrite } from "@/lib/waitingOn";
 import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG } from "@/lib/flags/keys";
+import { HTPR_9387_HEADER_ARROWS_FLAG } from "@/lib/flags/definitions/htpr-9387-header-arrows";
+import { ticketUpDownLivesInHeader } from "@/lib/taskDetailHeaderArrows";
 import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -81,6 +83,8 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const clearWaitingAgent = useFlag(HTPR_8994_CLEAR_WAITING_AGENT_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
+  const headerArrows = useFlag(HTPR_9387_HEADER_ARROWS_FLAG);
+  const upDownInHeader = ticketUpDownLivesInHeader(headerArrows, Boolean(_mbl), Boolean(embedded));
   const { secondaryPanelsReady, cachedLayout, descriptionStart, liveRowsPendingFor } = useTaskContext();
   const serverRowsShown = liveRowsPendingFor(descriptionStart === "server");
   const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded, !serverRowsShown);
@@ -159,6 +163,16 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   containerRef={dynamicElementRef}
                   toggleDueDate={toggleDueDate}
                   clearDesktopNavigation={titleClearOfNavFlag && !_mbl && !embedded}
+                  headerNavigation={headerArrows && upDownInHeader ? (
+                    <Suspense fallback={null}>
+                      <TaskMovement
+                        placement="header"
+                        currentItemInTasksPlaylist={currentItemInTasksPlaylist}
+                        navigateToNextTask={navigateToNextTask}
+                        navigateToPreviousTask={navigateToPreviousTask}
+                      />
+                    </Suspense>
+                  ) : null}
                 />
 
               <div
@@ -234,6 +248,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                 navigateToPreviousTask={navigateToPreviousTask}
                 appShellRail={appShellRailOn}
                 left={appShellRailOn ? APP_SHELL_RAIL_OFFSET : undefined}
+                headerArrows={headerArrows}
               />
             )
           }
@@ -388,12 +403,14 @@ const DesktopNavigation = ({
   currentItemInTasksPlaylist,
   appShellRail,
   left,
+  headerArrows = false,
 }: {
   onGoback: () => void;
   navigateToNextTask: any;
   navigateToPreviousTask: any;
   appShellRail?: boolean;
   left?: number | string;
+  headerArrows?: boolean;
   currentItemInTasksPlaylist: {
     projectId: number;
     uniqueIndex: any;
@@ -432,13 +449,15 @@ const DesktopNavigation = ({
           <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />
         </Suspense>
       </div>
-      <Suspense fallback={null}>
-        <TaskMovement
-          currentItemInTasksPlaylist={currentItemInTasksPlaylist}
-          navigateToNextTask={navigateToNextTask}
-          navigateToPreviousTask={navigateToPreviousTask}
-        />
-      </Suspense>
+      {headerArrows ? null : (
+        <Suspense fallback={null}>
+          <TaskMovement
+            currentItemInTasksPlaylist={currentItemInTasksPlaylist}
+            navigateToNextTask={navigateToNextTask}
+            navigateToPreviousTask={navigateToPreviousTask}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

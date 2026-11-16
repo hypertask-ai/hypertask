@@ -37,6 +37,8 @@ function loadPageModules() {
     "lucide-react": { ChevronUp: icon, ChevronDown: icon },
     "@/lib/state": state,
     "@/lib/taskDetailSwipe": load("src/lib/taskDetailSwipe.ts", {}),
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-9387-header-arrows": { HTPR_9387_HEADER_ARROWS_FLAG: "htpr-9387-header-arrows" },
   }).default;
   return () => React.createElement(state.StateRoot, null, React.createElement(TaskMovement, {
     currentItemInTasksPlaylist: { projectId: 339, uniqueIndex: 1816 },
