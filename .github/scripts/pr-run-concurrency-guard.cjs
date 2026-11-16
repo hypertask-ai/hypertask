@@ -85,12 +85,45 @@ function cancelInProgress(concurrency) {
   return raw;
 }
 
+function concurrencySections(text) {
+  const all = lines(text);
+  const sections = [];
+  for (let index = 0; index < all.length; index += 1) {
+    const match = /^(\s*)concurrency:\s*$/.exec(all[index]);
+    if (!match) continue;
+    const body = [];
+    for (const line of all.slice(index + 1)) {
+      if (!line.trim()) {
+        body.push(line);
+        continue;
+      }
+      if (line.length - line.trimStart().length <= match[1].length) break;
+      body.push(line);
+    }
+    sections.push(body);
+  }
+  return sections;
+}
+
+function exceptionProblems(name, text) {
+  const reason = EXCEPTIONS.get(name);
+  const problems = [];
+  if (!/[A-Z][A-Z0-9]*-\d+/.test(reason)) problems.push(`${name}: exception reason cites no ticket`);
+  const sections = concurrencySections(text);
+  if (!sections.length) problems.push(`${name}: no concurrency block`);
+  for (const concurrency of sections) {
+    if (value(concurrency, 'queue') !== 'max') problems.push(`${name}: exception lost its queue: max`);
+    if (cancelInProgress(concurrency) !== false) problems.push(`${name}: exception must not cancel runs`);
+  }
+  return [...new Set(problems)];
+}
+
 function problemsFor(name, text) {
   const onBody = section(text, 'on');
   const types = eventTypes(onBody);
   const pushes = [...types.values()].some(list => list.includes(PUSH_TYPE));
   if (!pushes) return [];
-  if (EXCEPTIONS.has(name)) return [];
+  if (EXCEPTIONS.has(name)) return exceptionProblems(name, text);
   const concurrency = section(text, 'concurrency');
   if (!concurrency.length) return [`${name}: no concurrency block`];
   const problems = [];

@@ -116,3 +116,70 @@ test('the guard rejects a group that names no pull request and a constant-false 
     'literal: cancel-in-progress is false',
   ]);
 });
+
+test('a workflow added after the exception list gets no exemption', () => {
+  const added = [
+    'on:',
+    '  pull_request:',
+    '    types: [opened, synchronize]',
+    '',
+  ].join('\n');
+  assert.deepEqual(problemsFor('new-checks', added), ['new-checks: no concurrency block']);
+});
+
+test('an excepted gate fails when it starts cancelling runs', () => {
+  const cancelling = [
+    'on:',
+    '  pull_request_target:',
+    '    types: [opened, synchronize]',
+    'concurrency:',
+    '  group: feature-flag-gate-serialized',
+    '  queue: max',
+    '  cancel-in-progress: true',
+    '',
+  ].join('\n');
+  assert.deepEqual(problemsFor('feature-flag-gate', cancelling), [
+    'feature-flag-gate: exception must not cancel runs',
+  ]);
+});
+
+test('an excepted gate fails when it loses its queue', () => {
+  const dropping = [
+    'on:',
+    '  pull_request_target:',
+    '    types: [opened, synchronize]',
+    'concurrency:',
+    '  group: pr-guards-trusted',
+    '  cancel-in-progress: false',
+    '',
+  ].join('\n');
+  assert.deepEqual(problemsFor('pr-guards-trusted', dropping), [
+    'pr-guards-trusted: exception lost its queue: max',
+  ]);
+});
+
+test('an excepted gate fails when it loses its concurrency block', () => {
+  const bare = [
+    'on:',
+    '  pull_request_target:',
+    '    types: [opened, synchronize]',
+    '',
+  ].join('\n');
+  assert.deepEqual(problemsFor('ux-signoff-gate', bare), ['ux-signoff-gate: no concurrency block']);
+});
+
+test('an excepted gate may serialize on a job instead of the workflow', () => {
+  const jobLevel = [
+    'on:',
+    '  pull_request_target:',
+    '    types: [opened, synchronize]',
+    'jobs:',
+    '  gate:',
+    '    runs-on: ubuntu-latest',
+    '    concurrency:',
+    '      group: codex-review-gate',
+    '      queue: max',
+    '',
+  ].join('\n');
+  assert.deepEqual(problemsFor('codex-review-gate', jobLevel), []);
+});

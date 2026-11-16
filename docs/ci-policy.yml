@@ -571,6 +571,12 @@ policies:
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
     non_cancelling_reconciliation: [feature-flag-gate-serialized, ux-signoff-gate, dependabot-lane, ci-tests]
+    required_status_gates_never_cancel: [ci-tests, pr-guards-trusted, feature-flag-gate, ux-signoff-gate, codex-review-gate]
+    ticket_filing_gates_never_cancel: [dependabot-lane]
+    exception_contract: queue_max_with_cancel_in_progress_false_and_a_cited_ticket
+    exception_guard: .github/scripts/pr-run-concurrency-guard.cjs
+    exception_guard_test: tests/pr-run-concurrency.test.cjs
+    fleet_checker_cancel_rule: does_not_accept_queue_max_with_cancel_in_progress_false
     prefer_queue_over_oom: true
   review:
     required_check_name: ai-review
