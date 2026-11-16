@@ -33,7 +33,7 @@ import {
   resolveInitialThemeColor,
   resolveThemePreference,
 } from "@/lib/themePreferences";
-import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, HTPR_7627_TICKET_FIRST_SCREEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG } from "@/lib/flags/keys";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
@@ -79,8 +79,7 @@ export default async function RootLayout(
   const identifyEventIds = Boolean(analyticsSession);
   const [device, boardDocument, inboxDocument] = await firstScreenPromise;
   const phoneZoom = device.isMobile && await isFeatureEnabled(HTPR_8145_PHONE_ZOOM_FLAG, analyticsSession?.id ?? -1);
-  const ticketShellEnabled = await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession?.id ?? -1);
-  const shellSeed = ticketShellEnabled ? await getServerTicketShell() : null;
+  const shellSeed = await getServerTicketShell();
   const firstScreen = boardDocument ?? inboxDocument;
   let flagSeed: FirstScreenFlags | null = null;
   if (analyticsSession && !firstScreen && !shellSeed) {
