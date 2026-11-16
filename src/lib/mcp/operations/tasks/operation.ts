@@ -27,7 +27,7 @@ import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tas
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG, HTPR_8738_PICKER_SKIPS_PARKED_FLAG } from '@/lib/flags/keys'
+import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG, HTPR_8738_PICKER_SKIPS_PARKED_FLAG, HTPR_9393_ARCHIVED_BOARD_TASK_LIST_FLAG } from '@/lib/flags/keys'
 import {
   ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
@@ -534,9 +534,10 @@ export async function GET(request: NextRequest) {
       return validationError(`sort must be one of ${TASK_SORT_FIELDS.join(', ')}`)
     }
 
+    const includeArchivedBoard = await isFeatureEnabled(HTPR_9393_ARCHIVED_BOARD_TASK_LIST_FLAG, user.id)
     const accessibleProjects = await prisma.project.findMany({
       where: {
-        status: 'Normal',
+        status: includeArchivedBoard && (projectId || boardId) ? { in: ['Normal', 'Archive'] } : 'Normal',
         ...getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
       },
       select: { id: true }
