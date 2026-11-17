@@ -4,11 +4,11 @@ const { tmpdir } = require('node:os');
 const path = require('node:path');
 
 const CONTEXT = 'pstack-verifier';
-const ALLOWED = new Set([
+const PINNED = [
   '.github/workflows/pstack-verifier.yml',
   'scripts/pstack-verifier.mjs',
-  'tests/verifier-status-guard.test.cjs',
-]);
+];
+const ALLOWED = new Set([...PINNED, 'tests/verifier-status-guard.test.cjs']);
 const LOCKFILES = new Set([
   'package-lock.json',
   'yarn.lock',
@@ -38,15 +38,17 @@ function considered(file) {
 }
 
 function writesVerifierContext(text) {
+  const source = String(text);
   WRITE.lastIndex = 0;
-  return WRITE.test(String(text));
+  if (WRITE.test(source)) return true;
+  return source.includes(CONTEXT) && /statuses:\s*write|checks:\s*write/.test(source);
 }
 
 function offending(files) {
   return files
     .filter((file) => {
       const normal = normalPath(file.path);
-      return considered(normal) && !ALLOWED.has(normal) && !String(file.text).includes('\0') && writesVerifierContext(file.text);
+      return considered(normal) && !ALLOWED.has(normal) && writesVerifierContext(file.text);
     })
     .map((file) => normalPath(file.path));
 }
@@ -61,9 +63,9 @@ function walk(dir, root, out) {
     }
     const rel = path.relative(root, absolute).split(path.sep).join('/');
     if (!considered(rel)) continue;
-    const text = readFileSync(absolute);
-    if (text.includes(0)) continue;
-    out.push({ path: rel, text: text.toString('utf8') });
+    const bytes = readFileSync(absolute);
+    if (bytes.includes(0) && !bytes.includes(Buffer.from(CONTEXT))) continue;
+    out.push({ path: rel, text: bytes.toString('utf8') });
   }
   return out;
 }
@@ -87,7 +89,7 @@ function trackedAt(head) {
 }
 
 function filesNamed(head, tracked) {
-  const result = git(['grep', '-l', '-I', '-F', '-e', CONTEXT, head]);
+  const result = git(['grep', '-l', '-F', '-e', CONTEXT, head]);
   if (result.status === 1) return [];
   if (result.status !== 0) throw new Error('git read failed; verifier status writers were not verified');
   const prefix = `${head}:`;
@@ -103,6 +105,23 @@ function filesTouched(base, head, tracked) {
   return result.stdout.split('\n').filter((file) => tracked.has(file));
 }
 
+function blobId(rev, file) {
+  const result = git(['rev-parse', '--verify', `${rev}:${file}`]);
+  return result.status === 0 ? result.stdout : null;
+}
+
+function untrustedPins(head, base) {
+  if (!/^[a-f0-9]{40}$/.test(base ?? '')) return [];
+  if (git(['cat-file', '-e', `${base}^{commit}`]).status !== 0) return [];
+  const drifted = [];
+  for (const file of PINNED) {
+    const after = blobId(head, file);
+    if (after === null) continue;
+    if (blobId(base, file) !== after) drifted.push(file);
+  }
+  return drifted;
+}
+
 function writersAt(head, base) {
   const tracked = new Set(trackedAt(head));
   const paths = new Set([...filesNamed(head, tracked), ...filesTouched(base, head, tracked)]);
@@ -112,7 +131,7 @@ function writersAt(head, base) {
     if (shown.status !== 0) continue;
     files.push({ path: file, text: shown.stdout });
   }
-  return offending(files);
+  return [...new Set([...untrustedPins(head, base), ...offending(files)])];
 }
 
 module.exports = { ALLOWED, CONTEXT, offending, walk, writesVerifierContext, writersAt };

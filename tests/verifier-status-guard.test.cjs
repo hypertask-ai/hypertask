@@ -84,6 +84,75 @@ test('a commit that adds the fixture workflow is rejected', () => {
   }
 });
 
+function withRepo(first, second, check) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'verifier-status-guard-'));
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+  const commit = (tree) => {
+    for (const [rel, data] of Object.entries(tree)) {
+      const abs = path.join(dir, rel);
+      mkdirSync(path.dirname(abs), { recursive: true });
+      writeFileSync(abs, data);
+    }
+    git('add', '-A');
+    git('commit', '-qm', 'fixture');
+    return git('rev-parse', 'HEAD');
+  };
+  const previous = process.cwd();
+  try {
+    git('init', '-q');
+    git('config', 'user.email', 'fixture@example.test');
+    git('config', 'user.name', 'Fixture');
+    const base = commit(first);
+    const sha = second ? commit(second) : base;
+    process.chdir(dir);
+    check(writersAt(sha, base));
+  } finally {
+    process.chdir(previous);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('a changed pinned verifier file is rejected', () => {
+  const same = 'export const ready = true;\n';
+  for (const pinned of ['scripts/pstack-verifier.mjs', '.github/workflows/pstack-verifier.yml']) {
+    withRepo({ [pinned]: same }, null, (found) => assert.deepEqual(found, []));
+    withRepo(
+      { [pinned]: same },
+      { [pinned]: 'export const ready = false;\n' },
+      (found) => assert.deepEqual(found, [pinned]),
+    );
+  }
+});
+
+test('an indirect status context in a writable workflow is rejected', () => {
+  const workflow = [
+    'name: forge',
+    'on: pull_request',
+    'permissions:',
+    '  statuses: write',
+    'env:',
+    '  STATUS_CONTEXT: pstack-verifier',
+    'jobs:',
+    '  post:',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - run: gh api --method POST repos/acme/app/statuses/abc -f state=success -f context="$STATUS_CONTEXT"',
+  ].join('\n');
+  withRepo(
+    { '.github/workflows/forge.yml': `${workflow}\n` },
+    null,
+    (found) => assert.deepEqual(found, ['.github/workflows/forge.yml']),
+  );
+});
+
+test('a binary that carries the verifier context is rejected', () => {
+  withRepo(
+    { 'payload.bin': Buffer.concat([Buffer.from('context=pstack-verifier\n'), Buffer.from([0])]) },
+    null,
+    (found) => assert.deepEqual(found, ['payload.bin']),
+  );
+});
+
 test('a root script that posts pstack-verifier is rejected', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'verifier-status-guard-'));
   const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
