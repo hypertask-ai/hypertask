@@ -23,6 +23,8 @@ function load(file, mocks) {
   new Function("require", "module", "exports", compiled)((name) => {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
     if (name === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
+    if (name === "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen") return { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG: "htpr-8032-phone-chat-fullscreen" };
+    if (name === "@/lib/contexts/mobileContext") return { MobileViewContext: React.createContext(false) };
     if (name.startsWith("@/") || name.startsWith("./")) throw new Error(`Unstubbed dependency: ${name}`);
     return require(name);
   }, mod, mod.exports);
