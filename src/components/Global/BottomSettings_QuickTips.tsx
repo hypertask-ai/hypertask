@@ -4,6 +4,7 @@ import {
   showAIChatInterfaceAtom,
   showCommandsAtom,
   showQuickTipsAtom,
+  showShortcutsAtom,
   appShellRailAtom,
   currentUserAtom,
 } from "@/store";
@@ -21,6 +22,7 @@ import {
   HTCTipsConstants,
   InboxPageTipsConstants,
   KanbanTipsConstants,
+  KanbanTipsTidyConstants,
   SearchPageTipsConstants,
   TaskDetailTipsConstants,
 } from "./ConstantsQuickTips";
@@ -42,6 +44,7 @@ import { useSettingsNavigation } from "../Modals/Settings/settingsNavigation";
 import { tooltipConfig } from "@/lib/configs/tooltip.config";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
+import { HTPR_9018_QUICK_TIPS_FLAG } from "@/lib/flags/definitions/htpr-9018-quick-tips";
 import { CLASS_NAME_CONSTANTS } from "@/lib/configs/general.config";
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
@@ -260,6 +263,8 @@ const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !mbl;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const [showQuickTips, setShowQuickTips] = useRecoilState(showQuickTipsAtom);
+  const [, setShowShortcuts] = useRecoilState(showShortcutsAtom);
+  const tidyQuickTips = useFlag(HTPR_9018_QUICK_TIPS_FLAG);
   useEffect(() => {
     setTutorialStored(
       Boolean(storageKey && window.sessionStorage.getItem(storageKey)),
@@ -277,12 +282,22 @@ const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
 
   if (showCommands.show) {
     return (
-      <TipsComp tips={HTCTipsConstants} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />
+      <TipsComp
+        tips={HTCTipsConstants}
+        toggleQuickTips={toggleQuickTips}
+        appShellRailOn={appShellRailOn}
+        onShowAllShortcuts={() => setShowShortcuts(true)}
+      />
     );
   }
   if (pathname?.startsWith("/project") || pathname?.startsWith("/demo")) {
     return (
-      <TipsComp tips={boardTips} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />
+      <TipsComp
+        tips={tidyQuickTips ? KanbanTipsTidyConstants : boardTips}
+        toggleQuickTips={toggleQuickTips}
+        appShellRailOn={appShellRailOn}
+        onShowAllShortcuts={() => setShowShortcuts(true)}
+      />
     );
   } else if (pathname?.startsWith("/detail")) {
     return (
@@ -290,6 +305,7 @@ const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
         tips={TaskDetailTipsConstants}
         toggleQuickTips={toggleQuickTips}
         appShellRailOn={appShellRailOn}
+        onShowAllShortcuts={() => setShowShortcuts(true)}
       />
     );
   } else if (pathname?.startsWith("/search")) {
@@ -298,6 +314,7 @@ const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
         tips={SearchPageTipsConstants}
         toggleQuickTips={toggleQuickTips}
         appShellRailOn={appShellRailOn}
+        onShowAllShortcuts={() => setShowShortcuts(true)}
       />
     );
   } else if (pathname?.startsWith("/inbox")) {
@@ -306,6 +323,7 @@ const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
         tips={InboxPageTipsConstants}
         toggleQuickTips={toggleQuickTips}
         appShellRailOn={appShellRailOn}
+        onShowAllShortcuts={() => setShowShortcuts(true)}
       />
     );
   } else return <></>;
@@ -315,12 +333,15 @@ const TipsComp = ({
   tips,
   toggleQuickTips,
   appShellRailOn = false,
+  onShowAllShortcuts,
 }: {
   tips: ITips[];
   toggleQuickTips: () => void;
   appShellRailOn?: boolean;
+  onShowAllShortcuts?: () => void;
 }) => {
   const isApple = useDeviceContext();
+  const tidyQuickTips = useFlag(HTPR_9018_QUICK_TIPS_FLAG);
   const barRef = useRef<HTMLDivElement>(null);
   const pathanme = usePathname();
   const { toggleShowCommands } = useHypertasksRecoilStates();
@@ -371,8 +392,8 @@ const TipsComp = ({
           ? `calc(${mainContentWidth === "100%" ? "100%" : mainContentWidth} - var(--app-shell-rail-w, 48px))`
           : mainContentWidth,
       }}
-      className={`quick-tips-bar xs:hidden lg:flex bg-active-list-element  p-2 items-center text-content ${pathanme?.startsWith("/project") ? "mb-0" : "mb-0"
-        } py-[2px]'`}
+      className={`quick-tips-bar xs:hidden lg:flex bg-active-list-element items-center text-content ${tidyQuickTips ? "px-3 py-1 rounded-[4px]" : "p-2 py-[2px]'"} ${pathanme?.startsWith("/project") ? "mb-0" : "mb-0"
+        }`}
     >
       <div
         className="flex justify-center items-center flex-1 min-w-0 flex-nowrap overflow-hidden whitespace-nowrap gap-[2px]"
@@ -407,7 +428,11 @@ const TipsComp = ({
                   {tip.key.map((tKey, tIndex) => (
                     <KBDElement
                       key={`${tIndex}-quicktips`}
-                      className={`bg-[var(--bg-quick-tip-key)] py-auto px-[6.25px] text-meta leading-[var(--leading-quick-tip-key)] font-semibold h-[20px] flex items-center justify-center mx-[0px] pt-[0px]`}
+                      className={
+                        tidyQuickTips
+                          ? "px-1 font-semibold text-dense xl:text-content"
+                          : "bg-[var(--bg-quick-tip-key)] py-auto px-[6.25px] text-meta leading-[var(--leading-quick-tip-key)] font-semibold h-[20px] flex items-center justify-center mx-[0px] pt-[0px]"
+                      }
                       content={renderShortcut(tKey)}
                     />
                   ))}
@@ -417,13 +442,29 @@ const TipsComp = ({
                 {tip.hint}
               </span>
             </div>
-            {index < tips.length - 1 && (
-              <div className="bg-[#8E9093] h-[4px] w-[4px] rounded-full mx-[4px]" />
-            )}
+            {index < tips.length - 1 &&
+              (tidyQuickTips ? (
+                <div className="mx-2 h-[14px] w-px shrink-0 bg-white-black opacity-20" />
+              ) : (
+                <div className="bg-[#8E9093] h-[4px] w-[4px] rounded-full mx-[4px]" />
+              ))}
           </React.Fragment>
         ))}
       </div>
 
+
+      {tidyQuickTips && onShowAllShortcuts && (
+        <>
+          <div className="mx-2 h-[14px] w-px shrink-0 bg-white-black opacity-20" />
+          <button
+            type="button"
+            onClick={onShowAllShortcuts}
+            className="shrink-0 cursor-pointer text-meta text-hypertasks-ai-purple hover:underline"
+          >
+            All shortcuts
+          </button>
+        </>
+      )}
 
       <X size={18}
         className="cursor-pointer text-white-black text-subheading font-bold"

@@ -98,10 +98,10 @@ test("shortcut footer publishes measured clearance, tracks resize and scrollbar 
     disconnect() { disconnected++; }
   };
   const Footer = new Function("React", "useRef", "useEffect", "useDeviceContext", "usePathname",
-    "useHypertasksRecoilStates", "useAiChatMainContentLayout", "useRecoilState", "isXScrollOnKanbanAtom", "KBDElement", "X",
+    "useHypertasksRecoilStates", "useAiChatMainContentLayout", "useRecoilState", "isXScrollOnKanbanAtom", "KBDElement", "X", "useFlag",
     `${compiled}; return TipsComp;`)(React, React.useRef, React.useEffect, () => false, () => "/project-15",
     () => ({ toggleShowCommands() {} }), () => ({ mainContentWidth: "100%" }), () => [scroll, () => {}], {},
-    ({ content }) => React.createElement("kbd", null, content), props => React.createElement("button", { ...props, "aria-label": "Dismiss tips" }));
+    ({ content }) => React.createElement("kbd", null, content), props => React.createElement("button", { ...props, "aria-label": "Dismiss tips" }), () => false);
   let visible = true;
   const render = (rail = false) => ui.render(visible ? React.createElement(Footer, {
     tips: [{ key: ["CTRL", "K"], hint: "command center" }], appShellRailOn: rail,
