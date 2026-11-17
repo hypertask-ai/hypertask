@@ -7,7 +7,6 @@ import { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG } from "@/lib/flags/definitions/ht
 import { HTPR_8945_CTRL_TAB_PALETTE_FLAG } from "@/lib/flags/definitions/htpr-8945-ctrl-tab-palette";
 import { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG } from "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top";
 import { HTPR_8947_CTRLK_NO_FOOTER_FLAG } from "@/lib/flags/definitions/htpr-8947-ctrlk-no-footer";
-import { HTPR_7871_CTRLK_ELLIPSIS_FLAG } from "@/lib/flags/definitions/htpr-7871-ctrlk-ellipsis";
 import { HTPR_8954_CTRLK_FILLED_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8954-ctrlk-filled-search";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
@@ -144,7 +143,6 @@ const Commands = (props: Props) => {
   const integratedTabsFlag = useFlag(HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG);
   const tabsOnTopFlag = useFlag(HTPR_8943_CTRLK_TABS_ON_TOP_FLAG);
   const noFooterFlag = useFlag(HTPR_8947_CTRLK_NO_FOOTER_FLAG);
-  const ellipsisFlag = useFlag(HTPR_7871_CTRLK_ELLIPSIS_FLAG);
   const filledSearchFlag = useFlag(HTPR_8954_CTRLK_FILLED_SEARCH_FLAG);
   const rightColumnFlag = useFlag(HTPR_8991_RIGHT_COLUMN_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
@@ -837,7 +835,7 @@ const Commands = (props: Props) => {
         ref={setInputRef}
         autoFocus={!isMobile}
         id="htc-mobile-search"
-        placeholder={isDemo ? "Press Enter to select" : ellipsisFlag ? "Type a command or search…" : "Type a command or search..."}
+        placeholder={isDemo ? "Press Enter to select" : "Type a command or search"}
         onChange={(event) => {
           if (focusProxy) delete focusProxy.pendingEnter;
           onKeyChange(event);
@@ -930,7 +928,7 @@ const Commands = (props: Props) => {
                ref={setInputRef}
                autoFocus
                id={newTaskWindow ? "htc-search" : "htc"}
-               placeholder={isDemo ? "Press Enter to select" : ellipsisFlag ? "Type a command or search…" : "Type a command or search..."}
+               placeholder={isDemo ? "Press Enter to select" : "Type a command or search"}
                onChange={(event) => {
                  if (focusProxy) delete focusProxy.pendingEnter;
                  onKeyChange(event);
