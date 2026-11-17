@@ -62,4 +62,12 @@ test('the workflow never hands the push token to the Claude step', () => {
   assert.doesNotMatch(claudeStep, /AUTOMERGE_TOKEN|GH_TOKEN|github\.token/);
   assert.match(claudeStep, /--tools Read,Edit,Write,Glob,Grep/);
   assert.doesNotMatch(claudeStep, /Bash/);
+  assert.match(claudeStep, /--safe-mode/);
+});
+
+test('a cancelled fix run never marks its head as tried', () => {
+  const yml = fs.readFileSync(path.join(__dirname, '../.github/workflows/review-fix.yml'), 'utf8');
+  const record = yml.split('- name: Record the attempt')[1];
+  assert.match(record, /if: success\(\) \|\| failure\(\)/);
+  assert.match(yml, /group: review-fix-pr-\$\{\{ matrix\.pull\.number \}\}\n\s+cancel-in-progress: false/);
 });
