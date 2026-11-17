@@ -177,16 +177,16 @@ export function decide({ model = {}, plan, evidence, binding }) {
   return { verdict, notes: String(model.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500) };
 }
 export function noteForeign(list, url, origin, kind) {
-  let foreign = true;
+  let abort = true, record = true;
   try {
     const seen = new URL(url);
     const home = seen.origin === new URL(origin).origin;
-    const script = kind === "subresource" && seen.href === "https://cdn.usefathom.com/script.js";
-    foreign = !home && !script;
-  } catch { foreign = true; }
-  if (!foreign) return false;
-  list.push({ url: String(url).slice(0, 300), kind });
-  return true;
+    const quiet = kind === "subresource" && seen.origin === "https://cdn.usefathom.com";
+    abort = !home;
+    record = abort && !quiet;
+  } catch { abort = true; record = true; }
+  if (record) list.push({ url: String(url).slice(0, 300), kind });
+  return abort;
 }
 export async function attachGuard(context, origin, offOrigin) {
   const urlOf = (value) => typeof value?.url === "function" ? value.url() : value?.url;

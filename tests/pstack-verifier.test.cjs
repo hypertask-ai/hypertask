@@ -40,15 +40,17 @@ test("a recorded off-origin subresource fails the verdict", async () => {
   const { attachGuard, decide, noteForeign } = await load();
   const origin = "http://127.0.0.1:3100";
   const script = "https://cdn.usefathom.com/script.js";
+  const event = "https://cdn.usefathom.com/?name=signup";
   const noted = [];
-  assert.equal(noteForeign(noted, script, origin, "subresource"), false);
+  for (const url of [script, event, `${script}?x=1`]) assert.equal(noteForeign(noted, url, origin, "subresource"), true);
   assert.equal(noteForeign(noted, `${origin}/`, origin, "navigation"), false);
-  for (const [url, kind] of [[script, "navigation"], ["https://cdn.usefathom.com/pixel.gif", "subresource"], [`${script}?x=1`, "subresource"], ["wss://cdn.usefathom.com/script.js", "websocket"]]) {
+  assert.deepEqual(noted, []);
+  for (const [url, kind] of [[script, "navigation"], ["https://cdn.usefathom.com.evil.test/script.js", "subresource"], ["https://evil.test/a.png", "subresource"], ["wss://cdn.usefathom.com/script.js", "websocket"]]) {
     assert.equal(noteForeign(noted, url, origin, kind), true);
   }
   assert.deepEqual(noted.map((item) => item.kind), ["navigation", "subresource", "subresource", "websocket"]);
   const offOrigin = [], calls = [];
-  const rows = [[script, false], ["https://cdn.usefathom.com/pixel.gif", false], ["https://cdn.usefathom.com.evil.test/script.js", false], ["https://evil.test/a.png", false], [script, true]];
+  const rows = [[`${origin}/app`, false], [script, false], [event, false], ["https://cdn.usefathom.com.evil.test/script.js", false], ["https://evil.test/a.png", false], [script, true]];
   await attachGuard({
     async route(_pattern, handler) {
       for (const [url, navigation] of rows) await handler({ request: () => ({ url: () => url, isNavigationRequest: () => navigation }), abort: async () => { calls.push(`abort ${url}`); }, continue: async () => { calls.push(`continue ${url}`); } });
@@ -57,9 +59,13 @@ test("a recorded off-origin subresource fails the verdict", async () => {
       handler({ url: () => "wss://cdn.usefathom.com/script.js", close() { calls.push("close ws"); }, connectToServer() { calls.push("open ws"); } });
     },
   }, origin, offOrigin);
-  assert.deepEqual(calls, [`continue ${script}`, ...rows.slice(1).map(([url]) => `abort ${url}`), "close ws"]);
-  assert.equal(offOrigin.some((item) => item.url === script && item.kind === "subresource"), false);
-  assert.equal(offOrigin.at(-1).kind, "websocket");
+  assert.deepEqual(calls, [`continue ${origin}/app`, ...rows.slice(1).map(([url]) => `abort ${url}`), "close ws"]);
+  assert.deepEqual(offOrigin.map((item) => [item.url, item.kind]), [
+    ["https://cdn.usefathom.com.evil.test/script.js", "subresource"],
+    ["https://evil.test/a.png", "subresource"],
+    [script, "navigation"],
+    ["wss://cdn.usefathom.com/script.js", "websocket"],
+  ]);
   const body = plan([{ op: "goto", path: "/" }]);
   assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence({ offOrigin }), binding }).verdict, "FAIL");
   assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding }).verdict, "PASS");
