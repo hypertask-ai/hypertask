@@ -934,3 +934,10 @@ session_ledgers:
   step_seconds: 0.12
   additional_jobs: false
   additional_required_contexts: false
+
+pstack_verifier:
+  ticket: https://app.hypertask.ai/detail/project-15/9381
+  workflow: .github/workflows/pstack-verifier.yml
+  context: pstack-verifier
+  required: false
+  note: enable after hosted proof
