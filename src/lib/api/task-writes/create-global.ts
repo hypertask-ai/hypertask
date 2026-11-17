@@ -28,6 +28,7 @@ import { CREATION_AGENT_HEADER, CREATION_CHANNEL_HEADER, creationChannelFromHead
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { archivedBoardTicketRefusal } from "@/utils/controllers/projects/archivedBoardTickets";
 import { schedulePostCreateWork, persistAssignee, createAssigneeActivityAndNotification, createPriorityActivity, createEstimateAndActivity, getActiveAgentOwnerId, isAgentAssignee, type TaskCreatedGlobally, type NormalizedTaskAssignee } from "./create-global-effects";
 import { taskWriteRoute, type TaskWriteRoute } from "./route";
 
@@ -133,13 +134,16 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     const authorizedProject = await prisma.project.findFirst({
       where: {
         id: projectId,
-        status: "Normal",
         ...taskWriteAccessWhere(userId, agentId, session.teamScope),
       },
-      select: { id: true },
+      select: { id: true, name: true, title: true, status: true },
     });
     if (!authorizedProject) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
+    }
+    const boardRefusal = await archivedBoardTicketRefusal(authorizedProject, userId);
+    if (boardRefusal) {
+      return NextResponse.json(boardRefusal, { status: 400, headers: responseHeaders });
     }
     recordAgentBoardScopeMiss(authorizedProject.id, "write");
     if (Array.isArray(urlsToAdd) && urlsToAdd.some((url) => url.Attachment)) {

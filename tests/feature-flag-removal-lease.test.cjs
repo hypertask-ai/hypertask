@@ -17,7 +17,10 @@ const prisma = {
       return { count: 1 };
     },
   },
-  project: { findFirst: async () => ({ uniqueIdentifier: "HTPR", section: [{ id: 1, section_title: "Bugs" }] }) },
+  project: {
+    findFirst: async () => ({ uniqueIdentifier: "HTPR", section: [{ id: 1, section_title: "Bugs" }] }),
+    findUnique: async () => ({ name: "project-15", title: "Hypertask Product", status: "Normal" }),
+  },
   label: { findFirst: async () => null },
   task: {
     findFirst: async () => null,

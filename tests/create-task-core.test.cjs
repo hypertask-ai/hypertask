@@ -14,6 +14,7 @@ function stubModule(relativePath, exports) {
 }
 
 const prisma = {
+  project: { findUnique: async () => ({ name: "project-15", title: "Hypertask Product", status: "Normal" }) },
   task: {
     create: async ({ data, include }) => {
       calls.taskData = data;
