@@ -1,3 +1,5 @@
+void ensureFlagIndex();
+
 function repoFrom(start: string) {
   const fs = process.getBuiltinModule("fs");
   const path = process.getBuiltinModule("path");
@@ -26,5 +28,3 @@ export function ensureFlagIndex(root?: string) {
     throw new Error((result.stderr || "Could not build the flag list").trim());
   }
 }
-
-ensureFlagIndex();
