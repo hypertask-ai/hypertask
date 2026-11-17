@@ -1,23 +1,9 @@
 {
-  "permissions": {
-    "deny": [
-      "Read(//proc/**)",
-      "Read(//sys/**)",
-      "Read(//etc/**)",
-      "Read(//root/**)",
-      "Read(//tmp/**)",
-      "Read(//run/**)",
-      "Read(//var/**)",
-      "Read(//opt/**)",
-      "Read(//home/runner/.*/**)",
-      "Read(//home/runner/work/_temp/**)",
-      "Read(//home/runner/work/_actions/**)",
-      "Edit(//**/.git/**)",
-      "Write(//**/.git/**)",
-      "Edit(//home/runner/work/*/*/trusted/**)",
-      "Write(//home/runner/work/*/*/trusted/**)"
-    ]
-  },
+  "permissions": { "deny": [
+    "Read(//proc/**)", "Read(//sys/**)", "Read(//etc/**)", "Read(//root/**)", "Read(//tmp/**)", "Read(//run/**)", "Read(//var/**)", "Read(//opt/**)",
+    "Read(//home/runner/.*/**)", "Read(//home/runner/work/_temp/**)", "Read(//home/runner/work/_actions/**)", "Edit(//**/.git/**)", "Write(//**/.git/**)",
+    "Edit(//home/runner/work/*/*/trusted/**)", "Write(//home/runner/work/*/*/trusted/**)"
+  ] },
   "disableAllHooks": true,
   "enableAllProjectMcpServers": false
 }

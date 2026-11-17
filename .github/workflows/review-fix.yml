@@ -40,7 +40,7 @@ jobs:
         with:
           script: |
             const { pick } = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/review-fix/review-fix.cjs`);
-            const pulls = await pick({ github, context, core, single: Number(process.env.PR_INPUT || 0) });
+            const pulls = await pick({ github, context, core, single: process.env.PR_INPUT });
             core.setOutput('pulls', JSON.stringify(pulls.slice(0, 4)));
 
   fix:
@@ -101,12 +101,7 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          claude -p "$(cat ../trusted/.github/scripts/review-fix/prompt.md)" \
-            --settings ../trusted/.github/scripts/review-fix/settings.json \
-            --model sonnet --effort high \
-            --tools Read,Edit,Write,Glob,Grep --allowedTools Read,Edit,Write,Glob,Grep \
-            --permission-mode acceptEdits --disable-slash-commands --no-session-persistence --safe-mode \
-            --max-turns 80 --output-format json > ../claude.json
+          claude -p "$(cat ../trusted/.github/scripts/review-fix/prompt.md)" --settings ../trusted/.github/scripts/review-fix/settings.json --model sonnet --effort high --tools Read,Edit,Write,Glob,Grep --allowedTools Read,Edit,Write,Glob,Grep --permission-mode acceptEdits --disable-slash-commands --no-session-persistence --safe-mode --max-turns 80 --output-format json > ../claude.json
       - name: Commit the fix
         id: commit
         working-directory: pr
@@ -117,22 +112,10 @@ jobs:
           answer="$(head -c 3000 .review-fix/answer.md 2>/dev/null || true)"
           if grep -rqF -- "$CLAUDE_CODE_OAUTH_TOKEN" . --exclude-dir=.git; then echo "::error::CLAUDE_CODE_OAUTH_TOKEN appeared in the checkout"; exit 1; fi
           rm -rf .review-fix
-          {
-            echo 'answer<<REVIEW_FIX_EOF'
-            echo "$answer"
-            echo 'REVIEW_FIX_EOF'
-          } >> "$GITHUB_OUTPUT"
+          printf 'answer<<REVIEW_FIX_EOF\n%s\nREVIEW_FIX_EOF\n' "$answer" >> "$GITHUB_OUTPUT"
           git add -A
-          if git diff --cached --quiet; then
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-            echo "note=no change made" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git diff --cached --name-only | grep -qE '^\.(github|claude)/'; then
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-            echo "note=refused: the change touched .github/ or .claude/" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          if git diff --cached --quiet; then echo "pushed=false" >> "$GITHUB_OUTPUT"; echo "note=no change made" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --cached --name-only | grep -qE '^\.(github|claude)/'; then echo "pushed=false" >> "$GITHUB_OUTPUT"; echo "note=refused: the change touched .github/ or .claude/" >> "$GITHUB_OUTPUT"; exit 0; fi
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -q -m "Fix review findings on $(git rev-parse --short=7 HEAD)" \
             -m "Co-Authored-By: Claude Sonnet <noreply@anthropic.com>"
@@ -146,7 +129,9 @@ jobs:
           BRANCH: ${{ matrix.pull.branch }}
         run: |
           if [ -z "$PUSH_TOKEN" ]; then echo "::error::AUTOMERGE_TOKEN is missing"; exit 1; fi
-          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+          url="https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git ls-remote --exit-code "$url" "refs/heads/${BRANCH}" >/dev/null
+          git push --force-with-lease="refs/heads/${BRANCH}:${{ matrix.pull.sha }}" "$url" "HEAD:refs/heads/${BRANCH}"
       - name: Record the attempt
         if: success() || failure()
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7

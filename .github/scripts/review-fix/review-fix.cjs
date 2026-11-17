@@ -15,9 +15,7 @@ function markers(comments) {
     try {
       const state = JSON.parse(MARKER.exec(String(comment.body ?? ''))?.[1] ?? 'null');
       return state && typeof state.sha === 'string' ? [state] : [];
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   });
 }
 
@@ -68,11 +66,18 @@ async function listAll(github, route, params) {
   return github.paginate(route, { ...params, per_page: 100 });
 }
 
+function pullNumber(single) {
+  if (single == null || single === '' || single === 0) return 0;
+  if (!/^[1-9]\d*$/.test(String(single))) throw new Error('PR input must be a positive integer');
+  return Number(single);
+}
+
 async function pick({ github, context, core, single = 0 }) {
   const { owner, repo } = context.repo;
   const full = `${owner}/${repo}`;
-  const numbers = single
-    ? [single]
+  const chosen = pullNumber(single);
+  const numbers = chosen
+    ? [chosen]
     : (await listAll(github, 'GET /repos/{owner}/{repo}/pulls', { owner, repo, state: 'open', base: 'production' })).map(pr => pr.number);
   const picked = [];
   for (const number of numbers) {
