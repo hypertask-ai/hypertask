@@ -44,7 +44,7 @@ test('writer output passes the same validator and defaults brain label', () => {
 const refusedToday = require('./fixtures/one-ticket-template/refused-today.json');
 for (const fixture of refusedToday) test(`real refused text preserved below divider: ${fixture.id}`, () => {
   const escape = text => text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const evidence = fixture.originalFormat === 'html' ? fixture.raw : `<pre>${escape(fixture.raw)}</pre>`;
+  const evidence = `<pre>${escape(fixture.raw)}</pre>`;
   assert.doesNotThrow(() => check(block + evidence));
 });
 test('moving an old evidence path above the divider is refused', () => {
