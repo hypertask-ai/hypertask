@@ -10,7 +10,7 @@ const base = "a".repeat(40);
 const head = "b".repeat(40);
 const contexts = [
   "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
-  "next-public-secrets", "pr-title", "secret-scan", "browser-smoke",
+  "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "premerge-evidence",
 ];
 const endpoints = [
   "repos/test/repo",
