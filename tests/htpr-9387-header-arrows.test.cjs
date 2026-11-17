@@ -13,7 +13,7 @@ const playlist = [
 ];
 let headerArrows = false;
 
-const { ticketUpDownLivesInHeader } = loadModule("src/lib/taskDetailHeaderArrows.ts");
+const { detailSidebarOverlays, ticketUpDownLivesInHeader } = loadModule("src/lib/taskDetailHeaderArrows.ts");
 
 const TaskMovement = loadModule("src/components/PageComponents/TaskDetail/TaskMovement.tsx", {
   "@/components/Common/Tooltip": { default: () => null },
@@ -86,6 +86,14 @@ test("up and down live in the desktop header only when the ticket flag is on", (
   assert.equal(ticketUpDownLivesInHeader(false, false, false), false);
   assert.equal(ticketUpDownLivesInHeader(true, true, false), false);
   assert.equal(ticketUpDownLivesInHeader(true, false, true), false);
+  assert.equal(ticketUpDownLivesInHeader(true, false, false, true), false);
+  assert.equal(detailSidebarOverlays(1920, 420, false), false);
+  assert.equal(detailSidebarOverlays(1440, 420, false), false);
+  assert.equal(detailSidebarOverlays(1280, 420, false), true);
+  assert.equal(detailSidebarOverlays(1440, 340, false), false);
+  assert.equal(detailSidebarOverlays(1280, 340, false), true);
+  assert.equal(detailSidebarOverlays(1440, 0, false), false);
+  assert.equal(detailSidebarOverlays(1000, 420, true), false);
 });
 
 test("header arrows are plain chevrons and still move between tickets", async () => {

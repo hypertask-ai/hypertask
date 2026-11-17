@@ -1,7 +1,7 @@
 import dynamic from "next/dynamic";
 import { instrumentedDynamicImport } from "@/lib/analytics/taskDetailPhaseTimings";
 import { TaskRelations, ICycle } from "@/models/model";
-import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
+import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatSidebarWidthPxAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8994_CLEAR_WAITING_AGENT_FLAG } from "@/lib/flags/definitions/htpr-8994-clear-waiting-agent";
@@ -9,15 +9,15 @@ import { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG } from "@/lib/flags/definitions/htpr
 import { applyWaitingOnWrite } from "@/lib/waitingOn";
 import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG } from "@/lib/flags/keys";
 import { HTPR_9387_HEADER_ARROWS_FLAG } from "@/lib/flags/definitions/htpr-9387-header-arrows";
-import { ticketUpDownLivesInHeader } from "@/lib/taskDetailHeaderArrows";
+import { detailSidebarOverlays, ticketUpDownLivesInHeader } from "@/lib/taskDetailHeaderArrows";
 import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
-import { useRecoilState } from "@/lib/state";
+import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { tasksPlayListAtom } from "@/store";
 import { inboxPlaylistHoldsTask } from "@/lib/inbox/inboxTasksPlaylist";
 import InboxPlaylistRestorer from "@/lib/inbox/InboxPlaylistRestorer";
@@ -56,6 +56,7 @@ import CommentAndDescriptionContainer from "@/components/PageComponents/TaskDeta
 import DueDateModal from "@/components/Modals/DueDate";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
+import { AI_CHAT_SIDEBAR_MIN_PX } from "@/lib/configs/style.config";
 import HypertasksCommands from "@/components/commands";
 import SetPriorityModal from "@/components/Modals/TaskPriority";
 import MoveToColumn from "@/components/Modals/commands/moveToColumn";
@@ -84,7 +85,23 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
   const headerArrows = useFlag(HTPR_9387_HEADER_ARROWS_FLAG);
-  const upDownInHeader = ticketUpDownLivesInHeader(headerArrows, Boolean(_mbl), Boolean(embedded));
+  const chatOpen = useRecoilValue(showAIChatInterfaceAtom);
+  const sidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
+  const chatWidth = useRecoilValue(aiChatSidebarWidthPxAtom);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  const reservedSidebarPx = !_mbl && sidebarMode && chatOpen ? Math.max(chatWidth, AI_CHAT_SIDEBAR_MIN_PX) : 0;
+  const upDownInHeader = ticketUpDownLivesInHeader(
+    headerArrows,
+    Boolean(_mbl),
+    Boolean(embedded),
+    detailSidebarOverlays(viewportWidth, reservedSidebarPx, Boolean(_mbl)),
+  );
   const { secondaryPanelsReady, cachedLayout, descriptionStart, liveRowsPendingFor } = useTaskContext();
   const serverRowsShown = liveRowsPendingFor(descriptionStart === "server");
   const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded, !serverRowsShown);
@@ -248,7 +265,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                 navigateToPreviousTask={navigateToPreviousTask}
                 appShellRail={appShellRailOn}
                 left={appShellRailOn ? APP_SHELL_RAIL_OFFSET : undefined}
-                headerArrows={headerArrows}
+                arrowsInHeader={upDownInHeader}
               />
             )
           }
@@ -403,14 +420,14 @@ const DesktopNavigation = ({
   currentItemInTasksPlaylist,
   appShellRail,
   left,
-  headerArrows = false,
+  arrowsInHeader = false,
 }: {
   onGoback: () => void;
   navigateToNextTask: any;
   navigateToPreviousTask: any;
   appShellRail?: boolean;
   left?: number | string;
-  headerArrows?: boolean;
+  arrowsInHeader?: boolean;
   currentItemInTasksPlaylist: {
     projectId: number;
     uniqueIndex: any;
@@ -449,7 +466,7 @@ const DesktopNavigation = ({
           <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />
         </Suspense>
       </div>
-      {headerArrows ? null : (
+      {arrowsInHeader ? null : (
         <Suspense fallback={null}>
           <TaskMovement
             currentItemInTasksPlaylist={currentItemInTasksPlaylist}
