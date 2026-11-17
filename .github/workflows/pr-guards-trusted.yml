@@ -20,7 +20,7 @@ concurrency:
   # same pull request, so a stale title check does not keep a runner (HYCI-29).
   # The group names the pull request, so one pull request does not cancel
   # another. queue: max is absent because GitHub rejects it beside cancellation.
-  group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}-${{ github.run_attempt }}
   cancel-in-progress: true
 
 jobs:

@@ -529,6 +529,15 @@ jobs:
                  [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
                  ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
                 echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
+                current_head=$(jq -r '.head.sha' <<<"$current")
+                current_fp="ffg=$(jq -r '.base.sha' <<<"$current").$(printf '%s\n%s' "$(jq -r '.title' <<<"$current")" "$(jq -c '[.labels[]?.name // empty] | sort' <<<"$current")" | sha256sum | cut -c1-16)"
+                fresh_status=$(gh_api "repos/$REPO/commits/$current_head/statuses?per_page=100" || printf '[]')
+                latest_state=$(jq -r '[.[] | select(.context == "feature-flag-gate")][0].state // ""' <<<"$fresh_status")
+                latest_fp=$(jq -r '([.[] | select(.context == "feature-flag-gate")][0].target_url // "") | split("#")[1:] | join("#")' <<<"$fresh_status")
+                if [ "$latest_state" = "success" ] && [ "$latest_fp" = "$current_fp" ]; then
+                  echo "Pull request #$number already has the verdict for its current title and labels."
+                  continue
+                fi
                 publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file" ||
                   echo "::error::Cannot publish the feature-flag-gate error for #$number."
                 continue

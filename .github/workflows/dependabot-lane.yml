@@ -46,6 +46,7 @@ concurrency:
 # happens when the repository allows auto-merge at all, and it is off today. The
 # old labeller ended its life red on every small bump over exactly that setting.
 permissions:
+  actions: read
   contents: read
   pull-requests: write
 

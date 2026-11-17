@@ -40,7 +40,12 @@ async function sweep({ comments = [], reviews = [], isDraft = false, currentHead
           return { data: { number: params.pull_number, head: { sha: gets++ ? currentHead : head, repo: { full_name: fork ? 'other/repo' : 'hypertask-ai/hypertask' } }, base: { ref: base, repo: { full_name: 'hypertask-ai/hypertask' } }, state, draft: isDraft } };
         },
       },
-      issues: { listComments: api('issues.listComments'), createComment: async value => posted.push(value), listForRepo: async () => ({ data: [] }) },
+      issues: {
+        listComments: api('issues.listComments'),
+        createComment: async value => { posted.push(value); return { data: { id: posted.length } }; },
+        deleteComment: async () => {},
+        listForRepo: async () => ({ data: [] }),
+      },
       repos: { listCommitStatusesForRef: api('repos.listCommitStatusesForRef'), createCommitStatus: async value => statuses.push(value) },
       checks: { listForRef: api('checks.listForRef'), create: async value => checks.push(value) },
     },

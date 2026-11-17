@@ -101,7 +101,7 @@ jobs:
         continue-on-error: true
         with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/verdict" }
       - env: { GH_TOKEN: "${{ github.token }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}", PR: "${{ needs.resolve.outputs.pr }}" }
-        run: started="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --jq .run_started_at)" && RUN_STARTED_AT="$started" node scripts/pstack-verifier.mjs post
+        run: started="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --jq .run_started_at || true)"; RUN_STARTED_AT="$started" node scripts/pstack-verifier.mjs post
   cancel:
     needs: [resolve, post]
     if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.post.result != 'success' }}"
