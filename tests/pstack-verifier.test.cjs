@@ -133,7 +133,7 @@ test("a non-app pass waits until every required context is green", async () => {
   assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: true, checksPending: false });
   const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, ...ciGate({ runs, statuses }) });
   assert.equal(passed.verdict, "PASS+NOTES");
-  const partial = statuses.filter((status) => status.context !== "premerge-evidence");
+  const partial = statuses.filter((status) => status.context !== "app-smoke");
   assert.deepEqual(ciGate({ runs, statuses: partial }), { checksPassed: false, checksPending: true });
   const red = statuses.map((status) => status.context === "ai-review" ? { context: "ai-review", state: "failure" } : status);
   const blockedGate = ciGate({ runs, statuses: red });
@@ -158,6 +158,31 @@ test("a non-app pass waits until every required context is green", async () => {
   assert.equal(ciGate(snapshot).checksPassed, true);
 });
 
+test("PR 3566 ruleset checks pass with no premerge-evidence status", async () => {
+  const { ciGate, requiredContextsReady, CONTEXT } = await load();
+  const runs = [
+    { name: "ci-tests", conclusion: "success" },
+    { name: "browser-smoke", conclusion: "success" },
+    { name: "next-public-secrets", conclusion: "success" },
+    { name: "secret-scan", conclusion: "success" },
+    { name: "production-test-warning", conclusion: "skipped" },
+    { name: CONTEXT, conclusion: "failure" },
+  ];
+  const statuses = [
+    { context: "app-smoke", state: "success" },
+    { context: "ai-review", state: "success" },
+    { context: "claude-review", state: "success" },
+    { context: "feature-flag-gate", state: "success" },
+    { context: "pr-title", state: "success" },
+    { context: "ux-signoff", state: "success" },
+    { context: CONTEXT, state: "failure" },
+  ];
+  const ready = requiredContextsReady(runs, statuses);
+  const gate = ciGate({ runs, statuses });
+  assert.deepEqual(ready, { missing: false, pending: false, failed: false });
+  assert.deepEqual(gate, { checksPassed: true, checksPending: false });
+});
+
 test("user-delivered files outside src cannot take the non-app pass", async () => {
   const { decide } = await load();
   const reason = "no user path in this diff";
@@ -171,6 +196,26 @@ test("user-delivered files outside src cannot take the non-app pass", async () =
   assert.equal(mixed.verdict, "FAIL");
   const scripts = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md", "scripts/pstack-verifier.mjs", ".github/workflows/pstack-verifier.yml", "tests/pstack-verifier.test.cjs"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
   assert.equal(scripts.verdict, "PASS+NOTES");
+});
+
+test("agent docs and root markdown are non-app; a src file stays app", async () => {
+  const { decide, hasAppPath } = await load();
+  const reason = "no user path in this diff";
+  const files = [".claude/reference/rule-checks.md", "AGENTS.md", "scripts/lib/agent-rule-check-table.cjs", "tests/agent-rule-check-table.test.cjs"];
+  const harness = ["e2e/visual/visual.spec.ts", "tests/visual-regression.test.cjs"];
+  assert.equal(hasAppPath(files), false);
+  assert.equal(hasAppPath(harness), false);
+  assert.equal(hasAppPath(["CLAUDE.md", "README.md"]), false);
+  const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files, filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  assert.match(passed.notes, /^no app path: /);
+  const harnessPass = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: harness, filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(harnessPass.verdict, "PASS+NOTES");
+  assert.match(harnessPass.notes, /^no app path: /);
+  assert.equal(hasAppPath(["src/app/page.tsx"]), true);
+  const app = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["src/app/page.tsx"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(app.verdict, "FAIL");
+  assert.match(app.notes, /no user path verified/);
 });
 
 test("a failed expect fails even when the model says PASS", async () => {
