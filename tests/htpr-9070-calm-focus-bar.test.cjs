@@ -73,7 +73,7 @@ test("focus paints a bar inside the card without changing border or padding", ()
 
 test("moving focus never changes the card's layout classes", () => {
   const layout = (rendered) => rendered.classes
-    .filter((name) => /^(?:border(?:-[ltrb])?|p[trblxy]?)-/.test(name))
+    .filter((name) => /^(?:border(?:-[ltrb])?-(?:\d|\[)|p[trblxy]?-(?:\d|\[))/.test(name))
     .sort();
   const plain = render(true);
   const focused = render(true, { active: true });

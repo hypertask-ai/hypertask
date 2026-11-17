@@ -68,7 +68,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
     "selected-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
     selected: selectedKeepsLayout ? "border-l-4 border-transparent" : "border-l-0",
     "active-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
-    active: paintsFocusBar ? "border-l-0" : "border-l-4 border-white-black",
+    active: paintsFocusBar ? "border-l-0 border-white-black" : "border-l-4 border-white-black",
     blocked: "border-l-4 border-[hsl(0_62.8%_30.6%)]",
     plain: "border-l-0",
   }[cardState];
