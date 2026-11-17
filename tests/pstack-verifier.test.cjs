@@ -104,8 +104,8 @@ test("empty-plan checks wait until conclusions land", async () => {
   const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: ciChecksPassed(runs), checksPending: ciChecksPending(runs) });
   assert.equal(passed.verdict, "PASS+NOTES");
   const early = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: false, checksPending: true });
-  assert.equal(early.verdict, "FAIL");
-  assert.equal(early.notes, "checks still running");
+  assert.equal(early.verdict, "PENDING");
+  assert.equal(early.notes, "waiting for required checks");
   const stuck = await waitForCiChecks(async () => pending, { sleep: async () => {}, rounds: 3, intervalMs: 1 });
   assert.equal(ciChecksPending(stuck), true);
   assert.equal(ciChecksPassed(stuck), false);
@@ -544,6 +544,64 @@ test("a run posts only when it owns the newest verifier status", async () => {
   assert.equal(posted[0].target_url, owned);
 });
 
+test("non-app files skip the model and pass on green checks", async () => {
+  const { selectPlan, decide, hasAppPath } = await load();
+  const files = ["scripts/pstack-verifier.mjs", "tests/pstack-verifier.test.cjs", "docs/ci.md", "README.md"];
+  assert.equal(hasAppPath(files), false);
+  const selected = selectPlan(files, false);
+  assert.deepEqual(selected, { actions: [], expect: [], reason: "no user path: non-app files only" });
+  assert.equal(selectPlan(["src/app/page.tsx"], false), null);
+  assert.equal(selectPlan(files, true), null);
+  const passed = decide({
+    model: { verdict: "FAIL", notes: "model should not run" },
+    plan: plan([], { ...selected, files, filesTruncated: false }),
+    evidence: null,
+    binding,
+    checksPassed: true,
+  });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  assert.equal(passed.notes, "no app path: no user path: non-app files only");
+});
+
+test("a preview that never listens is not a model verdict", async () => {
+  const { decide, notePreviewDown, previewDownBody, waitForPreview } = await load();
+  const refused = decide({
+    model: { verdict: "PASS", notes: "Navigation to the board failed with ERR_CONNECTION_REFUSED" },
+    plan: plan([{ op: "goto", path: "/project?id=1" }]),
+    evidence: evidence({ preview: "down" }),
+    binding,
+  });
+  assert.deepEqual(refused, { verdict: "FAIL", notes: "preview did not start" });
+  const body = plan([{ op: "goto", path: "/project?id=1" }]);
+  notePreviewDown(body, previewDownBody(binding));
+  assert.equal(body.fail, "preview did not start");
+  assert.equal(body.actions.length > 0 && !body.fail, false);
+  let calls = 0;
+  const up = await waitForPreview("http://127.0.0.1:3100", {
+    rounds: 3,
+    intervalMs: 5,
+    sleep: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls < 2) throw new Error("connect ECONNREFUSED 127.0.0.1:3100");
+      return { status: 200 };
+    },
+  });
+  assert.equal(up, true);
+  assert.equal(calls, 2);
+  calls = 0;
+  const dead = await waitForPreview("http://127.0.0.1:3100", {
+    rounds: 2,
+    intervalMs: 1,
+    sleep: async () => { calls += 1; },
+    fetchImpl: async () => { throw new Error("connect ECONNREFUSED 127.0.0.1:3100"); },
+  });
+  assert.equal(dead, false);
+  assert.equal(calls, 1);
+  await assert.rejects(() => waitForPreview("https://127.0.0.1:3100"), /preview url is not local/);
+});
+
+
 test("an api action passes from the preview response with no page navigation", async () => {
   const savedToken = process.env.GH_TOKEN;
   delete process.env.GH_TOKEN;
@@ -608,6 +666,7 @@ test("an api action passes from the preview response with no page navigation", a
     else process.env.GH_TOKEN = savedToken;
   }
 });
+
 
 test("a real plan with no evidence file fails as evidence missing", async () => {
   const { decide } = await load();
@@ -706,4 +765,187 @@ test("one bad model reply is retried and two bad replies fail closed", async () 
     (error) => error.message === "model HTTP 500: busy",
   );
   assert.equal(httpCalls, 1);
+});
+
+test("docs and bot shortcuts skip the model only for the sets decide accepts", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const {
+    CONTEXT, decide, parsePlan, planFromRequest, takeFileList, emptyPlanGate, statusDescription,
+    REQUIRED_CI_CONTEXTS, openWaitStartedAt, settleWaiting, WAIT_LIMIT_MS, cancelKeepsStatus,
+    postCommand, resolveCommand, authorGate,
+  } = await load();
+  assert.equal(Object.hasOwn(parsePlan(JSON.stringify({ actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" })), "botLogin"), false);
+  assert.equal(authorGate("no model line").stop, true);
+  const request = (files, extra = {}) => ({ ...binding, author: "grok", title: "t", body: "Author-Model: grok", diff: "", files, filesTruncated: false, ...extra });
+  let asked = 0;
+  const docs = await planFromRequest(request(["docs/ci.md"]), { binding, ask() { asked += 1; throw new Error("model"); } });
+  assert.equal(asked, 0);
+  assert.equal(docs.reason, "no user path");
+  assert.equal(docs.botLogin, undefined);
+  const runs = [...REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: "success" })), { name: "judge", conclusion: null }, { name: "CodeQL Analyze", conclusion: null }];
+  const statuses = REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: "success" }));
+  const gate = emptyPlanGate({ runs, statuses });
+  assert.deepEqual(gate, { checksPassed: true, checksPending: false, failed: false });
+  const quiet = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: gate.checksPassed, checksPending: gate.checksPending });
+  assert.equal(quiet.verdict, "PASS+NOTES");
+  const renamed = takeFileList([{ filename: "docs/example.ts", previous_filename: "src/pages/api/example.ts" }]);
+  assert.equal(renamed.files.includes("src/pages/api/example.ts"), true);
+  const moved = await planFromRequest(request(renamed.files), { binding, ask() { asked += 1; return { actions: [], expect: [], reason: "no user path" }; } });
+  assert.equal(asked, 1);
+  assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: renamed.files, filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "FAIL");
+  const workflow = await planFromRequest(request([".github/workflows/pstack-verifier.yml"]), {
+    binding,
+    ask() { asked += 1; return { actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" }; },
+  });
+  assert.equal(asked, 1);
+  assert.deepEqual([workflow.reason, workflow.botLogin], ["no user path: non-app files only", undefined]);
+  assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: [".github/workflows/pstack-verifier.yml"], filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "PASS+NOTES");
+  for (const file of ["packages/agent-sdk/README.md", "skills/ship/SKILL.md", ".agents/skills/ship/SKILL.md"]) {
+    assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: [file], filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "PASS+NOTES", file);
+  }
+  const failedRequired = emptyPlanGate({
+    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ai-review" ? "failure" : "success" })),
+    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: context === "ai-review" ? "failure" : "success" })),
+  });
+  assert.deepEqual([failedRequired.failed, failedRequired.checksPending], [true, false]);
+  const bot = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false, botLogin: "dependabot[bot]" }), evidence: null, binding, checksPassed: true });
+  assert.equal(bot.verdict, "PASS+NOTES");
+  assert.match(statusDescription({ verdict: bot.verdict, authorFamily: bot.authorFamily, verifierModel: "" }), /dependabot\[bot\]/);
+  const humanPlan = await planFromRequest(request(["package.json"]), {
+    binding,
+    ask() { asked += 1; return { actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" }; },
+  });
+  assert.equal(asked, 2);
+  assert.equal(humanPlan.botLogin, undefined);
+  const human = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.deepEqual([human.verdict, human.authorFamily], ["FAIL", undefined]);
+  const own = "https://github.com/acme/app/actions/runs/10/attempts/1";
+  assert.equal(cancelKeepsStatus({ state: "pending", description: "waiting for required checks", target_url: own }, own), true);
+  assert.equal(cancelKeepsStatus({ state: "pending", description: "Planning a user check", target_url: own }, own), false);
+  const started = openWaitStartedAt([
+    { context: CONTEXT, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T11:30:00Z" },
+    { context: CONTEXT, state: "success", created_at: "2026-11-17T10:00:00Z" },
+    { context: CONTEXT, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z" },
+  ]);
+  assert.equal(started, "2026-11-17T11:30:00Z");
+  const young = settleWaiting({
+    runs: [{ name: "ci-tests", conclusion: null }],
+    statuses: [
+      { context: CONTEXT, state: "pending", description: "waiting for required checks", created_at: started },
+      { context: "ci-tests", state: "pending" },
+    ],
+    now: Date.parse("2026-11-17T12:00:00Z"),
+  });
+  assert.equal(young.description, "waiting for required checks");
+  assert.ok(Date.parse("2026-11-17T12:00:00Z") - Date.parse(started) < WAIT_LIMIT_MS);
+  const sha = "c".repeat(40);
+  const work = fs.mkdtempSync(`${os.tmpdir()}/pv-post-`);
+  fs.mkdirSync(`${work}/verdict`);
+  const savedEnv = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK"].map((key) => [key, process.env[key]]);
+  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
+  const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
+  const mark = (runId, attempt, extra = {}) => ({ context: CONTEXT, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}`, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z", ...extra });
+  const post = async (verdict, statusRows, checkRuns, now) => {
+    fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict, notes: "waiting for required checks", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "" }));
+    const posts = [];
+    await postCommand({
+      now,
+      fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
+      gh: (args) => {
+        const url = String(args[1]);
+        if (url === "repos/acme/app/pulls/5") return JSON.stringify(open);
+        if (url === `repos/acme/app/commits/${sha}/statuses`) return JSON.stringify(statusRows);
+        if (url.startsWith(`repos/acme/app/commits/${sha}/check-runs`)) return JSON.stringify({ total_count: checkRuns.length, check_runs: checkRuns });
+        throw new Error(url);
+      },
+    });
+    return posts;
+  };
+  try {
+    const pending = await post("PENDING", [mark("10", "1", { created_at: "2026-11-17T11:50:00Z" }), { context: "ci-tests", state: "pending" }], [{ name: "ci-tests", conclusion: null }], Date.parse("2026-11-17T12:00:00Z"));
+      assert.deepEqual([pending.length, pending[0].state, pending[0].description], [1, "pending", "waiting for required checks"]);
+    const ignored = await post("PENDING", [mark("11", "1"), mark("10", "1")], [], Date.parse("2026-11-17T12:00:00Z"));
+    assert.deepEqual(ignored, []);
+    const passed = await post("PENDING", [mark("10", "1", { created_at: "2026-11-17T08:00:00Z" }), ...REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: "success" }))], REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: "success" })), Date.parse("2026-11-17T12:00:00Z"));
+    assert.equal(passed[0].state === "success" && !passed[0].description.includes("required checks did not finish"), true);
+    const timed = await post("PENDING", [mark("10", "1", { created_at: "2026-11-17T08:00:00Z" }), { context: "ci-tests", state: "pending" }], [{ name: "ci-tests", conclusion: null }], Date.parse("2026-11-17T12:00:00Z"));
+    assert.deepEqual([timed[0].state, timed[0].description], ["failure", "FAIL: required checks did not finish"]);
+  } finally {
+    for (const [key, value] of savedEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+  const head = "d".repeat(40);
+  const savedResolve = ["GH_TOKEN", "GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
+  const dir = fs.mkdtempSync(`${os.tmpdir()}/pv-resolve-`);
+  const output = `${dir}/output`;
+  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", WORK: dir, GITHUB_OUTPUT: output });
+  const commit = (sha, author = "dependabot[bot]", committer = "web-flow", verification = { verified: true, reason: "valid" }) => ({
+    sha, author: author ? { login: author } : null, committer: committer ? { login: committer } : null, commit: { verification },
+  });
+  const pull = (login, sha = head, body = "") => ({ number: 7, state: "open", draft: false, user: { login }, title: "deps", body, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } });
+  const lines = (files) => files.map((file) => JSON.stringify(typeof file === "string" ? { filename: file, previous_filename: null } : file)).join("\n");
+  const runResolve = async ({ login = "dependabot[bot]", body = "", files = ["package.json"], commits, second }) => {
+    fs.rmSync(`${dir}/request`, { recursive: true, force: true });
+    fs.writeFileSync(output, "");
+    const posts = [];
+    const calls = [];
+    const pulls = [pull(login, head, body), second ?? pull(login, head, body)];
+    await resolveCommand({
+      event: { workflow_run: { conclusion: "success", head_sha: head, pull_requests: [{ number: 7 }] } },
+      postStatus: async (row) => { posts.push(row); },
+      gh: (args) => {
+        calls.push(args);
+        const url = args.join(" ");
+        if (url.includes("/pulls/7/commits")) return JSON.stringify(args.includes("--paginate") ? commits : commits.slice(0, 30));
+        if (url.includes("/pulls/7/files")) return lines(files);
+        if (url.includes("vnd.github.diff")) return "";
+        if (url.includes("/pulls/7")) return JSON.stringify(pulls.shift());
+        throw new Error(url);
+      },
+    });
+    const written = fs.existsSync(`${dir}/request/request.json`) ? JSON.parse(fs.readFileSync(`${dir}/request/request.json`, "utf8")) : null;
+    return { posts, calls, written, stop: fs.readFileSync(output, "utf8") };
+  };
+  try {
+    const trusted = [commit("b".repeat(40)), commit(head)];
+    const clean = await runResolve({ commits: trusted, files: ["package.json"] });
+    assert.match(clean.stop, /stop=false/);
+    assert.equal(clean.written.botLogin, "dependabot[bot]");
+    let planned = 0;
+    const built = await planFromRequest(clean.written, { binding: { sha: head, run: "10", attempt: "1" }, ask() { planned += 1; throw new Error("model"); } });
+    assert.deepEqual([planned, built.botLogin], [0, "dependabot[bot]"]);
+    const other = await runResolve({ commits: [commit(head, "octocat")] });
+    assert.match(other.stop, /stop=true/);
+    assert.equal(other.written, null);
+    assert.match(other.posts[0].description, /author model unknown/);
+    const unsigned = await runResolve({ commits: [commit(head, "dependabot[bot]", "web-flow", { verified: false, reason: "unsigned" })] });
+    assert.match(unsigned.stop, /stop=true/);
+    assert.equal(unsigned.written, null);
+    assert.equal(unsigned.posts.some((row) => row.description.includes("PASS")), false);
+    const source = await runResolve({ commits: trusted, files: ["src/app/page.tsx"] });
+    assert.match(source.stop, /stop=true/);
+    assert.equal(source.written, null);
+    assert.match(source.posts[0].description, /dependabot\[bot\]/);
+    assert.match(source.posts[0].description, /bot changed a user path/);
+    const many = [...Array.from({ length: 30 }, () => commit("e".repeat(40))), commit(head, "octocat")];
+    const page = await runResolve({ commits: many });
+    assert.equal(page.calls.some((args) => args.includes("--paginate") && args.join(" ").includes("/commits")), true);
+    assert.match(page.stop, /stop=true/);
+    const raced = await runResolve({ commits: [commit("f".repeat(40))], second: pull("dependabot[bot]", head) });
+    assert.match(raced.stop, /stop=true/);
+    assert.deepEqual(raced.posts, []);
+    const person = await runResolve({ login: "octocat", body: "", files: ["package.json"], commits: [] });
+    assert.match(person.stop, /stop=true/);
+    assert.match(person.posts[0].description, /author model unknown/);
+  } finally {
+    for (const [key, value] of savedResolve) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

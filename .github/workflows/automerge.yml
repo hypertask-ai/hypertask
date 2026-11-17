@@ -115,6 +115,7 @@ jobs:
           REQUIRED="app-smoke ci-tests ai-review next-public-secrets pr-title"
           REQUIRED="$REQUIRED feature-flag-gate"
           REQUIRED="$REQUIRED browser-smoke"
+          REQUIRED="$REQUIRED pstack-verifier"
 
           # Any changed file matching this (case-insensitive) parks the PR for a
           # human: auth/identity, billing, security

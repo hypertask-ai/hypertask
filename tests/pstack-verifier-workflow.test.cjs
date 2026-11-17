@@ -1,7 +1,13 @@
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { spawn, spawnSync } = require("node:child_process");
+const { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } = require("node:fs");
+const { createServer } = require("node:http");
+const { tmpdir } = require("node:os");
+const { dirname, join } = require("node:path");
 const test = require("node:test");
 const yaml = require("js-yaml");
+
+const root = join(__dirname, "..");
 
 const read = (file) => yaml.load(readFileSync(file, "utf8"), { schema: yaml.JSON_SCHEMA });
 const trusted = read(".github/workflows/pstack-verifier.yml");
@@ -72,15 +78,252 @@ test("each verifier job has the declared permissions, key and token", async () =
     }
   }
   assert.deepEqual(names.filter((name) => !name.includes("${{ github.run_id }}-${{ github.run_attempt }}")), []);
-  assert.equal(policy.pstack_verifier.required, false);
-  assert.equal(policy.pstack_verifier.note, "enable after hosted proof");
-  assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), false);
+  assert.equal(policy.pstack_verifier.required, true);
+  assert.equal(policy.pstack_verifier.note, "https://app.hypertask.ai/detail/project-15/9411");
+  assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), true);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
-  const liveRulesetContexts = [
-    "app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review",
-    "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan",
-  ];
-  assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...liveRulesetContexts].sort());
+  assert.equal(REQUIRED_CI_CONTEXTS.includes("pstack-verifier"), false);
+  assert.deepEqual([...policy.policies.production_ruleset.required_status_checks].sort(), [...REQUIRED_CI_CONTEXTS, "pstack-verifier"].sort());
+  assert.equal(policy.required_checks.automerge_also_requires.includes("pstack-verifier"), true);
+  const cancel = trusted.jobs.cancel.steps.map((step) => String(step.run ?? "")).join("\n");
+  const guardAt = cancel.indexOf("waiting for required checks");
+  const failureAt = cancel.indexOf("state=failure");
+  assert.equal(guardAt >= 0 && failureAt > guardAt, true);
+});
+
+test("recheck waits on production, reruns only a verifier wait, and pages past a full run list", async () => {
+  const recheck = read(".github/workflows/pstack-verifier-recheck.yml");
+  assert.deepEqual(recheck.on.workflow_run.workflows, ["CI Tests", "PR Guards"]);
+  assert.equal(recheck.on.workflow_run.workflows.includes("Pstack Verifier Request"), false);
+  assert.deepEqual(recheck.jobs.recheck.permissions, { contents: "read", "pull-requests": "read", statuses: "read", actions: "write" });
+  assert.equal(recheck.jobs.chain.permissions.actions, "write");
+  assert.equal(recheck.jobs.chain.permissions.statuses, undefined);
+  assert.match(recheck.jobs.chain.steps.at(-1).run, /--chain-events workflow_dispatch/);
+  assert.match(recheck.jobs.chain.steps.at(-1).run, /--gap-minutes 30/);
+  const enabled = (expr, env) => Function(`return (${expr
+    .replaceAll("!cancelled()", "true")
+    .replaceAll("github.event.workflow_run.event", JSON.stringify(env.workflowRunEvent ?? ""))
+    .replaceAll("github.event_name", JSON.stringify(env.eventName))
+    .replaceAll("github.ref", JSON.stringify(env.ref ?? ""))
+    .replaceAll("==", "===")});`)();
+  for (const job of Object.values(recheck.jobs)) assert.equal(enabled(job.if, { eventName: "workflow_dispatch", ref: "refs/heads/feature" }), false);
+  assert.equal(enabled(recheck.jobs.recheck.if, { eventName: "workflow_dispatch", ref: "refs/heads/production" }), true);
+  assert.equal(enabled(recheck.jobs.chain.if, { eventName: "workflow_run", workflowRunEvent: "pull_request" }), false);
+  const helper = await import("../.github/scripts/pstack-verifier-recheck.mjs");
+  const { CONTEXT } = await import("../scripts/pstack-verifier.mjs");
+  assert.equal(helper.sourceStartsRecheck("Pstack Verifier Request"), false);
+  assert.equal(helper.shouldRerun({ context: CONTEXT, state: "pending", description: "Planning a user check" }, { name: "Pstack Verifier Request", path: ".github/workflows/pstack-verifier-request.yml" }), false);
+  assert.equal(helper.shouldRerun({ context: CONTEXT, state: "pending", description: "waiting for required checks" }, { path: ".github/workflows/pstack-verifier.yml" }), true);
+  assert.equal(helper.workflowRunSha({ workflow_run: { name: "Pstack Verifier Request", event: "pull_request", head_sha: "a".repeat(40) } }), "");
+  const oldest = "2026-11-17T01:00:00Z";
+  const items = Array.from({ length: 31 }, (_, index) => ({ number: index + 1, waitingSince: index === 30 ? oldest : new Date(Date.parse("2026-11-17T02:00:00Z") + index * 1000).toISOString() }));
+  assert.equal(helper.selectReruns(items)[0].number, 31);
+  assert.equal(helper.selectReruns(items).length, 10);
+  assert.equal(helper.selectReruns(items)[0].number, 31);
+  const pulls = await helper.listProductionPulls(async (page) => page === 1
+    ? Array.from({ length: 100 }, (_, index) => ({ number: index + 1, state: "open", draft: false, base: { ref: "production" } }))
+    : [{ number: 131, state: "open", draft: false, base: { ref: "production" } }]);
+  assert.equal(pulls.length, 101);
+  assert.equal(pulls.at(-1).number, 131);
+  const { runInFlight, standDown, handOff } = require("../.github/scripts/schedule-chain.cjs");
+  const page = Array.from({ length: 30 }, (_, index) => ({ id: index + 1, status: "in_progress", event: "workflow_run" }));
+  const api = async (path, method = "GET") => {
+    if (method === "POST") return {};
+    if (path.endsWith("per_page=30")) return { workflow_runs: page };
+    if (path.includes("page=2")) return { workflow_runs: [{ id: 99, status: "in_progress", event: "workflow_dispatch" }] };
+    return { workflow_runs: [] };
+  };
+  assert.equal((await runInFlight("hypertask-ai/hypertask", "pstack-verifier-recheck.yml", null, api, ["workflow_dispatch"])).id, 99);
+  assert.equal((await standDown("hypertask-ai/hypertask", { workflowFile: "pstack-verifier-recheck.yml", api, chainEvents: ["workflow_dispatch"] })).id, 99);
+  assert.equal(await standDown("hypertask-ai/hypertask", { workflowFile: "pstack-verifier-recheck.yml", api: async () => ({ workflow_runs: [] }), chainEvents: ["workflow_dispatch"] }), null);
+  assert.equal((await handOff("hypertask-ai/hypertask", { workflowFile: "pstack-verifier-recheck.yml", api: async (path, method) => method === "POST" ? {} : { workflow_runs: [] }, chainEvents: ["workflow_dispatch"] })).dispatched, true);
+});
+
+function dockerStub(log) {
+  return `#!/bin/bash
+printf '%s\\n' "$*" >> ${JSON.stringify(log)}
+if [ "$1" = inspect ]; then
+  printf 'true\\n'
+elif [ "$1" = logs ]; then
+  printf 'PostgreSQL init process complete; ready for start up.\\n'
+fi
+exit 0
+`;
+}
+
+function nodeStub(log) {
+  return `#!/bin/bash
+printf '%s\\n' "$*" >> ${JSON.stringify(log)}
+if [[ "$*" == *waitForPreview* ]]; then
+  if [ "\${PREVIEW_UP:-}" = 1 ]; then
+    touch "\$PSTACK_VERIFIER_STOP"
+    exit 0
+  fi
+  exit 1
+fi
+exec ${JSON.stringify(process.execPath)} "$@"
+`;
+}
+
+function runHeldSmoke(t, previewUp) {
+  const dir = mkdtempSync(join(tmpdir(), "pstack-preview-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, "bin");
+  const dockerLog = join(dir, "docker.log");
+  const nodeLog = join(dir, "node.log");
+  mkdirSync(bin);
+  mkdirSync(join(dir, "candidate"));
+  mkdirSync(join(dir, "trusted", "scripts"), { recursive: true });
+  writeFileSync(join(bin, "docker"), dockerStub(dockerLog), { mode: 0o755 });
+  writeFileSync(join(bin, "node"), nodeStub(nodeLog), { mode: 0o755 });
+  const ready = join(dir, "ready.env");
+  const result = spawnSync("bash", [join(root, "scripts/run-app-smoke-isolated.sh"), join(dir, "candidate"), join(dir, "trusted")], {
+    encoding: "utf8",
+    timeout: 15000,
+    env: {
+      PATH: `${bin}:/usr/bin:/bin`,
+      PSTACK_VERIFIER_HOLD: "1",
+      PSTACK_VERIFIER_READY: ready,
+      PSTACK_VERIFIER_STOP: join(dir, "stop"),
+      PREVIEW_UP: previewUp ? "1" : "0",
+      RUNNER_TEMP: dir,
+      CORE_SMOKE_TRUSTED_DEPENDENCIES: "false",
+      TMPDIR: dir,
+    },
+  });
+  return { result, dockerLog, nodeLog, ready, dir };
+}
+
+function assertRelayOwnsHostPort(log) {
+  const lines = log.split("\n").filter((line) => line.length > 0);
+  const app = lines.find((line) => line.includes("run -d --name ht-smoke-app-"));
+  const relay = lines.find((line) => line.includes("run -d --name ht-smoke-relay-"));
+  assert.equal(app?.includes("--network ht-smoke-net-"), true);
+  assert.equal(app.includes("127.0.0.1:3100:3100"), false);
+  assert.equal(lines.indexOf(relay) > lines.indexOf(app), true);
+  assert.equal(relay?.includes("--network ht-smoke-publish-"), true);
+  assert.equal(relay.includes("-p 127.0.0.1:3100:3100"), true);
+  assert.equal(lines.some((line) => line.startsWith("network create --internal ht-smoke-net-")), true);
+  assert.equal(lines.some((line) => line.startsWith("network create ht-smoke-publish-") && !line.includes("--internal")), true);
+  assert.equal(lines.some((line) => line.startsWith("network connect ht-smoke-net-") && line.includes(" ht-smoke-relay-")), true);
+}
+
+test("the held smoke publishes the relay on the host and fails closed when the preview check fails", (t) => {
+  const { result, dockerLog, nodeLog, ready } = runHeldSmoke(t, false);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.equal(result.stderr.includes("preview did not start"), true);
+  assert.equal(existsSync(ready), false);
+  const node = readFileSync(nodeLog, "utf8");
+  assert.equal(node.includes("waitForPreview"), true);
+  assert.equal(node.includes("pstack-verifier.mjs"), true);
+  assertRelayOwnsHostPort(readFileSync(dockerLog, "utf8"));
+});
+
+test("the held smoke records the host preview url when the preview check passes", (t) => {
+  const { result, ready, dir } = runHeldSmoke(t, true);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
+});
+
+function listenPreview(t) {
+  const server = createServer((_, response) => {
+    response.writeHead(200, { "content-type": "text/plain" });
+    response.end("ok");
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(3100, "127.0.0.1", () => {
+      t.after(() => new Promise((done) => server.close(done)));
+      resolve();
+    });
+  });
+}
+
+test("a listening preview stays ready when node -e imports the verifier", async (t) => {
+  await listenPreview(t);
+  const dir = mkdtempSync(join(tmpdir(), "pstack-preview-live-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, "bin");
+  mkdirSync(bin);
+  mkdirSync(join(dir, "candidate"));
+  mkdirSync(join(dir, "trusted", "scripts"), { recursive: true });
+  copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(dir, "trusted", "scripts", "pstack-verifier.mjs"));
+  writeFileSync(join(bin, "docker"), dockerStub(join(dir, "docker.log")), { mode: 0o755 });
+  const ready = join(dir, "ready.env");
+  const stop = join(dir, "stop");
+  writeFileSync(stop, "");
+  const result = await new Promise((resolve) => {
+    const child = spawn("bash", [join(root, "scripts/run-app-smoke-isolated.sh"), join(dir, "candidate"), join(dir, "trusted")], {
+      env: {
+        PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
+        PSTACK_VERIFIER_HOLD: "1",
+        PSTACK_VERIFIER_READY: ready,
+        PSTACK_VERIFIER_STOP: stop,
+        RUNNER_TEMP: dir,
+        CORE_SMOKE_TRUSTED_DEPENDENCIES: "false",
+        TMPDIR: dir,
+      },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    const timer = setTimeout(() => child.kill("SIGKILL"), 20000);
+    child.on("close", (status) => {
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr });
+    });
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(result.stderr.includes("preview did not start"), false);
+  assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
+  const cli = spawnSync(process.execPath, [join(root, "scripts/pstack-verifier.mjs")], { encoding: "utf8" });
+  assert.equal(cli.status, 1);
+  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|post/);
+});
+
+function playwrightModules() {
+  const candidates = [join(root, "node_modules"), join(process.env.HOME, "projects/hypertask/node_modules")];
+  const found = candidates.find((dir) => existsSync(join(dir, "playwright", "package.json")));
+  if (!found) throw new Error("playwright package is not installed");
+  return found;
+}
+
+test("a smoke boot that never writes ready records a down preview", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "pstack-job-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const trusted = join(dir, "trusted");
+  const scripts = join(trusted, "scripts");
+  const work = join(dir, "work");
+  mkdirSync(scripts, { recursive: true });
+  mkdirSync(join(dir, "candidate"));
+  copyFileSync(join(root, "scripts/pstack-verifier-drive.mjs"), join(scripts, "pstack-verifier-drive.mjs"));
+  copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(scripts, "pstack-verifier.mjs"));
+  symlinkSync(playwrightModules(), join(trusted, "node_modules"));
+  writeFileSync(join(scripts, "run-app-smoke-isolated.sh"), "#!/bin/bash\nexit 1\n", { mode: 0o755 });
+  const result = spawnSync("bash", [join(root, "scripts/pstack-verifier-job.sh"), trusted, join(dir, "candidate"), work], {
+    encoding: "utf8",
+    timeout: 20000,
+    env: {
+      PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+      HOME: process.env.HOME,
+      HEAD_SHA: "abc123",
+      GITHUB_RUN_ID: "42",
+      GITHUB_RUN_ATTEMPT: "3",
+      TMPDIR: dir,
+    },
+  });
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.deepEqual(JSON.parse(readFileSync(join(work, "evidence", "evidence.json"), "utf8")), {
+    sha: "abc123",
+    run: "42",
+    attempt: "3",
+    preview: "down",
+    steps: [],
+    expects: [],
+    navigations: [],
+    offOrigin: [],
+  });
 });
