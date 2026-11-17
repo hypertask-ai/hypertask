@@ -1,0 +1,17 @@
+name: Pstack Verifier Request
+on:
+  pull_request:
+    branches: [production]
+    types: [opened, synchronize, reopened, ready_for_review]
+concurrency:
+  group: pstack-verifier-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions: {}
+jobs:
+  request:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Request the protected pstack-verifier workflow
+        run: echo "The production workflow will drive ${{ github.event.pull_request.head.sha }}."
