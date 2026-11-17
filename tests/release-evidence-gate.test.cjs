@@ -104,6 +104,16 @@ test('inbox evidence follows every inbox file, and downloads skip everything els
   assert.deepEqual(artifactsToFetch(listed, ['docs/ci.md']), [])
 })
 
+test('a rename out of inbox still requires the inbox recording', async () => {
+  const { pathsFromPullFiles, evaluate } = await load()
+  const files = pathsFromPullFiles([
+    { filename: 'src/app/elsewhere/page.tsx', previous_filename: 'src/app/inbox/page.tsx' },
+  ])
+  const result = evaluate({ files, artifacts: [] })
+  assert.equal(result.ok, false)
+  assert.deepEqual(result.missing, [{ page: 'inbox.md', artifact: 'verify-qa-video-inbox' }])
+})
+
 test('a saved zip lists its recording names', async () => {
   const { listZipEntries } = await load()
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-evidence-test-'))

@@ -117,9 +117,20 @@ export function findMergedPr({ repo, sha }) {
   return { number: first.number, headSha: first.head && first.head.sha }
 }
 
+export function pathsFromPullFiles(entries) {
+  const paths = []
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!entry || typeof entry !== 'object') continue
+    if (typeof entry.filename === 'string' && entry.filename) paths.push(entry.filename)
+    if (typeof entry.previous_filename === 'string' && entry.previous_filename) paths.push(entry.previous_filename)
+  }
+  return paths
+}
+
 export function prFiles({ repo, pr }) {
-  const out = gh(['api', '--paginate', `repos/${repo}/pulls/${pr}/files`, '--jq', '.[].filename'])
-  return out.split('\n').map((line) => line.trim()).filter(Boolean)
+  const out = gh(['api', '--paginate', `repos/${repo}/pulls/${pr}/files`, '--jq', '.[] | {filename,previous_filename}'])
+  const entries = out.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => JSON.parse(line))
+  return pathsFromPullFiles(entries)
 }
 
 export function prArtifacts({ repo, sha, files }) {

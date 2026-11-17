@@ -27,7 +27,7 @@ export default defineConfig({
     // view without exposing the smoke account's session cookie.
     trace: 'off',
     screenshot: 'only-on-failure',
-    video: process.env.VERIFY_QA_RECORD === '1' ? 'on' : 'off',
+    video: 'off',
   },
   globalSetup: './e2e/smoke/global-setup.ts',
   projects: [
