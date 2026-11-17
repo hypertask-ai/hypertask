@@ -55,8 +55,11 @@ Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
 Open `/time` signed in. Confirm the Time reports title, Team, Board, Date
 range, and Group by. With no rows, Export CSV is disabled and the list says
 No time entries. Pick one board, open + Add time entry, search a disposable
-task, set hours, and save. A running row shows Pause or Resume, and Stop.
-The duration opens the time log. The task name links to that ticket.
+task, set hours, and save. That saved row has an end time, so it shows Edit
+and Delete, not Pause or Stop. To check a running row, open that ticket and
+press Start, then return to `/time`. The running row shows Pause or Resume,
+and Stop. Press Stop before leaving. The duration opens the time log. The
+task name links to that ticket.
 
 ### Local writing assistance and undo
 
@@ -114,14 +117,15 @@ Missing the cookie leaves the ticket unseeded. Do not switch
 `htpr-7627-ticket-first-screen` Off. Follow the Batch 3 proof rule. No test
 covers this flag off.
 
-With `htpr-7848-summary-on-view` on, change a disposable ticket and confirm
-the summary is not generated on that change. Open the ticket and confirm one
-refresh is scheduled, then a second open inside a minute does not schedule
-another. After a Stripe checkout for a team whose owners all have the flag,
-those tickets are marked out of date and no summary run starts from the
-checkout. Do not switch `htpr-7848-summary-on-view` Off. Off proof:
-`tests/htpr-7848-summary-on-view.test.cjs`. Do not change a live team's
-Stripe plan for this check.
+Record the live summary-on-view schedule and the Stripe checkout mark as
+UNREACHABLE. Changing a ticket only marks the summary out of date. Opening
+that ticket schedules a summary five seconds later and spends the AI
+allowance, which this map does not spend merely to force a summary. A
+finished Stripe checkout changes a live team's plan. Do not start a
+checkout and do not change a plan. Do not switch
+`htpr-7848-summary-on-view` Off. Closest proof is
+`tests/htpr-7848-summary-on-view.test.cjs`, including the test
+`a checkout marks in-scope tickets and asks for the backfill otherwise`.
 
 ### Empty field labels and the right column
 
@@ -271,8 +275,9 @@ live create/edit to confirm their background jobs did not emit allowance errors.
 
 ### Batch 3 proof
 
-Screenshot `/time` empty, then after one added entry and one CSV export.
-Delete that entry from the time log before leaving.
+Screenshot `/time` empty, then after one added entry, one running timer,
+and one CSV export. Press Stop on that timer, then delete the manual entry
+and the stopped entry from the time log before leaving.
 
 Runners never switch a flag Off. Read the live mode and leave it.
 Screenshot the on state on a disposable QA task only when that account
@@ -285,10 +290,11 @@ live off is UNREACHABLE and the test named in that flag's drive step is the
 off proof. When the live mode is already Off, that screen is the off proof
 and the on state is unreached. A flag with no named test uses this same rule.
 
-Do not change a live team's Stripe plan to prove
-`htpr-7848-summary-on-view`. Do not spend an AI allowance to force a summary
-or a smart label. Delete disposable tasks, drafts, chat sessions, and time
-entries in the product UI.
+Do not start a Stripe checkout and do not change a live team's plan to
+prove `htpr-7848-summary-on-view`. Do not open a stale ticket to force a
+summary, and do not spend an AI allowance on a summary or a smart label.
+Delete disposable tasks, drafts, chat sessions, and time entries in the
+product UI. Stop any timer this run started before deleting it.
 
 ### Cleanup
 
