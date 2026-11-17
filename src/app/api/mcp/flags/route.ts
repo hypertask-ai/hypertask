@@ -106,10 +106,10 @@ export async function PATCH(request: NextRequest) {
     }
     const source = attestation ? attestation.source : body.reason;
     const link = typeof source === "string" && source.length <= 500
-      ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.exec(source)
+      ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#(?:comment-([1-9]\d{0,8})|activity-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/.exec(source)
       : null;
     if (!usesReview && !usesFailure && !link) {
-      return noStore({ error: "Reason must link to the approved ticket comment (#comment-<id>)" }, 400);
+      return noStore({ error: "Reason must link to the approved ticket comment (#comment-<id>) or the lead's agent lane record (#activity-<id>)" }, 400);
     }
     const agent = await prisma.agent.findUniqueOrThrow({
       where: { id: ctx.agentId as string },
@@ -141,6 +141,59 @@ export async function PATCH(request: NextRequest) {
         return;
       }
       if (!link) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+      if (link[4]) {
+        if (ctx.agentId !== FLAG_CHAT_RECORD_AGENT_ID) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+        const lead = await tx.agent.findUnique({
+          where: { id: FLAG_CHAT_RECORD_AGENT_ID }, select: { userId: true, revokedAt: true },
+        });
+        if (!lead || lead.userId !== FEATURE_FLAG_OWNER_USER_ID || lead.revokedAt !== null) {
+          throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+        }
+        const activity = await tx.agentRunActivity.findFirst({
+          where: {
+            id: link[4],
+            run: { agentId: FLAG_CHAT_RECORD_AGENT_ID, task: {
+              projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" },
+              project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
+            } },
+          },
+          select: { text: true, createdAt: true, run: { select: { taskId: true } } },
+        });
+        const record = activity ? parseFlagChatRecord(activity.text) : null;
+        const recordDate = record ? Date.parse(`${record.date}T00:00:00.000Z`) : NaN;
+        const activityNow = Date.now();
+        const activityWeek = 7 * 24 * 60 * 60 * 1000;
+        if (!activity || !record || !Number.isFinite(recordDate)
+          || new Date(recordDate).toISOString().slice(0, 10) !== record.date
+          || recordDate > activityNow || recordDate < activityNow - activityWeek
+          || activity.createdAt.getTime() < recordDate
+          || (classifyAnswer(record.quote) !== "yes" && !(body.mode === "OFF" && isOffOrder(record.quote)))) {
+          throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+        }
+        const activitySwitches = parseSwitchQuestion(`${record.quote} ${record.tail}`.trim(), false);
+        if (!activitySwitches || activitySwitches.get(body.key as string) !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
+          throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+        }
+        const laterChange = await tx.featureFlagChange.findFirst({
+          where: { key: body.key as string, createdAt: { gt: activity.createdAt } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { newMode: true },
+        });
+        if (laterChange && laterChange.newMode !== body.mode) {
+          throw new FeatureFlagApprovalError("A later flag change supersedes this request");
+        }
+        const laterHuman = await tx.comment.findMany({
+          where: { taskId: activity.run.taskId, creatorId: FEATURE_FLAG_OWNER_USER_ID, agentId: null,
+            agentDisplayName: null, createdAt: { gte: activity.createdAt } },
+          select: { id: true, text: true, commentText: true },
+        });
+        const humanNo = laterHuman.find((later) => classifyAnswer(normalizeVisibleText(later.text || later.commentText || "")) === "no");
+        if (humanNo) throw new FeatureFlagApprovalError(`Valentin said no after that approval (comment ${humanNo.id})`);
+        await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: ctx.user.id,
+          log: JSON.stringify({ event: "flag_owner_request", key: body.key, mode: body.mode,
+            agentId: ctx.agentId, source, requestedAt: activity.createdAt.toISOString(),
+            quoteSha256: createHash("sha256").update(record.quote).digest("hex") }) } });
+        return;
+      }
       const commentId = Number(link[3]);
       const approval = await tx.comment.findFirst({
         where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } },
@@ -243,6 +296,7 @@ export async function PATCH(request: NextRequest) {
           const record = parseFlagChatRecord(comment.text || comment.commentText || "");
           const recordDate = record ? Date.parse(`${record.date}T00:00:00.000Z`) : NaN;
           if (!unedited || !fresh || comment.creatorId !== FEATURE_FLAG_OWNER_USER_ID
+            || ctx.agentId !== FLAG_CHAT_RECORD_AGENT_ID
             || comment.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !record || !Number.isFinite(recordDate)
             || new Date(recordDate).toISOString().slice(0, 10) !== record.date
             || recordDate > now || recordDate < now - week

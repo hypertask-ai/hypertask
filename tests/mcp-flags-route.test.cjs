@@ -28,6 +28,7 @@ let broadcastFails;
 let writeError;
 let previousMode;
 let approvalComment;
+let leadActivity;
 let approvalQueries;
 let lockQueries;
 let plainYesFlagOn;
@@ -147,6 +148,15 @@ const tx = {
       return leadAgent;
     },
   },
+  agentRunActivity: {
+    findFirst: async (query) => {
+      if (!leadActivity || query.where.id !== leadActivity.id) return null;
+      assert.deepEqual(query.where.run.task.projectId, 4060);
+      assert.deepEqual(query.where.run.task.uniqueIndex, 215);
+      assert.deepEqual(query.select, { text: true, createdAt: true, run: { select: { taskId: true } } });
+      return { text: leadActivity.text, createdAt: leadActivity.createdAt, run: { taskId: leadActivity.taskId } };
+    },
+  },
   comment: {
     findMany: async (query) => commentsMatching(query),
     findFirst: async (query) => {
@@ -243,6 +253,10 @@ test.beforeEach((t) => {
     commentText: `Question: Switch ${key} to Off?`, text: null, editedAt: null,
     reactions: [{ userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() }],
   };
+  leadActivity = {
+    id: "0b7f9f6e-2f7a-4f27-9e6d-2a1d6d6f6c11", taskId: 900, createdAt: new Date(),
+    text: `Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "turn it off now". Switch ${key} to Off`,
+  };
 });
 
 for (const method of ["GET", "PATCH"]) {
@@ -292,7 +306,7 @@ for (const badReason of [
   undefined, null, "", "not a URL", "http://app.hypertask.ai/detail/project-4060/215", "https://evil.test/detail/approval", "https://app.hypertask.ai.evil.test/page/approval", "https://app.hypertask.ai@evil.test/page/approval", "https://app.hypertask.ai/admin/flags", "https://app.hypertask.ai/page/approval", "https://app.hypertask.ai/detail/project-4060/215/extra", "https://app.hypertask.ai/detail/project-4060/2147483648", "https://app.hypertask.ai/detail/../admin/flags", "https://app.hypertask.ai/page/" + "a".repeat(500)]) {
   test(`PATCH rejects invalid reason ${JSON.stringify(badReason)}`, async () => {
     assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason: badReason }))), {
-      status: 400, body: { error: "Reason must link to the approved ticket comment (#comment-<id>)" },
+      status: 400, body: { error: "Reason must link to the approved ticket comment (#comment-<id>) or the lead's agent lane record (#activity-<id>)" },
     });
     assert.equal(writes.length, 0);
     assert.equal(approvalQueries.length, 0);
@@ -524,6 +538,7 @@ function ticketYes(text = "Yes") {
 }
 function chatRecord(text = `Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "yes, ship it"`) {
   ticketYes(text);
+  ctx.agentId = FLAG_CHAT_RECORD_AGENT_ID;
   approvalComment.agentId = FLAG_CHAT_RECORD_AGENT_ID;
   approvalComment.agentDisplayName = "HT Product Lead";
 }
@@ -617,6 +632,71 @@ test("PATCH refuses the lead in-chat record naming its own switch when the quote
   chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "no". Switch ${key} to Off`);
   ticketComments = [];
   await assertRefused(approvalRequired, "OFF");
+});
+
+const activityReason = "https://app.hypertask.ai/detail/project-4060/215#activity-0b7f9f6e-2f7a-4f27-9e6d-2a1d6d6f6c11";
+
+function leadActivityText(inner = "turn it off now", mode = "Off", day = new Date().toISOString().slice(0, 10)) {
+  return `Valentin said in chat (${day}): "${inner}". Switch ${key} to ${mode}`;
+}
+
+async function switchFromActivity(mode = "OFF") {
+  return result(await PATCH(request("PATCH", { key, mode, reason: activityReason })));
+}
+
+test("PATCH lets the lead switch Off from his agent lane record without a people comment", async () => {
+  ctx.agentId = FLAG_CHAT_RECORD_AGENT_ID;
+  leadActivity.text = leadActivityText();
+  ticketComments = [];
+  approvalComment = null;
+  const response = await switchFromActivity("OFF");
+  assert.equal(response.status, 200);
+  assert.deepEqual(writes.at(-1).slice(0, 2), [key, "OFF"]);
+  assert.equal(writes.at(-1)[2].reason, activityReason);
+  assert.equal(writes.at(-1)[2].agentId, FLAG_CHAT_RECORD_AGENT_ID);
+  assert.equal(auditLogs.length, 1);
+  assert.equal(auditLogs[0].event, "flag_owner_request");
+  assert.equal(auditLogs[0].requestedAt, leadActivity.createdAt.toISOString());
+  assert.equal(auditLogs[0].quoteSha256, createHash("sha256").update("turn it off now").digest("hex"));
+});
+
+test("PATCH refuses a runner replaying the lead's agent lane record", async () => {
+  ctx.agentId = "runner-3";
+  leadActivity.text = leadActivityText();
+  assert.deepEqual(await switchFromActivity("OFF"), { status: 403, body: { error: approvalRequired } });
+  assert.equal(writes.length, 0);
+  assert.equal(auditLogs.length, 0);
+});
+
+test("PATCH refuses a runner replaying the lead's people comment record", async () => {
+  chatRecord(leadActivityText("yes, ship it"));
+  ticketComments = [];
+  ctx.agentId = "runner-3";
+  assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason }))), { status: 403, body: { error: approvalRequired } });
+  assert.equal(writes.length, 0);
+});
+
+for (const [scenario, arrange] of [
+  ["a stale date", () => { leadActivity.text = leadActivityText("turn it off now", "Off", "2020-01-01"); }],
+  ["a different switch", () => { leadActivity.text = leadActivityText("yes, ship it", "Everyone"); }],
+  ["an unknown activity", () => { leadActivity.id = "1b7f9f6e-2f7a-4f27-9e6d-2a1d6d6f6c11"; }],
+  ["a later no from Valentin", () => { ticketComments.push({ id: 124, taskId: 900, text: "No", commentText: "", creatorId: 6, agentId: null, agentDisplayName: null, editedAt: null, editedByUserId: null, editedByAgentId: null, createdAt: new Date(Date.now() + 1000) }); }],
+]) {
+  test(`PATCH refuses an agent lane record with ${scenario}`, async () => {
+    ctx.agentId = FLAG_CHAT_RECORD_AGENT_ID;
+    leadActivity.text = leadActivityText();
+    approvalComment = null;
+    arrange();
+    assert.equal((await switchFromActivity("OFF")).status, 403);
+    assert.equal(writes.length, 0);
+    assert.equal(auditLogs.length, 0);
+  });
+}
+
+test("PATCH still lets the lead record his order in a people comment", async () => {
+  chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "yes, ship it". Switch ${key} to Off`);
+  ticketComments = [];
+  await assertAllowed("chat-record", key, "OFF", [123]);
 });
 
 function quoteBlockRecord(inner = "yes, ship it", tail = "") {
