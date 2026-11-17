@@ -19,6 +19,9 @@ fi
 if [ -d "$candidate_root/src/lib/flags/definitions" ]; then
   node "$trusted_root/scripts/generate-flag-index.mjs" "$candidate_root"
 fi
+if [ -d "$trusted_root/src/lib/flags/definitions" ]; then
+  node "$trusted_root/scripts/generate-flag-index.mjs" "$trusted_root"
+fi
 
 # Docker cannot create nested mount targets beneath the read-only /app bind.
 for candidate_mount in node_modules .next; do
