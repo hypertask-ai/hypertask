@@ -23,6 +23,9 @@ const PUSH_EVENTS = ['pull_request', 'pull_request_target'];
 const PUSH_TYPE = 'synchronize';
 // Only an expression can name the pull request, so a group without one is shared.
 const PER_PULL_REQUEST = /github\.event\.pull_request\.number|github\.head_ref|github\.ref(?!\w)/;
+const RUN_SCOPED = /github\.run_id|github\.run_attempt|github\.run_number/;
+const COMMIT_SCOPED = /github\.sha|github\.event\.pull_request\.head\.sha|github\.event\.head_commit\.id/;
+const PR_SCOPED = /github\.event\.pull_request\.number|inputs\.pr_number/;
 
 function lines(text) {
   return text.split('\n');
@@ -105,6 +108,13 @@ function concurrencySections(text) {
   return sections;
 }
 
+function groupSerializes(group) {
+  if (!group) return false;
+  if (RUN_SCOPED.test(group)) return false;
+  if (COMMIT_SCOPED.test(group) && !PR_SCOPED.test(group)) return false;
+  return true;
+}
+
 function exceptionProblems(name, text) {
   const reason = EXCEPTIONS.get(name);
   const problems = [];
@@ -114,6 +124,7 @@ function exceptionProblems(name, text) {
   for (const concurrency of sections) {
     if (value(concurrency, 'queue') !== 'max') problems.push(`${name}: exception lost its queue: max`);
     if (cancelInProgress(concurrency) !== false) problems.push(`${name}: exception must not cancel runs`);
+    if (!groupSerializes(value(concurrency, 'group'))) problems.push(`${name}: exception group does not serialize runs`);
   }
   return [...new Set(problems)];
 }

@@ -168,6 +168,26 @@ test('an excepted gate fails when it loses its concurrency block', () => {
   assert.deepEqual(problemsFor('ux-signoff-gate', bare), ['ux-signoff-gate: no concurrency block']);
 });
 
+test('an excepted gate fails when its group is unique per run', () => {
+  const perRun = [
+    'on:',
+    '  pull_request:',
+    '    types: [synchronize]',
+    'concurrency:',
+    '  group: ${{ github.run_id }}',
+    '  queue: max',
+    '  cancel-in-progress: false',
+    '',
+  ].join('\n');
+  const perCommit = perRun.replace('github.run_id', 'github.sha');
+  assert.deepEqual(problemsFor('ci-tests', perRun), [
+    'ci-tests: exception group does not serialize runs',
+  ]);
+  assert.deepEqual(problemsFor('ci-tests', perCommit), [
+    'ci-tests: exception group does not serialize runs',
+  ]);
+});
+
 test('an excepted gate may serialize on a job instead of the workflow', () => {
   const jobLevel = [
     'on:',
