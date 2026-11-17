@@ -92,7 +92,7 @@ export const LocalRightSideInfo = (
         data-task-property-label={graphite2Enabled ? true : undefined}
         onClick={onClick}
         className={cn(
-          "cursor-pointer border-icon-dark-gray relative group text-[#8E9093] font-medium",
+          "cursor-pointer border-icon-dark-gray relative group text-text-light-gray font-medium",
           plainCornersEnabled ? "rounded-[4px]" : "rounded-[5px]",
           _mbl ? "w-[88px] shrink-0 text-meta" : "w-[25%] @sm:w-1/2 @sm:border-none",
           className
