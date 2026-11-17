@@ -5,10 +5,12 @@ const yaml = require("js-yaml");
 
 const read = (file) => yaml.load(readFileSync(file, "utf8"), { schema: yaml.JSON_SCHEMA });
 const trusted = read(".github/workflows/pstack-verifier.yml");
+const request = read(".github/workflows/pstack-verifier-request.yml");
 const policy = read("docs/ci-policy.yml");
 const expected = {
   resolve: { contents: "read", "pull-requests": "read", statuses: "write" },
   plan: { contents: "read" },
+  drive: { contents: "read", packages: "read" },
   judge: { contents: "read" },
   post: { contents: "read", "pull-requests": "write", statuses: "write" },
   cancel: { statuses: "write" },
@@ -34,14 +36,17 @@ function tokenGaps(jobs) {
 }
 
 test("each verifier job has the declared permissions, key and token", () => {
+  assert.deepEqual(request.permissions, {});
   assert.deepEqual(trusted.permissions, {});
   for (const [name, permissions] of Object.entries(expected)) assert.deepEqual(trusted.jobs[name].permissions, permissions, name);
   assert.deepEqual(needs(trusted.jobs.plan), ["resolve"]);
-  assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan"]);
+  assert.deepEqual(needs(trusted.jobs.drive), ["resolve", "plan"]);
+  assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "drive"]);
   assert.deepEqual(needs(trusted.jobs.post), ["resolve", "judge"]);
   assert.deepEqual(needs(trusted.jobs.cancel), ["resolve", "post"]);
   const secretJobs = Object.entries(trusted.jobs).filter(([, job]) => strings(job).some((value) => value.includes("secrets."))).map(([name]) => name);
   assert.deepEqual(secretJobs, ["plan", "judge"]);
+  assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("secrets.") || value.includes("OPENROUTER_EVAL_KEY")), false);
   assert.deepEqual(tokenGaps(trusted.jobs), []);
   assert.equal(trusted.jobs.cancel.steps.some((step) => String(step.uses ?? "").includes("checkout")), false);
   const names = [];

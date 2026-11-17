@@ -8,6 +8,8 @@ export const FLASH = "deepseek/deepseek-v4.1-flash";
 export const PSTACK_VERIFIER = { model: FLASH, endpoint: "https://openrouter.ai/api/v1/chat/completions" };
 export const CONTEXT = "pstack-verifier";
 const KEYS = ["Escape", "Enter", "Tab", "Backspace", "ArrowDown", "ArrowUp"];
+export const CLICK_ROLES = ["link", "button", "menuitem", "menuitemcheckbox", "checkbox", "radio", "tab", "option", "switch", "combobox"];
+const LAND_ROLES = [...CLICK_ROLES, "textbox"];
 const FAMILIES = new Set(["claude", "deepseek", "grok", "codex", "other"]);
 
 export function assertFlashModel(model = PSTACK_VERIFIER.model) {
@@ -169,8 +171,108 @@ export function decide({ model = {}, plan, evidence, binding }) {
   if (verdict !== "PASS" && verdict !== "PASS+NOTES") return { verdict: "FAIL", notes: String(model.notes || "model verdict missing").slice(0, 500) };
   return { verdict, notes: String(model.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500) };
 }
+export function noteForeign(list, url, origin, kind) {
+  let foreign = true;
+  try { foreign = new URL(url).origin !== new URL(origin).origin; } catch { foreign = true; }
+  if (!foreign) return false;
+  list.push({ url: String(url).slice(0, 300), kind });
+  return true;
+}
+export async function attachGuard(context, origin, offOrigin) {
+  const urlOf = (value) => typeof value?.url === "function" ? value.url() : value?.url;
+  await context.route("**/*", async (route) => {
+    const request = route.request();
+    const navigation = typeof request.isNavigationRequest === "function" ? request.isNavigationRequest() : false;
+    if (noteForeign(offOrigin, urlOf(request), origin, navigation ? "navigation" : "subresource")) { await route.abort(); return; }
+    await route.continue();
+  });
+  if (typeof context.routeWebSocket !== "function") return;
+  await context.routeWebSocket(/.*/, (socket) => {
+    if (noteForeign(offOrigin, urlOf(socket), origin, "websocket")) { socket.close(); return; }
+    socket.connectToServer();
+  });
+}
+export function recordNav(list, url, status) {
+  const statusCode = Number(status) || 0, value = String(url ?? "");
+  if (!list.some((item) => item.url === value && item.status === statusCode)) list.push({ url: value, status: statusCode });
+}
+function seedPath(value, projectId) {
+  if (!/^[0-9]+$/.test(String(projectId ?? ""))) throw new Error("project id is not allowed");
+  return allowPath(String(value).split("{id}").join(String(projectId)));
+}
 function failureText(error) {
   return redact(String(error?.message ?? error).split("\n")[0], secretValues()).slice(0, 180);
+}
+async function control(page, name, roles) {
+  for (const role of roles) {
+    const found = page.getByRole(role, { name, exact: true });
+    if ((await found.count()) > 0) return found.first();
+  }
+  return null;
+}
+async function perform(page, action, base, projectId, navigations) {
+  if (action.op === "goto") {
+    const target = new URL(seedPath(action.path, projectId), base).toString();
+    const response = await page.goto(target, { waitUntil: "domcontentloaded", timeout: 20000 });
+    const status = Number(typeof response?.status === "function" ? response.status() : response?.status) || 0;
+    recordNav(navigations, typeof response?.url === "function" ? response.url() : target, status);
+    if (!(status >= 200 && status < 400)) throw new Error(`document status ${status}`);
+    return;
+  }
+  if (action.op === "click" || action.op === "fill") {
+    const name = action.op === "click" ? action.text : action.label;
+    const handle = await control(page, name, action.op === "click" ? CLICK_ROLES : ["textbox"]);
+    if (!handle) throw new Error("not actionable");
+    if (action.op === "click") await handle.click({ timeout: 8000 });
+    else await handle.fill(action.value, { timeout: 8000 });
+    return;
+  }
+  if (action.op === "press") {
+    const role = await page.evaluate(() => {
+      const el = document.activeElement;
+      if (!el || el === document.body || el === document.documentElement) return "";
+      const named = String(el.getAttribute?.("role") || "").toLowerCase();
+      if (named) return named;
+      const tag = el.tagName, type = String(el.type || "").toLowerCase();
+      if (tag === "BUTTON" || (tag === "INPUT" && (type === "button" || type === "submit" || type === "reset"))) return "button";
+      if (tag === "A" && el.hasAttribute?.("href")) return "link";
+      if (tag === "SELECT") return "combobox";
+      if (tag === "INPUT" && type === "checkbox") return "checkbox";
+      if (tag === "INPUT" && type === "radio") return "radio";
+      if (tag === "TEXTAREA" || el.isContentEditable || (tag === "INPUT" && !["hidden", "file", "range", "color", "image"].includes(type))) return "textbox";
+      return "";
+    });
+    if (!LAND_ROLES.includes(role)) throw new Error("not actionable");
+    await page.keyboard.press(action.key);
+    return;
+  }
+  if (action.op === "shot") return;
+  throw new Error("not actionable");
+}
+export async function runPlan({ page, plan, base, projectId, shotsDir, navigations }) {
+  const steps = [], expects = [];
+  for (const [index, action] of plan.actions.entries()) {
+    let ok = true, error = "";
+    try { await perform(page, action, base, projectId, navigations); }
+    catch (caught) { ok = false; error = failureText(caught); }
+    try { await page.screenshot({ path: path.join(shotsDir, `${index}.png`) }); }
+    catch (caught) { if (ok) { ok = false; error = failureText(caught); } }
+    steps.push({ action, ok, error });
+  }
+  for (const item of plan.expect ?? []) {
+    let ok = true, error = "";
+    try {
+      if (item.text) {
+        const found = page.getByText(item.text, { exact: false });
+        if ((await found.count()) < 1 || !(await found.first().isVisible())) throw new Error("text not visible");
+      } else {
+        const here = new URL(page.url()), want = new URL(seedPath(item.path, projectId), here.origin);
+        if (here.origin !== want.origin || here.pathname !== want.pathname || here.search !== want.search) throw new Error("url did not match");
+      }
+    } catch (caught) { ok = false; error = failureText(caught); }
+    expects.push({ expect: item, ok, error });
+  }
+  return { steps, expects, navigations };
 }
 export function githubEnv(base = process.env) {
   if (!base.GH_TOKEN) throw new Error("gh token is missing");

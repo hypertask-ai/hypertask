@@ -36,6 +36,30 @@ test("a failed expect fails even when the model says PASS", async () => {
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
   assert.equal(result.verdict, "FAIL");
 });
+
+test("a recorded off-origin subresource fails the verdict", async () => {
+  const { attachGuard, decide } = await load();
+  const offOrigin = [], calls = [];
+  await attachGuard({
+    async route(_pattern, handler) {
+      await handler({ request: () => ({ url: () => "https://evil.test/a.png", isNavigationRequest: () => false }), abort: async () => { calls.push("abort"); }, continue: async () => { calls.push("continue"); } });
+    },
+    async routeWebSocket() {},
+  }, "http://127.0.0.1:3100", offOrigin);
+  assert.deepEqual([calls, offOrigin[0].kind], [["abort"], "subresource"]);
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "goto", path: "/" }]), evidence: evidence({ offOrigin }), binding }).verdict, "FAIL");
+});
+
+test("status 500 on the first goto fails", async () => {
+  const { runPlan, decide } = await load();
+  const navigations = [];
+  const page = { on() {}, url: () => "http://127.0.0.1:3100/", async goto(url) { return { status: () => 500, url: () => url }; }, async screenshot() {} };
+  const body = plan([{ op: "goto", path: "/" }]);
+  const run = await runPlan({ page, plan: body, base: "http://127.0.0.1:3100", projectId: "1", shotsDir: "/tmp", navigations });
+  assert.equal(run.navigations[0].status, 500);
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence({ steps: run.steps, navigations: run.navigations }), binding }).verdict, "FAIL");
+});
+
 test("a verdict from another attempt fails", async () => {
   const { readVerdict } = await load();
   const pass = { ...binding, verdict: "PASS", notes: "", authorFamily: "grok", verifierModel: "deepseek/deepseek-v4.1-flash" };
