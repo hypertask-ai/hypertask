@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createSign, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -10,6 +10,9 @@ const heavyNeeded = (files) => createRequire(import.meta.url)("../.github/script
 export const FLASH = "deepseek/deepseek-v4.1-flash";
 export const PSTACK_VERIFIER = { model: FLASH, endpoint: "https://openrouter.ai/api/v1/chat/completions" };
 export const CONTEXT = "pstack-verifier";
+const APP_ID = 5264284;
+const APP_LOGIN = "hypertask-runners[bot]";
+const heldSecrets = [];
 const KEYS = ["Escape", "Enter", "Tab", "Backspace", "ArrowDown", "ArrowUp"];
 export const CLICK_ROLES = ["link", "button", "menuitem", "menuitemcheckbox", "checkbox", "radio", "tab", "option", "switch", "combobox"];
 const LAND_ROLES = [...CLICK_ROLES, "textbox"];
@@ -576,8 +579,14 @@ export function githubHeaders(env = process.env) {
 export function attemptUrl(repo, run, attempt) {
   return `https://github.com/${repo}/actions/runs/${run}/attempts/${attempt}`;
 }
+function holdSecret(value) {
+  if (value) heldSecrets.push(String(value));
+}
+function maskSecret(value) {
+  if (value) process.stdout.write(`::add-mask::${value}\n`);
+}
 function secretValues() {
-  return [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN].filter(Boolean);
+  return [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN, process.env.HYPERTASK_RUNNERS_KEY, ...heldSecrets].filter(Boolean);
 }
 function block(label, text, limit, fence) {
   return `${fence}${label}\n${String(text ?? "").slice(0, limit).split(fence).join("")}\n${fence}`;
@@ -659,8 +668,46 @@ function workDir() {
 function bindingNow(sha = process.env.HEAD_SHA) {
   return { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
 }
-async function postStatus({ repo, sha, run, attempt, state, description, fetchImpl = fetch }) {
-  const response = await fetchImpl(`https://api.github.com/repos/${repo}/statuses/${sha}`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ state, context: CONTEXT, description: String(description).slice(0, 140), target_url: attemptUrl(repo, run, attempt) }) });
+function appJwt(pem, now = Date.now()) {
+  const iat = Math.floor(now / 1000) - 60;
+  const exp = iat + 540;
+  const head = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify({ iat, exp, iss: APP_ID })).toString("base64url");
+  const data = `${head}.${body}`;
+  const sign = createSign("RSA-SHA256");
+  sign.update(data);
+  sign.end();
+  return `${data}.${sign.sign(pem).toString("base64url")}`;
+}
+export async function mintStatusToken(fetchImpl = fetch, now = Date.now()) {
+  const encoded = String(process.env.HYPERTASK_RUNNERS_KEY ?? "");
+  const pem = Buffer.from(encoded, "base64").toString("utf8");
+  if (!pem.includes("PRIVATE KEY")) throw new Error("token HTTP 0");
+  holdSecret(encoded);
+  holdSecret(pem);
+  const jwt = appJwt(pem, now);
+  holdSecret(jwt);
+  maskSecret(encoded);
+  maskSecret(pem);
+  maskSecret(jwt);
+  const headers = { Authorization: `Bearer ${jwt}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
+  const install = await fetchImpl("https://api.github.com/repos/hypertask-ai/hypertask/installation", { headers });
+  if (!install.ok) throw new Error(`installation HTTP ${install.status}`);
+  const id = Number((await install.json())?.id);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error("installation HTTP missing");
+  console.log(`installation ${id} HTTP ${install.status} permissions {"statuses":"write"}`);
+  const tokenResponse = await fetchImpl(`https://api.github.com/app/installations/${id}/access_tokens`, { method: "POST", headers, body: JSON.stringify({ repositories: ["hypertask"], permissions: { statuses: "write" } }) });
+  if (!tokenResponse.ok) throw new Error(`token HTTP ${tokenResponse.status}`);
+  const token = (await tokenResponse.json())?.token;
+  if (!token) throw new Error("token HTTP missing");
+  holdSecret(token);
+  maskSecret(token);
+  console.log(`token HTTP ${tokenResponse.status} permissions {"statuses":"write"}`);
+  return token;
+}
+async function postStatus({ repo, sha, run, attempt, state, description, fetchImpl = fetch, token }) {
+  const appToken = token || await mintStatusToken(fetchImpl);
+  const response = await fetchImpl(`https://api.github.com/repos/${repo}/statuses/${sha}`, { method: "POST", headers: { Authorization: `Bearer ${appToken}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" }, body: JSON.stringify({ state, context: CONTEXT, description: String(description).slice(0, 140), target_url: attemptUrl(repo, run, attempt) }) });
   if (!response.ok) throw new Error(`status HTTP ${response.status}`);
 }
 async function postComment(repo, pr, body, fetchImpl = fetch) {
@@ -691,30 +738,33 @@ function imagesIn(dir) {
 export function eligiblePull(item, repo, sha) {
   return !!item && item.state === "open" && item.draft === false && item.base?.ref === "production" && item.head?.sha === sha && item.head?.repo?.full_name === repo;
 }
-function ownsVerifierStatus(statuses, repo, run, attempt) {
-  const newest = (Array.isArray(statuses) ? statuses : []).find((status) => status?.context === CONTEXT);
-  return newest?.target_url === attemptUrl(repo, run, attempt);
+function appStatuses(statuses) {
+  return (Array.isArray(statuses) ? statuses : []).filter((status) => status?.context === CONTEXT && status?.creator?.login === APP_LOGIN);
+}
+function ownsAppStatus(statuses, repo, run, attempt, allowFirst = false) {
+  const newest = appStatuses(statuses)[0] ?? null;
+  if (!newest) return allowFirst;
+  return newest.target_url === attemptUrl(repo, run, attempt);
 }
 function pullUrl(repo, number) {
   return `repos/${repo}/pulls/${number}`;
 }
 export async function resolveCommand(io = {}) {
   const call = io.gh ?? gh;
-  const send = io.postStatus ?? postStatus;
   const event = io.event ?? JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
   const run = event.workflow_run ?? {};
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const sha = String(run.head_sha ?? "");
   const bound = { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
-  if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true" }); return; }
+  if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true", mark: "skip" }); return; }
   let number = String(run.pull_requests?.[0]?.number ?? "");
   if (!/^[0-9]+$/.test(number)) {
     const matches = JSON.parse(call(["api", `repos/${repo}/commits/${sha}/pulls`])).filter((item) => eligiblePull(item, repo, sha));
-    if (matches.length !== 1) { output({ stop: "true" }); return; }
+    if (matches.length !== 1) { output({ stop: "true", mark: "skip" }); return; }
     number = String(matches[0].number);
   }
   const item = JSON.parse(call(["api", pullUrl(repo, number)]));
-  if (!eligiblePull(item, repo, sha)) { output({ stop: "true" }); return; }
+  if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip" }); return; }
   let botLogin = "";
   let listed = null;
   if (BOT_LOGINS.has(item.user?.login)) {
@@ -723,19 +773,17 @@ export async function resolveCommand(io = {}) {
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
     const commitsKnown = Array.isArray(commits) ? commits : [];
     const lastSha = commitsKnown.at(-1)?.sha;
-    if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true" }); return; }
+    if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip" }); return; }
     const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
     if (!trusted) {
       const gate = authorGate(item.body);
       if (gate.stop) {
-        await send({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
-        output({ stop: "true" });
+        output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha, pr: String(item.number) });
         return;
       }
     } else if (listed.filesTruncated || !botFilesAllowed(listed.files)) {
       const description = listed.filesTruncated ? "FAIL: file list truncated" : `FAIL: author ${item.user.login}, bot changed a user path`;
-      await send({ repo, ...bound, state: "failure", description: description.slice(0, 140) });
-      output({ stop: "true" });
+      output({ stop: "true", mark: "failure", description: description.slice(0, 140), sha, pr: String(item.number) });
       return;
     } else {
       botLogin = item.user.login;
@@ -743,8 +791,7 @@ export async function resolveCommand(io = {}) {
   }
   const gate = authorGate(item.body);
   if (!botLogin && gate.stop) {
-    await send({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
-    output({ stop: "true" });
+    output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha, pr: String(item.number) });
     return;
   }
   if (!listed) listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
@@ -754,8 +801,7 @@ export async function resolveCommand(io = {}) {
   const request = { ...bound, pr: item.number, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
   if (botLogin) request.botLogin = botLogin;
   writeFileSync(path.join(dir, "request.json"), `${JSON.stringify(request)}\n`, { mode: 0o600 });
-  await send({ repo, ...bound, state: "pending", description: "Planning a user check" });
-  output({ stop: "false", pr: String(item.number), sha, files: listed.files.join("\n"), author: request.author });
+  output({ stop: "false", mark: "pending", description: "Planning a user check", pr: String(item.number), sha, files: listed.files.join("\n"), author: request.author });
 }
 export async function planFromRequest(request, deps = {}) {
   const ask = deps.ask ?? askModel;
@@ -831,7 +877,8 @@ export async function postCommand(io = {}) {
   catch { saved = { verdict: "FAIL", notes: "schema/binding mismatch", authorFamily: "", verifierModel: "" }; }
   const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
   const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
-  if (!eligiblePull(item, repo, binding.sha) || !ownsVerifierStatus(statuses, repo, binding.run, binding.attempt)) return;
+  if (!eligiblePull(item, repo, binding.sha)) return;
+  if (!ownsAppStatus(statuses, repo, binding.run, binding.attempt)) { console.log("not owner"); return; }
   let state = saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure";
   let description = statusDescription(saved);
   if (saved.verdict === "PENDING") {
@@ -841,16 +888,38 @@ export async function postCommand(io = {}) {
     state = settled.state;
     description = settled.description;
   }
-  await postStatus({ repo, ...binding, state, description, fetchImpl: io.fetch });
+  await postStatus({ repo, ...binding, state, description, fetchImpl: io.fetch, token: io.token });
   if (saved.verdict !== "PASS" && saved.verdict !== "PENDING") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()), io.fetch);
+}
+export async function markCommand(io = {}) {
+  const mode = process.env.MARK;
+  if (mode !== "pending" && mode !== "failure") return;
+  const repo = requireRepo(process.env.GITHUB_REPOSITORY);
+  const binding = bindingNow();
+  const statuses = JSON.parse((io.gh ?? gh)(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
+  if (!ownsAppStatus(statuses, repo, binding.run, binding.attempt, true)) { console.log("not owner"); return; }
+  const description = process.env.MARK_DESCRIPTION || (mode === "pending" ? "Planning a user check" : "FAIL: author model unknown");
+  await postStatus({ repo, ...binding, state: mode === "pending" ? "pending" : "failure", description, fetchImpl: io.fetch, token: io.token });
+}
+export async function cancelCommand(io = {}) {
+  const repo = requireRepo(process.env.GITHUB_REPOSITORY);
+  const binding = bindingNow();
+  const statuses = JSON.parse((io.gh ?? gh)(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
+  if (!ownsAppStatus(statuses, repo, binding.run, binding.attempt)) { console.log("not owner"); return; }
+  const newest = appStatuses(statuses)[0];
+  if (newest?.state === "success" || newest?.state === "failure") return;
+  await postStatus({ repo, ...binding, state: "failure", description: "FAIL: The verifier did not finish.", fetchImpl: io.fetch, token: io.token });
+  throw new Error("verifier did not finish");
 }
 async function main() {
   const command = process.argv[2];
   if (command === "resolve") await resolveCommand();
   else if (command === "plan") await planCommand();
   else if (command === "judge") await judgeCommand();
+  else if (command === "mark") await markCommand();
   else if (command === "post") await postCommand();
-  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|post");
+  else if (command === "cancel") await cancelCommand();
+  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|post|mark|cancel");
 }
 const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
 if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -149,19 +149,29 @@ try {
     }
     const expected = [
       "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
-      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke",
+      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "pstack-verifier",
     ].sort();
-    const actual = [...new Set(ruleset.rules
+    const checks = [...new Set(ruleset.rules
       .filter((rule) => rule.type === "required_status_checks")
-      .flatMap((rule) => rule.parameters.required_status_checks.map((check) => check.context)))].sort();
+      .flatMap((rule) => rule.parameters.required_status_checks))];
+    const actual = [...new Set(checks.map((check) => check.context))].sort();
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
       throw new Error("Live required checks do not match docs/ci-policy.yml.");
+    }
+    const integrationId = (context) => {
+      const rows = checks.filter((check) => check.context === context);
+      return rows.length === 1 ? rows[0].integration_id : null;
+    };
+    if (integrationId("pstack-verifier") !== 5264284) throw new Error("pstack-verifier integration must be 5264284.");
+    for (const context of expected) {
+      if (context !== "pstack-verifier" && integrationId(context) !== 15368) throw new Error(`${context} integration must be 15368.`);
     }
     recordVerified({
       repository: repo,
       defaultBranch: repository.default_branch,
       rulesetId: matches[0].id,
       contexts: actual,
+      integrations: Object.fromEntries(expected.map((context) => [context, integrationId(context)])),
     });
     publishResult(true);
     console.log(`Required-check settings verified: default branch, production protection, and exact required contexts. Stored at ${proofPath}.`);

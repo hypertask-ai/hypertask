@@ -512,10 +512,11 @@ test("a run posts only when it owns the newest verifier status", async () => {
   Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
   const statusesUrl = `repos/acme/app/commits/${sha}/statuses`;
   const owned = "https://github.com/acme/app/actions/runs/10/attempts/1";
-  const mark = (runId, attempt) => ({ context: "pstack-verifier", target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}` });
+  const mark = (runId, attempt) => ({ context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}` });
   const run = async (pull, statuses) => {
     posts.length = 0;
     await postCommand({
+      token: "app-token",
       fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
       gh: (args) => {
         const url = String(args[1]);
@@ -845,11 +846,12 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const savedEnv = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK"].map((key) => [key, process.env[key]]);
   Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
   const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
-  const mark = (runId, attempt, extra = {}) => ({ context: CONTEXT, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}`, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z", ...extra });
+  const mark = (runId, attempt, extra = {}) => ({ context: CONTEXT, creator: { login: "hypertask-runners[bot]" }, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}`, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z", ...extra });
   const post = async (verdict, statusRows, checkRuns, now) => {
     fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict, notes: "waiting for required checks", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "" }));
     const posts = [];
     await postCommand({
+      token: "app-token",
       now,
       fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
       gh: (args) => {
@@ -914,6 +916,8 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     const trusted = [commit("b".repeat(40)), commit(head)];
     const clean = await runResolve({ commits: trusted, files: ["package.json"] });
     assert.match(clean.stop, /stop=false/);
+    assert.match(clean.stop, /mark=pending/);
+    assert.deepEqual(clean.posts, []);
     assert.equal(clean.written.botLogin, "dependabot[bot]");
     let planned = 0;
     const built = await planFromRequest(clean.written, { binding: { sha: head, run: "10", attempt: "1" }, ask() { planned += 1; throw new Error("model"); } });
@@ -921,16 +925,22 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     const other = await runResolve({ commits: [commit(head, "octocat")] });
     assert.match(other.stop, /stop=true/);
     assert.equal(other.written, null);
-    assert.match(other.posts[0].description, /author model unknown/);
+    assert.deepEqual(other.posts, []);
+    assert.match(other.stop, /mark=failure/);
+    assert.match(other.stop, /author model unknown/);
     const unsigned = await runResolve({ commits: [commit(head, "dependabot[bot]", "web-flow", { verified: false, reason: "unsigned" })] });
     assert.match(unsigned.stop, /stop=true/);
     assert.equal(unsigned.written, null);
-    assert.equal(unsigned.posts.some((row) => row.description.includes("PASS")), false);
+    assert.deepEqual(unsigned.posts, []);
+    assert.match(unsigned.stop, /mark=failure/);
+    assert.equal(unsigned.stop.includes("PASS"), false);
     const source = await runResolve({ commits: trusted, files: ["src/app/page.tsx"] });
     assert.match(source.stop, /stop=true/);
     assert.equal(source.written, null);
-    assert.match(source.posts[0].description, /dependabot\[bot\]/);
-    assert.match(source.posts[0].description, /bot changed a user path/);
+    assert.deepEqual(source.posts, []);
+    assert.match(source.stop, /mark=failure/);
+    assert.match(source.stop, /dependabot\[bot\]/);
+    assert.match(source.stop, /bot changed a user path/);
     const many = [...Array.from({ length: 30 }, () => commit("e".repeat(40))), commit(head, "octocat")];
     const page = await runResolve({ commits: many });
     assert.equal(page.calls.some((args) => args.includes("--paginate") && args.join(" ").includes("/commits")), true);
@@ -938,14 +948,93 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     const raced = await runResolve({ commits: [commit("f".repeat(40))], second: pull("dependabot[bot]", head) });
     assert.match(raced.stop, /stop=true/);
     assert.deepEqual(raced.posts, []);
+    assert.match(raced.stop, /mark=skip/);
     const person = await runResolve({ login: "octocat", body: "", files: ["package.json"], commits: [] });
     assert.match(person.stop, /stop=true/);
-    assert.match(person.posts[0].description, /author model unknown/);
+    assert.deepEqual(person.posts, []);
+    assert.match(person.stop, /mark=failure/);
+    assert.match(person.stop, /author model unknown/);
   } finally {
     for (const [key, value] of savedResolve) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the app token writes the status and ignores a newer actions status", async () => {
+  const { generateKeyPairSync } = require("node:crypto");
+  const { postCommand, cancelCommand } = await load();
+  const pem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" });
+  const sha = "e".repeat(40);
+  const fs = require("node:fs");
+  const work = fs.mkdtempSync(`${require("node:os").tmpdir()}/pv-app-`);
+  fs.mkdirSync(`${work}/verdict`);
+  const saved = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK", "HYPERTASK_RUNNERS_KEY"].map((key) => [key, process.env[key]]);
+  const write = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (chunk, ...rest) => String(chunk).startsWith("::add-mask::") ? true : write(chunk, ...rest);
+  Object.assign(process.env, { GH_TOKEN: "actions-token", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work, HYPERTASK_RUNNERS_KEY: Buffer.from(pem).toString("base64") });
+  const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
+  const row = (runId, login, state = "pending") => ({ context: "pstack-verifier", creator: { login }, state, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/1` });
+  const owned = row(10, "hypertask-runners[bot]");
+  const gh = (statuses) => (args) => {
+    const url = String(args[1]);
+    if (url === "repos/acme/app/pulls/5") return JSON.stringify(open);
+    if (url === `repos/acme/app/commits/${sha}/statuses`) return JSON.stringify(statuses);
+    throw new Error("gh");
+  };
+  const http = (mode) => {
+    const calls = [];
+    const fetch = async (url, options = {}) => {
+      calls.push({ url: String(url), auth: options.headers?.Authorization, body: options.body ? JSON.parse(options.body) : null });
+      const path = String(url);
+      if (path.endsWith("/installation")) return { ok: true, status: 200, async json() { return { id: 77 }; } };
+      if (path.includes("/access_tokens")) return { ok: true, status: 201, async json() { return { token: "app-token" }; } };
+      if (path.includes("/statuses/")) return { ok: mode !== "status", status: mode === "status" ? 403 : 201 };
+      if (path.includes("/comments")) return { ok: mode !== "comment", status: mode === "comment" ? 403 : 201 };
+      throw new Error("url");
+    };
+    return { calls, fetch };
+  };
+  const run = async (command, statuses, verdict, extra = {}) => {
+    fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict, notes: verdict === "FAIL" ? "broke" : "", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "m" }));
+    const posts = [];
+    const logs = [];
+    const prior = console.log;
+    console.log = (...args) => logs.push(args.join(" "));
+    const fetch = extra.fetch ?? (async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; });
+    try { await command({ token: extra.fetch ? undefined : "app-token", fetch, gh: gh(statuses) }); }
+    finally { console.log = prior; }
+    return { posts, logs };
+  };
+  try {
+    const ok = http("ok");
+    await run(postCommand, [owned], "FAIL", { fetch: ok.fetch });
+    const minted = ok.calls.find((call) => call.url.includes("/access_tokens"));
+    const status = ok.calls.find((call) => call.url.includes("/statuses/"));
+    const comment = ok.calls.find((call) => call.url.includes("/comments"));
+    assert.equal(ok.calls.some((call) => call.url === "https://api.github.com/repos/hypertask-ai/hypertask/installation"), true);
+    assert.equal(minted.url, "https://api.github.com/app/installations/77/access_tokens");
+    assert.deepEqual(minted.body, { repositories: ["hypertask"], permissions: { statuses: "write" } });
+    const payload = JSON.parse(Buffer.from(minted.auth.slice(7).split(".")[1], "base64url").toString());
+    assert.equal(payload.iss === 5264284 && payload.exp - payload.iat < 600, true);
+    assert.equal(ok.calls.indexOf(status) < ok.calls.indexOf(comment) && status.auth === "Bearer app-token" && comment.auth === "Bearer actions-token" && status.auth !== comment.auth && status.body.state === "failure", true);
+    const deniedStatus = http("status");
+    await assert.rejects(() => run(postCommand, [owned], "FAIL", { fetch: deniedStatus.fetch }), /status HTTP 403/);
+    assert.equal(deniedStatus.calls.some((call) => call.url.includes("/comments")), false);
+    const deniedComment = http("comment");
+    await assert.rejects(() => run(postCommand, [owned], "FAIL", { fetch: deniedComment.fetch }), /comment HTTP 403/);
+    assert.equal(deniedComment.calls.some((call) => call.url.includes("/statuses/")), true);
+    const forged = await run(postCommand, [row(99, "github-actions[bot]", "success"), owned], "PASS");
+    assert.equal(forged.posts.length === 1 && forged.posts[0].state === "success", true);
+    const stalePost = await run(postCommand, [row(11, "hypertask-runners[bot]"), owned], "PASS");
+    assert.equal(stalePost.posts.length === 0 && stalePost.logs.includes("not owner"), true);
+    const staleCancel = await run(cancelCommand, [row(11, "hypertask-runners[bot]"), owned], "PASS");
+    assert.equal(staleCancel.posts.length === 0 && staleCancel.logs.includes("not owner"), true);
+  } finally {
+    process.stdout.write = write;
+    for (const [key, value] of saved) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    fs.rmSync(work, { recursive: true, force: true });
   }
 });

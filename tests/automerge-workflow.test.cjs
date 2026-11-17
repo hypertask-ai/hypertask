@@ -19,7 +19,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '', extraRollup = [], commitStatuses = null } = {}) {
   const omitBrowserSmoke = Boolean(arguments[0] && arguments[0].omitBrowserSmoke)
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
@@ -56,7 +56,7 @@ if [ "$1 $2" = "pr view" ]; then
     exit 0
   fi
   pr_view_json=$(cat <<'JSON'
-{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[${omitAppSmoke ? '' : '{"name":"app-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},'}{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},${reviewChecksJson},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"feature-flag-gate","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
+{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[${extraRollup.map((row) => JSON.stringify(row)).join(',')}${extraRollup.length ? ',' : ''}${omitAppSmoke ? '' : '{"name":"app-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},'}{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},${reviewChecksJson},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"feature-flag-gate","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
 JSON
 )
   if [ "\${GH_STUB_OMIT_BROWSER_SMOKE:-}" != "1" ]; then
@@ -77,6 +77,10 @@ if [ "$1" = "api" ] && [[ " $* " == *"pulls?state=open&base=production"* ]]; the
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"/issues/42/events"* ]]; then
   ${previousSpeedTitle ? "echo 'HTPR-5595 [SPEED] Optimize the app'" : "true"}
+  exit 0
+fi
+if [ "$1" = "api" ] && [[ " $* " == *"/commits/"*"/statuses"* ]]; then
+  printf '%s\\n' "$GH_STUB_COMMIT_STATUSES"
   exit 0
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"/statuses"* ]]; then
@@ -157,6 +161,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
         GH_STUB_INVALID_GATE_DECISION: invalidGateDecision ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
         GH_STUB_OMIT_BROWSER_SMOKE: omitBrowserSmoke ? '1' : '',
+        GH_STUB_COMMIT_STATUSES: JSON.stringify(commitStatuses ?? [{ context: 'pstack-verifier', state: 'success', creator: { login: 'hypertask-runners[bot]' }, updated_at: '2026-08-11T10:00:00Z' }]),
         EXPECTED_PR_TITLE: prTitle,
         EXPECTED_BASE_SHA: 'b'.repeat(40),
         EXPECTED_HEAD_SHA: head,
@@ -489,6 +494,25 @@ test('a bare-word BLOCKER without markdown bold still parks the PR', async () =>
   assert.match(result.stdout, /PARK: a review flagged a blocker or major-severity finding/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge counts only the hypertask-runners status for pstack-verifier', async () => {
+  const app = (state, at) => ({ context: 'pstack-verifier', state, creator: { login: 'hypertask-runners[bot]' }, updated_at: at })
+  const actions = (state, at) => ({ context: 'pstack-verifier', state, creator: { login: 'github-actions[bot]' }, updated_at: at })
+  const blocked = await runWorkflow({
+    commitStatuses: [actions('success', '2026-08-11T12:00:00Z'), app('failure', '2026-08-11T10:00:00Z')],
+    extraRollup: [{ context: 'pstack-verifier', state: 'SUCCESS', startedAt: '2026-08-11T12:00:00Z' }],
+  })
+  assert.equal(blocked.result.status, 0, blocked.result.stderr)
+  assert.match(blocked.result.stdout, /check pstack-verifier = FAILURE hypertask-runners\[bot\]/)
+  assert.doesNotMatch(blocked.result.stdout, /MERGED #42/)
+  const merged = await runWorkflow({
+    commitStatuses: [actions('failure', '2026-08-11T12:00:00Z'), app('success', '2026-08-11T10:00:00Z')],
+    extraRollup: [{ context: 'pstack-verifier', state: 'FAILURE', startedAt: '2026-08-11T12:00:00Z' }],
+  })
+  assert.equal(merged.result.status, 0, merged.result.stderr)
+  assert.match(merged.result.stdout, /check pstack-verifier = SUCCESS hypertask-runners\[bot\]/)
+  assert.match(merged.result.stdout, /MERGED #42/)
 })
 
 test('a malformed (null-body) review comment does not crash the sweep', async () => {

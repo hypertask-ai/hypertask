@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { spawn, spawnSync } = require("node:child_process");
-const { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } = require("node:fs");
+const { copyFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } = require("node:fs");
 const { createServer } = require("node:http");
 const { tmpdir } = require("node:os");
 const { dirname, join } = require("node:path");
@@ -14,12 +14,13 @@ const trusted = read(".github/workflows/pstack-verifier.yml");
 const request = read(".github/workflows/pstack-verifier-request.yml");
 const policy = read("docs/ci-policy.yml");
 const expected = {
-  resolve: { contents: "read", "pull-requests": "read", statuses: "write" },
+  resolve: { contents: "read", "pull-requests": "read" },
   plan: { contents: "read" },
   drive: { contents: "read", packages: "read" },
   judge: { contents: "read", checks: "read", statuses: "read" },
-  post: { contents: "read", "pull-requests": "write", statuses: "write" },
-  cancel: { statuses: "write" },
+  mark: { contents: "read", statuses: "read" },
+  post: { contents: "read", "pull-requests": "write", statuses: "read" },
+  cancel: { contents: "read", statuses: "read" },
 };
 
 function runParts(step) {
@@ -61,13 +62,14 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.deepEqual(needs(trusted.jobs.plan), ["resolve"]);
   assert.deepEqual(needs(trusted.jobs.drive), ["resolve", "plan"]);
   assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "drive"]);
-  assert.deepEqual(needs(trusted.jobs.post), ["resolve", "judge"]);
+  assert.deepEqual(needs(trusted.jobs.mark), ["resolve"]);
+  assert.deepEqual(needs(trusted.jobs.post), ["resolve", "judge", "mark"]);
   assert.deepEqual(needs(trusted.jobs.cancel), ["resolve", "post"]);
   const secretJobs = Object.entries(trusted.jobs).filter(([, job]) => strings(job).some((value) => value.includes("secrets."))).map(([name]) => name);
-  assert.deepEqual(secretJobs, ["plan", "judge"]);
+  assert.deepEqual(secretJobs, ["plan", "judge", "mark", "post", "cancel"]);
   assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("secrets.") || value.includes("OPENROUTER_EVAL_KEY")), false);
   assert.deepEqual(tokenGaps(trusted.jobs), []);
-  assert.equal(trusted.jobs.cancel.steps.some((step) => String(step.uses ?? "").includes("checkout")), false);
+  assert.equal(trusted.jobs.cancel.steps.some((step) => String(step.uses ?? "").startsWith("actions/checkout")), true);
   const names = [];
   for (const job of Object.values(trusted.jobs)) {
     for (const step of job.steps ?? []) {
@@ -78,9 +80,10 @@ test("each verifier job has the declared permissions, key and token", async () =
     }
   }
   assert.deepEqual(names.filter((name) => !name.includes("${{ github.run_id }}-${{ github.run_attempt }}")), []);
-  assert.equal(policy.pstack_verifier.required, false);
-  assert.equal(policy.pstack_verifier.note, "enable after hosted proof");
-  assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), false);
+  assert.equal(policy.pstack_verifier.required, true);
+  assert.equal(policy.pstack_verifier.note, "HTPR-9446 https://app.hypertask.ai/detail/project-15/9446");
+  assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), true);
+  assert.equal(policy.policies.production_ruleset.required_status_checks.includes("pstack-verifier"), true);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
@@ -89,7 +92,32 @@ test("each verifier job has the declared permissions, key and token", async () =
     "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan",
   ];
   assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...liveRulesetContexts].sort());
-  assert.match(String(trusted.jobs.cancel.steps.at(-1).run), /waiting for required checks[\s\S]*state=failure/);
+  assert.equal(trusted.jobs.cancel.steps.at(-1).run, "node scripts/pstack-verifier.mjs cancel");
+});
+
+test("only mark, post and cancel use the verifier environment and the app cannot be written by the job token", () => {
+  const named = [];
+  for (const file of readdirSync(".github/workflows")) {
+    if (!file.endsWith(".yml") && !file.endsWith(".yaml")) continue;
+    const doc = yaml.load(readFileSync(join(".github/workflows", file), "utf8"), { schema: yaml.JSON_SCHEMA });
+    for (const [name, job] of Object.entries(doc?.jobs ?? {})) {
+      const environment = typeof job.environment === "string" ? job.environment : job.environment?.name;
+      if (environment === "pstack-verifier") named.push(`${file}:${name}`);
+    }
+  }
+  assert.deepEqual(named.sort(), ["pstack-verifier.yml:cancel", "pstack-verifier.yml:mark", "pstack-verifier.yml:post"]);
+  const refs = (job) => (job.steps ?? []).filter((step) => String(step.uses ?? "").startsWith("actions/checkout")).map((step) => step.with?.ref ?? "");
+  for (const name of ["mark", "post", "cancel"]) {
+    assert.deepEqual(refs(trusted.jobs[name]), ["${{ github.sha }}"]);
+    assert.equal(trusted.jobs[name].permissions.statuses, "read");
+    assert.equal(trusted.jobs[name]["runs-on"], "ubuntu-latest");
+    assert.equal((trusted.jobs[name].steps ?? []).some((step) => String(step.uses ?? "").includes("actions/cache")), false);
+  }
+  assert.equal(trusted.jobs.post.permissions["pull-requests"], "write");
+  assert.equal(trusted.jobs.mark.permissions["pull-requests"], undefined);
+  assert.equal(trusted.jobs.cancel.permissions["pull-requests"], undefined);
+  assert.equal(refs(trusted.jobs.drive).includes("${{ needs.resolve.outputs.sha }}"), true);
+  assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("HYPERTASK_RUNNERS_KEY")), false);
 });
 
 function dockerStub(log) {

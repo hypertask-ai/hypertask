@@ -12,7 +12,7 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: read, pull-requests: read, statuses: write }
+    permissions: { contents: read, pull-requests: read }
     outputs:
       stop: ${{ steps.resolve.outputs.stop }}
       pr: ${{ steps.resolve.outputs.pr }}
@@ -90,39 +90,42 @@ jobs:
         run: node scripts/pstack-verifier.mjs judge
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, if-no-files-found: error, path: "${{ runner.temp }}/pstack-verifier/verdict" }
-  post:
-    needs: [resolve, judge]
-    if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.resolve.result == 'success' && needs.judge.result != 'cancelled' }}"
+  mark:
+    needs: [resolve]
+    if: "${{ github.ref == 'refs/heads/production' && needs.resolve.result == 'success' && needs.resolve.outputs.mark != 'skip' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: read, pull-requests: write, statuses: write }
+    environment: pstack-verifier
+    permissions: { contents: read, statuses: read }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
+      - env: { GH_TOKEN: "${{ github.token }}", HYPERTASK_RUNNERS_KEY: "${{ secrets.HYPERTASK_RUNNERS_KEY }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}", MARK: "${{ needs.resolve.outputs.mark }}", MARK_DESCRIPTION: "${{ needs.resolve.outputs.description }}" }
+        run: node scripts/pstack-verifier.mjs mark
+  post:
+    needs: [resolve, judge, mark]
+    if: "${{ github.ref == 'refs/heads/production' && !cancelled() && needs.resolve.outputs.stop != 'true' && needs.resolve.result == 'success' && needs.mark.result == 'success' && needs.judge.result != 'cancelled' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pstack-verifier
+    permissions: { contents: read, pull-requests: write, statuses: read }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         continue-on-error: true
         with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/verdict" }
-      - env: { GH_TOKEN: "${{ github.token }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}", PR: "${{ needs.resolve.outputs.pr }}" }
+      - env: { GH_TOKEN: "${{ github.token }}", HYPERTASK_RUNNERS_KEY: "${{ secrets.HYPERTASK_RUNNERS_KEY }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}", PR: "${{ needs.resolve.outputs.pr }}" }
         run: node scripts/pstack-verifier.mjs post
   cancel:
     needs: [resolve, post]
-    if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.post.result != 'success' }}"
+    if: "${{ github.ref == 'refs/heads/production' && !cancelled() && needs.resolve.outputs.stop != 'true' && needs.post.result != 'success' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { statuses: write }
+    environment: pstack-verifier
+    permissions: { contents: read, statuses: read }
     steps:
-      - env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          set -euo pipefail
-          repo="${{ github.repository }}"
-          sha="${{ github.event.workflow_run.head_sha }}"
-          run_id="${{ github.run_id }}"
-          attempt="${{ github.run_attempt }}"
-          url="https://github.com/${repo}/actions/runs/${run_id}/attempts/${attempt}"
-          line="$(gh api "repos/${repo}/commits/${sha}/statuses" --jq '[.[] | select(.context=="pstack-verifier" and .target_url=="'"${url}"'")] | first | if . == null then "" else [.state, .description] | @tsv end' || true)"
-          state="${line%%$'\t'*}"
-          description="${line#*$'\t'}"
-          if [ "$state" = "success" ] || [ "$state" = "failure" ]; then exit 0; fi
-          if [ "$state" = "pending" ] && [ "$description" = "waiting for required checks" ]; then exit 0; fi
-          gh api --method POST "repos/${repo}/statuses/${sha}" -f state=failure -f context=pstack-verifier -f description="FAIL: The verifier did not finish." -f target_url="$url"
-          exit 1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
+      - env: { GH_TOKEN: "${{ github.token }}", HYPERTASK_RUNNERS_KEY: "${{ secrets.HYPERTASK_RUNNERS_KEY }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}" }
+        run: node scripts/pstack-verifier.mjs cancel
