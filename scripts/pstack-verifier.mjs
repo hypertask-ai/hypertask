@@ -234,6 +234,7 @@ export function confirmsNoUserPath(reason) {
 export const FILE_LIST_CAP = 100;
 export const CI_WAIT_ROUNDS = 40;
 export const CI_WAIT_INTERVAL_MS = 30000;
+export const REQUIRED_CI_CONTEXTS = ["app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan", "premerge-evidence"];
 function relevantChecks(runs) {
   return (Array.isArray(runs) ? runs : []).filter((run) => run?.name !== CONTEXT);
 }
@@ -277,10 +278,37 @@ export function ciStatusesPassed(statuses) {
   const latest = relevantStatuses(statuses);
   return latest.length > 0 && latest.every((status) => status?.state === "success");
 }
-export function ciGate({ runs, statuses } = {}) {
+function latestRuns(runs) {
+  const seen = new Set();
+  const latest = [];
+  for (const run of relevantChecks(runs)) {
+    if (!run?.name || seen.has(run.name)) continue;
+    seen.add(run.name);
+    latest.push(run);
+  }
+  return latest;
+}
+export function requiredContextsReady(runs, statuses, required = REQUIRED_CI_CONTEXTS) {
+  const byRun = new Map(latestRuns(runs).map((run) => [run.name, run]));
+  const byStatus = new Map(relevantStatuses(statuses).map((status) => [status.context, status]));
+  let missing = false;
+  let pending = false;
+  let failed = false;
+  for (const name of required) {
+    const run = byRun.get(name);
+    const status = byStatus.get(name);
+    if (!run && !status) { missing = true; continue; }
+    if ((run && run.conclusion == null) || (status && (status.state == null || status.state === "pending"))) { pending = true; continue; }
+    if ((run && run.conclusion !== "success") || (status && status.state !== "success")) failed = true;
+  }
+  return { missing, pending, failed };
+}
+export function ciGate({ runs, statuses, required = REQUIRED_CI_CONTEXTS } = {}) {
+  const need = requiredContextsReady(runs, statuses, required);
+  const waiting = need.missing || need.pending;
   return {
-    checksPassed: ciChecksPassed(runs) && ciStatusesPassed(statuses),
-    checksPending: ciChecksPending(runs) || ciStatusesPending(statuses),
+    checksPassed: ciChecksPassed(runs) && ciStatusesPassed(statuses) && !waiting && !need.failed,
+    checksPending: ciChecksPending(runs) || ciStatusesPending(statuses) || waiting,
   };
 }
 export async function collectCheckRuns(readPage, pages = 5) {

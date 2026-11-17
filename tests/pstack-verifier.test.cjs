@@ -121,34 +121,38 @@ test("empty-plan checks wait until conclusions land", async () => {
   assert.equal(ciChecksPending([]), true);
 });
 
-test("a red or pending commit status blocks the non-app pass", async () => {
-  const { ciGate, ciStatusesPassed, ciStatusesPending, decide, waitForCiChecks, CONTEXT } = await load();
+test("a non-app pass waits until every required context is green", async () => {
+  const { ciGate, ciStatusesPassed, ciStatusesPending, decide, waitForCiChecks, CONTEXT, REQUIRED_CI_CONTEXTS } = await load();
   const reason = "no user path in this diff";
-  const runs = [{ name: "ci-tests", conclusion: "success" }, { name: CONTEXT, conclusion: "failure" }];
-  const green = [
-    { context: "pr-title", state: "success" },
-    { context: CONTEXT, state: "pending" },
-    { context: "pr-title", state: "failure" },
-    { context: "feature-flag-gate", state: "success" },
-    { context: "app-smoke", state: "success" },
-  ];
-  assert.equal(ciStatusesPassed(green), true);
-  assert.equal(ciStatusesPending(green), false);
-  assert.deepEqual(ciGate({ runs, statuses: green }), { checksPassed: true, checksPending: false });
-  const red = [{ context: "ai-review", state: "failure" }, { context: "pr-title", state: "success" }];
+  const checkNames = ["ci-tests", "browser-smoke", "next-public-secrets", "secret-scan"];
+  const runs = [...checkNames.map((name) => ({ name, conclusion: "success" })), { name: CONTEXT, conclusion: "failure" }];
+  const statuses = REQUIRED_CI_CONTEXTS.filter((name) => !checkNames.includes(name)).map((context) => ({ context, state: "success" }));
+  const older = [...statuses, { context: "pr-title", state: "failure" }, { context: CONTEXT, state: "pending" }];
+  assert.equal(ciStatusesPassed(older), true);
+  assert.equal(ciStatusesPending(older), false);
+  assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: true, checksPending: false });
+  const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, ...ciGate({ runs, statuses }) });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  const partial = statuses.filter((status) => status.context !== "premerge-evidence");
+  assert.deepEqual(ciGate({ runs, statuses: partial }), { checksPassed: false, checksPending: true });
+  const red = statuses.map((status) => status.context === "ai-review" ? { context: "ai-review", state: "failure" } : status);
   const blockedGate = ciGate({ runs, statuses: red });
   assert.deepEqual(blockedGate, { checksPassed: false, checksPending: false });
   const blocked = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: blockedGate.checksPassed, checksPending: blockedGate.checksPending });
   assert.equal(blocked.verdict, "FAIL");
   assert.match(blocked.notes, /no user path verified/);
-  assert.deepEqual(ciGate({ runs, statuses: [{ context: "app-smoke", state: "pending" }, { context: "pr-title", state: "success" }] }), { checksPassed: false, checksPending: true });
+  const pending = statuses.map((status) => status.context === "app-smoke" ? { context: "app-smoke", state: "pending" } : status);
+  assert.deepEqual(ciGate({ runs, statuses: pending }), { checksPassed: false, checksPending: true });
   assert.deepEqual(ciGate({ runs, statuses: [] }), { checksPassed: false, checksPending: true });
+  const skipped = runs.map((run) => run.name === "browser-smoke" ? { name: "browser-smoke", conclusion: "skipped" } : run);
+  assert.deepEqual(ciGate({ runs: skipped, statuses }), { checksPassed: false, checksPending: false });
+  const queued = [...runs, { name: "feature-flag-gate", conclusion: null }];
+  assert.equal(ciGate({ runs: queued, statuses }).checksPending, true);
+  assert.equal(ciGate({ runs: queued, statuses }).checksPassed, false);
   let reads = 0;
   const snapshot = await waitForCiChecks(async () => {
     reads += 1;
-    return reads < 2
-      ? { runs, statuses: [{ context: "app-smoke", state: "pending" }] }
-      : { runs, statuses: green };
+    return reads < 2 ? { runs, statuses: partial } : { runs, statuses };
   }, { sleep: async () => {}, rounds: 4, pending: (value) => ciGate(value).checksPending });
   assert.equal(reads, 2);
   assert.equal(ciGate(snapshot).checksPassed, true);
