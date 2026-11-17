@@ -62,4 +62,5 @@ test("each verifier job has the declared permissions, key and token", () => {
   assert.equal(policy.pstack_verifier.required, false);
   assert.equal(policy.pstack_verifier.note, "enable after hosted proof");
   assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), false);
+  for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
 });
