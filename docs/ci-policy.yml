@@ -966,3 +966,20 @@ pstack_verifier:
   context: pstack-verifier
   required: false
   note: enable after hosted proof
+
+repro_first:
+  ticket: https://app.hypertask.ai/detail/project-15/9407
+  workflow: .github/workflows/repro-first.yml
+  job: repro-first
+  script: .github/scripts/repro-first.mjs
+  mode: fails_the_job
+  required: false
+  ruleset: unchanged
+  triggers: [pull_request]
+  pull_request_base: production
+  signal: bugfix_title_tag
+  exempt: no_src_change
+  pass: at_least_one_changed_test_fails_on_the_merge_base_and_every_changed_test_passes_on_the_head
+  runs_on: ubuntu-latest
+  timeout_minutes: 30
+  paid_service: false

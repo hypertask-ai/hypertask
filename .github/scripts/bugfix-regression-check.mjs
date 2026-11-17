@@ -232,7 +232,7 @@ function runTestFile(dir, file) {
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}\n${result.error?.message ?? ""}`;
   return {
     passed: result.status === 0 && !result.signal && !result.error,
-    setupFailed: Boolean(result.error || result.signal || !/ERR_ASSERTION|AssertionError/.test(output) || /MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|SyntaxError:|Cannot find (?:module|package)/.test(output)),
+    setupFailed: Boolean(result.error || result.signal || /MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|SyntaxError:|Cannot find (?:module|package)|ENOENT|no such file or directory/.test(output)),
     output,
   };
 }
