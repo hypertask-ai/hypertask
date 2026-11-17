@@ -50,6 +50,8 @@ test("a quote block after the chat header is the approval and adjacent prose is 
   assert.equal(isOffOrder("turn it off when QA passes"), false);
   assert.equal(isBareOffOrder("turn it off"), true);
   assert.equal(isDirectOffOrder("turn it off now"), true);
+  assert.equal(isDirectOffOrder("turning it off now"), false);
+  assert.equal(isOffOrder("turning it off now"), false);
   assert.equal(isDirectOffOrder("can you turn it off?"), false);
   assert.equal(isDirectOffOrder("can you turn it off"), false);
   assert.equal(isBareOffOrder("turn it off!"), true);

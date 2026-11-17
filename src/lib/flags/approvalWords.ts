@@ -66,7 +66,7 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
   return tokens.every((token) => vocabulary.has(token)) ? "yes" : "unclear";
 }
 
-const OFF_VERB = /^(?:turn|turning|switch|toggle|flip|disable|kill)$/;
+const OFF_VERB = /^(?:turn|switch|toggle|flip|disable|kill)$/;
 const OFF_BLOCKER = /^(?:no|not|never|cannot|\p{L}+n't|dont|cant|wont|didnt|doesnt|isnt|wasnt|shouldnt|mustnt|neednt|couldnt|wouldnt|havent|hasnt|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until|on|but|only|after|when|once|before|while)$/u;
 const OFF_REACH = 4;
 
