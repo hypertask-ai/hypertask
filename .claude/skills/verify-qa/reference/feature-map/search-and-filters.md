@@ -3,17 +3,24 @@
 ## Sub-features
 
 - `phone-search-operators` Phone search operators.
+- `hide-tags` With `htpr-8171-hide-tags` on (Owner + QA), the tags filter on a board or on My Tasks can be set to Hide tags. Left and right, or the match label, cycle Match ANY, Match ALL, then Hide tags. Tickets that carry any picked tag drop out of that saved view, and the active tags row shows Hide. Asking AI for everything except those tags can save the view that way. Off, Hide is not offered, and a saved Hide does not remove tickets.
 
 ## How to get to it (user POV)
 
 The search bar (any board, or global) and board filter controls.
+Tags hide: open a board or My Tasks, open filters, pick one or more tags,
+and set the tags match to Hide tags while `htpr-8171-hide-tags` is on.
 
 ## Driving it with agent-browser
 
 `agent-browser`, headless, `?realtime=on`. Search a term that matches a title
 word and a scrambled/partial word, and check both archived and active tasks
 show up when they should. For filters, apply one and reload to confirm it
-holds.
+holds. For hide tags, use the QA flag account. Pick tags on a board and on
+My Tasks, set Hide tags, and confirm tickets with any of those tags leave
+the list. The active tags row shows Hide. Reload and confirm the saved view
+still hides them. With `htpr-8171-hide-tags` off, Hide is absent and a view
+saved as Hide shows those tickets again.
 
 ## Gotchas
 
@@ -23,6 +30,8 @@ holds.
   ([HTPR-6372](https://app.hypertask.ai/detail/project-15/6372) again, `#552`).
 - Board filters not applying immediately, requiring a reload to take effect
   ([HTPR-6595](https://app.hypertask.ai/detail/project-15/6595)).
+- Hide tags removing a ticket that does not carry the picked tags, or leaving a tagged ticket visible while `htpr-8171-hide-tags` is on.
+- Hide still removing tickets while `htpr-8171-hide-tags` is off.
 
 ### Phone search operators
 
@@ -45,7 +54,8 @@ checks do not replace a physical iOS Safari and Android Chrome check after deplo
 Screenshot the search results for the exact query from the ticket, in the
 exact order returned. Ranking bugs are about order, not presence, so a
 screenshot that only shows "the task appeared somewhere" doesn't verify a
-ranking fix.
+ranking fix. For `htpr-8171-hide-tags`, shoot the tags filter on Hide tags
+and the list with those tickets gone, then the same view with the flag off.
 
 ### Cleanup
 
