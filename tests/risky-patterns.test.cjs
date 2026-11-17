@@ -90,6 +90,29 @@ test("one approved exception allows one new effect hook and a second still fails
   assert.match(failures[0], /Effect hooks went from 1 allowed to 2/);
 });
 
+test("an exception kept from production still covers its code", async () => {
+  const { judge, emptyCounts } = await load();
+  const baseline = emptyCounts();
+  const approved = [{ pattern: "effectHooks", ticket, reason }];
+  const once = { ...baseline, effectHooks: 1 };
+  assert.deepEqual(judge({
+    counts: once,
+    baseBaseline: baseline,
+    headBaseline: baseline,
+    baseExceptions: approved,
+    headExceptions: approved,
+  }), []);
+  const dropped = judge({
+    counts: once,
+    baseBaseline: baseline,
+    headBaseline: baseline,
+    baseExceptions: approved,
+    headExceptions: [],
+  });
+  assert.equal(dropped.length, 1);
+  assert.match(dropped[0], /Effect hooks went from 0 allowed to 1/);
+});
+
 test("raising the baseline is refused and a bad exception does not add room", async () => {
   const { judge, emptyCounts } = await load();
   const baseline = emptyCounts();

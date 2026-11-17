@@ -100,12 +100,10 @@ function exceptionPath(key) {
   return `An approved exception is one object in scripts/risky-pattern-exceptions.json with pattern "${key}", a reason, and ticket set to a full https://app.hypertask.ai/detail/project-<board>/<number> link. Do not raise scripts/risky-pattern-baseline.json.`;
 }
 
-export function judge({ counts, baseBaseline, headBaseline, baseExceptions, headExceptions }) {
+export function judge({ counts, baseBaseline, headBaseline, headExceptions }) {
   const failures = [];
   const parsedHead = parseExceptions(headExceptions);
   failures.push(...parsedHead.errors);
-  const parsedBase = parseExceptions(Array.isArray(baseExceptions) ? baseExceptions : []);
-  const baseTally = tally(parsedBase.errors.length ? [] : parsedBase.entries);
   const headTally = tally(parsedHead.errors.length ? [] : parsedHead.entries);
   const establishing = baseBaseline == null;
   for (const key of KEYS) {
@@ -134,8 +132,7 @@ export function judge({ counts, baseBaseline, headBaseline, baseExceptions, head
     if (headCap > baseCap) {
       failures.push(`${pattern.label} baseline went from ${baseCap} to ${headCap}. Do not raise scripts/risky-pattern-baseline.json. ${exceptionPath(key)}`);
     }
-    const added = Math.max(0, headTally[key] - baseTally[key]);
-    const limit = baseCap + added;
+    const limit = baseCap + headTally[key];
     if (count > limit) {
       failures.push(`${pattern.label} went from ${limit} allowed to ${count} in the code. ${pattern.rightWay} ${exceptionPath(key)}`);
     }

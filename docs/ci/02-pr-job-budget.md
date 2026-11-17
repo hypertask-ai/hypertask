@@ -17,7 +17,7 @@ Small guards share scanner work and trusted metadata:
 Static gates inside `ci-checks` share one job and run as concurrent lanes (HYCI-8):
 agent board scope, TypeScript, Oxlint, ESLint, the lint overlap guard, board
 registration boundaries, the board-filter/Ctrl+K/source-text contracts, changed
-style tokens and paid API cost notes.
+style tokens, paid API cost notes, and risky pattern counts.
 None reads another's output, so the job costs its slowest lane instead of their sum.
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
