@@ -41,6 +41,16 @@ stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
 stubSourceModule("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
   AgentSidebarChatCommands: () => null,
 });
+stubSourceModule("src/components/AI_CHAT/AI_Tiptap_Container.tsx", {
+  AI_Tiptap_Container: () => null,
+  ChatScopeControl: () => null,
+});
+stubSourceModule("src/lib/flags/definitions/htpr-8032-phone-chat-fullscreen.ts", {
+  HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG: "htpr-8032-phone-chat-fullscreen",
+});
+stubSourceModule("src/lib/flags/definitions/htpr-7316-chat-scope-ticket.ts", {
+  HTPR_7316_CHAT_SCOPE_TICKET_FLAG: "htpr-7316-chat-scope-ticket",
+});
 stubSourceModule("src/lib/flags/definitions/htpr-7773-chat-header-name.ts", {
   HTPR_7773_CHAT_HEADER_NAME_FLAG: "htpr-7773-chat-header-name",
 });

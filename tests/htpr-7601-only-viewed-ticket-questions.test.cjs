@@ -30,6 +30,8 @@ const mocks = {
   "@/lib/ai/chipEvents": { signalAiChip: () => {} },
   "@/lib/ai/composeIntroTaskId": { composeIntroTaskId: () => undefined },
   "@/lib/flags/keys": { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG: questionsFlag, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG: viewedFlag, HTPR_7979_ACTION_CHIPS_FLAG: chipsFlag },
+  "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
+  "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen": { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG: "htpr-8032-phone-chat-fullscreen" },
   "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", { "data-message": message.id }, message.content) },
   "./TypingIndicator": { TypingIndicator: () => React.createElement("span", { "data-typing": "" }) },
   "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {
