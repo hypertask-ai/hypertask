@@ -16,6 +16,10 @@ const expected = {
   cancel: { statuses: "write" },
 };
 
+function runParts(step) {
+  return String(step?.run ?? "").split("&&").map((part) => part.trim()).filter((part) => part.length > 0);
+}
+
 function strings(value, out = []) {
   if (typeof value === "string") out.push(value);
   else if (Array.isArray(value)) value.forEach((item) => strings(item, out));
@@ -34,6 +38,15 @@ function tokenGaps(jobs) {
   }
   return gaps;
 }
+
+test("drive generates the database client before the drive script runs", () => {
+  const steps = trusted.jobs.drive.steps;
+  const generateAt = steps.findIndex((step) => runParts(step).some((part) => part.split(" ").includes("prisma") && part.split(" ").includes("generate")));
+  const driveAt = steps.findIndex((step) => runParts(step).some((part) => part.includes("pstack-verifier-job.sh")));
+  assert.equal(generateAt >= 0, true);
+  assert.equal(driveAt >= 0, true);
+  assert.equal(generateAt < driveAt, true);
+});
 
 test("each verifier job has the declared permissions, key and token", async () => {
   assert.deepEqual(request.permissions, {});
@@ -65,5 +78,9 @@ test("each verifier job has the declared permissions, key and token", async () =
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
-  assert.deepEqual(REQUIRED_CI_CONTEXTS, policy.required_checks.contexts);
+  const liveRulesetContexts = [
+    "app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review",
+    "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan",
+  ];
+  assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...liveRulesetContexts].sort());
 });

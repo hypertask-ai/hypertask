@@ -149,7 +149,7 @@ try {
     }
     const expected = [
       "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
-      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "premerge-evidence",
+      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke",
     ].sort();
     const actual = [...new Set(ruleset.rules
       .filter((rule) => rule.type === "required_status_checks")

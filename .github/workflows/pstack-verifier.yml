@@ -61,6 +61,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: "^24.22.1", check-latest: true }
       - run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Generate Prisma client
+        run: npx prisma generate
       - env: { GH_TOKEN: "${{ github.token }}" }
         run: set -o pipefail; printf '%s\n' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
