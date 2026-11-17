@@ -43,11 +43,12 @@ test('markers from anyone but github-actions are ignored', () => {
 
 test('findings keep current inline comments and drop outdated ones and replies', () => {
   const text = findingsText({
-    pr: pr(), statuses: red, reviews: [], comments: [],
+    pr: pr(), statuses: red, comments: [],
+    reviews: [{ id: 1, commit_id: sha, user: { login: 'chatgpt-codex-connector[bot]' }, submitted_at: '2026-11-02T00:00:00Z' }],
     reviewComments: [
-      { user: { login: 'chatgpt-codex-connector[bot]' }, path: 'a.js', line: 3, body: 'P1 keep' },
-      { user: { login: 'chatgpt-codex-connector[bot]' }, path: 'a.js', line: null, body: 'outdated' },
-      { user: { login: 'chatgpt-codex-connector[bot]' }, path: 'a.js', line: 3, in_reply_to_id: 1, body: 'reply' },
+      { pull_request_review_id: 1, user: { login: 'chatgpt-codex-connector[bot]' }, path: 'a.js', line: 3, body: 'P1 keep' },
+      { pull_request_review_id: 1, user: { login: 'chatgpt-codex-connector[bot]' }, path: 'a.js', line: null, body: 'outdated' },
+      { pull_request_review_id: 1, user: { login: 'chatgpt-codex-connector[bot]' }, path: 'a.js', line: 3, in_reply_to_id: 1, body: 'reply' },
       { user: { login: 'someone' }, path: 'a.js', line: 3, body: 'human' },
     ],
   });
@@ -56,11 +57,30 @@ test('findings keep current inline comments and drop outdated ones and replies',
   assert.doesNotMatch(text, /outdated|reply|human/);
 });
 
+test('findings drop inline comments from reviews of an older commit', () => {
+  const old = 'b'.repeat(40);
+  const codex = { login: 'chatgpt-codex-connector[bot]' };
+  const text = findingsText({
+    pr: pr(), statuses: red, comments: [],
+    reviews: [
+      { id: 1, commit_id: old, user: codex, submitted_at: '2026-11-01T00:00:00Z' },
+      { id: 2, commit_id: sha, user: codex, submitted_at: '2026-11-02T00:00:00Z' },
+    ],
+    reviewComments: [
+      { pull_request_review_id: 1, user: codex, path: 'a.js', line: 4, body: 'P1 stale' },
+      { pull_request_review_id: 2, user: codex, path: 'a.js', line: 5, body: 'P1 current' },
+    ],
+  });
+  assert.match(text, /P1 current/);
+  assert.doesNotMatch(text, /stale/);
+});
+
 test('the workflow never hands the push token to the Claude step', () => {
   const yml = fs.readFileSync(path.join(__dirname, '../.github/workflows/review-fix.yml'), 'utf8');
   const claudeStep = yml.split('- name: Fix with file tools only')[1].split('- name:')[0];
   assert.doesNotMatch(claudeStep, /AUTOMERGE_TOKEN|GH_TOKEN|github\.token/);
   assert.match(claudeStep, /--tools Read,Edit,Write,Glob,Grep/);
+  assert.match(claudeStep, /--settings \.\.\/trusted\/\.github\/scripts\/review-fix\/settings\.json/);
   assert.doesNotMatch(claudeStep, /Bash/);
   assert.match(claudeStep, /--safe-mode/);
 });

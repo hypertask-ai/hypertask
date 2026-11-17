@@ -50,10 +50,12 @@ function findingsText({ pr, statuses, reviewComments, comments, reviews }) {
       parts.push(`## Review by ${login(review.user)}\n${review.body}`);
     }
   }
-  for (const comment of reviewComments) {
-    if (!FINDING_AUTHORS.has(login(comment.user)) || comment.line == null || comment.in_reply_to_id) continue;
-    parts.push(`## ${comment.path}:${comment.line} (${login(comment.user)})\n${comment.body}`);
-  }
+  const inline = comment => FINDING_AUTHORS.has(login(comment.user)) && comment.line != null && !comment.in_reply_to_id;
+  const matching = ids => reviewComments.filter(comment => inline(comment) && ids.has(comment.pull_request_review_id));
+  const onHead = matching(new Set(reviews.filter(review => review.commit_id === head).map(review => review.id)));
+  const newestCodex = reviews.filter(review => login(review.user) === 'chatgpt-codex-connector').sort((a, b) => (Date.parse(b.submitted_at) || 0) - (Date.parse(a.submitted_at) || 0))[0];
+  const chosen = onHead.length ? onHead : matching(new Set(newestCodex ? [newestCodex.id] : []));
+  for (const comment of chosen) parts.push(`## ${comment.path}:${comment.line} (${login(comment.user)})\n${comment.body}`);
   for (const comment of [...comments].reverse()) {
     const body = String(comment.body ?? '');
     if (!FINDING_AUTHORS.has(login(comment.user)) || !body.includes(head.slice(0, 7))) continue;
