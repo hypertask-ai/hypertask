@@ -38,7 +38,7 @@ const DescriptionCreateTaskModal = () => {
         <BaseCommentAndDescriptionContainer className={descriptionFirstMobile ? "flex flex-col pb-4" : undefined}>
             <div
                 id={DIV_ID_CONSTANTS.descriptionContainerCreateTaskModal}
-                data-phone-new-task-card={Boolean(_mbl) && phoneNewTaskLayout ? "" : undefined}
+                data-phone-new-task-card={Boolean(_mbl) && phoneNewTaskLayout ? "on" : undefined}
                 onClick={() => {
                     setEditMode("Description")
                     setCurrentFocusedElement("Description")

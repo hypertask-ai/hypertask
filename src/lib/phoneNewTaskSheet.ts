@@ -20,10 +20,11 @@ export function phoneNewTaskViewportOffsets(
   const layoutHeight = finiteNonNegative(viewport.layoutHeight);
   const visibleHeight = finiteNonNegative(viewport.visibleHeight);
   const keyboard = finiteNonNegative(viewport.bottomInset);
+  if (keyboard <= 0) return { top: "0px", keyboard: "0px", keyboardOpen: false };
   const top = Math.max(0, layoutHeight - visibleHeight - keyboard);
   return {
     top: `${top}px`,
     keyboard: `${keyboard}px`,
-    keyboardOpen: keyboard > 0,
+    keyboardOpen: true,
   };
 }

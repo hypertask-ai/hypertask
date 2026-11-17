@@ -38,9 +38,9 @@ const CreateTaskGlobally: React.FC<IProps> = ({ shouldShow, closeCallback }) => 
             className={cn(
                 styles.links_modal,
                 "relative",
-                Boolean(isMobile) && phoneNewTaskLayout && "phone-new-task-sheet",
-                Boolean(isMobile) && phoneNewTaskLayout && keyboardOpen && "phone-new-task-keyboard",
             )}
+            data-phone-new-task-sheet={Boolean(isMobile) && phoneNewTaskLayout ? "on" : undefined}
+            data-phone-new-task-keyboard={Boolean(isMobile) && phoneNewTaskLayout && keyboardOpen ? "on" : undefined}
             style={phoneLayout ? { "--phone-new-task-viewport-top": top, "--phone-new-task-keyboard": keyboard } as CSSProperties : undefined}
         >
             <CreateTaskInfoColumnProvider>

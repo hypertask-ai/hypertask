@@ -36,21 +36,24 @@ test("phone new task layout is an owner and QA improvement flag", () => {
   );
 });
 
-test("flag off leaves the new task sheet class off, including on desktop", () => {
+test("flag off leaves the phone sheet markers off, including on desktop", () => {
   assert.match(modal, /useFlag\(HTPR_8029_PHONE_NEW_TASK_LAYOUT_FLAG\)/);
-  assert.match(modal, /Boolean\(isMobile\) && phoneNewTaskLayout && "phone-new-task-sheet"/);
-  assert.doesNotMatch(modal, /className=\{`\$\{styles\.links_modal\} relative phone-new-task-sheet`\}/);
+  assert.match(
+    modal,
+    /data-phone-new-task-sheet=\{Boolean\(isMobile\) && phoneNewTaskLayout \? "on" : undefined\}/,
+  );
+  assert.doesNotMatch(modal, /["'`]phone-new-task-sheet["'`]/);
   assert.match(description, /useFlag\(HTPR_8029_PHONE_NEW_TASK_LAYOUT_FLAG\)/);
   assert.match(
     description,
-    /data-phone-new-task-card=\{Boolean\(_mbl\) && phoneNewTaskLayout \? "" : undefined\}/,
+    /data-phone-new-task-card=\{Boolean\(_mbl\) && phoneNewTaskLayout \? "on" : undefined\}/,
   );
 });
 
 test("the phone sheet pads below the status bar, with a floor when the inset is 0", () => {
   assert.match(
     globals,
-    /#createTaskModal\.phone-new-task-sheet #body \{[^}]*padding-top:\s*max\(env\(safe-area-inset-top\),\s*28px\)/,
+    /#createTaskModal\[data-phone-new-task-sheet\] #body \{[^}]*padding-top:\s*max\(env\(safe-area-inset-top\),\s*28px\)/,
   );
   assert.match(modal, /useMobileVisualViewport\(Boolean\(isMobile\) && phoneNewTaskLayout\)/);
   assert.match(modal, /phoneNewTaskViewportOffsets\(viewport\)/);
@@ -69,12 +72,15 @@ test("the dictation row stays inside the text card and docks above the keyboard"
   assert.match(controls, /data-mobile-new-task-actions/);
 
   const dock = sheetRule(
-    "#createTaskModal.phone-new-task-sheet [data-phone-new-task-card] .attachment-upload-container",
+    "#createTaskModal[data-phone-new-task-sheet] [data-phone-new-task-card] .attachment-upload-container",
   );
   assert.match(dock, /margin-top:\s*auto/);
-  const dialog = sheetRule("#createTaskModal.phone-new-task-sheet .modal-dialog");
+  const dialog = sheetRule("#createTaskModal[data-phone-new-task-sheet] {");
   assert.match(dialog, /bottom:\s*var\(--phone-new-task-keyboard,\s*0px\)/);
-  assert.match(modal, /phoneNewTaskLayout && keyboardOpen && "phone-new-task-keyboard"/);
+  assert.match(
+    modal,
+    /data-phone-new-task-keyboard=\{Boolean\(isMobile\) && phoneNewTaskLayout && keyboardOpen \? "on" : undefined\}/,
+  );
 });
 
 test("visual viewport offsets keep the sheet on the visible area", () => {
@@ -93,6 +99,10 @@ test("visual viewport offsets keep the sheet on the visible area", () => {
   );
   assert.deepEqual(
     phoneNewTaskViewportOffsets({ layoutHeight: 800, visibleHeight: 500, bottomInset: 0 }),
-    { top: "300px", keyboard: "0px", keyboardOpen: false },
+    { top: "0px", keyboard: "0px", keyboardOpen: false },
+  );
+  assert.deepEqual(
+    phoneNewTaskViewportOffsets({ layoutHeight: 800, visibleHeight: 400, bottomInset: 300 }),
+    { top: "100px", keyboard: "300px", keyboardOpen: true },
   );
 });
