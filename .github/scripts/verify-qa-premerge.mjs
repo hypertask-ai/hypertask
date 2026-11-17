@@ -376,6 +376,7 @@ export async function runTaggedJourneys({ base, journey, outDir }, execute = spa
       BASE_URL: base,
       SMOKE_BASE_URL: base,
       HT_QA_JOURNEYS: '1',
+      VERIFY_QA_RECORD: '1',
       HT_QA_TIER: '',
       HT_QA_EXPECTED_PLAN: 'Free',
       PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,

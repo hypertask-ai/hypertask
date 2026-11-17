@@ -2177,6 +2177,15 @@ jobs:
           path: verify-qa-premerge/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Upload the recorded inbox video
+        id: verify-qa-video
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verify-qa-video-inbox
+          path: verify-qa-premerge/test-results/**/*.webm
+          if-no-files-found: warn
+          retention-days: 7
       - name: Link premerge verify-qa evidence
         if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
         run: |
