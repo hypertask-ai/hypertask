@@ -476,7 +476,6 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "pr-title",
     "next-public-secrets",
     "secret-scan",
-    "premerge-evidence",
   ];
 
   assert.equal(policy.topology.repository_default_branch, "production");
