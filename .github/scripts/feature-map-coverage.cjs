@@ -81,17 +81,23 @@ function escapeReg(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function dynamicSegment() {
+  return "(?:<[^>\\s/]+>|:[A-Za-z_][A-Za-z0-9_]*|\\[[^\\]\\s/]+\\]|\\{[^}\\s/]+\\})";
+}
+
 function mentioned(feature, corpus) {
   if (feature.kind === "flag") {
     return new RegExp(`(?<![A-Za-z0-9-])${escapeReg(feature.id)}(?![A-Za-z0-9-])`).test(corpus);
   }
   if (corpus.includes(feature.source)) return true;
   if (feature.id === "/") return /(?:^|[\s`(])\/(?:[\s`)]|$)/m.test(corpus);
-  const dynamic = feature.id.includes("/:");
-  const needle = dynamic ? feature.id.split("/:")[0] : feature.id;
-  if (!needle || needle === "/") return false;
-  const boundary = dynamic ? "(?=/)" : "(?![A-Za-z0-9._~/-])";
-  return new RegExp(`${escapeReg(needle)}${boundary}`).test(corpus);
+  if (feature.id.includes("/:")) {
+    const segments = feature.id.split("/").filter(Boolean);
+    if (segments[0].startsWith(":")) return false;
+    const body = segments.map((segment) => (segment.startsWith(":") ? dynamicSegment() : escapeReg(segment))).join("/");
+    return new RegExp(`(?<![A-Za-z0-9._~-])/${body}(?![A-Za-z0-9._~/-])`).test(corpus);
+  }
+  return new RegExp(`${escapeReg(feature.id)}(?![A-Za-z0-9._~/-])`).test(corpus);
 }
 
 function coverageReport(root, options = {}) {

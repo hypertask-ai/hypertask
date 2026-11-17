@@ -72,6 +72,16 @@ test("strict mode fails while a feature is unmapped and passes when it is mapped
   assert.match(reportOnly.stdout, /^3 of 6\n/);
 });
 
+test("a dynamic route is not mapped by a shared prefix", (t) => {
+  const root = tree();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  write(root, "src/app/chat/[sessionId]/page.tsx", "export default function Page() { return null }\n");
+  write(root, ".claude/skills/verify-qa/reference/feature-map/inbox.md", "Call `/api/mcp/chat/rooms/pending` and open `/chat/rooms`.\n");
+  assert.equal(coverageReport(root, { only: "/chat/:sessionId" }).line, "0 of 1");
+  write(root, ".claude/skills/verify-qa/reference/feature-map/inbox.md", "Open `/chat/<session>`.\n");
+  assert.equal(coverageReport(root, { only: "/chat/:sessionId" }).line, "1 of 1");
+});
+
 test("a missing feature name and a step summary are explicit", (t) => {
   const root = tree();
   const summary = path.join(root, "summary.md");
