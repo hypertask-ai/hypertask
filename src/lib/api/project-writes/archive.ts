@@ -7,9 +7,9 @@ export const POST = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
   validationMessage: "Missing required information",
   allowNullBody: true,
-  operation: async (body, session, request) => {
-    const rawProjectId = body?.projectId ?? request.query?.projectId;
-    const projectId = Number(Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId);
+  operation: async (body, session) => {
+    const req = { body };
+    const { projectId } = req.body;
     try {
       const response = await archiveProject(projectId, session.userId);
       return NextResponse.json(response.json, { status: response.status });

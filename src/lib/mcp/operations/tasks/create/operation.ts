@@ -151,19 +151,14 @@ export async function POST(request: NextRequest) {
         }
         const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope, { refuseArchivedBoard: true });
         if (projectCheck.error) {
-            const code = projectCheck.error.status === 404
-                ? 'not_found'
-                : projectCheck.error.status === 400
-                    ? 'invalid_field'
-                    : 'forbidden';
-            const summary = projectCheck.error.status === 404
-                ? 'Not found'
-                : projectCheck.error.status === 400
-                    ? projectCheck.error.message
-                    : 'Permission error';
+            const status = projectCheck.error.status;
             return NextResponse.json(
                 {
-                    ...buildFieldError(code, 'project_id', summary),
+                    ...buildFieldError(
+                        status === 404 ? 'not_found' : status === 400 ? 'invalid_field' : 'forbidden',
+                        'project_id',
+                        status === 404 ? 'Not found' : status === 400 ? projectCheck.error.message : 'Permission error',
+                    ),
                     message: projectCheck.error.message,
                     ...(dryRun && { valid: false }),
                     ...(correlationId && { correlationId })
