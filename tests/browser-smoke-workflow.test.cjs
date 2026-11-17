@@ -22,6 +22,7 @@ case "$(sed -n "\${n}p" "${dir}/outcomes")" in
   ok) echo built; exit 0;;
   font) cat "${FONT_MISS_LOG}"; exit 1;;
   next) printf '%s\n' 'Failed to compile.' '' '\`next/font\` error:' 'Failed to fetch \`Inter\` from Google Fonts.'; exit 1;;
+  turbo) printf '%s\n' 'next/font/google queries have exactly one entry'; exit 1;;
   *) echo "Type error: something else" >&2; exit 1;;
 esac
 `, { mode: 0o755 });
@@ -326,6 +327,8 @@ test("browser smoke retries its build once, only after a Google font download fa
   assert.deepEqual(run(["font", "ok"]), { status: 0, calls: 2 });
   assert.deepEqual(run(["font", "font"]), { status: 1, calls: 2 });
   assert.deepEqual(run(["next", "ok"]), { status: 0, calls: 2 });
+  assert.deepEqual(run(["turbo", "ok"]), { status: 0, calls: 2 });
+  assert.deepEqual(run(["turbo", "turbo"]), { status: 1, calls: 2 });
   assert.deepEqual(run(["other", "ok"]), { status: 1, calls: 1 });
 });
 
@@ -346,6 +349,8 @@ test("every build retry guard retries the log a real font failure prints", async
   for (const step of steps) {
     assert.deepEqual(runBuildStep(step, ["font", "ok"]), { status: 0, calls: 2 });
     assert.deepEqual(runBuildStep(step, ["next", "ok"]), { status: 0, calls: 2 });
+    assert.deepEqual(runBuildStep(step, ["turbo", "ok"]), { status: 0, calls: 2 });
+    assert.deepEqual(runBuildStep(step, ["turbo", "turbo"]), { status: 1, calls: 2 });
     assert.deepEqual(runBuildStep(step, ["font", "font"]), { status: 1, calls: 2 });
     assert.deepEqual(runBuildStep(step, ["other", "ok"]), { status: 1, calls: 1 });
   }
