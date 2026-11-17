@@ -11,7 +11,7 @@ import { MobileViewContext } from '@/lib/contexts/mobileContext';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_8029_PHONE_NEW_TASK_LAYOUT_FLAG } from '@/lib/flags/definitions/htpr-8029-phone-new-task-layout';
 import { useMobileVisualViewport } from '@/hooks/General/useMobileVisualViewport';
-import { phoneNewTaskViewportOffsets } from '@/lib/phoneNewTaskSheet';
+import { phoneNewTaskShortSheet, phoneNewTaskViewportOffsets } from '@/lib/phoneNewTaskSheet';
 import { cn } from '@/utils/undoActions/helperFuncs';
 
 interface IProps {
@@ -25,6 +25,7 @@ const CreateTaskGlobally: React.FC<IProps> = ({ shouldShow, closeCallback }) => 
     const phoneLayout = Boolean(isMobile) && phoneNewTaskLayout
     const viewport = useMobileVisualViewport(Boolean(isMobile) && phoneNewTaskLayout)
     const { top, keyboard, keyboardOpen } = phoneNewTaskViewportOffsets(viewport)
+    const shortSheet = phoneNewTaskShortSheet(viewport)
     if (!shouldShow) return (<></>)
     return (
         <ModalContainerCustom
@@ -41,6 +42,7 @@ const CreateTaskGlobally: React.FC<IProps> = ({ shouldShow, closeCallback }) => 
             )}
             data-phone-new-task-sheet={Boolean(isMobile) && phoneNewTaskLayout ? "on" : undefined}
             data-phone-new-task-keyboard={Boolean(isMobile) && phoneNewTaskLayout && keyboardOpen ? "on" : undefined}
+            data-phone-new-task-short={phoneLayout && shortSheet ? "on" : undefined}
             style={phoneLayout ? { "--phone-new-task-viewport-top": top, "--phone-new-task-keyboard": keyboard } as CSSProperties : undefined}
         >
             <CreateTaskInfoColumnProvider>
