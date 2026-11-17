@@ -5,11 +5,13 @@ const yaml = require("js-yaml");
 
 const read = (file) => yaml.load(readFileSync(file, "utf8"), { schema: yaml.JSON_SCHEMA });
 const trusted = read(".github/workflows/pstack-verifier.yml");
+const request = read(".github/workflows/pstack-verifier-request.yml");
 const policy = read("docs/ci-policy.yml");
 const expected = {
   resolve: { contents: "read", "pull-requests": "read", statuses: "write" },
   plan: { contents: "read" },
-  judge: { contents: "read" },
+  drive: { contents: "read", packages: "read" },
+  judge: { contents: "read", checks: "read", statuses: "read" },
   post: { contents: "read", "pull-requests": "write", statuses: "write" },
   cancel: { statuses: "write" },
 };
@@ -33,15 +35,18 @@ function tokenGaps(jobs) {
   return gaps;
 }
 
-test("each verifier job has the declared permissions, key and token", () => {
+test("each verifier job has the declared permissions, key and token", async () => {
+  assert.deepEqual(request.permissions, {});
   assert.deepEqual(trusted.permissions, {});
   for (const [name, permissions] of Object.entries(expected)) assert.deepEqual(trusted.jobs[name].permissions, permissions, name);
   assert.deepEqual(needs(trusted.jobs.plan), ["resolve"]);
-  assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan"]);
+  assert.deepEqual(needs(trusted.jobs.drive), ["resolve", "plan"]);
+  assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "drive"]);
   assert.deepEqual(needs(trusted.jobs.post), ["resolve", "judge"]);
   assert.deepEqual(needs(trusted.jobs.cancel), ["resolve", "post"]);
   const secretJobs = Object.entries(trusted.jobs).filter(([, job]) => strings(job).some((value) => value.includes("secrets."))).map(([name]) => name);
   assert.deepEqual(secretJobs, ["plan", "judge"]);
+  assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("secrets.") || value.includes("OPENROUTER_EVAL_KEY")), false);
   assert.deepEqual(tokenGaps(trusted.jobs), []);
   assert.equal(trusted.jobs.cancel.steps.some((step) => String(step.uses ?? "").includes("checkout")), false);
   const names = [];
@@ -58,4 +63,7 @@ test("each verifier job has the declared permissions, key and token", () => {
   assert.equal(policy.pstack_verifier.note, "enable after hosted proof");
   assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), false);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
+  const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
+  assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
+  assert.deepEqual(REQUIRED_CI_CONTEXTS, policy.required_checks.contexts);
 });
