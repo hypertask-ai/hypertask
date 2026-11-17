@@ -490,6 +490,7 @@ body {
 
 #createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-testid="ticket-thread"] {
   flex: 0 0 auto !important;
+  max-height: 100%;
   position: sticky;
   bottom: 0;
   z-index: var(--z-sticky);
@@ -498,10 +499,14 @@ body {
 }
 
 #createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-phone-new-task-card] {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   min-height: 120px;
   margin-top: 0;
   margin-bottom: 0;
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] #main-wrapper-create-task-create-task-tiptap-description {
+  min-height: 0 !important;
 }
 
 @layer utilities {
