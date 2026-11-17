@@ -48,3 +48,14 @@ test('a section heading with its text on the same line still ends the brief list
   assert.equal(x.split('\n').length, 4);
   assert.match(x, /^1\. \[ \] Corners 4 max\.\n2\. \[ \] No purple anywhere\./);
 });
+test('a bold change item stays on the checklist', () => {
+  const brief = '<p><strong>Change.</strong></p><ol><li><p><strong>Header stays one line.</strong></p></li><li><p>Radius 4 max.</p></li></ol>'
+    + '<p><strong>Keep the title bold.</strong></p><p>Hide the icon.</p>'
+    + '<p><strong>Design links.</strong></p><p>Cleanup.</p>';
+  const x = checklistFromBrief(brief);
+  assert.match(x, /Header stays one line/);
+  assert.match(x, /Radius 4 max\./);
+  assert.match(x, /Keep the title bold/);
+  assert.match(x, /Hide the icon/);
+  assert.doesNotMatch(x, /Cleanup/);
+});

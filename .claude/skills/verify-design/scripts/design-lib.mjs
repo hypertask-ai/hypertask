@@ -1,8 +1,10 @@
 const sectionMark = '\u0001';
+const sectionLabel = /^(?:change|design links|done when|not in scope)\s*[.:\-–]?\s*$/i;
 function markHeadings(html) {
   return html
     .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (_, inner) => `\n${sectionMark}${inner}\n`)
-    .replace(/<p[^>]*>\s*<strong>([^<]{1,80})<\/strong>\s*<\/p>/gi, (_, inner) => `\n${sectionMark}${inner}\n`);
+    .replace(/<p[^>]*>\s*<strong>([^<]{1,80})<\/strong>\s*<\/p>/gi, (full, inner) =>
+      sectionLabel.test(inner.trim()) ? `\n${sectionMark}${inner}\n` : full);
 }
 export function checklistFromBrief(html) {
   const text = markHeadings(html).replace(/<br\s*\/?\s*>|<\/(?:p|div|h[1-6]|li|section)>/gi, '\n').replace(/<[^>]*>/g, ' ')
