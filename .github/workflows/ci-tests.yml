@@ -17,7 +17,7 @@ on:
     branches: [production]
 
 concurrency:
-  group: ci-tests-${{ github.event.pull_request.number || github.sha }}-${{ github.run_attempt }}
+  group: ci-tests-${{ github.event.pull_request.number || github.sha }}${{ github.run_attempt > 1 && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 # One knob for the Test step. YPER4-554 (HT Product Lead, 2026-10-24) capped it
@@ -116,6 +116,12 @@ jobs:
       # ledger-only PR takes, so this step carries no `if:` and no new job.
       - name: Guard session ledgers
         run: node scripts/check-session-ledgers.mjs
+
+      - name: Stop a stale rerun
+        if: github.run_attempt > 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/stale-rerun.cjs
 
       # Never build a commit whose review already failed (owner, 2026-08-26).
       # This does NOT wait: a pending or absent verdict builds in parallel as
@@ -952,6 +958,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      pull-requests: read
       packages: read
     outputs:
       docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
@@ -1004,6 +1011,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Stop a stale rerun
+        if: github.run_attempt > 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/stale-rerun.cjs
       # Keep the required jobs running: only their heavy steps may be skipped.
       - name: Determine change scope
         id: scope

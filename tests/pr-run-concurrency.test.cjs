@@ -21,9 +21,21 @@ test('the six gates that used to queue now cancel the same pull request', () => 
     const concurrency = workflow(name).concurrency;
     assert.equal(concurrency['cancel-in-progress'], true, name);
     assert.equal(concurrency.queue, undefined, name);
-    assert.match(concurrency.group, /github\.event\.pull_request\.number/, name);
+    assert.equal(String(concurrency.group).includes('github.event.pull_request.number'), true, name);
   }
-  assert.match(workflow('ci-tests').concurrency.group, /github\.run_attempt/);
+  const tests = workflow('ci-tests');
+  assert.equal(tests.concurrency.group.includes("github.run_attempt > 1 && format('-{0}', github.run_id)"), true);
+  for (const job of ['ci-prepare', 'browser-build']) {
+    assert.equal(tests.jobs[job].steps.some((step) => step.run === 'node .github/scripts/stale-rerun.cjs'), true, job);
+  }
+});
+
+test('a rerun stops only when its commit is no longer the live head', () => {
+  const { shouldStop } = require('../.github/scripts/stale-rerun.cjs');
+  assert.equal(shouldStop(1, 'pull_request', 'old', 'new'), false);
+  assert.equal(shouldStop(2, 'pull_request', 'abc', 'abc'), false);
+  assert.equal(shouldStop(2, 'push', 'abc', 'def'), true);
+  assert.equal(shouldStop(2, 'schedule', 'abc', 'def'), false);
 });
 
 test('the pilot workflow keeps both jobs and cancels per pull request', () => {
