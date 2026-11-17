@@ -72,16 +72,67 @@ test("each verifier job has the declared permissions, key and token", async () =
     }
   }
   assert.deepEqual(names.filter((name) => !name.includes("${{ github.run_id }}-${{ github.run_attempt }}")), []);
-  assert.equal(policy.pstack_verifier.required, false);
-  assert.equal(policy.pstack_verifier.note, "enable after hosted proof");
-  assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), false);
+  assert.equal(policy.pstack_verifier.required, true);
+  assert.equal(policy.pstack_verifier.note, "https://app.hypertask.ai/detail/project-15/9411");
+  assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), true);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
-  const liveRulesetContexts = [
-    "app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review",
-    "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan",
-  ];
-  assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...liveRulesetContexts].sort());
-  assert.match(String(trusted.jobs.cancel.steps.at(-1).run), /waiting for required checks[\s\S]*state=failure/);
+  assert.equal(REQUIRED_CI_CONTEXTS.includes("pstack-verifier"), false);
+  assert.deepEqual([...policy.policies.production_ruleset.required_status_checks].sort(), [...REQUIRED_CI_CONTEXTS, "pstack-verifier"].sort());
+  assert.equal(policy.required_checks.automerge_also_requires.includes("pstack-verifier"), true);
+  const cancel = trusted.jobs.cancel.steps.map((step) => String(step.run ?? "")).join("\n");
+  const guardAt = cancel.indexOf("waiting for required checks");
+  const failureAt = cancel.indexOf("state=failure");
+  assert.equal(guardAt >= 0 && failureAt > guardAt, true);
+});
+
+test("recheck waits on production, reruns only a verifier wait, and pages past a full run list", async () => {
+  const recheck = read(".github/workflows/pstack-verifier-recheck.yml");
+  const automerge = readFileSync(".github/workflows/automerge.yml", "utf8");
+  assert.match(automerge, /REQUIRED="\$REQUIRED pstack-verifier"/);
+  assert.deepEqual(recheck.on.workflow_run.workflows, ["CI Tests", "PR Guards"]);
+  assert.equal(recheck.on.workflow_run.workflows.includes("Pstack Verifier Request"), false);
+  assert.deepEqual(recheck.jobs.recheck.permissions, { contents: "read", "pull-requests": "read", statuses: "read", actions: "write" });
+  assert.equal(recheck.jobs.chain.permissions.actions, "write");
+  assert.equal(recheck.jobs.chain.permissions.statuses, undefined);
+  assert.match(recheck.jobs.chain.steps.at(-1).run, /--chain-events workflow_dispatch/);
+  assert.match(recheck.jobs.chain.steps.at(-1).run, /--gap-minutes 30/);
+  const enabled = (expr, env) => Function(`return (${expr
+    .replaceAll("!cancelled()", "true")
+    .replaceAll("github.event.workflow_run.event", JSON.stringify(env.workflowRunEvent ?? ""))
+    .replaceAll("github.event_name", JSON.stringify(env.eventName))
+    .replaceAll("github.ref", JSON.stringify(env.ref ?? ""))
+    .replaceAll("==", "===")});`)();
+  for (const job of Object.values(recheck.jobs)) assert.equal(enabled(job.if, { eventName: "workflow_dispatch", ref: "refs/heads/feature" }), false);
+  assert.equal(enabled(recheck.jobs.recheck.if, { eventName: "workflow_dispatch", ref: "refs/heads/production" }), true);
+  assert.equal(enabled(recheck.jobs.chain.if, { eventName: "workflow_run", workflowRunEvent: "pull_request" }), false);
+  const helper = await import("../.github/scripts/pstack-verifier-recheck.mjs");
+  const { CONTEXT } = await import("../scripts/pstack-verifier.mjs");
+  assert.equal(helper.sourceStartsRecheck("Pstack Verifier Request"), false);
+  assert.equal(helper.shouldRerun({ context: CONTEXT, state: "pending", description: "Planning a user check" }, { name: "Pstack Verifier Request", path: ".github/workflows/pstack-verifier-request.yml" }), false);
+  assert.equal(helper.shouldRerun({ context: CONTEXT, state: "pending", description: "waiting for required checks" }, { path: ".github/workflows/pstack-verifier.yml" }), true);
+  assert.equal(helper.workflowRunSha({ workflow_run: { name: "Pstack Verifier Request", event: "pull_request", head_sha: "a".repeat(40) } }), "");
+  const oldest = "2026-11-17T01:00:00Z";
+  const items = Array.from({ length: 31 }, (_, index) => ({ number: index + 1, waitingSince: index === 30 ? oldest : new Date(Date.parse("2026-11-17T02:00:00Z") + index * 1000).toISOString() }));
+  assert.equal(helper.selectReruns(items)[0].number, 31);
+  assert.equal(helper.selectReruns(items).length, 10);
+  assert.equal(helper.selectReruns(items)[0].number, 31);
+  const pulls = await helper.listProductionPulls(async (page) => page === 1
+    ? Array.from({ length: 100 }, (_, index) => ({ number: index + 1, state: "open", draft: false, base: { ref: "production" } }))
+    : [{ number: 131, state: "open", draft: false, base: { ref: "production" } }]);
+  assert.equal(pulls.length, 101);
+  assert.equal(pulls.at(-1).number, 131);
+  const { runInFlight, standDown, handOff } = require("../.github/scripts/schedule-chain.cjs");
+  const page = Array.from({ length: 30 }, (_, index) => ({ id: index + 1, status: "in_progress", event: "workflow_run" }));
+  const api = async (path, method = "GET") => {
+    if (method === "POST") return {};
+    if (path.endsWith("per_page=30")) return { workflow_runs: page };
+    if (path.includes("page=2")) return { workflow_runs: [{ id: 99, status: "in_progress", event: "workflow_dispatch" }] };
+    return { workflow_runs: [] };
+  };
+  assert.equal((await runInFlight("hypertask-ai/hypertask", "pstack-verifier-recheck.yml", null, api, ["workflow_dispatch"])).id, 99);
+  assert.equal((await standDown("hypertask-ai/hypertask", { workflowFile: "pstack-verifier-recheck.yml", api, chainEvents: ["workflow_dispatch"] })).id, 99);
+  assert.equal(await standDown("hypertask-ai/hypertask", { workflowFile: "pstack-verifier-recheck.yml", api: async () => ({ workflow_runs: [] }), chainEvents: ["workflow_dispatch"] }), null);
+  assert.equal((await handOff("hypertask-ai/hypertask", { workflowFile: "pstack-verifier-recheck.yml", api: async (path, method) => method === "POST" ? {} : { workflow_runs: [] }, chainEvents: ["workflow_dispatch"] })).dispatched, true);
 });

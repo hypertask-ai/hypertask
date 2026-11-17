@@ -373,6 +373,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
+  assert.match(workflow, /REQUIRED="\$REQUIRED pstack-verifier"/);
 });
 
 test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
@@ -454,7 +455,8 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.match(settingsScript, /ruleset\.target !== "branch"/);
   assert.match(settingsScript, /!ruleset\.conditions\.ref_name\.include\.includes\("refs\/heads\/production"\)/);
   assert.match(settingsScript, /ruleset\.conditions\.ref_name\.exclude\.includes\("refs\/heads\/production"\)/);
-  assert.match(settingsScript, /new Set\(ruleset\.rules/);
+  assert.match(settingsScript, /new Set\(checks\.map\(\(check\) => check\.context\)\)/);
+  assert.match(settingsScript, /integration_id !== 15368/);
   assert.match(settingsScript, /Live required checks do not match docs\/ci-policy\.yml/);
   const contexts = settingsScript.match(/const expected = \[([\s\S]*?)\]\.sort\(\)/)[1];
   assert.deepEqual(
@@ -475,6 +477,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "pr-title",
     "next-public-secrets",
     "secret-scan",
+    "pstack-verifier",
   ];
 
   assert.equal(policy.topology.repository_default_branch, "production");
@@ -484,6 +487,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "browser-smoke",
     "ci-tests",
     "feature-flag-gate",
+    "pstack-verifier",
   ]);
   assert.deepEqual(
     policy.policies.production_ruleset.required_status_checks,
