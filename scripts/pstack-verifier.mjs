@@ -460,9 +460,9 @@ export function runMinutes(startedAt, now = Date.now()) {
 }
 export function verdictComment(verdict, notes, minutes) {
   const time = minutes == null ? "Run time unknown." : `Run time ${minutes} min.`;
-  if (verdict === "PASS" || verdict === "PASS+NOTES") return `${verdict}. ${time}`;
+  if (verdict === "PASS") return `${verdict}. ${time}`;
   const detail = String(notes ?? "").replace(/\s+/g, " ").trim();
-  return `${verdict}: ${detail} ${time}`.replace(/\s+/g, " ").trim();
+  return `${verdict}: ${detail || "no detail"} ${time}`.replace(/\s+/g, " ").trim();
 }
 export async function postCommand(io = {}) {
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);

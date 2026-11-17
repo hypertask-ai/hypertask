@@ -338,6 +338,7 @@ test("a verdict comment names how long the run took", async () => {
   assert.equal(runMinutes("2026-11-17T12:00:00.000Z", Date.parse("2026-11-17T12:12:00.000Z")), 12);
   assert.equal(runMinutes("not-a-time", 0), null);
   assert.equal(verdictComment("PASS", "", 12), "PASS. Run time 12 min.");
+  assert.equal(verdictComment("PASS+NOTES", "the banner is clipped", 12), "PASS+NOTES: the banner is clipped Run time 12 min.");
   assert.equal(verdictComment("FAIL", "the board did not open", 12), "FAIL: the board did not open Run time 12 min.");
   assert.equal(verdictComment("FAIL", "the board did not open", null), "FAIL: the board did not open Run time unknown.");
 });

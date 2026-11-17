@@ -334,10 +334,17 @@ async function run({ github, context, core, single = 0 }) {
     if (result.state === 'pending' && reviewer === 'codex' && !node.isDraft && !running && !requested) {
       const current = await github.rest.pulls.get({ owner, repo, pull_number: node.number });
       if (current.data.head.sha === node.headRefOid && current.data.state === 'open' && !current.data.draft) {
-        await github.rest.issues.createComment({
+        const created = await github.rest.issues.createComment({
           owner, repo, issue_number: node.number,
           body: `@codex review\n\nReview the current head ${node.headRefOid}.\n${requestMarker}`,
         });
+        const after = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: node.number, per_page: 100 });
+        const markers = after.filter(comment =>
+          String(comment.user?.login ?? '').replace(/\[bot\]$/, '') === 'github-actions' && comment.body?.includes(requestMarker));
+        const keep = Math.min(created.data.id, ...markers.map(comment => comment.id));
+        for (const comment of markers) {
+          if (comment.id !== keep) await github.rest.issues.deleteComment({ owner, repo, comment_id: comment.id });
+        }
       }
     }
 
