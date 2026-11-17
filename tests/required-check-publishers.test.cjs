@@ -110,8 +110,9 @@ test("an archived reporting ticket is reopened before the comment lands on it", 
   const board = fakeBoard([{ id: 501, title: "[INFRA] A required check has no publisher" }], "Archive");
   await run({ gh: fakeGitHub().gh, fetchImpl: board.fetchImpl, now, env: { REPO: "test/repo", HYPERTASK_MCP_TOKEN: "t" }, log: () => {} });
   const order = board.calls.map((call) => call.url.split("/api/mcp")[1].split("?")[0]);
-  assert.ok(order.indexOf("/tasks/update") < order.indexOf("/comments"));
-  assert.deepEqual(boardCall(board, "/tasks/update"), { task_id: 501, status: "Normal", sectionId: 7 });
+  assert.deepEqual(order, ["/tasks", "/tasks", "/projects", "/tasks/update", "/tasks/update", "/comments"]);
+  const updates = board.calls.filter((call) => call.url.endsWith("/tasks/update")).map((call) => JSON.parse(call.options.body));
+  assert.deepEqual(updates, [{ task_id: 501, status: "Normal" }, { task_id: 501, sectionId: 7 }]);
   assert.equal(boardCall(board, "/comments").task_id, 501);
 });
 

@@ -91,7 +91,8 @@ async function reopen(fetchImpl, token, taskId, log) {
   const active = sections?.find((item) => (item.section_title ?? item.title) === "Backlog")
     ?? sections?.find((item) => (item.section_title ?? item.title) !== "Done");
   if (!active?.id) throw new Error(`Board ${BOARD} active section is unavailable.`);
-  await boardWrite(fetchImpl, token, "/tasks/update", { task_id: taskId, status: "Normal", sectionId: Number(active.id) });
+  await boardWrite(fetchImpl, token, "/tasks/update", { task_id: taskId, status: "Normal" });
+  await boardWrite(fetchImpl, token, "/tasks/update", { task_id: taskId, sectionId: Number(active.id) });
   log(`Required-check publishers: reopened ticket ${taskId}.`);
 }
 
