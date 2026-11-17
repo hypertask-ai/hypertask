@@ -1,4 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 export const FLASH = "deepseek/deepseek-v4.1-flash";
 export const PSTACK_VERIFIER = { model: FLASH, endpoint: "https://openrouter.ai/api/v1/chat/completions" };
@@ -165,6 +169,21 @@ export function decide({ model = {}, plan, evidence, binding }) {
   if (verdict !== "PASS" && verdict !== "PASS+NOTES") return { verdict: "FAIL", notes: String(model.notes || "model verdict missing").slice(0, 500) };
   return { verdict, notes: String(model.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500) };
 }
+function failureText(error) {
+  return redact(String(error?.message ?? error).split("\n")[0], secretValues()).slice(0, 180);
+}
+export function githubEnv(base = process.env) {
+  if (!base.GH_TOKEN) throw new Error("gh token is missing");
+  const env = { ...base };
+  delete env.GITHUB_TOKEN;
+  return env;
+}
+export function githubHeaders(env = process.env) {
+  return { Authorization: `Bearer ${githubEnv(env).GH_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
+}
+export function attemptUrl(repo, run, attempt) {
+  return `https://github.com/${repo}/actions/runs/${run}/attempts/${attempt}`;
+}
 function secretValues() {
   return [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN].filter(Boolean);
 }
@@ -191,4 +210,132 @@ export async function completeWithOpenRouter(prompt, { key, model, images = [], 
   const text = (await response.json()).choices?.[0]?.message?.content;
   if (!text) throw new Error("model returned nothing");
   return text;
+}
+function requireRepo(repo) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? "")) throw new Error("repository is not a name");
+  return repo;
+}
+function gh(args) {
+  const result = spawnSync("gh", args, { encoding: "utf8", env: githubEnv() });
+  if (result.status !== 0) throw new Error((result.stderr || "gh failed").split("\n")[0]);
+  return result.stdout;
+}
+function output(values) {
+  const file = process.env.GITHUB_OUTPUT;
+  if (!file) return;
+  const lines = Object.entries(values).map(([key, value]) => {
+    const body = String(value ?? "");
+    return body.includes("\n") ? `${key}<<EOF_${key}\n${body}\nEOF_${key}` : `${key}=${body}`;
+  });
+  writeFileSync(file, `${lines.join("\n")}\n`, { flag: "a" });
+}
+function workDir() {
+  return process.env.WORK || path.join(process.env.RUNNER_TEMP || "/tmp", "pstack-verifier");
+}
+function bindingNow(sha = process.env.HEAD_SHA) {
+  return { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
+}
+async function postStatus({ repo, sha, run, attempt, state, description }) {
+  const response = await fetch(`https://api.github.com/repos/${repo}/statuses/${sha}`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ state, context: CONTEXT, description: String(description).slice(0, 140), target_url: attemptUrl(repo, run, attempt) }) });
+  if (!response.ok) throw new Error(`status HTTP ${response.status}`);
+}
+async function postComment(repo, pr, body) {
+  const response = await fetch(`https://api.github.com/repos/${repo}/issues/${pr}/comments`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ body: String(body).slice(0, 4000) }) });
+  if (!response.ok) throw new Error(`comment HTTP ${response.status}`);
+}
+function imagesIn(dir) {
+  try {
+    return readdirSync(dir).filter((name) => name.endsWith(".png")).sort().slice(0, 6).flatMap((name) => {
+      const data = readFileSync(path.join(dir, name));
+      return data.length > 180000 ? [] : [data.toString("base64")];
+    });
+  } catch { return []; }
+}
+async function resolveCommand() {
+  const run = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")).workflow_run ?? {};
+  const repo = requireRepo(process.env.GITHUB_REPOSITORY);
+  const sha = String(run.head_sha ?? "");
+  const bound = { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
+  if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true" }); return; }
+  let number = String(run.pull_requests?.[0]?.number ?? "");
+  if (!/^[0-9]+$/.test(number)) {
+    const matches = JSON.parse(gh(["api", `repos/${repo}/commits/${sha}/pulls`])).filter((item) => item.state === "open" && item.draft === false && item.base?.ref === "production" && item.head?.sha === sha && item.head?.repo?.full_name === repo);
+    if (matches.length !== 1) { output({ stop: "true" }); return; }
+    number = String(matches[0].number);
+  }
+  const item = JSON.parse(gh(["api", `repos/${repo}/pulls/${number}`]));
+  if (item.state !== "open" || item.draft || item.base?.ref !== "production" || item.head?.sha !== sha || item.head?.repo?.full_name !== repo) { output({ stop: "true" }); return; }
+  const gate = authorGate(item.body);
+  if (gate.stop) {
+    await postStatus({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
+    output({ stop: "true" });
+    return;
+  }
+  const files = gh(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[].filename"]).split("\n").filter(Boolean).slice(0, 100);
+  const diff = gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/pulls/${item.number}`]).slice(0, 12000);
+  const dir = path.join(workDir(), "request");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "request.json"), `${JSON.stringify({ ...bound, pr: item.number, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files, author: gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" })}\n`, { mode: 0o600 });
+  await postStatus({ repo, ...bound, state: "pending", description: "Planning a user check" });
+  output({ stop: "false", pr: String(item.number), sha, files: files.join("\n"), author: gate.author });
+}
+async function planCommand() {
+  const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
+  const binding = bindingNow();
+  if (request.sha !== binding.sha || String(request.run) !== binding.run || String(request.attempt) !== binding.attempt) throw new Error("schema/binding mismatch");
+  const picked = pickVerifier(request.author, process.env.PSTACK_VERIFIER_ALT_MODEL);
+  const plan = { ...binding, authorFamily: request.author, verifierModel: picked.model || "", actions: [], expect: [], reason: "", fail: picked.fail || "", claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
+  if (!picked.fail) {
+    try {
+      const parsed = parsePlan(await completeWithOpenRouter(buildPrompt({ kind: "plan", ...request }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model }));
+      plan.actions = parsed.actions; plan.expect = parsed.expect; plan.reason = parsed.reason;
+    } catch (error) { plan.fail = failureText(error); }
+  }
+  const dir = path.join(workDir(), "plan");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "plan.json"), `${JSON.stringify(plan)}\n`, { mode: 0o600 });
+  output({ empty: plan.actions.length ? "false" : "true", model: plan.verifierModel });
+}
+async function judgeCommand() {
+  const binding = bindingNow();
+  const plan = readPlan(readFileSync(path.join(workDir(), "plan", "plan.json"), "utf8"), binding);
+  let evidence = null;
+  try { evidence = JSON.parse(readFileSync(path.join(workDir(), "evidence", "evidence.json"), "utf8")); } catch { evidence = null; }
+  let model = { verdict: "", notes: "" };
+  const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
+  if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
+    try {
+      const parsed = parseAnswer(await completeWithOpenRouter(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model, images: imagesIn(path.join(workDir(), "evidence", "shots")) }));
+      model = { verdict: parsed.verdict, notes: parsed.notes };
+    } catch (error) { model = { verdict: "FAIL", notes: failureText(error) }; }
+  }
+  const verdict = decide({ model, plan, evidence, binding });
+  const dir = path.join(workDir(), "verdict");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, authorFamily: plan.authorFamily || "", verifierModel: plan.verifierModel || "" })}\n`, { mode: 0o600 });
+}
+async function postCommand() {
+  const repo = requireRepo(process.env.GITHUB_REPOSITORY);
+  const binding = bindingNow();
+  const pr = String(process.env.PR ?? "");
+  if (!/^[0-9]+$/.test(pr) || !/^[0-9a-f]{40}$/.test(binding.sha)) throw new Error("the pull request head is missing");
+  const item = JSON.parse(gh(["api", `repos/${repo}/pulls/${pr}`]));
+  let saved;
+  try { saved = readVerdict(readFileSync(path.join(workDir(), "verdict", "verdict.json"), "utf8"), binding); }
+  catch { saved = { verdict: "FAIL", notes: "schema/binding mismatch", authorFamily: "", verifierModel: "" }; }
+  if (item.head?.sha !== binding.sha) saved = { ...saved, verdict: "FAIL", notes: "the pull request head moved" };
+  const description = `${saved.verdict}: author ${saved.authorFamily || "unknown"}, verifier ${saved.verifierModel || "none"}`.slice(0, 140);
+  await postStatus({ repo, ...binding, state: saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure", description });
+  if (saved.verdict !== "PASS") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()));
+}
+async function main() {
+  const command = process.argv[2];
+  if (command === "resolve") await resolveCommand();
+  else if (command === "plan") await planCommand();
+  else if (command === "judge") await judgeCommand();
+  else if (command === "post") await postCommand();
+  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|post");
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().catch((error) => { console.error(redact(error.message ?? String(error), secretValues())); process.exitCode = 1; });
 }

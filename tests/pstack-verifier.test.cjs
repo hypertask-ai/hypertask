@@ -42,3 +42,10 @@ test("a verdict from another attempt fails", async () => {
   assert.equal(readVerdict(JSON.stringify({ ...pass, attempt: "2" }), binding).verdict, "FAIL");
   assert.equal(readVerdict(JSON.stringify(pass), binding).verdict, "PASS");
 });
+
+test("github calls read GH_TOKEN and ignore GITHUB_TOKEN", async () => {
+  const { githubHeaders, githubEnv } = await load();
+  assert.equal(githubHeaders({ GH_TOKEN: "abc", GITHUB_TOKEN: "nope" }).Authorization, "Bearer abc");
+  assert.equal(Object.hasOwn(githubEnv({ GH_TOKEN: "abc", GITHUB_TOKEN: "nope" }), "GITHUB_TOKEN"), false);
+  assert.throws(() => githubHeaders({ GITHUB_TOKEN: "nope" }), /gh token is missing/);
+});

@@ -1,0 +1,100 @@
+name: pstack-verifier
+on:
+  workflow_run:
+    workflows: ["Pstack Verifier Request"]
+    types: [completed]
+permissions: {}
+concurrency:
+  group: pstack-verifier-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+jobs:
+  resolve:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read, pull-requests: read, statuses: write }
+    outputs:
+      stop: ${{ steps.resolve.outputs.stop }}
+      pr: ${{ steps.resolve.outputs.pr }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      files: ${{ steps.resolve.outputs.files }}
+      author: ${{ steps.resolve.outputs.author }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
+      - id: resolve
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: node scripts/pstack-verifier.mjs resolve
+      - if: steps.resolve.outputs.stop != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: "pstack-request-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, path: "${{ runner.temp }}/pstack-verifier/request" }
+  plan:
+    needs: [resolve]
+    if: needs.resolve.result == 'success' && needs.resolve.outputs.stop != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    outputs:
+      empty: ${{ steps.plan.outputs.empty }}
+      model: ${{ steps.plan.outputs.model }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with: { name: "pstack-request-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/request" }
+      - id: plan
+        env: { GH_TOKEN: "${{ github.token }}", OPENROUTER_EVAL_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}", PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}" }
+        run: node scripts/pstack-verifier.mjs plan
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: "pstack-plan-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, if-no-files-found: error, path: "${{ runner.temp }}/pstack-verifier/plan" }
+  judge:
+    needs: [resolve, plan]
+    if: always() && needs.resolve.outputs.stop != 'true' && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with: { name: "pstack-plan-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/plan" }
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        continue-on-error: true
+        with: { name: "pstack-evidence-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/evidence" }
+      - env: { GH_TOKEN: "${{ github.token }}", OPENROUTER_EVAL_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}", PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}" }
+        run: node scripts/pstack-verifier.mjs judge
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, if-no-files-found: error, path: "${{ runner.temp }}/pstack-verifier/verdict" }
+  post:
+    needs: [resolve, judge]
+    if: always() && needs.resolve.outputs.stop != 'true' && needs.resolve.result == 'success' && needs.judge.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { contents: read, pull-requests: write, statuses: write }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        continue-on-error: true
+        with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/verdict" }
+      - env: { GH_TOKEN: "${{ github.token }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}", PR: "${{ needs.resolve.outputs.pr }}" }
+        run: node scripts/pstack-verifier.mjs post
+  cancel:
+    needs: [resolve, post]
+    if: always() && needs.resolve.outputs.stop != 'true' && needs.post.result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: { statuses: write }
+    steps:
+      - env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          set -euo pipefail
+          repo="${{ github.repository }}"
+          sha="${{ github.event.workflow_run.head_sha }}"
+          run_id="${{ github.run_id }}"
+          attempt="${{ github.run_attempt }}"
+          url="https://github.com/${repo}/actions/runs/${run_id}/attempts/${attempt}"
+          state="$(gh api "repos/${repo}/commits/${sha}/statuses" --jq '.[] | select(.context=="pstack-verifier" and .target_url=="'"${url}"'") | .state' | head -n 1 || true)"
+          if [ "$state" = "success" ] || [ "$state" = "failure" ]; then exit 0; fi
+          gh api --method POST "repos/${repo}/statuses/${sha}" -f state=failure -f context=pstack-verifier -f description="FAIL: The verifier did not finish." -f target_url="$url"
+          exit 1
