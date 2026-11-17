@@ -173,6 +173,21 @@ test("user-delivered files outside src cannot take the non-app pass", async () =
   assert.equal(scripts.verdict, "PASS+NOTES");
 });
 
+test("agent docs and root markdown are non-app; a src file stays app", async () => {
+  const { decide, hasAppPath } = await load();
+  const reason = "no user path in this diff";
+  const files = [".claude/reference/rule-checks.md", "AGENTS.md", "scripts/lib/agent-rule-check-table.cjs", "tests/agent-rule-check-table.test.cjs"];
+  assert.equal(hasAppPath(files), false);
+  assert.equal(hasAppPath(["CLAUDE.md", "README.md"]), false);
+  const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files, filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  assert.match(passed.notes, /^no app path: /);
+  assert.equal(hasAppPath(["src/app/page.tsx"]), true);
+  const app = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["src/app/page.tsx"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(app.verdict, "FAIL");
+  assert.match(app.notes, /no user path verified/);
+});
+
 test("a failed expect fails even when the model says PASS", async () => {
   const { decide } = await load();
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
