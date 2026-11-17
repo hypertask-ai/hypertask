@@ -53,6 +53,8 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/ai/prompts/registry") return registry;
     if (id === "@/lib/ai/chipEvents") return { signalAiChip: () => {} };
     if (id === "@/lib/ai/composeIntroTaskId") return { composeIntroTaskId: () => undefined };
+    if (id === "@/lib/contexts/mobileContext") return { MobileViewContext: require("react").createContext(false) };
+    if (id === "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen") return { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG: "htpr-8032-phone-chat-fullscreen" };
     if (id.startsWith("@/") || id.startsWith(".")) throw new Error(`Unstubbed ${file}: ${id}`);
     return require(id);
   }, mod, mod.exports);
