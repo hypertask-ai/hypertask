@@ -84,3 +84,22 @@ test("each verifier job has the declared permissions, key and token", async () =
   ];
   assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...liveRulesetContexts].sort());
 });
+
+test("drive waits on the host preview and records a down preview", () => {
+  const smoke = readFileSync("scripts/run-app-smoke-isolated.sh", "utf8");
+  const job = readFileSync("scripts/pstack-verifier-job.sh", "utf8");
+  const drive = readFileSync("scripts/pstack-verifier-drive.mjs", "utf8");
+  const appAt = smoke.indexOf('docker run -d --name "$app"');
+  const relayAt = smoke.indexOf('docker run -d --name "$relay"');
+  assert.equal(appAt > 0, true);
+  assert.equal(relayAt > appAt, true);
+  assert.equal(smoke.slice(appAt, relayAt).includes("-p 127.0.0.1:3100:3100"), false);
+  assert.equal(smoke.slice(relayAt).includes("-p 127.0.0.1:3100:3100"), true);
+  assert.match(smoke, /docker network create --internal/);
+  assert.match(smoke, /--network "\$publish_network"/);
+  assert.match(smoke, /waitForPreview/);
+  assert.match(smoke, /preview did not start/);
+  assert.match(job, /--preview-down/);
+  assert.match(drive, /waitForPreview\(ready\.url\)/);
+  assert.match(drive, /--preview-down/);
+});
