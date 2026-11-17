@@ -116,6 +116,41 @@ test('a person keeps their own id when the filter says me', async () => {
   ]);
 });
 
+test('a blank acting agent stores the person, not an empty id', async () => {
+  const { createView, calls } = fixture();
+
+  await createView({
+    projectId: 15,
+    userId: 6,
+    agentId: '   ',
+    title: 'My queue',
+    filters: { assignee_ids: ['me'] },
+  });
+
+  assert.deepEqual(calls.created[0].data.board_filters.addedFilters, [
+    { type: 'Assignees', searchPayload: [person] },
+  ]);
+});
+
+test('a native assignee payload of me stores the calling agent', async () => {
+  const { createView, calls } = fixture();
+
+  await createView({
+    projectId: 15,
+    userId: 6,
+    agentId,
+    title: 'Native me',
+    board_filters: {
+      matchFilters: 'ANY',
+      addedFilters: [{ type: 'Assignees', searchPayload: [{ id: 'me' }] }],
+    },
+  });
+
+  assert.deepEqual(calls.created[0].data.board_filters.addedFilters, [
+    { type: 'Assignees', searchPayload: [agent] },
+  ]);
+});
+
 test('with the flag off me is refused instead of matching nobody', async () => {
   const { createView } = fixture({ flagOn: false });
 

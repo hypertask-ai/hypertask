@@ -8,6 +8,12 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 
 import type { ToolContext } from "./context";
 
+const savedViewAssigneeId = z.union([
+  z.coerce.number().int().positive(),
+  z.string().uuid(),
+  z.literal("me"),
+]);
+
 export function createUpdateViewTool(context: ToolContext) {
   const { sendStatus, user, actingAgentId } = context;
   return {
@@ -31,7 +37,7 @@ export function createUpdateViewTool(context: ToolContext) {
             "ANY: the ticket has at least one of these tags. ALL: it has every tag. HIDE: leave out tickets that have any of these tags. Use HIDE for without, except, everything but, or hide these tags."
           ),
         assignee_ids: z
-          .array(z.union([z.coerce.number().int().positive(), z.string().uuid(), z.literal("me")]))
+          .array(savedViewAssigneeId)
           .optional()
           .describe("User ids, agent uuids, or me. [] clears."),
         match: z

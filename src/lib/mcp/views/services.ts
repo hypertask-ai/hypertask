@@ -121,15 +121,26 @@ async function buildLabelsFilterEntry(
 
 const SELF_ASSIGNEE = 'me';
 
+function isSelfAssignee(assigneeId: number | string): boolean {
+    return typeof assigneeId === 'string' && assigneeId.trim().toLowerCase() === SELF_ASSIGNEE;
+}
+
+function presentAgentId(agentId?: string | null): string | null {
+    if (typeof agentId !== 'string') return null;
+    const trimmed = agentId.trim();
+    return trimmed === '' ? null : trimmed;
+}
+
 async function resolveSelfAssignee(
     assigneeId: number | string,
     userId?: number,
     agentId?: string | null,
 ): Promise<number | string> {
-    if (typeof assigneeId !== 'string' || assigneeId.trim().toLowerCase() !== SELF_ASSIGNEE) return assigneeId;
+    if (!isSelfAssignee(assigneeId)) return assigneeId;
     if (userId === undefined) return assigneeId;
-    if (!await isFeatureEnabled(HTPR_9371_VIEW_ME_ASSIGNEE_FLAG, userId).catch(() => false)) return assigneeId;
-    return agentId ?? userId;
+    const enabled = await isFeatureEnabled(HTPR_9371_VIEW_ME_ASSIGNEE_FLAG, userId).catch(() => false);
+    if (!enabled) return assigneeId;
+    return presentAgentId(agentId) ?? userId;
 }
 
 async function buildAssigneesFilterEntry(
