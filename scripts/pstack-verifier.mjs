@@ -171,6 +171,7 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
     if (checksPending) return { verdict: "FAIL", notes: "checks still running" };
     return { verdict: "FAIL", notes: (reason ? `no user path verified: ${reason}` : "no user path verified").slice(0, 500) };
   }
+  if (evidence == null) return { verdict: "FAIL", notes: "evidence missing" };
   let seen;
   try { seen = readEvidence(evidence, binding); } catch { return { verdict: "FAIL", notes: "schema/binding mismatch" }; }
   const problems = [];
