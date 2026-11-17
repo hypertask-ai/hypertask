@@ -1,3 +1,4 @@
+import { PLAIN_LANGUAGE_TICKET_LABELS, hasPlainLanguageTicketBlock, missingPlainLanguageTicketLabels, ticketOpening } from '../tickets/plainLanguageTicket.mjs'
 import { parse } from 'node-html-parser'
 import { FLAG_CHAT_RECORD, normalizeVisibleText } from '@/lib/flags/approvalWords'
 import { MAX_CHECK_TEXT_LENGTH, dropBlockquotes, stripTags } from '@/lib/text/safeHtmlText.mjs'
@@ -19,7 +20,6 @@ const TECHNICAL_KINDS: Array<[RegExp, string]> = [
 const TECHNICAL_DETAIL = new RegExp(TECHNICAL_KINDS.map(([pattern]) => pattern.source).join('|'))
 const DASHED_CODE_NAME = /\b(?:htpr|yper\d+|hyci|htfe|hefe|inne)-\d+(?:-[a-z0-9]+)+\b/i
 const PLAIN_VALENTIN_QUOTE = /Valentin\b(?:\s*,|\s+\([^)\n]{0,48}\))?(?:\s+\d{4}-\d{2}-\d{2})?\s*:\s*["“]|Valentin\s+(?:said|says|wrote|asked|replied)\b[^.\n]{0,24}["“]/i
-const TICKET_PARTS = ['Problem', 'Fix', 'Done when', 'Risk', 'Decision'] as const
 const QUESTION_PARTS = ['What this is', 'Question', 'My recommendation', 'Why', 'Yes', 'No'] as const
 
 const PLAIN_ADVICE = 'Use short plain sentences for people; put technical details and status in the agent log.'
@@ -28,7 +28,7 @@ const BUILD_LINK_ADVICE = 'Keep people text plain: link the build or commit inst
 const DASHED_CODE_FIX = 'Say what it does in plain words. Put the code name in the agent log.'
 const QUOTE_FIX = 'Put his words in a quote block, not in quote marks.'
 const QUESTION_FIX = 'Start with What this is. Then at most three plain points. Then Question, My recommendation, Why, Yes and No, each on its own line.'
-const PARTS_FIX = 'Add the missing part in plain words. Risk says what can go wrong and how to undo.'
+const PARTS_FIX = 'Use the five opening lines from docs/ticket-template.md. Put technical details below a divider.'
 
 export type AgentWritingRule = {
   id: string
@@ -54,6 +54,7 @@ const RULES = new Map(AGENT_WRITING_RULES.map((rule) => [rule.id, rule]))
 export class AgentWritingError extends Error {
   readonly status = 400
   readonly code = 'invalid_field'
+  readonly violations: { field: string; rule?: string; message: string }[] = []
 
   constructor(readonly field: string, reason: string, offender?: string, advice = PLAIN_ADVICE, readonly rule?: string) {
     const quoted = excerpt(offender)
@@ -61,8 +62,8 @@ export class AgentWritingError extends Error {
   }
 }
 
-export function agentWritingDetails(error: AgentWritingError): { field: string; code: 'agent_writing' } {
-  return { field: error.field, code: 'agent_writing' }
+export function agentWritingDetails(error: AgentWritingError) {
+  return { field: error.field, code: 'agent_writing' as const, violations: error.violations }
 }
 
 function excerpt(text: string | undefined): string {
@@ -184,21 +185,15 @@ function questionHit(html: string): Hit | null {
   return null
 }
 
-function hasTicketPart(html: string, name: string): boolean {
-  const label = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
-  const source = parse(html).structuredText
-  return new RegExp(`(?:^|\\n)\\s*(?:\\*\\*)?${label}\\s*[:.]?(?:\\*\\*)?(?=\\s|$)`, 'i').test(source)
-}
-
 function partsHit(html: string): Hit | null {
-  const missing = TICKET_PARTS.find((part) => !hasTicketPart(html, part))
-  return missing ? { reason: `${missing} is missing`, offender: missing } : null
+  if (hasPlainLanguageTicketBlock(html)) return null
+  const missing = missingPlainLanguageTicketLabels(html)
+  return { reason: missing.length ? `${missing.join(', ')} is missing` : 'Opening labels need ordered, nonempty values', offender: missing.join(', ') }
 }
 
-function fail(field: string, id: string, hit: Hit): never {
+function refusal(field: string, id: string, hit: Hit): AgentWritingError {
   const rule = ruleById(id)
-  if (hit.legacy) throw new AgentWritingError(field, hit.reason, hit.offender, hit.fix ?? rule.fix, rule.id)
-  throw new AgentWritingError(field, `Rule ${rule.name}: ${hit.reason}`, hit.offender, hit.fix ?? rule.fix, rule.id)
+  return new AgentWritingError(field, hit.legacy ? hit.reason : `Rule ${rule.name}: ${hit.reason}`, hit.offender, hit.fix ?? rule.fix, rule.id)
 }
 
 export type AgentWritingContext = { create?: boolean; houseRules?: boolean; commentEdit?: boolean }
@@ -212,6 +207,7 @@ export function assertAgentWriting(
   context: AgentWritingContext = {},
 ): void {
   if (!agentId) return
+  const errors: AgentWritingError[] = []
   const lineRules = AGENT_WRITING_RULES.filter((rule) => rule.scope === 'line')
   const fieldRules = AGENT_WRITING_RULES.filter((rule) => rule.scope === 'field')
   const createRules = AGENT_WRITING_RULES.filter((rule) => rule.scope === 'create-description')
@@ -219,29 +215,40 @@ export function assertAgentWriting(
     const value = fields[field]
     if (typeof value !== 'string') continue
     if (value.length > MAX_CHECK_TEXT_LENGTH) {
-      throw new AgentWritingError(field, `Keep text within ${MAX_CHECK_TEXT_LENGTH} characters`)
+      errors.push(new AgentWritingError(field, `Keep text within ${MAX_CHECK_TEXT_LENGTH} characters`))
+      continue
     }
-    const old = previous[field]
+    const checked = field === 'description' ? ticketOpening(value) : value
+    const oldValue = previous[field]
+    const old = field === 'description' && typeof oldValue === 'string' && oldValue.length <= MAX_CHECK_TEXT_LENGTH ? ticketOpening(oldValue) : oldValue
     const unchanged = new Set(typeof old === 'string' && old.length <= MAX_CHECK_TEXT_LENGTH ? lines(old) : [])
-    const fresh = lines(value).filter((line) => !unchanged.has(line))
+    const fresh = lines(checked).filter((line) => !unchanged.has(line))
     for (const line of fresh) {
+      const label = field === 'description' ? PLAIN_LANGUAGE_TICKET_LABELS.find((part: string) => labelPattern(part).test(line)) : undefined
+      const prose = label ? line.replace(labelPattern(label), '').trim() : line
       for (const rule of lineRules) {
         if (!context.houseRules && HOUSE_RULES.has(rule.id)) continue
-        const hit = lineHit(rule.id, line)
-        if (hit) fail(field, rule.id, hit)
+        const hit = lineHit(rule.id, prose)
+        if (hit) errors.push(refusal(field, rule.id, hit))
       }
     }
     if (context.houseRules && fresh.some((line) => labelPattern('Question').test(line))) {
       for (const rule of fieldRules) {
-        const hit = rule.id === 'question-shape' ? questionHit(value) : null
-        if (hit) fail(field, rule.id, hit)
+        const hit = rule.id === 'question-shape' ? questionHit(checked) : null
+        if (hit) errors.push(refusal(field, rule.id, hit))
       }
     }
     if (context.houseRules && context.create && field === 'description') {
       for (const rule of createRules) {
-        const hit = rule.id === 'ticket-parts' ? partsHit(value) : null
-        if (hit) fail(field, rule.id, hit)
+        const hit = rule.id === 'ticket-parts' ? partsHit(checked) : null
+        if (hit) errors.push(refusal(field, rule.id, hit))
       }
     }
+  }
+  if (errors.length) {
+    const first = errors[0]
+    first.violations.push(...errors.map((error) => ({ field: error.field, rule: error.rule, message: error.message })))
+    first.message = [...new Set(errors.map((error) => error.message))].join('\n')
+    throw first
   }
 }

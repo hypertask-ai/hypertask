@@ -1,3 +1,4 @@
+import { assertAgentWriting, AgentWritingError } from "@/lib/agents/writing";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { generateText } from "ai";
@@ -74,6 +75,15 @@ export async function generateTaskWriterDraft(
             body.taskTitle.trim() || taskTitleFromBrief(body.PROMPT),
         })
       : { title: null, description: draftHtml };
+
+  if (agentId && body.aiMode === "AiTaskWriter") {
+    try {
+      assertAgentWriting(agentId, properties, {}, { create: true, houseRules: true });
+    } catch (error) {
+      if (error instanceof AgentWritingError) return { success: false as const, error: error.message };
+      throw error;
+    }
+  }
 
   const parsedAt = Date.now();
   console.info(`[ai/task-writer] stages ${JSON.stringify({

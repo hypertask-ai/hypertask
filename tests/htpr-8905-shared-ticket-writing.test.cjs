@@ -5,8 +5,13 @@ const { load } = require("./task-route-loader.cjs");
 const { assertAgentWriting, AgentWritingError, AGENT_WRITING_RULES } = load("src/lib/agents/writing.ts", {});
 const flagKey = "htpr-8905-shared-ticket-writing";
 
-const withRisk = `<h2>Problem</h2><p>Search omits reminders.</p><h2>Fix</h2><p>Search reads reminders.</p><h2>Done when</h2><p>Search finds reminders.</p><h2>Risk</h2><p>Low. Undo: revert one change.</p><h2>Decision</h2><p>None.</p>`;
-const withoutRisk = withRisk.replace("<h2>Risk</h2><p>Low. Undo: revert one change.</p>", "");
+const { renderPlainLanguageTicketDescription } = load("src/lib/tickets/plainLanguageTicket.mjs");
+const withRisk = renderPlainLanguageTicketDescription({
+  whatWrongOrWanted: "Search omits reminders.", whoItAffects: "Everyone.",
+  recommendedCourseAndWhy: "Restore search. People need reminders.",
+  whatValentinMustDecide: "Nothing.", howToUndo: "Revert the change.",
+}).replace("<hr>", "");
+const withoutRisk = withRisk.replace(/<p><strong>How to undo:[\s\S]*?<\/p>/, "");
 
 const examples = {
   "robot-status": { title: "Search finds reminders", description: `${withRisk}<p>Helpers: none.</p>` },
@@ -40,7 +45,8 @@ function appCreate(sharedOn) {
     project: { findFirst: async () => ({ id: 7 }), findUnique: async () => ({ uniqueIdentifier: "HTPR" }) },
     task: { create: async ({ data }) => { writes.push(data); return { id: 91, projectId: 7, ...data }; } },
     section: { findFirst: async () => ({ id: 12, section_title: "Todo" }) },
-    label: { findMany: async () => [] },
+    taskLabel: { createMany: async () => {}, findMany: async () => [] },
+    label: { findMany: async () => [], create: async () => ({ id: "medium" }) },
     $executeRaw: async () => {},
   };
   const effects = {
@@ -107,7 +113,7 @@ function toolCreate() {
     "@/utils/controllers/agents/boardMembers": { isAgentOnBoard: async () => true },
     "@/lib/mcp/tasks/mappers": { mapTaskToDetail: (task) => task },
     "@/lib/mcp/idempotency/idempotencyStore": { normalizeIdempotencyKey: () => null, withIdempotency: async (_op, _user, _key, _body, write) => write(), IdempotencyAccessError: class extends Error {}, IdempotencyInProgressError: class extends Error {} },
-    "@/lib/prisma": { default: { task: { findMany: async () => [] }, user: { findUnique: async () => ({ id: 6, email: "qa@example.com" }) }, label: { findMany: async () => [] } } },
+    "@/lib/prisma": { default: { task: { findMany: async () => [] }, user: { findUnique: async () => ({ id: 6, email: "qa@example.com" }) }, label: { findMany: async () => [], create: async () => ({ id: "medium" }) } } },
     "@/lib/flags": { isFeatureEnabled: async (key) => key === "yper4-910-agent-writing" || key === "htpr-8798-writing-house-rules" || key === flagKey },
     "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (text) => text },
     "@/utils/helperFunctions/sanitizeRichHtml": { sanitizeRichHtml: (text) => text },

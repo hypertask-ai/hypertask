@@ -21,6 +21,39 @@ function openingLabelPattern(label) {
   return new RegExp(`^\\s*${escaped}\\s*:(?=\\s)`, "i");
 }
 
+export function ticketOpening(html) {
+  let cursor = 0;
+  while (cursor < html.length) {
+    const start = html.indexOf("<", cursor);
+    if (start === -1) break;
+    if (html.startsWith("<!--", start)) {
+      const close = html.indexOf("-->", start + 4);
+      if (close === -1) break;
+      cursor = close + 3;
+      continue;
+    }
+    let quote = "";
+    let end = start + 1;
+    for (; end < html.length; end += 1) {
+      const char = html[end];
+      if (quote) { if (char === quote) quote = ""; }
+      else if (char === '"' || char === "'") quote = char;
+      else if (char === ">") break;
+    }
+    if (end === html.length) break;
+    const tag = html.slice(start, end + 1);
+    if (/^<hr(?=[\s/>])/i.test(tag)) return html.slice(0, start);
+    cursor = end + 1;
+    const raw = tag.match(/^<(script|style|textarea)(?=[\s>])/i);
+    if (raw) {
+      const close = html.toLowerCase().indexOf(`</${raw[1].toLowerCase()}`, cursor);
+      if (close === -1) break;
+      cursor = close;
+    }
+  }
+  return html;
+}
+
 function structuredText(html) {
   return stripTags(dropBlockquotes(html)
     .replace(/<br\s*\/?>/gi, "\n")
@@ -54,17 +87,23 @@ export function assertPlainLanguageTicketBlock(html) {
 
 export function hasPlainLanguageTicketBlock(html) {
   if (typeof html !== "string" || html.length > MAX_CHECK_TEXT_LENGTH || !html.trim()) return false;
-  const source = structuredText(html);
+  const source = structuredText(ticketOpening(html));
   const trimmed = source.trimStart();
   const opener = openingLabelPattern(PLAIN_LANGUAGE_TICKET_LABELS[0]);
   const atStart = trimmed.match(opener);
   if (!atStart || atStart.index !== 0) return false;
-  return PLAIN_LANGUAGE_TICKET_LABELS.every((label) => labelPattern(label).test(source));
+  let end = atStart[0].length;
+  for (let index = 1; index < PLAIN_LANGUAGE_TICKET_LABELS.length; index += 1) {
+    const match = source.match(labelPattern(PLAIN_LANGUAGE_TICKET_LABELS[index]));
+    if (!match || match.index <= end || !source.slice(end, match.index).trim()) return false;
+    end = match.index + match[0].length;
+  }
+  return Boolean(source.slice(end).trim());
 }
 
 export function missingPlainLanguageTicketLabels(html) {
   if (typeof html !== "string" || html.length > MAX_CHECK_TEXT_LENGTH || !html.trim()) return [...PLAIN_LANGUAGE_TICKET_LABELS];
-  const source = structuredText(html);
+  const source = structuredText(ticketOpening(html));
   return PLAIN_LANGUAGE_TICKET_LABELS.filter((label) => !labelPattern(label).test(source));
 }
 
@@ -133,4 +172,8 @@ export const INTERNAL_AGENT_TICKET_BOARDS = new Set([15, 4060]);
 
 export function isInternalAgentTicketBoard(projectId) {
   return INTERNAL_AGENT_TICKET_BOARDS.has(projectId);
+}
+
+export function plainLanguageTicketWriterRule() {
+  return `Use docs/ticket-template.md on every board. Open with exactly these five labelled paragraphs in order: ${PLAIN_LANGUAGE_TICKET_LABELS.map((label) => `${label}:`).join("; ")}. Give each a nonempty plain value. Use at most twelve words per sentence, excluding the label. Keep status, code, paths, ids, repro commands and raw source text below the first <hr>. Preserve those details there. This opening replaces default or board-specific Now/Problem/Fix/Done when/Risk/Decision sections. Keep the title plain. The decision is a yes/no question or nothing.`;
 }

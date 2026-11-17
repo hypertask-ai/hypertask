@@ -1,6 +1,6 @@
 # Ticket template
 
-Every ticket writer on Hypertask internal boards uses this shape. One file, plain language, a recommendation in every ticket. Do not copy this text into skills or prompts; link to `docs/ticket-template.md` in the repo.
+Agent ticket writers use this shape on every board. One file, plain language, a recommendation in every ticket. Do not copy this text into skills or prompts; link to `docs/ticket-template.md` in the repo.
 
 ## The block (required for machine checks)
 
@@ -37,3 +37,17 @@ Optional after the divider: related tickets, what was tried, screenshots, and pr
 > ---
 >
 > Done when: E removes the ticket, it stays gone after two reloads, and the next ticket takes focus.
+
+## Validation
+
+Only the opening receives description style checks.
+The first HTML divider ends that opening.
+Evidence below it keeps commands and raw errors.
+Titles and people comments retain their own checks.
+The description size limit still applies.
+
+Refusals list every detected writing rule together.
+Agent drafts receive the same validation.
+Missing brain labels default to brain-medium.
+
+Implementation: `src/lib/tickets/plainLanguageTicket.mjs` and `src/lib/agents/writing.ts`.

@@ -1,3 +1,4 @@
+import { plainLanguageTicketWriterRule } from "@/lib/tickets/plainLanguageTicket.mjs";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7977_SHORT_TASK_WRITER_FLAG, HTPR_9009_WRITER_URGENCY_FLAG, HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
@@ -464,6 +465,7 @@ export async function prepareTaskWriterRun(
   if (body.aiMode === "AiTaskWriter" && await isFeatureEnabled(HTPR_7977_SHORT_TASK_WRITER_FLAG, userId)) {
     suffix += `\n\n${renderPrompt("task-writer-short-style-rule")}`;
   }
+  if (agentId && body.aiMode === "AiTaskWriter") suffix += `\n\n${plainLanguageTicketWriterRule()}`;
   const instructions = await cachedInstructionsForUser(userId, {
     modelId: selected.modelId,
     fixed: fixedInstructions,

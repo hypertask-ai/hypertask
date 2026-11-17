@@ -1,3 +1,4 @@
+import { renderPlainLanguageTicketDescription } from "../../src/lib/tickets/plainLanguageTicket.mjs";
 import { createHash } from "node:crypto";
 
 // Files, or adds a note to, the emergency ticket on the Hypertask board when
@@ -46,14 +47,14 @@ function rollbackNote(kind, cause, message) {
 export function incidentDescription({ kind, cause, message = "", runUrl = "", now = new Date() }) {
   const when = now.toISOString().slice(0, 16).replace("T", " ");
   const link = runUrl ? `<p>Open <a href="${escapeHtml(runUrl)}">the failing run</a> for details.</p>` : "";
-  return (
-    `<h2>Problem</h2><p>${escapeHtml(incidentWhat(kind, cause, message))} on app.hypertask.ai.</p>` +
-    `<p>It was seen at ${when} UTC.</p><p>${rollbackNote(kind, cause, message)}</p>${link}` +
-    `<h2>Fix</h2><p>Find the cause. Bring the live app back first.</p>` +
-    `<h2>Done when</h2><p>The live checks pass again on app.hypertask.ai.</p>` +
-    `<h2>Risk</h2><p>Customers may see errors until this is fixed.</p>` +
-    `<h2>Decision</h2><p>None.</p>`
-  );
+  return renderPlainLanguageTicketDescription({
+    whatWrongOrWanted: `${incidentWhat(kind, cause, message)} on app.hypertask.ai.`,
+    whoItAffects: "Customers. The affected count is unknown.",
+    recommendedCourseAndWhy: "Restore the live app first. Customers may see errors.",
+    whatValentinMustDecide: "Nothing.",
+    howToUndo: "Revert the repair if needed.",
+  }) + `<p>It was seen at ${when} UTC.</p><p>${rollbackNote(kind, cause, message)}</p>${link}`;
+
 }
 
 export async function fileIncident(config, fetchImpl = fetch) {

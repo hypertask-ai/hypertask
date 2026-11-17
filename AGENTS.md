@@ -49,3 +49,12 @@ Runners never switch a flag Off; Off is Valentin's own safety switch.
 `src/` enforces comment rules through `local/no-comments`.
 
 Implementation lives in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, `src/lib/auth/`, `src/pages/api/queues/`, and `src/lib/realtime/`.
+
+## Ticket checks
+
+| Rule | Enforcement |
+|---|---|
+| One agent template on every board | `assertAgentWriting`, `plainLanguageTicket.mjs`, `one-ticket-template.test.cjs` |
+| Style checks stop at the divider | `ticketOpening`, divider and moved-evidence regression tests |
+| Missing brain labels default to medium | `defaultAgentBrainLabelIds`, `default-agent-brain-label.test.cjs` |
+| Agent writer drafts pass ticket validation | `generateTaskWriterDraft`, `task-writer-ticket-validator.test.cjs` |

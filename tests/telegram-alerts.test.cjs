@@ -71,7 +71,8 @@ test('unrunnable smoke creates one infra ticket, never Telegram, and updates it 
   const { assertAgentWriting } = loadModule('src/lib/agents/writing.ts');
   assert.doesNotThrow(() => assertAgentWriting('agent', { title: payload.title, description: payload.description }));
   assert.throws(() => assertAgentWriting('agent', { description: 'Smoke failed for commit a12bc3456789.' }), /build or commit id/);
-  assert.equal(payload.description, '<h2>Problem</h2><p>A production check could not finish.</p><h2>Fix</h2><p>Read the agent log for details.</p><h2>Done when</h2><p>The check finishes with a clear result.</p><h2>Risk</h2><p>A release warning could be missed.</p><h2>Decision</h2><p>None.</p>');
+  const { hasPlainLanguageTicketBlock } = await import('../src/lib/tickets/plainLanguageTicket.mjs');
+  assert.equal(hasPlainLanguageTicketBlock(payload.description), true);
   const activities = h.calls.filter((c) => c.url.endsWith('/activities'));
   assert.equal(activities.length, 2);
   assert.match(JSON.parse(activities[0].options.body).text, /QA session expired\nhttps:\/\/github.com\/test\/repo\/actions\/runs\/42/);

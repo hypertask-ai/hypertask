@@ -12,8 +12,13 @@ const shaped = `<p><strong>What this is:</strong> a flag that keeps a running ch
 <p><strong>Yes:</strong> everyone gets it.</p>
 <p><strong>No:</strong> it stays with me and QA.</p>`
 
-const withRisk = `<h2>Problem</h2><p>Search omits reminders.</p><h2>Fix</h2><p>Search reads reminders.</p><h2>Done when</h2><p>Search finds reminders.</p><h2>Risk</h2><p>Low. Undo: revert one change.</p><h2>Decision</h2><p>None.</p>`
-const withoutRisk = withRisk.replace('<h2>Risk</h2><p>Low. Undo: revert one change.</p>', '')
+const { renderPlainLanguageTicketDescription } = load('src/lib/tickets/plainLanguageTicket.mjs');
+const withRisk = renderPlainLanguageTicketDescription({
+  whatWrongOrWanted: 'Search omits reminders.', whoItAffects: 'Everyone.',
+  recommendedCourseAndWhy: 'Restore search. People need reminders.',
+  whatValentinMustDecide: 'Nothing.', howToUndo: 'Revert the change.',
+}).replace('<hr>', '');
+const withoutRisk = withRisk.replace(/<p><strong>How to undo:[\s\S]*?<\/p>/, '');
 
 const modelTickets = {
   'HTPR-7852': {
@@ -149,7 +154,7 @@ test('a Question split by line breaks still passes', () => {
 })
 
 test('a ticket heading with a non-breaking space still passes', () => {
-  const description = withRisk.replace('<h2>Done when</h2>', '<p><strong>Done&nbsp;when:</strong></p>')
+  const description = withRisk.replace('Who it affects:', 'Who&nbsp;it affects:')
   assert.doesNotThrow(() => assertAgentWriting('agent', { description }, {}, { create: true, houseRules: true }))
 })
 
@@ -167,8 +172,8 @@ for (const [ticket, body] of Object.entries(modelTickets)) {
   })
 }
 
-test('model ticket HTPR-7852 still passes on create', () => {
-  assert.doesNotThrow(() => assertAgentWriting('agent', modelTickets['HTPR-7852'], {}, { create: true, houseRules: true }))
+test('legacy model ticket needs the common template on create', () => {
+  assert.throws(() => assertAgentWriting('agent', modelTickets['HTPR-7852'], {}, { create: true, houseRules: true }), /What's wrong or wanted/)
 })
 
 function taskRoutes() {
@@ -212,14 +217,14 @@ function taskRoutes() {
   return { calls, create: (body) => create(request({ project_id: 15, title: 'Short title', ...body })) }
 }
 
-test('a ticket without Risk is refused on create', async () => {
+test('a ticket without undo is refused on create', async () => {
   const h = taskRoutes()
   const response = await h.create({ description: withoutRisk, dry_run: true })
   assert.equal(response.status, 400)
   const body = await response.json()
   assert.equal(body.field, 'description')
-  assert.match(body.error, /Rule Ticket parts: Risk is missing/)
-  assert.match(body.error, /what can go wrong and how to undo/)
+  assert.match(body.error, /Rule Ticket parts: How to undo is missing/)
+  assert.match(body.error, /docs\/ticket-template\.md/)
   assert.equal(h.calls.writes, 0)
   assert.equal((await h.create({ description: withRisk, dry_run: true })).status, 200)
 })
