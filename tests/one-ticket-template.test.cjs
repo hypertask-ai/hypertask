@@ -78,7 +78,6 @@ test('explicit brain choice is preserved',async()=>{
   assert.deepEqual(await h.defaultAgentBrainLabelIds(7,['bug','hard']),['bug','hard']);
   assert.equal(h.created.length,0);
 });
-
 const output='<h1 id="ai-generated-task-title">Search finds reminders</h1>'+template.renderPlainLanguageTicketDescription({whatWrongOrWanted:'Search misses reminders.',whoItAffects:'Everyone.',recommendedCourseAndWhy:'Restore search. People need reminders.',whatValentinMustDecide:'Nothing.',howToUndo:'Revert the change.'})+'<pre>node scripts/repro.mjs --project_id 15</pre>';
 function writer(text) {
  return load('src/app/api/ai/_lib/taskWriterDraft.ts',{
