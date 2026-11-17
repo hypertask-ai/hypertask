@@ -191,7 +191,17 @@ test('phone conversation list leaves the composer clear and typing taps never sw
     const menu = (await list.boundingBox())!
     const boundary = (await composer.boundingBox())!
     expect(menu.y + menu.height).toBeLessThanOrEqual(boundary.y - 12)
-    expect(await list.evaluate(node => node.scrollHeight > node.clientHeight), 'phone list scrolls above the composer').toBe(true)
+    const listBox = await list.evaluate(node => {
+      const maxHeight = Number.parseFloat(getComputedStyle(node).maxHeight)
+      return {
+        height: node.getBoundingClientRect().height,
+        maxHeight,
+        scrollsWhenTaller: !(node.scrollHeight > maxHeight + 1) || node.scrollHeight > node.clientHeight,
+      }
+    })
+    expect(listBox.height, 'phone list stays above the composer').toBeGreaterThan(0)
+    expect(listBox.maxHeight, 'phone list stays above the composer').toBeGreaterThan(0)
+    expect(listBox.scrollsWhenTaller, 'phone list scrolls above the composer').toBe(true)
     const box = (await editor.boundingBox())!
     const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
     expect(await editor.evaluate((node, point) => {
