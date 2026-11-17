@@ -23,12 +23,14 @@ function fakeGitHub(overrides = {}) {
   return { gh, calls };
 }
 
-function fakeBoard(tasks = []) {
+function fakeBoard(tasks = [], storedStatus = "Normal") {
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
-    if (url.includes("/tasks?")) return { ok: true, status: 200, json: async () => ({ tasks }) };
-    if (url.includes("/tasks/create") || url.includes("/comments")) return { ok: true, status: 200, json: async () => ({ success: true }) };
+    if (url.includes("/tasks?")) return { ok: true, status: 200, json: async () => ({ tasks: url.includes(`status=${storedStatus}`) ? tasks : [] }) };
+    if (url.includes("/projects?")) return { ok: true, status: 200, json: async () => ({ projects: [{ id: 11514, sections: [{ id: 7, section_title: "Backlog" }, { id: 9, section_title: "Done" }] }] }) };
+    if (url.includes("/tasks/create")) return { ok: true, status: 200, json: async () => ({ success: true, task: { id: 900 } }) };
+    if (url.includes("/tasks/update") || url.includes("/comments")) return { ok: true, status: 200, json: async () => ({ success: true }) };
     throw new Error(`unexpected board call ${url}`);
   };
   return { fetchImpl, calls };
@@ -90,6 +92,27 @@ test("the first silent check opens the reporting ticket on the monitoring board"
   assert.equal(created.project_id, 11514);
   assert.equal(created.title, TICKET_TITLE);
   assert.match(created.description, /What's wrong or wanted/);
+});
+
+test("the first silent check posts its names as the first comment on the new ticket", async () => {
+  const { run } = await load();
+  const board = fakeBoard();
+  await run({ gh: fakeGitHub().gh, fetchImpl: board.fetchImpl, now, env: { REPO: "test/repo", HYPERTASK_MCP_TOKEN: "t" }, log: () => {} });
+  const order = board.calls.map((call) => call.url.split("/api/mcp")[1].split("?")[0]);
+  assert.ok(order.indexOf("/tasks/create") < order.indexOf("/comments"));
+  const body = boardCall(board, "/comments");
+  assert.equal(body.task_id, 900);
+  assert.match(body.text, /<li><p>premerge-evidence<\/p><\/li>/);
+});
+
+test("an archived reporting ticket is reopened before the comment lands on it", async () => {
+  const { run } = await load();
+  const board = fakeBoard([{ id: 501, title: "[INFRA] A required check has no publisher" }], "Archive");
+  await run({ gh: fakeGitHub().gh, fetchImpl: board.fetchImpl, now, env: { REPO: "test/repo", HYPERTASK_MCP_TOKEN: "t" }, log: () => {} });
+  const order = board.calls.map((call) => call.url.split("/api/mcp")[1].split("?")[0]);
+  assert.ok(order.indexOf("/tasks/update") < order.indexOf("/comments"));
+  assert.deepEqual(boardCall(board, "/tasks/update"), { task_id: 501, status: "Normal", sectionId: 7 });
+  assert.equal(boardCall(board, "/comments").task_id, 501);
 });
 
 test("a healthy set of required checks writes nothing to the board", async () => {

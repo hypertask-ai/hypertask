@@ -349,7 +349,10 @@ window is silent: the job comments on the monitoring ticket on
 the step summary. The comment is idempotent per day and per set of silent
 contexts, so an unfixed check adds one comment a day, not one an hour. A quiet
 repository reports nothing, because no result at all cannot tell a broken
-publisher from a day without pull requests. Removing a required check stays
+publisher from a day without pull requests. An archived or deleted copy of that
+ticket is restored to Normal before the comment, so an outage never records its
+alert on a closed ticket, and the run that opens the ticket posts the silent
+names as its first comment. Removing a required check stays
 Valentin's call; the monitor reads the ruleset and never writes it.
 
 ## CI App API pool (YPER4-881)

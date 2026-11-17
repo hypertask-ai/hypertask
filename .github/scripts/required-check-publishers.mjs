@@ -85,21 +85,38 @@ async function boardWrite(fetchImpl, token, path, body, key) {
   return result;
 }
 
+async function reopen(fetchImpl, token, taskId, log) {
+  const projects = await boardWrite(fetchImpl, token, "/projects?limit=100");
+  const sections = (projects?.projects ?? []).find((item) => Number(item.id) === BOARD)?.sections;
+  const active = sections?.find((item) => (item.section_title ?? item.title) === "Backlog")
+    ?? sections?.find((item) => (item.section_title ?? item.title) !== "Done");
+  if (!active?.id) throw new Error(`Board ${BOARD} active section is unavailable.`);
+  await boardWrite(fetchImpl, token, "/tasks/update", { task_id: taskId, status: "Normal", sectionId: Number(active.id) });
+  log(`Required-check publishers: reopened ticket ${taskId}.`);
+}
+
 async function report({ fetchImpl, token, silent, now, log }) {
   const key = `required-check-publishers-${reportKey(silent, now)}`;
   let existing;
+  let found = null;
   for (const status of ["Normal", "Archive", "Deleted"]) {
     const page = await boardWrite(fetchImpl, token, `/tasks?project_id=${BOARD}&status=${status}&search=${encodeURIComponent(TICKET_TITLE)}&limit=100`);
     existing = (page?.tasks ?? []).find((task) => task.title === TICKET_TITLE);
-    if (existing) break;
+    if (existing) {
+      found = status;
+      break;
+    }
   }
   if (existing) {
+    if (found !== "Normal") await reopen(fetchImpl, token, existing.id, log);
     await boardWrite(fetchImpl, token, "/comments", { task_id: existing.id, text: commentText(silent), content_type: "html" }, key);
     log(`Required-check publishers: commented on ticket ${existing.id}.`);
     return;
   }
-  await boardWrite(fetchImpl, token, "/tasks/create", { project_id: BOARD, title: TICKET_TITLE, description: TICKET_DESCRIPTION, content_type: "html" }, key);
-  log("Required-check publishers: opened the reporting ticket.");
+  const created = await boardWrite(fetchImpl, token, "/tasks/create", { project_id: BOARD, title: TICKET_TITLE, description: TICKET_DESCRIPTION, content_type: "html" }, key);
+  if (!created?.task?.id) throw new Error("Board created the reporting ticket without a task id.");
+  await boardWrite(fetchImpl, token, "/comments", { task_id: created.task.id, text: commentText(silent), content_type: "html" }, key);
+  log(`Required-check publishers: opened ticket ${created.task.id}.`);
 }
 
 export async function run({ gh = ghApi, fetchImpl = fetch, env = process.env, now = Date.now(), log = console.log } = {}) {
