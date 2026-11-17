@@ -124,6 +124,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6461-my-tasks-snooze": true,
   "htpr-6938-my-tasks-icon-controls": true,
   "htpr-7871-ctrlk-ellipsis": true,
+  "htpr-7092-decisions": true,
 } as const;
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);

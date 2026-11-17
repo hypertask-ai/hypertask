@@ -688,7 +688,8 @@ test("decisions flag is retired and the Inbox Decisions split stays on", async (
   assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
   listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
   assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
-  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], true);
   await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
   listedRows = [];
 });
