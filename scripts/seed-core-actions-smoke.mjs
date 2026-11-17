@@ -30,7 +30,7 @@ try {
       email: `core-smoke-${runKey}@example.invalid`,
       displayName,
       UserSetting: {
-        create: { notification: false },
+        create: { notification: false, onboardingTourStatus: true },
       },
     },
   });
