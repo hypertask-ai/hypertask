@@ -20,5 +20,5 @@ env -u OPENROUTER_EVAL_KEY -u OPENCODE_API_KEY -u GH_TOKEN -u GITHUB_TOKEN -u AC
   bash "$trusted/scripts/run-app-smoke-isolated.sh" "$candidate" "$trusted" &
 boot_pid=$!
 for _ in $(seq 1 600); do [ -f "$ready" ] && break; kill -0 "$boot_pid" 2>/dev/null || break; sleep 2; done
-[ -f "$ready" ] || exit 1
+if [ ! -f "$ready" ]; then node "$trusted/scripts/pstack-verifier-drive.mjs" --preview-down; fi
 WORK="$work" PSTACK_READY="$ready" node "$trusted/scripts/pstack-verifier-drive.mjs"

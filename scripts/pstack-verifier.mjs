@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const { heavyNeeded } = createRequire(import.meta.url)("../.github/scripts/ci-change-scope.cjs");
+const heavyNeeded = (files) => createRequire(import.meta.url)("../.github/scripts/ci-change-scope.cjs").heavyNeeded(files);
 
 export const FLASH = "deepseek/deepseek-v4.1-flash";
 export const PSTACK_VERIFIER = { model: FLASH, endpoint: "https://openrouter.ai/api/v1/chat/completions" };
@@ -180,6 +180,7 @@ function sameSeries(seen, planned, key) {
 export function decide({ model = {}, plan, evidence, binding, checksPassed = false, checksPending = false }) {
   let parsed;
   try { parsed = readPlan(plan, binding); } catch { return { verdict: "FAIL", notes: "schema/binding mismatch" }; }
+  if (evidence?.preview === "down") return { verdict: "FAIL", notes: "preview did not start" };
   if (parsed.fail) return { verdict: "FAIL", notes: String(parsed.fail).slice(0, 500) };
   if (!parsed.actions.length) {
     const reason = String(parsed.reason ?? "").replace(/\s+/g, " ").trim();
@@ -266,6 +267,30 @@ export function hasAppPath(files) {
     if (!name.includes("/") && name.endsWith(".md")) return false;
     return true;
   });
+}
+export function selectPlan(files, filesTruncated = false) {
+  const list = Array.isArray(files) ? files : [];
+  if (filesTruncated || hasAppPath(list)) return null;
+  return { actions: [], expect: [], reason: "no user path: non-app files only" };
+}
+export function previewDownBody(binding) {
+  return { sha: binding.sha, run: String(binding.run), attempt: String(binding.attempt), preview: "down", steps: [], expects: [], navigations: [], offOrigin: [] };
+}
+export function notePreviewDown(plan, evidence) {
+  if (evidence?.preview === "down") plan.fail = "preview did not start";
+  return plan;
+}
+export async function waitForPreview(url, { fetchImpl = globalThis.fetch, rounds = 30, intervalMs = 1000, sleep = (ms) => new Promise((done) => { setTimeout(done, ms); }) } = {}) {
+  const target = new URL(url);
+  if (target.protocol !== "http:" || target.hostname !== "127.0.0.1") throw new Error("preview url is not local");
+  for (let attempt = 0; attempt < rounds; attempt += 1) {
+    try {
+      const response = await fetchImpl(target.href, { redirect: "manual", signal: AbortSignal.timeout(5000) });
+      if (Number(response.status) < 500) return true;
+    } catch {}
+    if (attempt + 1 < rounds) await sleep(intervalMs);
+  }
+  return false;
 }
 export function confirmsNoUserPath(reason) {
   return /no user path|no user-facing/i.test(String(reason ?? ""));
@@ -740,14 +765,11 @@ export async function planFromRequest(request, deps = {}) {
   const picked = pickVerifier(request.author, deps.altModel ?? process.env.PSTACK_VERIFIER_ALT_MODEL);
   const listed = planFileList(request);
   const plan = { ...binding, authorFamily: botLogin || request.author || "", verifierModel: botLogin ? "" : (picked.model || ""), actions: [], expect: [], reason: "", fail: botLogin ? "" : (picked.fail || ""), files: listed.files, filesTruncated: listed.filesTruncated, claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
-  if (botLogin) {
-    plan.actions = [];
-    plan.reason = "no user path";
-    plan.botLogin = botLogin;
-  } else if (!plan.fail && docsShortcut(listed.files, listed.filesTruncated)) {
-    plan.actions = [];
-    plan.reason = "no user path";
-  } else if (!plan.fail) {
+  const selected = botLogin || plan.fail ? null : selectPlan(listed.files, listed.filesTruncated);
+  if (botLogin) { plan.reason = "no user path"; plan.botLogin = botLogin; }
+  else if (!plan.fail && docsShortcut(listed.files, listed.filesTruncated)) plan.reason = "no user path";
+  else if (selected) Object.assign(plan, selected);
+  else if (!plan.fail) {
     try {
       const parsed = await ask(buildPrompt({ kind: "plan", ...request }), { key: deps.key ?? process.env.OPENROUTER_EVAL_KEY, model: picked.model }, parsePlan);
       plan.actions = parsed.actions; plan.expect = parsed.expect; plan.reason = parsed.reason;
@@ -770,6 +792,7 @@ async function judgeCommand() {
   let evidence = null;
   try { evidence = JSON.parse(readFileSync(path.join(workDir(), "evidence", "evidence.json"), "utf8")); } catch { evidence = null; }
   let model = { verdict: "", notes: "" };
+  notePreviewDown(plan, evidence);
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
   if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
     try {
@@ -829,6 +852,7 @@ async function main() {
   else if (command === "post") await postCommand();
   else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|post");
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
+if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   main().catch((error) => { console.error(redact(error.message ?? String(error), secretValues())); process.exitCode = 1; });
 }

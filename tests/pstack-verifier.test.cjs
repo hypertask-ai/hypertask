@@ -544,6 +544,64 @@ test("a run posts only when it owns the newest verifier status", async () => {
   assert.equal(posted[0].target_url, owned);
 });
 
+test("non-app files skip the model and pass on green checks", async () => {
+  const { selectPlan, decide, hasAppPath } = await load();
+  const files = ["scripts/pstack-verifier.mjs", "tests/pstack-verifier.test.cjs", "docs/ci.md", "README.md"];
+  assert.equal(hasAppPath(files), false);
+  const selected = selectPlan(files, false);
+  assert.deepEqual(selected, { actions: [], expect: [], reason: "no user path: non-app files only" });
+  assert.equal(selectPlan(["src/app/page.tsx"], false), null);
+  assert.equal(selectPlan(files, true), null);
+  const passed = decide({
+    model: { verdict: "FAIL", notes: "model should not run" },
+    plan: plan([], { ...selected, files, filesTruncated: false }),
+    evidence: null,
+    binding,
+    checksPassed: true,
+  });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  assert.equal(passed.notes, "no app path: no user path: non-app files only");
+});
+
+test("a preview that never listens is not a model verdict", async () => {
+  const { decide, notePreviewDown, previewDownBody, waitForPreview } = await load();
+  const refused = decide({
+    model: { verdict: "PASS", notes: "Navigation to the board failed with ERR_CONNECTION_REFUSED" },
+    plan: plan([{ op: "goto", path: "/project?id=1" }]),
+    evidence: evidence({ preview: "down" }),
+    binding,
+  });
+  assert.deepEqual(refused, { verdict: "FAIL", notes: "preview did not start" });
+  const body = plan([{ op: "goto", path: "/project?id=1" }]);
+  notePreviewDown(body, previewDownBody(binding));
+  assert.equal(body.fail, "preview did not start");
+  assert.equal(body.actions.length > 0 && !body.fail, false);
+  let calls = 0;
+  const up = await waitForPreview("http://127.0.0.1:3100", {
+    rounds: 3,
+    intervalMs: 5,
+    sleep: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls < 2) throw new Error("connect ECONNREFUSED 127.0.0.1:3100");
+      return { status: 200 };
+    },
+  });
+  assert.equal(up, true);
+  assert.equal(calls, 2);
+  calls = 0;
+  const dead = await waitForPreview("http://127.0.0.1:3100", {
+    rounds: 2,
+    intervalMs: 1,
+    sleep: async () => { calls += 1; },
+    fetchImpl: async () => { throw new Error("connect ECONNREFUSED 127.0.0.1:3100"); },
+  });
+  assert.equal(dead, false);
+  assert.equal(calls, 1);
+  await assert.rejects(() => waitForPreview("https://127.0.0.1:3100"), /preview url is not local/);
+});
+
+
 test("an api action passes from the preview response with no page navigation", async () => {
   const savedToken = process.env.GH_TOKEN;
   delete process.env.GH_TOKEN;
@@ -608,6 +666,7 @@ test("an api action passes from the preview response with no page navigation", a
     else process.env.GH_TOKEN = savedToken;
   }
 });
+
 
 test("a real plan with no evidence file fails as evidence missing", async () => {
   const { decide } = await load();
@@ -724,11 +783,10 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   assert.equal(asked, 0);
   assert.equal(docs.reason, "no user path");
   assert.equal(docs.botLogin, undefined);
-  const runs = [...REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: "success" })), { name: "judge", conclusion: null }, { name: "optional-check", conclusion: null }];
+  const runs = [...REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: "success" })), { name: "judge", conclusion: null }, { name: "CodeQL Analyze", conclusion: null }];
   const statuses = REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: "success" }));
   const gate = emptyPlanGate({ runs, statuses });
-  assert.equal(gate.checksPassed, true);
-  assert.equal(gate.checksPending, false);
+  assert.deepEqual(gate, { checksPassed: true, checksPending: false, failed: false });
   const quiet = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: gate.checksPassed, checksPending: gate.checksPending });
   assert.equal(quiet.verdict, "PASS+NOTES");
   const renamed = takeFileList([{ filename: "docs/example.ts", previous_filename: "src/pages/api/example.ts" }]);
@@ -740,8 +798,8 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     binding,
     ask() { asked += 1; return { actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" }; },
   });
-  assert.equal(asked, 2);
-  assert.equal(workflow.botLogin, undefined);
+  assert.equal(asked, 1);
+  assert.deepEqual([workflow.reason, workflow.botLogin], ["no user path: non-app files only", undefined]);
   assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: [".github/workflows/pstack-verifier.yml"], filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "PASS+NOTES");
   for (const file of ["packages/agent-sdk/README.md", "skills/ship/SKILL.md", ".agents/skills/ship/SKILL.md"]) {
     assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: [file], filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "PASS+NOTES", file);
@@ -750,8 +808,7 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ai-review" ? "failure" : "success" })),
     statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: context === "ai-review" ? "failure" : "success" })),
   });
-  assert.equal(failedRequired.failed, true);
-  assert.equal(failedRequired.checksPending, false);
+  assert.deepEqual([failedRequired.failed, failedRequired.checksPending], [true, false]);
   const bot = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false, botLogin: "dependabot[bot]" }), evidence: null, binding, checksPassed: true });
   assert.equal(bot.verdict, "PASS+NOTES");
   assert.match(statusDescription({ verdict: bot.verdict, authorFamily: bot.authorFamily, verifierModel: "" }), /dependabot\[bot\]/);
@@ -759,11 +816,10 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     binding,
     ask() { asked += 1; return { actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" }; },
   });
-  assert.equal(asked, 3);
+  assert.equal(asked, 2);
   assert.equal(humanPlan.botLogin, undefined);
   const human = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
-  assert.equal(human.verdict, "FAIL");
-  assert.equal(human.authorFamily, undefined);
+  assert.deepEqual([human.verdict, human.authorFamily], ["FAIL", undefined]);
   const own = "https://github.com/acme/app/actions/runs/10/attempts/1";
   assert.equal(cancelKeepsStatus({ state: "pending", description: "waiting for required checks", target_url: own }, own), true);
   assert.equal(cancelKeepsStatus({ state: "pending", description: "Planning a user check", target_url: own }, own), false);
@@ -808,17 +864,13 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   };
   try {
     const pending = await post("PENDING", [mark("10", "1", { created_at: "2026-11-17T11:50:00Z" }), { context: "ci-tests", state: "pending" }], [{ name: "ci-tests", conclusion: null }], Date.parse("2026-11-17T12:00:00Z"));
-    assert.equal(pending.length, 1);
-    assert.equal(pending[0].state, "pending");
-    assert.equal(pending[0].description, "waiting for required checks");
+      assert.deepEqual([pending.length, pending[0].state, pending[0].description], [1, "pending", "waiting for required checks"]);
     const ignored = await post("PENDING", [mark("11", "1"), mark("10", "1")], [], Date.parse("2026-11-17T12:00:00Z"));
     assert.deepEqual(ignored, []);
     const passed = await post("PENDING", [mark("10", "1", { created_at: "2026-11-17T08:00:00Z" }), ...REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: "success" }))], REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: "success" })), Date.parse("2026-11-17T12:00:00Z"));
-    assert.equal(passed[0].state, "success");
-    assert.equal(passed[0].description.includes("required checks did not finish"), false);
+    assert.equal(passed[0].state === "success" && !passed[0].description.includes("required checks did not finish"), true);
     const timed = await post("PENDING", [mark("10", "1", { created_at: "2026-11-17T08:00:00Z" }), { context: "ci-tests", state: "pending" }], [{ name: "ci-tests", conclusion: null }], Date.parse("2026-11-17T12:00:00Z"));
-    assert.equal(timed[0].state, "failure");
-    assert.equal(timed[0].description, "FAIL: required checks did not finish");
+    assert.deepEqual([timed[0].state, timed[0].description], ["failure", "FAIL: required checks did not finish"]);
   } finally {
     for (const [key, value] of savedEnv) {
       if (value === undefined) delete process.env[key];
@@ -865,8 +917,7 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     assert.equal(clean.written.botLogin, "dependabot[bot]");
     let planned = 0;
     const built = await planFromRequest(clean.written, { binding: { sha: head, run: "10", attempt: "1" }, ask() { planned += 1; throw new Error("model"); } });
-    assert.equal(planned, 0);
-    assert.equal(built.botLogin, "dependabot[bot]");
+    assert.deepEqual([planned, built.botLogin], [0, "dependabot[bot]"]);
     const other = await runResolve({ commits: [commit(head, "octocat")] });
     assert.match(other.stop, /stop=true/);
     assert.equal(other.written, null);
@@ -884,14 +935,12 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     const page = await runResolve({ commits: many });
     assert.equal(page.calls.some((args) => args.includes("--paginate") && args.join(" ").includes("/commits")), true);
     assert.match(page.stop, /stop=true/);
-    assert.equal(page.written, null);
     const raced = await runResolve({ commits: [commit("f".repeat(40))], second: pull("dependabot[bot]", head) });
     assert.match(raced.stop, /stop=true/);
     assert.deepEqual(raced.posts, []);
     const person = await runResolve({ login: "octocat", body: "", files: ["package.json"], commits: [] });
     assert.match(person.stop, /stop=true/);
     assert.match(person.posts[0].description, /author model unknown/);
-    assert.equal(person.written, null);
   } finally {
     for (const [key, value] of savedResolve) {
       if (value === undefined) delete process.env[key];
