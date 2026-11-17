@@ -412,6 +412,31 @@ feature_map_weekly:
   fixtures: offline_with_temporary_home_and_no_secrets
   app_driving: false
 
+feature_map_coverage:
+  ticket: https://app.hypertask.ai/detail/project-15/9406
+  context: feature-map-coverage
+  workflow: .github/workflows/feature-map-coverage.yml
+  runs_on: ubuntu-latest
+  required: false
+  report_only: true
+  blocks_merge: false
+  triggers: [workflow_dispatch, pull_request]
+  pull_request_base: production
+  paths:
+    - src/app/**
+    - src/lib/flags/definitions/**
+    - .claude/skills/verify-qa/reference/feature-map/**
+    - .github/scripts/feature-map-coverage.cjs
+    - .github/workflows/feature-map-coverage.yml
+    - tests/feature-map-coverage.test.cjs
+  node_major: 24
+  permissions: [contents_read]
+  commands:
+    - node --test tests/feature-map-coverage.test.cjs
+    - node .github/scripts/feature-map-coverage.cjs
+  fixtures: offline_with_temporary_home_and_no_secrets
+  app_driving: false
+
 feature_map_live_weekly:
   ticket: https://app.hypertask.ai/detail/project-11514/205
   context: feature-map-live-weekly

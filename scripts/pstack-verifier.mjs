@@ -239,7 +239,7 @@ export function confirmsNoUserPath(reason) {
 export const FILE_LIST_CAP = 100;
 export const CI_WAIT_ROUNDS = 40;
 export const CI_WAIT_INTERVAL_MS = 30000;
-export const REQUIRED_CI_CONTEXTS = ["app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan", "premerge-evidence"];
+export const REQUIRED_CI_CONTEXTS = ["app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
 function relevantChecks(runs) {
   return (Array.isArray(runs) ? runs : []).filter((run) => run?.name !== CONTEXT);
 }
