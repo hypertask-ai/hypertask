@@ -115,6 +115,15 @@ test("a plan stage that returns no actions fails the eval even when the judge sa
   }
 });
 
+test("a plan that ignores the fixture fails the eval even with a valid shape", async () => {
+  const { CASES, runEval } = await load();
+  const complete = async (prompt) => (prompt.includes("Plan one user check") ? '{"actions":[{"op":"goto","path":"/"}],"expect":[{"text":"Welcome"}],"reason":"home"}' : '{"verdict":"PASS","notes":"looks fine"}');
+  const clean = CASES.filter((item) => item.name === "clean");
+  const result = await runEval({ alt, key: "test-key", complete, cases: clean });
+  assert.equal(result.ok, false);
+  for (const row of result.results) assert.match(row.failure, /does not exercise the fixture/);
+});
+
 test("a failed model call is an eval error, not a FAIL the planted case accepts", async () => {
   const { CASES, runEval } = await load();
   const complete = async (prompt) => {

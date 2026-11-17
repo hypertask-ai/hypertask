@@ -65,6 +65,12 @@ export function planPromptFor(item) {
   return buildPrompt({ kind: "plan", ...item.claim });
 }
 
+export function planCoversFixture(plan, value = "Renewal date") {
+  const fillsField = plan.actions.some((action) => action.op === "fill" && action.value === value);
+  const watchesField = plan.expect.some((expect) => expect.text === value);
+  return fillsField && watchesField;
+}
+
 export function evalEvidence(item, plan = item.plan) {
   const passing = item.expected === "PASS";
   const failedStep = Number.isInteger(item.stepFailure) ? item.stepFailure : -1;
@@ -92,6 +98,7 @@ export async function judgeCase({ item, model, key, answer, complete = completeW
     const planText = live ? await complete(planPromptFor(item), { key, model }) : answer.plan;
     plan = { ...plan, ...parsePlan(planText) };
     if (!plan.actions.length) throw new Error("the plan stage returned no actions");
+    if (!planCoversFixture(plan)) throw new Error("the plan does not exercise the fixture behaviour");
   } catch (error) { failure = redact(error?.message ?? String(error), [key]); }
   const evidence = evalEvidence(item, plan);
   let judged = { verdict: "", notes: "" };
