@@ -135,6 +135,27 @@ test("recorded GitHub runner results: pull 3561 goes red and pull 3560 goes gree
   assert.match(brokenHead.lines[0], /does not pass on the pull request/);
 });
 
+test("a TypeError on the old code counts, and a missing module does not", async (t) => {
+  const repo = initRepo();
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const base = commit(repo, { "src/lib.js": "module.exports = null;\n" });
+  const thrown = commit(repo, {
+    "src/lib.js": "module.exports = { id: 1 };\n",
+    "tests/id.test.cjs": "const assert = require('node:assert/strict');\nconst test = require('node:test');\ntest('id', () => { assert.equal(require('../src/lib.js').id, 1); });\n",
+  });
+  const typeError = run(repo, ["--title", "HTPR-4 [BUGFIX] Read the id", "--base", base, "--head", thrown]);
+  assert.equal(typeError.status, 0, typeError.stdout + typeError.stderr);
+  assert.match(typeError.stdout, /repro-first pass tests\/id\.test\.cjs/);
+
+  const added = commit(repo, {
+    "src/added.js": "module.exports = 1;\n",
+    "tests/added.test.cjs": "const assert = require('node:assert/strict');\nconst test = require('node:test');\ntest('added', () => { assert.equal(require('../src/added.js'), 1); });\n",
+  });
+  const missing = run(repo, ["--title", "HTPR-4 [BUGFIX] Add a module", "--base", thrown, "--head", added]);
+  assert.equal(missing.status, 1, missing.stdout + missing.stderr);
+  assert.match(missing.stdout, /no changed test fails on the old code/);
+});
+
 test("scope writes run=false when the pull request is exempt", async (t) => {
   const repo = initRepo();
   t.after(() => rmSync(repo, { recursive: true, force: true }));
