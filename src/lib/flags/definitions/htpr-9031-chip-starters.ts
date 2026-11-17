@@ -8,7 +8,7 @@ export default {
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-10",
   description:
-    "Starter questions in a new AI chat sit bottom left just above the message box. Each question is only as wide as its text and uses the regular 14px chat font with 4px corners.",
+    "Starter questions in a new AI chat sit bottom left just above the message box. Each question is only as wide as its text and uses the regular 14px chat font with 4px corners. The same layout applies to plain chat and to chat opened on a ticket.",
   releaseRisk: {
     risk: "new",
     reason:
