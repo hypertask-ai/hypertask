@@ -6,7 +6,7 @@ import { parse } from "node-html-parser";
 import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isBareOffOrder, isOffOrder, normalizeVisibleText, parseFlagChatRecord, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
+import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isBareOffOrder, isDirectOffOrder, isOffOrder, normalizeVisibleText, parseFlagChatRecord, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_KEYS,
@@ -167,9 +167,11 @@ export async function PATCH(request: NextRequest) {
           || new Date(recordDate).toISOString().slice(0, 10) !== record.date
           || recordDate > activityNow || recordDate < activityNow - activityWeek
           || activity.createdAt.getTime() < recordDate
-          || (classifyAnswer(record.quote) !== "yes" && !(body.mode === "OFF" && isOffOrder(record.quote)))) {
+          || (classifyAnswer(record.quote) !== "yes" && !(body.mode === "OFF" && isDirectOffOrder(record.quote)))) {
           throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         }
+        const laneTaskId = activity.run.taskId;
+        if (laneTaskId == null) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         const activitySwitches = parseSwitchQuestion(`${record.quote} ${record.tail}`.trim(), false);
         if (!activitySwitches || activitySwitches.get(body.key as string) !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
           throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
@@ -182,7 +184,7 @@ export async function PATCH(request: NextRequest) {
           throw new FeatureFlagApprovalError("A later flag change supersedes this request");
         }
         const laterHuman = await tx.comment.findMany({
-          where: { taskId: activity.run.taskId, creatorId: FEATURE_FLAG_OWNER_USER_ID, agentId: null,
+          where: { taskId: laneTaskId, creatorId: FEATURE_FLAG_OWNER_USER_ID, agentId: null,
             agentDisplayName: null, createdAt: { gte: activity.createdAt } },
           select: { id: true, text: true, commentText: true },
         });

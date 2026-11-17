@@ -4,7 +4,7 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const jiti = createJiti(__filename, { interopDefault: true });
-const { normalizeVisibleText, classifyAnswer, parseSwitchQuestion, strictSwitchRequest, isBareOffOrder, isOffOrder, parseFlagChatRecord, FLAG_CHAT_RECORD_AGENT_ID } = jiti(path.join(__dirname, "../src/lib/flags/approvalWords.ts"));
+const { normalizeVisibleText, classifyAnswer, parseSwitchQuestion, strictSwitchRequest, isBareOffOrder, isDirectOffOrder, isOffOrder, parseFlagChatRecord, FLAG_CHAT_RECORD_AGENT_ID } = jiti(path.join(__dirname, "../src/lib/flags/approvalWords.ts"));
 
 for (const [expected, fixtures] of [
   ["yes", ["Yes", "yes!", "YES.", "ship it", "works, release it", "Yes, ship it", "yes, ship it", "ok go ahead", "👍", "lgtm",
@@ -49,6 +49,9 @@ test("a quote block after the chat header is the approval and adjacent prose is 
   assert.equal(isOffOrder("turn it off after QA"), false);
   assert.equal(isOffOrder("turn it off when QA passes"), false);
   assert.equal(isBareOffOrder("turn it off"), true);
+  assert.equal(isDirectOffOrder("turn it off now"), true);
+  assert.equal(isDirectOffOrder("can you turn it off?"), false);
+  assert.equal(isDirectOffOrder("can you turn it off"), false);
   assert.equal(isBareOffOrder("turn it off!"), true);
   assert.equal(isBareOffOrder("turn it off provided QA passes"), false);
   assert.equal(parseSwitchQuestion(`${conditional.quote} ${conditional.tail}`), null);

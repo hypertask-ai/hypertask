@@ -78,6 +78,16 @@ export function isOffOrder(text: string): boolean {
   return words.some((word, index) => OFF_VERB.test(word) && words.slice(index + 1, index + 1 + OFF_REACH).includes("off"));
 }
 
+const OFF_LEAD = new Set(["please", "just", "now"]);
+
+export function isDirectOffOrder(text: string): boolean {
+  if (text.includes("?")) return false;
+  if (!isOffOrder(text)) return false;
+  const words = text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  const verbAt = words.findIndex((word) => OFF_VERB.test(word));
+  return verbAt >= 0 && words.slice(0, verbAt).every((word) => OFF_LEAD.has(word));
+}
+
 export function isBareOffOrder(quote: string): boolean {
   return BARE_OFF.test(quote.trim().replace(/[^\p{L}\p{N}]+$/u, ""));
 }
