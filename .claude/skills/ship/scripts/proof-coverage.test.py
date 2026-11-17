@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+import importlib.util
 import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import proof_coverage as pc
+module_path = Path(__file__).resolve().parent / "proof-coverage.py"
+spec = importlib.util.spec_from_file_location("proof_coverage", module_path)
+pc = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(pc)
 
 fails, passes = 0, 0
 
@@ -43,6 +46,12 @@ check(items == ["The row is gone on desktop", "No new add control replaces it",
                 "The keyboard sheet lists every key"], "acceptance points come from both sections")
 check("Related: HTPR-6568" not in items, "a related link is not an acceptance point")
 check("A board control breaks" not in items, "a risk bullet is not an acceptance point")
+inline = "<p>Done when: E removes the ticket and the next ticket takes focus.</p>"
+check(pc.acceptance_items(inline) == ["E removes the ticket and the next ticket takes focus"],
+      "an inline Done when line is an acceptance point")
+under_heading = "<h2>Done when</h2><p>The keyboard sheet lists every key.</p>"
+check(pc.acceptance_items(under_heading) == ["The keyboard sheet lists every key"],
+      "a paragraph under Done when stays in the section")
 
 markdown = (
     "# Page\n\n## Gotchas\n\n"

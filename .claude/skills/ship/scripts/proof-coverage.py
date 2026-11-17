@@ -68,13 +68,21 @@ def acceptance_items(source):
     parser.flush()
     active, items = False, []
     for kind, text in parser.blocks:
-        label = text.lower().rstrip(":")
-        if label in ACCEPTANCE:
+        head, sep, tail = text.partition(":")
+        if sep and head.lower().strip() in ACCEPTANCE and tail.strip():
+            active = True
+            if not NON_ACCEPTANCE.match(tail.strip()):
+                items.append(tail.strip())
+            continue
+        if text.lower().rstrip(":") in ACCEPTANCE:
             active = True
             continue
-        if kind in ("heading", "para"):
-            if len(text) <= 60:
-                active = False
+        if kind == "heading":
+            active = False
+            continue
+        if kind == "para":
+            if active and not NON_ACCEPTANCE.match(text):
+                items.append(text)
             continue
         if active and not NON_ACCEPTANCE.match(text):
             items.append(text)
