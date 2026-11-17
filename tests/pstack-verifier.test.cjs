@@ -75,6 +75,22 @@ test("the model call uses the eval headers and AbortSignal.timeout", async () =>
   assert.deepEqual(seen, [60000, PSTACK_VERIFIER.endpoint, "Bearer secret", "application/json", true]);
 });
 
+test("the model call turns reasoning off so the answer fits the token cap", async () => {
+  const { completeWithOpenRouter } = await load();
+  let sent;
+  const text = await completeWithOpenRouter("{}", {
+    key: "secret",
+    model: "deepseek/deepseek-v4.1-flash",
+    fetchImpl: async (url, options) => {
+      sent = JSON.parse(options.body);
+      return { ok: true, async json() { return { choices: [{ message: { content: "{}" } }] }; } };
+    },
+  });
+  assert.equal(text, "{}");
+  assert.deepEqual(sent.reasoning, { enabled: false });
+  assert.equal(sent.max_tokens, 1200);
+});
+
 test("a verdict from another attempt fails", async () => {
   const { readVerdict } = await load();
   const pass = { ...binding, verdict: "PASS", notes: "", authorFamily: "grok", verifierModel: "deepseek/deepseek-v4.1-flash" };

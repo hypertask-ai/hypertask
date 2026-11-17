@@ -210,7 +210,7 @@ export async function completeWithOpenRouter(prompt, { key, model, images = [], 
   if (!key) throw new Error("model login is missing");
   const chosen = String(model).startsWith("deepseek/") ? assertFlashModel(model) : String(model);
   const content = images.length ? [{ type: "text", text: prompt }, ...images.slice(0, 6).map((data) => ({ type: "image_url", image_url: { url: `data:image/png;base64,${data}` } }))] : prompt;
-  const response = await fetchImpl(PSTACK_VERIFIER.endpoint, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: chosen, temperature: 0, max_tokens: 1200, messages: [{ role: "system", content: "Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content }] }), signal: AbortSignal.timeout(60000) });
+  const response = await fetchImpl(PSTACK_VERIFIER.endpoint, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: chosen, temperature: 0, max_tokens: 1200, reasoning: { enabled: false }, messages: [{ role: "system", content: "Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content }] }), signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error(`model HTTP ${response.status}`);
   const text = (await response.json()).choices?.[0]?.message?.content;
   if (!text) throw new Error("model returned nothing");
