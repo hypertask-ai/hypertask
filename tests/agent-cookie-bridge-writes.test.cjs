@@ -144,7 +144,12 @@ function fixture() {
     '@/lib/mcp/tasks/mappers': { taskDetailInclude: () => ({}), mapTaskToDetail: task => task },
     '@/lib/mcp/tasks/broadcastTaskUpdates': { broadcastTaskUpdates: async () => {} },
     '@/lib/mcp/tasks/agentMutationFence': { assertAgentAssignmentChangeAllowed: async () => {} },
-    '@/lib/mcp/agents/scopes': { requireRole: async () => null },
+    '@/lib/mcp/agents/scopes': {
+      requireRole: async () => null,
+      getAgentRole: async () => 'write',
+      roleMeets: (role, min) => ({ read: 0, write: 1, admin: 2 })[role] >= ({ read: 0, write: 1, admin: 2 })[min],
+      insufficientScopeResponse: (role, min) => Response.json({ success: false, error: `This agent's role ('${role}') does not permit this action; requires '${min}' or higher.`, code: 'insufficient_scope' }, { status: 403 }),
+    },
     '@/lib/mcp/agents': { getMcpSessionAgentSummary: async () => ({ id: ctx.agentId }) },
     '@/lib/pullRequests/taskPullRequests': { linkTaskPullRequest: async () => {}, PullRequestLinkError: class extends Error {} },
     '@/lib/mcp/tasks/resolveTask': { TaskIdentifierOutOfRangeError: class extends Error {} },

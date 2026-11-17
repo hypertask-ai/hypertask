@@ -50,7 +50,12 @@ function teamFixture(mode, actor = 'bound') {
     '@/utils/controllers/comments/processMentions': { convertPlainTextMentionsToHtml: text => text, resolveTextMentions: async text => text },
     '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },
     '@/lib/mcp/agents': agents,
-    '@/lib/mcp/agents/scopes': { requireRole: async () => null },
+    '@/lib/mcp/agents/scopes': {
+      requireRole: async () => null,
+      getAgentRole: async () => 'write',
+      roleMeets: (role, min) => ({ read: 0, write: 1, admin: 2 })[role] >= ({ read: 0, write: 1, admin: 2 })[min],
+      insufficientScopeResponse: (role, min) => Response.json({ success: false, error: `This agent's role ('${role}') does not permit this action; requires '${min}' or higher.`, code: 'insufficient_scope' }, { status: 403 }),
+    },
     '@/utils/controllers/activities/createLabelActivity': {},
     '@/lib/agentWebhooks/outbox': {},
     '@/utils/controllers/urls/extractUrlsFromContent': { persistUrlsForDescription: async () => {}, persistUrlsForComment: async () => {} },

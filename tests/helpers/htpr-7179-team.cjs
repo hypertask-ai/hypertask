@@ -55,7 +55,12 @@ function teamFixture(mode, actor = 'bound') {
   const agents = { getMcpSessionAgentSummary: async () => null, mapVisibleMcpAgent: () => null, mcpVisibleAgentSelect: () => ({ id: true }), loadVisibleMcpAgents: async () => new Map() };
   Object.assign(f.mocks, {
     '@/lib/mcp/agents': agents,
-    '@/lib/mcp/agents/scopes': { requireRole: async () => null },
+    '@/lib/mcp/agents/scopes': {
+      requireRole: async () => null,
+      getAgentRole: async () => 'write',
+      roleMeets: (role, min) => ({ read: 0, write: 1, admin: 2 })[role] >= ({ read: 0, write: 1, admin: 2 })[min],
+      insufficientScopeResponse: (role, min) => Response.json({ success: false, error: `This agent's role ('${role}') does not permit this action; requires '${min}' or higher.`, code: 'insufficient_scope' }, { status: 403 }),
+    },
     '@/utils/controllers/activities/createLabelActivity': {},
     '@/lib/agentWebhooks/outbox': {},
     '@/lib/pullRequests/taskPullRequests': { refreshTaskPullRequests: async (_taskId, pullRequests) => pullRequests },

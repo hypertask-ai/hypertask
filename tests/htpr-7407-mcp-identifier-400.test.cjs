@@ -46,7 +46,12 @@ function setup(failure) {
     },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: (_request, error) => crashReports.push(error) },
     '@/lib/mcp/agents': {},
-    '@/lib/mcp/agents/scopes': { requireRole: async () => null },
+    '@/lib/mcp/agents/scopes': {
+      requireRole: async () => null,
+      getAgentRole: async () => 'write',
+      roleMeets: (role, min) => ({ read: 0, write: 1, admin: 2 })[role] >= ({ read: 0, write: 1, admin: 2 })[min],
+      insufficientScopeResponse: (role, min) => Response.json({ success: false, error: `This agent's role ('${role}') does not permit this action; requires '${min}' or higher.`, code: 'insufficient_scope' }, { status: 403 }),
+    },
     '@/lib/mcp/tasks/services': {},
     '@/lib/mcp/tasks/mappers': {},
     '@/lib/mcp/tasks/agentMutationFence': { TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {} },
