@@ -1,5 +1,5 @@
 version: 15
-last_updated: 2026-11-02
+last_updated: 2026-11-17
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -696,6 +696,20 @@ ci_tests:
     failed_cancelled_or_missing_fails_ci_tests: true
     pool_jobs_when_not_started: 0
     measured_2026_11_01: {pushes: 35, ci_prepare_median_seconds: 55, stress_runs: 8, stress_seconds_total: 2659}
+  feature_map_change_gate:
+    ticket: https://app.hypertask.ai/detail/project-15/9415
+    script: .github/scripts/feature-map-change-guard.mjs
+    test: tests/feature-map-change-guard.test.cjs
+    job: ci-checks
+    lane: feature-map-change
+    static_gate_parallel: true
+    job_budget_cost: 0
+    enforced_tags: [FEATURE, IMPROVE]
+    exempt_tags: [BUGFIX, INFRA, REFACTOR]
+    user_facing_paths: ["src/app/**", "src/components/**"]
+    area: first_directory_under_user_facing_root
+    map_folder: .claude/skills/verify-qa/reference/feature-map
+    failure_names_map_folder: true
   pull_request_types: [opened, synchronize, reopened, ready_for_review]
   pull_request_concurrency:
     group: ci-tests-${{ github.event.pull_request.number || github.sha }}
