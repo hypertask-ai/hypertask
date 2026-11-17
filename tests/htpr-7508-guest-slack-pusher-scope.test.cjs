@@ -86,6 +86,7 @@ function harness({ area, actor = "agent", enforce = true, grant = "none", teamle
     "@/lib/auth/betterAuth": { auth: { handler: async () => new Response(null, { status: 204 }) } },
     "@/lib/demo/provisionGuest": { provisionGuest: provision, provisionGuestBoard: async (...args) => { writes.push({ regenerate: args }); return { projectId: 902, boardUrl: "/project?id=902", uniqueIdentifier: "REGEN" }; }, provisionLearnBoard: async () => { throw new Error("Unexpected tutorial provisioning"); } },
     "@/lib/demo/generateDemoBoard": { DemoBoardGenerationUnavailableError: class extends Error {} },
+    "@/lib/demo/slidingWindow": { consumeDemoWindow: async () => ({ allowed: true, retryAfter: 0 }) },
     "@/lib/tutorial/keyboardShortcutTutorial": { KEYBOARD_SHORTCUT_TUTORIAL_ENABLED: tutorialEnabled },
     "@/utils/controllers/tutorial/ensureLearnTutorialInbox": { ensureLearnTutorialInbox: async () => [], validateLearnTutorialInboxTargets: async ({ targets }) => targets },
     "@/lib/auth/serverUser": { getServerCookieUser: async () => authenticated ? f.user : null },

@@ -217,5 +217,15 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-9080 saves one boolean per person through Hypertask's own same-origin preferences API. No paid provider call, no retries, no token budget.",
     "source": "https://app.hypertask.ai/detail/project-15/9080"
+  },
+  "src/app/api/demo/chat/stream/route.ts:06e4e13c868bf883a50e84784501d0633ca2eec88f9d0b4c4f4d84af31c3c5ec": {
+    "maxUsdPerDay": 2,
+    "reason": "HTPR-9262 deletes the spend-cap switch and keeps the same demo chat gateway call on the same model with a 600 output-token cap and one retry. The metered allowance and the shared twenty-per-hour per-network limit now always apply, so spending can only fall: $1 a month and $0.25 a day for each Free team, and BYOK teams never fall back to our keys.",
+    "source": "https://app.hypertask.ai/detail/project-15/9262"
+  },
+  "src/lib/demo/generateDemoBoard.ts:4c4b75cd3ad972e8fcf2437673f8452868a4b6408072643b9759c57be3913649": {
+    "maxUsdPerDay": 2,
+    "reason": "HTPR-9262 deletes the spend-cap switch and keeps the same demo board generation call on the same model with two retries. The metered per-team allowance and the five-per-hour guest creation limit now always apply, so demo spend is unchanged or lower.",
+    "source": "https://app.hypertask.ai/detail/project-15/9262"
   }
 }
