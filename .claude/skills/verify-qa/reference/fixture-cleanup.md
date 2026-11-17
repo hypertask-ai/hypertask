@@ -58,6 +58,8 @@ write that value back with `POST /api/users/preferences`, the same route
 Settings uses. Card parts, theme and notification choices are settings.
 Read the saved value after the write and confirm it matches.
 
+Write `Leftovers: none` only when nothing from this run remains; otherwise list the test logins, labels, switched settings, reminders and production rows you left in place.
+
 A reminder on a ticket this command deletes is already cleared by the trash
 step. A reminder left on any other ticket is a leftover. Name that ticket,
 or clear the reminder, before you write `none`.
