@@ -134,6 +134,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     const authorizedProject = await prisma.project.findFirst({
       where: {
         id: projectId,
+        status: { not: "Deleted" },
         ...taskWriteAccessWhere(userId, agentId, session.teamScope),
       },
       select: { id: true, name: true, title: true, status: true },
