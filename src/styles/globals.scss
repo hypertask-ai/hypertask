@@ -383,6 +383,98 @@ body {
   overflow: hidden !important;
 }
 
+#createTaskModal.phone-new-task-sheet {
+  --phone-new-task-keyboard: 0px;
+  --phone-new-task-viewport-top: 0px;
+  overflow: hidden;
+}
+
+#createTaskModal.phone-new-task-sheet .modal-dialog {
+  position: fixed;
+  top: var(--phone-new-task-viewport-top, 0px);
+  right: 0;
+  bottom: var(--phone-new-task-keyboard, 0px);
+  left: 0;
+  width: auto;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#createTaskModal.phone-new-task-sheet .modal-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+}
+
+#createTaskModal.phone-new-task-sheet .modal-content > div,
+#createTaskModal.phone-new-task-sheet #body,
+#createTaskModal.phone-new-task-sheet #taskInfo_comments_description_container,
+#createTaskModal.phone-new-task-sheet [data-testid="ticket-thread"],
+#createTaskModal.phone-new-task-sheet [data-phone-new-task-card],
+#createTaskModal.phone-new-task-sheet #main-wrapper-create-task-create-task-tiptap-description,
+#createTaskModal.phone-new-task-sheet #main-wrapper-create-task-create-task-tiptap-description > :last-child {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#createTaskModal.phone-new-task-sheet #body {
+  overflow: hidden;
+  padding-top: max(env(safe-area-inset-top), 28px);
+}
+
+#createTaskModal.phone-new-task-sheet [data-testid="ticket-thread"] {
+  padding-bottom: 0;
+}
+
+#createTaskModal.phone-new-task-sheet [data-phone-new-task-card] {
+  margin-bottom: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+  overflow: hidden;
+}
+
+#createTaskModal.phone-new-task-sheet #main-wrapper-create-task-create-task-tiptap-description > :last-child {
+  height: auto;
+}
+
+#createTaskModal.phone-new-task-sheet #main-wrapper-create-task-create-task-tiptap-description > :last-child > :first-child {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#createTaskModal.phone-new-task-sheet #main-wrapper-create-task-create-task-tiptap-description > :last-child > :first-child > :last-child {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+#createTaskModal.phone-new-task-sheet [data-phone-new-task-card] .attachment-upload-container {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-top: auto;
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+#createTaskModal.phone-new-task-sheet.phone-new-task-keyboard [data-mobile-new-task-actions] {
+  padding-bottom: 0.75rem;
+}
+
 .item {
   // color:white;
   display: block;

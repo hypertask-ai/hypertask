@@ -12,10 +12,12 @@ import { DIV_ID_CONSTANTS, TOUR_TARGET_CONSTANTS } from '@/lib/configs/general.c
 import BaseCommentAndDescriptionContainer from '@/components/PageComponents/TaskDetail/CommentAndDescription/BaseCommentAndDescriptionContainer';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG } from '@/lib/flags/keys';
+import { HTPR_8029_PHONE_NEW_TASK_LAYOUT_FLAG } from '@/lib/flags/definitions/htpr-8029-phone-new-task-layout';
 
 const DescriptionCreateTaskModal = () => {
     const _mbl = useContext(MobileViewContext);
     const descriptionFirstEnabled = useFlag(HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG);
+    const phoneNewTaskLayout = useFlag(HTPR_8029_PHONE_NEW_TASK_LAYOUT_FLAG);
     const descriptionFirstMobile = Boolean(_mbl && descriptionFirstEnabled);
     const currentUser = useCurrentUser()
     const { currentFocusedElement, editMode, formValues, setEditMode, setCurrentFocusedElement, handleChange } = useContextCreateTaskModal()
@@ -36,6 +38,7 @@ const DescriptionCreateTaskModal = () => {
         <BaseCommentAndDescriptionContainer className={descriptionFirstMobile ? "flex flex-col pb-4" : undefined}>
             <div
                 id={DIV_ID_CONSTANTS.descriptionContainerCreateTaskModal}
+                data-phone-new-task-card={Boolean(_mbl) && phoneNewTaskLayout ? "" : undefined}
                 onClick={() => {
                     setEditMode("Description")
                     setCurrentFocusedElement("Description")
