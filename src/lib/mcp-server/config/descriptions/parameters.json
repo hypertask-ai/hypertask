@@ -4,7 +4,7 @@
   "agent_id": "Owned managed agent UUID; webhook actions also accept self for the authenticated agent.",
   "as_agent": "Agent UUID you own to act as; the write is attributed to that agent and its board membership is checked. Get it from hypertask_agents ensure or list.",
   "assigned_to": "Assignee filter using the identifiers or special values accepted by this action.",
-  "assignee_ids": "Task assignments use numeric human user ids; saved view filters also accept managed agent UUIDs. These are not display names.",
+  "assignee_ids": "Task assignments use numeric human user ids; saved view filters also accept managed agent UUIDs or the literal me. These are not display names.",
   "board_filters": "Structured filters for a saved board view.",
   "board_id": "Numeric board id to restrict the search; a board is a project.",
   "body_html": "HTML body of a saved report.",

@@ -30,9 +30,9 @@ export function createCreateViewTool(context: ToolContext) {
             "ANY: the ticket has at least one of these tags. ALL: it has every tag. HIDE: leave out tickets that have any of these tags. Use HIDE for without, except, everything but, or hide these tags."
           ),
         assignee_ids: z
-          .array(z.union([z.coerce.number().int().positive(), z.string().uuid()]))
+          .array(z.union([z.coerce.number().int().positive(), z.string().uuid(), z.literal("me")]))
           .optional()
-          .describe("Only show tasks assigned to these users (numeric id) or agents (uuid)."),
+          .describe("Only show tasks assigned to these users (numeric id), agents (uuid), or me for the caller."),
         match: z
           .enum(["ALL", "ANY"])
           .default("ANY")

@@ -91,7 +91,11 @@ const viewIdSchema = z.string().uuid();
 const viewAssigneeIdSchema = z.union([
   z.number().int().positive(),
   z.string().uuid(),
+  z.literal('me'),
 ]);
+const viewAssigneeIdsSchema = z.array(viewAssigneeIdSchema).optional().describe(
+  'Numeric user ids, managed agent UUIDs, or the literal me for the caller. Not display names.',
+);
 const nativeBoardFiltersSchema = z.record(z.string(), z.unknown());
 const visibleSectionIdsSchema = z.array(z.number().int().positive());
 
@@ -104,7 +108,7 @@ export function getCreateViewInputSchema() {
       filters: z
         .object({
           label_names: z.array(z.string().min(1)).optional(),
-          assignee_ids: z.array(viewAssigneeIdSchema).optional(),
+          assignee_ids: viewAssigneeIdsSchema,
           match: viewMatchSchema.optional(),
           label_match: labelMatchSchema.optional(),
         })
@@ -131,7 +135,7 @@ export function getUpdateViewBaseSchema() {
       title: z.string().trim().min(1).optional(),
       visibility: viewVisibilitySchema.optional(),
       label_names: z.array(z.string().min(1)).optional(),
-      assignee_ids: z.array(viewAssigneeIdSchema).optional(),
+      assignee_ids: viewAssigneeIdsSchema,
       match: viewMatchSchema.optional(),
       label_match: labelMatchSchema.optional(),
       board_filters: nativeBoardFiltersSchema.optional(),

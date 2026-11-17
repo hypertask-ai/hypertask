@@ -141,6 +141,26 @@ test("create and update view validation accept agent UUIDs and reject garbage", 
   assert.equal(
     CreateViewInputSchema.safeParse({
       project_id: 15,
+      title: "My tickets",
+      filters: { assignee_ids: ["me"] },
+    }).success,
+    true,
+  );
+  assert.equal(
+    UpdateViewInputSchema.safeParse({
+      viewId,
+      assignee_ids: ["me"],
+    }).success,
+    true,
+  );
+  assert.match(
+    CreateViewInputSchema.shape.filters.unwrap().shape.assignee_ids.description,
+    /literal me/,
+  );
+  assert.match(UpdateViewInputSchema.shape.assignee_ids.description, /literal me/);
+  assert.equal(
+    CreateViewInputSchema.safeParse({
+      project_id: 15,
       title: "Invalid agent view",
       filters: { assignee_ids: ["not-a-uuid"] },
     }).success,
