@@ -376,9 +376,9 @@ function imagesIn(dir) {
 export function eligiblePull(item, repo, sha) {
   return !!item && item.state === "open" && item.draft === false && item.base?.ref === "production" && item.head?.sha === sha && item.head?.repo?.full_name === repo;
 }
-function currentRunMayPost(listed, runId, attempt) {
-  const runs = listed?.workflow_runs ?? [], self = runs.find((run) => Number(run.id) === Number(runId)), started = Date.parse(self?.run_started_at);
-  return !!self && String(self.run_attempt) === String(attempt) && Number.isFinite(started) && (listed?.total_count ?? runs.length) === runs.length && self.conclusion !== "cancelled" && self.status !== "cancelled" && runs.every((run) => Number(run.id) === Number(self.id) || (!["queued", "waiting", "requested", "pending", "in_progress"].includes(run.status) && !(Date.parse(run.run_started_at) > started)));
+function ownsVerifierStatus(statuses, repo, run, attempt) {
+  const newest = (Array.isArray(statuses) ? statuses : []).find((status) => status?.context === CONTEXT);
+  return newest?.target_url === attemptUrl(repo, run, attempt);
 }
 async function resolveCommand() {
   const run = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")).workflow_run ?? {};
@@ -453,8 +453,8 @@ export async function postCommand(io = {}) {
   try { saved = readVerdict(readFileSync(path.join(workDir(), "verdict", "verdict.json"), "utf8"), binding); }
   catch { saved = { verdict: "FAIL", notes: "schema/binding mismatch", authorFamily: "", verifierModel: "" }; }
   const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
-  const listed = JSON.parse(call(["api", `repos/${repo}/actions/workflows/pstack-verifier.yml/runs?head_sha=${binding.sha}&per_page=100`]));
-  if (!eligiblePull(item, repo, binding.sha) || !currentRunMayPost(listed, binding.run, binding.attempt)) return;
+  const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
+  if (!eligiblePull(item, repo, binding.sha) || !ownsVerifierStatus(statuses, repo, binding.run, binding.attempt)) return;
   const description = `${saved.verdict}: author ${saved.authorFamily || "unknown"}, verifier ${saved.verifierModel || "none"}`.slice(0, 140);
   await postStatus({ repo, ...binding, state: saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure", description, fetchImpl: io.fetch });
   if (saved.verdict !== "PASS") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()), io.fetch);
