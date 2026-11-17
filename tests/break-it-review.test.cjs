@@ -68,7 +68,8 @@ test("a broken fix posts a red break-it status and a comment that names the fail
     return { ok: true, json: async () => ({}) };
   };
   Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: "b".repeat(40), OPENROUTER_EVAL_KEY: "sk-test-break-it-secret", GH_TOKEN: "ghs-test" });
-  await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: () => JSON.stringify(pr) });
+  const spawn = () => ({ status: 1, stdout: "not ok 1 - a blank title is rejected\nAssertionError: expected 1 to be 2\n", stderr: "" });
+  await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: () => JSON.stringify(pr), spawn });
   const status = posts.find((item) => item.url.endsWith(`/statuses/${"b".repeat(40)}`));
   const comment = posts.find((item) => item.url.endsWith("/issues/7/comments"));
   assert.equal(status.body.state, "failure");
