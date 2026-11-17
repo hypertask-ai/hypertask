@@ -47,8 +47,8 @@ export function commentText(silent) {
   const items = silent.map((context) => `<li><p>${escapeHtml(context)}</p></li>`).join("");
   return `<p>These required checks published no result in the last ${Math.round(STALE_MINUTES / 60)} hours:</p>`
     + `<ul>${items}</ul>`
-    + "<p>Every other check kept reporting in the same window, so the repository is busy and these publishers are not.</p>"
-    + "<p>Restore the publisher, or ask Valentin to remove the check from the required list.</p>";
+    + "<p>Other checks kept reporting. These publishers did not.</p>"
+    + "<p>Restore the publisher. Or ask Valentin to drop that required check.</p>";
 }
 
 export const TICKET_DESCRIPTION =
@@ -109,14 +109,14 @@ async function report({ fetchImpl, token, silent, now, log }) {
     }
   }
   if (existing) {
-    if (found !== "Normal") await reopen(fetchImpl, token, existing.id, log);
-    await boardWrite(fetchImpl, token, "/comments", { task_id: existing.id, text: commentText(silent), content_type: "html" }, key);
+    if (found !== "Normal" || existing.sectionIsDone) await reopen(fetchImpl, token, existing.id, log);
+    await boardWrite(fetchImpl, token, "/comments", { task_id: existing.id, text: commentText(silent), content_type: "html", kind: "qa" }, key);
     log(`Required-check publishers: commented on ticket ${existing.id}.`);
     return;
   }
   const created = await boardWrite(fetchImpl, token, "/tasks/create", { project_id: BOARD, title: TICKET_TITLE, description: TICKET_DESCRIPTION, content_type: "html" }, key);
   if (!created?.task?.id) throw new Error("Board created the reporting ticket without a task id.");
-  await boardWrite(fetchImpl, token, "/comments", { task_id: created.task.id, text: commentText(silent), content_type: "html" }, key);
+  await boardWrite(fetchImpl, token, "/comments", { task_id: created.task.id, text: commentText(silent), content_type: "html", kind: "qa" }, key);
   log(`Required-check publishers: opened ticket ${created.task.id}.`);
 }
 

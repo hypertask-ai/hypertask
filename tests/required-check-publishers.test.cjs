@@ -78,6 +78,7 @@ test("a silent required check comments once on the existing reporting ticket", a
   const body = boardCall(board, "/comments");
   assert.equal(body.task_id, 501);
   assert.equal(body.content_type, "html");
+  assert.equal(body.kind, "qa");
   assert.match(body.text, /<li><p>premerge-evidence<\/p><\/li>/);
   assert.doesNotMatch(body.text, /ci-tests/);
   assert.match(board.calls.find((call) => call.url.endsWith("/comments")).options.headers["Idempotency-Key"], /^required-check-publishers-[0-9a-f]{24}$/);
@@ -102,7 +103,17 @@ test("the first silent check posts its names as the first comment on the new tic
   assert.ok(order.indexOf("/tasks/create") < order.indexOf("/comments"));
   const body = boardCall(board, "/comments");
   assert.equal(body.task_id, 900);
+  assert.equal(body.kind, "qa");
   assert.match(body.text, /<li><p>premerge-evidence<\/p><\/li>/);
+});
+
+test("a reporting ticket in the done column is reopened before the comment", async () => {
+  const { run } = await load();
+  const board = fakeBoard([{ id: 501, title: "[INFRA] A required check has no publisher", sectionIsDone: true }]);
+  await run({ gh: fakeGitHub().gh, fetchImpl: board.fetchImpl, now, env: { REPO: "test/repo", HYPERTASK_MCP_TOKEN: "t" }, log: () => {} });
+  const updates = board.calls.filter((call) => call.url.endsWith("/tasks/update")).map((call) => JSON.parse(call.options.body));
+  assert.deepEqual(updates, [{ task_id: 501, status: "Normal" }, { task_id: 501, sectionId: 7 }]);
+  assert.equal(boardCall(board, "/comments").kind, "qa");
 });
 
 test("an archived reporting ticket is reopened before the comment lands on it", async () => {
