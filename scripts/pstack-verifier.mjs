@@ -179,8 +179,10 @@ export function decide({ model = {}, plan, evidence, binding }) {
 export function noteForeign(list, url, origin, kind) {
   let foreign = true;
   try {
-    const seen = new URL(url).origin;
-    foreign = seen !== new URL(origin).origin && seen !== "https://cdn.usefathom.com";
+    const seen = new URL(url);
+    const home = seen.origin === new URL(origin).origin;
+    const script = kind === "subresource" && seen.href === "https://cdn.usefathom.com/script.js";
+    foreign = !home && !script;
   } catch { foreign = true; }
   if (!foreign) return false;
   list.push({ url: String(url).slice(0, 300), kind });
