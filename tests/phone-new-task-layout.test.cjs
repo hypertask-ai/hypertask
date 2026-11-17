@@ -15,7 +15,9 @@ const editor = read("src/components/RTE/TiptapCreateTaskModal.tsx");
 const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
 const controls = read("src/components/Common/AttachmentsUpload/AttachmentControls.tsx");
 const globals = read("src/styles/globals.scss");
-const { phoneNewTaskViewportOffsets } = load("src/lib/phoneNewTaskSheet.ts");
+const { phoneNewTaskShortSheet, phoneNewTaskViewportOffsets } = load(
+  "src/lib/phoneNewTaskSheet.ts",
+);
 
 const sheetRule = (selector) => {
   const start = globals.indexOf(selector);
@@ -81,6 +83,42 @@ test("the dictation row stays inside the text card and docks above the keyboard"
     modal,
     /data-phone-new-task-keyboard=\{Boolean\(isMobile\) && phoneNewTaskLayout && keyboardOpen \? "on" : undefined\}/,
   );
+});
+
+test("a 500px tall viewport scrolls the sheet and keeps the description card", () => {
+  assert.equal(
+    phoneNewTaskShortSheet({ layoutHeight: 844, visibleHeight: 500, bottomInset: 344 }),
+    true,
+  );
+  assert.equal(
+    phoneNewTaskShortSheet({ layoutHeight: 500, visibleHeight: 500, bottomInset: 0 }),
+    true,
+  );
+  assert.equal(
+    phoneNewTaskShortSheet({ layoutHeight: 844, visibleHeight: 844, bottomInset: 0 }),
+    false,
+  );
+  assert.match(
+    modal,
+    /data-phone-new-task-short=\{phoneLayout && shortSheet \? "on" : undefined\}/,
+  );
+
+  const body = sheetRule(
+    "#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] #body {",
+  );
+  assert.match(body, /overflow-y:\s*auto/);
+
+  const properties = sheetRule(
+    "#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-task-properties-rail]",
+  );
+  assert.match(properties, /min-height:\s*0/);
+  assert.match(properties, /overflow-y:\s*auto/);
+
+  const card = sheetRule(
+    "#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-phone-new-task-card] {",
+  );
+  assert.match(card, /min-height:\s*120px/);
+  assert.match(card, /flex:\s*1\s+0\s+auto/);
 });
 
 test("visual viewport offsets keep the sheet on the visible area", () => {
