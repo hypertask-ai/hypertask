@@ -230,13 +230,14 @@ async function runSeededInboxCycle({ base, stateFile, items, outDir }) {
   const steps = []
   let stopped = false
   let browser
+  let context
   let page
   const runId = process.env.GITHUB_RUN_ID || 'local'
   const videoDir = path.join(outDir, 'test-results', 'inbox-cycle')
   try {
   await mkdir(videoDir, { recursive: true })
   browser = await chromium.launch({ headless: true })
-  const context = await browser.newContext({
+  context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     baseURL: base,
     storageState: stateFile,
@@ -347,6 +348,7 @@ async function runSeededInboxCycle({ base, stateFile, items, outDir }) {
       }
     })
   } finally {
+    await context?.close()
     await browser?.close()
   }
   return { steps, screenshots }
