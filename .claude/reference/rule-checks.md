@@ -13,7 +13,7 @@ or when a row names a check file that is not in the repository.
 | Claim before investigating or coding. Respect active claims. | `.claude/skills/ship/scripts/ship-claim.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Add only your agent. Preserve human assignees. | nothing yet |
 | Branch from `origin/production`; target `production`. | nothing yet |
-| One ticket, one PR. Leave auto-merge off. | `.github/scripts/pr-title.cjs` |
+| One ticket, one PR. Leave auto-merge off. | `.github/scripts/pr-title.cjs` binds this pull request only. A second pull request and auto-merge are nothing yet |
 | Never stash or discard another session's changes. | nothing yet |
 | Never use the archived `hypertask-ai/hypertasks` repository. | nothing yet |
 | Verify the successful production deployment and live behavior before Done. | `.github/workflows/prod-health.yml` |
