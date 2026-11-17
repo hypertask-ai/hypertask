@@ -224,8 +224,9 @@ export function modelHttpError(status, body, secrets) {
   const snippet = redact(String(body ?? "").replace(/\s+/g, " ").trim(), secrets).slice(0, 200);
   return snippet ? `model HTTP ${status}: ${snippet}` : `model HTTP ${status}`;
 }
+const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/"];
 export function hasAppPath(files) {
-  return (Array.isArray(files) ? files : []).some((file) => String(file).startsWith("src/"));
+  return (Array.isArray(files) ? files : []).some((file) => !NON_APP_PREFIXES.some((prefix) => String(file).startsWith(prefix)));
 }
 export function confirmsNoUserPath(reason) {
   return /no user path|no user-facing/i.test(String(reason ?? ""));
@@ -257,6 +258,31 @@ export function ciChecksPassed(runs) {
   const relevant = relevantChecks(runs);
   return relevant.length > 0 && relevant.every((run) => run.conclusion === "success" || run.conclusion === "skipped");
 }
+export function relevantStatuses(statuses) {
+  const seen = new Set();
+  const latest = [];
+  for (const status of Array.isArray(statuses) ? statuses : []) {
+    const context = status?.context;
+    if (!context || context === CONTEXT || seen.has(context)) continue;
+    seen.add(context);
+    latest.push(status);
+  }
+  return latest;
+}
+export function ciStatusesPending(statuses) {
+  const latest = relevantStatuses(statuses);
+  return latest.length === 0 || latest.some((status) => status?.state == null || status.state === "pending");
+}
+export function ciStatusesPassed(statuses) {
+  const latest = relevantStatuses(statuses);
+  return latest.length > 0 && latest.every((status) => status?.state === "success");
+}
+export function ciGate({ runs, statuses } = {}) {
+  return {
+    checksPassed: ciChecksPassed(runs) && ciStatusesPassed(statuses),
+    checksPending: ciChecksPending(runs) || ciStatusesPending(statuses),
+  };
+}
 export async function collectCheckRuns(readPage, pages = 5) {
   const runs = [];
   for (let page = 1; page <= pages; page += 1) {
@@ -267,11 +293,11 @@ export async function collectCheckRuns(readPage, pages = 5) {
   }
   return runs;
 }
-export async function waitForCiChecks(read, { sleep = (ms) => new Promise((done) => { setTimeout(done, ms); }), rounds = CI_WAIT_ROUNDS, intervalMs = CI_WAIT_INTERVAL_MS } = {}) {
+export async function waitForCiChecks(read, { sleep = (ms) => new Promise((done) => { setTimeout(done, ms); }), rounds = CI_WAIT_ROUNDS, intervalMs = CI_WAIT_INTERVAL_MS, pending = ciChecksPending } = {}) {
   let runs = [];
   for (let round = 0; round < rounds; round += 1) {
     runs = await read();
-    if (!ciChecksPending(runs)) return runs;
+    if (!pending(runs)) return runs;
     if (round + 1 < rounds) await sleep(intervalMs);
   }
   return runs;
@@ -525,9 +551,12 @@ async function judgeCommand() {
   if (!plan.fail && !plan.actions.length && !listWasTruncated(plan, files)) {
     try {
       const repo = requireRepo(process.env.GITHUB_REPOSITORY);
-      const runs = await waitForCiChecks(() => collectCheckRuns((page) => JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`]))));
-      checksPassed = ciChecksPassed(runs);
-      checksPending = ciChecksPending(runs);
+      const gate = await waitForCiChecks(async () => ({
+        runs: await collectCheckRuns((page) => JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`]))),
+        statuses: JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/status`])).statuses,
+      }), { pending: (snapshot) => ciGate(snapshot).checksPending });
+      checksPassed = ciGate(gate).checksPassed;
+      checksPending = ciGate(gate).checksPending;
     } catch (error) { console.log(`ci checks unread: ${failureText(error)}`); }
   }
   const verdict = decide({ model, plan, evidence, binding, checksPassed, checksPending });
