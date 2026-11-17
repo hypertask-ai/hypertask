@@ -30,6 +30,7 @@ export const CASES = [
     expected: "FAIL",
     why: "The saved field name is not on the page, so the claimed behaviour is broken.",
     claim,
+    pageShowsField: false,
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
   {
@@ -37,6 +38,7 @@ export const CASES = [
     expected: "PASS",
     why: "The saved field name is on the page, so the claimed behaviour works.",
     claim,
+    pageShowsField: true,
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
 ];
@@ -58,7 +60,8 @@ function matches(item, verdict) {
 }
 
 export function evalPlan(item, model) {
-  return { ...EVAL_BINDING, authorFamily: String(model).startsWith("deepseek/") ? "deepseek" : "other", verifierModel: model, actions: item.plan.actions, expect: item.plan.expect, reason: "" };
+  if (!item?.claim) throw new Error("eval case is missing");
+  return { ...EVAL_BINDING, authorFamily: String(model).startsWith("deepseek/") ? "deepseek" : "other", verifierModel: model, actions: [], expect: [], reason: "" };
 }
 
 export function planPromptFor(item) {
@@ -72,12 +75,12 @@ export function planCoversFixture(plan, value = "Renewal date") {
 }
 
 export function evalEvidence(item, plan = item.plan) {
-  const passing = item.expected === "PASS";
+  const shown = item.pageShowsField === true;
   const failedStep = Number.isInteger(item.stepFailure) ? item.stepFailure : -1;
   return {
     ...EVAL_BINDING,
     steps: plan.actions.map((action, index) => (index === failedStep ? { action, ok: false, error: "step was not actionable" } : { action, ok: true, error: "" })),
-    expects: plan.expect.map((expect) => ({ expect, ok: passing, error: passing ? "" : "text not visible" })),
+    expects: plan.expect.map((expect) => ({ expect, ok: shown, error: shown ? "" : "text not visible" })),
     navigations,
     offOrigin: [],
   };
