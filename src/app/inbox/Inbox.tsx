@@ -992,7 +992,8 @@ const Inbox = ({
                 </>
               ))}
             </div>
-            {!isMbl && !narrowInboxTabs && !(inboxZeroTabsFlag && isInboxZero) && (
+            {!isMbl && !narrowInboxTabs && (
+              !(inboxZeroTabsFlag && isInboxZero) && (
               <div
                 className={`flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 ${
                   isInboxZero ? "bg-transparent" : "bg-hoverCardBackground"
@@ -1017,6 +1018,7 @@ const Inbox = ({
                   ),
                 )}
               </div>
+              )
             )}
             {isMbl && (
               <MobileInboxSplitDock
