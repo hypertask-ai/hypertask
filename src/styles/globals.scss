@@ -476,6 +476,33 @@ body {
   padding-bottom: 0.75rem;
 }
 
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] #body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-task-properties-rail],
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-mobile-new-task-properties] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-testid="ticket-thread"] {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  min-height: 120px;
+  background-color: var(--bg-taskDetail-container);
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-phone-new-task-card] {
+  flex: 1 0 auto;
+  min-height: 120px;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .item {
   // color:white;
   display: block;
