@@ -371,6 +371,13 @@ TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-age
 IDENTITY="$SHARED_IDENTITY"
 [ -x "$SHIP_IDENTITY" ] || { printf 'vcc: %s is missing; refusing to write as %s\n' "$SHIP_IDENTITY" "$SHARED_IDENTITY" >&2; exit 2; }
 IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$SHIP_IDENTITY")
+SESSION_NAME=${SHIP_SESSION_NAME:-}
+if [ -z "$SESSION_NAME" ]; then
+  SESSION_NAME=$($SHIP_IDENTITY --name 2>/dev/null | head -1)
+  SESSION_NAME=${SESSION_NAME%%$'\t'*}
+  [ "$SESSION_NAME" = "$SHARED_IDENTITY" ] && SESSION_NAME=''
+fi
+SESSION_NAME=${SESSION_NAME%% | *}
 # A runner writes as its own agent or not at all: ship-identity falls back to Valentin when no
 # token exists, which would post a runner's words under his name (YPER4-960).
 # HYCI-408: a session named for its tmux slot ("ht-or-runner-5") resolves to "RUNNER 5" in ship-identity, so the
@@ -381,18 +388,18 @@ runner_slot() {
     | grep -oE '(^|[^a-z0-9])runner[-_ ]?[0-9]+([^a-z0-9]|$)' \
     | grep -oE '[0-9]+' | head -1 || true
 }
-case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
+case "$(printf '%s' "$SESSION_NAME" | tr '[:upper:]' '[:lower:]')" in
   *runner*)
-    if [ "$IDENTITY" != "${SHIP_SESSION_NAME%% | *}" ]; then
-      session_slot=$(runner_slot "${SHIP_SESSION_NAME}")
+    if [ "$IDENTITY" != "$SESSION_NAME" ]; then
+      session_slot=$(runner_slot "$SESSION_NAME")
       identity_slot=$(runner_slot "$IDENTITY")
       [ -n "$session_slot" ] && [ "$session_slot" = "$identity_slot" ] \
-        || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; }
+        || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SESSION_NAME" "$IDENTITY" >&2; exit 2; }
     fi ;;
 esac
 # A named session writes as itself or not at all (HTPR-9359): ship-identity falls back to the shared login when no token exists.
-if [ -n "${SHIP_SESSION_NAME:-}" ] && [ "$IDENTITY" = "$SHARED_IDENTITY" ]; then
-  printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2
+if [ -n "$SESSION_NAME" ] && [ "$IDENTITY" = "$SHARED_IDENTITY" ]; then
+  printf 'vcc: %s has no board login; refusing to write as %s\n' "$SESSION_NAME" "$IDENTITY" >&2
   exit 2
 fi
 HT_TOKEN="$(cat "$TOKEN_FILE")"

@@ -48,6 +48,10 @@ mkdir -p "$HOME/.agents/skills/ship/scripts"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'STUB'
 #!/usr/bin/env bash
 printf 'identity lookup\n' >> "$VCC_TEST_TRACE"
+if [ "${1:-}" = --name ]; then
+  printf '%s\n' "${VCC_TEST_DISCOVERED_NAME:-}"
+  exit 0
+fi
 printf '%s\t%s\n' "${VCC_TEST_IDENTITY:-Fixture}" "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 STUB
 chmod +x "$T/bin/"* "$HOME/.agents/skills/ship/scripts/ship-identity"
@@ -147,6 +151,9 @@ printf 'ok runner slot names write as that runner, another slot or no slot is re
 login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' SHIP_SESSION_NAME='HT Pstack Boss' bash "$vcc" comment add X-1 --text hi
 login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' SHIP_SESSION_NAME='HTPR-1 | fix' bash "$vcc" task move X-1 --section 'In Progress'
 allowed env VCC_TEST_IDENTITY='HT Pstack Boss' SHIP_SESSION_NAME='HT Pstack Boss | HTPR-9359' bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' VCC_TEST_DISCOVERED_NAME='HT Pstack Boss' bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_DISCOVERED_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
+allowed env bash "$vcc" comment add X-1 --text hi
 login_refused env HOME="$T/no-identity" bash "$vcc" comment add X-1 --text hi
 grep -q 'is missing; refusing to write as Valentins Claude Code' "$T/err" || fail "missing login lookup message unclear: $(cat "$T/err")"
 printf 'ok a named session without its own login is refused\n'
@@ -802,6 +809,7 @@ printf 'ok activity add accepts --text and --body in either order\n'
   printf 'fixture-token\n' > "$home/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
   cat > "$home/.agents/skills/ship/scripts/ship-identity" <<'STUB'
 #!/bin/sh
+[ "${1:-}" = --name ] && exit 0
 printf 'Fixture\t%s/.config/hypertask-agents/credentials/valentins-claude-code-agent-token\n' "$HOME"
 STUB
   chmod +x "$home/.agents/skills/ship/scripts/ship-identity"

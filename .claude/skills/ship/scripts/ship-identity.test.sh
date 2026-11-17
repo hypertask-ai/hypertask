@@ -36,4 +36,8 @@ check 'SPEED RUNNER' 'Valentins Claude Code' 'valentin-token'
 check 'ht-or-runner-99' 'Valentins Claude Code' 'valentin-token'
 check 'runner' 'Valentins Claude Code' 'valentin-token'
 check 'HTPR-1 | fix' 'Valentins Claude Code' 'valentin-token'
+# --name reports the discovered name alone, so vcc can refuse a named session before it writes.
+named=$(SHIP_SESSION_NAME='ci-boss | HTPR-1' bash "$here/ship-identity" --name)
+[ "$named" = 'ci-boss' ] || fail "--name gave \"$named\", wanted \"ci-boss\""
+[ -z "$(SHIP_SESSION_NAME='' bash "$here/ship-identity" --name)" ] || fail '--name invented a name for an unnamed session'
 printf 'ship-identity.test ok: literal token wins, a runner slot name resolves to that runner, no runner falls back to Valentin\n'
