@@ -31,6 +31,28 @@ test("an empty plan is not a pass", async () => {
   assert.deepEqual(result, { verdict: "FAIL", notes: "no user path verified" });
 });
 
+test("an empty plan logs its reason and passes only for a non-app change with green checks", async () => {
+  const { decide, ciChecksPassed, CONTEXT } = await load();
+  const reason = "This ticket is about CI test infrastructure; it has no user-facing screen to check.";
+  const scripts = plan([], { reason, files: [".github/scripts/verify-qa-premerge.mjs", "tests/verify-qa-premerge.test.cjs"] });
+  const missed = decide({ model: { verdict: "PASS", notes: "" }, plan: scripts, evidence: null, binding, checksPassed: false });
+  assert.equal(missed.verdict, "FAIL");
+  assert.match(missed.notes, /no user path verified: This ticket is about CI/);
+  const app = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { reason, files: ["src/app/page.tsx"] }), evidence: null, binding, checksPassed: true });
+  assert.equal(app.verdict, "FAIL");
+  const quiet = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { reason: "could not tell", files: ["docs/ci.md"] }), evidence: null, binding, checksPassed: true });
+  assert.equal(quiet.verdict, "FAIL");
+  const passed = decide({ model: { verdict: "", notes: "" }, plan: scripts, evidence: null, binding, checksPassed: true });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  assert.match(passed.notes, /^no app path: /);
+  const runs = [{ name: "ci-tests", conclusion: "success" }, { name: "browser-smoke", conclusion: "skipped" }, { name: CONTEXT, conclusion: "failure" }];
+  assert.equal(ciChecksPassed(runs), true);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: "failure" }]), false);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: null }]), false);
+  assert.equal(ciChecksPassed([]), false);
+  assert.equal(ciChecksPassed([{ name: CONTEXT, conclusion: "failure" }]), false);
+});
+
 test("a failed expect fails even when the model says PASS", async () => {
   const { decide } = await load();
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
@@ -203,6 +225,32 @@ test("the model call turns reasoning off so the answer fits the token cap", asyn
   assert.equal(text, "{}");
   assert.deepEqual(sent.reasoning, { enabled: false });
   assert.equal(sent.max_tokens, 1200);
+  let other;
+  await completeWithOpenRouter("{}", {
+    key: "secret",
+    model: "google/gemini-3.8-flash",
+    fetchImpl: async (_url, options) => {
+      other = JSON.parse(options.body);
+      return { ok: true, async json() { return { choices: [{ message: { content: "{}" } }] }; } };
+    },
+  });
+  assert.equal(Object.hasOwn(other, "reasoning"), false);
+  const key = "sk-live-eval-key";
+  const detail = `provider rejected reasoning.enabled ${key} ${"x".repeat(240)}`;
+  await assert.rejects(
+    completeWithOpenRouter("{}", {
+      key,
+      model: "google/gemini-3.8-flash",
+      fetchImpl: async () => ({ ok: false, status: 400, async text() { return detail; } }),
+    }),
+    (error) => {
+      assert.match(error.message, /^model HTTP 400: /);
+      assert.equal(error.message.includes(key), false);
+      assert.equal(error.message.includes("[redacted]"), true);
+      assert.ok(error.message.length <= "model HTTP 400: ".length + 200);
+      return true;
+    },
+  );
 });
 
 test("a verdict from another attempt fails", async () => {
