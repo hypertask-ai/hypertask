@@ -258,8 +258,14 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
         const viewToActivate = hideActiveViewOnToggle && willHide
             ? getViewToActivateWhenHidden(currentProject, activeBuiltinViews, orderedViews, viewId)
             : undefined
-        setHiddenViewTabIds((prev) => ({ ...prev, [key]: !prev[key] }))
-        if (viewToActivate) void switchViewHandler(viewToActivate)
+        const commitHidden = () => setHiddenViewTabIds((prev) => ({ ...prev, [key]: !prev[key] }))
+        if (!viewToActivate) {
+            commitHidden()
+            return
+        }
+        switchViewHandler(viewToActivate)
+            .then(commitHidden)
+            .catch(() => toast.error("Could not switch view, so it stays visible"))
     }
 
     const toggleEdit = (view: IView) => {
