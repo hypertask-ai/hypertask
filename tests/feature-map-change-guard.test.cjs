@@ -102,14 +102,17 @@ test("a citation to another area's changed file does not cover this area", async
   assert.match(result.reasons.join(" "), /uncovered areas: src\/components/);
 });
 
-test("editing only the map index fails", async () => {
+test("editing only the map index or a generated row fails", async () => {
   const { evaluate } = await load();
-  const result = evaluate({
-    title: "HTPR-1 [FEATURE] Add settings",
-    changedFiles: ["src/app/settings/page.tsx"],
-    mapPages: [{ status: "M", path: `${folder}/INDEX.md`, text: "| Settings | [settings](settings.md) | `src/app/settings/page.tsx` |\n" }],
-  });
-  assert.equal(result.ok, false);
+  for (const pagePath of [`${folder}/INDEX.md`, `${folder}/rows/settings.md`]) {
+    const result = evaluate({
+      title: "HTPR-1 [FEATURE] Add settings",
+      changedFiles: ["src/app/settings/page.tsx"],
+      mapPages: [{ status: "M", path: pagePath, text: "| Settings | `src/app/settings/page.tsx` |\n" }],
+    });
+    assert.equal(result.ok, false, pagePath);
+    assert.match(result.reasons.join(" "), /no feature-map page was added or edited/);
+  }
 });
 
 test("real feature PR 3182 has no map entry and fails", async () => {

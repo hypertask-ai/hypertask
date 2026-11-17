@@ -46,7 +46,7 @@ export function evaluate({ title, changedFiles, mapPages }) {
   const files = [...new Set(changedFiles)].filter(isUserFacing);
   if (!files.length) return { tag, enforced: true, ok: true, reasons: [], areas: [] };
   const areas = [...new Set(files.map(areaOf))].sort();
-  const pages = (mapPages ?? []).filter((page) => page.status !== "D" && page.path.endsWith(".md") && page.path !== `${mapFolder}/INDEX.md`);
+  const pages = (mapPages ?? []).filter((page) => page.status !== "D" && page.path.endsWith(".md") && page.path !== `${mapFolder}/INDEX.md` && !page.path.startsWith(`${mapFolder}/rows/`));
   const cited = pages.flatMap((page) => [...citedPaths(page.text)]);
   const uncovered = areas.filter((area) => !citesArea(new Set(cited), area, files));
   const reasons = [];
