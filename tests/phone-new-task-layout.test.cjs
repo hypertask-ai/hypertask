@@ -155,7 +155,7 @@ test("short sheet sizing overrides shared inline flex and layered important padd
 });
 
 const { chromium } = require("@playwright/test");
-test("short sheets reserve the card's intrinsic height despite shared inline flex and important padding", {
+test("phone sheets keep the dictation row inside the card and scroll long drafts in the editor", {
   skip: !fs.existsSync(chromium.executablePath()),
 }, async () => {
   const browser = await chromium.launch({ headless: true });
@@ -177,8 +177,8 @@ test("short sheets reserve the card's intrinsic height despite shared inline fle
         .editor { min-height: 42svh; overflow-y: auto; }
         .attachment-upload-container { height: 60px; }
         [data-phone-new-task-card] { padding: 10px; }
-        ${phoneStyles}
       </style>
+      <style id="phone-styles">${phoneStyles}</style>
       <div id="createTaskModal" data-phone-new-task-sheet="on" data-phone-new-task-short="on">
         <div class="modal-content"><div id="body">
           <header style="flex:0 0 105px"></header>
@@ -198,7 +198,7 @@ test("short sheets reserve the card's intrinsic height despite shared inline fle
         </div></div>
       </div>
     `);
-    for (const draft of ["Short draft", "<p>Long draft line</p>".repeat(80)]) {
+    for (const draft of ["", "<p>Long draft line</p>".repeat(80)]) {
       await page.locator(".editor").evaluate((editor, draft) => { editor.innerHTML = draft; }, draft);
       for (const viewport of [
         { layoutHeight: 500, visibleHeight: 500, bottomInset: 0 },
@@ -215,15 +215,44 @@ test("short sheets reserve the card's intrinsic height despite shared inline fle
         }, { offsets, short: phoneNewTaskShortSheet(viewport) });
         const rects = await page.locator("#createTaskModal").evaluate((sheet) => {
           const rect = (selector) => sheet.querySelector(selector).getBoundingClientRect().toJSON();
-          return { sheet: sheet.getBoundingClientRect().toJSON(), card: rect("[data-phone-new-task-card]"), row: rect(".attachment-upload-container") };
+          const editor = sheet.querySelector(".editor");
+          editor.scrollTop = editor.scrollHeight;
+          return {
+            sheet: sheet.getBoundingClientRect().toJSON(),
+            card: rect("[data-phone-new-task-card]"),
+            row: rect(".attachment-upload-container"),
+            editor: rect(".editor"),
+            editorScrollTop: editor.scrollTop,
+            pageHeight: document.documentElement.scrollHeight,
+            pageScrollTop: document.scrollingElement.scrollTop,
+          };
         });
         assert.equal(rects.sheet.height, viewport.visibleHeight);
         assert.ok(rects.card.height >= 120, JSON.stringify(rects));
         assert.ok(rects.row.bottom <= rects.sheet.bottom, JSON.stringify(rects));
         assert.ok(rects.row.bottom <= rects.card.bottom, JSON.stringify(rects));
+        assert.ok(rects.row.top >= rects.card.top, JSON.stringify(rects));
+        assert.ok(rects.row.top >= rects.sheet.top, JSON.stringify(rects));
         assert.ok(rects.card.bottom - rects.row.bottom <= 24, JSON.stringify(rects));
+        assert.ok(rects.editor.bottom <= rects.row.top, JSON.stringify(rects));
+        assert.equal(rects.pageHeight, viewport.layoutHeight);
+        assert.equal(rects.pageScrollTop, 0);
+        if (draft) assert.ok(rects.editorScrollTop > 0, JSON.stringify(rects));
       }
     }
+    await page.locator("#createTaskModal").evaluate((sheet) => {
+      sheet.removeAttribute("data-phone-new-task-sheet");
+    });
+    const flagOffLayout = () => page.locator("#createTaskModal").evaluate((sheet) =>
+      [sheet, ...sheet.querySelectorAll("*")].map((element) => ({
+        rect: element.getBoundingClientRect().toJSON(),
+        overflowY: getComputedStyle(element).overflowY,
+        minHeight: getComputedStyle(element).minHeight,
+      })),
+    );
+    const withPhoneStyles = await flagOffLayout();
+    await page.locator("#phone-styles").evaluate((style) => style.remove());
+    assert.deepEqual(await flagOffLayout(), withPhoneStyles);
   } finally {
     await browser.close();
   }
