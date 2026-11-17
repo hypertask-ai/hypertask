@@ -25,7 +25,6 @@ const RELEASED = [
 const HELD = {
   "yper4-651-self-follow-quiet": "customer-email",
   "htpr-8143-quiet-agent-updates": "customer-email",
-  "htpr-8215-agent-archive-delete": "data-deletion",
   "htpr-7575-phone-chat-delete": "data-deletion",
   "htpr-7686-free-plan-copy": "money",
   "htpr-7854-ai-thinking-opt-in": "money",
