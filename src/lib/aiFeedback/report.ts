@@ -9,6 +9,8 @@ import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
+import upsertTaskDescription from '@/utils/controllers/description/common-description-create'
+import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
@@ -327,15 +329,24 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         }
         if (existing) {
           if (automaticRefusal && plain) {
-            const readable = plainFeedback(input, fingerprint, {
+            const reporterFields = {
               agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
               ownerName: displayName,
               origin: reporter.origin,
-            }, stored, house ? 'house' : 'plain', true)
-            await tx.description.update({
-              where: { taskId: existing.id },
-              data: { content: readable.description },
-            })
+            }
+            const shape = house ? 'house' as const : 'plain' as const
+            const stale = plainFeedback(input, fingerprint, reporterFields, stored, shape, false).description
+            const next = plainFeedback(input, fingerprint, reporterFields, stored, shape, true).description
+            const current = (await tx.description.findUnique({ where: { taskId: existing.id }, select: { content: true } }))?.content ?? ''
+            const normalizedStale = normalizeBlockHtml(stale)
+            if (current === stale || current === normalizedStale) {
+              await upsertTaskDescription({
+                taskId: existing.id,
+                creatorId: actorId,
+                content: next,
+                actingUserId: actorId,
+              }, tx)
+            }
           }
           const count = storedCount + 1
           const text = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))

@@ -12,7 +12,7 @@ test.after(() => {
 })
 
 function setup({ off = [] } = {}) {
-  const created = [], comments = [], rows = [], lookups = []
+  const created = [], comments = [], rows = [], lookups = [], versions = []
   const disabled = new Set(off)
   const on = async (key, userId) => {
     lookups.push({ flag: key, userId })
@@ -20,11 +20,28 @@ function setup({ off = [] } = {}) {
   }
   const db = {
     description: {
+      findUnique: async ({ where }) => {
+        const row = rows.find((row) => row.id === where.taskId)
+        return row ? { content: row.description } : null
+      },
       update: async ({ where, data }) => {
         const row = rows.find((row) => row.id === where.taskId)
         if (!row) throw new Error('missing description')
         row.description = data.content
         return { taskId: where.taskId, content: data.content }
+      },
+      upsert: async ({ where, update }) => {
+        const row = rows.find((row) => row.id === where.taskId)
+        if (!row) throw new Error('missing description')
+        row.description = update.content
+        return { taskId: where.taskId, content: update.content }
+      },
+    },
+    docVersion: {
+      count: async () => versions.length,
+      create: async ({ data }) => {
+        versions.push(data)
+        return data
       },
     },
     section: { findMany: async () => [{ id: 2, section_title: 'Done' }] },
@@ -45,7 +62,12 @@ function setup({ off = [] } = {}) {
       },
       update: async ({ where, data }) => Object.assign(comments.find(comment => comment.id === where.id), data),
     },
-    $queryRaw: async () => [{ locked: true }],
+    $queryRaw: async (query) => {
+      const text = Array.isArray(query) ? query.join('') : ''
+      if (text.includes('TaskLease')) return []
+      return [{ locked: true }]
+    },
+    $executeRaw: async () => 0,
     $transaction: async (run) => run(db),
   }
   const load = loader({
@@ -68,7 +90,7 @@ function setup({ off = [] } = {}) {
   })
   return {
     ...load('src/lib/aiFeedback/report.ts'),
-    load, created, comments, lookups,
+    load, created, comments, lookups, versions,
     enable(key) { disabled.delete(key) },
   }
 }
@@ -142,4 +164,18 @@ test('a repeat report rewrites an open refusal that still says an engineer shoul
   assert.match(f.created[0].description, /wrong or expired key, not a Hypertask bug/)
   assert.match(f.created[0].description, /check its key and board permissions/)
   assert.doesNotMatch(f.created[0].description, /An engineer should look/)
+  assert.equal(f.versions.length, 1)
+  assert.match(f.versions[0].contentHtml, /An engineer should look/)
+})
+
+test('a repeat report leaves an edited refusal description in place', async () => {
+  const f = setup({ off: [flag] })
+  await f.fileAiFeedback(refused, undefined, { origin: 'automatic' })
+  f.created[0].description += '<p>Investigation: the key was rotated.</p>'
+  f.enable(flag)
+  const second = await f.fileAiFeedback(refused, undefined, { origin: 'automatic' })
+  assert.equal(second.deduped, true)
+  assert.match(f.created[0].description, /Investigation: the key was rotated/)
+  assert.match(f.created[0].description, /An engineer should look/)
+  assert.equal(f.versions.length, 0)
 })
