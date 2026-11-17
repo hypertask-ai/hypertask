@@ -651,3 +651,59 @@ test("a real plan with no evidence file fails as evidence missing", async () => 
     assert.equal(result.notes, "evidence missing");
   }
 });
+
+test("one bad model reply is retried and two bad replies fail closed", async () => {
+  const { askModel, parseAnswer, parsePlan, decide } = await load();
+  const model = "deepseek/deepseek-v4.1-flash";
+  const prompt = "same prompt";
+  const drive = (contents) => {
+    const seen = [];
+    const fetchImpl = async (_url, options) => {
+      const body = JSON.parse(options.body);
+      seen.push({ model: body.model, prompt: body.messages[1].content });
+      const content = contents[seen.length - 1];
+      return { ok: true, async json() { return { choices: [{ message: { content } }] }; } };
+    };
+    return { seen, options: { key: "secret", model, fetchImpl } };
+  };
+  const good = { verdict: "PASS", notes: "" };
+  const passDrive = drive(['{"verdict":"PASS",}', JSON.stringify(good)]);
+  const parsed = await askModel(prompt, passDrive.options, parseAnswer);
+  assert.equal(passDrive.seen.length, 2);
+  assert.deepEqual(passDrive.seen[0], { model, prompt });
+  assert.deepEqual(passDrive.seen[1], { model, prompt });
+  const passed = decide({
+    model: { verdict: parsed.verdict, notes: parsed.notes },
+    plan: plan([{ op: "goto", path: "/" }]),
+    evidence: evidence(),
+    binding,
+  });
+  assert.equal(passed.verdict, "PASS");
+  assert.equal(passed.notes, "");
+  const schema = drive(['{"actions":[{"op":"nope"}]}', '{"actions":[{"op":"goto","path":"/"}],"expect":[],"reason":"open the board"}']);
+  const planned = await askModel(prompt, schema.options, parsePlan);
+  assert.equal(schema.seen.length, 2);
+  assert.equal(planned.actions[0].path, "/");
+  const closed = drive(["", '{"verdict":"PASS",}']);
+  let thrown;
+  try { await askModel(prompt, closed.options, parseAnswer); } catch (error) { thrown = error; }
+  assert.equal(closed.seen.length, 2);
+  const failed = decide({
+    model: { verdict: "FAIL", notes: thrown.message },
+    plan: plan([{ op: "goto", path: "/" }]),
+    evidence: evidence(),
+    binding,
+  });
+  assert.equal(failed.verdict, "FAIL");
+  assert.equal(failed.notes, "model output invalid after retry");
+  let httpCalls = 0;
+  await assert.rejects(
+    askModel(prompt, {
+      key: "secret",
+      model,
+      fetchImpl: async () => { httpCalls += 1; return { ok: false, status: 500, async text() { return "busy"; } }; },
+    }, parseAnswer),
+    (error) => error.message === "model HTTP 500: busy",
+  );
+  assert.equal(httpCalls, 1);
+});
