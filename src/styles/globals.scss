@@ -933,11 +933,11 @@ svg.lucide.fill-current {
     border-radius: 10px !important;
   }
 
-  html[data-task-box-outlines] [data-task-detail-path] [data-task-properties-rail][data-properties-rail-corners="4"] {
+  html[data-task-box-outlines]:not(.dia):not(.rounded) [data-task-detail-path] [data-task-properties-rail][data-properties-rail-corners="4"] {
     border-radius: 4px !important;
   }
 
-  html[data-task-box-outlines] [data-task-detail-path] [data-task-properties-rail][data-properties-rail-corners="4"] [data-task-property-chip] {
+  [data-task-detail-path] [data-task-properties-rail][data-properties-rail-corners="4"] [data-task-property-chip] {
     border-radius: 4px !important;
   }
 
