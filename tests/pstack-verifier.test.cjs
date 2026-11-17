@@ -114,6 +114,23 @@ test("judge shots keep the final frames in numeric order", async () => {
   assert.equal(withShot.includes("0.png"), false);
 });
 
+test("a long plan sends the shot and the final frame to the judge", async () => {
+  const { runPlan, pickJudgeShots } = await load();
+  const written = [];
+  const page = {
+    on() {},
+    url: () => "http://127.0.0.1:3100/",
+    async goto(url) { return { status: () => 200, url: () => url }; },
+    async screenshot({ path: file }) { written.push(file.split("/").pop()); },
+  };
+  const actions = [...Array.from({ length: 8 }, () => ({ op: "goto", path: "/" })), { op: "shot", name: "after" }];
+  await runPlan({ page, plan: plan(actions), base: "http://127.0.0.1:3100", projectId: "1", shotsDir: "/tmp/pstack-shots", navigations: [] });
+  const picked = pickJudgeShots(written);
+  assert.equal(picked.includes("shot-after.png"), true);
+  assert.equal(picked.at(-1), "8.png");
+  assert.equal(picked.includes("0.png"), false);
+});
+
 test("github calls read GH_TOKEN and ignore GITHUB_TOKEN", async () => {
   const { githubHeaders, githubEnv } = await load();
   assert.equal(githubHeaders({ GH_TOKEN: "abc", GITHUB_TOKEN: "nope" }).Authorization, "Bearer abc");

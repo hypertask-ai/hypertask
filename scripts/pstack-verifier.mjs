@@ -260,8 +260,10 @@ export async function runPlan({ page, plan, base, projectId, shotsDir, navigatio
     let ok = true, error = "";
     try { await perform(page, action, base, projectId, navigations); }
     catch (caught) { ok = false; error = failureText(caught); }
-    try { await page.screenshot({ path: path.join(shotsDir, `${index}.png`) }); }
-    catch (caught) { if (ok) { ok = false; error = failureText(caught); } }
+    try {
+      await page.screenshot({ path: path.join(shotsDir, `${index}.png`) });
+      if (action.op === "shot") await page.screenshot({ path: path.join(shotsDir, `shot-${action.name}.png`) });
+    } catch (caught) { if (ok) { ok = false; error = failureText(caught); } }
     steps.push({ action, ok, error });
   }
   for (const item of plan.expect ?? []) {
