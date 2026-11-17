@@ -1532,6 +1532,26 @@ test("server description in the first page load is permanent and no longer regis
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
+test("Ctrl+K ellipsis flag is retired and the placeholder stays on for old tabs", async () => {
+  const key = "htpr-7871-ctrlk-ellipsis";
+  assert.equal(flags.HTPR_7871_CTRLK_ELLIPSIS_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261115120000_drop_htpr_7871_ctrlk_ellipsis_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  for (const userId of [6, 985, 42]) {
+    assert.equal(await flags.isFeatureEnabled(key, userId), false);
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+});
+
 for (const [key, risk] of [
   ["htpr-7982-cancelled-free", "money"],
   ["htpr-7575-phone-chat-delete", "data-deletion"],
