@@ -100,7 +100,7 @@ test("github calls read GH_TOKEN and ignore GITHUB_TOKEN", async () => {
 
 test("a superseded or ineligible run does not post", async () => {
   const { postCommand } = await load();
-  const sha = "c".repeat(40), posts = [], self = { id: 10, run_number: 3, status: "in_progress", conclusion: null };
+  const sha = "c".repeat(40), posts = [], self = { id: 10, run_number: 3, run_attempt: 1, status: "in_progress", conclusion: null, run_started_at: "2026-11-17T01:00:00Z" };
   const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
   const fs = require("node:fs"), work = fs.mkdtempSync(`${require("node:os").tmpdir()}/pv-`);
   fs.mkdirSync(`${work}/verdict`);
@@ -121,10 +121,10 @@ test("a superseded or ineligible run does not post", async () => {
     return posts.slice();
   };
   const denied = [
-    [open, [self, { id: 11, run_number: 4 }]],
+    [open, [self, { id: 9, run_number: 1, run_attempt: 2, status: "in_progress", run_started_at: "2026-11-17T00:00:00Z" }]],
     [open, [{ ...self, conclusion: "cancelled" }]],
     [open, [{ ...self, status: "cancelled" }]],
-    [open, [self, { id: 9, run_number: 8 }]],
+    [open, [self, { id: 11, run_number: 4, status: "completed", conclusion: "success", run_started_at: "2026-11-17T02:00:00Z" }]],
     [open, [self], 2],
     [{ ...open, draft: true }, [self]],
     [{ ...open, state: "closed" }, [self]],
@@ -133,7 +133,7 @@ test("a superseded or ineligible run does not post", async () => {
     [{ ...open, head: { sha, repo: { full_name: "other/repo" } } }, [self]],
   ];
   for (const [pull, runs, total] of denied) assert.deepEqual(await run(pull, runs, total), []);
-  const posted = await run(open, [self]);
+  const posted = await run(open, [self, { id: 8, run_number: 8, status: "completed", conclusion: "success", run_started_at: "2026-11-17T00:00:00Z" }]);
   assert.equal(posted.length, 1);
   assert.equal(posted[0].state, "success");
   assert.equal(posted[0].context, "pstack-verifier");
