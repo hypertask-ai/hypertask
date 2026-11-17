@@ -146,7 +146,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         <span
           aria-hidden="true"
           data-focus-bar="true"
-          className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-[3px] rounded-l-[5px] bg-white-black"
+          className="pointer-events-none absolute inset-y-0 left-0 z-base w-[3px] rounded-l-[5px] bg-white-black"
         />
       )}
       <Link
