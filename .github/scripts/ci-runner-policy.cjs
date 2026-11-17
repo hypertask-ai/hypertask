@@ -2,6 +2,7 @@ const { spawnSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const { createHash } = require('node:crypto');
 const yaml = require('js-yaml');
+const { writersAt } = require('./verifier-status-guard.cjs');
 
 function command(program, args, options = {}) {
   const result = spawnSync(program, args, { encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024, ...options });
@@ -97,6 +98,8 @@ async function checkPullRequest({ pr, core }) {
   }
   command('git', ['fetch', '--no-tags', '--depth=1', 'origin', `refs/pull/${pr.number}/head`], { env });
   if (git(['rev-parse', 'FETCH_HEAD']).trim() !== pr.head.sha) throw new Error('PR head changed during runner check');
+  const forged = writersAt(pr.head.sha, pr.base?.sha);
+  if (forged.length) throw new Error(`pstack-verifier status write is not allowed in ${forged.join(', ')}`);
   core.info(run(pr.base.repo.full_name, pr.head.sha));
 }
 
