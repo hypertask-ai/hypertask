@@ -40,6 +40,10 @@ async function harness(state) {
       if (state === 'outage') throw new Error('fake outage')
       return store.get(key) ?? null
     },
+    mget: async (...keys) => {
+      if (state === 'outage') throw new Error('fake outage')
+      return keys.map((key) => store.get(key) ?? null)
+    },
     set: async (key, value) => { store.set(key, value); return 'OK' },
   }
   const dependencies = { '@/lib/auth/session': session, '@/lib/redis': { getRedis: async () => redis } }
