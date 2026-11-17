@@ -11,7 +11,7 @@ const expected = {
   resolve: { contents: "read", "pull-requests": "read", statuses: "write" },
   plan: { contents: "read" },
   drive: { contents: "read", packages: "read" },
-  judge: { contents: "read" },
+  judge: { contents: "read", checks: "read", statuses: "read" },
   post: { contents: "read", "pull-requests": "write", statuses: "write" },
   cancel: { statuses: "write" },
 };
@@ -35,7 +35,7 @@ function tokenGaps(jobs) {
   return gaps;
 }
 
-test("each verifier job has the declared permissions, key and token", () => {
+test("each verifier job has the declared permissions, key and token", async () => {
   assert.deepEqual(request.permissions, {});
   assert.deepEqual(trusted.permissions, {});
   for (const [name, permissions] of Object.entries(expected)) assert.deepEqual(trusted.jobs[name].permissions, permissions, name);
@@ -63,4 +63,7 @@ test("each verifier job has the declared permissions, key and token", () => {
   assert.equal(policy.pstack_verifier.note, "enable after hosted proof");
   assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), false);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
+  const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
+  assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
+  assert.deepEqual(REQUIRED_CI_CONTEXTS, policy.required_checks.contexts);
 });
