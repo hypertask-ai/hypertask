@@ -38,7 +38,7 @@ const isEditDistanceOne = (left: string, right: string) => {
 };
 
 const FILLER_WORDS = new Set([
-  "a", "an", "the", "to", "my", "i", "in", "on", "off", "of", "for", "is",
+  "a", "an", "the", "to", "my", "i", "in", "of", "for", "is",
   "it", "this", "that", "do", "can", "please", "how", "and", "at", "from",
   "be", "up", "im", "into", "with", "what", "where", "when", "let",
 ]);
@@ -92,8 +92,10 @@ const useHTC = (
 
   const collectResults = useCallback((searchTerm: string, synonymsEnabled: boolean) => {
     const tokens = searchTerm.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    const searched = synonymsEnabled ? tokens.filter((token) => !FILLER_WORDS.has(token)) : tokens;
     if (tokens.length === 0) return emptyQueryCommands;
+    const searched = synonymsEnabled && tokens.length > 1
+      ? tokens.filter((token) => !FILLER_WORDS.has(token))
+      : tokens;
     if (searched.length === 0) return [{ group: "Results", commandLists: [] }];
 
     const seen = new Set<string>();

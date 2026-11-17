@@ -12,7 +12,7 @@ const palettes = {
 
 const loadSearch = (synonymsEnabled) => {
   let filtered;
-  const module = loadModule('src/hooks/MultiPages/HTC/useHTC.tsx', {
+  const useHtc = loadModule('src/hooks/MultiPages/HTC/useHTC.tsx', {
     react: {
       useCallback: (callback) => callback,
       useEffect: () => {},
@@ -24,7 +24,7 @@ const loadSearch = (synonymsEnabled) => {
     '@/utils/getCurrentUser': { getCurrentUserFromCookies: () => ({ id: 6 }) },
   });
   return (context, query) => {
-    module.default(palettes[context]).onKeyChange({ target: { value: query } });
+    useHtc.default(palettes[context]).onKeyChange({ target: { value: query } });
     return filtered.flatMap((group) => group.commandLists);
   };
 };
@@ -77,6 +77,14 @@ test('existing name and keyword matches keep their result with the flag on', () 
       if (before === undefined) continue;
       assert.equal(topCommandKey(withSynonyms, context, query), before, `query "${query}" must keep its ${context} result`);
     }
+  }
+});
+
+test('single-word keyword searches keep their results with the flag on', () => {
+  for (const query of ['off', 'my']) {
+    const before = topCommandKey(withoutSynonyms, 'board', query);
+    assert.ok(before, `query "${query}" must match a command without the flag`);
+    assert.equal(topCommandKey(withSynonyms, 'board', query), before, `query "${query}" must keep its result with the flag on`);
   }
 });
 

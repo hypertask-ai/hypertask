@@ -7,6 +7,8 @@ const React = require("react");
 const { createRoot } = require("react-dom/client");
 const { createJiti } = require("jiti");
 
+const { stubModule } = require("./helpers/loadModule.cjs");
+
 const root = path.resolve(__dirname, "..");
 const readSource = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -70,7 +72,11 @@ test("mobile command search uses one flush rounded focus ring", () => {
   assert.doesNotMatch(searchInput, /\bm-2\b|bg-newcomment-well/);
 });
 
-test("mobile commands select no row until the user searches", async () => {
+test("mobile commands select no row until the user searches", async (t) => {
+  stubModule(t, "src/hooks/useFlag.tsx", { useFlag: () => false });
+  stubModule(t, "src/lib/flags/definitions/htpr-9030-htc-command-synonyms.ts", {
+    HTPR_9030_HTC_COMMAND_SYNONYMS_FLAG: "htpr-9030-htc-command-synonyms",
+  });
   const dom = new JSDOM('<div id="root"></div>', {
     url: "https://app.hypertask.ai/board",
   });
@@ -90,10 +96,8 @@ test("mobile commands select no row until the user searches", async () => {
   const storePath = path.join(root, "src/store/index.ts");
   const userPath = path.join(root, "src/utils/getCurrentUser.ts");
   const hookPath = path.join(root, "src/hooks/MultiPages/HTC/useHTC.tsx");
-  const useFlagPath = path.join(root, "src/hooks/useFlag.tsx");
-  const synonymsFlagPath = path.join(root, "src/lib/flags/definitions/htpr-9030-htc-command-synonyms.ts");
   const previousModules = new Map(
-    [statePath, storePath, userPath, useFlagPath, synonymsFlagPath, hookPath].map((filename) => [
+    [statePath, storePath, userPath, hookPath].map((filename) => [
       filename,
       require.cache[filename],
     ]),
@@ -129,19 +133,6 @@ test("mobile commands select no row until the user searches", async () => {
       loaded: true,
       exports: { getCurrentUserFromCookies: () => null },
     };
-    require.cache[useFlagPath] = {
-      id: useFlagPath,
-      filename: useFlagPath,
-      loaded: true,
-      exports: { useFlag: () => false },
-    };
-    require.cache[synonymsFlagPath] = {
-      id: synonymsFlagPath,
-      filename: synonymsFlagPath,
-      loaded: true,
-      exports: { HTPR_9030_HTC_COMMAND_SYNONYMS_FLAG: "htpr-9030-htc-command-synonyms" },
-    };
-
     const jiti = createJiti(__filename, {
       alias: { "@": path.join(root, "src") },
     });
