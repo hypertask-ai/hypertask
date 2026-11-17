@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { buildCoreSmokeSeedPlan } from "./lib/core-smoke-seed-plan.mjs";
+import { boardRecords, buildCoreSmokeSeedPlan, teamRoster } from "./lib/core-smoke-seed-plan.mjs";
 
 const envFile = process.env.CORE_SMOKE_ENV_FILE;
 if (!envFile) throw new Error("CORE_SMOKE_ENV_FILE is required");
@@ -47,13 +47,14 @@ try {
   const team = await prisma.team.create({
     data: { title: "Core actions smoke", totalSeats: plan.members.length, googleAccountId: googleAccount.id },
   });
+  const roster = new Set(teamRoster(plan).map((member) => member.uid));
   await prisma.member_Team.createMany({
-    data: users.map((member) => ({ userId: member.id, teamId: team.id, googleAccountId: googleAccount.id })),
+    data: users.filter((member) => roster.has(member.uid)).map((member) => ({ userId: member.id, teamId: team.id, googleAccountId: googleAccount.id })),
   });
   const projects = new Map();
-  for (const board of plan.boards) {
+  for (const board of boardRecords(plan, googleAccount.id)) {
     projects.set(board.key, await prisma.project.create({
-      data: { name: board.name, title: board.title, ownerId: user.id, teamId: team.id, sections: board.sections },
+      data: { name: board.name, title: board.title, ownerId: user.id, teamId: team.id, googleAccountId: board.googleAccountId, sections: board.sections },
     }));
   }
   const sections = new Map();

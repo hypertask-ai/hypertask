@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
+const { copyFileSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
@@ -40,4 +40,15 @@ test("smoke seed plan is real-team size and a one-ticket seed fails", async () =
   assert.match(legacy.lines.join("\n"), /members 1 is below 8/);
   const live = await inspectRoot(root);
   assert.equal(live.code, 0, live.lines.join("\n"));
+  assert.equal(planMod.teamRoster(plan).length, plan.members.length - 1);
+  assert.ok(planMod.teamRoster(plan).every((member) => member.owner === false));
+  assert.ok(planMod.boardRecords(plan, "ga").every((board) => board.googleAccountId === "ga"));
+  assert.deepEqual(planMod.seedImplementationGaps(plan, readFileSync(path.join(root, "scripts/seed-core-actions-smoke.mjs"), "utf8")), []);
+  const broken = mkdtempSync(path.join(tmpdir(), "seed-size-plan-"));
+  mkdirSync(path.join(broken, "scripts/lib"), { recursive: true });
+  copyFileSync(path.join(root, "scripts/lib/core-smoke-seed-plan.mjs"), path.join(broken, "scripts/lib/core-smoke-seed-plan.mjs"));
+  writeFileSync(path.join(broken, "scripts/seed-core-actions-smoke.mjs"), "prisma.task.create(\n");
+  const ignored = await inspectRoot(broken);
+  assert.equal(ignored.code, 1);
+  assert.match(ignored.lines.join("\n"), /seed missing buildCoreSmokeSeedPlan/);
 });

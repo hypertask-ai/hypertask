@@ -51,6 +51,26 @@ export function buildCoreSmokeSeedPlan({ runKey }) {
   return { members, boards, labels, tasks, comments, taskLabels };
 }
 
+export function teamRoster(plan) {
+  return plan.members.filter((member) => !member.owner)
+}
+
+export function boardRecords(plan, googleAccountId) {
+  return plan.boards.map((board) => ({ ...board, googleAccountId }))
+}
+
+export function seedImplementationGaps(plan, source) {
+  const gaps = []
+  const roster = teamRoster(plan)
+  if (roster.length !== plan.members.length - 1 || roster.some((member) => member.owner)) gaps.push("team roster includes the owner")
+  const boards = boardRecords(plan, "account")
+  if (boards.length !== plan.boards.length || boards.some((board) => board.googleAccountId !== "account")) gaps.push("boards are missing their google account")
+  for (const token of ["buildCoreSmokeSeedPlan({ runKey })", "teamRoster(plan)", "boardRecords(plan, googleAccount.id)", "plan.tasks.map("]) {
+    if (!source.includes(token)) gaps.push(`seed missing ${token}`)
+  }
+  return gaps
+}
+
 export function summarizePlan(plan) {
   return {
     boards: plan.boards.length, tickets: plan.tasks.length, members: plan.members.length,

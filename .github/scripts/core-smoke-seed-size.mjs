@@ -7,7 +7,21 @@ export async function inspectRoot(root) {
   const planFile = path.join(root, "scripts/lib/core-smoke-seed-plan.mjs");
   if (existsSync(planFile)) {
     const mod = await import(pathToFileURL(planFile));
-    return mod.seedSizeReport(mod.summarizePlan(mod.buildCoreSmokeSeedPlan({ runKey: "proof" })));
+    const plan = mod.buildCoreSmokeSeedPlan({ runKey: "proof" });
+    const report = mod.seedSizeReport(mod.summarizePlan(plan));
+    const seedFile = path.join(root, "scripts/seed-core-actions-smoke.mjs");
+    const source = existsSync(seedFile) ? readFileSync(seedFile, "utf8") : "";
+    const gaps = mod.seedImplementationGaps(plan, source);
+    if (report.code === 0 && gaps.length === 0) return report;
+    return {
+      code: 1,
+      lines: [
+        "core-smoke-seed-size fail",
+        ...(report.code === 0 ? [] : report.lines.slice(1, -1)),
+        ...gaps.map((gap) => `core-smoke-seed-size ${gap}`),
+        report.lines.at(-1),
+      ],
+    };
   }
   const seedFile = path.join(root, "scripts/seed-core-actions-smoke.mjs");
   if (!existsSync(seedFile)) return { code: 1, lines: ["core-smoke-seed-size fail no seed script"] };
