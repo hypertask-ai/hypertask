@@ -373,15 +373,15 @@ test("template button hierarchy has one primary and a borderless muted secondary
   assert.ok(html.includes('<div class="content-list" style="margin:0 0 24px;font-size:14px;line-height:1.6;">'));
   assert.ok(html.includes('<p style="margin:0 0 16px;">Agent completed &#39;Task&#39; on Board.</p>'));
   assert.ok(html.includes('<p style="margin:0 0 16px;">Hypertask works best when your team and your agents share the board.</p>'));
-  assert.ok(html.includes('.cta { background-color: #4455BB !important; color: #ffffff !important; }'));
-  assert.match(html, /class="cta"[^>]*background-color:#4455BB[^>]*>Review the work<\/a>/);
+  assert.ok(html.includes('.cta { background-color: #5D6577 !important; color: #000000 !important; }'));
+  assert.match(html, /class="cta"[^>]*background-color:#5C6070[^>]*>Review the work<\/a>/);
   const secondary = html.match(/<a class="secondary-cta"[^>]*>Invite a teammate<\/a>/)?.[0];
   assert.ok(secondary);
-  assert.ok(secondary.includes("color:#727279"));
+  assert.ok(secondary.includes("color:#71717A"));
   for (const property of ["background", "border", "padding", "font-weight:600"]) {
     assert.equal(secondary.includes(property), false);
   }
-  assert.match(html, /\.secondary-cta \{ color: #8e9093 !important; \}/);
+  assert.match(html, /\.secondary-cta \{ color: #9A9CA1 !important; \}/);
   assert.ok(html.indexOf('class="secondary-cta"') < html.indexOf('class="cta"'), "primary action comes last");
 });
 

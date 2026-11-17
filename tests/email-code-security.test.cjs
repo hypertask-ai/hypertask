@@ -171,6 +171,7 @@ test('send-email-link never returns authentication secrets', async () => {
         '@/lib/prisma': { user: { findFirst: async () => null } },
         '@/lib/flags': {
           HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
+          HTPR_9069_SIGN_IN_EMAIL_STYLE_FLAG: 'htpr-9069-sign-in-email-style',
           isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
         },
         '@/lib/services/verificationCodeService': {
@@ -184,7 +185,9 @@ test('send-email-link never returns authentication secrets', async () => {
         '@/lib/auth/requestBaseUrl': {
           getRequestBaseUrl: () => 'https://app.hypertask.ai',
         },
+        '@/lib/email/signInEmail': { renderSignInEmail: () => ({ subject: '', html: '' }) },
         '@/lib/email/sendEmail': { sendEmail: async () => {} },
+        '@/lib/email/signInEmail': { renderSignInEmail: () => ({ subject: '', html: '' }) },
       },
     )
     const response = await POST(
@@ -226,6 +229,7 @@ test('send-email-link keeps the stored code when Resend times out', async () => 
         '@/lib/prisma': { user: { findFirst: async () => null } },
         '@/lib/flags': {
           HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
+          HTPR_9069_SIGN_IN_EMAIL_STYLE_FLAG: 'htpr-9069-sign-in-email-style',
           isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
         },
         '@/lib/services/verificationCodeService': {
@@ -239,6 +243,7 @@ test('send-email-link keeps the stored code when Resend times out', async () => 
         '@/lib/auth/requestBaseUrl': {
           getRequestBaseUrl: () => 'https://app.hypertask.ai',
         },
+        '@/lib/email/signInEmail': { renderSignInEmail: () => ({ subject: '', html: '' }) },
         '@/lib/email/sendEmail': {
           sendEmail: async () => {
             throw new Error('Resend API request timed out after 5000ms')

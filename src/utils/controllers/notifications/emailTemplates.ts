@@ -52,6 +52,7 @@ interface NotificationContent {
   secondaryCta?: { label: string; link: string };
   ctaColor?: string;
   quoteBorder?: string;
+  footerNote?: string;
 }
 
 const settingsUrl = "https://app.hypertask.ai/settings";
@@ -63,23 +64,23 @@ export function renderLayout(content: NotificationContent, link: string, unsubsc
   const preview =
     content.listHtml ??
     (previewHtml
-      ? `<blockquote class="preview" style="margin:0 0 24px;padding:16px 18px;background-color:#f9f9f9;border-left:3px solid ${content.quoteBorder ?? "#4455BB"};color:#262525;font-size:15px;line-height:1.6;">${previewHtml}</blockquote>`
+      ? `<blockquote class="preview" style="margin:0 0 24px;padding:16px 18px;background-color:#F7F7F8;border:1px solid #E2E2E6;border-left:3px solid ${content.quoteBorder ?? "#5C6070"};color:#18181B;font-size:15px;line-height:1.6;">${previewHtml}</blockquote>`
       : "");
   const badge = content.badge
-    ? `<td style="vertical-align:middle;white-space:nowrap;"><span class="badge" style="display:inline-block;background-color:#f9efcb;color:#262525;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;">${content.badge}</span></td>`
+    ? `<td style="vertical-align:middle;white-space:nowrap;"><span class="badge" style="display:inline-block;background-color:#f9efcb;color:#18181B;font-size:12px;font-weight:600;padding:4px 10px;border-radius:4px;white-space:nowrap;">${content.badge}</span></td>`
     : "";
   const identity = content.identity
     ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 20px;">
               <tr>
-                <td style="width:40px;vertical-align:middle;"><div class="avatar" style="width:40px;height:40px;border-radius:20px;background-color:#262525;color:#ffffff;text-align:center;line-height:40px;font-size:14px;font-weight:700;">${content.identity.initials}</div></td>
-                <td style="width:100%;padding-left:12px;vertical-align:middle;"><div class="identity-name" style="color:#262525;font-size:15px;font-weight:700;">${content.identity.name}</div><div class="identity-sub" style="color:#858585;font-size:13px;">${content.identity.subline}</div></td>
+                <td style="width:40px;vertical-align:middle;"><div class="avatar" style="width:40px;height:40px;border-radius:4px;background-color:#18181B;color:#FAFAFA;text-align:center;line-height:40px;font-size:14px;font-weight:700;">${content.identity.initials}</div></td>
+                <td style="width:100%;padding-left:12px;vertical-align:middle;"><div class="identity-name" style="color:#18181B;font-size:15px;font-weight:700;">${content.identity.name}</div><div class="identity-sub" style="color:#71717A;font-size:13px;">${content.identity.subline}</div></td>
                 ${badge}
               </tr>
             </table>
             `
     : "";
   const eyebrow = content.eyebrow
-    ? `<p class="eyebrow" style="margin:0 0 6px;color:#858585;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">${content.eyebrow}</p>
+    ? `<p class="eyebrow" style="margin:0 0 6px;color:#71717A;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">${content.eyebrow}</p>
             `
     : "";
   const contextTitle = content.contextTitle
@@ -87,8 +88,8 @@ export function renderLayout(content: NotificationContent, link: string, unsubsc
             `
     : "";
   const identityDarkModeStyles = content.identity
-    ? `        .identity-name { color:#ffffff !important; }
-        .avatar { background-color:#ffffff !important; color:#262525 !important; }
+    ? `        .identity-name { color:#FAFAFA !important; }
+        .avatar { background-color:#FAFAFA !important; color:#18181B !important; }
         .badge { background-color:#403a28 !important; color:#d29f02 !important; }
 `
     : "";
@@ -100,17 +101,17 @@ export function renderLayout(content: NotificationContent, link: string, unsubsc
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
       @media (prefers-color-scheme: dark) {
-        .email-body { background-color: #0e0e0e !important; color: #ffffff !important; }
-        .email-card { background-color: #27292D !important; border-color: rgb(35,37,42) !important; color: #ffffff !important; }
-        .wordmark, .content-list { color: #ffffff !important; }
+        .email-body { background-color: #17181B !important; color: #FAFAFA !important; }
+        .email-card { background-color: #1F2125 !important; border-color: #2A2C31 !important; color: #FAFAFA !important; }
+        .wordmark, .content-list, h1 { color: #FAFAFA !important; }
         /* Graphite: --bg-comment-description #262a30; --color-white-black #ffffff. */
         .onboarding-code { background-color: #262a30 !important; color: #ffffff !important; }
-        .preview { background-color: #2F343C !important; color: #ffffff !important; border-left-color: #4455BB !important; }
+        .preview { background-color: #26282D !important; color: #FAFAFA !important; border-color: #2A2C31 !important; border-left-color: #5D6577 !important; }
         .mention-hl { background-color: #403a28 !important; color: #d29f02 !important; }
-        .cta { background-color: #4455BB !important; color: #ffffff !important; }
-        .secondary-cta { color: #8e9093 !important; }
-        .footer { color: #858585 !important; }
-        .footer-link { color: #4455BB !important; }
+        .cta { background-color: #5D6577 !important; color: #000000 !important; }
+        .secondary-cta { color: #9A9CA1 !important; }
+        .footer { color: #9A9CA1 !important; }
+        .footer-link { color: #9A9CA1 !important; }
 ${identityDarkModeStyles}      }
       @media only screen and (max-width: 600px) {
         .email-shell { padding: 16px 12px !important; }
@@ -118,17 +119,17 @@ ${identityDarkModeStyles}      }
       }
     </style>
   </head>
-  <body class="email-body" style="margin:0;padding:0;background-color:#f3f3f3;color:#262525;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  <body class="email-body" style="margin:0;padding:0;background-color:#EFEFF1;color:#18181B;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
       <tr>
         <td class="email-shell" align="center" style="padding:32px 16px;">
-          <div class="email-card" style="box-sizing:border-box;width:100%;max-width:560px;padding:32px;background-color:#ffffff;border:1px solid rgb(224,224,224);color:#262525;text-align:left;">
-            <div class="wordmark" style="margin:0 0 28px;color:#262525;font-size:13px;font-weight:700;letter-spacing:0.04em;">Hypertask</div>
-            <h1 style="margin:0 0 20px;font-size:20px;line-height:1.4;font-weight:600;">${content.heading}</h1>
+          <div class="email-card" style="box-sizing:border-box;width:100%;max-width:560px;padding:32px;background-color:#FFFFFF;border:1px solid #E2E2E6;color:#18181B;text-align:left;">
+            <div class="wordmark" style="margin:0 0 28px;color:#18181B;font-size:13px;font-weight:700;letter-spacing:0.04em;">Hypertask</div>
+            <h1 style="margin:0 0 20px;color:#18181B;font-size:20px;line-height:1.4;font-weight:600;">${content.heading}</h1>
             ${identity}${eyebrow}${contextTitle}${preview}
-            ${content.secondaryCta ? `<a class="secondary-cta" href="${escapeHtml(content.secondaryCta.link)}" style="display:inline-block;margin:0 16px 12px 0;color:#727279;font-size:14px;text-decoration:none;">${escapeHtml(content.secondaryCta.label)}</a>` : ""}
-            <a class="cta" href="${escapeHtml(link)}" style="display:inline-block;padding:10px 16px;background-color:${content.ctaColor ?? "#4455BB"};color:#ffffff;border-radius:4px;font-size:15px;font-weight:600;text-decoration:none;">${content.ctaLabel}</a>
-            <p class="footer" style="margin:32px 0 0;color:#858585;font-size:12px;line-height:1.5;">Hypertask · <a class="footer-link" href="${settingsUrl}" style="color:#4455BB;text-decoration:underline;">Notification settings</a>${unsubscribeUrl ? ` · <a class="footer-link" href="${escapeHtml(unsubscribeUrl)}" style="color:#4455BB;text-decoration:underline;">Unsubscribe</a>` : ""}</p>
+            ${content.secondaryCta ? `<a class="secondary-cta" href="${escapeHtml(content.secondaryCta.link)}" style="display:inline-block;margin:0 16px 12px 0;color:#71717A;font-size:14px;text-decoration:underline;">${escapeHtml(content.secondaryCta.label)}</a>` : ""}
+            <a class="cta" href="${escapeHtml(link)}" style="display:inline-block;padding:10px 16px;background-color:${content.ctaColor ?? "#5C6070"};color:#FAFAFA;border-radius:4px;font-size:15px;font-weight:600;text-decoration:none;">${content.ctaLabel}</a>
+            <p class="footer" style="margin:32px 0 0;color:#71717A;font-size:12px;line-height:1.5;">${content.footerNote ? escapeHtml(content.footerNote) : `Hypertask · <a class="footer-link" href="${settingsUrl}" style="color:#71717A;text-decoration:underline;">Notification settings</a>`}${unsubscribeUrl ? ` · <a class="footer-link" href="${escapeHtml(unsubscribeUrl)}" style="color:#71717A;text-decoration:underline;">Unsubscribe</a>` : ""}</p>
           </div>
         </td>
       </tr>
@@ -212,7 +213,7 @@ export function renderDigestEmail(
         ? mentionQuoteHtml(event.commentText ?? "")
         : escapeHtml(commentPreview(event.commentText ?? ""));
       const quote = previewHtml
-        ? `<div class="preview" style="margin:6px 0 0;padding:10px 12px;background-color:#f9f9f9;border-left:3px solid #4455BB;color:#262525;font-size:14px;line-height:1.55;">${previewHtml}</div>`
+        ? `<div class="preview" style="margin:6px 0 0;padding:10px 12px;background-color:#F7F7F8;border:1px solid #E2E2E6;border-left:3px solid #5C6070;color:#18181B;font-size:14px;line-height:1.55;">${previewHtml}</div>`
         : "";
       return `<li style="margin:0 0 14px;">${escapeHtml(event.line)}${quote}</li>`;
     })
@@ -235,7 +236,7 @@ export function renderDigestEmail(
           : count === 1
             ? `1 update on &ldquo;${title}&rdquo;`
             : `${count} updates on &ldquo;${title}&rdquo;`,
-        listHtml: `<ul class="content-list" style="margin:0 0 24px;padding-left:20px;color:#262525;font-size:15px;line-height:1.6;">${items}</ul>`,
+        listHtml: `<ul class="content-list" style="margin:0 0 24px;padding-left:20px;color:#18181B;font-size:15px;line-height:1.6;">${items}</ul>`,
         ctaLabel: "View task",
       },
       link
@@ -288,8 +289,6 @@ export function renderNotificationEmail(
             contextTitle: `&ldquo;${title}&rdquo;`,
             previewHtml: mentionQuoteHtml(body.commentText ?? ""),
             ctaLabel: `Reply to ${sender}`,
-            ctaColor: "#262525",
-            quoteBorder: "#858585",
           },
           body.link
         ),

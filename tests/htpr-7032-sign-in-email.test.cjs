@@ -76,6 +76,14 @@ function harness(t, { existingUser = null, modes = {} } = {}) {
   })
   const { POST } = loadTs('src/app/api/auth/send-email-link/route.ts', {
     ...emailStraightBoardStubs,
+    '@/lib/email/signInEmail': loadTs('src/lib/email/signInEmail.ts', {
+      '@/utils/htmlEscape': loadTs('src/utils/htmlEscape.ts'),
+      '@/utils/controllers/notifications/emailTemplates': loadTs('src/utils/controllers/notifications/emailTemplates.ts', {
+        '@/utils/htmlEscape': loadTs('src/utils/htmlEscape.ts'),
+        './commentPreview': { commentPreview: () => '' },
+        './mentionText': { mentionQuoteHtml: () => '' },
+      }),
+    }),
     '@/lib/prisma': { default: prisma, __esModule: true },
     '@/lib/flags': flags,
     '@/lib/flags/keys': keys,
@@ -102,7 +110,7 @@ function harness(t, { existingUser = null, modes = {} } = {}) {
 }
 
 function emailLink(email) {
-  return new URL(email.html.match(/<a href="([^"]+)"/)[1])
+  return new URL(email.html.match(/<a [^>]*href="([^"]+)"/)[1].replace(/&amp;/g, "&"))
 }
 
 function assertSafeLink(url) {

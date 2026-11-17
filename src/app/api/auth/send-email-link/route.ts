@@ -7,12 +7,14 @@ import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { sendEmail } from '@/lib/email/sendEmail'
+import { renderSignInEmail } from '@/lib/email/signInEmail'
 import prisma from '@/lib/prisma'
 import { findUserByEmail } from '@/utils/controllers/users/findUserByEmail'
 import { isFeatureEnabled } from '@/lib/flags'
 import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7553_EMAIL_STRAIGHT_BOARD_FLAG,
+  HTPR_9069_SIGN_IN_EMAIL_STYLE_FLAG,
 } from '@/lib/flags/keys'
 import {
   finishStraightBoardEmailSignup,
@@ -31,7 +33,7 @@ const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
 const LINK_EXPIRY_MINUTES = 15
 const CODE_EXPIRY_MINUTES = 30
 
-type EmailVariant = { correctExpiry: boolean, firstTime: boolean }
+type EmailVariant = { correctExpiry: boolean, firstTime: boolean, styledLayout: boolean }
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
@@ -69,11 +71,29 @@ async function sendEmailWithResend(to: string, link: string, code: string, varia
     ? 'Confirm your email to land on your board, where people and AI agents work together.'
     : 'Choose your preferred sign-in method below'
 
+  const email = variant.styledLayout
+    ? renderSignInEmail({
+        heading,
+        introduction,
+        link,
+        code,
+        linkMinutes: variant.correctExpiry ? LINK_EXPIRY_MINUTES : 30,
+        codeMinutes: variant.correctExpiry ? CODE_EXPIRY_MINUTES : 15,
+      })
+    : { subject: heading, html: legacySignInHtml(heading, introduction, link, code, variant) }
+
   await sendEmail({
     to,
     from: `Hypertask <${EMAIL_FROM}>`,
-    subject: heading,
-    html: `
+    subject: email.subject,
+    html: email.html,
+  })
+
+  console.log('✅ Sign-in email sent')
+}
+
+function legacySignInHtml(heading: string, introduction: string, link: string, code: string, variant: EmailVariant) {
+  return `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9fafb; padding: 40px 20px;">
             <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
               <div style="text-align: center; margin-bottom: 32px;">
@@ -126,10 +146,7 @@ async function sendEmailWithResend(to: string, link: string, code: string, varia
               </div>
             </div>
           </div>
-        `,
-  })
-
-  console.log('✅ Email sent via Resend with both link and code')
+        `
 }
 
 function createEmailLoginToken(email: string, signupContextId: string | null) {
@@ -264,8 +281,9 @@ export async function POST(request: NextRequest) {
     const recipientId = existingUser?.id ?? 0
     const correctExpiry = await isFeatureEnabled(HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, recipientId)
     const firstTime = !existingUser
+    const styledLayout = await isFeatureEnabled(HTPR_9069_SIGN_IN_EMAIL_STYLE_FLAG, recipientId)
 
-    await sendEmailWithLink(normalizedEmail, signInLink, verificationCode, { correctExpiry, firstTime })
+    await sendEmailWithLink(normalizedEmail, signInLink, verificationCode, { correctExpiry, firstTime, styledLayout })
 
     return NextResponse.json({
       success: true,
