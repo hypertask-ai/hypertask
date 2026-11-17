@@ -3,8 +3,12 @@ import { parse, NodeType, type HTMLElement, type Node } from "node-html-parser";
 export const FLAG_CHAT_RECORD_AGENT_ID = "9b0f3a93-5e88-4093-b558-cad1c229bc51";
 export const FLAG_CHAT_RECORD = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):\s*"([^"]*)"(?:(?:[\s\p{P}]+switch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s+(?:only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-]))+[\s\p{P}]*|\.)?$/u;
 
+function foldQuestionMarks(text: string): string {
+  return text.replace(/[\u00BF\u037E\u055E\u061F\u1367\u1945\u203D\u2047\u2048\u2049\u2CFA\u2CFB\u2E18\u2E2E\u2E54\u2753\u2754\uA60F\uA6F7\uFE16\uFE56\uFF1F\u{11143}\u{1E95F}\u{1F679}\u{1F67A}\u{1F67B}\u{1FBC4}]/gu, "?");
+}
+
 export function normalizeVisibleText(html: string): string {
-  return parse(html).text.replace(/\u037E/g, "?").normalize("NFKC")
+  return foldQuestionMarks(parse(html).text).normalize("NFKC")
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .toLowerCase().replace(/\s+/g, " ").trim();
@@ -52,7 +56,7 @@ export function parseFlagChatRecord(html: string): { date: string; quote: string
 }
 
 export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
-  const answer = text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().replace(/\s+/g, " ").trim()
+  const answer = foldQuestionMarks(text).normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().replace(/\s+/g, " ").trim()
     .replace(/^@(?:valentin yeo|ht product lead)\b[\s,:-]*/, "");
   const tokens = answer.match(/[\p{L}\p{N}']+|👍|👎/gu) ?? [];
   const words = tokens.join(" ");
@@ -79,11 +83,10 @@ export function isOffOrder(text: string): boolean {
 }
 
 const OFF_LEAD = new Set(["please", "just", "now"]);
-const QUESTION_MARK = /[?\u00BF\u061F\u203D\u2E18\u2E2E\u2753\u2754]/u;
 
 export function isDirectOffOrder(text: string): boolean {
-  const normalized = text.replace(/\u037E/g, "?").normalize("NFKC");
-  if (QUESTION_MARK.test(normalized)) return false;
+  const normalized = foldQuestionMarks(text).normalize("NFKC");
+  if (normalized.includes("?")) return false;
   if (!isOffOrder(normalized)) return false;
   const words = normalized.replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
   const verbAt = words.findIndex((word) => OFF_VERB.test(word));

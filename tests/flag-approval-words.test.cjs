@@ -16,7 +16,8 @@ for (const [expected, fixtures] of [
     "if it works, release it", "maybe", "yes, later", "sure, wait", "", "hmm",
     "yes no", "yes not", "yes never", "yes don't", "yes dont", "yes do not", "yes can't", "yes cannot", "yes won't",
     "yes hold", "yes stop", "yes unless", "yes until", "yes perhaps", "yes except", "yes however", "yes instead",
-    "yes broken", "yes bug", "yes 👎", "yes unknown", "<unknown>yes</unknown>", "sure", "works", 'Valentin said in chat (2026-10-24): "yes, ship it"']],
+    "yes broken", "yes bug", "yes 👎", "yes unknown", "<unknown>yes</unknown>", "sure", "works", 'Valentin said in chat (2026-10-24): "yes, ship it"',
+    "yes\u1367", "yes\u055E", "yes\u{11143}"]],
 ]) {
   for (const fixture of fixtures) {
     test(`classifyAnswer ${JSON.stringify(fixture)} is ${expected}`, () => {
@@ -57,6 +58,12 @@ test("a quote block after the chat header is the approval and adjacent prose is 
   assert.equal(isDirectOffOrder("turn it off\uFF1F"), false);
   assert.equal(isDirectOffOrder("turn it off\u061F"), false);
   assert.equal(isDirectOffOrder("turn it off\u037E"), false);
+  assert.equal(isDirectOffOrder("turn it off\u1367"), false);
+  assert.equal(isDirectOffOrder("turn it off\u055E"), false);
+  assert.equal(isDirectOffOrder("turn it off\u2CFA"), false);
+  assert.equal(isDirectOffOrder("turn it off\u{1E95F}"), false);
+  assert.equal(isDirectOffOrder(normalizeVisibleText("turn it off\u1367")), false);
+  assert.equal(normalizeVisibleText("yes\u1367"), "yes?");
   assert.equal(isDirectOffOrder("turn it off;"), true);
   assert.equal(isBareOffOrder("turn it off!"), true);
   assert.equal(isBareOffOrder("turn it off provided QA passes"), false);
