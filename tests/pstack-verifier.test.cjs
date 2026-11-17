@@ -503,7 +503,7 @@ test("github calls read GH_TOKEN and ignore GITHUB_TOKEN", async () => {
 });
 
 test("a run posts only when it owns the newest verifier status", async () => {
-  const { postCommand } = await load();
+  const { postCommand, CONTEXT } = await load();
   const sha = "c".repeat(40), posts = [];
   const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
   const fs = require("node:fs"), work = fs.mkdtempSync(`${require("node:os").tmpdir()}/pv-`);
@@ -512,7 +512,7 @@ test("a run posts only when it owns the newest verifier status", async () => {
   Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
   const statusesUrl = `repos/acme/app/commits/${sha}/statuses`;
   const owned = "https://github.com/acme/app/actions/runs/10/attempts/1";
-  const mark = (runId, attempt) => ({ context: "pstack-verifier", target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}` });
+  const mark = (runId, attempt) => ({ context: CONTEXT, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}` });
   const run = async (pull, statuses) => {
     posts.length = 0;
     await postCommand({

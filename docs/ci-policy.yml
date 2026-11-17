@@ -963,7 +963,7 @@ session_ledgers:
 pstack_verifier:
   ticket: https://app.hypertask.ai/detail/project-15/9381
   workflow: .github/workflows/pstack-verifier.yml
-  context: pstack-verifier
+  status_context: pstack-verifier
   required: false
   note: enable after hosted proof
 
