@@ -556,6 +556,64 @@ test("a verdict comment names how long the run took", async () => {
   assert.equal(verdictComment("FAIL", "the board did not open", null), "FAIL: the board did not open Run time unknown.");
 });
 
+test("non-app files skip the model and pass on green checks", async () => {
+  const { selectPlan, decide, hasAppPath } = await load();
+  const files = ["scripts/pstack-verifier.mjs", "tests/pstack-verifier.test.cjs", "docs/ci.md", "README.md"];
+  assert.equal(hasAppPath(files), false);
+  const selected = selectPlan(files, false);
+  assert.deepEqual(selected, { actions: [], expect: [], reason: "no user path: non-app files only" });
+  assert.equal(selectPlan(["src/app/page.tsx"], false), null);
+  assert.equal(selectPlan(files, true), null);
+  const passed = decide({
+    model: { verdict: "FAIL", notes: "model should not run" },
+    plan: plan([], { ...selected, files, filesTruncated: false }),
+    evidence: null,
+    binding,
+    checksPassed: true,
+  });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  assert.equal(passed.notes, "no app path: no user path: non-app files only");
+});
+
+test("a preview that never listens is not a model verdict", async () => {
+  const { decide, notePreviewDown, previewDownBody, waitForPreview } = await load();
+  const refused = decide({
+    model: { verdict: "PASS", notes: "Navigation to the board failed with ERR_CONNECTION_REFUSED" },
+    plan: plan([{ op: "goto", path: "/project?id=1" }]),
+    evidence: evidence({ preview: "down" }),
+    binding,
+  });
+  assert.deepEqual(refused, { verdict: "FAIL", notes: "preview did not start" });
+  const body = plan([{ op: "goto", path: "/project?id=1" }]);
+  notePreviewDown(body, previewDownBody(binding));
+  assert.equal(body.fail, "preview did not start");
+  assert.equal(body.actions.length > 0 && !body.fail, false);
+  let calls = 0;
+  const up = await waitForPreview("http://127.0.0.1:3100", {
+    rounds: 3,
+    intervalMs: 5,
+    sleep: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls < 2) throw new Error("connect ECONNREFUSED 127.0.0.1:3100");
+      return { status: 200 };
+    },
+  });
+  assert.equal(up, true);
+  assert.equal(calls, 2);
+  calls = 0;
+  const dead = await waitForPreview("http://127.0.0.1:3100", {
+    rounds: 2,
+    intervalMs: 1,
+    sleep: async () => { calls += 1; },
+    fetchImpl: async () => { throw new Error("connect ECONNREFUSED 127.0.0.1:3100"); },
+  });
+  assert.equal(dead, false);
+  assert.equal(calls, 1);
+  await assert.rejects(() => waitForPreview("https://127.0.0.1:3100"), /preview url is not local/);
+});
+
+
 test("an api action passes from the preview response with no page navigation", async () => {
   const savedToken = process.env.GH_TOKEN;
   delete process.env.GH_TOKEN;
@@ -620,6 +678,7 @@ test("an api action passes from the preview response with no page navigation", a
     else process.env.GH_TOKEN = savedToken;
   }
 });
+
 
 test("a real plan with no evidence file fails as evidence missing", async () => {
   const { decide } = await load();
