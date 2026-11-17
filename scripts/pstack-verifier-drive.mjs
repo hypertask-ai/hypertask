@@ -24,7 +24,7 @@ try {
     const request = response.request();
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) recordNav(navigations, response.url(), response.status());
   });
-  const run = await runPlan({ page, plan, base: ready.url, projectId: seeded.CORE_SMOKE_PROJECT_ID, shotsDir, navigations });
+  const run = await runPlan({ page, plan, base: ready.url, projectId: seeded.CORE_SMOKE_PROJECT_ID, taskId: seeded.CORE_SMOKE_TASK_ID, bearer: seeded.CORE_SMOKE_MCP_TOKEN, shotsDir, navigations });
   writeFileSync(path.join(evidenceDir, "evidence.json"), `${JSON.stringify({ ...binding, steps: run.steps, expects: run.expects, navigations, offOrigin })}\n`, { mode: 0o600 });
 } finally {
   await context?.close();
