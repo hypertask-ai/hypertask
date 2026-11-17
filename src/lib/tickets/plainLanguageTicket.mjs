@@ -22,6 +22,7 @@ function openingLabelPattern(label) {
 }
 
 export function ticketOpening(html) {
+  html = dropBlockquotes(html);
   let cursor = 0;
   while (cursor < html.length) {
     const start = html.indexOf("<", cursor);

@@ -1,12 +1,9 @@
 import { plainLanguageTicketWriterRule } from "@/lib/tickets/plainLanguageTicket.mjs";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
-import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7977_SHORT_TASK_WRITER_FLAG, HTPR_9009_WRITER_URGENCY_FLAG, HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG } from "@/lib/flags/keys";
+import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7977_SHORT_TASK_WRITER_FLAG, HTPR_9009_WRITER_URGENCY_FLAG, HTPR_9010_TASK_WRITER_BRAIN_TAG_FLAG , HTPR_7500_WRITER_OLD_STRUCTURE_FLAG , HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_7471_WRITER_BOARD_FORMAT_FLAG , HTPR_7054_CTRLJ_DUE_DATE_FLAG , HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_9046_JEV_DUPLICATE_HINT_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
-import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
-import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
-import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
-import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { taskWriteAccessWhere , projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
 
 import { z } from "zod";
@@ -46,12 +43,10 @@ import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { isFeatureEnabled, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_9046_JEV_DUPLICATE_HINT_FLAG } from "@/lib/flags/keys";
 import type { JevDuplicateDraft } from "@/lib/ai/jevDuplicateCheck";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
 import { authorizeIndexedRows } from "@/lib/rag/authorizeIndexedRows";
 import { searchTasks } from "@/utils/controllers/turbopuffer/turbopufferHelper";

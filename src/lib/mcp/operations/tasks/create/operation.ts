@@ -1,7 +1,7 @@
 import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
-import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
+import { IdempotencyAccessError , IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from "@/lib/mcp/idempotency/idempotencyStore"
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -15,7 +15,6 @@ import { validateProjectAccess, getSectionForTask, createTask, validateParentTas
 import { mapTaskToDetail } from '@/lib/mcp/tasks/mappers';
 import { CreateTaskBody, TaskDetail } from '@/lib/mcp/tasks/types';
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml';
-import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from '@/lib/mcp/idempotency/idempotencyStore';
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 import { isAgentOnBoard } from '@/utils/controllers/agents/boardMembers';
