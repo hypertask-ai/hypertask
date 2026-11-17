@@ -23,12 +23,15 @@ Paths in reference commands are repository-relative.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
 
+Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
+
 ## Read X when Y
 
 Read linked sections on demand, not every reference.
 
 | When | Read |
 |---|---|
+| Checking what enforces an agent rule | [Rule checks](.claude/reference/rule-checks.md) |
 | Starting, claiming, delegating, shipping | [Session rules](.claude/reference/workflow.md#claude-code-and-codex-sessions), [claim rules](.claude/reference/boards.md#claim-a-ticket-before-working-it-collision-avoidance), `/ship` |
 | Reading tickets or writing board content | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions), [ticket template](docs/ticket-template.md) |
 | CLI or MCP work | [Repositories and credentials](.claude/reference/cli.md#cli-and-mcp-repositories) |
