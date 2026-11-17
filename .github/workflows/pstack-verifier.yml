@@ -93,7 +93,7 @@ jobs:
     if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.resolve.result == 'success' && needs.judge.result != 'cancelled' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: read, pull-requests: write, statuses: write }
+    permissions: { actions: read, contents: read, pull-requests: write, statuses: write }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
