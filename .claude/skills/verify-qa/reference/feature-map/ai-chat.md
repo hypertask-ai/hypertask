@@ -559,9 +559,7 @@ it still open. The computed `box-shadow` of `.chatwindow` and of
 `#htc .modal-content` must be the same value, and `#htc` itself must report
 `none`. Change `--shadow-floating` on the document element: both panels must
 change together, and restoring the token must restore both. Check every theme.
-Resize to 390x844: the chat sheet must report no shadow. With
-`htpr-8055-floating-elevation` Off, the chat returns to its previous halo and
-the palette stays flat.
+Resize to 390x844: the chat sheet must report no shadow.
 
 ### Returning from Settings
 

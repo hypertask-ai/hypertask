@@ -2,15 +2,17 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 
-const flag = "htpr-8055-floating-elevation";
+const removedFlag = "htpr-8055-floating-elevation";
 
-function windowView({ enabled = true, mobile = false, framed = false } = {}) {
+function useFlagMock(framed) {
+  return key => key === "htpr-8334-multi-chat-windows" ? framed : false;
+}
+
+function windowView({ mobile = false, framed = false } = {}) {
   const load = loader({
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
-    "@/hooks/useFlag": {
-      useFlag: key => (key === flag ? enabled : key === "htpr-8334-multi-chat-windows" ? framed : false),
-    },
+    "@/hooks/useFlag": { useFlag: useFlagMock(framed) },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {
       useAiChatContext: () => ({
@@ -34,45 +36,33 @@ function windowView({ enabled = true, mobile = false, framed = false } = {}) {
   return view;
 }
 
-for (const enabled of [false, true]) {
-  test(`desktop chat uses the shared floating shadow only with the flag: ${enabled}`, () => {
-    const view = windowView({ enabled });
-    try {
-      const panel = view.container.querySelector(".chatwindow");
-      assert.ok(panel.classList.contains("shadow-floating") === enabled);
-      if (enabled) {
-        assert.equal(panel.style.boxShadow, "");
-      } else {
-        assert.equal(panel.style.boxShadow, "var(--shadow-floating-previous)");
-      }
-    } finally { view.close(); }
-  });
-}
+test(`desktop chat always uses the shared floating shadow with ${removedFlag} gone`, () => {
+  const view = windowView();
+  try {
+    const panel = view.container.querySelector(".chatwindow");
+    assert.ok(panel.classList.contains("shadow-floating"));
+    assert.equal(panel.style.boxShadow, "");
+  } finally { view.close(); }
+});
 
-for (const enabled of [false, true]) {
-  test(`framed chat uses one outer shadow with the flag: ${enabled}`, () => {
-    const load = loader({
-      "@/hooks/useFlag": {
-        useFlag: key => key === flag ? enabled : key === "htpr-8334-multi-chat-windows",
-      },
-    });
-    const { ChatWindowFrame } = load("src/components/AI_CHAT/ChatWindowFrame.tsx");
-    const view = mount();
-    try {
-      view.render(React.createElement(ChatWindowFrame, {
-        state: { id: "window-1", sessionId: null, title: null, userId: 1, x: 0, y: 0, width: 400, height: 500, minimized: false },
-        viewport: { width: 1200, height: 800 },
-        onFocus: () => {}, onMove: () => {}, onResize: () => {},
-      }, "Chat"));
-      const frame = view.container.querySelector('[aria-label="AI chat window"]');
-      assert.ok(frame.classList.contains("rounded-[4px]"));
-      assert.equal(frame.classList.contains("shadow-floating"), enabled);
-      assert.equal(frame.classList.contains("shadow-customshadow-4"), !enabled);
-    } finally { view.close(); }
-  });
-}
+test("framed chat always uses the shared floating shadow", () => {
+  const load = loader({ "@/hooks/useFlag": { useFlag: useFlagMock(true) } });
+  const { ChatWindowFrame } = load("src/components/AI_CHAT/ChatWindowFrame.tsx");
+  const view = mount();
+  try {
+    view.render(React.createElement(ChatWindowFrame, {
+      state: { id: "window-1", sessionId: null, title: null, userId: 1, x: 0, y: 0, width: 400, height: 500, minimized: false },
+      viewport: { width: 1200, height: 800 },
+      onFocus: () => {}, onMove: () => {}, onResize: () => {},
+    }, "Chat"));
+    const frame = view.container.querySelector('[aria-label="AI chat window"]');
+    assert.ok(frame.classList.contains("rounded-[4px]"));
+    assert.ok(frame.classList.contains("shadow-floating"));
+    assert.equal(frame.classList.contains("shadow-customshadow-4"), false);
+  } finally { view.close(); }
+});
 
-test("phone chat sheet keeps no shadow with the flag on", () => {
+test("phone chat sheet keeps no shadow", () => {
   const view = windowView({ mobile: true });
   try {
     const panel = view.container.querySelector(".chatwindow");
@@ -90,12 +80,4 @@ test("a framed chat window keeps no shadow", () => {
     assert.equal(panel.classList.contains("shadow-floating"), false);
     assert.equal(panel.style.boxShadow, "");
   } finally { view.close(); }
-});
-
-test("the shared shadow is a bugfix that ships to Everyone and rolls back", () => {
-  const definition = loader()("src/lib/flags/definitions/htpr-8055-floating-elevation.ts").default;
-  assert.equal(definition.key, flag);
-  assert.equal(definition.kind, "bugfix");
-  assert.equal(definition.defaultMode, "EVERYONE");
-  assert.equal(definition.releaseRisk.risk, "small");
 });
