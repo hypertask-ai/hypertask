@@ -224,7 +224,7 @@ const body = {
 const user = { id: 985, email: "qa@example.invalid", displayName: "QA" };
 
 test("chat keeps stable rules first and query, selection and both clocks at the end", () => {
-  const output = content.createUserPrompt(body, user, "Ticket snapshot");
+  const output = content.createUserPrompt(body, user, "Ticket snapshot", true);
   const history = output.indexOf("CHAT HISTORY:");
   assert.ok(output.indexOf("IMPORTANT: Analyze") < history);
   assert.ok(output.indexOf("SCOPE:") < history);
@@ -235,7 +235,10 @@ test("chat keeps stable rules first and query, selection and both clocks at the 
   assert.ok(output.indexOf("User query: Current question") < output.indexOf("[Current Time:"));
   assert.equal((output.match(/\[Current Time:/g) ?? []).length, 1);
   assert.equal((output.match(/Today's Date & Time:/g) ?? []).length, 1);
-  assert.equal(content.createUserContent(body, user, "Ticket snapshot"), output);
+  assert.equal(content.createUserContent(body, user, "Ticket snapshot", true), output);
+  const uncached = content.createUserPrompt(body, user, "Ticket snapshot", false);
+  assert.ok(uncached.indexOf("User query: Current question") < uncached.indexOf("CHAT HISTORY:"));
+  assert.ok(uncached.indexOf("CHAT HISTORY:") > uncached.indexOf("Today's Date & Time:"));
 });
 
 test("chat uses one server-evaluated decision for prompt ordering and provider caching", async () => {
@@ -270,7 +273,7 @@ test("chat uses one server-evaluated decision for prompt ordering and provider c
     "./chatNames": { nameChatFromFirstMessage: async () => null },
   });
   await turn.runModelTurn({ body, dbUser: user, selected: { model }, trustedChatSessionId: "owned-session", providerAbort: new AbortController() }, body, {});
-  assert.equal(userPrompt, content.createUserPrompt(body, user, "Ticket snapshot"));
+  assert.equal(userPrompt, content.createUserPrompt(body, user, "Ticket snapshot", await h.aiPromptCachingEnabled(model)));
   const output = await transform(params());
   assert.match(output.providerOptions.openai.promptCacheKey, /^[A-Za-z0-9_-]{32}$/);
   assert.deepEqual(h.checks, []);
@@ -350,7 +353,7 @@ test("On direct OpenAI never receives a prompt cache key even with a trusted ses
 
 test("chat reordering preserves attachment parts", () => {
   const request = { ...body, images64: [{ url: "data:image/png;base64,YQ==", fileName: "fixture.png", mimeType: "image/png" }] };
-  const attached = plain(content.createUserContent(request, user, "Ticket snapshot"));
-  assert.equal(attached[0].text, content.createUserPrompt(request, user, "Ticket snapshot"));
+  const attached = plain(content.createUserContent(request, user, "Ticket snapshot", true));
+  assert.equal(attached[0].text, content.createUserPrompt(request, user, "Ticket snapshot", true));
   assert.deepEqual(attached.slice(1), [{ type: "file", mediaType: "image/png", filename: "fixture.png", data: { type: "data", data: "YQ==" } }]);
 });
