@@ -18,8 +18,7 @@ on:
 
 concurrency:
   group: ci-tests-${{ github.event.pull_request.number || github.sha }}
-  queue: max
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 # One knob for the Test step. YPER4-554 (HT Product Lead, 2026-10-24) capped it
 # at 2 because 3 or more count-split shards queued other pulls. YPER4-777 broke

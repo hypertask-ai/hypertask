@@ -16,13 +16,12 @@ permissions:
   statuses: write
 
 concurrency:
-  # One run at a time per pull request, and no cancellation. A cancelled
-  # evaluation leaves the required pr-title status unresolved, and a rerun of an
-  # older event cancels the current one (HYCI-29). `queue: max` keeps a slot for
-  # every pending event, so the newest event always publishes its own result.
+  # One group per pull request. A newer event cancels the older run of that
+  # same pull request, so a stale title check does not keep a runner (HYCI-29).
+  # The group names the pull request, so one pull request does not cancel
+  # another. queue: max is absent because GitHub rejects it beside cancellation.
   group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}
-  queue: max
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   pr-guards-trusted:

@@ -453,6 +453,17 @@ async function judgeCommand() {
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, authorFamily: plan.authorFamily || "", verifierModel: plan.verifierModel || "" })}\n`, { mode: 0o600 });
 }
+export function runMinutes(startedAt, now = Date.now()) {
+  const started = Date.parse(String(startedAt ?? ""));
+  if (!Number.isFinite(started)) return null;
+  return Math.max(0, Math.round((now - started) / 60000));
+}
+export function verdictComment(verdict, notes, minutes) {
+  const time = minutes == null ? "Run time unknown." : `Run time ${minutes} min.`;
+  if (verdict === "PASS" || verdict === "PASS+NOTES") return `${verdict}. ${time}`;
+  const detail = String(notes ?? "").replace(/\s+/g, " ").trim();
+  return `${verdict}: ${detail} ${time}`.replace(/\s+/g, " ").trim();
+}
 export async function postCommand(io = {}) {
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const binding = bindingNow();
@@ -467,7 +478,9 @@ export async function postCommand(io = {}) {
   if (!eligiblePull(item, repo, binding.sha) || !ownsVerifierStatus(statuses, repo, binding.run, binding.attempt)) return;
   const description = `${saved.verdict}: author ${saved.authorFamily || "unknown"}, verifier ${saved.verifierModel || "none"}`.slice(0, 140);
   await postStatus({ repo, ...binding, state: saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure", description, fetchImpl: io.fetch });
-  if (saved.verdict !== "PASS") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()), io.fetch);
+  const minutes = runMinutes(io.startedAt ?? process.env.RUN_STARTED_AT, io.now);
+  const notes = redact(saved.notes, secretValues());
+  await postComment(repo, pr, verdictComment(saved.verdict, notes, minutes), io.fetch);
 }
 async function main() {
   const command = process.argv[2];

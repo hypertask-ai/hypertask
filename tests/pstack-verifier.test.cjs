@@ -296,13 +296,14 @@ test("a run posts only when it owns the newest verifier status", async () => {
   const fs = require("node:fs"), work = fs.mkdtempSync(`${require("node:os").tmpdir()}/pv-`);
   fs.mkdirSync(`${work}/verdict`);
   fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict: "PASS", notes: "", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "m" }));
-  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
+  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work, RUN_STARTED_AT: "2026-11-17T12:00:00.000Z" });
   const statusesUrl = `repos/acme/app/commits/${sha}/statuses`;
   const owned = "https://github.com/acme/app/actions/runs/10/attempts/1";
   const mark = (runId, attempt) => ({ context: "pstack-verifier", target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}` });
   const run = async (pull, statuses) => {
     posts.length = 0;
     await postCommand({
+      now: Date.parse("2026-11-17T12:12:00.000Z"),
       fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
       gh: (args) => {
         const url = String(args[1]);
@@ -325,8 +326,18 @@ test("a run posts only when it owns the newest verifier status", async () => {
   ];
   for (const [pull, statuses] of denied) assert.deepEqual(await run(pull, statuses), []);
   const posted = await run(open, [{ context: "ci", target_url: "https://example.test" }, mark("10", "1"), mark("9", "3")]);
-  assert.equal(posted.length, 1);
+  assert.equal(posted.length, 2);
   assert.equal(posted[0].state, "success");
   assert.equal(posted[0].context, "pstack-verifier");
   assert.equal(posted[0].target_url, owned);
+  assert.equal(posted[1].body, "PASS. Run time 12 min.");
+});
+
+test("a verdict comment names how long the run took", async () => {
+  const { verdictComment, runMinutes } = await load();
+  assert.equal(runMinutes("2026-11-17T12:00:00.000Z", Date.parse("2026-11-17T12:12:00.000Z")), 12);
+  assert.equal(runMinutes("not-a-time", 0), null);
+  assert.equal(verdictComment("PASS", "", 12), "PASS. Run time 12 min.");
+  assert.equal(verdictComment("FAIL", "the board did not open", 12), "FAIL: the board did not open Run time 12 min.");
+  assert.equal(verdictComment("FAIL", "the board did not open", null), "FAIL: the board did not open Run time unknown.");
 });

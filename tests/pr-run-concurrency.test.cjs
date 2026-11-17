@@ -4,7 +4,7 @@ const { readFileSync, mkdtempSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 const yaml = require('js-yaml');
-const { EXCEPTIONS, check, problemsFor } = require('../.github/scripts/pr-run-concurrency-guard.cjs');
+const { check, problemsFor } = require('../.github/scripts/pr-run-concurrency-guard.cjs');
 
 const WORKFLOWS = '.github/workflows';
 
@@ -14,21 +14,14 @@ test('every pull request push cancels its superseded run', () => {
   assert.deepEqual(check(WORKFLOWS), []);
 });
 
-test('ci-tests queues every synchronize without cancelling pending runs', () => {
-  const ci = workflow('ci-tests');
-  assert.equal(ci.concurrency.queue, 'max');
-  assert.equal(ci.concurrency['cancel-in-progress'], false);
-});
-
-test('only the listed gates skip cancellation, and each cites its ticket', () => {
-  assert.deepEqual([...EXCEPTIONS.keys()],
-    ['feature-flag-gate', 'ux-signoff-gate', 'pr-guards-trusted', 'dependabot-lane', 'codex-review-gate', 'ci-tests']);
-  for (const [name, reason] of EXCEPTIONS) {
-    const config = workflow(name);
-    const concurrency = config.concurrency ?? Object.values(config.jobs).find(job => job.concurrency).concurrency;
-    assert.equal(concurrency.queue, 'max', `${name} keeps a slot for every pending event`);
-    assert.equal(concurrency['cancel-in-progress'] ?? false, false);
-    assert.match(reason, /[A-Z][A-Z0-9]*-\d+/);
+test('the six gates that used to queue now cancel the same pull request', () => {
+  for (const name of ['ci-tests', 'pr-guards-trusted', 'feature-flag-gate', 'ux-signoff-gate', 'codex-review-gate', 'dependabot-lane']) {
+    const text = readFileSync(path.join(WORKFLOWS, `${name}.yml`), 'utf8');
+    assert.deepEqual(problemsFor(name, text), [], name);
+    const concurrency = workflow(name).concurrency;
+    assert.equal(concurrency['cancel-in-progress'], true, name);
+    assert.equal(concurrency.queue, undefined, name);
+    assert.match(concurrency.group, /github\.event\.pull_request\.number/, name);
   }
 });
 
@@ -127,38 +120,28 @@ test('a workflow added after the exception list gets no exemption', () => {
   assert.deepEqual(problemsFor('new-checks', added), ['new-checks: no concurrency block']);
 });
 
-test('an excepted gate fails when it starts cancelling runs', () => {
-  const cancelling = [
+test('a gate fails when cancel-in-progress is missing or false', () => {
+  const missing = [
     'on:',
     '  pull_request_target:',
     '    types: [opened, synchronize]',
     'concurrency:',
-    '  group: feature-flag-gate-serialized',
-    '  queue: max',
-    '  cancel-in-progress: true',
+    '  group: feature-flag-gate-${{ github.event.pull_request.number }}',
     '',
   ].join('\n');
-  assert.deepEqual(problemsFor('feature-flag-gate', cancelling), [
-    'feature-flag-gate: exception must not cancel runs',
+  const held = missing.replace(
+    '  group: feature-flag-gate-${{ github.event.pull_request.number }}',
+    '  group: pr-guards-trusted-${{ github.event.pull_request.number }}\n  cancel-in-progress: false',
+  );
+  assert.deepEqual(problemsFor('feature-flag-gate', missing), [
+    'feature-flag-gate: cancel-in-progress is missing',
+  ]);
+  assert.deepEqual(problemsFor('pr-guards-trusted', held), [
+    'pr-guards-trusted: cancel-in-progress is false',
   ]);
 });
 
-test('an excepted gate fails when it loses its queue', () => {
-  const dropping = [
-    'on:',
-    '  pull_request_target:',
-    '    types: [opened, synchronize]',
-    'concurrency:',
-    '  group: pr-guards-trusted',
-    '  cancel-in-progress: false',
-    '',
-  ].join('\n');
-  assert.deepEqual(problemsFor('pr-guards-trusted', dropping), [
-    'pr-guards-trusted: exception lost its queue: max',
-  ]);
-});
-
-test('an excepted gate fails when it loses its concurrency block', () => {
+test('a gate fails when it loses its concurrency block', () => {
   const bare = [
     'on:',
     '  pull_request_target:',
@@ -168,27 +151,26 @@ test('an excepted gate fails when it loses its concurrency block', () => {
   assert.deepEqual(problemsFor('ux-signoff-gate', bare), ['ux-signoff-gate: no concurrency block']);
 });
 
-test('an excepted gate fails when its group is unique per run', () => {
+test('a gate fails when its group is unique per run', () => {
   const perRun = [
     'on:',
     '  pull_request:',
     '    types: [synchronize]',
     'concurrency:',
     '  group: ${{ github.run_id }}',
-    '  queue: max',
-    '  cancel-in-progress: false',
+    '  cancel-in-progress: true',
     '',
   ].join('\n');
   const perCommit = perRun.replace('github.run_id', 'github.sha');
   assert.deepEqual(problemsFor('ci-tests', perRun), [
-    'ci-tests: exception group does not serialize runs',
+    'ci-tests: concurrency group ${{ github.run_id }} is not per pull request',
   ]);
   assert.deepEqual(problemsFor('ci-tests', perCommit), [
-    'ci-tests: exception group does not serialize runs',
+    'ci-tests: concurrency group ${{ github.sha }} is not per pull request',
   ]);
 });
 
-test('an excepted gate may serialize on a job instead of the workflow', () => {
+test('a job-level group does not stand in for the workflow group', () => {
   const jobLevel = [
     'on:',
     '  pull_request_target:',
@@ -197,9 +179,9 @@ test('an excepted gate may serialize on a job instead of the workflow', () => {
     '  gate:',
     '    runs-on: ubuntu-latest',
     '    concurrency:',
-    '      group: codex-review-gate',
-    '      queue: max',
+    '      group: codex-review-gate-${{ github.event.pull_request.number }}',
+    '      cancel-in-progress: true',
     '',
   ].join('\n');
-  assert.deepEqual(problemsFor('codex-review-gate', jobLevel), []);
+  assert.deepEqual(problemsFor('codex-review-gate', jobLevel), ['codex-review-gate: no concurrency block']);
 });

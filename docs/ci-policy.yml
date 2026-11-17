@@ -83,15 +83,15 @@ pr_job_budget:
     - workflow: .github/workflows/feature-flag-gate.yml
       jobs: 2
       published_statuses: [feature-flag-gate, reconcile-feature-flag-gate]
-      concurrency_group: feature-flag-gate-serialized
-      queue: max
-      cancel_in_progress: false
+      concurrency_group: "feature-flag-gate-${{ github.event.pull_request.number || github.ref }}"
+      queue: none
+      cancel_in_progress: true
     - workflow: .github/workflows/ux-signoff-gate.yml
       jobs: 1
       published_statuses: [ux-signoff-gate, ux-signoff]
-      concurrency_group: ux-signoff-gate
-      queue: max
-      cancel_in_progress: false
+      concurrency_group: "ux-signoff-gate-${{ github.event.pull_request.number || github.ref }}"
+      queue: none
+      cancel_in_progress: true
   context_publication: native_scanner_checks_and_combined_trusted_commit_status
   isolated_guards:
     node_version: vercel_secret_runner_separate_from_candidate_scripts
@@ -561,22 +561,23 @@ policies:
     repository_creation_setting: enabled
   concurrency:
     cancel_superseded_pull_request_runs: true
-    ci_tests_cancel_in_progress: false
-    ci_tests_pull_request_pending_events: queue_max
+    ci_tests_cancel_in_progress: true
+    ci_tests_pull_request_pending_events: cancel
     trusted_guard_event_isolation: pull_request_number
-    trusted_guard_cancel_in_progress: false
-    trusted_guard_pending_events: queue_max
+    trusted_guard_cancel_in_progress: true
+    trusted_guard_pending_events: cancel
     serialized_pull_request_guard_writes: true
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true
     app_smoke_workflow_runs: per_run_validation_and_report_only_validated_current_head_builds_cancel_by_repository_branch
-    non_cancelling_reconciliation: [feature-flag-gate-serialized, ux-signoff-gate, dependabot-lane, ci-tests]
-    required_status_gates_never_cancel: [ci-tests, pr-guards-trusted, feature-flag-gate, ux-signoff-gate, codex-review-gate]
-    ticket_filing_gates_never_cancel: [dependabot-lane]
-    exception_contract: queue_max_with_cancel_in_progress_false_and_a_cited_ticket
+    non_cancelling_reconciliation: []
+    required_status_gates_never_cancel: []
+    ticket_filing_gates_never_cancel: []
+    cancelling_pull_request_workflows: [ci-tests, pr-guards-trusted, feature-flag-gate, ux-signoff-gate, codex-review-gate, dependabot-lane]
+    exception_contract: none
     exception_guard: .github/scripts/pr-run-concurrency-guard.cjs
     exception_guard_test: tests/pr-run-concurrency.test.cjs
-    fleet_checker_cancel_rule: does_not_accept_queue_max_with_cancel_in_progress_false
+    fleet_checker_cancel_rule: cancel_in_progress_true_on_every_pull_request_workflow
     prefer_queue_over_oom: true
   review:
     required_check_name: ai-review
