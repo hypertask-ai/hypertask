@@ -144,3 +144,79 @@ test("visual viewport offsets keep the sheet on the visible area", () => {
     { top: "100px", keyboard: "300px", keyboardOpen: true },
   );
 });
+
+
+test("short sheet sizing overrides shared inline flex and layered important padding", () => {
+  const thread = sheetRule(
+    '#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-testid="ticket-thread"] {',
+  );
+  assert.match(thread, /flex:\s*0 0 auto !important/);
+  assert.match(globals, /@layer utilities\s*\{\s*#createTaskModal\[data-phone-new-task-sheet\]\[data-phone-new-task-short\] \[data-testid="ticket-thread"\]\s*\{\s*padding-bottom:\s*0 !important/);
+});
+
+const { chromium } = require("@playwright/test");
+test("short sheets reserve the card's intrinsic height despite shared inline flex and important padding", {
+  skip: !fs.existsSync(chromium.executablePath()),
+}, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 500 } });
+    const phoneStyles = globals.slice(
+      globals.indexOf("#createTaskModal[data-phone-new-task-sheet] {"),
+      globals.indexOf("\n.item {"),
+    );
+    await page.setContent(`
+      <style>
+        @layer utilities {
+          .shared-thread { padding-bottom: 50px !important; }
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; }
+        .properties { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+        .properties > div { height: 240px; }
+        .editor { flex: 1 0 72px; }
+        .attachment-upload-container { height: 60px; }
+        [data-phone-new-task-card] { padding: 10px; }
+        ${phoneStyles}
+      </style>
+      <div id="createTaskModal" data-phone-new-task-sheet="on" data-phone-new-task-short="on">
+        <div class="modal-content"><div id="body">
+          <header style="flex:0 0 105px"></header>
+          <div id="taskInfo_comments_description_container" style="flex:1">
+            <div class="properties"><div></div></div>
+            <div data-testid="ticket-thread" class="shared-thread" style="flex:1">
+              <div data-phone-new-task-card="on">
+                <div class="editor"></div><div class="attachment-upload-container"></div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    `);
+    for (const viewport of [
+      { layoutHeight: 500, visibleHeight: 500, bottomInset: 0 },
+      { layoutHeight: 844, visibleHeight: 500, bottomInset: 344 },
+      { layoutHeight: 844, visibleHeight: 400, bottomInset: 344 },
+      { layoutHeight: 844, visibleHeight: 844, bottomInset: 0 },
+    ]) {
+      await page.setViewportSize({ width: 390, height: viewport.layoutHeight });
+      const offsets = phoneNewTaskViewportOffsets(viewport);
+      await page.locator("#createTaskModal").evaluate((sheet, { offsets, short }) => {
+        sheet.style.setProperty("--phone-new-task-viewport-top", offsets.top);
+        sheet.style.setProperty("--phone-new-task-keyboard", offsets.keyboard);
+        sheet.toggleAttribute("data-phone-new-task-short", short);
+      }, { offsets, short: phoneNewTaskShortSheet(viewport) });
+      const rects = await page.locator("#createTaskModal").evaluate((sheet) => {
+        const rect = (selector) => sheet.querySelector(selector).getBoundingClientRect().toJSON();
+        return { sheet: sheet.getBoundingClientRect().toJSON(), card: rect("[data-phone-new-task-card]"), row: rect(".attachment-upload-container") };
+      });
+      assert.equal(rects.sheet.height, viewport.visibleHeight);
+      assert.ok(rects.card.height >= 120, JSON.stringify(rects));
+      assert.ok(rects.row.bottom <= rects.sheet.bottom, JSON.stringify(rects));
+      assert.ok(rects.row.bottom <= rects.card.bottom, JSON.stringify(rects));
+      assert.ok(rects.card.bottom - rects.row.bottom <= 24, JSON.stringify(rects));
+    }
+  } finally {
+    await browser.close();
+  }
+});

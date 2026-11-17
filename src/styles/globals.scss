@@ -489,6 +489,7 @@ body {
 }
 
 #createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-testid="ticket-thread"] {
+  flex: 0 0 auto !important;
   position: sticky;
   bottom: 0;
   z-index: var(--z-sticky);
@@ -501,6 +502,12 @@ body {
   min-height: 120px;
   margin-top: 0;
   margin-bottom: 0;
+}
+
+@layer utilities {
+  #createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-testid="ticket-thread"] {
+    padding-bottom: 0 !important;
+  }
 }
 
 .item {
