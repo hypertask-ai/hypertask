@@ -4,6 +4,8 @@
 
 - `mobile-dictated-task-writer-save` Mobile dictated Task Writer save.
 - `new-task-keyboard-handoff` New Task keyboard handoff.
+- `free-file-25mb` With `htpr-7924-free-file-25mb` on, and `htpr-7686-free-plan-limits` on, a Free scope may attach a file up to 25 MB. `POST /api/tasks/uploadFinalize` refuses a larger file with HTTP 402, code `PLAN_LIMIT_REACHED`, and `Files on the Free plan can be up to 25 MB. Upgrade to upload bigger files.` Off, that ceiling stays 10 MB. A file of 10 MB or smaller skips this check. A paid scope is not refused here. Plans copy says `Up to 25 MB each on tickets and comments` when the flag is on. Default mode is Owner + QA.
+- `free-storage-2gb` With `htpr-7924-free-storage-2gb` on, and `htpr-7686-free-plan-limits` on, a Free scope that would pass 2 GB of stored attachments is refused by the same finalize call with HTTP 402, code `PLAN_LIMIT_REACHED`, and `Your team has used its 2 GB of free storage. Upgrade to Pro to upload more.` Off, this cap does not run. A paid scope is not refused. Plans copy adds `Up to 2 GB attachment storage per team` when the flag is on. Default mode is Owner + QA.
 
 ## How to get to it (user POV)
 
@@ -16,12 +18,15 @@ On a board, Ctrl+K then **Create task** (or `C`) opens the create window (`src/c
 3. Press **Save & close**. Expect the toast `Task saved. 1 file uploading` (a small file can finish first and show `Successfully created the task`).
 4. Watch the requests: `POST /api/tasks/uploadUrl` with purpose `task-attachment-link`, `POST /api/tasks/uploadFinalize`, `POST /api/tasks/createGlobally`, then `POST /api/tasks/uploadFinalize` with action `link-task-attachment`. All must be 200.
 5. Open the new task and reload: the file shows on the task.
+6. On a Free board, with `htpr-7686-free-plan-limits` and `htpr-7924-free-file-25mb` on for the QA user, attach a file larger than 10 MB and at most 25 MB. `POST /api/tasks/uploadFinalize` must be 200. Repeat with a file over 25 MB and expect 402 and the 25 MB sentence. Turn `htpr-7924-free-file-25mb` off and expect an over-10 MB file to be refused at 10 MB.
+7. With `htpr-7924-free-storage-2gb` on, upload a file that makes that Free scope's stored attachments pass 2 GB. Expect 402 and the 2 GB sentence, and the staged object removed. Turn the flag off and confirm that same size is not refused for storage.
 
 ## Gotchas
 
 - The link call refused (403) or never sent, so the task saves without its file.
 - A pending upload lost when the window closes or Save & new resets it.
 - Late callbacks from the previous ticket attaching to the next one after Save & new.
+- Both Free attachment flags do nothing until `htpr-7686-free-plan-limits` is on. A file of 10 MB or less never consults `htpr-7924-free-file-25mb`. The storage flag off means no 2 GB cap, not a lower cap. A refused finalize deletes the staged object.
 
 ### What proof to collect
 
