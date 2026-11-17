@@ -5,11 +5,36 @@
 - `ctrl-o-ticket-link-labels` Ctrl+O ticket link labels.
 - `background-smart-labels` Background smart labels.
 - `description-ai-draft-review` Description AI draft review.
+- `time-reports` Signed-in `/time` (`src/app/time/page.tsx`) is the Time reports screen. Scope by team, board, date range, and user when the report allows other people. Group by day, task, or user. Export CSV, add a time entry, and pause, resume, or stop a running timer.
+- `local-writing-assistance` With `htpr-5908-local-writing-assistance` on (Everyone), a lowercase letter typed at a paragraph start or after sentence punctuation is capitalized in an editable editor when the browser does not do it.
+- `auto-task-descriptions` With `htpr-6177-auto-task-descriptions` on, Settings, Task page, shows Suggest descriptions from task titles. The line under it is Show an AI draft below empty task descriptions. The saved preference defaults on. The command list includes Settings: Suggest descriptions from task titles.
+- `autocap-undo` With `htpr-6906-autocap-undo` on (Everyone) and local writing assistance on, Backspace, Ctrl+Z, or Cmd+Z right after that automatic capital restores the lowercase letter. The changed letter stays underlined for 1800ms.
+- `unread-ticket-opens-top` With `htpr-7315-unread-ticket-opens-top` on (Owner + QA), a ticket with no deep link opens at the description when it was never read, at the first unread comment when one exists, and at the newest comment otherwise.
+- `ticket-chat-reminder` With `htpr-7318-ticket-chat-reminder` on (Everyone), above the comments the viewer sees You chatted about this ticket and Only you see this, then that viewer's three newest chats on this ticket that already have messages. A row opens the AI sidebar and resumes that chat.
+- `cached-static-first` With `htpr-7395-cached-static-first` on (Everyone), a cached ticket paints the saved description before the rich editor loads, then mounts the editor after paint. A warm editor keeps the immediate path. Off mounts the editor immediately.
+- `inline-agent-images` With `htpr-7514-inline-agent-images` on (Everyone), an agent image write embeds the image in the description or comment. Attachment only, link only, or inline_images false keeps the file or link.
+- `ticket-first-screen` With `htpr-7627-ticket-first-screen` on (Owner + QA), a full ticket page seeds that account's flags and board display preferences into the HTML before the first client render. An RSC request or a missing display cookie skips the seed.
+- `summary-on-view` With `htpr-7848-summary-on-view` on (Owner + QA), a ticket change only marks the AI summary out of date. Opening the ticket schedules one refresh, at most once a minute, five seconds later. Stripe checkout marks that team's tickets out of date instead of generating summaries. Off keeps the scheduled runs.
+- `empty-field-labels` With `htpr-7868-empty-field-labels` on (Everyone), an empty Due date shows No due date and an empty Task size shows No size, in the ticket side panel and the new task window. Off shows a dash.
+- `new-subtask-button` With `htpr-8250-new-subtask-button` on (Everyone), the sub-task modal always starts with + Create new sub-task, or Create sub-task plus the typed name. Off shows create only when the search matches nothing.
+- `agent-automatic-ai` With `htpr-8904-agent-automatic-ai` on (Owner + QA), an agent-authored ticket change skips the automatic ticket summary, comment summary, and smart labels. A person's edit on the same board still runs them. Off restores the agent calls.
+- `ctrl-j-write-with-ai` With `htpr-8975-ctrl-j-write-with-ai` on (Owner + QA), Ctrl+J or Cmd+J in an editable ticket comment, comment edit, or description skips the compose palette and runs the editor's Write with AI toggle. The inline box uses the comment well, the comment-row mic, and a text Rewrite button instead of the purple arrow.
+- `right-column` With `htpr-8991-right-column` on (Owner + QA), the ticket side panel keeps Status and Project, shows the other fields only when they have a value, and adds Add field. Add field opens the command list of the empty fields. The ticket ID sits beside the title and copies on click.
+- `sticky-title` With `htpr-8992-sticky-title` on (Owner + QA), the ticket title bar stays put and, once the page is scrolled, draws a 1px line under it. On a phone that line uses the border token that stays visible in dark themes. Off leaves the header as it is.
+- `ai-box-outline` With `htpr-9025-ai-box-outline` on (Owner + QA), the Write with AI box in the description and comment editors gets a 1px outline in the editor border colour. Size and corners stay the same. Off removes that outline.
 
 ## How to get to it (user POV)
 
 `https://app.hypertask.ai/detail/project-<id>/<taskNumber>`, opened from a
 board card, an Inbox notification, or a deep link.
+
+Time reports are `https://app.hypertask.ai/time` for a signed-in account.
+The page title is Time. Back returns to the previous screen.
+
+The description, comments, title, side panel, sub-task modal, and Write with
+AI box are on that ticket. Suggest descriptions from task titles is in
+Settings, Task page. The new-task window uses the same empty Due date and
+Task size labels.
 
 ## Driving it with agent-browser
 
@@ -24,6 +49,116 @@ Checks the title and saved description, including bold.
 Prints PASS/FAIL per step and `task ok`. Loopback only.
 `--break title` must print `negative control ok`.
 Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+
+### Time reports
+
+Open `/time` signed in. Confirm the Time reports title, Team, Board, Date
+range, and Group by. With no rows, Export CSV is disabled and the list says
+No time entries. Pick one board, open + Add time entry, search a disposable
+task, set hours, and save. A running row shows Pause or Resume, and Stop.
+The duration opens the time log. The task name links to that ticket.
+
+### Local writing assistance and undo
+
+In a disposable ticket description, with
+`htpr-5908-local-writing-assistance` on, type a lowercase letter at the start
+of an empty paragraph and after a period and a space. The editor capitalizes
+it. With `htpr-6906-autocap-undo` also on, press Backspace once, or Ctrl+Z
+or Cmd+Z, before typing more. The lowercase letter returns, and the capital
+was underlined. Off for either flag leaves that key alone.
+
+### Suggest descriptions from task titles
+
+With `htpr-6177-auto-task-descriptions` on, open Settings, Task page. The
+toggle Suggest descriptions from task titles is present and defaults on.
+Ctrl+K or Cmd+K lists Settings: Suggest descriptions from task titles. The
+task-writer request kind auto-description is rejected with Automatic
+description suggestions are turned off, so do not expect a draft to appear
+under an empty description from that request.
+
+### Where a ticket opens
+
+With `htpr-7315-unread-ticket-opens-top` on, open three disposable tickets
+that have no hash deep link: never read, already read with no new comments,
+and one with a newer comment than last read. They land on the description,
+the newest comment, and the first unread comment. A comment hash still wins.
+From a board, a scroll setting other than Bottom stays at the top. From an
+inbox item, scroll setting None stays at the top.
+
+### Ticket chat reminder
+
+With `htpr-7318-ticket-chat-reminder` on, chat about one disposable ticket
+from the signed-in account, then reopen it. Above the comments, You chatted
+about this ticket and Only you see this list at most three sessions. Another
+account on the same ticket does not see them. Clicking a row opens the AI
+sidebar on that session. Off hides the block and leaves the chats.
+
+### Cached description, first screen, and summary on view
+
+With `htpr-7395-cached-static-first` on, open a ticket that was already
+loaded. The saved description is visible before the rich editor mounts.
+Reload a ticket whose editor module is already warm and the editor mounts
+without that wait. Off mounts the editor immediately.
+
+With `htpr-7627-ticket-first-screen` on, load a ticket document as that
+account, not as an RSC request, and with the board display cookie set. The
+first HTML includes that account's flag values and display preferences.
+Missing the cookie, or Off, leaves the ticket unseeded.
+
+With `htpr-7848-summary-on-view` on, change a disposable ticket and confirm
+the summary is not generated on that change. Open the ticket and confirm one
+refresh is scheduled, then a second open inside a minute does not schedule
+another. After a Stripe checkout for a team whose owners all have the flag,
+those tickets are marked out of date and no summary run starts from the
+checkout. Off restores the scheduled summary runs.
+
+### Empty field labels and the right column
+
+With `htpr-7868-empty-field-labels` on, open a ticket and a new task with no
+due date and no size. Both say No due date and No size. Set a date and a
+size and the real values show. Off restores the dash.
+
+With `htpr-8991-right-column` on, Status and Project stay. Empty assignee,
+due date, priority, size, and tags are hidden. Add field opens the command
+list of those empty fields. The ticket ID beside the title copies on click.
+Off shows every row, including the empty placeholders and the ID row.
+
+### Sub-task button
+
+With `htpr-8250-new-subtask-button` on, open the sub-task modal on a
+disposable ticket. The header is Link existing or create a new subtask. With
+an empty search the first row is + Create new sub-task. Type a name and the
+row becomes Create sub-task with that name, while matching tasks stay in the
+list. Off hides that row until the search matches nothing.
+
+### Agent images and agent automatic AI
+
+With `htpr-7514-inline-agent-images` on, have an agent put an image in a
+disposable description or comment without asking for attachment only or link
+only. The image is inline. Repeat with an explicit attachment-only or
+link-only instruction and the image stays a file or a link.
+
+With `htpr-8904-agent-automatic-ai` on, an agent-authored change on a
+disposable ticket does not schedule a ticket summary, a comment summary, or
+smart labels. A person editing the same ticket still does. Off schedules the
+agent calls again.
+
+### Sticky title and the Write with AI box
+
+With `htpr-8992-sticky-title` on, scroll a long ticket. The title bar stays
+and a 1px line appears under it. On a phone, check the line in a dark theme.
+Off keeps the header unchanged.
+
+With `htpr-8975-ctrl-j-write-with-ai` on, focus an editable description or
+comment and press Ctrl+J or Cmd+J. The compose palette stays closed and the
+editor's Write with AI toggle runs. The inline box uses the comment well,
+the comment-row mic, and a text Rewrite button. Press Ctrl+J or Cmd+J again
+inside the box and it closes. Off restores the purple arrow and lets that
+shortcut open the compose palette.
+
+With `htpr-9025-ai-box-outline` on, that same box has a 1px outline in the
+editor border colour. The corners and the controls do not move. Off removes
+the outline.
 
 
 ## Gotchas
@@ -114,6 +249,19 @@ scheduled dispatch in `tests/htpr-8099-smart-label-refusal.test.cjs`. Record liv
 refusal coverage as UNREACHABLE unless a QA team is already exhausted; local
 fixtures do not replace live proof. Read production task-route logs after the
 live create/edit to confirm their background jobs did not emit allowance errors.
+
+### Batch 3 proof
+
+Screenshot `/time` empty, then after one added entry and one CSV export.
+Delete that entry from the time log before leaving.
+
+For each ticket flag, screenshot the on state and the off state on a
+disposable QA task. Reload the ticket after a description, summary, image,
+or scroll check. Record Owner + QA flags as unreached when the QA account
+cannot turn them on. Do not change a live team's Stripe plan to prove
+`htpr-7848-summary-on-view`. Do not spend an AI allowance to force a summary
+or a smart label. Delete disposable tasks, drafts, chat sessions, and time
+entries in the product UI.
 
 ### Cleanup
 
