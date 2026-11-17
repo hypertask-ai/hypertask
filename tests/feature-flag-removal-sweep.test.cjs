@@ -232,7 +232,7 @@ test("an existing open removal ticket is reused and no second task is created", 
 });
 
 test("the runtime failure key produces a ticket accepted by the real writing rules", async () => {
-  const key = "htpr-6555-idle-comment-mic";
+  const key = registeredKey;
   assert.throws(() => validateWriting("agent", {
     title: `Remove feature flag ${key}`,
   }, {}, { houseRules: true }), /Dashed code name/);
@@ -241,7 +241,7 @@ test("the runtime failure key produces a ticket accepted by the real writing rul
     headers: { authorization: "Bearer test-cron-secret" },
   }));
   assert.deepEqual(await response.json(), { filed: 1, keys: [key], failed: [], deferred: 0 });
-  assert.equal(filed[0].title, "Remove the safety switch for HTPR-6555");
+  assert.equal(filed[0].title, "Remove the safety switch for HTPR-3533");
   assert.ok(filed[0].description.includes(`/${key}\"`));
   assert.ok(!filed[0].description.includes(`<code>${key}</code>`));
 });
