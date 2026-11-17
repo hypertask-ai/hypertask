@@ -60,8 +60,53 @@ test("plain themes get 4px rail corners and themed rails keep theirs", () => {
   assert.match(chip[0], /border-radius:\s*4px !important/);
 });
 
-test("4px corners stay off Dia and Rounded rails and chips ignore the outline flag", async () => {
-  const { chromium } = require("@playwright/test");
+function specificity(selector) {
+  const parts = [selector.replace(/:not\([^)]+\)/g, ""), ...[...selector.matchAll(/:not\(([^)]+)\)/g)].map((match) => match[1])];
+  const body = parts.join(" ");
+  const classes = (body.match(/\.[\w-]+/g) || []).length;
+  const attrs = (body.match(/\[[^\]]+\]/g) || []).length;
+  const elements = (body.match(/(^|[\s>+~])[a-zA-Z][\w-]*/g) || []).length;
+  return [classes + attrs, elements];
+}
+
+function themeMatches(selector, theme) {
+  const classes = new Set(theme.split(/\s+/).filter(Boolean));
+  for (const match of selector.matchAll(/:not\(\.([\w-]+)\)/g)) {
+    if (classes.has(match[1])) return false;
+  }
+  const plain = selector.replace(/:not\([^)]+\)/g, "");
+  for (const match of plain.matchAll(/\.([\w-]+)/g)) {
+    if (!classes.has(match[1])) return false;
+  }
+  return true;
+}
+
+function winningRadius(css, theme, outlines, target) {
+  const rules = [...css.matchAll(/([^{}]+)\{[^}]*border-radius:\s*([0-9]+px)/g)].map((match) => ({
+    selector: match[1].trim(),
+    radius: match[2],
+  }));
+  let best = null;
+  let bestScore = null;
+  for (const rule of rules) {
+    const chipRule = rule.selector.includes("data-task-property-chip");
+    if (target === "chip" ? !chipRule : chipRule) continue;
+    if (rule.selector.includes("[data-task-box-outlines]") && !outlines) continue;
+    if (!themeMatches(rule.selector, theme)) continue;
+    const score = specificity(rule.selector);
+    const higher = !bestScore
+      || score[0] > bestScore[0]
+      || (score[0] === bestScore[0] && score[1] > bestScore[1])
+      || (score[0] === bestScore[0] && score[1] === bestScore[1]);
+    if (higher) {
+      best = rule.radius;
+      bestScore = score;
+    }
+  }
+  return best || "0px";
+}
+
+test("4px corners stay off Dia and Rounded rails and chips ignore the outline flag", () => {
   const scss = fs.readFileSync(path.join(__dirname, "../src/styles/globals.scss"), "utf8");
   const rail = scss.match(/html\[data-task-box-outlines\]:not\(\.dia\):not\(\.rounded\) \[data-task-detail-path\] \[data-task-properties-rail\]\[data-properties-rail-corners="4"\] \{[^}]+\}/)[0];
   const chip = scss.match(/\[data-task-detail-path\] \[data-task-properties-rail\]\[data-properties-rail-corners="4"\] \[data-task-property-chip\] \{[^}]+\}/)[0];
@@ -74,30 +119,28 @@ test("4px corners stay off Dia and Rounded rails and chips ignore the outline fl
     [data-task-property-chip] { border-radius: 5px !important; }
     ${chip}
   `;
-  const markup = (theme, outlines) => `<!doctype html><html class="${theme}" ${outlines ? "data-task-box-outlines" : ""}>
-    <head><style>${css}</style></head>
-    <body><div data-task-detail-path>
-      <div id="rail" data-task-properties-rail data-properties-rail-corners="4">
-        <span id="chip" data-task-property-chip></span>
-      </div>
-    </div></body></html>`;
-  const browser = await chromium.launch();
-  try {
-    const tab = await browser.newPage();
-    const radius = async (theme, outlines) => {
-      await tab.setContent(markup(theme, outlines));
-      return tab.evaluate(() => ({
-        rail: getComputedStyle(document.getElementById("rail")).borderRadius,
-        chip: getComputedStyle(document.getElementById("chip")).borderRadius,
-      }));
-    };
-    assert.deepEqual(await radius("porcelain", true), { rail: "4px", chip: "4px" });
-    assert.deepEqual(await radius("dia", true), { rail: "10px", chip: "4px" });
-    assert.deepEqual(await radius("rounded rounded-light", true), { rail: "20px", chip: "4px" });
-    assert.deepEqual(await radius("porcelain", false), { rail: "0px", chip: "4px" });
-  } finally {
-    await browser.close();
-  }
+  const radius = (theme, outlines) => ({
+    rail: winningRadius(css, theme, outlines, "rail"),
+    chip: winningRadius(css, theme, outlines, "chip"),
+  });
+  assert.deepEqual(radius("porcelain", true), { rail: "4px", chip: "4px" });
+  assert.deepEqual(radius("dia", true), { rail: "10px", chip: "4px" });
+  assert.deepEqual(radius("rounded rounded-light", true), { rail: "20px", chip: "4px" });
+  assert.deepEqual(radius("porcelain", false), { rail: "0px", chip: "4px" });
+});
+
+test("the label token color stays inside the flagged ticket rail", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "../src/components/PageComponents/TaskDetail/MainPageComponents/index.tsx"),
+    "utf8",
+  );
+  const label = source.slice(source.indexOf("export const LocalRightSideInfo"), source.indexOf("export const ClickableSpan"));
+  assert.match(label, /text-\[#8E9093\]/);
+  assert.doesNotMatch(label, /text-text-light-gray/);
+  const scss = fs.readFileSync(path.join(__dirname, "../src/styles/globals.scss"), "utf8");
+  const chip = scss.match(/\[data-task-detail-path\] \[data-task-properties-rail\]\[data-properties-rail-corners="4"\] \[data-task-property-chip\] \{[^}]+\}/);
+  assert.ok(chip);
+  assert.match(chip[0], /color:\s*var\(--color-text-light-gray\)/);
 });
 
 test("a revealed field belongs to one ticket only", () => {

@@ -939,6 +939,7 @@ svg.lucide.fill-current {
 
   [data-task-detail-path] [data-task-properties-rail][data-properties-rail-corners="4"] [data-task-property-chip] {
     border-radius: 4px !important;
+    color: var(--color-text-light-gray);
   }
 
   html[data-task-box-outlines] [data-task-detail-path] .description-container:focus-within,

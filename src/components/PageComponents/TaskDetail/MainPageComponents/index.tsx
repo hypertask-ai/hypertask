@@ -91,7 +91,7 @@ export const LocalRightSideInfo = (
         data-task-property-chip
         onClick={onClick}
         className={cn(
-          "cursor-pointer rounded-[5px] border-icon-dark-gray relative group text-text-light-gray font-medium",
+          "cursor-pointer rounded-[5px] border-icon-dark-gray relative group text-[#8E9093] font-medium",
           _mbl ? "w-[88px] shrink-0 text-meta" : "w-[25%] @sm:w-1/2 @sm:border-none",
           className
         )}>
