@@ -248,9 +248,22 @@ async function postComment(repo, pr, body) {
   const response = await fetch(`https://api.github.com/repos/${repo}/issues/${pr}/comments`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ body: String(body).slice(0, 4000) }) });
   if (!response.ok) throw new Error(`comment HTTP ${response.status}`);
 }
+export function pickJudgeShots(names, limit = 6) {
+  const index = (name) => {
+    const match = /^(\d+)\.png$/.exec(name);
+    return match ? Number(match[1]) : null;
+  };
+  const png = names.filter((name) => name.endsWith(".png"));
+  const numbered = png.filter((name) => index(name) !== null).sort((a, b) => index(a) - index(b));
+  const shots = png.filter((name) => index(name) === null);
+  const last = numbered.at(-1);
+  const fillers = [...shots, ...numbered.slice(-limit)].filter((name, place, list) => name !== last && list.indexOf(name) === place);
+  const chosen = [...(last ? [last] : []), ...fillers].slice(0, limit);
+  return chosen.sort((a, b) => (index(a) ?? -1) - (index(b) ?? -1));
+}
 function imagesIn(dir) {
   try {
-    return readdirSync(dir).filter((name) => name.endsWith(".png")).sort().slice(0, 6).flatMap((name) => {
+    return pickJudgeShots(readdirSync(dir)).flatMap((name) => {
       const data = readFileSync(path.join(dir, name));
       return data.length > 180000 ? [] : [data.toString("base64")];
     });

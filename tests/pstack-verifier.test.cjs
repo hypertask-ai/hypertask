@@ -82,6 +82,15 @@ test("a verdict from another attempt fails", async () => {
   assert.equal(readVerdict(JSON.stringify(pass), binding).verdict, "PASS");
 });
 
+test("judge shots keep the final frames in numeric order", async () => {
+  const { pickJudgeShots } = await load();
+  assert.deepEqual(pickJudgeShots(["0.png", "1.png", "10.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png", "8.png", "9.png"]), ["5.png", "6.png", "7.png", "8.png", "9.png", "10.png"]);
+  const withShot = pickJudgeShots(["shot-after.png", "0.png", "1.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png"]);
+  assert.equal(withShot.includes("shot-after.png"), true);
+  assert.equal(withShot.at(-1), "7.png");
+  assert.equal(withShot.includes("0.png"), false);
+});
+
 test("github calls read GH_TOKEN and ignore GITHUB_TOKEN", async () => {
   const { githubHeaders, githubEnv } = await load();
   assert.equal(githubHeaders({ GH_TOKEN: "abc", GITHUB_TOKEN: "nope" }).Authorization, "Bearer abc");
