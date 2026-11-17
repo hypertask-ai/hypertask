@@ -147,6 +147,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (boardRefusal) {
       return NextResponse.json(boardRefusal, { status: 400, headers: responseHeaders });
     }
+    if (authorizedProject.status === "Archive") {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
+    }
     recordAgentBoardScopeMiss(authorizedProject.id, "write");
     if (Array.isArray(urlsToAdd) && urlsToAdd.some((url) => url.Attachment)) {
       try {

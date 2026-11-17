@@ -252,3 +252,106 @@ test("the MCP create and move operations ask the board lookup to refuse archived
     assert.match(fs.readFileSync(file, "utf8"), /validateProjectAccess\([^)]*\{ refuseArchivedBoard: true \}\)/, `${file} must refuse archived boards`);
   }
 });
+
+const ARCHIVED_BOARD = { id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive" };
+const ARCHIVED_MESSAGE = 'Board "Fleet CI & Infra" is archived, so it cannot take new tickets.';
+
+function globalCreate(board, flagEnabled) {
+  const writes = [];
+  const prisma = {
+    user: { findUnique: async () => ({ id: 6, displayName: "Val", photoURL: null, email: "v@example.com" }) },
+    project: { findFirst: async () => board },
+    task: { create: async (input) => { writes.push(input); return { id: 77 }; } },
+  };
+  const { POST } = load("src/lib/api/task-writes/create-global.ts", {
+    "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/flags": { isFeatureEnabled: async (key) => flagEnabled && key === FLAG_KEY },
+  });
+  const call = () => POST({
+    headers: new Headers(),
+    cookies: {},
+    json: async () => ({ projectId: board.id, title: "A ticket", description: "A note" }),
+  }, { userId: 6 });
+  return { call, writes };
+}
+
+test("creating a ticket through the app on an archived board is refused by name when the flag is on", async () => {
+  const { call, writes } = globalCreate(ARCHIVED_BOARD, true);
+  const response = await call();
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).message, ARCHIVED_MESSAGE);
+  assert.equal(writes.length, 0);
+});
+
+test("creating a ticket through the app on an archived board stays forbidden when the flag is off", async () => {
+  const { call, writes } = globalCreate(ARCHIVED_BOARD, false);
+  const response = await call();
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { message: "Forbidden" });
+  assert.equal(writes.length, 0);
+});
+
+function mcpCreate(projectError) {
+  const writes = [];
+  class StubResponse {
+    constructor(body, status) {
+      this.body = body;
+      this.status = status;
+    }
+    static json(body, init) {
+      return new StubResponse(body, init?.status ?? 200);
+    }
+  }
+  const { POST } = load("src/lib/mcp/operations/tasks/create/operation.ts", {
+    "next/server": { NextResponse: StubResponse },
+    "@/lib/agents/writing": { AgentWritingError: class extends Error {} },
+    "@/lib/agents/writingEnforcement": { enforceAgentWriting: async () => undefined },
+    "@/lib/mcp/routeWrapper": {
+      wrapMcpRoute: (handler) => handler,
+      validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId: null, teamScope: null }),
+      checkMcpRouteRateLimit: async () => null,
+      readMcpRouteJsonBody: async (request) => ({ ok: true, body: request.body }),
+    },
+    "@/lib/mcp/tasks/validators": {
+      validateCreateTaskBody: () => ({
+        valid: true,
+        data: { project_id: 11514, title: "A ticket", description: "A note", section_id: 9 },
+      }),
+    },
+    "@/lib/mcp/tasks/services": {
+      validateProjectAccess: async () => ({ project: null, error: projectError }),
+      getSectionForTask: async () => ({ section: { id: 9 } }),
+      createTask: async () => { writes.push("create"); return { id: 77 }; },
+      validateParentTask: async () => ({}),
+      validateProjectMemberIds: async () => ({ invalidIds: [] }),
+      matchLabelIds: () => ({ ids: [], unresolved: [] }),
+    },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+  });
+  const call = () => POST({ body: { project_id: 11514, title: "A ticket", description: "A note" }, headers: { get: () => null } });
+  return { call, writes };
+}
+
+test("MCP create names the archived board in the error clients read", async () => {
+  const { call, writes } = mcpCreate({ status: 400, message: ARCHIVED_MESSAGE });
+  const response = await call();
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, ARCHIVED_MESSAGE);
+  assert.equal(response.body.code, "invalid_field");
+  assert.equal(response.body.field, "project_id");
+  assert.equal(response.body.message, ARCHIVED_MESSAGE);
+  assert.equal(writes.length, 0);
+});
+
+test("MCP create still reports a missing board and a permission failure in their own words", async () => {
+  const missing = await mcpCreate({ status: 404, message: "Project with ID 11514 not found" }).call();
+  assert.equal(missing.status, 404);
+  assert.equal(missing.body.error, "Not found");
+  assert.equal(missing.body.code, "not_found");
+  assert.equal(missing.body.message, "Project with ID 11514 not found");
+  const forbidden = await mcpCreate({ status: 403, message: "User does not have permission to create tasks in this project" }).call();
+  assert.equal(forbidden.status, 403);
+  assert.equal(forbidden.body.error, "Permission error");
+  assert.equal(forbidden.body.code, "forbidden");
+  assert.equal(forbidden.body.message, "User does not have permission to create tasks in this project");
+});
