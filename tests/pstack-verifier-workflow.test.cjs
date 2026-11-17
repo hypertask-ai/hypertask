@@ -1,7 +1,12 @@
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { dirname, join } = require("node:path");
 const test = require("node:test");
 const yaml = require("js-yaml");
+
+const root = join(__dirname, "..");
 
 const read = (file) => yaml.load(readFileSync(file, "utf8"), { schema: yaml.JSON_SCHEMA });
 const trusted = read(".github/workflows/pstack-verifier.yml");
@@ -85,21 +90,132 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...liveRulesetContexts].sort());
 });
 
-test("drive waits on the host preview and records a down preview", () => {
-  const smoke = readFileSync("scripts/run-app-smoke-isolated.sh", "utf8");
-  const job = readFileSync("scripts/pstack-verifier-job.sh", "utf8");
-  const drive = readFileSync("scripts/pstack-verifier-drive.mjs", "utf8");
-  const appAt = smoke.indexOf('docker run -d --name "$app"');
-  const relayAt = smoke.indexOf('docker run -d --name "$relay"');
-  assert.equal(appAt > 0, true);
-  assert.equal(relayAt > appAt, true);
-  assert.equal(smoke.slice(appAt, relayAt).includes("-p 127.0.0.1:3100:3100"), false);
-  assert.equal(smoke.slice(relayAt).includes("-p 127.0.0.1:3100:3100"), true);
-  assert.match(smoke, /docker network create --internal/);
-  assert.match(smoke, /--network "\$publish_network"/);
-  assert.match(smoke, /waitForPreview/);
-  assert.match(smoke, /preview did not start/);
-  assert.match(job, /--preview-down/);
-  assert.match(drive, /waitForPreview\(ready\.url\)/);
-  assert.match(drive, /--preview-down/);
+function dockerStub(log) {
+  return `#!/bin/bash
+printf '%s\\n' "$*" >> ${JSON.stringify(log)}
+if [ "$1" = inspect ]; then
+  printf 'true\\n'
+elif [ "$1" = logs ]; then
+  printf 'PostgreSQL init process complete; ready for start up.\\n'
+fi
+exit 0
+`;
+}
+
+function nodeStub(log) {
+  return `#!/bin/bash
+printf '%s\\n' "$*" >> ${JSON.stringify(log)}
+if [[ "$*" == *waitForPreview* ]]; then
+  if [ "\${PREVIEW_UP:-}" = 1 ]; then
+    touch "\$PSTACK_VERIFIER_STOP"
+    exit 0
+  fi
+  exit 1
+fi
+exec ${JSON.stringify(process.execPath)} "$@"
+`;
+}
+
+function runHeldSmoke(t, previewUp) {
+  const dir = mkdtempSync(join(tmpdir(), "pstack-preview-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, "bin");
+  const dockerLog = join(dir, "docker.log");
+  const nodeLog = join(dir, "node.log");
+  mkdirSync(bin);
+  mkdirSync(join(dir, "candidate"));
+  mkdirSync(join(dir, "trusted", "scripts"), { recursive: true });
+  writeFileSync(join(bin, "docker"), dockerStub(dockerLog), { mode: 0o755 });
+  writeFileSync(join(bin, "node"), nodeStub(nodeLog), { mode: 0o755 });
+  const ready = join(dir, "ready.env");
+  const result = spawnSync("bash", [join(root, "scripts/run-app-smoke-isolated.sh"), join(dir, "candidate"), join(dir, "trusted")], {
+    encoding: "utf8",
+    timeout: 15000,
+    env: {
+      PATH: `${bin}:/usr/bin:/bin`,
+      PSTACK_VERIFIER_HOLD: "1",
+      PSTACK_VERIFIER_READY: ready,
+      PSTACK_VERIFIER_STOP: join(dir, "stop"),
+      PREVIEW_UP: previewUp ? "1" : "0",
+      RUNNER_TEMP: dir,
+      CORE_SMOKE_TRUSTED_DEPENDENCIES: "false",
+      TMPDIR: dir,
+    },
+  });
+  return { result, dockerLog, nodeLog, ready, dir };
+}
+
+function assertRelayOwnsHostPort(log) {
+  const lines = log.split("\n").filter((line) => line.length > 0);
+  const app = lines.find((line) => line.includes("run -d --name ht-smoke-app-"));
+  const relay = lines.find((line) => line.includes("run -d --name ht-smoke-relay-"));
+  assert.equal(app?.includes("--network ht-smoke-net-"), true);
+  assert.equal(app.includes("127.0.0.1:3100:3100"), false);
+  assert.equal(lines.indexOf(relay) > lines.indexOf(app), true);
+  assert.equal(relay?.includes("--network ht-smoke-publish-"), true);
+  assert.equal(relay.includes("-p 127.0.0.1:3100:3100"), true);
+  assert.equal(lines.some((line) => line.startsWith("network create --internal ht-smoke-net-")), true);
+  assert.equal(lines.some((line) => line.startsWith("network create ht-smoke-publish-") && !line.includes("--internal")), true);
+  assert.equal(lines.some((line) => line.startsWith("network connect ht-smoke-net-") && line.includes(" ht-smoke-relay-")), true);
+}
+
+test("the held smoke publishes the relay on the host and fails closed when the preview check fails", (t) => {
+  const { result, dockerLog, nodeLog, ready } = runHeldSmoke(t, false);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.equal(result.stderr.includes("preview did not start"), true);
+  assert.equal(existsSync(ready), false);
+  const node = readFileSync(nodeLog, "utf8");
+  assert.equal(node.includes("waitForPreview"), true);
+  assert.equal(node.includes("pstack-verifier.mjs"), true);
+  assertRelayOwnsHostPort(readFileSync(dockerLog, "utf8"));
+});
+
+test("the held smoke records the host preview url when the preview check passes", (t) => {
+  const { result, ready, dir } = runHeldSmoke(t, true);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
+});
+
+function playwrightModules() {
+  const candidates = [join(root, "node_modules"), join(process.env.HOME, "projects/hypertask/node_modules")];
+  const found = candidates.find((dir) => existsSync(join(dir, "playwright", "package.json")));
+  if (!found) throw new Error("playwright package is not installed");
+  return found;
+}
+
+test("a smoke boot that never writes ready records a down preview", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "pstack-job-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const trusted = join(dir, "trusted");
+  const scripts = join(trusted, "scripts");
+  const work = join(dir, "work");
+  mkdirSync(scripts, { recursive: true });
+  mkdirSync(join(dir, "candidate"));
+  copyFileSync(join(root, "scripts/pstack-verifier-drive.mjs"), join(scripts, "pstack-verifier-drive.mjs"));
+  copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(scripts, "pstack-verifier.mjs"));
+  symlinkSync(playwrightModules(), join(trusted, "node_modules"));
+  writeFileSync(join(scripts, "run-app-smoke-isolated.sh"), "#!/bin/bash\nexit 1\n", { mode: 0o755 });
+  const result = spawnSync("bash", [join(root, "scripts/pstack-verifier-job.sh"), trusted, join(dir, "candidate"), work], {
+    encoding: "utf8",
+    timeout: 20000,
+    env: {
+      PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+      HOME: process.env.HOME,
+      HEAD_SHA: "abc123",
+      GITHUB_RUN_ID: "42",
+      GITHUB_RUN_ATTEMPT: "3",
+      TMPDIR: dir,
+    },
+  });
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.deepEqual(JSON.parse(readFileSync(join(work, "evidence", "evidence.json"), "utf8")), {
+    sha: "abc123",
+    run: "42",
+    attempt: "3",
+    preview: "down",
+    steps: [],
+    expects: [],
+    navigations: [],
+    offOrigin: [],
+  });
 });
