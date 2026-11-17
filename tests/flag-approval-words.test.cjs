@@ -54,6 +54,10 @@ test("a quote block after the chat header is the approval and adjacent prose is 
   assert.equal(isOffOrder("turning it off now"), false);
   assert.equal(isDirectOffOrder("can you turn it off?"), false);
   assert.equal(isDirectOffOrder("can you turn it off"), false);
+  assert.equal(isDirectOffOrder("turn it off\uFF1F"), false);
+  assert.equal(isDirectOffOrder("turn it off\u061F"), false);
+  assert.equal(isDirectOffOrder("turn it off\u037E"), false);
+  assert.equal(isDirectOffOrder("turn it off;"), true);
   assert.equal(isBareOffOrder("turn it off!"), true);
   assert.equal(isBareOffOrder("turn it off provided QA passes"), false);
   assert.equal(parseSwitchQuestion(`${conditional.quote} ${conditional.tail}`), null);

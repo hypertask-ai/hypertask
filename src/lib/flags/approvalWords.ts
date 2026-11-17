@@ -4,7 +4,7 @@ export const FLAG_CHAT_RECORD_AGENT_ID = "9b0f3a93-5e88-4093-b558-cad1c229bc51";
 export const FLAG_CHAT_RECORD = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):\s*"([^"]*)"(?:(?:[\s\p{P}]+switch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s+(?:only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-]))+[\s\p{P}]*|\.)?$/u;
 
 export function normalizeVisibleText(html: string): string {
-  return parse(html).text.normalize("NFKC")
+  return parse(html).text.replace(/\u037E/g, "?").normalize("NFKC")
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .toLowerCase().replace(/\s+/g, " ").trim();
@@ -79,11 +79,13 @@ export function isOffOrder(text: string): boolean {
 }
 
 const OFF_LEAD = new Set(["please", "just", "now"]);
+const QUESTION_MARK = /[?\u00BF\u061F\u203D\u2E18\u2E2E\u2753\u2754]/u;
 
 export function isDirectOffOrder(text: string): boolean {
-  if (text.includes("?")) return false;
-  if (!isOffOrder(text)) return false;
-  const words = text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  const normalized = text.replace(/\u037E/g, "?").normalize("NFKC");
+  if (QUESTION_MARK.test(normalized)) return false;
+  if (!isOffOrder(normalized)) return false;
+  const words = normalized.replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
   const verbAt = words.findIndex((word) => OFF_VERB.test(word));
   return verbAt >= 0 && words.slice(0, verbAt).every((word) => OFF_LEAD.has(word));
 }
