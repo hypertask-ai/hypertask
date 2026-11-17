@@ -89,6 +89,7 @@ test("each verifier job has the declared permissions, key and token", async () =
     "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan",
   ];
   assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...liveRulesetContexts].sort());
+  assert.match(String(trusted.jobs.cancel.steps.at(-1).run), /waiting for required checks[\s\S]*state=failure/);
 });
 
 function dockerStub(log) {
