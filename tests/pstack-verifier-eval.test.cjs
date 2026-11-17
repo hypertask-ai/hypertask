@@ -3,10 +3,11 @@ const test = require("node:test");
 
 const load = () => import("../scripts/pstack-verifier-eval.mjs");
 const alt = "openai/gpt-5";
+const plan = (item) => JSON.stringify(item.plan);
 
 test("a verifier stuck on FAIL fails the eval, so a strict model cannot block good changes", async () => {
-  const { runEval, answersFor } = await load();
-  const result = await runEval({ alt, answers: answersFor("blind") });
+  const { runEval } = await load();
+  const result = await runEval({ alt, replay: "blind" });
   assert.equal(result.ok, false);
   const clean = result.results.filter((row) => row.case === "clean");
   assert.equal(clean.length, 2);
@@ -18,13 +19,14 @@ test("a verifier stuck on FAIL fails the eval, so a strict model cannot block go
 });
 
 test("both cases come out right for both model families", async () => {
-  const { runEval, answersFor, FLASH } = await load();
-  const result = await runEval({ alt, answers: answersFor("correct") });
+  const { runEval, FLASH } = await load();
+  const result = await runEval({ alt, replay: "correct" });
   assert.equal(result.ok, true);
   assert.deepEqual(result.models, [FLASH, alt]);
   assert.equal(result.results.length, 4);
   for (const row of result.results) {
     assert.equal(row.ok, true, `${row.case} ${row.model}`);
+    assert.equal(row.failure, "");
     assert.ok(row.verdict === row.expected || (row.expected === "PASS" && row.verdict === "PASS+NOTES"));
   }
   const planted = result.results.filter((row) => row.case === "planted-bug");
@@ -49,15 +51,23 @@ test("the judge reads the fixture claim and the page evidence", async () => {
   assert.match(prompt, /Judge whether the changed user path worked/);
 });
 
+test("the plan prompt asks the real planner for the case claim", async () => {
+  const { CASES, planPromptFor } = await load();
+  const prompt = planPromptFor(CASES[0]);
+  assert.match(prompt, /Plan one user check of at most 12 actions/);
+  assert.match(prompt, /A saved project field appears in the field list/);
+});
+
 test("a failed step still fails when the model says PASS", async () => {
-  const { CASES, runEval, answersFor } = await load();
+  const { CASES, runEval } = await load();
   const broken = {
     ...CASES.find((item) => item.name === "clean"),
     name: "broken-step",
     expected: "FAIL",
-    evidence: { ...CASES[1].evidence, steps: CASES[1].evidence.steps.map((step, index) => (index === 3 ? { ...step, ok: false, error: "not actionable" } : step)) },
+    stepFailure: 3,
+    judge: '{"verdict":"PASS","notes":"looks fine"}',
   };
-  const result = await runEval({ alt, answers: answersFor("correct"), cases: [broken] });
+  const result = await runEval({ alt, replay: "correct", cases: [broken] });
   assert.equal(result.ok, true);
   for (const row of result.results) {
     assert.equal(row.verdict, "FAIL");
@@ -78,15 +88,44 @@ test("live mode refuses to run without a key", async () => {
   await assert.rejects(main(["--live"], { alt, key: "", write() {} }), /OPENROUTER_EVAL_KEY is missing/);
 });
 
-test("the live run calls the model with the fixture prompt and counts the verdicts", async () => {
-  const { runEval, answersFor } = await load();
+test("the live run plans and judges every case through the model", async () => {
+  const { CASES, runEval } = await load();
   const prompts = [];
   const complete = async (prompt) => {
     prompts.push(prompt);
-    return answersFor("correct")[prompt.includes("text not visible") ? "planted-bug" : "clean"];
+    if (prompt.includes("Plan one user check")) return JSON.stringify(CASES[0].plan);
+    return '{"verdict":"PASS","notes":"The saved field is visible."}';
   };
   const result = await runEval({ alt, key: "test-key", complete });
   assert.equal(result.ok, true);
-  assert.equal(prompts.length, 4);
+  assert.equal(prompts.length, 8);
+  assert.equal(prompts.filter((prompt) => prompt.includes("Plan one user check")).length, 4);
   assert.equal(new Set(result.results.map((row) => row.model)).size, 2);
+});
+
+test("a plan stage that returns no actions fails the eval even when the judge says PASS", async () => {
+  const { CASES, runEval } = await load();
+  const complete = async (prompt) => (prompt.includes("Plan one user check") ? '{"actions":[],"expect":[],"reason":"no user path"}' : '{"verdict":"PASS","notes":"looks fine"}');
+  const clean = CASES.filter((item) => item.name === "clean");
+  const result = await runEval({ alt, key: "test-key", complete, cases: clean });
+  assert.equal(result.ok, false);
+  for (const row of result.results) {
+    assert.equal(row.ok, false);
+    assert.match(row.failure, /no actions/);
+  }
+});
+
+test("a failed model call is an eval error, not a FAIL the planted case accepts", async () => {
+  const { CASES, runEval } = await load();
+  const complete = async (prompt) => {
+    if (prompt.includes("Plan one user check")) throw new Error("model HTTP 500");
+    return '{"verdict":"PASS","notes":"The saved field is visible."}';
+  };
+  const planted = CASES.filter((item) => item.name === "planted-bug");
+  const result = await runEval({ alt, key: "test-key", complete, cases: planted });
+  assert.equal(result.ok, false);
+  for (const row of result.results) {
+    assert.equal(row.ok, false);
+    assert.match(row.failure, /model HTTP 500/);
+  }
 });

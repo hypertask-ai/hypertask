@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { FLASH, buildPrompt, completeWithOpenRouter, decide, parseAnswer, pickVerifier, redact } from "./pstack-verifier.mjs";
+import { FLASH, buildPrompt, completeWithOpenRouter, decide, parseAnswer, parsePlan, pickVerifier, redact } from "./pstack-verifier.mjs";
 
 export { FLASH };
 export const EVAL_BINDING = { sha: "b".repeat(40), run: "1", attempt: "1" };
@@ -22,7 +22,6 @@ const actions = [
   { op: "press", key: "Enter" },
 ];
 
-const steps = actions.map((action) => ({ action, ok: true, error: "" }));
 const navigations = [{ url: "http://127.0.0.1:3100/project?id=1", status: 200 }];
 
 export const CASES = [
@@ -32,7 +31,6 @@ export const CASES = [
     why: "The saved field name is not on the page, so the claimed behaviour is broken.",
     claim,
     plan: { actions, expect: [{ text: "Renewal date" }] },
-    evidence: { steps, expects: [{ expect: { text: "Renewal date" }, ok: false, error: "text not visible" }], navigations, offOrigin: [] },
   },
   {
     name: "clean",
@@ -40,7 +38,6 @@ export const CASES = [
     why: "The saved field name is on the page, so the claimed behaviour works.",
     claim,
     plan: { actions, expect: [{ text: "Renewal date" }] },
-    evidence: { steps, expects: [{ expect: { text: "Renewal date" }, ok: true, error: "" }], navigations, offOrigin: [] },
   },
 ];
 
@@ -64,47 +61,63 @@ export function evalPlan(item, model) {
   return { ...EVAL_BINDING, authorFamily: String(model).startsWith("deepseek/") ? "deepseek" : "other", verifierModel: model, actions: item.plan.actions, expect: item.plan.expect, reason: "" };
 }
 
-export function evalEvidence(item) {
-  return { ...EVAL_BINDING, ...item.evidence };
+export function planPromptFor(item) {
+  return buildPrompt({ kind: "plan", ...item.claim });
+}
+
+export function evalEvidence(item, plan = item.plan) {
+  const passing = item.expected === "PASS";
+  const failedStep = Number.isInteger(item.stepFailure) ? item.stepFailure : -1;
+  return {
+    ...EVAL_BINDING,
+    steps: plan.actions.map((action, index) => (index === failedStep ? { action, ok: false, error: "step was not actionable" } : { action, ok: true, error: "" })),
+    expects: plan.expect.map((expect) => ({ expect, ok: passing, error: passing ? "" : "text not visible" })),
+    navigations,
+    offOrigin: [],
+  };
+}
+
+export function answerFor(mode, item) {
+  const plan = JSON.stringify(item.plan);
+  if (mode === "correct") return { plan, judge: item.judge ?? JSON.stringify({ verdict: item.expected, notes: item.why }) };
+  if (mode === "blind") return { plan, judge: '{"verdict":"FAIL","notes":"Not sure."}' };
+  throw new Error(`unknown replay mode ${mode}`);
 }
 
 export async function judgeCase({ item, model, key, answer, complete = completeWithOpenRouter }) {
-  const plan = evalPlan(item, model);
-  const evidence = evalEvidence(item);
-  let reply = answer;
+  const live = answer === undefined;
+  let plan = evalPlan(item, model);
   let failure = "";
-  if (reply === undefined) {
-    try { reply = await complete(promptFor(item, plan, evidence), { key, model }); }
-    catch (error) { failure = redact(error?.message ?? String(error), [key]); }
-  }
+  try {
+    const planText = live ? await complete(planPromptFor(item), { key, model }) : answer.plan;
+    plan = { ...plan, ...parsePlan(planText) };
+    if (!plan.actions.length) throw new Error("the plan stage returned no actions");
+  } catch (error) { failure = redact(error?.message ?? String(error), [key]); }
+  const evidence = evalEvidence(item, plan);
   let judged = { verdict: "", notes: "" };
-  if (reply !== undefined) {
-    try { judged = parseAnswer(reply); }
-    catch (error) { failure = redact(error?.message ?? String(error), [key]); }
+  if (!failure) {
+    try {
+      const reply = live ? await complete(promptFor(item, plan, evidence), { key, model }) : answer.judge;
+      judged = parseAnswer(reply);
+    } catch (error) { failure = redact(error?.message ?? String(error), [key]); }
   }
-  const result = decide({ model: failure ? { verdict: "FAIL", notes: failure } : judged, plan, evidence, binding: EVAL_BINDING });
-  return { case: item.name, model, expected: item.expected, verdict: result.verdict, notes: result.notes, ok: matches(item, result.verdict), why: item.why };
+  const result = decide({ model: judged, plan, evidence, binding: EVAL_BINDING });
+  return { case: item.name, model, expected: item.expected, verdict: result.verdict, notes: result.notes, ok: !failure && matches(item, result.verdict), failure, why: item.why };
 }
 
-export async function runEval({ alt, key, answers, complete = completeWithOpenRouter, cases = CASES }) {
+export async function runEval({ alt, key, replay, complete = completeWithOpenRouter, cases = CASES }) {
   const models = evalModels(alt);
   const results = [];
   for (const model of models) {
     for (const item of cases) {
-      results.push(await judgeCase({ item, model, key, answer: answers?.[item.name], complete }));
+      results.push(await judgeCase({ item, model, key, answer: replay ? answerFor(replay, item) : undefined, complete }));
     }
   }
   return { ok: results.every((result) => result.ok), models, results };
 }
 
-export function answersFor(mode) {
-  if (mode === "correct") return { "planted-bug": '{"verdict":"FAIL","notes":"The saved field is not on the page."}', clean: '{"verdict":"PASS","notes":"The saved field is visible."}' };
-  if (mode === "blind") return { "planted-bug": '{"verdict":"FAIL","notes":"Not sure."}', clean: '{"verdict":"FAIL","notes":"Not sure."}' };
-  throw new Error(`unknown replay mode ${mode}`);
-}
-
 function report(result, out) {
-  const lines = result.results.map((row) => `${row.ok ? "ok  " : "FAIL"} ${row.case} on ${row.model}: expected ${row.expected}, got ${row.verdict}`);
+  const lines = result.results.map((row) => `${row.ok ? "ok  " : "FAIL"} ${row.case} on ${row.model}: expected ${row.expected}, got ${row.verdict}${row.failure ? ` (eval error: ${row.failure})` : ""}`);
   const body = { ok: result.ok, models: result.models, results: result.results };
   if (out) writeFileSync(out, `${JSON.stringify(body, null, 2)}\n`);
   return `${lines.join("\n")}\n${result.ok ? "eval passed" : "eval failed"}\n`;
@@ -120,7 +133,7 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   const key = io.key ?? process.env.OPENROUTER_EVAL_KEY;
   if (!alt) throw new Error("PSTACK_VERIFIER_ALT_MODEL is missing");
   if (mode === "replay") {
-    const result = await runEval({ alt, answers: answersFor(replay) });
+    const result = await runEval({ alt, replay });
     const text = report(result, out);
     (io.write ?? process.stdout.write.bind(process.stdout))(text);
     return result.ok;
