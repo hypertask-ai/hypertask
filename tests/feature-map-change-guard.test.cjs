@@ -91,6 +91,17 @@ test("a map page for a different area still fails", async () => {
   assert.match(result.reasons.join(" "), /src\/app\/settings/);
 });
 
+test("a citation to another area's changed file does not cover this area", async () => {
+  const { evaluate } = await load();
+  const result = evaluate({
+    title: "HTPR-1 [FEATURE] Add settings",
+    changedFiles: ["src/app/settings/page.tsx", "src/components/Editor.tsx", `${folder}/settings.md`],
+    mapPages: [{ status: "M", path: `${folder}/settings.md`, text: "# Settings\n\n`src/app/settings/page.tsx`\n" }],
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reasons.join(" "), /uncovered areas: src\/components/);
+});
+
 test("editing only the map index fails", async () => {
   const { evaluate } = await load();
   const result = evaluate({

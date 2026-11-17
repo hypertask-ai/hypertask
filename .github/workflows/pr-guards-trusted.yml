@@ -115,6 +115,11 @@ jobs:
               ...context.repo, pull_number: pr.number, per_page: 100,
             });
             const changed = files.map(file => ({ path: file.filename, status: file.status }));
+            core.setOutput('sha', pr.head.sha);
+            if (files.length !== pr.changed_files) {
+              core.setFailed(`The changed-file list is incomplete (${files.length} of ${pr.changed_files}); the feature map cannot be checked.`);
+              return;
+            }
             const pages = changed.filter(file => file.status !== 'removed' && file.path.startsWith(`${mapFolder}/`) && file.path.endsWith('.md'));
             const texts = [];
             for (const page of pages) {
@@ -122,7 +127,6 @@ jobs:
               texts.push({ ...page, text: Buffer.from(data.content, 'base64').toString('utf8') });
             }
             const result = evaluate({ title: pr.title, changedFiles: changed.map(file => file.path), mapPages: texts });
-            core.setOutput('sha', pr.head.sha);
             if (!result.ok) {
               core.setFailed(formatFailure(result));
               return;
