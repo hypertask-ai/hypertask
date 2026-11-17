@@ -43,7 +43,7 @@ jobs:
         working-directory: candidate
         run: |
           command -v bwrap >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y bubblewrap; }
-          npm ci --prefer-offline --no-audit --no-fund
+          npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
       - name: Ask another model family to break the fix
         if: ${{ !cancelled() }}
         working-directory: trusted

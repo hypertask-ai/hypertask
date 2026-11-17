@@ -50,18 +50,30 @@ export function parseBreakTests(text) {
   });
 }
 
+export function attemptKind(result) {
+  const status = result?.status ?? result?.code;
+  const output = String(result?.output ?? "");
+  if (!result || result.error || result.signal || status == null) return "unproven";
+  if (status === 0) return "held";
+  if (/SyntaxError|Cannot find module|ERR_MODULE_NOT_FOUND/.test(output) && !/AssertionError/.test(output)) return "unproven";
+  return /AssertionError|\bnot ok \d/.test(output) ? "broke" : "unproven";
+}
+
 export function breakSummary({ author, model, tests, results }) {
-  const broke = results.filter((item) => item.code !== 0);
+  const judged = results.map((item) => ({ ...item, kind: attemptKind(item) }));
+  const broke = judged.filter((item) => item.kind === "broke");
+  const unproven = judged.filter((item) => item.kind === "unproven");
   const lines = [`Break-it review: author ${author}, breaker ${model}.`];
   if (!results.length) lines.push("No break-it tests were run, so this fix is unproven.");
-  for (const item of results) {
+  for (const item of judged) {
     const name = tests.find((test) => test.file === item.file)?.name ?? item.file;
-    lines.push(`${item.code === 0 ? "HELD" : "BROKE"} ${name}`.slice(0, 200));
+    const label = item.kind === "held" ? "HELD" : item.kind === "broke" ? "BROKE" : "UNPROVEN";
+    lines.push(`${label} ${name}`.slice(0, 200));
     const tail = String(item.output ?? "").replace(/\r/g, "").split("\n").filter((line) => /^not ok|AssertionError|Error:|actual|expected|broke/i.test(line)).slice(0, 4);
-    if (item.code !== 0 && tail.length) lines.push(`  ${tail.join(" | ")}`.slice(0, 500));
+    if (item.kind === "broke" && tail.length) lines.push(`  ${tail.join(" | ")}`.slice(0, 500));
   }
-  lines.push(broke.length ? `Result: ${broke.length} of ${results.length} break attempts found a hole.` : `Result: ${results.length} break attempts, the fix held.`);
-  return { broke: broke.length, text: lines.join("\n") };
+  if (results.length) lines.push(broke.length ? `Result: ${broke.length} of ${results.length} break attempts found a hole.` : unproven.length ? `Result: ${unproven.length} of ${results.length} break attempts were unproven.` : `Result: ${results.length} break attempts, the fix held.`);
+  return { broke: broke.length, unproven: results.length ? unproven.length : 1, text: lines.join("\n") };
 }
 
 export function modelFor(author, alt) {
@@ -103,7 +115,7 @@ async function github(pathname, init, fetchImpl = fetch) {
 function runTest(file, repo, spawn = spawnSync) {
   const launch = sandboxLaunch(repo, file);
   const result = spawn(launch.cmd, launch.args, { encoding: "utf8", timeout: 120000, env: launch.env });
-  return { file, code: result.status ?? 1, output: `${result.stdout ?? ""}${result.stderr ?? ""}`.slice(-2000) };
+  return { file, status: result.status, signal: result.signal || "", error: result.error ? String(result.error.message || result.error) : "", code: result.status ?? 1, output: `${result.stdout ?? ""}${result.stderr ?? ""}`.slice(-2000) };
 }
 
 export async function main(io = {}) {
@@ -136,7 +148,7 @@ export async function main(io = {}) {
     }
     rmSync(dir, { recursive: true, force: true });
     const summary = breakSummary({ author, model, tests, results });
-    status = { state: summary.broke ? "failure" : "success", text: summary.text };
+    status = { state: summary.broke || summary.unproven ? "failure" : "success", text: summary.text };
   } catch (error) {
     status = { state: "failure", text: `Break-it review could not run: ${redact(error.message, [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN]).slice(0, 300)}` };
   }

@@ -966,6 +966,7 @@ break_it_review:
   max_generated_tests: 3
   generated_tests_run: bubblewrap_no_network_no_secrets
   install_failure: unproven
+  candidate_install: npm_ci_ignore_scripts
   reports: [pr_comment, break-it_commit_status]
   node_major: 24
   timeout_minutes: 25

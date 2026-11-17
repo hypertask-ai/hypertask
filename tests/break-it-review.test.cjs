@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
-const { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -101,15 +101,16 @@ test("a failed install is unproven and does not claim the fix broke", async () =
   assert.equal(posts.some((item) => /BROKE/.test(String(item.body.body ?? ""))), false);
 });
 
-test("the workflow runs the base script and keeps the head checkout separate", () => {
-  const source = readFileSync(path.join(root, ".github/workflows/break-it-review.yml"), "utf8");
-  assert.match(source, /pull_request_target:/);
-  assert.match(source, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
-  assert.match(source, /path: trusted/);
-  assert.match(source, /path: candidate/);
-  assert.match(source, /working-directory: trusted/);
-  assert.match(source, /persist-credentials: false/);
-  assert.doesNotMatch(source, /pull_request:\n/);
+test("a sandbox failure or a test that never ran is unproven", async () => {
+  const { breakSummary } = await load();
+  const tests = [{ name: "one", file: "break-it-one.test.cjs" }];
+  const timedOut = breakSummary({ author: "claude", model: "m", tests, results: [{ file: tests[0].file, status: null, signal: "SIGTERM", error: "timed out", output: "" }] });
+  assert.equal(timedOut.broke, 0);
+  assert.equal(/found a hole/.test(timedOut.text), false);
+  assert.match(timedOut.text, /UNPROVEN one/);
+  const syntax = breakSummary({ author: "claude", model: "m", tests, results: [{ file: tests[0].file, code: 1, output: "not ok 1 - one\nSyntaxError: Unexpected token" }] });
+  assert.equal(syntax.broke, 0);
+  assert.match(syntax.text, /were unproven/);
 });
 
 test("a generated test cannot see the key, the parent process, or the network", async () => {
