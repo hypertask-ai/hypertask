@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { load } = require('./task-route-loader.cjs');
 function setup(labels) {
   const created=[];
-  const db={label:{findMany:async()=>labels,create:async({data})=>{created.push(data);return {id:'created-medium'};}}};
+  const db={$executeRaw:async()=>{},$transaction:async run=>run(db),label:{findMany:async()=>labels,create:async({data})=>{created.push(data);return {id:'created-medium'};}}};
   return {created,...load('src/lib/agents/defaultBrainLabel.ts',{'@/lib/prisma':{default:db}})};
 }
 test('absent brain defaults to existing medium and retains other labels',async()=>{

@@ -1,4 +1,5 @@
 const stub = {
+  plainLanguageTicketWriterRule: () => require("../../src/lib/tickets/plainLanguageTicket.mjs").plainLanguageTicketWriterRule(),
   PlainLanguageTicketError: class PlainLanguageTicketError extends Error {},
   hasPlainLanguageTicketBlock: () => true,
   assertPlainLanguageTicketBlock: () => {},
@@ -6,6 +7,7 @@ const stub = {
   plainLanguageTicketRefusalMessage: () => "",
 };
 module.exports = {
+  "@/lib/agents/defaultBrainLabel": { defaultAgentBrainLabelIds: async (_projectId, ids) => [...ids] },
   "@/lib/tickets/plainLanguageTicket.mjs": stub,
   "@/lib/tickets/plainLanguageTicket": stub,
   "@/lib/tickets/plainLanguageTicketEnforcement": stub,

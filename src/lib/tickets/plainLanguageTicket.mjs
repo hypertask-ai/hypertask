@@ -58,7 +58,7 @@ export function ticketOpening(html) {
 function structuredText(html) {
   return stripTags(dropBlockquotes(html)
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n"))
+    .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n"))
     .replace(/&nbsp;/gi, " ")
     .replace(/&#x27;/gi, "'")
     .replace(/&apos;/gi, "'")
@@ -66,7 +66,7 @@ function structuredText(html) {
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&amp;/gi, "&")
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\n]+/g, " ")
     .trim();
 }
 
@@ -88,18 +88,11 @@ export function assertPlainLanguageTicketBlock(html) {
 
 export function hasPlainLanguageTicketBlock(html) {
   if (typeof html !== "string" || html.length > MAX_CHECK_TEXT_LENGTH || !html.trim()) return false;
-  const source = structuredText(ticketOpening(html));
-  const trimmed = source.trimStart();
-  const opener = openingLabelPattern(PLAIN_LANGUAGE_TICKET_LABELS[0]);
-  const atStart = trimmed.match(opener);
-  if (!atStart || atStart.index !== 0) return false;
-  let end = atStart[0].length;
-  for (let index = 1; index < PLAIN_LANGUAGE_TICKET_LABELS.length; index += 1) {
-    const match = source.match(labelPattern(PLAIN_LANGUAGE_TICKET_LABELS[index]));
-    if (!match || match.index <= end || !source.slice(end, match.index).trim()) return false;
-    end = match.index + match[0].length;
-  }
-  return Boolean(source.slice(end).trim());
+  const lines = structuredText(ticketOpening(html)).split("\n").map(line => line.trim()).filter(Boolean);
+  return lines.length === PLAIN_LANGUAGE_TICKET_LABELS.length && lines.every((line, index) => {
+    const match = line.match(openingLabelPattern(PLAIN_LANGUAGE_TICKET_LABELS[index]));
+    return match && Boolean(line.slice(match[0].length).trim());
+  });
 }
 
 export function missingPlainLanguageTicketLabels(html) {

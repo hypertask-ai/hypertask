@@ -40,14 +40,8 @@ Optional after the divider: related tickets, what was tried, screenshots, and pr
 
 ## Validation
 
-Only the opening receives description style checks.
-The first HTML divider ends that opening.
-Evidence below it keeps commands and raw errors.
-Titles and people comments retain their own checks.
-The description size limit still applies.
+Only the opening receives description style checks. The first HTML divider ends that opening. Evidence below it keeps commands and raw errors. Titles and people comments retain their own checks. The description size limit still applies.
 
-Refusals list every detected writing rule together.
-Agent drafts receive the same validation.
-Missing brain labels default to brain-medium.
+Refusals list every detected writing rule together. Agent drafts receive the same validation. Missing brain labels default to brain-medium.
 
 Implementation: `src/lib/tickets/plainLanguageTicket.mjs` and `src/lib/agents/writing.ts`.

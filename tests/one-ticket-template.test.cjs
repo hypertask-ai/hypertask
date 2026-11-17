@@ -64,3 +64,7 @@ test('refusals remain caller-fixable with all violations', () => {
     assert.equal(fixable.callerCanFixRefusal(details,400),true);
   }
 });
+
+test('each required label owns a separate opening line', () => {
+  assert.equal(template.hasPlainLanguageTicketBlock(block.replace(/<\/p><p>/g, ' ')), false);
+});

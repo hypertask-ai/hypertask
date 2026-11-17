@@ -48,6 +48,7 @@ function appCreate(sharedOn) {
     taskLabel: { createMany: async () => {}, findMany: async () => [] },
     label: { findMany: async () => [], create: async () => ({ id: "medium" }) },
     $executeRaw: async () => {},
+    $transaction: async run => run(prisma),
   };
   const effects = {
     schedulePostCreateWork() {},
@@ -125,11 +126,11 @@ function toolCreate() {
   }).POST;
   return {
     calls,
-    post: async (fields, dryRun = true) => {
+    post: async (fields, dryRun = true, projectId = 15) => {
       const response = await create(new Request("https://app.hypertask.ai/api/mcp/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: 15, title: fields.title, description: fields.description, dry_run: dryRun }),
+        body: JSON.stringify({ project_id: projectId, title: fields.title, description: fields.description, dry_run: dryRun }),
       }));
       return { status: response.status, body: await response.json() };
     },
@@ -185,4 +186,11 @@ test("switching the shared check off lets the app save text the agent tool still
   assert.equal(posted.status, 400);
   assert.equal(posted.body.error, directRefusal(examples["dashed-code-name"]).message);
   console.log("HTPR-8905-SHARED-RULES-OK");
+});
+
+test("the common opening accepts evidence on every board", async () => {
+  for (const projectId of [15, 2060, 10450, 7]) {
+    const response = await toolCreate().post({ ...passing, description: passing.description + '<hr><p>Next: run scripts/repro.mjs --project_id 15</p>' }, true, projectId);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+  }
 });
