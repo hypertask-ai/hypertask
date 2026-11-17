@@ -544,6 +544,71 @@ test("a run posts only when it owns the newest verifier status", async () => {
   assert.equal(posted[0].target_url, owned);
 });
 
+test("an api action passes from the preview response with no page navigation", async () => {
+  const savedToken = process.env.GH_TOKEN;
+  delete process.env.GH_TOKEN;
+  try {
+  const { parsePlan, runPlan, decide, buildPrompt } = await load();
+  const parsed = parsePlan(JSON.stringify({
+    actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }],
+    expect: [],
+    reason: "",
+  }));
+  assert.deepEqual(parsed.actions[0], { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" });
+  assert.throws(() => parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: "/project", body: {}, expectStatus: 200, expectText: "saved" }] })), /path is not on this app/);
+  const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
+  assert.equal(prompt.includes('"op":"api"'), true);
+  assert.equal(buildPrompt({ kind: "judge", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1", plan: parsed, evidence: { steps: [], expects: [], navigations: [], offOrigin: [] } }, "<<<fence>>>").includes("response text"), true);
+  const calls = [];
+  const page = {
+    async goto() { throw new Error("navigated"); },
+    async screenshot() { throw new Error("screenshot"); },
+    request: { async fetch(url, options) { calls.push({ url, options }); return { status: () => 200, async text() { return '{"ok":true,"saved":true}'; } }; } },
+  };
+  const drive = { base: "http://127.0.0.1:3100", projectId: "4", taskId: "7", bearer: "smoke-token", shotsDir: "/tmp", navigations: [] };
+  const body = plan(parsed.actions);
+  const run = await runPlan({ page, plan: body, ...drive });
+  assert.deepEqual(calls, [{ url: "http://127.0.0.1:3100/api/mcp/tasks/7", options: { method: "POST", headers: { Authorization: "Bearer smoke-token" }, maxRedirects: 0, failOnStatusCode: false, data: {} } }]);
+  assert.deepEqual(run.navigations, []);
+  assert.equal(run.steps[0].ok, true);
+  assert.equal(run.steps[0].text.includes("saved"), true);
+  const seen = evidence({ steps: run.steps, expects: run.expects, navigations: [] });
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding }).verdict, "PASS");
+  assert.equal(decide({ model: { verdict: "", notes: "" }, plan: body, evidence: seen, binding }).verdict, "FAIL");
+  const miss = await runPlan({
+    page: { ...page, request: { async fetch() { return { status: () => 200, async text() { return "nope"; } }; } } },
+    plan: body,
+    ...drive,
+    navigations: [],
+  });
+  assert.equal(miss.steps[0].ok, false);
+  assert.match(miss.steps[0].error, /response text missing/);
+  assert.equal(decide({ model: { verdict: "PASS", notes: "saved" }, plan: body, evidence: evidence({ steps: miss.steps, expects: [], navigations: [] }), binding }).verdict, "FAIL");
+  const down = await runPlan({
+    page: { ...page, request: { async fetch() { return { status: () => 500, async text() { return "saved"; } }; } } },
+    plan: body,
+    ...drive,
+    navigations: [],
+  });
+  assert.equal(down.steps[0].ok, false);
+  assert.match(down.steps[0].error, /api status 500/);
+  const plain = [];
+  await runPlan({
+    page: { ...page, request: { async fetch(url, options) { plain.push(options.headers); return { status: () => 204, async text() { return "ok"; } }; } } },
+    plan: plan([{ op: "api", method: "GET", path: "/api/tasks/{id}", body: {}, expectStatus: 204, expectText: "ok" }]),
+    ...drive,
+    navigations: [],
+  });
+  assert.deepEqual(plain, [{}]);
+  const empty = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { reason: "no user path", files: ["src/lib/api/task-writes/save.ts"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(empty.verdict, "FAIL");
+  assert.match(empty.notes, /no user path verified/);
+  } finally {
+    if (savedToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = savedToken;
+  }
+});
+
 test("a real plan with no evidence file fails as evidence missing", async () => {
   const { decide } = await load();
   const cases = [
