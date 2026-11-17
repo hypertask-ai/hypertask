@@ -233,7 +233,7 @@ async function perform(page, action, base, projectId, navigations) {
   }
   if (action.op === "click" || action.op === "fill") {
     const name = action.op === "click" ? action.text : action.label;
-    const handle = await control(page, name, action.op === "click" ? CLICK_ROLES : ["textbox"]);
+    const handle = await control(page, name, action.op === "click" ? CLICK_ROLES : ["textbox", "searchbox", "spinbutton"]);
     if (!handle) throw new Error("not actionable");
     if (action.op === "click") await handle.click({ timeout: 8000 });
     else await handle.fill(action.value, { timeout: 8000 });
