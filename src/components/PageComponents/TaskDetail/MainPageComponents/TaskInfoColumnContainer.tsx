@@ -2,6 +2,8 @@ import React, { useContext } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8993_PROPERTIES_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8993-properties-column";
 
 const DESKTOP_CLASSES =
   "sticky flex flex-col gap-4 rounded-[4px] min-h-0 py-[10px] px-[16px] w-full max-w-[312px] min-w-[260px]  ml-2 @lg:ml-[16px] items-center font-medium";
@@ -25,12 +27,14 @@ export const TaskInfoColumnContainer: React.FC<TaskInfoColumnContainerProps> = (
   className,
 }) => {
   const _mbl = useContext(MobileViewContext);
+  const plainCornersEnabled = useFlag(HTPR_8993_PROPERTIES_COLUMN_FLAG);
 
   const desktopHeight = heightVariant === "fit" ? "h-fit" : "h-full";
 
   return (
     <div
       data-task-properties-rail
+      data-properties-rail-corners={plainCornersEnabled ? "4" : undefined}
       style={style}
       className={cn(
         BASE_CLASSES,

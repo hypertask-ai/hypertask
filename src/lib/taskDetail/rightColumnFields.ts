@@ -79,6 +79,30 @@ export interface AddFieldOption {
   label: string;
 }
 
+export interface RevealedCustomField {
+  taskId: number;
+  fieldId: string;
+}
+
+export type CustomFieldReveal = RevealedCustomField | null;
+
+export const revealCustomField = (
+  taskId: number,
+  fieldId: string,
+): RevealedCustomField => ({ taskId, fieldId });
+
+export const getRevealedCustomFieldId = (
+  reveal: CustomFieldReveal,
+  taskId: number,
+): string | null => (reveal?.taskId === taskId ? reveal.fieldId : null);
+
+export const closeCustomFieldReveal = (
+  reveal: CustomFieldReveal,
+  taskId: number,
+  fieldId: string,
+): CustomFieldReveal =>
+  getRevealedCustomFieldId(reveal, taskId) === fieldId ? null : reveal;
+
 const CUSTOM_FIELD_OPTION_PREFIX = "custom:";
 
 export const customFieldOptionKey = (fieldId: CustomFieldId) =>

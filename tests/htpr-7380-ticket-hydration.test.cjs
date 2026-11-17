@@ -90,6 +90,7 @@ const TaskInfo = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/T
   "@/hooks/useFlag": { useFlag: () => false },
   "@/lib/flags/definitions/htpr-8991-right-column": { HTPR_8991_RIGHT_COLUMN_FLAG: "htpr-8991-right-column" },
   "@/lib/flags/definitions/htpr-8997-id-row": { HTPR_8997_ID_ROW_FLAG: "htpr-8997-id-row" },
+  "@/lib/flags/definitions/htpr-8993-properties-column": { HTPR_8993_PROPERTIES_COLUMN_FLAG: "htpr-8993-properties-column" },
   "@/lib/flags/definitions/htpr-8992-sticky-title": { HTPR_8992_STICKY_TITLE_FLAG: "htpr-8992-sticky-title" },
   "@/lib/taskDetail/rightColumnFields": load("src/lib/taskDetail/rightColumnFields.ts"),
   "@/lib/assignees": load("src/lib/assignees.ts"),
