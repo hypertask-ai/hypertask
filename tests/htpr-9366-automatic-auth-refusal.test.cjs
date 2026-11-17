@@ -4,6 +4,12 @@ const { loader } = require('./htpr-6927-fixtures.cjs')
 
 const flag = 'htpr-9366-automatic-auth-refusal'
 const refused = { surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'unauthorized', category: 'auth_failed' }
+const previousAgentUser = process.env.AI_FEEDBACK_AGENT_USER_ID
+process.env.AI_FEEDBACK_AGENT_USER_ID = '42'
+test.after(() => {
+  if (previousAgentUser === undefined) delete process.env.AI_FEEDBACK_AGENT_USER_ID
+  else process.env.AI_FEEDBACK_AGENT_USER_ID = previousAgentUser
+})
 
 function setup({ off = [] } = {}) {
   const created = [], comments = [], rows = [], lookups = []
@@ -13,6 +19,14 @@ function setup({ off = [] } = {}) {
     return !disabled.has(key)
   }
   const db = {
+    description: {
+      update: async ({ where, data }) => {
+        const row = rows.find((row) => row.id === where.taskId)
+        if (!row) throw new Error('missing description')
+        row.description = data.content
+        return { taskId: where.taskId, content: data.content }
+      },
+    },
     section: { findMany: async () => [{ id: 2, section_title: 'Done' }] },
     project: { findFirst: async () => ({ uniqueIdentifier: 'HTPR', section: [{ id: 1, section_title: 'Bugs' }] }) },
     user: { findUnique: async () => ({ displayName: 'Robin' }) },
@@ -52,7 +66,11 @@ function setup({ off = [] } = {}) {
     } },
     '@/lib/realtime/server': { broadcastTaskChange: async () => {} },
   })
-  return { ...load('src/lib/aiFeedback/report.ts'), load, created, comments, lookups }
+  return {
+    ...load('src/lib/aiFeedback/report.ts'),
+    load, created, comments, lookups,
+    enable(key) { disabled.delete(key) },
+  }
 }
 
 test('flag is a bug fix on for everyone', () => {
@@ -104,7 +122,24 @@ test('a self-reported server error still reads as a likely Hypertask bug', async
 
 test('an agent report keeps the refusal reading with the flag off', async () => {
   const f = setup({ off: [flag] })
-  await f.fileAiFeedback(refused, 42, { origin: 'agent' })
+  const text = f.plainFeedback(refused, 'fingerprint', { origin: 'agent' }, undefined, 'plain', false)
+  assert.match(text.description, /wrong or expired key, not a Hypertask bug/)
+  assert.doesNotMatch(text.description, /An engineer should look/)
+  const result = await f.fileAiFeedback(refused, 42, { origin: 'agent' })
+  assert.equal(result.filed, false)
+  assert.equal(result.reason, 'access_refused')
+  assert.equal(f.created.length, 0)
+})
+
+test('a repeat report rewrites an open refusal that still says an engineer should look', async () => {
+  const f = setup({ off: [flag] })
+  await f.fileAiFeedback(refused, undefined, { origin: 'automatic' })
+  assert.match(f.created[0].description, /An engineer should look/)
+  f.enable(flag)
+  const second = await f.fileAiFeedback(refused, undefined, { origin: 'automatic' })
+  assert.equal(second.deduped, true)
+  assert.equal(f.created.length, 1)
   assert.match(f.created[0].description, /wrong or expired key, not a Hypertask bug/)
+  assert.match(f.created[0].description, /check its key and board permissions/)
   assert.doesNotMatch(f.created[0].description, /An engineer should look/)
 })

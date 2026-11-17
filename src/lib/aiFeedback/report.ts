@@ -120,7 +120,7 @@ function shortNote(note: string): string {
 }
 
 function houseReading(reading: string) {
-  if (reading.includes('wrong or expired key')) return 'This usually means a wrong or expired key.'
+  if (reading.includes('wrong or expired key')) return 'This usually means a wrong or expired key, not a Hypertask bug.'
   if (reading.includes('may have used a board')) return 'The agent may not use that board or action.'
   if (reading.includes("can't tell")) return 'There are no details, so we cannot tell yet.'
   return reading
@@ -326,6 +326,17 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           return keptMarker && !logged.includes(marker) ? logged + marker : logged
         }
         if (existing) {
+          if (automaticRefusal && plain) {
+            const readable = plainFeedback(input, fingerprint, {
+              agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
+              ownerName: displayName,
+              origin: reporter.origin,
+            }, stored, house ? 'house' : 'plain', true)
+            await tx.description.update({
+              where: { taskId: existing.id },
+              data: { content: readable.description },
+            })
+          }
           const count = storedCount + 1
           const text = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))
           const previous = comment?.activity
