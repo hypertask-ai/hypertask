@@ -8,6 +8,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7614_SELECTED_CARD_BORDER_FLAG } from "@/lib/flags/keys";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-8927-board-card-overflow";
+import { HTPR_8976_MOUSE_MULTISELECT_FLAG } from "@/lib/flags/definitions/htpr-8976-mouse-multiselect";
 interface ITaskDraggableContainer {
   children: ReactNode;
   selectionControl?: ReactNode;
@@ -45,6 +46,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   const selectedCardBorder = useFlag(HTPR_7614_SELECTED_CARD_BORDER_FLAG);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
+  const mouseMultiselect = useFlag(HTPR_8976_MOUSE_MULTISELECT_FLAG);
   const selectionLine = selectedCardBorder
     ? "!outline-solid !outline-1 !-outline-offset-1 !outline-hypertasks-purple"
     : "ring-1 ring-inset ring-hypertasks-purple";
@@ -123,7 +125,10 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         parentClassName
       )}
       onClick={(event) =>
-        onSelectToggle && (event.shiftKey || selectionMode)
+        onSelectToggle &&
+        (event.shiftKey ||
+          selectionMode ||
+          (mouseMultiselect && (event.ctrlKey || event.metaKey)))
           ? onSelectToggle(event)
           : openDetail()
       }
@@ -153,7 +158,9 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         onClick={(event) => {
           const shiftSelects =
             onSelectToggle && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && event.button === 0;
-          if (shiftSelects) {
+          const modifierSelects =
+            mouseMultiselect && onSelectToggle && (event.metaKey || event.ctrlKey) && !event.altKey && event.button === 0;
+          if (shiftSelects || modifierSelects) {
             event.preventDefault();
             return;
           }
