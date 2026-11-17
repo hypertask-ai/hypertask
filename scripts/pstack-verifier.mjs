@@ -224,9 +224,14 @@ export function modelHttpError(status, body, secrets) {
   const snippet = redact(String(body ?? "").replace(/\s+/g, " ").trim(), secrets).slice(0, 200);
   return snippet ? `model HTTP ${status}: ${snippet}` : `model HTTP ${status}`;
 }
-const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/"];
+const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/"];
 export function hasAppPath(files) {
-  return (Array.isArray(files) ? files : []).some((file) => !NON_APP_PREFIXES.some((prefix) => String(file).startsWith(prefix)));
+  return (Array.isArray(files) ? files : []).some((file) => {
+    const name = String(file);
+    if (NON_APP_PREFIXES.some((prefix) => name.startsWith(prefix))) return false;
+    if (!name.includes("/") && name.endsWith(".md")) return false;
+    return true;
+  });
 }
 export function confirmsNoUserPath(reason) {
   return /no user path|no user-facing/i.test(String(reason ?? ""));
