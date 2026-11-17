@@ -280,12 +280,13 @@ export async function runPlan({ page, plan, base, projectId, shotsDir, navigatio
         try { await page.getByText(item.text, { exact: false }).first().waitFor({ timeout: 8000 }); }
         catch { throw new Error("text not visible"); }
       } else {
-        const here = new URL(page.url()), want = new URL(seedPath(item.path, projectId), here.origin);
-        if (here.origin !== want.origin || here.pathname !== want.pathname || here.search !== want.search) throw new Error("url did not match");
+        const path = seedPath(item.path, projectId);
+        try { await page.waitForURL((url) => { const want = new URL(path, url); return url.pathname === want.pathname && url.search === want.search; }, { timeout: 8000 }); } catch { throw new Error("url did not match"); }
       }
     } catch (caught) { ok = false; error = failureText(caught); }
     expects.push({ expect: item, ok, error });
   }
+  await page.screenshot({ path: path.join(shotsDir, `${plan.actions.length}.png`) }).catch(() => {});
   return { steps, expects, navigations };
 }
 export function githubEnv(base = process.env) {

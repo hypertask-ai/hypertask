@@ -105,8 +105,8 @@ test("judge screenshots are candidate-controlled untrusted input", async () => {
   assert.equal(prompt.slice(0, prompt.indexOf(fence)).includes(claim), true);
 });
 
-test("drive waits for a control or text that is not in the DOM yet", async () => {
-  const { runPlan } = await load();
+test("drive waits for a control, text, or url that is not ready yet", async () => {
+  const { runPlan, pickJudgeShots } = await load();
   const drive = { base: "http://127.0.0.1:3100", projectId: "1", shotsDir: "/tmp", navigations: [] };
   const pageFor = (present) => {
     const clicks = [];
@@ -153,6 +153,22 @@ test("drive waits for a control or text that is not in the DOM yet", async () =>
   const absent = await runPlan({ page: pageFor(false), plan: plan([{ op: "shot", name: "a" }], { expect: [{ text: "Saved" }] }), ...drive });
   assert.equal(absent.expects[0].ok, false);
   assert.match(absent.expects[0].error, /text not visible/);
+  const urlPage = (land) => {
+    const order = [], page = { href: "http://127.0.0.1:3100/start", order, url() { return this.href; }, async waitForURL(match, options) { this.timeout = options?.timeout; await new Promise((r) => setTimeout(r, 15)); if (land) this.href = "http://127.0.0.1:3100/project?id=1"; order.push("wait"); if (!match(new URL(this.href))) throw new Error("timeout"); }, async screenshot({ path: file }) { order.push(file.split("/").pop()); } };
+    return page;
+  };
+  const judgeLast = (page) => pickJudgeShots(page.order.filter((name) => String(name).endsWith(".png"))).at(-1);
+  const ready = urlPage(true);
+  const urlPlan = plan([{ op: "shot", name: "a" }], { expect: [{ path: "/project?id={id}" }] });
+  assert.equal((await runPlan({ page: ready, plan: urlPlan, ...drive })).expects[0].ok, true);
+  assert.equal(ready.timeout, 8000);
+  assert.equal(judgeLast(ready), ready.order.at(-1));
+  assert.ok(ready.order.indexOf("wait") < ready.order.lastIndexOf(ready.order.at(-1)));
+  const stuck = urlPage(false);
+  const missedUrl = await runPlan({ page: stuck, plan: urlPlan, ...drive });
+  assert.equal(missedUrl.expects[0].ok, false);
+  assert.match(missedUrl.expects[0].error, /url did not match/);
+  assert.ok(stuck.order.indexOf("wait") < stuck.order.lastIndexOf(stuck.order.at(-1)));
 });
 
 test("the model call uses the eval headers and AbortSignal.timeout", async () => {
@@ -218,7 +234,7 @@ test("a long plan sends the shot and the final frame to the judge", async () => 
   await runPlan({ page, plan: plan(actions), base: "http://127.0.0.1:3100", projectId: "1", shotsDir: "/tmp/pstack-shots", navigations: [] });
   const picked = pickJudgeShots(written);
   assert.equal(picked.includes("shot-after.png"), true);
-  assert.equal(picked.at(-1), "8.png");
+  assert.equal(picked.at(-1), "9.png");
   assert.equal(picked.includes("0.png"), false);
 });
 
