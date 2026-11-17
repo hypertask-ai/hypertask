@@ -891,7 +891,7 @@ test("settlement failures retain the reservation against the cap", async () => {
   const redis = fakeRedis();
   const originalEval = redis.eval;
   redis.eval = async (...args) => {
-    if (args[1] === 4 && args.length === 11) {
+    if (String(args[0]).includes('local removed = redis.call("ZREM"')) {
       throw new Error("Redis settlement unavailable");
     }
     return originalEval(...args);

@@ -677,13 +677,12 @@ test("prompt cache flag is retired after becoming permanent", async () => {
   listedRows = [];
 });
 
-test("allowance resync flag is retired with its stored mode removed", async () => {
+test("allowance resync flag is retired and the stored EVERYONE row stays for rollback", async () => {
   const key = "htpr-7687-allowance-resync";
   assert.equal(definitions.some((entry) => entry.key === key), false);
   assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
   assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
-  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261116120000_drop_htpr_7687_allowance_resync_flag/migration.sql"), "utf8"),
-    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "src/prisma/migrations/20261116120000_drop_htpr_7687_allowance_resync_flag")), false);
   assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
   assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
   listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
