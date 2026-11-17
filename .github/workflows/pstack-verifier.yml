@@ -67,7 +67,7 @@ jobs:
         with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, if-no-files-found: error, path: "${{ runner.temp }}/pstack-verifier/verdict" }
   post:
     needs: [resolve, judge]
-    if: always() && needs.resolve.outputs.stop != 'true' && needs.resolve.result == 'success' && needs.judge.result != 'cancelled'
+    if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.resolve.result == 'success' && needs.judge.result != 'cancelled' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { contents: read, pull-requests: write, statuses: write }
@@ -81,7 +81,7 @@ jobs:
         run: node scripts/pstack-verifier.mjs post
   cancel:
     needs: [resolve, post]
-    if: always() && needs.resolve.outputs.stop != 'true' && needs.post.result != 'success'
+    if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.post.result != 'success' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { statuses: write }

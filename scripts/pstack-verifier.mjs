@@ -240,12 +240,12 @@ function workDir() {
 function bindingNow(sha = process.env.HEAD_SHA) {
   return { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
 }
-async function postStatus({ repo, sha, run, attempt, state, description }) {
-  const response = await fetch(`https://api.github.com/repos/${repo}/statuses/${sha}`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ state, context: CONTEXT, description: String(description).slice(0, 140), target_url: attemptUrl(repo, run, attempt) }) });
+async function postStatus({ repo, sha, run, attempt, state, description, fetchImpl = fetch }) {
+  const response = await fetchImpl(`https://api.github.com/repos/${repo}/statuses/${sha}`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ state, context: CONTEXT, description: String(description).slice(0, 140), target_url: attemptUrl(repo, run, attempt) }) });
   if (!response.ok) throw new Error(`status HTTP ${response.status}`);
 }
-async function postComment(repo, pr, body) {
-  const response = await fetch(`https://api.github.com/repos/${repo}/issues/${pr}/comments`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ body: String(body).slice(0, 4000) }) });
+async function postComment(repo, pr, body, fetchImpl = fetch) {
+  const response = await fetchImpl(`https://api.github.com/repos/${repo}/issues/${pr}/comments`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ body: String(body).slice(0, 4000) }) });
   if (!response.ok) throw new Error(`comment HTTP ${response.status}`);
 }
 export function pickJudgeShots(names, limit = 6) {
@@ -269,6 +269,13 @@ function imagesIn(dir) {
     });
   } catch { return []; }
 }
+export function eligiblePull(item, repo, sha) {
+  return !!item && item.state === "open" && item.draft === false && item.base?.ref === "production" && item.head?.sha === sha && item.head?.repo?.full_name === repo;
+}
+function currentRunMayPost(listed, runId) {
+  const runs = listed?.workflow_runs ?? [], id = Number(runId), self = runs.find((run) => Number(run.id) === id);
+  return !!self && (listed?.total_count ?? runs.length) === runs.length && self.conclusion !== "cancelled" && self.status !== "cancelled" && runs.every((run) => Number(run.id) <= id && Number(run.run_number) <= Number(self.run_number));
+}
 async function resolveCommand() {
   const run = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")).workflow_run ?? {};
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
@@ -277,12 +284,12 @@ async function resolveCommand() {
   if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true" }); return; }
   let number = String(run.pull_requests?.[0]?.number ?? "");
   if (!/^[0-9]+$/.test(number)) {
-    const matches = JSON.parse(gh(["api", `repos/${repo}/commits/${sha}/pulls`])).filter((item) => item.state === "open" && item.draft === false && item.base?.ref === "production" && item.head?.sha === sha && item.head?.repo?.full_name === repo);
+    const matches = JSON.parse(gh(["api", `repos/${repo}/commits/${sha}/pulls`])).filter((item) => eligiblePull(item, repo, sha));
     if (matches.length !== 1) { output({ stop: "true" }); return; }
     number = String(matches[0].number);
   }
   const item = JSON.parse(gh(["api", `repos/${repo}/pulls/${number}`]));
-  if (item.state !== "open" || item.draft || item.base?.ref !== "production" || item.head?.sha !== sha || item.head?.repo?.full_name !== repo) { output({ stop: "true" }); return; }
+  if (!eligiblePull(item, repo, sha)) { output({ stop: "true" }); return; }
   const gate = authorGate(item.body);
   if (gate.stop) {
     await postStatus({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
@@ -332,19 +339,21 @@ async function judgeCommand() {
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, authorFamily: plan.authorFamily || "", verifierModel: plan.verifierModel || "" })}\n`, { mode: 0o600 });
 }
-async function postCommand() {
+export async function postCommand(io = {}) {
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const binding = bindingNow();
   const pr = String(process.env.PR ?? "");
   if (!/^[0-9]+$/.test(pr) || !/^[0-9a-f]{40}$/.test(binding.sha)) throw new Error("the pull request head is missing");
-  const item = JSON.parse(gh(["api", `repos/${repo}/pulls/${pr}`]));
+  const call = io.gh ?? gh;
   let saved;
   try { saved = readVerdict(readFileSync(path.join(workDir(), "verdict", "verdict.json"), "utf8"), binding); }
   catch { saved = { verdict: "FAIL", notes: "schema/binding mismatch", authorFamily: "", verifierModel: "" }; }
-  if (item.head?.sha !== binding.sha) saved = { ...saved, verdict: "FAIL", notes: "the pull request head moved" };
+  const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
+  const listed = JSON.parse(call(["api", `repos/${repo}/actions/workflows/pstack-verifier.yml/runs?head_sha=${binding.sha}&per_page=100`]));
+  if (!eligiblePull(item, repo, binding.sha) || !currentRunMayPost(listed, binding.run)) return;
   const description = `${saved.verdict}: author ${saved.authorFamily || "unknown"}, verifier ${saved.verifierModel || "none"}`.slice(0, 140);
-  await postStatus({ repo, ...binding, state: saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure", description });
-  if (saved.verdict !== "PASS") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()));
+  await postStatus({ repo, ...binding, state: saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure", description, fetchImpl: io.fetch });
+  if (saved.verdict !== "PASS") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()), io.fetch);
 }
 async function main() {
   const command = process.argv[2];
