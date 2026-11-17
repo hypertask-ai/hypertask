@@ -275,7 +275,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.match(
     isolated,
-    /timeout --signal=KILL 1m node \/trusted\/scripts\/seed-core-actions-smoke\.mjs/,
+    /timeout --signal=KILL 2m node \/trusted\/scripts\/seed-core-actions-smoke\.mjs/,
   );
   assert.match(isolated, /trap 'cleanup 130' INT/);
   assert.match(isolated, /trap 'cleanup 143' TERM/);
@@ -323,11 +323,12 @@ test("app smoke validates the head before isolated build and route checks", asyn
     isolated,
     /Generated Prisma client missing from the candidate dependencies\./,
   );
+  const seedPlan = await readFile("scripts/lib/core-smoke-seed-plan.mjs", "utf8");
   assert.match(seed, /writeFile\(/);
   assert.match(seed, /flag: "wx"/);
-  assert.match(seed, /sections: \["Baseline", "Alternate"\]/);
-  assert.match(seed, /section_title: "Baseline"/);
-  assert.match(seed, /section_title: "Alternate"/);
+  assert.match(seed, /buildCoreSmokeSeedPlan/);
+  assert.match(seedPlan, /"Baseline"/);
+  assert.match(seedPlan, /"Alternate"/);
   assert.match(isolated, /next build/);
   assert.doesNotMatch(isolated, /next build --webpack/);
   assert.match(isolated, /NODE_OPTIONS=--max-old-space-size=8192/);

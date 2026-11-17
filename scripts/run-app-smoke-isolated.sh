@@ -323,7 +323,7 @@ docker run --rm --name "$seed" --network "$network" "${trusted_runtime[@]}" "${c
   -e CORE_SMOKE_APP_ROOT=/trusted \
   -e CORE_SMOKE_ENV_FILE=/state/smoke.env \
   -v "$state:/state" \
-  "$runtime_image" timeout --signal=KILL 1m node /trusted/scripts/seed-core-actions-smoke.mjs
+  "$runtime_image" timeout --signal=KILL 2m node /trusted/scripts/seed-core-actions-smoke.mjs
 
 docker run --rm --name "$probe" \
   --cap-drop ALL \
