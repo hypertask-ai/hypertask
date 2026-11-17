@@ -662,6 +662,7 @@ const UpdateKanban = () => {
     const newItem: ITask = {
       ...taskToMove,
       sectionId: destinationSectionId,
+      section: destinationSection.section_title,
       ranking,
     };
     const destinationItems = options.insertAtEnd

@@ -79,6 +79,7 @@ export const getBlockedByMeSections = (
   const placements = new Map(sections.flatMap((section) =>
     (section.items ?? []).map((task) => [task.id, {
       sectionId: section.sectionId ?? section.id ?? task.sectionId,
+      section: section.section_title,
       ranking: task.ranking,
     }] as const),
   ));

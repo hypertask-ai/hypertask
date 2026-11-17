@@ -88,6 +88,26 @@ test("Blocked and Blocked by me skip done columns when asked", () => {
   );
 });
 
+test("Blocked by me reads the column a ticket sits in, not its stale title", () => {
+  const moved = { id: "moved", section: "Doing", sectionId: 1, ranking: "a", waitingOnUserId: 6 };
+  const staleProject = {
+    id: 15,
+    section: [
+      { id: 1, sectionId: 1, section_title: "Doing", isDone: false },
+      { id: 2, sectionId: 2, section_title: "Done", isDone: true },
+    ],
+    sections: [{ id: 2, sectionId: 2, section_title: "Done", items: [moved] }],
+    tasks: [moved],
+  };
+  const sections = builtin.getBlockedByMeSections(staleProject, {
+    currentUserId: 6,
+    doneSectionTitles: doneTitles,
+    excludeDoneFromBlocked: true,
+  });
+
+  assert.equal(sections.reduce((count, section) => count + section.items.length, 0), 0);
+});
+
 test("the built-in views state their rule in one short line", () => {
   const blocked = builtin.BUILTIN_VIEWS.find((view) => view.id === builtin.BUILTIN_VIEW_IDS.blocked);
   const blockedByMe = builtin.BUILTIN_VIEWS.find((view) => view.id === builtin.BUILTIN_VIEW_IDS.blockedByMe);
