@@ -7,6 +7,13 @@ const directory = path.join(root, "src/lib/flags/definitions");
 const load = createJiti(__filename, { interopDefault: true });
 const paths = () => fs.readdirSync(directory).filter((name) => name !== "index.generated.ts" && name !== "index.generated.cjs").sort();
 
+function ensure() {
+  load(path.join(root, "src/lib/flags/ensureFlagIndex.ts"));
+}
+
 exports.definitions = () => paths().map((name) => load(path.join(directory, name)).default);
 exports.source = () => paths().map((name) => fs.readFileSync(path.join(directory, name), "utf8")).join("\n");
-exports.load = (relative) => load(path.isAbsolute(relative) ? relative : path.join(root, relative));
+exports.load = (relative) => {
+  ensure();
+  return load(path.isAbsolute(relative) ? relative : path.join(root, relative));
+};
