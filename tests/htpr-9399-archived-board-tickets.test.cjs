@@ -204,3 +204,46 @@ test("moving a ticket into an active board still moves it", async () => {
   assert.equal(result.success, true);
   assert.equal(movedRecords.length, 2);
 });
+
+function mcpAccess(board, flagEnabled) {
+  const projectQueries = [];
+  const prisma = {
+    project: {
+      findFirst: async ({ where }) => {
+        projectQueries.push(where);
+        if (where.status === "Normal") return null;
+        const matches = board.status === where.status;
+        return matches ? { id: board.id, name: board.name, title: board.title, status: board.status } : null;
+      },
+    },
+  };
+  const { validateProjectAccess } = load("src/lib/mcp/tasks/services.ts", {
+    "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/flags": flagState(flagEnabled),
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
+  });
+  return { validateProjectAccess, projectQueries };
+}
+
+test("MCP create and move refuse an archived board with the same archived error as the API", async () => {
+  const { validateProjectAccess } = mcpAccess({ id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive" }, true);
+  const result = await validateProjectAccess(11514, 6, null, null, { refuseArchivedBoard: true });
+  assert.equal(result.error.status, 400);
+  assert.match(result.error.message, /Fleet CI & Infra/);
+  assert.match(result.error.message, /archived/);
+});
+
+test("MCP board lookups outside the create and move paths keep the 404 and the flag switch", async () => {
+  const board = { id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive" };
+  const withoutOption = await mcpAccess(board, true).validateProjectAccess(11514, 6, null, null);
+  assert.equal(withoutOption.error.status, 404);
+  const flagOff = await mcpAccess(board, false).validateProjectAccess(11514, 6, null, null, { refuseArchivedBoard: true });
+  assert.equal(flagOff.error.status, 404);
+});
+
+test("the MCP create and move operations ask the board lookup to refuse archived boards", () => {
+  const fs = require("node:fs");
+  for (const file of ["src/lib/mcp/operations/tasks/create/operation.ts", "src/lib/mcp/operations/tasks/move/operation.ts"]) {
+    assert.match(fs.readFileSync(file, "utf8"), /validateProjectAccess\([^)]*\{ refuseArchivedBoard: true \}\)/, `${file} must refuse archived boards`);
+  }
+});

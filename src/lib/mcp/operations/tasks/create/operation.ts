@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
                 throw error;
             }
         }
-        const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope);
+        const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope, { refuseArchivedBoard: true });
         if (projectCheck.error) {
             return NextResponse.json(
                 {
