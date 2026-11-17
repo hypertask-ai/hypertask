@@ -812,7 +812,7 @@ unset -f gh
 # Proof contract.
 sha=$(gh pr view 809 -R hypertask-ai/hypertask --json mergeCommit --jq .mergeCommit.oid)
 R=$E/HTPR-6570/2026-10-01-qa-run-1; mkdir -p "$R"; : > "$R/a.png"
-T() { if ./ship-check proof HTPR-6570 >/dev/null; then [ "$1" = pass ] && ok "$2" || bad "$2"; else [ "$1" = fail ] && ok "$2" || bad "$2"; fi; }
+T() { if SHIP_PROOF_STRICT=0 ./ship-check proof HTPR-6570 >/dev/null; then [ "$1" = pass ] && ok "$2" || bad "$2"; else [ "$1" = fail ] && ok "$2" || bad "$2"; fi; }
 printf 'Feature map: .claude/skills/verify-qa/reference/feature-map/my-tasks.md\nDoctor: sha deadbeef0 deployment success\nRun: 2026-10-01-qa-run-1\n## Cases\n- PASS: x -> a.png\n' > "$E/HTPR-6570/proof.md"
 T fail "stale proof rejected"
 sed -i "s/deadbeef0/${sha:0:9}/" "$E/HTPR-6570/proof.md"
@@ -825,6 +825,16 @@ sed -i '$d' "$E/HTPR-6570/proof.md"; echo '- PASS: z -> old.png' >> "$E/HTPR-657
 T fail "evidence outside the current run rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; mkdir -p "$E/x"; printf 'png' > "$E/x/a.png"; sed -i 's/^Run: .*/Run: ..\/..\/x/' "$E/HTPR-6570/proof.md"
 T fail "run folder outside the ticket rejected"
+
+# Strict coverage (HTPR-8941): every ticket acceptance point and every feature-map Gotchas item needs a row.
+S() { if SHIP_PROOF_STRICT=1 ./ship-check proof HTPR-6570 >/dev/null; then [ "$1" = pass ] && ok "$2" || bad "$2"; else [ "$1" = fail ] && ok "$2" || bad "$2"; fi; }
+sed -i 's/^Run: .*/Run: 2026-10-01-qa-run-1/' "$E/HTPR-6570/proof.md"
+sed -i 's@feature-map/public-sites.md@feature-map/my-tasks.md@' "$E/HTPR-6570/proof.md"
+S fail "proof without acceptance rows refused"
+printf '\n## Acceptance\n- PASS: The row and the Title input are gone from My Tasks on desktop and mobile -> a.png\n- PASS: No new add control replaces it. Task creation on My Tasks uses the existing board pattern only -> a.png\n\n## What usually breaks\n- UNREACHABLE: Controls nobody asked for showing up on top of the table, like the "Quick add a task" bar removed in HTPR-6570 -> no such control on this page; table checked\n- UNREACHABLE: Ctrl+E not archiving the focused row (HTPR-6445) -> keyboard archive not on this page; row menu checked\n' >> "$E/HTPR-6570/proof.md"
+S pass "strict proof accepts acceptance and breakage coverage"
+sed -i '/No new add control replaces it/d' "$E/HTPR-6570/proof.md"
+S fail "proof that skips an acceptance point refused"
 
 fi
 

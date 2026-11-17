@@ -801,6 +801,9 @@ check_proof() {
   done < <(grep -E '^[[:space:]]*- PASS:' "$p")
   [ "$n" -gt 0 ] || fail "proof.md has no '- PASS: <case> -> <evidence file>' line"
   [ -n "$(find "$d/$run" -name '*.png' -size +0 -print -quit)" ] || fail "no screenshot (*.png) in $d/$run"
+  if [ "${SHIP_PROOF_STRICT:-1}" != 0 ]; then
+    python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/proof-coverage.py" "$1" "$sha" "$p" || return 1
+  fi
   echo "proof ok"
 }
 

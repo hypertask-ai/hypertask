@@ -34,7 +34,16 @@ Push, then run `scripts/verify-qa <branch> inbox-cycle`. It uses GitHub-hosted f
    ## Cases
    - PASS: <case> -> <nonempty-file-in-run-folder>
    - UNREACHABLE: <case> -> <reason; closest real check>
+
+   ## Acceptance
+   - PASS: <acceptance point copied from the ticket> -> <nonempty-file-in-run-folder>
+
+   ## What usually breaks
+   - PASS: <Gotchas bullet copied from the feature map page> -> <nonempty-file-in-run-folder>
+   - UNREACHABLE: <Gotchas bullet > -> <reason; closest real check>
    ```
 
-7. Run `.claude/skills/ship/scripts/ship-check proof <TICKET>`. Require `proof ok`; it checks merge SHA, format, run files and screenshots. A FAIL case cannot pass. This validates records, not behavior.
+The Acceptance block names every point from the ticket's acceptance section (Done when, Done means or Acceptance criteria), one row each. The What usually breaks block names every Gotchas bullet on the feature map page, one row each. A missing or unpassed row is refused, and the message names the item. A ticket with no acceptance section and a page with no Gotchas need neither block. `SHIP_PROOF_STRICT=0` restores the older shape-only check.
+
+7. Run `.claude/skills/ship/scripts/ship-check proof <TICKET>`. Require `proof ok`; it checks merge SHA, format, run files, screenshots and that the proof covers every acceptance point and Gotchas item. A FAIL case cannot pass. This validates records, not behavior.
 8. Publish the self-contained HTML QA report as a ticket page through `vcc pages create`. Post one `--kind qa` verdict with report link, proof and attachments. Read back. PASS: explain what changed, then Done. FAIL: keep In Progress; follow [ship](../ship/SKILL.md) for flagged failures. Repair and repeat. After two failed repairs, use its ticket-only handoff; do not message a lead. Never invent a pass.
