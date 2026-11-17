@@ -16,7 +16,7 @@ const KEY = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function definitionDefaults(root) {
   const directory = path.join(root, FLAG_DEFINITIONS_DIRECTORY);
-  const paths = readdirSync(directory).filter((name) => name !== "index.generated.ts").sort()
+  const paths = readdirSync(directory).filter((name) => name !== "index.generated.ts" && name !== "index.generated.cjs").sort()
     .map((name) => FLAG_DEFINITIONS_DIRECTORY + name);
   const rows = parseFlagFiles(paths, (name) => readFileSync(path.join(root, name), "utf8"));
   return Object.fromEntries(rows.map(({ definition }) => [

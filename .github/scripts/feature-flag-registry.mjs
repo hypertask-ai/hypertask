@@ -195,7 +195,7 @@ export const FLAG_DEFINITIONS_DIRECTORY = "src/lib/flags/definitions/";
 
 export function flagDefinitionPaths(ref) {
   return git(["ls-tree", "-r", "--name-only", ref, FLAG_DEFINITIONS_DIRECTORY])
-    .split("\n").filter(Boolean).sort();
+    .split("\n").filter((file) => file && !file.endsWith("/index.generated.cjs")).sort();
 }
 
 // Parse data, never execute PR modules in trusted checks or during generation.
