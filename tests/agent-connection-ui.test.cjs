@@ -212,7 +212,7 @@ test("connected email shares the current layout, escapes the client and has exac
   assert.equal(paragraph.textContent, "Claude Code <fixture> just talked to Hypertask. Ask your agent to pick up the top task on your board.");
   assert.equal(paragraph.style.margin, "0px 0px 16px");
   assert.equal(dom.window.document.querySelector("blockquote"), null);
-  assert.ok(email.html.includes(".cta { background-color: #5D6577 !important; color: #000000 !important; }"));
+  assert.ok(email.html.includes(".cta { background-color: #4455BB !important; color: #ffffff !important; }"));
   assert.doesNotMatch(email.html, /\u2014/);
   dom.window.close();
 });

@@ -107,7 +107,7 @@ test("flag Off keeps the previous sign-in email so the change reverts in one swi
   assert.equal(html.includes('class="cta"'), false);
 });
 
-test("notification, digest and onboarding emails share the same grey style and 4px corners", () => {
+test("notification, digest and onboarding emails keep the previous layout", () => {
   const templates = load("src/utils/controllers/notifications/emailTemplates.ts", {
     "@/utils/htmlEscape": load("src/utils/htmlEscape.ts"),
     "./commentPreview": { commentPreview: () => "A short comment" },
@@ -129,9 +129,9 @@ test("notification, digest and onboarding emails share the same grey style and 4
     cta: { label: "Open my board", url: "https://app.hypertask.ai/project?id=42" },
   });
   for (const email of [comment, digest, onboarding]) {
-    assert.ok(email.html.includes("background-color:#EFEFF1"));
-    assert.ok(email.html.includes("background-color:#5C6070"));
-    assert.equal(email.html.includes("#4455BB"), false);
-    assert.equal(email.html.includes("border-radius:999px"), false);
+    assert.ok(email.html.includes("background-color:#f3f3f3"), "page background");
+    assert.ok(email.html.includes("#4455BB"), "previous blue");
+    assert.equal(email.html.includes("background-color:#EFEFF1"), false);
+    assert.equal(email.html.includes("background-color:#5C6070"), false);
   }
 });
