@@ -97,7 +97,8 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (body.existingTaskId != null && body.requestKind !== "compose-task") {
       return NextResponse.json({ message: "New Task window is turned off" }, { status: 403, headers: responseHeaders });
     }
-    const projectId = Number(requestedProjectId);
+    const queryProjectId = request.query?.projectId;
+    const projectId = Number(requestedProjectId ?? (Array.isArray(queryProjectId) ? queryProjectId[0] : queryProjectId));
     if (!Number.isInteger(projectId) || projectId <= 0) {
       return NextResponse.json({ message: "Invalid project id" }, { status: 400, headers: responseHeaders });
     }

@@ -1,21 +1,26 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const { test } = require("node:test");
 const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const FLAG_KEY = "htpr-9399-archived-board-tickets";
+const GUARD_FILE = "src/utils/controllers/projects/archivedBoardTickets.ts";
+const FLAG_FILE = "src/lib/flags/definitions/htpr-9399-archived-board-tickets.ts";
 
 function flagState(enabled) {
   return { isFeatureEnabled: async () => enabled };
 }
 
 function loadGuard(enabled) {
-  return load("src/utils/controllers/projects/archivedBoardTickets.ts", {
+  assert.equal(fs.existsSync(GUARD_FILE), true, "archived board guard is not on this code");
+  return load(GUARD_FILE, {
     "@/lib/flags": flagState(enabled),
   });
 }
 
 test("the archived board guard ships to everyone as a reversible bugfix", () => {
-  const { default: flag } = load("src/lib/flags/definitions/htpr-9399-archived-board-tickets.ts");
+  assert.equal(fs.existsSync(FLAG_FILE), true, "archived board ticket flag is not on this code");
+  const { default: flag } = load(FLAG_FILE);
   assert.equal(flag.key, FLAG_KEY);
   assert.equal(flag.kind, "bugfix");
   assert.equal(flag.defaultMode, "EVERYONE");
