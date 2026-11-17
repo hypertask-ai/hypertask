@@ -130,9 +130,13 @@ test('committed baseline contains measured boxes and complete vertical order for
     const entry = baseline.viewports[device];
     assert.deepEqual(entry.viewport, viewport);
     assert.deepEqual(Object.keys(entry.screens).sort(), ['app-shell', 'board', 'inbox', 'my-tasks', 'new-task', 'ticket']);
-    for (const screen of Object.values(entry.screens)) {
+    for (const [screenName, screen] of Object.entries(entry.screens)) {
       const names = Object.keys(screen.landmarks);
-      assert.ok(names.length >= 4 && names.length <= 8);
+      if (device === 'Desktop' && screenName === 'inbox') {
+        assert.deepEqual(names.sort(), ['list', 'panel', 'search']);
+      } else {
+        assert.ok(names.length >= 4 && names.length <= 8);
+      }
       assert.deepEqual(screen.order.flat().sort(), [...names].sort());
       for (const landmark of Object.values(screen.landmarks)) {
         assert.equal(typeof landmark.selector, 'string');

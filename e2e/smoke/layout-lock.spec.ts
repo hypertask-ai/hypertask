@@ -54,7 +54,7 @@ function landmarks(screen: string, phone: boolean): Targets {
     case 'inbox': return {
       panel: target('[data-testid="inbox-panel"]'),
       list: target('[data-testid="inbox-list"]:visible', true),
-      splits: target(phone ? 'nav[aria-label="Inbox splits"]' : '.inbox-text-left'),
+      ...(phone ? { splits: target('nav[aria-label="Inbox splits"]') } : {}),
       search: target(phone ? '[aria-label="Commands"]' : '.app-shell-rail [aria-label="Search"]'),
     }
     case 'my-tasks': return {
