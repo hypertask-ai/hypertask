@@ -1,4 +1,3 @@
-import { assertAgentWriting, AgentWritingError } from "@/lib/agents/writing";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { generateText } from "ai";
@@ -77,6 +76,7 @@ export async function generateTaskWriterDraft(
       : { title: null, description: draftHtml };
 
   if (agentId && body.aiMode === "AiTaskWriter") {
+    const { assertAgentWriting, AgentWritingError } = await import("@/lib/agents/writing");
     try {
       assertAgentWriting(agentId, properties, {}, { create: true, houseRules: true });
     } catch (error) {

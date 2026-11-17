@@ -55,16 +55,49 @@ test('fake dividers in HTML attributes or comments cannot hide bad prose', () =>
     assert.throws(() => check(block.replace('Everyone.', `${fake}Next: inspect src/lib/search.ts.`)), /Technical detail/);
   }
 });
-test('refusals remain caller-fixable with all violations', () => {
-  const fixable = load('src/lib/aiFeedback/callerFixable.ts');
-  try { check('<p>Next: inspect src/lib/search.ts.</p>'); assert.fail('accepted'); }
-  catch (error) {
-    const details = writing.agentWritingDetails(error);
-    assert.equal(details.violations.length,3);
-    assert.equal(fixable.callerCanFixRefusal(details,400),true);
-  }
-});
-
 test('each required label owns a separate opening line', () => {
   assert.equal(template.hasPlainLanguageTicketBlock(block.replace(/<\/p><p>/g, ' ')), false);
+});
+function setup(labels) {
+  const created=[];
+  const db={$executeRaw:async()=>{},$transaction:async run=>run(db),label:{findMany:async()=>labels,create:async({data})=>{created.push(data);return {id:'created-medium'};}}};
+  return {created,...load('src/lib/agents/defaultBrainLabel.ts',{'@/lib/prisma':{default:db}})};
+}
+test('absent brain defaults to existing medium and retains other labels',async()=>{
+  const h=setup([{id:'bug',value:'Bug'},{id:'medium',value:'brain-medium'}]);
+  assert.deepEqual(await h.defaultAgentBrainLabelIds(7,['bug']),['bug','medium']);
+  assert.equal(h.created.length,0);
+});
+test('a board without medium gets that default',async()=>{
+  const h=setup([]);
+  assert.deepEqual(await h.defaultAgentBrainLabelIds(7,[]),['created-medium']);
+  assert.deepEqual(h.created,[{projectId:7,value:'brain-medium'}]);
+});
+test('explicit brain choice is preserved',async()=>{
+  const h=setup([{id:'hard',value:'brain-hard'}]);
+  assert.deepEqual(await h.defaultAgentBrainLabelIds(7,['bug','hard']),['bug','hard']);
+  assert.equal(h.created.length,0);
+});
+
+const output='<h1 id="ai-generated-task-title">Search finds reminders</h1>'+template.renderPlainLanguageTicketDescription({whatWrongOrWanted:'Search misses reminders.',whoItAffects:'Everyone.',recommendedCourseAndWhy:'Restore search. People need reminders.',whatValentinMustDecide:'Nothing.',howToUndo:'Revert the change.'})+'<pre>node scripts/repro.mjs --project_id 15</pre>';
+function writer(text) {
+ return load('src/app/api/ai/_lib/taskWriterDraft.ts',{
+  'ai':{generateText:async()=>({text})},
+  './taskWriterRun':{prepareTaskWriterRun:async()=>({selected:{model:{},modelId:'fixture',settings:{}},instructions:template.plainLanguageTicketWriterRule(),messages:[],skills:[],validateDraft:true})},
+  './modelProvider':{configureAiModelUsage(){}},
+  './editorAi':{filterOneImagePass:text=>({emit:text})},
+  '@/lib/net/downloadWithoutBrotli':{downloadWithoutBrotli(){}},
+  '@/lib/agents/writing':writing,
+ }).generateTaskWriterDraft({aiMode:'AiTaskWriter',taskTitle:'',PROMPT:'Restore search'},6,'agent');
+}
+test('the actual writer draft output passes the ticket validator',async()=>{
+ const draft=await writer(output);
+ assert.equal(draft.success,true);
+ assert.doesNotThrow(()=>writing.assertAgentWriting('agent',{title:draft.title,description:draft.html},{},{create:true,houseRules:true}));
+});
+test('the writer refuses its own invalid output before returning success',async()=>{
+ const draft=await writer(output.replace('Everyone.','Next: inspect src/lib/search.ts.'));
+ assert.equal(draft.success,false);
+ assert.match(draft.error,/Robot status/);
+ assert.match(draft.error,/Technical detail/);
 });

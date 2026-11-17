@@ -1,3 +1,4 @@
+import { renderPlainLanguageTicketDescription } from "@/lib/tickets/plainLanguageTicket.mjs";
 import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
@@ -31,7 +32,11 @@ function removalTitle(key: string) {
 function removalDescription(key: string, releasedAt: Date) {
   const released = releasedAt.toISOString().slice(0, 10);
   const days = removalWindowForFlag({ key });
-  return (
+  return renderPlainLanguageTicketDescription({
+    whatWrongOrWanted: "This released change still has a safety switch.", whoItAffects: "Internal only.",
+    recommendedCourseAndWhy: "Remove the switch. Keep enabled behaviour.",
+    whatValentinMustDecide: "Nothing.", howToUndo: "Undo the cleanup.",
+  }) + (
     `<h2>Problem</h2><p>This released change still has a safety switch.</p>` +
     `<p>Live for <strong>Everyone</strong> since ${released}.</p>` +
     `<p>Live for more than ${days} days.</p>` +

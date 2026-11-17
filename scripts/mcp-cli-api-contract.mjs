@@ -1,3 +1,4 @@
+import { renderPlainLanguageTicketDescription } from "../src/lib/tickets/plainLanguageTicket.mjs";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -250,13 +251,11 @@ export async function runContract() {
     taskRow(await call(token, "tasks", "get", { task_id: [board.task.id] }), board.task.id, board.task.title);
     taskRow(await call(token, "search", "tasks", { query: "contract", project_id: board.id }), board.task.id, board.task.title);
     const title = `${role} contract ${Date.now()}`;
-    const description = [
-      "Problem: The contract needs a ticket.",
-      "Fix: Create one on the seeded board.",
-      "Done when: The new ticket can be read back.",
-      "Risk: A bad write can leave a fixture ticket. Delete it.",
-      "Decision: Keep the ticket for the rest of this check.",
-    ].join("\n");
+    const description = renderPlainLanguageTicketDescription({
+      whatWrongOrWanted: "The contract needs a ticket.", whoItAffects: "Test team only.",
+      recommendedCourseAndWhy: "Create a fixture ticket. Read it back.",
+      whatValentinMustDecide: "Nothing.", howToUndo: "Delete the fixture ticket.",
+    });
     const created = await call(token, "tasks", "create", { project_id: board.id, title, section_id: board.columns[0].id, description });
     requireThat(Number.isInteger(created.task?.id) && created.task.title === title, `${role}: invalid created task`);
     const id = created.task.id;

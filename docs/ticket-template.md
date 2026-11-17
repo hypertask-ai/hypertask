@@ -37,11 +37,3 @@ Optional after the divider: related tickets, what was tried, screenshots, and pr
 > ---
 >
 > Done when: E removes the ticket, it stays gone after two reloads, and the next ticket takes focus.
-
-## Validation
-
-Only the opening receives description style checks. The first HTML divider ends that opening. Evidence below it keeps commands and raw errors. Titles and people comments retain their own checks. The description size limit still applies.
-
-Refusals list every detected writing rule together. Agent drafts receive the same validation. Missing brain labels default to brain-medium.
-
-Implementation: `src/lib/tickets/plainLanguageTicket.mjs` and `src/lib/agents/writing.ts`.
