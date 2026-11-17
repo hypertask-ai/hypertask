@@ -167,7 +167,6 @@ function selfCheck() {
 }
 
 module.exports = { heavyNeeded, buildNeeded, isDocsOnlyFile, changeScope };
-
 if (require.main === module) {
   if (process.argv.includes('--self-check')) {
     selfCheck();

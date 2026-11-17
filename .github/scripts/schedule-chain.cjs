@@ -69,17 +69,8 @@ function liveRun(runs, ownRunId, chainEvents) {
 }
 
 async function runInFlight(repo, workflowFile, ownRunId = null, api = request, chainEvents = null) {
-  const events = chainEvents && chainEvents.length ? chainEvents : null;
-  let page = 1;
-  for (;;) {
-    const suffix = page === 1 ? "" : `&page=${page}`;
-    const payload = await api(`/repos/${repo}/actions/workflows/${workflowFile}/runs?per_page=30${suffix}`);
-    const runs = payload?.workflow_runs ?? [];
-    const found = liveRun(runs, ownRunId, events);
-    if (found) return found;
-    if (!events || runs.length < 30) return null;
-    page += 1;
-  }
+  const payload = await api(`/repos/${repo}/actions/workflows/${workflowFile}/runs?per_page=30`);
+  return liveRun(payload.workflow_runs, ownRunId, chainEvents);
 }
 
 // A cron or a push only restarts a chain that died. While another link is queued

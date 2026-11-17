@@ -712,7 +712,7 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const fs = require("node:fs");
   const os = require("node:os");
   const {
-    decide, parsePlan, planFromRequest, takeFileList, emptyPlanGate, statusDescription,
+    CONTEXT, decide, parsePlan, planFromRequest, takeFileList, emptyPlanGate, statusDescription,
     REQUIRED_CI_CONTEXTS, openWaitStartedAt, settleWaiting, WAIT_LIMIT_MS, cancelKeepsStatus,
     postCommand, resolveCommand, authorGate,
   } = await load();
@@ -768,15 +768,15 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   assert.equal(cancelKeepsStatus({ state: "pending", description: "waiting for required checks", target_url: own }, own), true);
   assert.equal(cancelKeepsStatus({ state: "pending", description: "Planning a user check", target_url: own }, own), false);
   const started = openWaitStartedAt([
-    { context: "pstack-verifier", state: "pending", description: "waiting for required checks", created_at: "2026-11-17T11:30:00Z" },
-    { context: "pstack-verifier", state: "success", created_at: "2026-11-17T10:00:00Z" },
-    { context: "pstack-verifier", state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z" },
+    { context: CONTEXT, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T11:30:00Z" },
+    { context: CONTEXT, state: "success", created_at: "2026-11-17T10:00:00Z" },
+    { context: CONTEXT, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z" },
   ]);
   assert.equal(started, "2026-11-17T11:30:00Z");
   const young = settleWaiting({
     runs: [{ name: "ci-tests", conclusion: null }],
     statuses: [
-      { context: "pstack-verifier", state: "pending", description: "waiting for required checks", created_at: started },
+      { context: CONTEXT, state: "pending", description: "waiting for required checks", created_at: started },
       { context: "ci-tests", state: "pending" },
     ],
     now: Date.parse("2026-11-17T12:00:00Z"),
@@ -789,7 +789,7 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const savedEnv = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK"].map((key) => [key, process.env[key]]);
   Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
   const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
-  const mark = (runId, attempt, extra = {}) => ({ context: "pstack-verifier", target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}`, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z", ...extra });
+  const mark = (runId, attempt, extra = {}) => ({ context: CONTEXT, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}`, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z", ...extra });
   const post = async (verdict, statusRows, checkRuns, now) => {
     fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict, notes: "waiting for required checks", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "" }));
     const posts = [];
@@ -826,7 +826,6 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     }
     fs.rmSync(work, { recursive: true, force: true });
   }
-
   const head = "d".repeat(40);
   const savedResolve = ["GH_TOKEN", "GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
   const dir = fs.mkdtempSync(`${os.tmpdir()}/pv-resolve-`);

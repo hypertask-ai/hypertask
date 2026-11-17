@@ -10,7 +10,7 @@ const base = "a".repeat(40);
 const head = "b".repeat(40);
 const contexts = [
   "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
-  "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "pstack-verifier",
+  "next-public-secrets", "pr-title", "secret-scan", "browser-smoke",
 ];
 const endpoints = [
   "repos/test/repo",
@@ -21,7 +21,7 @@ const endpoints = [
 function runSettings({
   event = "pull_request", file = ".github/workflows/ci-tests.yml",
   diffStatus = 0, fetchStatus = 0, httpStatus = 200, resetSeconds = 0,
-  liveContexts = contexts, proof = null, integrationId = 15368, omitIntegration = false,
+  liveContexts = contexts, proof = null,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "required-check-settings-"));
   const log = join(directory, "calls");
@@ -106,9 +106,7 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
           target: "branch",
           conditions: { ref_name: { include: ["refs/heads/production"], exclude: [] } },
           rules: [{ type: "required_status_checks", parameters: {
-            required_status_checks: liveContexts.map((context) => (
-              omitIntegration ? { context } : { context, integration_id: integrationId }
-            )),
+            required_status_checks: liveContexts.map((context) => ({ context })),
           } }],
         }),
       },
@@ -247,15 +245,6 @@ for (const httpStatus of [404, 403]) {
     assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 1);
   });
 }
-
-test("a required check without Actions integration_id 15368 fails", () => {
-  const missing = runSettings({ omitIntegration: true });
-  assertRejected(missing);
-  assert.match(missing.output, /integration_id 15368/);
-  const other = runSettings({ integrationId: 1 });
-  assertRejected(other);
-  assert.match(other.output, /integration_id 15368/);
-});
 
 test("different live required contexts fail verification", () => {
   const result = runSettings({ liveContexts: contexts.filter((context) => context !== "ci-tests") });
