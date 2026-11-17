@@ -71,6 +71,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
+    "@/lib/flags/definitions/htpr-8976-mouse-multiselect": { HTPR_8976_MOUSE_MULTISELECT_FLAG: "htpr-8976-mouse-multiselect" },
     "@/lib/flags/keys": {},
     "@/lib/state": { useSetRecoilState: () => () => {} },
     "@/store": {},
@@ -121,6 +122,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
+    "@/lib/flags/definitions/htpr-8976-mouse-multiselect": { HTPR_8976_MOUSE_MULTISELECT_FLAG: "htpr-8976-mouse-multiselect" },
   });
   const { useTaskDetailEditorFocus } = load("src/components/RTE/useTaskDetailEditorFocus.tsx", {
     "@/lib/demo/guest": { isGuestUser: () => false },
@@ -158,6 +160,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/hooks/useFlag": { useFlag: () => true },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
+    "@/lib/flags/definitions/htpr-8976-mouse-multiselect": { HTPR_8976_MOUSE_MULTISELECT_FLAG: "htpr-8976-mouse-multiselect" },
     "@/lib/flags/keys": {},
   }).default;
   const Container = load("src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/index.tsx", {
@@ -168,6 +171,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/hooks/useFlag": { useFlag: key => { if (key === "htpr-8334-multi-chat-windows") return false; assert.equal(key, flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG); return true; } },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
+    "@/lib/flags/definitions/htpr-8976-mouse-multiselect": { HTPR_8976_MOUSE_MULTISELECT_FLAG: "htpr-8976-mouse-multiselect" },
     "@/lib/flags/keys": flags,
     "@/lib/taskDetailEditTarget": load("src/lib/taskDetailEditTarget.ts"),
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
@@ -182,6 +186,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/hooks/useFlag": { useFlag: () => true },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
+    "@/lib/flags/definitions/htpr-8976-mouse-multiselect": { HTPR_8976_MOUSE_MULTISELECT_FLAG: "htpr-8976-mouse-multiselect" },
     "@/lib/flags/keys": flags,
   }).default;
   const cache = load("src/lib/navigation/cachedTaskDetail.ts", {
@@ -207,6 +212,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/hooks/useFlag": { useFlag: () => cachedLayout },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-8927-board-card-overflow": { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG: "htpr-8927-board-card-overflow" },
+    "@/lib/flags/definitions/htpr-8976-mouse-multiselect": { HTPR_8976_MOUSE_MULTISELECT_FLAG: "htpr-8976-mouse-multiselect" },
     "@/lib/flags/keys": {},
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
