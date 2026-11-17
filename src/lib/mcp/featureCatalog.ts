@@ -34,8 +34,8 @@ export async function getFeaturePageWarnings(title: string, userId: number) {
   ]
   let destination: { name: string; url: string } | undefined
   if (/\bdecisions?\b/.test(normalizedTitle)) {
-    const decisions = (await getFeatureCatalog(userId)).find(({ name }) => name === 'Decisions')
-    if (decisions?.url) destination = { name: decisions.name, url: decisions.url }
+    const decisions = CORE_DESTINATIONS.find(({ key }) => key === 'core-decisions')
+    if (decisions) destination = { name: decisions.name, url: decisions.url }
   }
   destination ??= destinations.find(({ titles }) => titles.test(normalizedTitle))
   return destination ? [{
