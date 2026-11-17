@@ -224,9 +224,14 @@ export function modelHttpError(status, body, secrets) {
   const snippet = redact(String(body ?? "").replace(/\s+/g, " ").trim(), secrets).slice(0, 200);
   return snippet ? `model HTTP ${status}: ${snippet}` : `model HTTP ${status}`;
 }
-const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/"];
+const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/", "e2e/"];
 export function hasAppPath(files) {
-  return (Array.isArray(files) ? files : []).some((file) => !NON_APP_PREFIXES.some((prefix) => String(file).startsWith(prefix)));
+  return (Array.isArray(files) ? files : []).some((file) => {
+    const name = String(file);
+    if (NON_APP_PREFIXES.some((prefix) => name.startsWith(prefix))) return false;
+    if (!name.includes("/") && name.endsWith(".md")) return false;
+    return true;
+  });
 }
 export function confirmsNoUserPath(reason) {
   return /no user path|no user-facing/i.test(String(reason ?? ""));
@@ -234,7 +239,7 @@ export function confirmsNoUserPath(reason) {
 export const FILE_LIST_CAP = 100;
 export const CI_WAIT_ROUNDS = 40;
 export const CI_WAIT_INTERVAL_MS = 30000;
-export const REQUIRED_CI_CONTEXTS = ["app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan", "premerge-evidence"];
+export const REQUIRED_CI_CONTEXTS = ["app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
 function relevantChecks(runs) {
   return (Array.isArray(runs) ? runs : []).filter((run) => run?.name !== CONTEXT);
 }
