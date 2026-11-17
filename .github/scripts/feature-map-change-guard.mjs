@@ -34,8 +34,7 @@ export function citedPaths(markdown) {
 function citesArea(cited, area, files) {
   const areaFiles = files.filter((file) => areaOf(file) === area);
   for (const token of cited) {
-    if (token === area || token.startsWith(`${area}/`)) return true;
-    if (areaFiles.includes(token)) return true;
+    if (token === area || areaFiles.includes(token)) return true;
   }
   return false;
 }

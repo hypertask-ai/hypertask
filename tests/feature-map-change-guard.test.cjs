@@ -91,6 +91,19 @@ test("a map page for a different area still fails", async () => {
   assert.match(result.reasons.join(" "), /src\/app\/settings/);
 });
 
+test("an unchanged file in the same area does not cover the change", async () => {
+  const { evaluate } = await load();
+  const changedFiles = ["src/app/chat/Chat.tsx", `${folder}/chat.md`];
+  const title = "HTPR-1 [FEATURE] Add chat";
+  const page = { status: "M", path: `${folder}/chat.md` };
+  const miss = evaluate({ title, changedFiles, mapPages: [{ ...page, text: "`src/app/chat/page.tsx`\n" }] });
+  const area = evaluate({ title, changedFiles, mapPages: [{ ...page, text: "`src/app/chat`\n" }] });
+  const file = evaluate({ title, changedFiles, mapPages: [{ ...page, text: "`src/app/chat/Chat.tsx`\n" }] });
+  assert.equal(miss.ok, false);
+  assert.equal(area.ok, true);
+  assert.equal(file.ok, true);
+});
+
 test("a citation to another area's changed file does not cover this area", async () => {
   const { evaluate } = await load();
   const result = evaluate({
@@ -119,15 +132,7 @@ test("real feature PR 3182 has no map entry and fails", async () => {
   const { evaluate } = await load();
   const changedFiles = [
     "src/components/PageComponents/Kanban/HeaderComponents/ShellViewControls.tsx",
-    "src/components/PageComponents/Kanban/HeaderComponents/TableTagGroupPicker.tsx",
     "src/components/PageComponents/Kanban/TableView/TableView.tsx",
-    "src/components/PageComponents/Kanban/TableView/useTableActions.ts",
-    "src/components/PageComponents/Kanban/TableView/useTableState.ts",
-    "src/hooks/Homepage/Views/useKanbanViews.ts",
-    "src/lib/api/project-writes/views/gate-table-group-by.ts",
-    "src/lib/flags/definitions/htpr-8974-table-group-modes.ts",
-    "src/lib/table-view/tableGroupByTag.ts",
-    "tests/htpr-8974-table-groups.test.ts",
   ];
   const result = evaluate({ title: "HTPR-8974 [FEATURE] Choose table groups and tags", changedFiles, mapPages: [] });
   assert.equal(result.ok, false);
@@ -143,7 +148,7 @@ test("real feature PR 3302 edits its map page and passes", async () => {
     "src/hooks/Homepage/Views/useKanbanViews.ts",
     "tests/htpr-8974-table-groups.test.ts",
   ];
-  const text = "# Boards and views\n\n`.kanban-column-title`, `src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx`\n";
+  const text = "# Boards and views\n\n`src/components/PageComponents/Kanban/TableView/TableView.tsx`\n";
   const result = evaluate({ title: "HTPR-8974 [FEATURE] Add missing table group actions", changedFiles, mapPages: [{ status: "M", path: `${folder}/boards-and-views.md`, text }] });
   assert.equal(result.ok, true);
 });
