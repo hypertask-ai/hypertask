@@ -941,3 +941,10 @@ pstack_verifier:
   context: pstack-verifier
   required: false
   note: enable after hosted proof
+
+pstack_verifier_eval:
+  ticket: https://app.hypertask.ai/detail/project-15/9409
+  workflow: .github/workflows/pstack-verifier-eval.yml
+  context: null
+  required: false
+  note: weekly and manual eval of the verifier itself; a planted bug must fail and a clean change must pass
