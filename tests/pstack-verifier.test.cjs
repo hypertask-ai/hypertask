@@ -543,3 +543,46 @@ test("a run posts only when it owns the newest verifier status", async () => {
   assert.equal(posted[0].context, "pstack-verifier");
   assert.equal(posted[0].target_url, owned);
 });
+
+test("a real plan with no evidence file fails as evidence missing", async () => {
+  const { decide } = await load();
+  const cases = [
+    {
+      sha: "063c98017335df33d9c67ec5bd9c67a8b1733bbf",
+      run: "44125323814",
+      attempt: "1",
+      actions: [{ op: "goto", path: "/detail/project-{id}/1" }, { op: "shot", name: "task-detail" }],
+      expect: [{ path: "/detail/project-{id}/1" }],
+      reason: "Task detail screen is the user-facing path for this ticket; the diff only adds QA driver scripts with no new user screen.",
+      files: [
+        ".claude/skills/verify-qa/scripts/area-click-drive.mjs",
+        ".claude/skills/verify-qa/scripts/area-clicks.mjs",
+        ".claude/skills/verify-qa/scripts/drive-cli.mjs",
+        ".claude/skills/verify-qa/scripts/drive-grade.mjs",
+        ".github/scripts/verify-qa-premerge.mjs",
+        "tests/htpr-9383-area-clicks.test.cjs",
+        "tests/verify-qa-premerge.test.cjs",
+      ],
+    },
+    {
+      sha: "96303a53d5f8b56b734106bc460256be065414a5",
+      run: "44112608688",
+      attempt: "1",
+      actions: [{ op: "goto", path: "/project?id={id}" }, { op: "click", text: "HTPR-9381" }, { op: "shot", name: "task-detail" }],
+      expect: [{ text: "HTPR-9381" }, { path: "/detail/project-{id}/1" }],
+      reason: "Open the board, select the HTPR-9381 task, and confirm its detail page renders.",
+      files: ["scripts/pstack-verifier.mjs", "tests/pstack-verifier-workflow.test.cjs", "tests/pstack-verifier.test.cjs"],
+    },
+  ];
+  for (const item of cases) {
+    const binding = { sha: item.sha, run: item.run, attempt: item.attempt };
+    const result = decide({
+      model: { verdict: "", notes: "" },
+      plan: { ...binding, authorFamily: "grok", verifierModel: "deepseek/deepseek-v4.1-flash", actions: item.actions, expect: item.expect, reason: item.reason, fail: "", files: item.files, filesTruncated: false },
+      evidence: null,
+      binding,
+    });
+    assert.equal(result.verdict, "FAIL");
+    assert.equal(result.notes, "evidence missing");
+  }
+});
