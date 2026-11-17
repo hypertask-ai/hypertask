@@ -82,6 +82,20 @@ test("a dynamic route is not mapped by a shared prefix", (t) => {
   assert.equal(coverageReport(root, { only: "/chat/:sessionId" }).line, "1 of 1");
 });
 
+test("a catch-all citation and an app URL count, and an API path does not", (t) => {
+  const root = tree();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  write(root, "src/app/detail/[...slug]/page.tsx", "export default function Page() { return null }\n");
+  write(root, "src/app/chat/[sessionId]/page.tsx", "export default function Page() { return null }\n");
+  write(root, ".claude/skills/verify-qa/reference/feature-map/detail.md", "Open `https://app.hypertask.ai/detail/project-<id>/<taskNumber>` and `https://app.hypertask.ai/chat/<session>`.\n");
+  write(root, ".claude/skills/verify-qa/reference/feature-map/rows/detail.md", "| Detail |\n");
+  assert.equal(coverageReport(root, { only: "/detail/:...slug" }).line, "1 of 1");
+  assert.equal(coverageReport(root, { only: "/chat/:sessionId" }).line, "1 of 1");
+  write(root, ".claude/skills/verify-qa/reference/feature-map/detail.md", "Call `https://app.hypertask.ai/api/mcp/chat/rooms/pending`.\n");
+  assert.equal(coverageReport(root, { only: "/chat/:sessionId" }).line, "0 of 1");
+  assert.equal(coverageReport(root, { only: "/detail/:...slug" }).line, "0 of 1");
+});
+
 test("a missing feature name and a step summary are explicit", (t) => {
   const root = tree();
   const summary = path.join(root, "summary.md");

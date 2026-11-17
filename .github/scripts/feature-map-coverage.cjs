@@ -22,7 +22,7 @@ function routeOf(pageFile, appRoot) {
   for (const part of parts) {
     if (part.startsWith("(") && part.endsWith(")")) continue;
     if (part.startsWith("[[...") && part.endsWith("]]")) continue;
-    if (part.startsWith("[...") && part.endsWith("]")) url.push(`:${part.slice(4, -1)}`);
+    if (part.startsWith("[...") && part.endsWith("]")) url.push(`:...${part.slice(4, -1)}`);
     else if (part.startsWith("[") && part.endsWith("]")) url.push(`:${part.slice(1, -1)}`);
     else url.push(part);
   }
@@ -85,6 +85,11 @@ function dynamicSegment() {
   return "(?:<[^>\\s/]+>|:[A-Za-z_][A-Za-z0-9_]*|\\[[^\\]\\s/]+\\]|\\{[^}\\s/]+\\})";
 }
 
+function catchAllSegments() {
+  const segment = "[^\\s`)/]+";
+  return `${segment}(?:/${segment})*`;
+}
+
 function mentioned(feature, corpus) {
   if (feature.kind === "flag") {
     return new RegExp(`(?<![A-Za-z0-9-])${escapeReg(feature.id)}(?![A-Za-z0-9-])`).test(corpus);
@@ -92,10 +97,15 @@ function mentioned(feature, corpus) {
   if (corpus.includes(feature.source)) return true;
   if (feature.id === "/") return /(?:^|[\s`(])\/(?:[\s`)]|$)/m.test(corpus);
   if (feature.id.includes("/:")) {
+    const text = corpus.replace(/https?:\/\/(?:[a-z0-9-]+\.)*hypertask\.ai(?=\/)/gi, "");
     const segments = feature.id.split("/").filter(Boolean);
     if (segments[0].startsWith(":")) return false;
-    const body = segments.map((segment) => (segment.startsWith(":") ? dynamicSegment() : escapeReg(segment))).join("/");
-    return new RegExp(`(?<![A-Za-z0-9._~-])/${body}(?![A-Za-z0-9._~/-])`).test(corpus);
+    const body = segments.map((segment) => {
+      if (segment.startsWith(":...")) return catchAllSegments();
+      if (segment.startsWith(":")) return dynamicSegment();
+      return escapeReg(segment);
+    }).join("/");
+    return new RegExp(`(?<![A-Za-z0-9._~-])/${body}(?![A-Za-z0-9._~/-])`).test(text);
   }
   return new RegExp(`${escapeReg(feature.id)}(?![A-Za-z0-9._~/-])`).test(corpus);
 }
