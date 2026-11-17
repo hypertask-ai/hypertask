@@ -1,0 +1,17 @@
+name: Env proof
+on:
+  push:
+    branches: [proof/env-pstack-verifier]
+  pull_request:
+    branches: [production]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    environment: pstack-verifier
+    steps:
+      - name: Secret presence
+        env:
+          K: ${{ secrets.HYPERTASK_RUNNERS_KEY }}
+        run: '[ -n "$K" ] && echo "secret present" || echo "secret absent"'
