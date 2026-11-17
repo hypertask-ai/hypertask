@@ -107,4 +107,26 @@ function markerBody({ sha, pushed, note }) {
   return `<!-- review-fix:v1 ${JSON.stringify({ sha, pushed })} -->\nReview fix on ${sha.slice(0, 7)}: ${note}`;
 }
 
-module.exports = { eligible, findingsText, markers, markerBody, pick, collect, MAX_FIXES, OFF_LABEL, RED_CONTEXTS };
+function writeAllowed(settings, tool, file, cwd) {
+  const path = require('node:path');
+  const abs = path.resolve(cwd, file), root = path.resolve(cwd);
+  const denied = (tool === 'Edit' || tool === 'Write') && settings.permissions.deny.some(rule => {
+    const pattern = rule.startsWith(`${tool}(`) && rule.endsWith(')') ? rule.slice(tool.length + 1, -1) : '';
+    if (!pattern.startsWith('//')) return false;
+    const rx = pattern.slice(1).replaceAll('**', '\0').replace(/[.+^${}()|[\]\\]/g, '\\$&').replaceAll('*', '[^/]*').replaceAll('\0', '.*');
+    return new RegExp(`^${rx}$`).test(abs);
+  });
+  return !denied && !(settings.permissions.blockWritesOutsideWorkingDirectories && abs !== root && !abs.startsWith(`${root}/`));
+}
+function pushPlan({ token, repository, branch, sha }) {
+  if (!token) throw new Error('AUTOMERGE_TOKEN is missing');
+  const url = `https://x-access-token:${token}@github.com/${repository}.git`, ref = `refs/heads/${branch}`;
+  return { lsRemote: ['git', 'ls-remote', '--exit-code', url, ref], push: ['git', 'push', `--force-with-lease=${ref}:${sha}`, url, `HEAD:${ref}`] };
+}
+if (require.main === module && process.argv[2] === 'push') {
+  const { execFileSync } = require('node:child_process');
+  const plan = pushPlan({ token: process.env.PUSH_TOKEN, repository: process.env.GITHUB_REPOSITORY, branch: process.env.BRANCH, sha: process.env.EXPECTED_SHA });
+  for (const cmd of [plan.lsRemote, plan.push]) execFileSync(cmd[0], cmd.slice(1), { stdio: 'inherit' });
+}
+
+module.exports = { eligible, findingsText, markers, markerBody, pick, collect, writeAllowed, pushPlan, MAX_FIXES, OFF_LABEL, RED_CONTEXTS };

@@ -1,8 +1,7 @@
 {
-  "permissions": { "deny": [
-    "Read(//proc/**)", "Read(//sys/**)", "Read(//etc/**)", "Read(//root/**)", "Read(//tmp/**)", "Read(//run/**)", "Read(//var/**)", "Read(//opt/**)",
-    "Read(//home/runner/.*/**)", "Read(//home/runner/work/_temp/**)", "Read(//home/runner/work/_actions/**)", "Edit(//**/.git/**)", "Write(//**/.git/**)",
-    "Edit(//home/runner/work/*/*/trusted/**)", "Write(//home/runner/work/*/*/trusted/**)"
+  "permissions": { "blockWritesOutsideWorkingDirectories": true, "deny": [
+    "Read(//proc/**)", "Read(//sys/**)", "Read(//etc/**)", "Read(//root/**)", "Read(//tmp/**)", "Read(//run/**)", "Read(//var/**)", "Read(//opt/**)", "Read(//home/runner/.*/**)", "Read(//home/runner/work/_temp/**)", "Read(//home/runner/work/_actions/**)", "Edit(//**/.git/**)", "Write(//**/.git/**)",
+    "Edit(//home/runner/work/*/*/trusted/**)", "Write(//home/runner/work/*/*/trusted/**)", "Edit(//home/runner/work/_temp/**)", "Write(//home/runner/work/_temp/**)", "Edit(//home/runner/work/_actions/**)", "Write(//home/runner/work/_actions/**)", "Edit(//tmp/**)", "Write(//tmp/**)", "Edit(//proc/**)", "Write(//proc/**)", "Edit(//sys/**)", "Write(//sys/**)", "Edit(//etc/**)", "Write(//etc/**)", "Edit(//root/**)", "Write(//root/**)", "Edit(//run/**)", "Write(//run/**)", "Edit(//var/**)", "Write(//var/**)", "Edit(//opt/**)", "Write(//opt/**)", "Edit(//home/runner/.*/**)", "Write(//home/runner/.*/**)"
   ] },
   "disableAllHooks": true,
   "enableAllProjectMcpServers": false

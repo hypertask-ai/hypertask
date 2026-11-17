@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { eligible, findingsText, markers, markerBody, pick, MAX_FIXES } = require('../.github/scripts/review-fix/review-fix.cjs');
+const yaml = require('js-yaml');
+const { eligible, findingsText, markers, markerBody, pick, pushPlan, writeAllowed, MAX_FIXES } = require('../.github/scripts/review-fix/review-fix.cjs');
 
 const repo = 'hypertask-ai/hypertask';
 const sha = 'a'.repeat(40);
@@ -12,7 +13,11 @@ const pr = overrides => ({
 });
 const red = [{ context: 'ai-review', state: 'failure', description: 'worst P1' }];
 const bot = body => ({ user: { login: 'github-actions[bot]' }, body });
-const yml = fs.readFileSync(path.join(__dirname, '../.github/workflows/review-fix.yml'), 'utf8');
+const workflow = yaml.load(fs.readFileSync(path.join(__dirname, '../.github/workflows/review-fix.yml'), 'utf8'));
+const step = name => workflow.jobs.fix.steps.find(item => item.name === name);
+const settings = require('../.github/scripts/review-fix/settings.json');
+const checkout = '/home/runner/work/hypertask/hypertask/pr';
+const rulesOnly = { permissions: { ...settings.permissions, blockWritesOutsideWorkingDirectories: false } };
 
 test('a red ai-review on an open production PR is picked', () => {
   assert.equal(eligible({ pr: pr(), statuses: red, comments: [], repo }), '');
@@ -77,26 +82,33 @@ test('findings drop inline comments from reviews of an older commit', () => {
 });
 
 test('the workflow never hands the push token to the Claude step', () => {
-  const claudeStep = yml.split('- name: Fix with file tools only')[1].split('- name:')[0];
-  assert.doesNotMatch(claudeStep, /AUTOMERGE_TOKEN|GH_TOKEN|github\.token/);
-  assert.match(claudeStep, /--tools Read,Edit,Write,Glob,Grep/);
-  assert.match(claudeStep, /--settings \.\.\/trusted\/\.github\/scripts\/review-fix\/settings\.json/);
-  assert.doesNotMatch(claudeStep, /Bash/);
-  assert.match(claudeStep, /--safe-mode/);
-  assert.ok(['Edit', 'Write'].every((tool) => require('../.github/scripts/review-fix/settings.json').permissions.deny.includes(`${tool}(//home/runner/work/*/*/trusted/**)`)));
+  const fix = step('Fix with file tools only');
+  assert.deepEqual(Object.keys(fix.env), ['CLAUDE_CODE_OAUTH_TOKEN']);
+  assert.equal(fix.run, 'claude -p "$(cat ../trusted/.github/scripts/review-fix/prompt.md)" --settings ../trusted/.github/scripts/review-fix/settings.json --model sonnet --effort high --tools Read,Edit,Write,Glob,Grep --allowedTools Read,Edit,Write,Glob,Grep --permission-mode acceptEdits --disable-slash-commands --no-session-persistence --safe-mode --max-turns 80 --output-format json > ../claude.json');
+  for (const tool of ['Edit', 'Write']) {
+    assert.equal(writeAllowed(rulesOnly, tool, '/home/runner/work/_temp/_runner_file_commands/set_env_1', checkout), false);
+    assert.equal(writeAllowed(rulesOnly, tool, `${checkout}/../trusted/x`, checkout), false);
+    assert.equal(writeAllowed(settings, tool, `${checkout}/src/a.js`, checkout), true);
+    assert.equal(writeAllowed(settings, tool, `${checkout}/../claude.json`, checkout), false);
+  }
 });
 
 test('a cancelled fix run never marks its head as tried', () => {
-  const record = yml.split('- name: Record the attempt')[1];
-  assert.match(record, /if: success\(\) \|\| failure\(\)/);
-  assert.match(yml, /group: review-fix-pr-\$\{\{ matrix\.pull\.number \}\}\n\s+cancel-in-progress: false/);
+  assert.equal(step('Record the attempt').if, 'success() || failure()');
+  assert.deepEqual(workflow.jobs.fix.concurrency, { group: 'review-fix-pr-${{ matrix.pull.number }}', 'cancel-in-progress': false });
 });
 
 test('the push leases the head the fix started from', () => {
-  const push = yml.split('- name: Push the fix')[1].split('- name:')[0];
-  assert.match(push, /git ls-remote --exit-code "\$url" "refs\/heads\/\$\{BRANCH\}"/);
-  assert.equal((push.match(/--force/g) || []).length, 1);
-  assert.match(push, /git push --force-with-lease="refs\/heads\/\$\{BRANCH\}:\$\{\{ matrix\.pull\.sha \}\}" "\$url" "HEAD:refs\/heads\/\$\{BRANCH\}"/);
+  const push = step('Push the fix');
+  assert.equal(push.env.EXPECTED_SHA, '${{ matrix.pull.sha }}');
+  assert.equal(push.env.BRANCH, '${{ matrix.pull.branch }}');
+  assert.equal(push.run, 'node ../trusted/.github/scripts/review-fix/review-fix.cjs push');
+  const plan = pushPlan({ token: 't', repository: 'hypertask-ai/hypertask', branch: 'boss/x', sha: 'abc' });
+  assert.deepEqual(plan.lsRemote, ['git', 'ls-remote', '--exit-code', 'https://x-access-token:t@github.com/hypertask-ai/hypertask.git', 'refs/heads/boss/x']);
+  assert.equal(plan.push.filter(arg => arg.includes('--force')).length, 1);
+  assert.equal(plan.push[2], '--force-with-lease=refs/heads/boss/x:abc');
+  assert.equal(plan.push.at(-1), 'HEAD:refs/heads/boss/x');
+  assert.throws(() => pushPlan({ token: '', repository: 'o/r', branch: 'b', sha: 's' }), /AUTOMERGE_TOKEN is missing/);
 });
 
 test('a manual PR input must be a positive integer', async () => {

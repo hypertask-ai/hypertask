@@ -76,20 +76,11 @@ jobs:
         env:
           PR_NUMBER: ${{ matrix.pull.number }}
         with:
-          script: |
-            const fs = require('node:fs');
-            const { collect } = require(`${process.env.GITHUB_WORKSPACE}/trusted/.github/scripts/review-fix/review-fix.cjs`);
-            const { findings } = await collect({ github, context, number: Number(process.env.PR_NUMBER) });
-            fs.mkdirSync('pr/.review-fix', { recursive: true });
-            fs.writeFileSync('pr/.review-fix/findings.md', findings);
+          script: "const fs = require('node:fs'); const { collect } = require(`${process.env.GITHUB_WORKSPACE}/trusted/.github/scripts/review-fix/review-fix.cjs`); const { findings } = await collect({ github, context, number: Number(process.env.PR_NUMBER) }); fs.mkdirSync('pr/.review-fix', { recursive: true }); fs.writeFileSync('pr/.review-fix/findings.md', findings);"
       - name: Require the Claude subscription token
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-            echo "::error::The repo secret CLAUDE_CODE_OAUTH_TOKEN is empty or missing. No paid API key is used as a fallback."
-            exit 1
-          fi
+        run: test -n "$CLAUDE_CODE_OAUTH_TOKEN" || { echo "::error::The repo secret CLAUDE_CODE_OAUTH_TOKEN is empty or missing. No paid API key is used as a fallback."; exit 1; }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ^24.22.1
@@ -100,26 +91,15 @@ jobs:
         working-directory: pr
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          claude -p "$(cat ../trusted/.github/scripts/review-fix/prompt.md)" --settings ../trusted/.github/scripts/review-fix/settings.json --model sonnet --effort high --tools Read,Edit,Write,Glob,Grep --allowedTools Read,Edit,Write,Glob,Grep --permission-mode acceptEdits --disable-slash-commands --no-session-persistence --safe-mode --max-turns 80 --output-format json > ../claude.json
+        run: claude -p "$(cat ../trusted/.github/scripts/review-fix/prompt.md)" --settings ../trusted/.github/scripts/review-fix/settings.json --model sonnet --effort high --tools Read,Edit,Write,Glob,Grep --allowedTools Read,Edit,Write,Glob,Grep --permission-mode acceptEdits --disable-slash-commands --no-session-persistence --safe-mode --max-turns 80 --output-format json > ../claude.json
       - name: Commit the fix
         id: commit
         working-directory: pr
         env:
           BRANCH: ${{ matrix.pull.branch }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          answer="$(head -c 3000 .review-fix/answer.md 2>/dev/null || true)"
-          if grep -rqF -- "$CLAUDE_CODE_OAUTH_TOKEN" . --exclude-dir=.git; then echo "::error::CLAUDE_CODE_OAUTH_TOKEN appeared in the checkout"; exit 1; fi
-          rm -rf .review-fix
-          printf 'answer<<REVIEW_FIX_EOF\n%s\nREVIEW_FIX_EOF\n' "$answer" >> "$GITHUB_OUTPUT"
-          git add -A
-          if git diff --cached --quiet; then echo "pushed=false" >> "$GITHUB_OUTPUT"; echo "note=no change made" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if git diff --cached --name-only | grep -qE '^\.(github|claude)/'; then echo "pushed=false" >> "$GITHUB_OUTPUT"; echo "note=refused: the change touched .github/ or .claude/" >> "$GITHUB_OUTPUT"; exit 0; fi
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Fix review findings on $(git rev-parse --short=7 HEAD)" \
-            -m "Co-Authored-By: Claude Sonnet <noreply@anthropic.com>"
-          echo "pushed=pending" >> "$GITHUB_OUTPUT"
+        run: >-
+          answer="$(head -c 3000 .review-fix/answer.md 2>/dev/null || true)"; if grep -rqF -- "$CLAUDE_CODE_OAUTH_TOKEN" . --exclude-dir=.git; then echo "::error::CLAUDE_CODE_OAUTH_TOKEN appeared in the checkout"; exit 1; fi; rm -rf .review-fix; printf 'answer<<REVIEW_FIX_EOF\n%s\nREVIEW_FIX_EOF\n' "$answer" >> "$GITHUB_OUTPUT"; git add -A; if git diff --cached --quiet; then echo "pushed=false" >> "$GITHUB_OUTPUT"; echo "note=no change made" >> "$GITHUB_OUTPUT"; exit 0; fi; if git diff --cached --name-only | grep -qE '^\.(github|claude)/'; then echo "pushed=false" >> "$GITHUB_OUTPUT"; echo "note=refused: the change touched .github/ or .claude/" >> "$GITHUB_OUTPUT"; exit 0; fi; git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "Fix review findings on $(git rev-parse --short=7 HEAD)" -m "Co-Authored-By: Claude Sonnet <noreply@anthropic.com>"; echo "pushed=pending" >> "$GITHUB_OUTPUT"
       - name: Push the fix
         id: push
         if: steps.commit.outputs.pushed == 'pending'
@@ -127,11 +107,8 @@ jobs:
         env:
           PUSH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           BRANCH: ${{ matrix.pull.branch }}
-        run: |
-          if [ -z "$PUSH_TOKEN" ]; then echo "::error::AUTOMERGE_TOKEN is missing"; exit 1; fi
-          url="https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git ls-remote --exit-code "$url" "refs/heads/${BRANCH}" >/dev/null
-          git push --force-with-lease="refs/heads/${BRANCH}:${{ matrix.pull.sha }}" "$url" "HEAD:refs/heads/${BRANCH}"
+          EXPECTED_SHA: ${{ matrix.pull.sha }}
+        run: node ../trusted/.github/scripts/review-fix/review-fix.cjs push
       - name: Record the attempt
         if: success() || failure()
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
@@ -142,8 +119,4 @@ jobs:
           NOTE: ${{ steps.push.outcome == 'success' && 'pushed a fix commit' || steps.commit.outputs.note || 'fix run failed' }}
           ANSWER: ${{ steps.commit.outputs.answer }}
         with:
-          script: |
-            const { markerBody } = require(`${process.env.GITHUB_WORKSPACE}/trusted/.github/scripts/review-fix/review-fix.cjs`);
-            const note = `${process.env.NOTE}. Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = [markerBody({ sha: process.env.HEAD_SHA, pushed: process.env.PUSHED === 'true', note }), process.env.ANSWER].filter(Boolean).join('\n\n');
-            await github.rest.issues.createComment({ ...context.repo, issue_number: Number(process.env.PR_NUMBER), body });
+          script: "const { markerBody } = require(`${process.env.GITHUB_WORKSPACE}/trusted/.github/scripts/review-fix/review-fix.cjs`); const note = `${process.env.NOTE}. Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`; const body = [markerBody({ sha: process.env.HEAD_SHA, pushed: process.env.PUSHED === 'true', note }), process.env.ANSWER].filter(Boolean).join('\\n\\n'); await github.rest.issues.createComment({ ...context.repo, issue_number: Number(process.env.PR_NUMBER), body });"
