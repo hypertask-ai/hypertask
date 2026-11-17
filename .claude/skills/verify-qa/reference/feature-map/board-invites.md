@@ -3,10 +3,11 @@
 ## Sub-features
 
 - `board-invites` Board invites.
+- `invite-accept` `/invite` (`src/app/invite/page.tsx`) needs `?key=<invite key>`. No key, or a key with no invite row, sends you to `/`. A signed-in join that returns 200 opens `/project?id=<projectId>`, and keeps `view` when the link has one. Otherwise the normal login screen stays up. The page stores `inviteKey`, and `project` plus `projectInvite` when those query values are present, for 10080 seconds.
 
 ## How to get to it (user POV)
 
-Settings > Team > Members > Invite, and the invite command dialog (`src/components/Modals/commands/inviteMember.tsx`). A pending invite shows Resend and Cancel; they call `POST /api/invite/reSendInvite` and `POST /api/invite/cancelInvite` with `{ projectId, email }` (`src/hooks/MultiPages/useInviteCallbackHandlers.ts`). New invites go through `POST /api/invite/createInviteLink`.
+Open `/invite?key=<invite key>` from an invite link. Creating the link is Settings > Team > Members > Invite, and the invite command dialog (`src/components/Modals/commands/inviteMember.tsx`). A pending invite shows Resend and Cancel; they call `POST /api/invite/reSendInvite` and `POST /api/invite/cancelInvite` with `{ projectId, email }` (`src/hooks/MultiPages/useInviteCallbackHandlers.ts`). New invites go through `POST /api/invite/createInviteLink`.
 
 ## Driving it with agent-browser
 
@@ -16,11 +17,13 @@ Use the shared fixture board 7283 (**QA Team Board**): owner 4036 (`~/.config/ht
 2. As owner 4036, click Resend on that pending invite: `reSendInvite` answers 200 and the pending row stays.
 3. As the outsider, `POST /api/invite/reSendInvite` and `POST /api/invite/cancelInvite` with `{ projectId: 7283, email: <that address> }`: both answer 403, and the owner still sees the pending invite after reload (HTPR-7176).
 4. Without any login both routes answer 401.
+5. Open `/invite?key=<that invite key>` signed out. The login screen shows and the `inviteKey` cookie is set. Sign in as a QA account that is not on board 7283. A 200 join opens that board. Open `/invite` with no `key` and confirm the page sends you to `/`.
 
 ## Gotchas
 
 - Routes trusting an id from the request body (`userId`) instead of the login, or skipping the owner/member check on the board (HTPR-7176 for resend).
 - Resend on an address with no pending invite answers 500 (no invite to resend); not a regression.
+- A signed-in join that does not return 200 leaves the login screen up. This page does not show its own error.
 
 ### What proof to collect
 
