@@ -34,7 +34,7 @@ test('native scanner checks retain required names without commit-status API call
   }
 });
 
-test('trusted publication combines outside and title guards without exposing candidate code', () => {
+test('trusted publication combines outside, title and feature-map guards without exposing candidate code', () => {
   const w = workflow('pr-guards-trusted');
   assert.deepEqual(Object.keys(w.jobs), ['pr-guards-trusted', 'bind-ticket']);
   assert.deepEqual(Object.keys(w.on), ['pull_request_target', 'workflow_dispatch']);
@@ -42,12 +42,12 @@ test('trusted publication combines outside and title guards without exposing can
   assert.equal(w.concurrency.queue, 'max');
   assert.equal(w.concurrency['cancel-in-progress'], false);
   const steps = w.jobs['pr-guards-trusted'].steps;
-  assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'runner-policy']);
+  assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'feature-map', 'runner-policy']);
   const checkout = steps.find(step => step.uses?.startsWith('actions/checkout@'));
   assert.equal(checkout.with.ref, 'production');
   assert.equal(checkout.with['persist-credentials'], false);
   assert.ok(steps.every(step => !step['continue-on-error']));
-  for (const id of ['outside', 'size', 'title', 'runner-policy']) {
+  for (const id of ['outside', 'size', 'title', 'feature-map', 'runner-policy']) {
     assert.equal(steps.find(step => step.id === id).env.PR_METADATA, '${{ steps.metadata.outputs.pr }}');
   }
   assert.equal(steps.at(-1).if, "${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}");

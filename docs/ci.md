@@ -576,6 +576,12 @@ every other tag are exempt. A pull request that breaks the rule fails with a
 message naming
 `.claude/skills/verify-qa/reference/feature-map/` and the uncovered areas.
 
+The tag can be changed after the pull request is opened, and `ci-tests` does not
+rerun on a title edit, so the same check runs again in the title-sensitive
+`pr-guards-trusted` workflow. It reads the file list and the map pages through
+the pull request API and fails the required `pr-title` context, which keeps a
+retag from slipping past the gate.
+
 ## Docs-only CI lane (YPER4-548 / YPER4-663)
 
 Required `app-smoke` and `browser-smoke` still report success when every changed
