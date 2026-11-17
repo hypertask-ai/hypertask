@@ -65,7 +65,8 @@ In a disposable ticket description, with
 of an empty paragraph and after a period and a space. The editor capitalizes
 it. With `htpr-6906-autocap-undo` also on, press Backspace once, or Ctrl+Z
 or Cmd+Z, before typing more. The lowercase letter returns, and the capital
-was underlined. Off for either flag leaves that key alone.
+was underlined. Do not switch either flag Off. Off proof:
+`tests/editor-writing-assistance.test.ts`.
 
 ### Suggest descriptions from task titles
 
@@ -74,7 +75,9 @@ toggle Suggest descriptions from task titles is present and defaults on.
 Ctrl+K or Cmd+K lists Settings: Suggest descriptions from task titles. The
 task-writer request kind auto-description is rejected with Automatic
 description suggestions are turned off, so do not expect a draft to appear
-under an empty description from that request.
+under an empty description from that request. Do not switch
+`htpr-6177-auto-task-descriptions` Off. The Settings toggle is a preference,
+not the flag. Follow the Batch 3 proof rule for the flag's live mode.
 
 ### Where a ticket opens
 
@@ -83,7 +86,9 @@ that have no hash deep link: never read, already read with no new comments,
 and one with a newer comment than last read. They land on the description,
 the newest comment, and the first unread comment. A comment hash still wins.
 From a board, a scroll setting other than Bottom stays at the top. From an
-inbox item, scroll setting None stays at the top.
+inbox item, scroll setting None stays at the top. Do not switch
+`htpr-7315-unread-ticket-opens-top` Off. Off proof:
+`tests/htpr-7315-initial-ticket-position.test.cjs`.
 
 ### Ticket chat reminder
 
@@ -91,37 +96,45 @@ With `htpr-7318-ticket-chat-reminder` on, chat about one disposable ticket
 from the signed-in account, then reopen it. Above the comments, You chatted
 about this ticket and Only you see this list at most three sessions. Another
 account on the same ticket does not see them. Clicking a row opens the AI
-sidebar on that session. Off hides the block and leaves the chats.
+sidebar on that session. Do not switch `htpr-7318-ticket-chat-reminder` Off.
+Off proof: `tests/htpr-7318-ticket-chat-reminder.test.cjs`.
 
 ### Cached description, first screen, and summary on view
 
 With `htpr-7395-cached-static-first` on, open a ticket that was already
 loaded. The saved description is visible before the rich editor mounts.
 Reload a ticket whose editor module is already warm and the editor mounts
-without that wait. Off mounts the editor immediately.
+without that wait. Do not switch `htpr-7395-cached-static-first` Off.
+Off proof: `tests/htpr-7395-cached-static-first.test.cjs`.
 
 With `htpr-7627-ticket-first-screen` on, load a ticket document as that
 account, not as an RSC request, and with the board display cookie set. The
 first HTML includes that account's flag values and display preferences.
-Missing the cookie, or Off, leaves the ticket unseeded.
+Missing the cookie leaves the ticket unseeded. Do not switch
+`htpr-7627-ticket-first-screen` Off. Follow the Batch 3 proof rule. No test
+covers this flag off.
 
 With `htpr-7848-summary-on-view` on, change a disposable ticket and confirm
 the summary is not generated on that change. Open the ticket and confirm one
 refresh is scheduled, then a second open inside a minute does not schedule
 another. After a Stripe checkout for a team whose owners all have the flag,
 those tickets are marked out of date and no summary run starts from the
-checkout. Off restores the scheduled summary runs.
+checkout. Do not switch `htpr-7848-summary-on-view` Off. Off proof:
+`tests/htpr-7848-summary-on-view.test.cjs`. Do not change a live team's
+Stripe plan for this check.
 
 ### Empty field labels and the right column
 
 With `htpr-7868-empty-field-labels` on, open a ticket and a new task with no
 due date and no size. Both say No due date and No size. Set a date and a
-size and the real values show. Off restores the dash.
+size and the real values show. Do not switch `htpr-7868-empty-field-labels`
+Off. Off proof: `tests/htpr-7868-empty-field-labels.test.cjs`.
 
 With `htpr-8991-right-column` on, Status and Project stay. Empty assignee,
 due date, priority, size, and tags are hidden. Add field opens the command
 list of those empty fields. The ticket ID beside the title copies on click.
-Off shows every row, including the empty placeholders and the ID row.
+Do not switch `htpr-8991-right-column` Off. Follow the Batch 3 proof rule.
+No test covers this flag off.
 
 ### Sub-task button
 
@@ -129,36 +142,42 @@ With `htpr-8250-new-subtask-button` on, open the sub-task modal on a
 disposable ticket. The header is Link existing or create a new subtask. With
 an empty search the first row is + Create new sub-task. Type a name and the
 row becomes Create sub-task with that name, while matching tasks stay in the
-list. Off hides that row until the search matches nothing.
+list. Do not switch `htpr-8250-new-subtask-button` Off. Off proof:
+`tests/htpr-8250-new-subtask-button.test.cjs`.
 
 ### Agent images and agent automatic AI
 
 With `htpr-7514-inline-agent-images` on, have an agent put an image in a
 disposable description or comment without asking for attachment only or link
 only. The image is inline. Repeat with an explicit attachment-only or
-link-only instruction and the image stays a file or a link.
+link-only instruction and the image stays a file or a link. Do not switch
+`htpr-7514-inline-agent-images` Off. Off proof:
+`tests/htpr-7514-inline-agent-images.test.cjs`.
 
 With `htpr-8904-agent-automatic-ai` on, an agent-authored change on a
 disposable ticket does not schedule a ticket summary, a comment summary, or
-smart labels. A person editing the same ticket still does. Off schedules the
-agent calls again.
+smart labels. A person editing the same ticket still does. Do not switch
+`htpr-8904-agent-automatic-ai` Off. Off proof:
+`tests/htpr-8904-agent-automatic-ai.test.cjs`.
 
 ### Sticky title and the Write with AI box
 
 With `htpr-8992-sticky-title` on, scroll a long ticket. The title bar stays
 and a 1px line appears under it. On a phone, check the line in a dark theme.
-Off keeps the header unchanged.
+Do not switch `htpr-8992-sticky-title` Off. Off proof:
+`tests/htpr-8992-sticky-title.test.cjs`.
 
 With `htpr-8975-ctrl-j-write-with-ai` on, focus an editable description or
 comment and press Ctrl+J or Cmd+J. The compose palette stays closed and the
 editor's Write with AI toggle runs. The inline box uses the comment well,
 the comment-row mic, and a text Rewrite button. Press Ctrl+J or Cmd+J again
-inside the box and it closes. Off restores the purple arrow and lets that
-shortcut open the compose palette.
+inside the box and it closes. Do not switch `htpr-8975-ctrl-j-write-with-ai`
+Off. Off proof: `tests/htpr-8975-ctrl-j-write-with-ai.test.cjs`.
 
 With `htpr-9025-ai-box-outline` on, that same box has a 1px outline in the
-editor border colour. The corners and the controls do not move. Off removes
-the outline.
+editor border colour. The corners and the controls do not move. Do not
+switch `htpr-9025-ai-box-outline` Off. Follow the Batch 3 proof rule. No
+test covers this flag off.
 
 
 ## Gotchas
@@ -255,10 +274,18 @@ live create/edit to confirm their background jobs did not emit allowance errors.
 Screenshot `/time` empty, then after one added entry and one CSV export.
 Delete that entry from the time log before leaving.
 
-For each ticket flag, screenshot the on state and the off state on a
-disposable QA task. Reload the ticket after a description, summary, image,
-or scroll check. Record Owner + QA flags as unreached when the QA account
-cannot turn them on. Do not change a live team's Stripe plan to prove
+Runners never switch a flag Off. Read the live mode and leave it.
+Screenshot the on state on a disposable QA task only when that account
+already has the flag. Reload the ticket after a description, summary, image,
+or scroll check.
+
+When the live mode is Owner + QA, screenshot the off state with a plain
+account that is not an owner and not QA. When the live mode is Everyone,
+live off is UNREACHABLE and the test named in that flag's drive step is the
+off proof. When the live mode is already Off, that screen is the off proof
+and the on state is unreached. A flag with no named test uses this same rule.
+
+Do not change a live team's Stripe plan to prove
 `htpr-7848-summary-on-view`. Do not spend an AI allowance to force a summary
 or a smart label. Delete disposable tasks, drafts, chat sessions, and time
 entries in the product UI.
