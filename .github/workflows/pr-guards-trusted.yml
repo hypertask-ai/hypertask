@@ -126,7 +126,8 @@ jobs:
               const { data } = await github.rest.repos.getContent({ ...context.repo, path: page.path, ref: pr.head.sha });
               texts.push({ ...page, text: Buffer.from(data.content, 'base64').toString('utf8') });
             }
-            const result = evaluate({ title: pr.title, changedFiles: changed.map(file => file.path), mapPages: texts });
+            const changedFiles = files.flatMap(file => file.previous_filename && file.previous_filename !== file.filename ? [file.filename, file.previous_filename] : [file.filename]);
+            const result = evaluate({ title: pr.title, changedFiles, mapPages: texts });
             if (!result.ok) {
               core.setFailed(formatFailure(result));
               return;

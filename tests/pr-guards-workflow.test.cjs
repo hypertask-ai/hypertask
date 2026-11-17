@@ -50,6 +50,7 @@ test('trusted publication combines outside, title and feature-map guards without
   for (const id of ['outside', 'size', 'title', 'feature-map', 'runner-policy']) {
     assert.equal(steps.find(step => step.id === id).env.PR_METADATA, '${{ steps.metadata.outputs.pr }}');
   }
+  assert.match(steps.find(step => step.id === 'feature-map').with.script, /previous_filename !== file\.filename \? \[file\.filename, file\.previous_filename\]/);
   assert.equal(steps.at(-1).if, "${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}");
   assert.deepEqual(workflow('gitleaks').on.push.branches, ['main', 'master', 'production']);
   assert.deepEqual(workflow('secret-guard').on.push.branches, ['production', 'main']);
