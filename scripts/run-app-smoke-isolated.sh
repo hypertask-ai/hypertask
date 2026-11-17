@@ -7,6 +7,13 @@ trusted_root=${2:?trusted checkout is required}
 [ -d "$trusted_root/scripts" ] || { echo "Trusted scripts do not exist." >&2; exit 1; }
 candidate_root=$(cd "$candidate_root" && pwd -P)
 trusted_root=$(cd "$trusted_root" && pwd -P)
+hold=0
+publish_args=()
+if [ "${PSTACK_VERIFIER_HOLD:-}" = "1" ]; then
+  hold=1
+  : "${PSTACK_VERIFIER_READY:?PSTACK_VERIFIER_READY is required}"
+  : "${PSTACK_VERIFIER_STOP:?PSTACK_VERIFIER_STOP is required}"
+fi
 
 # The candidate is mounted read-only, so build its flag index here with the trusted generator.
 # It only parses the flag files as data and never runs candidate code.
@@ -304,6 +311,9 @@ common_env=(
   -e TURBOPUFFER_BASE_URL=http://"$mock":3200
   -e BUILD_ID="${GITHUB_SHA:-smoke}"
 )
+if [ "$hold" = 1 ]; then
+  common_env+=(-e NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100)
+fi
 
 docker run --rm --name "$prepare" --network "$network" "${runtime[@]}" "${common_env[@]}" \
   "$runtime_image" timeout --signal=KILL 2m ./node_modules/.bin/prisma migrate deploy
@@ -341,7 +351,11 @@ docker run --rm --name "$builder" --network "$network" "${runtime[@]}" "${common
   -v "$trusted_root/scripts:/trusted:ro" \
   "$runtime_image" timeout --signal=KILL 10m node node_modules/next/dist/bin/next build
 
+if [ "$hold" = 1 ]; then
+  publish_args=(-p 127.0.0.1:3100:3100)
+fi
 docker run -d --name "$app" --network "$network" \
+  "${publish_args[@]}" \
   --cap-drop ALL \
   --security-opt no-new-privileges \
   --read-only \
@@ -374,6 +388,24 @@ while [ "$SECONDS" -lt "$deadline" ]; do
   sleep 1
 done
 [ "$app_ready" = true ] || { echo "Next.js did not become ready within 60 seconds." >&2; exit 1; }
+
+if [ "$hold" = 1 ]; then
+  ready_dir=$(dirname "$PSTACK_VERIFIER_READY")
+  mkdir -p "$ready_dir"
+  cp "$scratch/smoke.env" "$ready_dir/smoke.env"
+  chmod 600 "$ready_dir/smoke.env"
+  printf 'url=http://127.0.0.1:3100\nenv=%s\n' "$ready_dir/smoke.env" > "$PSTACK_VERIFIER_READY"
+  chmod 600 "$PSTACK_VERIFIER_READY"
+  echo "pstack verifier holding http://127.0.0.1:3100"
+  while [ ! -f "$PSTACK_VERIFIER_STOP" ]; do
+    if ! docker inspect -f '{{.State.Running}}' "$app" 2>/dev/null | grep -qx true; then
+      echo "The candidate app exited while the verifier was driving." >&2
+      exit 1
+    fi
+    sleep 2
+  done
+  exit 0
+fi
 
 timeout --signal=KILL 2m docker run --rm --name "$harness" --network "$network" \
   --cap-drop ALL \

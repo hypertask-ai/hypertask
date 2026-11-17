@@ -47,12 +47,35 @@ jobs:
         run: node scripts/pstack-verifier.mjs plan
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with: { name: "pstack-plan-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, if-no-files-found: error, path: "${{ runner.temp }}/pstack-verifier/plan" }
-  judge:
+  drive:
     needs: [resolve, plan]
-    if: always() && needs.resolve.outputs.stop != 'true' && needs.plan.result == 'success'
+    if: needs.resolve.outputs.stop != 'true' && needs.plan.result == 'success' && needs.plan.outputs.empty != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions: { contents: read }
+    timeout-minutes: 35
+    permissions: { contents: read, packages: read }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: "${{ github.repository }}", ref: "${{ needs.resolve.outputs.sha }}", path: candidate, fetch-depth: 1, persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: "^24.22.1", check-latest: true }
+      - run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - env: { GH_TOKEN: "${{ github.token }}" }
+        run: set -o pipefail; printf '%s\n' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with: { name: "pstack-plan-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/plan" }
+      - env: { HEAD_SHA: "${{ needs.resolve.outputs.sha }}", CORE_SMOKE_TRUSTED_DEPENDENCIES: "true" }
+        run: bash scripts/pstack-verifier-job.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/candidate" "${{ runner.temp }}/pstack-verifier"
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: "pstack-evidence-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, if-no-files-found: ignore, path: "${{ runner.temp }}/pstack-verifier/evidence" }
+  judge:
+    needs: [resolve, plan, drive]
+    if: always() && needs.resolve.outputs.stop != 'true' && needs.plan.result == 'success' && (needs.drive.result == 'success' || needs.drive.result == 'failure' || needs.drive.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: read, checks: read, statuses: read }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
