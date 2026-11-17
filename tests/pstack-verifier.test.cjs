@@ -98,43 +98,44 @@ test("github calls read GH_TOKEN and ignore GITHUB_TOKEN", async () => {
   assert.throws(() => githubHeaders({ GITHUB_TOKEN: "nope" }), /gh token is missing/);
 });
 
-test("a superseded or ineligible run does not post", async () => {
+test("a run posts only when it owns the newest verifier status", async () => {
   const { postCommand } = await load();
-  const sha = "c".repeat(40), posts = [], self = { id: 10, run_number: 3, run_attempt: 1, status: "in_progress", conclusion: null, run_started_at: "2026-11-17T01:00:00Z" };
+  const sha = "c".repeat(40), posts = [];
   const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
   const fs = require("node:fs"), work = fs.mkdtempSync(`${require("node:os").tmpdir()}/pv-`);
   fs.mkdirSync(`${work}/verdict`);
   fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict: "PASS", notes: "", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "m" }));
   Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
-  const runsUrl = `repos/acme/app/actions/workflows/pstack-verifier.yml/runs?head_sha=${sha}&per_page=100`;
-  const run = async (pull, workflowRuns, total = workflowRuns.length) => {
+  const statusesUrl = `repos/acme/app/commits/${sha}/statuses`;
+  const owned = "https://github.com/acme/app/actions/runs/10/attempts/1";
+  const mark = (runId, attempt) => ({ context: "pstack-verifier", target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}` });
+  const run = async (pull, statuses) => {
     posts.length = 0;
     await postCommand({
       fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
       gh: (args) => {
         const url = String(args[1]);
         if (url === "repos/acme/app/pulls/5") return JSON.stringify(pull);
-        if (url === runsUrl) return JSON.stringify({ total_count: total, workflow_runs: workflowRuns });
+        if (url === statusesUrl) return JSON.stringify(statuses);
         throw new Error(url);
       },
     });
     return posts.slice();
   };
   const denied = [
-    [open, [self, { id: 9, run_number: 1, run_attempt: 2, status: "in_progress", run_started_at: "2026-11-17T00:00:00Z" }]],
-    [open, [{ ...self, conclusion: "cancelled" }]],
-    [open, [{ ...self, status: "cancelled" }]],
-    [open, [self, { id: 11, run_number: 4, status: "completed", conclusion: "success", run_started_at: "2026-11-17T02:00:00Z" }]],
-    [open, [self], 2],
-    [{ ...open, draft: true }, [self]],
-    [{ ...open, state: "closed" }, [self]],
-    [{ ...open, base: { ref: "main" } }, [self]],
-    [{ ...open, head: { sha: "d".repeat(40), repo: open.head.repo } }, [self]],
-    [{ ...open, head: { sha, repo: { full_name: "other/repo" } } }, [self]],
+    [open, [mark("11", "1"), mark("10", "1")]],
+    [open, [mark("10", "2"), mark("10", "1")]],
+    [open, []],
+    [{ ...open, draft: true }, [mark("10", "1")]],
+    [{ ...open, state: "closed" }, [mark("10", "1")]],
+    [{ ...open, base: { ref: "main" } }, [mark("10", "1")]],
+    [{ ...open, head: { sha: "d".repeat(40), repo: open.head.repo } }, [mark("10", "1")]],
+    [{ ...open, head: { sha, repo: { full_name: "other/repo" } } }, [mark("10", "1")]],
   ];
-  for (const [pull, runs, total] of denied) assert.deepEqual(await run(pull, runs, total), []);
-  const posted = await run(open, [self, { id: 8, run_number: 8, status: "completed", conclusion: "success", run_started_at: "2026-11-17T00:00:00Z" }]);
+  for (const [pull, statuses] of denied) assert.deepEqual(await run(pull, statuses), []);
+  const posted = await run(open, [{ context: "ci", target_url: "https://example.test" }, mark("10", "1"), mark("9", "3")]);
   assert.equal(posted.length, 1);
   assert.equal(posted[0].state, "success");
   assert.equal(posted[0].context, "pstack-verifier");
+  assert.equal(posted[0].target_url, owned);
 });
