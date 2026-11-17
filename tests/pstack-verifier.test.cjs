@@ -31,6 +31,148 @@ test("an empty plan is not a pass", async () => {
   assert.deepEqual(result, { verdict: "FAIL", notes: "no user path verified" });
 });
 
+test("an empty plan logs its reason and passes only for a non-app change with green checks", async () => {
+  const { decide, ciChecksPassed, CONTEXT } = await load();
+  const reason = "This ticket is about CI test infrastructure; it has no user-facing screen to check.";
+  const scripts = plan([], { reason, files: [".github/scripts/verify-qa-premerge.mjs", "tests/verify-qa-premerge.test.cjs"] });
+  const missed = decide({ model: { verdict: "PASS", notes: "" }, plan: scripts, evidence: null, binding, checksPassed: false });
+  assert.equal(missed.verdict, "FAIL");
+  assert.match(missed.notes, /no user path verified: This ticket is about CI/);
+  const app = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { reason, files: ["src/app/page.tsx"] }), evidence: null, binding, checksPassed: true });
+  assert.equal(app.verdict, "FAIL");
+  const quiet = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { reason: "could not tell", files: ["docs/ci.md"] }), evidence: null, binding, checksPassed: true });
+  assert.equal(quiet.verdict, "FAIL");
+  const passed = decide({ model: { verdict: "", notes: "" }, plan: scripts, evidence: null, binding, checksPassed: true });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  assert.match(passed.notes, /^no app path: /);
+  const runs = [{ name: "ci-tests", conclusion: "success" }, { name: "browser-smoke", conclusion: "skipped" }, { name: CONTEXT, conclusion: "failure" }];
+  assert.equal(ciChecksPassed(runs), true);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: "failure" }]), false);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: null }]), false);
+  assert.equal(ciChecksPassed([]), false);
+  assert.equal(ciChecksPassed([{ name: CONTEXT, conclusion: "failure" }]), false);
+});
+
+test("a truncated file list cannot take the non-app pass", async () => {
+  const { decide, takeFileList, planFileList } = await load();
+  const names = [...Array.from({ length: 100 }, (_, index) => `docs/a${index}.md`), "src/app/page.tsx"];
+  const listed = takeFileList(names);
+  assert.equal(listed.files.length, 100);
+  assert.equal(listed.filesTruncated, true);
+  assert.equal(listed.files.includes("src/app/page.tsx"), false);
+  const reason = "no user path in this diff";
+  const hidden = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: listed.files, filesTruncated: listed.filesTruncated }), evidence: null, binding, checksPassed: true });
+  assert.equal(hidden.verdict, "FAIL");
+  assert.equal(hidden.notes, "file list truncated");
+  const kept = planFileList({ files: listed.files, filesTruncated: true });
+  assert.equal(kept.filesTruncated, true);
+  assert.equal(kept.files.length, 100);
+  const whole = takeFileList(["docs/ci.md", "scripts/pstack-verifier.mjs"]);
+  assert.deepEqual(whole, { files: ["docs/ci.md", "scripts/pstack-verifier.mjs"], filesTruncated: false });
+  const unmarked = decide({
+    model: { verdict: "", notes: "" },
+    plan: plan([], { reason, files: Array.from({ length: 100 }, () => "docs/ci.md") }),
+    evidence: null,
+    binding,
+    checksPassed: true,
+  });
+  assert.equal(unmarked.verdict, "FAIL");
+  assert.equal(unmarked.notes, "file list truncated");
+  const markedWhole = decide({
+    model: { verdict: "", notes: "" },
+    plan: plan([], { reason, files: Array.from({ length: 100 }, () => "docs/ci.md"), filesTruncated: false }),
+    evidence: null,
+    binding,
+    checksPassed: true,
+  });
+  assert.equal(markedWhole.verdict, "PASS+NOTES");
+});
+
+test("empty-plan checks wait until conclusions land", async () => {
+  const { waitForCiChecks, collectCheckRuns, ciChecksPassed, ciChecksPending, decide, CONTEXT } = await load();
+  const reason = "no user path in this diff";
+  const pending = [{ name: "ci-tests", conclusion: null, status: "in_progress" }];
+  const done = [{ name: "ci-tests", conclusion: "success", status: "completed" }, { name: "browser-smoke", conclusion: "skipped" }, { name: CONTEXT, conclusion: null }];
+  let reads = 0;
+  const runs = await waitForCiChecks(async () => {
+    reads += 1;
+    return reads < 3 ? pending : done;
+  }, { sleep: async () => {}, rounds: 5, intervalMs: 25 });
+  assert.equal(reads, 3);
+  assert.equal(ciChecksPending(runs), false);
+  assert.equal(ciChecksPassed(runs), true);
+  const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: ciChecksPassed(runs), checksPending: ciChecksPending(runs) });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  const early = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: false, checksPending: true });
+  assert.equal(early.verdict, "FAIL");
+  assert.equal(early.notes, "checks still running");
+  const stuck = await waitForCiChecks(async () => pending, { sleep: async () => {}, rounds: 3, intervalMs: 1 });
+  assert.equal(ciChecksPending(stuck), true);
+  assert.equal(ciChecksPassed(stuck), false);
+  const pages = [];
+  const collected = await collectCheckRuns(async (page) => {
+    pages.push(page);
+    if (page === 1) return { total_count: 101, check_runs: Array.from({ length: 100 }, (_, index) => ({ name: `check-${index}`, conclusion: "success" })) };
+    return { total_count: 101, check_runs: [{ name: "last", conclusion: "failure" }] };
+  });
+  assert.deepEqual(pages, [1, 2]);
+  assert.equal(collected.length, 101);
+  assert.equal(ciChecksPassed(collected), false);
+  assert.equal(ciChecksPending([]), true);
+});
+
+test("a non-app pass waits until every required context is green", async () => {
+  const { ciGate, ciStatusesPassed, ciStatusesPending, decide, waitForCiChecks, CONTEXT, REQUIRED_CI_CONTEXTS } = await load();
+  const reason = "no user path in this diff";
+  const checkNames = ["ci-tests", "browser-smoke", "next-public-secrets", "secret-scan"];
+  const runs = [...checkNames.map((name) => ({ name, conclusion: "success" })), { name: CONTEXT, conclusion: "failure" }];
+  const statuses = REQUIRED_CI_CONTEXTS.filter((name) => !checkNames.includes(name)).map((context) => ({ context, state: "success" }));
+  const older = [...statuses, { context: "pr-title", state: "failure" }, { context: CONTEXT, state: "pending" }];
+  assert.equal(ciStatusesPassed(older), true);
+  assert.equal(ciStatusesPending(older), false);
+  assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: true, checksPending: false });
+  const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, ...ciGate({ runs, statuses }) });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  const partial = statuses.filter((status) => status.context !== "premerge-evidence");
+  assert.deepEqual(ciGate({ runs, statuses: partial }), { checksPassed: false, checksPending: true });
+  const red = statuses.map((status) => status.context === "ai-review" ? { context: "ai-review", state: "failure" } : status);
+  const blockedGate = ciGate({ runs, statuses: red });
+  assert.deepEqual(blockedGate, { checksPassed: false, checksPending: false });
+  const blocked = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: blockedGate.checksPassed, checksPending: blockedGate.checksPending });
+  assert.equal(blocked.verdict, "FAIL");
+  assert.match(blocked.notes, /no user path verified/);
+  const pending = statuses.map((status) => status.context === "app-smoke" ? { context: "app-smoke", state: "pending" } : status);
+  assert.deepEqual(ciGate({ runs, statuses: pending }), { checksPassed: false, checksPending: true });
+  assert.deepEqual(ciGate({ runs, statuses: [] }), { checksPassed: false, checksPending: true });
+  const skipped = runs.map((run) => run.name === "browser-smoke" ? { name: "browser-smoke", conclusion: "skipped" } : run);
+  assert.deepEqual(ciGate({ runs: skipped, statuses }), { checksPassed: false, checksPending: false });
+  const queued = [...runs, { name: "feature-flag-gate", conclusion: null }];
+  assert.equal(ciGate({ runs: queued, statuses }).checksPending, true);
+  assert.equal(ciGate({ runs: queued, statuses }).checksPassed, false);
+  let reads = 0;
+  const snapshot = await waitForCiChecks(async () => {
+    reads += 1;
+    return reads < 2 ? { runs, statuses: partial } : { runs, statuses };
+  }, { sleep: async () => {}, rounds: 4, pending: (value) => ciGate(value).checksPending });
+  assert.equal(reads, 2);
+  assert.equal(ciGate(snapshot).checksPassed, true);
+});
+
+test("user-delivered files outside src cannot take the non-app pass", async () => {
+  const { decide } = await load();
+  const reason = "no user path in this diff";
+  const files = ["public/login-app-dark.png", "public/service-worker.js", "next.config.js", "tokens.css"];
+  for (const file of files) {
+    const result = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: [file], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+    assert.equal(result.verdict, "FAIL", file);
+    assert.match(result.notes, /no user path verified/, file);
+  }
+  const mixed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md", "public/login-app-dark.png"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(mixed.verdict, "FAIL");
+  const scripts = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md", "scripts/pstack-verifier.mjs", ".github/workflows/pstack-verifier.yml", "tests/pstack-verifier.test.cjs"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(scripts.verdict, "PASS+NOTES");
+});
+
 test("a failed expect fails even when the model says PASS", async () => {
   const { decide } = await load();
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
@@ -247,6 +389,32 @@ test("the model call turns reasoning off so the answer fits the token cap", asyn
   assert.equal(text, "{}");
   assert.deepEqual(sent.reasoning, { enabled: false });
   assert.equal(sent.max_tokens, 1200);
+  let other;
+  await completeWithOpenRouter("{}", {
+    key: "secret",
+    model: "google/gemini-3.8-flash",
+    fetchImpl: async (_url, options) => {
+      other = JSON.parse(options.body);
+      return { ok: true, async json() { return { choices: [{ message: { content: "{}" } }] }; } };
+    },
+  });
+  assert.equal(Object.hasOwn(other, "reasoning"), false);
+  const key = "sk-live-eval-key";
+  const detail = `provider rejected reasoning.enabled ${key} ${"x".repeat(240)}`;
+  await assert.rejects(
+    completeWithOpenRouter("{}", {
+      key,
+      model: "google/gemini-3.8-flash",
+      fetchImpl: async () => ({ ok: false, status: 400, async text() { return detail; } }),
+    }),
+    (error) => {
+      assert.match(error.message, /^model HTTP 400: /);
+      assert.equal(error.message.includes(key), false);
+      assert.equal(error.message.includes("[redacted]"), true);
+      assert.ok(error.message.length <= "model HTTP 400: ".length + 200);
+      return true;
+    },
+  );
 });
 
 test("a verdict from another attempt fails", async () => {
