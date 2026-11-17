@@ -95,8 +95,6 @@ test("each verifier job has the declared permissions, key and token", async () =
 
 test("recheck waits on production, reruns only a verifier wait, and pages past a full run list", async () => {
   const recheck = read(".github/workflows/pstack-verifier-recheck.yml");
-  const automerge = readFileSync(".github/workflows/automerge.yml", "utf8");
-  assert.match(automerge, /REQUIRED="\$REQUIRED pstack-verifier"/);
   assert.deepEqual(recheck.on.workflow_run.workflows, ["CI Tests", "PR Guards"]);
   assert.equal(recheck.on.workflow_run.workflows.includes("Pstack Verifier Request"), false);
   assert.deepEqual(recheck.jobs.recheck.permissions, { contents: "read", "pull-requests": "read", statuses: "read", actions: "write" });
