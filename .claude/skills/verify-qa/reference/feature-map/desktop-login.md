@@ -26,7 +26,7 @@ Open `/cli-auth` from the terminal sign-in link. Open `/login/agent` to start an
 8. Run the core live Inbox cycle after deployment. No paid AI generation is needed for an authentication change.
 9. Open `/cli-auth` while signed out and confirm Authenticating HyperTask CLI. Sign in as QA 985, open `/cli-auth?port=3456`, and confirm Allow and continue and Cancel. Do not press Allow unless you will discard the code. Press Cancel and confirm the declined copy, then Close.
 10. Open `/login/agent` signed out and confirm the return to login. Sign in as QA 985 with `htpr-7552-agent-code-signin` on and confirm the redirect to `/cli-auth?agent=1`. Press Get a five-minute code. Confirm the command, the MCP server line, and a countdown from five minutes. Stop before Approve and connect. Let the code expire, or Decline if a claim appears.
-11. With `htpr-7684-desktop-ai-chat-bearer` on, call `GET /api/ai-chat/all-sessions` with the human CLI bearer and confirm the sessions belong to that person. Repeat with the flag off, and with an agent bearer, and confirm both are refused. Do not start a paid chat generation.
+11. Call `GET /api/ai-chat/all-sessions` with the human CLI bearer. Confirm the sessions belong to that person. Repeat the call with an agent bearer and confirm the refusal. Production mode for `htpr-7684-desktop-ai-chat-bearer` is EVERYONE in `e2e/smoke/production-flag-modes.json`, so the flag-off call is UNREACHABLE. Do not switch that flag Off. Cite `tests/htpr-7684-desktop-ai-chat-bearer.test.cjs`, the test `flag off refuses the desktop token; flag on still allows it`. Do not start a paid chat generation.
 
 ## Gotchas
 
@@ -36,17 +36,18 @@ Open `/cli-auth` from the terminal sign-in link. Open `/login/agent` to start an
 - Agent/scoped credentials gain human access, or revoked signed cookies borrow another token.
 - Full-login changes silently alter the agent-run authenticator's invalid-bearer refusal.
 - `/login/agent` returns not found when `htpr-7552-agent-code-signin` is off. That is the flag, not a missing route.
-- Approve only the agent you just started. The human CLI code lasts about 2 minutes. The agent code lasts five minutes.
+- Do not press Approve and connect in this run. This map never deletes agents or boards.
+- The human CLI code lasts about 2 minutes. The agent code lasts five minutes.
 - Do not send a paid AI chat to prove `htpr-7684-desktop-ai-chat-bearer`. The session list is the check.
 
 ### What proof to collect
 
 Record request method/path, status, asserted actor/board IDs, fixture persistence and cleanup. Keep response projections sanitized; never save credentials or full account objects. Use desktop and phone doctor screenshots plus a short recording of the isolated fixture's real detail view. Mark live credential revocation, administrative actions, billing and external integrations UNREACHABLE when intentionally not mutated; cite their local boundary checks instead of claiming live coverage.
 
-For `/cli-auth` and `/login/agent`, screenshot the consent screen, the declined screen, and the five-minute code screen. Record the session-list status for the human bearer, the flag-off bearer, and an agent bearer. Do not save the code or the bearer.
+For `/cli-auth` and `/login/agent`, screenshot the consent screen, the declined screen, and the five-minute code screen. Record the session-list status for the human bearer and for an agent bearer. Record the flag-off session list as UNREACHABLE and cite `tests/htpr-7684-desktop-ai-chat-bearer.test.cjs`. Do not save the code or the bearer.
 
 ### Cleanup
 
 Delete only the fixture IDs created by this run through the supported product task APIs. Confirm they are no longer normal tasks. Never delete real tasks, credentials, agents, integrations, teams or boards.
 
-If you approved an agent, remove only that new agent board from this run. If you only generated a code, let it expire. Do not revoke the QA browser session.
+Stop before Approve and connect, so this run creates no agent and no agent board. Let a generated code expire. Press Decline if a claim appears. Do not revoke the QA browser session.
