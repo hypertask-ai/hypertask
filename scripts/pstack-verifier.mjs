@@ -1,8 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+
+const heavyNeeded = (files) => createRequire(import.meta.url)("../.github/scripts/ci-change-scope.cjs").heavyNeeded(files);
 
 export const FLASH = "deepseek/deepseek-v4.1-flash";
 export const PSTACK_VERIFIER = { model: FLASH, endpoint: "https://openrouter.ai/api/v1/chat/completions" };
@@ -167,7 +170,7 @@ export function readVerdict(text, binding) {
   if (typeof text !== "string" || text.length < 2 || text.length > 8000) return fail("schema/binding mismatch");
   let body;
   try { body = JSON.parse(text); } catch { return fail("schema/binding mismatch"); }
-  if (!sameBinding(body, binding) || !["PASS", "PASS+NOTES", "FAIL"].includes(body.verdict)) return fail("schema/binding mismatch");
+  if (!sameBinding(body, binding) || !["PASS", "PASS+NOTES", "FAIL", "PENDING"].includes(body.verdict)) return fail("schema/binding mismatch");
   return { verdict: body.verdict, notes: String(body.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500), sha: binding.sha, run: String(binding.run), attempt: String(binding.attempt), authorFamily: String(body.authorFamily ?? "").slice(0, 40), verifierModel: String(body.verifierModel ?? "").slice(0, 80) };
 }
 function sameSeries(seen, planned, key) {
@@ -184,7 +187,9 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
     const files = Array.isArray(parsed.files) ? parsed.files : [];
     if (listWasTruncated(parsed, files)) return { verdict: "FAIL", notes: "file list truncated" };
     if (files.length && !hasAppPath(files) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
-    if (checksPending) return { verdict: "FAIL", notes: "checks still running" };
+    if (files.length && docsShortcut(files, parsed.filesTruncated) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
+    if (botPlanPass(parsed, checksPassed)) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500), authorFamily: parsed.botLogin };
+    if (checksPending) return { verdict: "PENDING", notes: "waiting for required checks" };
     return { verdict: "FAIL", notes: (reason ? `no user path verified: ${reason}` : "no user path verified").slice(0, 500) };
   }
   if (evidence == null) return { verdict: "FAIL", notes: "evidence missing" };
@@ -294,6 +299,38 @@ export const FILE_LIST_CAP = 100;
 export const CI_WAIT_ROUNDS = 40;
 export const CI_WAIT_INTERVAL_MS = 30000;
 export const REQUIRED_CI_CONTEXTS = ["app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
+export const BOT_LOGINS = new Set(["dependabot", "dependabot[bot]", "app/dependabot"]);
+const BOT_COMMITTERS = new Set([...BOT_LOGINS, "web-flow"]);
+const MANIFEST_BASENAMES = new Set(["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"]);
+export const WAIT_LIMIT_MS = 90 * 60 * 1000;
+const VERIFIER_JOBS = new Set(["resolve", "plan", "drive", "judge", "post", "cancel", "pstack-verifier"]);
+export function docsShortcut(files, filesTruncated = false) {
+  return filesTruncated !== true && heavyNeeded(files) === false;
+}
+export function isBotManifest(file) {
+  const name = String(file ?? "");
+  if (name === ".github/dependabot.yml" || name.endsWith("/.github/dependabot.yml")) return true;
+  const base = name.slice(name.lastIndexOf("/") + 1);
+  return MANIFEST_BASENAMES.has(base);
+}
+export function botFileAllowed(file) {
+  return isBotManifest(file) || heavyNeeded([String(file)]) === false;
+}
+export function botFilesAllowed(files) {
+  return Array.isArray(files) && files.length > 0 && files.every((file) => botFileAllowed(file));
+}
+export function commitTrusted(commit) {
+  const author = commit?.author?.login;
+  const committer = commit?.committer?.login;
+  const verification = commit?.commit?.verification;
+  if (!author || !committer || !verification || typeof verification !== "object") return false;
+  if (!BOT_LOGINS.has(author) || !BOT_COMMITTERS.has(committer)) return false;
+  return verification.verified === true && verification.reason === "valid";
+}
+function botPlanPass(parsed, checksPassed) {
+  const files = Array.isArray(parsed?.files) ? parsed.files : [];
+  return BOT_LOGINS.has(parsed?.botLogin) && checksPassed === true && !listWasTruncated(parsed, files) && botFilesAllowed(files) && confirmsNoUserPath(parsed?.reason);
+}
 function relevantChecks(runs) {
   return (Array.isArray(runs) ? runs : []).filter((run) => run?.name !== CONTEXT);
 }
@@ -302,9 +339,18 @@ function listWasTruncated(plan, files) {
   if (plan?.filesTruncated === false) return false;
   return files.length >= FILE_LIST_CAP;
 }
+export function namesInFileEntry(entry) {
+  if (typeof entry === "string") return entry ? [entry] : [];
+  if (!entry || typeof entry !== "object") return [];
+  const names = [entry.filename, entry.previous_filename].map((name) => String(name ?? "")).filter(Boolean);
+  return [...new Set(names)];
+}
 export function takeFileList(names) {
-  const all = (Array.isArray(names) ? names : []).map((file) => String(file ?? "")).filter(Boolean);
+  const all = (Array.isArray(names) ? names : []).flatMap((file) => namesInFileEntry(file));
   return { files: all.slice(0, FILE_LIST_CAP), filesTruncated: all.length > FILE_LIST_CAP };
+}
+export function parseFileRows(text) {
+  return String(text ?? "").split("\n").map((line) => line.trim()).filter(Boolean).map((line) => JSON.parse(line));
 }
 export function planFileList(request) {
   const listed = takeFileList(Array.isArray(request?.files) ? request.files : []);
@@ -369,6 +415,40 @@ export function ciGate({ runs, statuses, required = REQUIRED_CI_CONTEXTS } = {})
     checksPassed: ciChecksPassed(runs) && ciStatusesPassed(statuses) && !waiting && !need.failed,
     checksPending: ciChecksPending(runs) || ciStatusesPending(statuses) || waiting,
   };
+}
+export function emptyPlanGate({ runs, statuses, required = REQUIRED_CI_CONTEXTS } = {}) {
+  const visible = (Array.isArray(runs) ? runs : []).filter((run) => !VERIFIER_JOBS.has(run?.name));
+  const need = requiredContextsReady(visible, statuses, required);
+  return {
+    checksPassed: !need.missing && !need.pending && !need.failed,
+    checksPending: (need.missing || need.pending) && !need.failed,
+    failed: need.failed,
+  };
+}
+export function openWaitStartedAt(statuses) {
+  const ours = (Array.isArray(statuses) ? statuses : []).filter((status) => status?.context === CONTEXT);
+  const terminal = ours.findIndex((status) => status.state === "success" || status.state === "failure");
+  const window = terminal === -1 ? ours : ours.slice(0, terminal);
+  const waits = window.filter((status) => status.state === "pending" && status.description === "waiting for required checks" && status.created_at);
+  return waits.length ? waits[waits.length - 1].created_at : null;
+}
+export function statusDescription({ verdict, authorFamily = "", verifierModel = "" } = {}) {
+  if (verdict === "PENDING") return "waiting for required checks";
+  return `${verdict}: author ${authorFamily || "unknown"}, verifier ${verifierModel || "none"}`.slice(0, 140);
+}
+export function settleWaiting({ runs, statuses, authorFamily = "", verifierModel = "", now = Date.now(), limitMs = WAIT_LIMIT_MS } = {}) {
+  const gate = emptyPlanGate({ runs, statuses });
+  if (gate.checksPassed) return { verdict: "PASS+NOTES", state: "success", description: statusDescription({ verdict: "PASS+NOTES", authorFamily, verifierModel }), notes: "no app path: no user path" };
+  if (gate.failed) return { verdict: "FAIL", state: "failure", description: statusDescription({ verdict: "FAIL", authorFamily, verifierModel }), notes: "required check failed" };
+  const started = openWaitStartedAt(statuses);
+  const age = started ? now - Date.parse(started) : 0;
+  if (started && Number.isFinite(age) && age >= limitMs) return { verdict: "FAIL", state: "failure", description: "FAIL: required checks did not finish", notes: "required checks did not finish" };
+  return { verdict: "PENDING", state: "pending", description: "waiting for required checks", notes: "waiting for required checks" };
+}
+export function cancelKeepsStatus(status, ownUrl) {
+  if (!status || status.target_url !== ownUrl) return false;
+  if (status.state === "success" || status.state === "failure") return true;
+  return status.state === "pending" && status.description === "waiting for required checks";
 }
 export async function collectCheckRuns(readPage, pages = 5) {
   const runs = [];
@@ -615,57 +695,91 @@ function ownsVerifierStatus(statuses, repo, run, attempt) {
   const newest = (Array.isArray(statuses) ? statuses : []).find((status) => status?.context === CONTEXT);
   return newest?.target_url === attemptUrl(repo, run, attempt);
 }
-async function resolveCommand() {
-  const run = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")).workflow_run ?? {};
+function pullUrl(repo, number) {
+  return `repos/${repo}/pulls/${number}`;
+}
+export async function resolveCommand(io = {}) {
+  const call = io.gh ?? gh;
+  const send = io.postStatus ?? postStatus;
+  const event = io.event ?? JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+  const run = event.workflow_run ?? {};
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const sha = String(run.head_sha ?? "");
   const bound = { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
   if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true" }); return; }
   let number = String(run.pull_requests?.[0]?.number ?? "");
   if (!/^[0-9]+$/.test(number)) {
-    const matches = JSON.parse(gh(["api", `repos/${repo}/commits/${sha}/pulls`])).filter((item) => eligiblePull(item, repo, sha));
+    const matches = JSON.parse(call(["api", `repos/${repo}/commits/${sha}/pulls`])).filter((item) => eligiblePull(item, repo, sha));
     if (matches.length !== 1) { output({ stop: "true" }); return; }
     number = String(matches[0].number);
   }
-  const item = JSON.parse(gh(["api", `repos/${repo}/pulls/${number}`]));
+  const item = JSON.parse(call(["api", pullUrl(repo, number)]));
   if (!eligiblePull(item, repo, sha)) { output({ stop: "true" }); return; }
+  let botLogin = "";
+  let listed = null;
+  if (BOT_LOGINS.has(item.user?.login)) {
+    const commits = JSON.parse(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/commits`]));
+    listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
+    const again = JSON.parse(call(["api", pullUrl(repo, number)]));
+    const commitsKnown = Array.isArray(commits) ? commits : [];
+    const lastSha = commitsKnown.at(-1)?.sha;
+    if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true" }); return; }
+    const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
+    if (!trusted) {
+      const gate = authorGate(item.body);
+      if (gate.stop) {
+        await send({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
+        output({ stop: "true" });
+        return;
+      }
+    } else if (listed.filesTruncated || !botFilesAllowed(listed.files)) {
+      const description = listed.filesTruncated ? "FAIL: file list truncated" : `FAIL: author ${item.user.login}, bot changed a user path`;
+      await send({ repo, ...bound, state: "failure", description: description.slice(0, 140) });
+      output({ stop: "true" });
+      return;
+    } else {
+      botLogin = item.user.login;
+    }
+  }
   const gate = authorGate(item.body);
-  if (gate.stop) {
-    await postStatus({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
+  if (!botLogin && gate.stop) {
+    await send({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
     output({ stop: "true" });
     return;
   }
-  const listed = takeFileList(gh(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[].filename"]).split("\n"));
-  const diff = gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/pulls/${item.number}`]).slice(0, 12000);
+  if (!listed) listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
+  const diff = call(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/pulls/${item.number}`]).slice(0, 12000);
   const dir = path.join(workDir(), "request");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "request.json"), `${JSON.stringify({ ...bound, pr: item.number, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" })}\n`, { mode: 0o600 });
-  await postStatus({ repo, ...bound, state: "pending", description: "Planning a user check" });
-  output({ stop: "false", pr: String(item.number), sha, files: listed.files.join("\n"), author: gate.author });
+  const request = { ...bound, pr: item.number, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  if (botLogin) request.botLogin = botLogin;
+  writeFileSync(path.join(dir, "request.json"), `${JSON.stringify(request)}\n`, { mode: 0o600 });
+  await send({ repo, ...bound, state: "pending", description: "Planning a user check" });
+  output({ stop: "false", pr: String(item.number), sha, files: listed.files.join("\n"), author: request.author });
 }
-async function planCommand() {
-  const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
-  const binding = bindingNow();
-  if (request.sha !== binding.sha || String(request.run) !== binding.run || String(request.attempt) !== binding.attempt) throw new Error("schema/binding mismatch");
-  const picked = pickVerifier(request.author, process.env.PSTACK_VERIFIER_ALT_MODEL);
+export async function planFromRequest(request, deps = {}) {
+  const ask = deps.ask ?? askModel;
+  const binding = deps.binding ?? bindingNow();
+  if (request.sha !== binding.sha || String(request.run) !== String(binding.run) || String(request.attempt) !== String(binding.attempt)) throw new Error("schema/binding mismatch");
+  const botLogin = BOT_LOGINS.has(request.botLogin) ? request.botLogin : "";
+  const picked = pickVerifier(request.author, deps.altModel ?? process.env.PSTACK_VERIFIER_ALT_MODEL);
   const listed = planFileList(request);
-  const selected = picked.fail ? null : selectPlan(listed.files, listed.filesTruncated);
-  if (selected) {
-    const skipped = { ...binding, authorFamily: request.author, verifierModel: picked.model || "", actions: selected.actions, expect: selected.expect, reason: selected.reason, fail: "", files: listed.files, filesTruncated: listed.filesTruncated, claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
-    console.log(`plan reason: ${skipped.reason || "(none)"}`);
-    const dir = path.join(workDir(), "plan");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, "plan.json"), `${JSON.stringify(skipped)}\n`, { mode: 0o600 });
-    output({ empty: "true", model: skipped.verifierModel });
-    return;
-  }
-  const plan = { ...binding, authorFamily: request.author, verifierModel: picked.model || "", actions: [], expect: [], reason: "", fail: picked.fail || "", files: listed.files, filesTruncated: listed.filesTruncated, claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
-  if (!picked.fail) {
+  const plan = { ...binding, authorFamily: botLogin || request.author || "", verifierModel: botLogin ? "" : (picked.model || ""), actions: [], expect: [], reason: "", fail: botLogin ? "" : (picked.fail || ""), files: listed.files, filesTruncated: listed.filesTruncated, claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
+  const selected = botLogin || plan.fail ? null : selectPlan(listed.files, listed.filesTruncated);
+  if (botLogin) { plan.reason = "no user path"; plan.botLogin = botLogin; }
+  else if (!plan.fail && docsShortcut(listed.files, listed.filesTruncated)) plan.reason = "no user path";
+  else if (selected) Object.assign(plan, selected);
+  else if (!plan.fail) {
     try {
-      const parsed = await askModel(buildPrompt({ kind: "plan", ...request }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model }, parsePlan);
+      const parsed = await ask(buildPrompt({ kind: "plan", ...request }), { key: deps.key ?? process.env.OPENROUTER_EVAL_KEY, model: picked.model }, parsePlan);
       plan.actions = parsed.actions; plan.expect = parsed.expect; plan.reason = parsed.reason;
     } catch (error) { plan.fail = failureText(error, 220); }
   }
+  return plan;
+}
+async function planCommand() {
+  const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
+  const plan = await planFromRequest(request);
   console.log(`plan reason: ${plan.reason || "(none)"}`);
   const dir = path.join(workDir(), "plan");
   mkdirSync(dir, { recursive: true });
@@ -695,15 +809,16 @@ async function judgeCommand() {
       const gate = await waitForCiChecks(async () => ({
         runs: await collectCheckRuns((page) => JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`]))),
         statuses: JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/status`])).statuses,
-      }), { pending: (snapshot) => ciGate(snapshot).checksPending });
-      checksPassed = ciGate(gate).checksPassed;
-      checksPending = ciGate(gate).checksPending;
+      }), { pending: (snapshot) => emptyPlanGate(snapshot).checksPending });
+      const ready = emptyPlanGate(gate);
+      checksPassed = ready.checksPassed;
+      checksPending = ready.checksPending;
     } catch (error) { console.log(`ci checks unread: ${failureText(error)}`); }
   }
   const verdict = decide({ model, plan, evidence, binding, checksPassed, checksPending });
   const dir = path.join(workDir(), "verdict");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, authorFamily: plan.authorFamily || "", verifierModel: plan.verifierModel || "" })}\n`, { mode: 0o600 });
+  writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, authorFamily: verdict.authorFamily || plan.botLogin || plan.authorFamily || "", verifierModel: plan.botLogin ? "" : (plan.verifierModel || "") })}\n`, { mode: 0o600 });
 }
 export async function postCommand(io = {}) {
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
@@ -717,9 +832,17 @@ export async function postCommand(io = {}) {
   const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
   const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
   if (!eligiblePull(item, repo, binding.sha) || !ownsVerifierStatus(statuses, repo, binding.run, binding.attempt)) return;
-  const description = `${saved.verdict}: author ${saved.authorFamily || "unknown"}, verifier ${saved.verifierModel || "none"}`.slice(0, 140);
-  await postStatus({ repo, ...binding, state: saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure", description, fetchImpl: io.fetch });
-  if (saved.verdict !== "PASS") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()), io.fetch);
+  let state = saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure";
+  let description = statusDescription(saved);
+  if (saved.verdict === "PENDING") {
+    const runs = await collectCheckRuns(async (page) => JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`])));
+    const settled = settleWaiting({ runs, statuses, authorFamily: saved.authorFamily, verifierModel: saved.verifierModel, now: io.now });
+    saved = { ...saved, verdict: settled.verdict, notes: settled.notes };
+    state = settled.state;
+    description = settled.description;
+  }
+  await postStatus({ repo, ...binding, state, description, fetchImpl: io.fetch });
+  if (saved.verdict !== "PASS" && saved.verdict !== "PENDING") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()), io.fetch);
 }
 async function main() {
   const command = process.argv[2];
@@ -729,6 +852,7 @@ async function main() {
   else if (command === "post") await postCommand();
   else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|post");
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
+if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   main().catch((error) => { console.error(redact(error.message ?? String(error), secretValues())); process.exitCode = 1; });
 }
