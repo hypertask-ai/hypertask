@@ -546,6 +546,7 @@ async function trySmartLabelBatch(
     });
     return true;
   } catch (error) {
+    if (findSharedAiAllowanceError(error)) return false;
     console.error("[labelClassifier] Batch submit failed; running the backfill now instead", error);
     return false;
   }

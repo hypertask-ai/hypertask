@@ -34,9 +34,10 @@ function saveTooLong(): Error {
 }
 
 export function taskSaveBudget(deadline = Date.now() + TASK_SAVE_LIMIT_MS) {
+  let closed = false
   const remaining = () => {
     const ms = deadline - Date.now()
-    if (ms <= 0) throw saveTooLong()
+    if (closed || ms <= 0) throw saveTooLong()
     return ms
   }
   return {
@@ -46,7 +47,12 @@ export function taskSaveBudget(deadline = Date.now() + TASK_SAVE_LIMIT_MS) {
       const ms = remaining()
       const pending = work()
       waitUntil(pending.catch(() => undefined))
-      return finishWithin(pending, ms)
+      try {
+        return await finishWithin(pending, ms)
+      } catch (error) {
+        if (isTaskSaveTimeout(error)) closed = true
+        throw error
+      }
     },
   }
 }
