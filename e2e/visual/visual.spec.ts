@@ -177,7 +177,9 @@ for (const screen of screens) {
     await test.step('assets loaded and landmark geometry settled', async () => {
       await settled(page, landmarks)
     }, { timeout: 15_000 })
-    await expect(page).toHaveScreenshot(`${screen}.png`)
+    await expect(page).toHaveScreenshot(`${screen}.png`, screen === 'inbox' ? {
+      mask: [page.getByAltText('Inbox zero reward background')],
+    } : {})
     if (testInfo.project.name === 'desktop' && (screen === 'task-detail' || screen === 'comment-box')) {
       await test.step('desktop composer follows the last seeded comment', async () => {
         const lastCommentBox = await lastComment.boundingBox({ timeout: 15_000 })

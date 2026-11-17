@@ -374,7 +374,7 @@ test("capture config has exactly two DPR1 Chromium viewports and strict non-upda
   assert.equal(JSON.stringify(config.expect.toHaveScreenshot), JSON.stringify({ animations: "disabled", caret: "hide", scale: "css", maxDiffPixelRatio: 0.01, threshold: 0.2 }));
 });
 
-test("five full-viewport screens use real theme/time, cached ticket navigation, loaded assets and three stable geometry samples without masks", () => {
+test("five full-viewport screens use real theme/time, cached ticket navigation, loaded assets and three stable geometry samples, masking only the inbox reward photo", () => {
   const spec = source("e2e/visual/visual.spec.ts");
   assert.match(spec, /const screens = \['board', 'task-detail', 'comment-box', 'ctrl-j', 'inbox'\]/);
   assert.match(spec, /page\.clock\.setFixedTime\(new Date\(fixture\.visualNow\)\)/);
@@ -409,8 +409,9 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.match(spec, /image\.complete\)/);
   assert.ok(spec.indexOf('image.complete)') < spec.indexOf('toHaveScreenshot('));
   assert.match(spec, /image\.currentSrc && image\.naturalWidth > 0/);
-  assert.match(spec, /toHaveScreenshot\(`\$\{screen\}\.png`\)/);
-  assert.doesNotMatch(spec, /mask:|clip:|fullPage:|networkidle|withRealtime|\.fill\(|\.submit\(/);
+  assert.match(spec, /toHaveScreenshot\(`\$\{screen\}\.png`, screen === 'inbox' \? \{\s*mask: \[page\.getByAltText\('Inbox zero reward background'\)\],\s*\} : \{\}\)/);
+  assert.equal((spec.match(/mask:/g) || []).length, 1);
+  assert.doesNotMatch(spec, /clip:|fullPage:|networkidle|withRealtime|\.fill\(|\.submit\(/);
   assert.ok(spec.indexOf('toHaveScreenshot(') < spec.indexOf('desktop composer must follow'));
   assert.match(spec, /toBeGreaterThanOrEqual\(lastCommentBox!\.y \+ lastCommentBox!\.height\)/);
 });
