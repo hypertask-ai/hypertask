@@ -1,0 +1,160 @@
+name: Review fix
+
+on:
+  workflow_run:
+    workflows: ["Codex review gate", "Claude review", "pstack-verifier"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to fix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: read
+
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && format('review-fix-{0}', inputs.pr) || 'review-fix-sweep' }}
+  cancel-in-progress: true
+
+jobs:
+  pick:
+    name: Pick pull requests with red reviews
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      pulls: ${{ steps.pick.outputs.pulls }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 1
+          sparse-checkout: .github/scripts/review-fix
+          persist-credentials: false
+      - id: pick
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          PR_INPUT: ${{ inputs.pr }}
+        with:
+          script: |
+            const { pick } = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/review-fix/review-fix.cjs`);
+            const pulls = await pick({ github, context, core, single: Number(process.env.PR_INPUT || 0) });
+            core.setOutput('pulls', JSON.stringify(pulls.slice(0, 4)));
+
+  fix:
+    name: Fix review findings on PR ${{ matrix.pull.number }}
+    needs: pick
+    if: needs.pick.outputs.pulls != '[]' && needs.pick.outputs.pulls != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        pull: ${{ fromJSON(needs.pick.outputs.pulls) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 1
+          sparse-checkout: .github/scripts/review-fix
+          path: trusted
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ matrix.pull.sha }}
+          fetch-depth: 1
+          path: pr
+          persist-credentials: false
+      - name: Collect the findings
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          PR_NUMBER: ${{ matrix.pull.number }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { collect } = require(`${process.env.GITHUB_WORKSPACE}/trusted/.github/scripts/review-fix/review-fix.cjs`);
+            const { findings } = await collect({ github, context, number: Number(process.env.PR_NUMBER) });
+            fs.mkdirSync('pr/.review-fix', { recursive: true });
+            fs.writeFileSync('pr/.review-fix/findings.md', findings);
+      - name: Require the Claude subscription token
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::The repo secret CLAUDE_CODE_OAUTH_TOKEN is empty or missing. No paid API key is used as a fallback."
+            exit 1
+          fi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Install the pinned Claude Code CLI
+        run: npm install --global @anthropic-ai/claude-code@2.1.325
+      - name: Fix with file tools only
+        working-directory: pr
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude -p "$(cat ../trusted/.github/scripts/review-fix/prompt.md)" \
+            --model sonnet --effort high \
+            --tools Read,Edit,Write,Glob,Grep --allowedTools Read,Edit,Write,Glob,Grep \
+            --permission-mode acceptEdits --disable-slash-commands --no-session-persistence \
+            --max-turns 80 --output-format json > ../claude.json || echo "claude exited $?"
+      - name: Commit the fix
+        id: commit
+        working-directory: pr
+        env:
+          BRANCH: ${{ matrix.pull.branch }}
+        run: |
+          answer="$(head -c 3000 .review-fix/answer.md 2>/dev/null || true)"
+          rm -rf .review-fix
+          {
+            echo 'answer<<REVIEW_FIX_EOF'
+            echo "$answer"
+            echo 'REVIEW_FIX_EOF'
+          } >> "$GITHUB_OUTPUT"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "note=no change made" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --cached --name-only | grep -q '^\.github/'; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "note=refused: the change touched .github/" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Fix review findings on $(git rev-parse --short=7 HEAD)" \
+            -m "Co-Authored-By: Claude Sonnet <noreply@anthropic.com>"
+          echo "pushed=pending" >> "$GITHUB_OUTPUT"
+      - name: Push the fix
+        id: push
+        if: steps.commit.outputs.pushed == 'pending'
+        working-directory: pr
+        env:
+          PUSH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          BRANCH: ${{ matrix.pull.branch }}
+        run: |
+          if [ -z "$PUSH_TOKEN" ]; then echo "::error::AUTOMERGE_TOKEN is missing"; exit 1; fi
+          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+      - name: Record the attempt
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          PR_NUMBER: ${{ matrix.pull.number }}
+          HEAD_SHA: ${{ matrix.pull.sha }}
+          PUSHED: ${{ steps.push.outcome == 'success' }}
+          NOTE: ${{ steps.push.outcome == 'success' && 'pushed a fix commit' || steps.commit.outputs.note || 'fix run failed' }}
+          ANSWER: ${{ steps.commit.outputs.answer }}
+        with:
+          script: |
+            const { markerBody } = require(`${process.env.GITHUB_WORKSPACE}/trusted/.github/scripts/review-fix/review-fix.cjs`);
+            const note = `${process.env.NOTE}. Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [markerBody({ sha: process.env.HEAD_SHA, pushed: process.env.PUSHED === 'true', note }), process.env.ANSWER].filter(Boolean).join('\n\n');
+            await github.rest.issues.createComment({ ...context.repo, issue_number: Number(process.env.PR_NUMBER), body });
