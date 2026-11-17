@@ -318,6 +318,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    if (body.board_empty_sections !== undefined && !(await isFeatureEnabled(HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG, user.id))) {
+      return viewInputRefusal('board_empty_sections is not available yet', 'board_empty_sections')
+    }
 
     const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope)
     if (access.error) {
@@ -340,9 +343,7 @@ export async function POST(request: NextRequest) {
       sorting_order: body.sorting_order,
       sorting_stack: body.sorting_stack,
       subtask_setting: body.subtask_setting,
-      board_empty_sections: (await isFeatureEnabled(HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG, user.id))
-        ? body.board_empty_sections
-        : undefined,
+      board_empty_sections: body.board_empty_sections,
       setAsDefault: body.set_as_default ?? false,
     })
 

@@ -104,17 +104,19 @@ test('creating a view keeps empty columns hidden for an enabled caller', async (
   assert.deepEqual(f.flagCalls, [{ key: flagKey, userId: 985 }]);
 });
 
-test('creating a view ignores the empty-column setting when the flag is off', async () => {
+test('creating a view refuses the empty-column setting when the flag is off', async () => {
   const f = viewOperations({
     enabled: false,
     body: { project_id: 15, title: 'Hide empty columns', board_empty_sections: 'Hidden' },
   });
 
   const response = await f.create();
+  const payload = await response.json();
 
-  assert.equal(response.status, 200);
-  assert.equal(f.writes.length, 1);
-  assert.equal(f.writes[0].board_empty_sections, undefined);
+  assert.equal(response.status, 400);
+  assert.equal(f.writes.length, 0);
+  assert.equal(payload.details.field, 'board_empty_sections');
+  assert.match(payload.message, /not available yet/);
 });
 
 test('updating a view keeps empty columns hidden for an enabled caller', async () => {
@@ -128,12 +130,14 @@ test('updating a view keeps empty columns hidden for an enabled caller', async (
   assert.deepEqual(f.flagCalls, [{ key: flagKey, userId: 985 }]);
 });
 
-test('updating a view ignores the empty-column setting when the flag is off', async () => {
+test('updating a view refuses the empty-column setting when the flag is off', async () => {
   const f = viewOperations({ enabled: false, body: { board_empty_sections: 'Hidden' } });
 
   const response = await f.update();
+  const payload = await response.json();
 
-  assert.equal(response.status, 200);
-  assert.equal(f.writes.length, 1);
-  assert.equal(f.writes[0].board_empty_sections, undefined);
+  assert.equal(response.status, 400);
+  assert.equal(f.writes.length, 0);
+  assert.equal(payload.details.field, 'board_empty_sections');
+  assert.match(payload.message, /not available yet/);
 });

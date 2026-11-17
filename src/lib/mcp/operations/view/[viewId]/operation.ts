@@ -17,7 +17,7 @@ import { ListViewItem } from "@/lib/mcp/operations/view/operation";
 import { TBoardSortingLevel } from "@/models/Views/model";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { getViewUrl } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
-import { isViewCallerError, plainViewError, viewMutationRefusal } from "@/lib/mcp/views/viewRefusal";
+import { isViewCallerError, plainViewError, viewInputRefusal, viewMutationRefusal } from "@/lib/mcp/views/viewRefusal";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-9369-view-empty-columns";
 import { isSubtaskSetting } from "@/models/Views/model";
@@ -246,6 +246,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
         { status: 400 }
       )
     }
+    if (body.board_empty_sections !== undefined && !(await isFeatureEnabled(HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG, ctx.user.id))) {
+      return viewInputRefusal('board_empty_sections is not available yet', 'board_empty_sections')
+    }
     const title = body.title === undefined ? undefined : String(body.title).trim()
     if (title !== undefined && !title) {
       return NextResponse.json(
@@ -268,9 +271,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
       sorting_order: body.sorting_order,
       sorting_stack: body.sorting_stack,
       subtask_setting: body.subtask_setting,
-      board_empty_sections: (await isFeatureEnabled(HTPR_9369_VIEW_EMPTY_COLUMNS_FLAG, ctx.user.id))
-        ? body.board_empty_sections
-        : undefined,
+      board_empty_sections: body.board_empty_sections,
       setAsDefault: body.set_as_default,
     })
     return NextResponse.json({ success: true, view: updated })
