@@ -23,6 +23,7 @@ test('the six gates that used to queue now cancel the same pull request', () => 
     assert.equal(concurrency.queue, undefined, name);
     assert.match(concurrency.group, /github\.event\.pull_request\.number/, name);
   }
+  assert.match(workflow('ci-tests').concurrency.group, /github\.run_attempt/);
 });
 
 test('the pilot workflow keeps both jobs and cancels per pull request', () => {

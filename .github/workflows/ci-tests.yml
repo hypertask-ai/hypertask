@@ -17,7 +17,7 @@ on:
     branches: [production]
 
 concurrency:
-  group: ci-tests-${{ github.event.pull_request.number || github.sha }}
+  group: ci-tests-${{ github.event.pull_request.number || github.sha }}-${{ github.run_attempt }}
   cancel-in-progress: true
 
 # One knob for the Test step. YPER4-554 (HT Product Lead, 2026-10-24) capped it
