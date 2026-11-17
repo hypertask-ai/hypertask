@@ -18,6 +18,7 @@ const jiti = createRequire(path.join(appRoot, "package.json"))("jiti")(
 );
 const prisma = jiti(path.join(appRoot, "src/lib/prisma.ts"));
 const { signSession } = jiti(path.join(appRoot, "src/lib/auth/session.ts"));
+const { createMcpToken } = jiti(path.join(appRoot, "src/lib/mcp/auth/verifyJwt.ts"));
 
 const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
 const displayName = `Core smoke user ${runKey}`;
@@ -93,6 +94,7 @@ try {
   });
 
   const signedSession = signSession({ id: user.id, email: user.email });
+  const mcpToken = createMcpToken(user.id, user.email);
   const legacyUser = encodeURIComponent(
     JSON.stringify({
       id: user.id,
@@ -120,6 +122,7 @@ try {
       firebaseServiceAccount,
       betterAuthSecret,
       byokCipherSecret,
+      mcpToken,
     ]) {
       console.log(`::add-mask::${value}`);
     }
@@ -127,6 +130,7 @@ try {
 
   const values = {
     CORE_SMOKE_COOKIE: cookie,
+    CORE_SMOKE_MCP_TOKEN: mcpToken,
     CORE_SMOKE_PROJECT_ID: project.id,
     CORE_SMOKE_TASK_ID: task.id,
     CORE_SMOKE_USER_ID: user.id,
