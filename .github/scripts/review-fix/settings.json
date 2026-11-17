@@ -13,7 +13,9 @@
       "Read(//home/runner/work/_temp/**)",
       "Read(//home/runner/work/_actions/**)",
       "Edit(//**/.git/**)",
-      "Write(//**/.git/**)"
+      "Write(//**/.git/**)",
+      "Edit(//home/runner/work/*/*/trusted/**)",
+      "Write(//home/runner/work/*/*/trusted/**)"
     ]
   },
   "disableAllHooks": true,

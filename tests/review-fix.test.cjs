@@ -83,6 +83,7 @@ test('the workflow never hands the push token to the Claude step', () => {
   assert.match(claudeStep, /--settings \.\.\/trusted\/\.github\/scripts\/review-fix\/settings\.json/);
   assert.doesNotMatch(claudeStep, /Bash/);
   assert.match(claudeStep, /--safe-mode/);
+  assert.ok(['Edit', 'Write'].every((tool) => require('../.github/scripts/review-fix/settings.json').permissions.deny.includes(`${tool}(//home/runner/work/*/*/trusted/**)`)));
 });
 
 test('a cancelled fix run never marks its head as tried', () => {
