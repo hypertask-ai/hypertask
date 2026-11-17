@@ -1480,7 +1480,7 @@ echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:
 N nochange YPER4-901 >/dev/null && bad "nochange borrowed a Control line from another comment" || ok "nochange needs the Control line in the opener comment"
 echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search found the fault on the build before the fix.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange accepts proof with a Control line" || bad "nochange refused proof with a Control line"
-echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search found the fault on the build before the fix.</p>"}]}' > "$NC/comments"
 N nochange FOO-901 >/dev/null && bad "nochange accepted a non-ticket id" || ok "nochange refuses a non-ticket id (FOO-901)"
 N nochange HTPR-901x >/dev/null && bad "nochange accepted a malformed id" || ok "nochange refuses a malformed id (HTPR-901x)"
 N nochange HTPR-901 | grep -q 'nochange ok' && ok "nochange accepts HTPR with a resolution comment" || bad "nochange HTPR"

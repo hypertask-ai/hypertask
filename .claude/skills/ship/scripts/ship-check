@@ -9,9 +9,8 @@
 #                                closed as outdated, and the ticket carries a comment opening "Resolved without a change:" that
 #                                links that PR. Then pr, merged, deployed and proof pass; docs keeps its own rule.
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
-#                                with evidence (an https URL or a <pre>/<code> block) and a Control: line naming the check that found the fault
-#                                on a known bad build, no open PR titled with T, no bound PR, and no origin branch named *<t lowercased>*
-#                                with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
+#                                with evidence (an https URL or a <pre>/<code> block) and a Control: line with content, no open PR titled with T,
+#                                no bound PR, and no origin branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     test click removed for every PR (hookless sessions)
 #   ship-check premerge-status <pr> publish the required current-head GitHub status
@@ -316,8 +315,7 @@ nochange_origin_branches() {
 
 # The closing record: one comment whose visible text (tags removed, leading space dropped) opens with
 # "Resolved without a change:" and carries evidence in that same comment: an https URL, or a <pre>/<code>
-# block whose visible inner text is not blank. When control is asked for, the same comment also needs a
-# "Control:" line with content. Returns 2 when the comments cannot be read.
+# block whose visible inner text is not blank. Returns 2 when the comments cannot be read.
 resolution_comment() {
   local t=$1 repo=${2:-} pr=${3:-} control=${4:-} cmts
   cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || return 2
@@ -337,7 +335,7 @@ resolution_comment() {
 
 resolution_comment_reason() {
   if [ -n "${2:-}" ]; then
-    echo "$1 has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output) and a Control: line naming the check that found the fault on a known bad build"
+    echo "$1 has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output) and a Control: line with content"
     return
   fi
   echo "$1 has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output)"
