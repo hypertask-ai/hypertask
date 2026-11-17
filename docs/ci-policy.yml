@@ -949,15 +949,14 @@ bugfix_regression:
   forks_trusted: false
 
 break_it_review:
-  # Report-only, same shape as bugfix_regression above. The GitHub App that
-  # owns the check is the repository token, not a new integration.
   ticket: https://app.hypertask.ai/detail/project-15/9408
   workflow: .github/workflows/break-it-review.yml
   job: break-it
   script: .github/scripts/break-it-review.mjs
+  script_source: pull_request_base_sha
   mode: report_only
   required: false
-  triggers: [pull_request]
+  triggers: [pull_request_target]
   pull_request_types: [opened, synchronize, reopened, edited, ready_for_review]
   pull_request_base: production
   signal: bugfix_title_tag
@@ -965,7 +964,8 @@ break_it_review:
   other_family_model: PSTACK_VERIFIER_ALT_MODEL
   secret: OPENROUTER_EVAL_KEY
   max_generated_tests: 3
-  generated_tests_run: on_the_pull_request_head_with_node_test
+  generated_tests_run: bubblewrap_no_network_no_secrets
+  install_failure: unproven
   reports: [pr_comment, break-it_commit_status]
   node_major: 24
   timeout_minutes: 25

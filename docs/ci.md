@@ -1164,24 +1164,6 @@ no release permission. Its workflow states this in
 The job also runs `.github/scripts/bugfix-regression-check.mjs --backtest <n>`
 by hand to summarise how recent merged bugfix pull requests would have fared.
 
-## Break-it review (HTPR-9408)
-
-A `[BUGFIX]` pull request gets a second opinion from a different model family
-than the one recorded in its `Author-Model` line. That model reads the diff and
-the ticket link, writes up to three edge-case tests aimed at breaking the fix,
-and the job runs them on the pull request head. The job posts one pull request
-comment and one `break-it` commit status: green when the fix held, red when a
-break attempt found a hole.
-
-The job is report-only. It is not a required check and never blocks a merge.
-It reuses the pstack verifier's OpenRouter helpers, so it needs the same
-`OPENROUTER_EVAL_KEY` secret and `PSTACK_VERIFIER_ALT_MODEL` variable. A
-`deepseek` author needs the alternate model set, because the verifier model is
-`deepseek/deepseek-v4.1-flash`. The workflow is
-[`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml)
-and the tests are
-[`tests/break-it-review.test.cjs`](../tests/break-it-review.test.cjs).
-
 ## CI failure log (HYCI-17)
 
 `CI Failure Log` (`.github/workflows/ci-failure-log.yml`) records one line per
@@ -1900,3 +1882,9 @@ workflow gets no allowance and fails on its first comment. Unused allowances do 
 fail, so cleaning a file is safe, and `node scripts/check-no-comments.mjs
 --write-baseline` shrinks the baseline to the current counts when that cleanup
 lands. No new required check is added.
+
+## Break-it review (HTPR-9408)
+
+A `[BUGFIX]` pull request gets edge-case tests from a different model family than its `Author-Model` line. The job runs up to three of those tests on the pull request head, inside a sandbox with no network and no secrets. The reviewer script is the one on the base commit. It posts one comment and one `break-it` status: green when the fix held, red when a break found a hole, and red as unproven when the attempts did not run.
+
+The job is report-only and never blocks a merge. It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`. A `deepseek` author needs the alternate model, because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml) and [`tests/break-it-review.test.cjs`](../tests/break-it-review.test.cjs).
