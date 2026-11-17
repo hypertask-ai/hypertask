@@ -9,7 +9,7 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 import type { ToolContext } from "./context";
 
 export function createUpdateViewTool(context: ToolContext) {
-  const { sendStatus, user } = context;
+  const { sendStatus, user, actingAgentId } = context;
   return {
     hypertask_update_view: tool({
       description:
@@ -33,9 +33,7 @@ export function createUpdateViewTool(context: ToolContext) {
         assignee_ids: z
           .array(z.union([z.coerce.number().int().positive(), z.string().uuid(), z.literal("me")]))
           .optional()
-          .describe(
-            "Replace the view's assignee filter with these user ids (numeric), agent ids (uuid), or me for the caller. Pass [] to clear it."
-          ),
+          .describe("User ids, agent uuids, or me. [] clears."),
         match: z
           .enum(["ALL", "ANY"])
           .optional()
@@ -70,6 +68,7 @@ export function createUpdateViewTool(context: ToolContext) {
         const updated = await updateView({
           viewId: input.view_id,
           userId: user.id,
+          agentId: actingAgentId,
           title: input.title,
           visibility: input.visibility,
           filters: filtersProvided

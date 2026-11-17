@@ -10,7 +10,7 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 import type { ToolContext } from "./context";
 
 export function createCreateViewTool(context: ToolContext) {
-  const { sendStatus, user } = context;
+  const { sendStatus, user, actingAgentId } = context;
   return {
     hypertask_create_view: tool({
       description:
@@ -32,7 +32,7 @@ export function createCreateViewTool(context: ToolContext) {
         assignee_ids: z
           .array(z.union([z.coerce.number().int().positive(), z.string().uuid(), z.literal("me")]))
           .optional()
-          .describe("Only show tasks assigned to these users (numeric id), agents (uuid), or me for the caller."),
+          .describe("User ids, agent uuids, or me."),
         match: z
           .enum(["ALL", "ANY"])
           .default("ANY")
@@ -58,7 +58,7 @@ export function createCreateViewTool(context: ToolContext) {
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_create_view");
 
-        const access = await validateProjectAccess(input.project_id, user.id);
+        const access = await validateProjectAccess(input.project_id, user.id, actingAgentId);
         if (access.error) {
           return { success: false, error: access.error.message };
         }
@@ -66,6 +66,7 @@ export function createCreateViewTool(context: ToolContext) {
         const view = await createView({
           projectId: input.project_id,
           userId: user.id,
+          agentId: actingAgentId,
           title: input.title,
           visibility: input.visibility,
           filters: {

@@ -131,6 +131,53 @@ test('with the flag off me is refused instead of matching nobody', async () => {
   );
 });
 
+test('chat create and update pass the acting agent through me', async () => {
+  const { z } = require('zod');
+  const calls = [];
+  const stubs = {
+    ai: { tool: (definition) => definition },
+    '@/models/Views/model': { SORTING_MODES: ['Manual', 'Priority'], SUBTASK_SETTINGS: ['None', 'Parent'] },
+    '@/lib/ai/chatStream/request': { viewSortingStackSchema: z.array(z.string()) },
+    '@/lib/ai/tools/execution': { withToolErrors: (run) => run },
+    '@/lib/ai/tools/helpers': { sanitizeForJson: (value) => value },
+    '@/lib/mcp/tasks/services': {
+      validateProjectAccess: async (_projectId, _userId, seenAgentId) => {
+        calls.push({ access: seenAgentId ?? null });
+        return { error: null };
+      },
+    },
+    '@/lib/mcp/views/services': {
+      createView: async (input) => {
+        calls.push({ create: input.agentId ?? null, assignee_ids: input.filters.assignee_ids });
+        return { id: 'view-1' };
+      },
+      updateView: async (input) => {
+        calls.push({ update: input.agentId ?? null, assignee_ids: input.filters.assignee_ids });
+        return { id: 'view-1' };
+      },
+    },
+  };
+  const { createCreateViewTool } = loadModule('src/lib/ai/tools/createView.ts', stubs);
+  const { createUpdateViewTool } = loadModule('src/lib/ai/tools/updateView.ts', stubs);
+  const context = { sendStatus() {}, user: { id: 6 }, actingAgentId: agentId };
+
+  await createCreateViewTool(context).hypertask_create_view.execute({
+    project_id: 15,
+    title: 'Mine',
+    assignee_ids: ['me'],
+  });
+  await createUpdateViewTool(context).hypertask_update_view.execute({
+    view_id: 'view-1',
+    assignee_ids: ['me'],
+  });
+
+  assert.deepEqual(calls, [
+    { access: agentId },
+    { create: agentId, assignee_ids: ['me'] },
+    { update: agentId, assignee_ids: ['me'] },
+  ]);
+});
+
 test('updating only the assignee filter rewrites the stored filters', async () => {
   const storedBoardFilters = {
     matchFilters: 'ANY',
