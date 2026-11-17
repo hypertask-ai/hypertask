@@ -7,6 +7,7 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 
 const FLAG = "htpr-8957-calm-model-picker";
 const AUTO_FLAG = "htpr-7915-auto-model";
+const THINKING_FLAG = "htpr-9004-thinking-effort";
 
 test("calm rows stay flat, keep provider and price, and drop descriptions", () => {
   const { calmModelRows } = loadModule("src/lib/aiChat/calmModelPicker.ts");
@@ -45,7 +46,7 @@ async function mount(enabled, props = {}) {
     "next/navigation": { useRouter: () => ({ push() {} }) },
     "next/link": { default: ({ children, ...props }) => React.createElement("a", props, children) },
     "@/hooks/useFlag": {
-      useFlag: (key) => key === FLAG ? enabled : key === AUTO_FLAG,
+      useFlag: (key) => key === FLAG ? enabled : key === AUTO_FLAG || (props.thinking && key === THINKING_FLAG),
       useFlagLoaded: () => true,
     },
     "@/hooks/General/useCurrentBoardBilling": {
@@ -89,6 +90,7 @@ async function mount(enabled, props = {}) {
       currentOptions: [toAutoModelOption(selected), ...aiModelOptions],
       calm: true,
       mobileQuickPicker: props.mobileQuickPicker,
+      thinkingControls: Boolean(props.thinking),
       optionCallback() {},
     }));
   });
@@ -146,6 +148,21 @@ test("flag on still lists models in the phone quick picker", async () => {
       : [...menu.querySelectorAll("[role='menuitemradio']")];
     assert.ok(models.length > 1);
     assert.match(models.map((row) => row.textContent).join("\n"), /Luna 6/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("thinking controls stay in the calm picker for Luna", async () => {
+  const { container, cleanup } = await mount(true, { thinking: true });
+  try {
+    const trigger = container.querySelector("button[aria-expanded='false']");
+    assert.ok(trigger);
+    await React.act(async () => trigger.click());
+    const menu = container.querySelector("[data-calm-model-picker]");
+    assert.ok(menu);
+    assert.match(menu.textContent, /Luna 6[\s\S]*Thinking/);
+    assert.equal(menu.textContent.includes("Reset to default"), false);
   } finally {
     await cleanup();
   }

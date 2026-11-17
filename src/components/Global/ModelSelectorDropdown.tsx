@@ -268,7 +268,8 @@ const AIModelDropDownList = ({
     thinkingControls &&
     !autoSelected &&
     modelSupportsThinkingControl(selectedOption.modelKey);
-  const showCalm = Boolean(calm) && calmPicker && !mobileQuickPicker && !(thinkingFlag && thinkingModelSupported);
+  const showCalm = Boolean(calm) && calmPicker && !mobileQuickPicker;
+  const calmThinking = showCalm && thinkingFlag && thinkingModelSupported;
   const calmCandidates: {
     key: string;
     label: string;
@@ -771,7 +772,38 @@ const AIModelDropDownList = ({
                   />
                 ) : null}
               </div>
-              {selectedEfforts.length > 0 ? (
+              {calmThinking ? (
+                <div className="mt-1 border-t border-border-light-gray-thin px-1.5 pt-1.5">
+                  <SettingsToggle
+                    square
+                    inputId="ai-model-thinking-toggle"
+                    label="Thinking"
+                    checked={thinkingPreference.enabled}
+                    onChange={() => setThinkingPreference({ enabled: !thinkingPreference.enabled })}
+                  />
+                  {thinkingPreference.enabled ? (
+                    <div className="flex flex-wrap items-center gap-1 px-1.5 pb-1">
+                      {AI_THINKING_EFFORTS.map((effort) => (
+                        <button
+                          key={effort}
+                          type="button"
+                          data-calm-thinking-effort={effort}
+                          aria-pressed={effort === thinkingPreference.effort}
+                          className={cn(
+                            "rounded-[4px] px-2 py-1",
+                            effort === thinkingPreference.effort
+                              ? "bg-hoverCardBackground text-white-black"
+                              : "text-text-light-gray",
+                          )}
+                          onClick={() => selectThinkingEffort(effort)}
+                        >
+                          {thinkingEffortLabels[effort]}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : selectedEfforts.length > 0 ? (
                 <div className="mt-1 flex flex-wrap items-center gap-1 border-t border-border-light-gray-thin px-1.5 pt-1.5">
                   <span className="px-1 text-text-light-gray">Effort</span>
                   {selectedEfforts.map((effort) => (
