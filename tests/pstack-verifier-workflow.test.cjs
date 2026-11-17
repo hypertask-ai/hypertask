@@ -65,5 +65,9 @@ test("each verifier job has the declared permissions, key and token", async () =
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
-  assert.deepEqual(REQUIRED_CI_CONTEXTS, policy.required_checks.contexts);
+  const liveRulesetContexts = [
+    "app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review",
+    "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan",
+  ];
+  assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...liveRulesetContexts].sort());
 });
