@@ -35,3 +35,16 @@ test('failed design review uses the intake column the board already has', () => 
   assert.equal(board.stdout, 'Todo\n');
   assert.equal(run('Done').status, 1);
 });
+test('brief checklist stops at the next section, not at the Figma link list', () => {
+  const brief = '<p><strong>Change.</strong></p><ol><li><p>Header: title only.</p></li><li><p>Radius 4 max. Bubbles, buttons, rows, chips.</p></li></ol>'
+    + '<p><strong>Design links.</strong></p><ul><li><p><a href="https://www.figma.com/design/x/?node-id=145-9419">Cleanup</a></p></li><li><p><a href="https://www.figma.com/design/x/?node-id=145-9921">Listening</a></p></li></ul>'
+    + '<p><strong>Done when.</strong></p><ul><li><p>Radius 4 max everywhere.</p></li></ul>';
+  const x = checklistFromBrief(brief);
+  assert.match(x, /^1\. \[ \] Header: title only\.\n2\. \[ \] Radius 4 max\.\n3\. \[ \] Bubbles, buttons, rows, chips\.\n4\. \[ \] No purple anywhere\./);
+  assert.doesNotMatch(x, /Design links|Cleanup|Listening|Done when|everywhere/);
+});
+test('a section heading with its text on the same line still ends the brief list', () => {
+  const x = checklistFromBrief('<p><strong>Change.</strong></p><ol><li><p>Corners 4 max.</p></li></ol><p><strong>Not in scope.</strong> Light and AMOLED.</p>');
+  assert.equal(x.split('\n').length, 4);
+  assert.match(x, /^1\. \[ \] Corners 4 max\.\n2\. \[ \] No purple anywhere\./);
+});

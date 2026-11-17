@@ -1,14 +1,21 @@
+const sectionMark = '\u0001';
+function markHeadings(html) {
+  return html
+    .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (_, inner) => `\n${sectionMark}${inner}\n`)
+    .replace(/<p[^>]*>\s*<strong>([^<]{1,80})<\/strong>\s*<\/p>/gi, (_, inner) => `\n${sectionMark}${inner}\n`);
+}
 export function checklistFromBrief(html) {
-  const text = html.replace(/<br\s*\/?\s*>|<\/(?:p|div|h[1-6]|li|section)>/gi, '\n').replace(/<[^>]*>/g, ' ')
+  const text = markHeadings(html).replace(/<br\s*\/?\s*>|<\/(?:p|div|h[1-6]|li|section)>/gi, '\n').replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'");
   const lines = text.split('\n').map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  let start = lines.findIndex(x => /^change\s*[.:\-–]?\s*$/i.test(x));
-  if (start === -1) start = lines.findIndex(x => /^change\b/i.test(x));
+  const isHeading = x => x.startsWith(sectionMark) || /^(not in scope|done when)\b/i.test(x);
+  let start = lines.findIndex(x => x.replace(sectionMark, '').match(/^\s*change\s*[.:\-–]?\s*$/i));
+  if (start === -1) start = lines.findIndex(x => x.replace(sectionMark, '').match(/^\s*change\b/i));
   let selected = lines;
   if (start !== -1) {
-    const end = lines.findIndex((x, i) => i > start && /^(not in scope|done when)\b/i.test(x));
+    const end = lines.findIndex((x, i) => i > start && isHeading(x));
     selected = lines.slice(start, end === -1 ? undefined : end);
-    selected[0] = selected[0].replace(/^change\b\s*[.:\-–]?\s*/i, '');
+    selected[0] = selected[0].replace(sectionMark, '').replace(/^change\b\s*[.:\-–]?\s*/i, '');
   }
   const sentences = selected.flatMap(line => line.match(/[^.!?]+(?:[.!?]+|$)/g) || []).map(s => s.trim()).filter(Boolean);
   return [...sentences, 'No purple anywhere.', 'No sparkle icon.', 'Every corner is 0, 2 or 4px.'].map((s, i) => `${i + 1}. [ ] ${s}`).join('\n');
