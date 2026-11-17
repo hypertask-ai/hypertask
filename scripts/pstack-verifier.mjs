@@ -459,6 +459,30 @@ export async function completeWithOpenRouter(prompt, { key, model, images = [], 
   if (!text) throw new Error("model returned nothing");
   return text;
 }
+function invalidModelOutput(error) {
+  const wrapped = new Error(String(error?.message ?? error));
+  wrapped.modelOutput = true;
+  return wrapped;
+}
+export async function askModel(prompt, options, read) {
+  const once = async () => {
+    let text;
+    try { text = await completeWithOpenRouter(prompt, options); }
+    catch (error) {
+      if (error?.message !== "model returned nothing") throw error;
+      throw invalidModelOutput(error);
+    }
+    try { return read(text); }
+    catch (error) { throw invalidModelOutput(error); }
+  };
+  try { return await once(); }
+  catch (error) { if (!error?.modelOutput) throw error; }
+  try { return await once(); }
+  catch (error) {
+    if (!error?.modelOutput) throw error;
+    throw new Error("model output invalid after retry");
+  }
+}
 function requireRepo(repo) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? "")) throw new Error("repository is not a name");
   return repo;
@@ -556,7 +580,7 @@ async function planCommand() {
   const plan = { ...binding, authorFamily: request.author, verifierModel: picked.model || "", actions: [], expect: [], reason: "", fail: picked.fail || "", files: listed.files, filesTruncated: listed.filesTruncated, claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
   if (!picked.fail) {
     try {
-      const parsed = parsePlan(await completeWithOpenRouter(buildPrompt({ kind: "plan", ...request }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model }));
+      const parsed = await askModel(buildPrompt({ kind: "plan", ...request }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model }, parsePlan);
       plan.actions = parsed.actions; plan.expect = parsed.expect; plan.reason = parsed.reason;
     } catch (error) { plan.fail = failureText(error, 220); }
   }
@@ -575,7 +599,7 @@ async function judgeCommand() {
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
   if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
     try {
-      const parsed = parseAnswer(await completeWithOpenRouter(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model, images: imagesIn(path.join(workDir(), "evidence", "shots")) }));
+      const parsed = await askModel(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
       model = { verdict: parsed.verdict, notes: parsed.notes };
     } catch (error) { model = { verdict: "FAIL", notes: failureText(error, 220) }; }
   }
