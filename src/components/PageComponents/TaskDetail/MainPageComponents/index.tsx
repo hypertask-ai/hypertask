@@ -1,4 +1,3 @@
-import { HTPR_8993_PROPERTIES_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8993-properties-column";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { useFlag } from "@/hooks/useFlag";
 import Tooltip from "@/components/Common/Tooltip";
@@ -84,16 +83,15 @@ export const LocalRightSideInfo = (
   }) => {
   const _mbl = useContext(MobileViewContext);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
-  const plainCornersEnabled = useFlag(HTPR_8993_PROPERTIES_COLUMN_FLAG);
 
   return (
     <>
       <span
         data-task-property-label={graphite2Enabled ? true : undefined}
+        data-task-property-chip
         onClick={onClick}
         className={cn(
-          "cursor-pointer border-icon-dark-gray relative group text-text-light-gray font-medium",
-          plainCornersEnabled ? "rounded-[4px]" : "rounded-[5px]",
+          "cursor-pointer rounded-[5px] border-icon-dark-gray relative group text-text-light-gray font-medium",
           _mbl ? "w-[88px] shrink-0 text-meta" : "w-[25%] @sm:w-1/2 @sm:border-none",
           className
         )}>

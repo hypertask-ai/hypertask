@@ -937,6 +937,10 @@ svg.lucide.fill-current {
     border-radius: 4px !important;
   }
 
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-properties-rail][data-properties-rail-corners="4"] [data-task-property-chip] {
+    border-radius: 4px !important;
+  }
+
   html[data-task-box-outlines] [data-task-detail-path] .description-container:focus-within,
   html[data-task-box-outlines] #comment[data-testid="comment-composer"]:focus-within,
   html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-state="active"] {
