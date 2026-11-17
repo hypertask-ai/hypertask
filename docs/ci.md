@@ -1152,6 +1152,24 @@ no release permission. Its workflow states this in
 The job also runs `.github/scripts/bugfix-regression-check.mjs --backtest <n>`
 by hand to summarise how recent merged bugfix pull requests would have fared.
 
+## Break-it review (HTPR-9408)
+
+A `[BUGFIX]` pull request gets a second opinion from a different model family
+than the one recorded in its `Author-Model` line. That model reads the diff and
+the ticket link, writes up to three edge-case tests aimed at breaking the fix,
+and the job runs them on the pull request head. The job posts one pull request
+comment and one `break-it` commit status: green when the fix held, red when a
+break attempt found a hole.
+
+The job is report-only. It is not a required check and never blocks a merge.
+It reuses the pstack verifier's OpenRouter helpers, so it needs the same
+`OPENROUTER_EVAL_KEY` secret and `PSTACK_VERIFIER_ALT_MODEL` variable. A
+`deepseek` author needs the alternate model set, because the verifier model is
+`deepseek/deepseek-v4.1-flash`. The workflow is
+[`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml)
+and the tests are
+[`tests/break-it-review.test.cjs`](../tests/break-it-review.test.cjs).
+
 ## CI failure log (HYCI-17)
 
 `CI Failure Log` (`.github/workflows/ci-failure-log.yml`) records one line per
