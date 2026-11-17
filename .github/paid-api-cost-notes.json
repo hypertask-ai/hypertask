@@ -217,5 +217,15 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-9080 saves one boolean per person through Hypertask's own same-origin preferences API. No paid provider call, no retries, no token budget.",
     "source": "https://app.hypertask.ai/detail/project-15/9080"
+  },
+  "src/components/generalCommandActions.ts:74aaa5fd2a81e5d9815922a7315ef5f7188015e900d085bc58647dd0044c59d6": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-9254 always sends the chosen board prefix to Hypertask's own same-origin create-board route. No paid provider or model call, no new request, no retries: the prefix rides the create-board save the palette already made.",
+    "source": "https://app.hypertask.ai/detail/project-15/9254"
+  },
+  "src/components/generalCommandActions.ts:d07ba7cf9686b55710292dd35e4531e14375f1422be6a3c05b5640ea921705a9": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-9254 always sends the chosen board prefix to Hypertask's own same-origin create-board route on the second palette create path. No paid provider or model call, no new request, no retries.",
+    "source": "https://app.hypertask.ai/detail/project-15/9254"
   }
 }
