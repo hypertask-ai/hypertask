@@ -171,6 +171,50 @@ test("drive waits for a control, text, or url that is not ready yet", async () =
   assert.ok(stuck.order.indexOf("wait") < stuck.order.lastIndexOf(stuck.order.at(-1)));
 });
 
+test("fill reaches a search box and a number box", async () => {
+  const { runPlan } = await load();
+  const drive = { base: "http://127.0.0.1:3100", projectId: "1", shotsDir: "/tmp", navigations: [] };
+  const pageFor = (ready) => {
+    const filled = [];
+    return {
+      filled,
+      getByRole(role, { name, exact }) {
+        const locator = {
+          first() { return locator; },
+          waitFor(options) {
+            if (!(Number(options?.timeout) > 0)) throw new Error("unbounded");
+            if (role !== ready || exact !== true) throw new Error("missing");
+            return Promise.resolve();
+          },
+          async fill(value, options) {
+            if (!(Number(options?.timeout) > 0)) throw new Error("unbounded");
+            filled.push({ role, name, value });
+          },
+        };
+        return locator;
+      },
+      async screenshot() {},
+    };
+  };
+  const search = pageFor("searchbox");
+  const found = await runPlan({ page: search, plan: plan([{ op: "fill", label: "Find", value: "boards" }]), ...drive });
+  assert.equal(found.steps[0].ok, true);
+  assert.deepEqual(search.filled, [{ role: "searchbox", name: "Find", value: "boards" }]);
+  const number = pageFor("spinbutton");
+  const counted = await runPlan({ page: number, plan: plan([{ op: "fill", label: "Days", value: "3" }]), ...drive });
+  assert.equal(counted.steps[0].ok, true);
+  assert.deepEqual(number.filled, [{ role: "spinbutton", name: "Days", value: "3" }]);
+  const text = pageFor("textbox");
+  const typed = await runPlan({ page: text, plan: plan([{ op: "fill", label: "Title", value: "Smoke" }]), ...drive });
+  assert.equal(typed.steps[0].ok, true);
+  assert.deepEqual(text.filled, [{ role: "textbox", name: "Title", value: "Smoke" }]);
+  const none = pageFor("button");
+  const missed = await runPlan({ page: none, plan: plan([{ op: "fill", label: "Title", value: "Smoke" }]), ...drive });
+  assert.equal(missed.steps[0].ok, false);
+  assert.match(missed.steps[0].error, /not actionable/);
+  assert.deepEqual(none.filled, []);
+});
+
 test("the model call uses the eval headers and AbortSignal.timeout", async () => {
   const { completeWithOpenRouter, PSTACK_VERIFIER } = await load();
   const seen = [];
