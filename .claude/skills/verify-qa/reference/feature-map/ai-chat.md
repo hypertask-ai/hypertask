@@ -33,6 +33,33 @@
 - `compact-automatic-ticket-context` Compact automatic ticket context.
 - `floating-panel-elevation` Floating panel elevation.
 - `returning-from-settings` Returning from Settings.
+- `chat-session-url` Open `/chat/<sessionId>` for one saved conversation. `src/app/chat/[sessionId]/page.tsx` passes that id into the full-screen chat.
+- `chat-history-paging` With `htpr-6971-chat-history-paging` on, the history list loads thirty titles at a time, and messages load only for the conversation you open.
+- `chat-names` With `htpr-7052-chat-names` on, a new chat is named after its ticket or board, then after its first message, instead of New AI Chat. A manual rename stays.
+- `chat-scope-ticket` With `htpr-7316-chat-scope-ticket` on, docked chat on an open ticket offers Current ticket and limits context to that title, description and comments.
+- `chat-task-writer` With `htpr-7363-chat-task-writer` on, sidebar chat creates a task from a brief through the task writer. A writer failure does not save chat-authored text.
+- `agent-sidebar-chats` With `htpr-7518-agent-sidebar-chats` on, the docked sidebar switches between AI chat and accepted agents on that board.
+- `keep-ai-chat-closed` With `htpr-7530-keep-ai-chat-closed` on, and the separate open switches off, Settings offers Keep AI chat closed always.
+- `ai-settings` With `htpr-7622-ai-settings` on, personal AI chat beside an open Settings page can propose one change on that page. Apply and Undo go through the app card.
+- `ai-chat-open-switches` With `htpr-7650-ai-chat-open-switches` on, Settings has three per-person switches: new tickets, opened tickets, and boards.
+- `prompt-caching` With `htpr-7689-prompt-caching` on, Claude gateway chat uses automatic caching and OpenAI gateway chat uses a session cache key. Stable rules stay before live context.
+- `deepseek-flash-fast` With `htpr-7730-deepseek-flash-fast` on, the picker lists DeepSeek V4.1 Flash Fast. Off hides it and saved or requested choices use the plan default.
+- `ctrl-tab-session-switch` With `htpr-7763-ctrl-tab-session-switch` on, desktop full-screen chat uses Ctrl+Tab and Ctrl+Shift+Tab to move along the visible rail without wrapping, then focuses the message box.
+- `docs-routing` With `htpr-7780-docs-routing` on, product, plan, price, limit, shortcut and setup questions search the help docs before the answer, and claim only what those docs state.
+- `ai-thinking-opt-in` With `htpr-7854-ai-thinking-opt-in` on, each AI feature sends the reasoning effort from one map. Off keeps the adaptive medium default.
+- `chat-prompt-lean` With `htpr-7861-chat-prompt-lean` on, the chat system prompt drops repeated instructions and names the tools this turn can call.
+- `auto-model` With `htpr-7915-auto-model` on, Auto is the default model and each AI job picks inside the models that team has enabled.
+- `grok-gemini4-models` With `htpr-7939-grok-gemini4-models` on, the pickers list Grok 4.7 and Gemini 4 Argon. Off hides them and saved or requested choices use the plan default.
+- `ai-chip-events` With `htpr-7978-ai-chip-events` on, suggestion chips log shown, clicked, ignored and the next typed text, with the board and chip type. The screen does not change.
+- `chat-cleanup` With `htpr-8261-chat-cleanup` on, the floating and sidebar composer puts the microphone left of a word Send and shows a Dictation pill, with no sparkle or purple.
+- `full-screen-chat-cleanup` With `htpr-8263-full-screen-chat-cleanup` on, `/chat` uses a title-only header, the microphone left of a text Send button, a plain placeholder, 4px corners and tighter list rows.
+- `ai-chat-one-composer` With `htpr-8824-ai-chat-one-composer` on, full-screen, sidebar and floating chat share one text box. The plus menu and microphone sit inside it with Send. The board picker and model picker sit below.
+- `evlog-chat-log` With `htpr-8863-evlog-chat-log` on, each AI chat request writes one structured log line: model, outcome, duration, and on a failure the reason and the next step. The reply does not wait on that line.
+- `ai-chat-header-menus` With `htpr-8956-ai-chat-header-menus` on, the header title and chevron are one Chat history button. History is searchable and grouped. The overflow menu lists Pin chat open and Keep chat closed on their own lines.
+- `sidebar-sections` With `htpr-8963-sidebar-sections` on, the full-screen rail sections Pinned, Today, Previous 7 days and Older collapse from their headers, and a pinned chat keeps a pin mark.
+- `thinking-effort` With `htpr-9004-thinking-effort` on, the model selector adds a Thinking switch and an effort of Low, Medium or High. Thinking starts off.
+- `chip-starters` With `htpr-9031-chip-starters` on, starter questions in a new chat sit at the bottom left, just above the message box, only as wide as their text, in the regular chat font with 4px corners.
+- `jev-auto-model-shadow` With `htpr-9048-jev-auto-model-shadow` on, every Auto turn also asks Jev which effort fits and logs that guess beside Auto's choice. The person still sees Auto's model.
 
 ## How to get to it (user POV)
 
@@ -144,6 +171,114 @@ Record desktop and phone send-to-visible-link timings separately from
 body completion, with sample counts and errors. Keep Task Writer inputs,
 models, prompts and output unchanged; prepare context before publishing so
 the new ticket cannot become its own duplicate-search result.
+
+### One saved conversation
+
+A signed-in person opens `/chat/<sessionId>`. `src/app/chat/[sessionId]/page.tsx` reads the `nookies_user` cookie, redirects to `/login` when it is missing, and renders full-screen chat with that session id. `/chat` with no id stays the unspecialized full-screen chat.
+
+### Paged chat history
+
+With `htpr-6971-chat-history-paging` on, open the chat history list on the docked sidebar or on `/chat`. The list requests thirty titles from `/api/ai-chat/all-sessions`. Opening a row loads that conversation's messages. Further titles arrive only when the list asks for the next page. When the flag is off, or the server returns the unpaged list, the older full history comes back.
+
+### Names for new chats
+
+With `htpr-7052-chat-names` on, start a chat on a ticket or a board. The title begins as that ticket title or board name. After the first message, an automatic title, including New AI Chat, becomes a short form of that message, at most fifty characters. A title you renamed by hand stays as you wrote it.
+
+### Current ticket scope
+
+With `htpr-7316-chat-scope-ticket` on, open a ticket and the docked AI chat. The scope control lists Current ticket while that ticket is open. Choose it. The turn uses that ticket's title, description and comments, and does not search other tickets. The default scope stays the board until the person chooses Current ticket. Full-screen `/chat` does not add this docked control.
+
+### Tasks written from chat
+
+With `htpr-7363-chat-task-writer` on, ask the sidebar chat to create a task from a brief. The create path runs the task writer, including its authoring style, priority and size, before the ticket is saved. If the writer fails or returns an empty title, the turn refuses the write. Chat-authored text is not saved in its place.
+
+### Agents in the sidebar
+
+With `htpr-7518-agent-sidebar-chats` on, open AI chat on a board where you are the owner or an accepted member. The header reads AI chat, or the selected agent's name. Choose another accepted agent on that board to open that agent's conversation in the same sidebar. A revoked or non-member board does not load that list. The list loads only while this flag is on.
+
+### Keep chat closed
+
+With `htpr-7530-keep-ai-chat-closed` on, and `htpr-7650-ai-chat-open-switches` off, open Settings, Task page. The switch is labeled Keep AI chat closed always. Turn it on. Moving through tickets, boards, Inbox and My Tasks leaves the chat closed until you open it. Turn the switch off and the previous automatic opening returns. While the three open switches are on, this single switch is not shown.
+
+### Settings changes from chat
+
+With `htpr-7622-ai-settings` on, open one Settings page and the personal AI chat beside it. Ask for one change that belongs on that page: theme on Appearance, a notification on Notifications, or a board role on the members page. The reply is a proposal card. Apply and Undo run the existing settings action after you confirm. Cancel drops the proposal. A proposal expires. An agent chat cannot make one. A board-role change is an access change: apply and undo it only as the board owner, on a board you can restore.
+
+### When chat opens by itself
+
+With `htpr-7650-ai-chat-open-switches` on, open Settings, Task page, in `src/components/Modals/Settings/TaskPageSection.tsx`. Three switches are stored per person and followed in each browser: Open AI chat on newly created tickets, Open AI chat when I open a ticket, and Open AI chat on boards. Each one controls only that case. Manual open still works. While manual chat is on, these three switches are hidden and chat opens only when you open it, except the new-ticket case that manual chat still owns.
+
+### Gateway prompt cache
+
+With `htpr-7689-prompt-caching` on, send a normal gateway chat turn. Claude models on the gateway use automatic caching. OpenAI models on the gateway attach a cache key scoped to the chat session, and the stable rules stay before the live ticket or clock. Direct Anthropic caching is a different flag. Off leaves the request shape as it was. This changes paid cache writes, not the words on screen.
+
+### DeepSeek Flash Fast
+
+With `htpr-7730-deepseek-flash-fast` on, open the model picker in chat or in Settings. DeepSeek V4.1 Flash Fast is listed, from `src/lib/aiModelOptions.ts`. Choose it and send. The stream body carries that option. Off hides the row. A saved or requested choice of that model falls back to the plan default. The option costs more than DeepSeek V4.1 Flash and draws on the team AI allowance.
+
+### Ctrl+Tab between chats
+
+With `htpr-7763-ctrl-tab-session-switch` on, open `/chat` on a desktop window at least 768px wide, with at least two chats visible in the rail. The listener in `src/app/chat/Chat.tsx` runs while `htpr-7766-chat-shortcuts` is off. Ctrl+Tab selects the next visible session. Ctrl+Shift+Tab selects the previous one. Neither wraps past the end of the rail. The address becomes `/chat/<sessionId>` and the message box takes focus. Docked chat is unchanged. A phone-width window ignores the keys.
+
+### Answers from the docs
+
+With `htpr-7780-docs-routing` on, ask a product, plan, price, limit, shortcut or setup question in AI chat. The turn adds the docs-routing instructions in `src/lib/ai/chatStream/modelTurn.ts` and can call search_help_docs before answering. The answer may state a feature, price, limit or plan name only when the returned article states it. A failed lookup is not proof the feature is absent. Questions about your own tickets still use board tools. Off answers those product questions from model memory.
+
+### Reasoning effort map
+
+With `htpr-7854-ai-thinking-opt-in` on, there is no new switch. Each AI feature sends the reasoning effort stored in one map. Titles, summaries, labels, heartbeats and questions use the lower effort in that map. Chat, task writer and mentions stay on low effort. Off keeps today's adaptive medium default. Reasoning tokens are billed as model output. This is separate from the Thinking switch.
+
+### Shorter chat instructions
+
+With `htpr-7861-chat-prompt-lean` on, send any chat message. The system prompt uses the lean agent instructions and names the tools this turn can call, instead of the longer repeated block. Confirmation, task scope, label safety and writing rules stay. The tool validators still decide what a tool may do. Nothing in the composer changes.
+
+### Auto model
+
+With `htpr-7915-auto-model` on, open the model picker. Auto is the default, described as picking the right model for each job. A chat turn, and the other AI features that share this preference, route inside the models that team has already enabled. Off keeps the previous default pick.
+
+### Grok 4.7 and Gemini 4 Argon
+
+With `htpr-7939-grok-gemini4-models` on, open the model picker and the Settings model commands. Grok 4.7 and Gemini 4 Argon are listed, with the xAI provider row. Send with one of them and record that option on the chat request. Off hides both. A saved or requested choice of either model uses the plan default. They are optional paid models.
+
+### Chip event log
+
+With `htpr-7978-ai-chip-events` on, open a new chat so suggestion chips show, click one, ignore another, then type your own next message. The screen looks the same. The client records shown, clicked, ignored and next_typed, each with the board and the chip type, through `src/lib/ai/chipEvents.ts`. Off records none of those events.
+
+### Sidebar and floating composer
+
+With `htpr-8261-chat-cleanup` on, open the docked sidebar and the floating chat. The microphone sits to the left of a Send button that uses the word Send. While dictation is active, a Dictation pill is shown. Sparkle and purple are gone from those two surfaces. Sending, dictation and attachments behave as before. Off restores the previous look.
+
+### Full-screen chat cleanup
+
+With `htpr-8263-full-screen-chat-cleanup` on, open `/chat`. The header is the title only. The microphone sits left of a Send button that uses the word Send. The placeholder is plain. Corners are 4px. Rows in the chat list are shorter. The same composer cleanup is shared with the other chat surfaces that use it. Off restores the sparkle header, the icon Send button, the old placeholder and the old spacing. Sending, dictation and session handling stay the same.
+
+### One composer
+
+With `htpr-8824-ai-chat-one-composer` on, open `/chat`, the docked sidebar and the floating window. All three use one text box. Inside that row, from `src/components/AI_CHAT/AiChatOneComposer.tsx`, the plus menu, the microphone and Send sit together. The board picker and the model picker sit below the box. Attachments, dictation, context and sending do the same work as before. Off restores the previous placement of those controls.
+
+### One log line per chat request
+
+With `htpr-8863-evlog-chat-log` on, send a chat message. After the turn, one structured log records the model, the provider, the outcome and the duration. A failed turn also records why it stopped and the next step. The line carries no prompt text and no keys. The reply is not held back while the line is written. Off leaves today's logs.
+
+### Header menus
+
+With `htpr-8956-ai-chat-header-menus` on, open the docked chat. The title and chevron are one button, Chat history. It opens a searchable list grouped into Today, Previous 7 days and Older. On the desktop sidebar the separate history clock is gone, because that title button opens history. The three-dot menu is one line per item, including Pin chat open and, when the keep-closed switch exists, Keep chat closed. Pin chat open and Keep chat closed still change the same saved open state. Off restores the previous header.
+
+### Collapsible rail sections
+
+With `htpr-8963-sidebar-sections` on, open `/chat` with several chats. The rail in `src/app/chat/Chat.tsx` groups them as Today, Previous 7 days and Older. A pinned chat also gets a Pinned group. Each header is a button that collapses and expands that group. A pinned chat shows a pin mark on the row, not only while the pointer is over it. Searching the rail does not collapse groups. Off leaves every section open and shows the pin only on hover.
+
+### Thinking and effort
+
+With `htpr-9004-thinking-effort` on, open the model selector in `src/components/Global/ModelSelectorDropdown.tsx` on a model whose provider is OpenAI, Anthropic, Google or DeepSeek. A Thinking switch is there and starts off. Effort offers Low, Medium and High. The stored default effort is Low. Turn Thinking on, pick High, and the next reply uses that effort. Turn it off and the request sends no thinking effort. Other providers do not show the control. Off keeps today's selector. Thinking tokens are billed as model output for as long as the switch stays on.
+
+### Starter questions
+
+With `htpr-9031-chip-starters` on, open a new AI chat so the welcome questions show, in `src/components/AI_CHAT/WelcomeScreen.tsx`. They sit at the bottom left, just above the message box. Each chip is only as wide as its text, uses the regular 14px chat font, and has 4px corners. Off keeps the centered, full-width, 12px questions.
+
+### Jev's effort guess
+
+With `htpr-9048-jev-auto-model-shadow` on, send a message while the selected model is Auto, on a team that is not paying with its own key. Auto still chooses the model the person sees. After that choice, Jev is asked which effort level fits the message, and the guess is stored next to Auto's level. The extra call does not delay the reply. A customer-funded team skips the call. Off stops the extra call and the log. There is nothing new on screen.
 
 ### Agent ticket proposals
 
