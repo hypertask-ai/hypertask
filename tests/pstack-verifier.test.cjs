@@ -133,7 +133,7 @@ test("a non-app pass waits until every required context is green", async () => {
   assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: true, checksPending: false });
   const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, ...ciGate({ runs, statuses }) });
   assert.equal(passed.verdict, "PASS+NOTES");
-  const partial = statuses.filter((status) => status.context !== "premerge-evidence");
+  const partial = statuses.filter((status) => status.context !== "app-smoke");
   assert.deepEqual(ciGate({ runs, statuses: partial }), { checksPassed: false, checksPending: true });
   const red = statuses.map((status) => status.context === "ai-review" ? { context: "ai-review", state: "failure" } : status);
   const blockedGate = ciGate({ runs, statuses: red });
@@ -156,6 +156,31 @@ test("a non-app pass waits until every required context is green", async () => {
   }, { sleep: async () => {}, rounds: 4, pending: (value) => ciGate(value).checksPending });
   assert.equal(reads, 2);
   assert.equal(ciGate(snapshot).checksPassed, true);
+});
+
+test("PR 3566 ruleset checks pass with no premerge-evidence status", async () => {
+  const { ciGate, requiredContextsReady, CONTEXT } = await load();
+  const runs = [
+    { name: "ci-tests", conclusion: "success" },
+    { name: "browser-smoke", conclusion: "success" },
+    { name: "next-public-secrets", conclusion: "success" },
+    { name: "secret-scan", conclusion: "success" },
+    { name: "production-test-warning", conclusion: "skipped" },
+    { name: CONTEXT, conclusion: "failure" },
+  ];
+  const statuses = [
+    { context: "app-smoke", state: "success" },
+    { context: "ai-review", state: "success" },
+    { context: "claude-review", state: "success" },
+    { context: "feature-flag-gate", state: "success" },
+    { context: "pr-title", state: "success" },
+    { context: "ux-signoff", state: "success" },
+    { context: CONTEXT, state: "failure" },
+  ];
+  const ready = requiredContextsReady(runs, statuses);
+  const gate = ciGate({ runs, statuses });
+  assert.deepEqual(ready, { missing: false, pending: false, failed: false });
+  assert.deepEqual(gate, { checksPassed: true, checksPending: false });
 });
 
 test("user-delivered files outside src cannot take the non-app pass", async () => {
