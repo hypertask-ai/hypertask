@@ -89,6 +89,7 @@ import SplitTitle from "@/components/notifications/inboxSplit/SplitTitle";
 import InboxZeroSheet from "@/components/notifications/InboxZeroSheet";
 import { DEFAULT_INBOX_ZERO_RULES, type InboxZeroRules } from "@/lib/inboxZero";
 import { HTPR_8046_ARCHIVE_SAFE_FLAG } from "@/lib/flags/definitions/htpr-8046-archive-safe";
+import { HTPR_9071_INBOX_ZERO_TABS_FLAG } from "@/lib/flags/definitions/htpr-9071-inbox-zero-tabs";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { useMobileView } from "@/lib/contexts/mobileContext";
 import InboxNotifyNudge from "@/components/notifications/InboxNotifyNudge";
@@ -760,6 +761,7 @@ const Inbox = ({
     toast.dismiss(toastId);
   };
   const { isInboxZero } = useInboxZeroStyling();
+  const inboxZeroTabsFlag = useFlag(HTPR_9071_INBOX_ZERO_TABS_FLAG);
   const activeSplit = _notificationsTQ?.structuredData?.tabs[globalFocus.currSplit]?.project;
   const canArchiveSafe = archiveSafeEnabled &&
     (activeSplit === "Updates" || activeSplit === "Important" || activeSplit === "Agents");
@@ -877,46 +879,48 @@ const Inbox = ({
                 : "bg-containerBackground"
             }`}
           >
-            <SplitTitlesContainer
-              contentGap={appShellRailOn && !isInboxZero}
-              narrowLayout={narrowInboxTabs}
-              hidden={narrowInboxTabs && isMbl}
-              SelectedCount={showSelectedCount ? InboxSelectedCount : null}
-              trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
-            >
-              {_notificationsTQ?.structuredData?.tabs.map(
-                (tab: InboxTabMeta, index: number, tabs: InboxTabMeta[]) => (
-                  <SplitTitle
-                    isSelected={globalFocus.currSplit !== index}
-                    onClick={() => navigateTabs(index)}
-                    key={tab.project?.toString()}
-                    tab={tab}
-                    trailingAction={
-                      !isMbl && index === tabs.length - 1 ? (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          aria-label="Manage inbox splits"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setShowManageSplits(true);
-                          }}
-                          className="group relative flex shrink-0 items-center justify-center self-center px-1 text-text-light-gray pills-gear"
-                        >
-                          <Settings2 size={14} strokeWidth={1.75} />
-                          <Tooltip
-                            text="Manage inbox splits"
-                            left={-35}
-                            bottom={-34}
-                            keyCombination={[]}
-                          />
-                        </span>
-                      ) : undefined
-                    }
-                  />
-                ),
-              )}
-            </SplitTitlesContainer>
+            {!(inboxZeroTabsFlag && isInboxZero) && (
+              <SplitTitlesContainer
+                contentGap={appShellRailOn && !isInboxZero}
+                narrowLayout={narrowInboxTabs}
+                hidden={narrowInboxTabs && isMbl}
+                SelectedCount={showSelectedCount ? InboxSelectedCount : null}
+                trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
+              >
+                {_notificationsTQ?.structuredData?.tabs.map(
+                  (tab: InboxTabMeta, index: number, tabs: InboxTabMeta[]) => (
+                    <SplitTitle
+                      isSelected={globalFocus.currSplit !== index}
+                      onClick={() => navigateTabs(index)}
+                      key={tab.project?.toString()}
+                      tab={tab}
+                      trailingAction={
+                        !isMbl && index === tabs.length - 1 ? (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            aria-label="Manage inbox splits"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setShowManageSplits(true);
+                            }}
+                            className="group relative flex shrink-0 items-center justify-center self-center px-1 text-text-light-gray pills-gear"
+                          >
+                            <Settings2 size={14} strokeWidth={1.75} />
+                            <Tooltip
+                              text="Manage inbox splits"
+                              left={-35}
+                              bottom={-34}
+                              keyCombination={[]}
+                            />
+                          </span>
+                        ) : undefined
+                      }
+                    />
+                  ),
+                )}
+              </SplitTitlesContainer>
+            )}
 
             <div
               className={

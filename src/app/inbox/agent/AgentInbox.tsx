@@ -38,6 +38,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7892_AGENT_INBOX_KEEPS_SCROLL_FLAG } from "@/lib/flags/definitions/htpr-7892-agent-inbox-keeps-scroll";
+import { HTPR_9071_INBOX_ZERO_TABS_FLAG } from "@/lib/flags/definitions/htpr-9071-inbox-zero-tabs";
 import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 import { isAIChatElementFocused } from "@/lib/keyboard/chatSurfaceFocus";
 import { resolveInboxFocusScroll } from "@/lib/inboxFocusScroll";
@@ -341,6 +342,7 @@ const AgentInbox = ({
   }, [_notificationsTQ?.structuredData?.data, trigger, agentInboxKeepsScroll]);
 
   const { isInboxZero } = useInboxZeroStyling();
+  const inboxZeroTabsFlag = useFlag(HTPR_9071_INBOX_ZERO_TABS_FLAG);
   const handleBulkArchive = async (
     selectedNotifications: INotification[],
   ) => {};
@@ -390,28 +392,30 @@ const AgentInbox = ({
               isInboxZero ? "bg-transparent" : "bg-containerBackground"
             }`}
           >
-            <SplitTitlesContainer>
-              {_notificationsTQ?.structuredData?.tabs.map(
-                (
-                  tab: {
-                    project: any;
-                    idx: number;
-                    length: number;
-                    hasUnseen: boolean;
-                  },
-                  index: number,
-                ) => (
-                  <>
-                    <SplitTitle
-                      isSelected={globalFocus.currSplit !== index}
-                      onClick={() => navigateTabs(index)}
-                      key={tab.project?.toString()}
-                      tab={tab}
-                    />
-                  </>
-                ),
-              )}
-            </SplitTitlesContainer>
+            {!(inboxZeroTabsFlag && isInboxZero) && (
+              <SplitTitlesContainer>
+                {_notificationsTQ?.structuredData?.tabs.map(
+                  (
+                    tab: {
+                      project: any;
+                      idx: number;
+                      length: number;
+                      hasUnseen: boolean;
+                    },
+                    index: number,
+                  ) => (
+                    <>
+                      <SplitTitle
+                        isSelected={globalFocus.currSplit !== index}
+                        onClick={() => navigateTabs(index)}
+                        key={tab.project?.toString()}
+                        tab={tab}
+                      />
+                    </>
+                  ),
+                )}
+              </SplitTitlesContainer>
+            )}
 
             {__notifications?.map((notification, index) => (
               <>
