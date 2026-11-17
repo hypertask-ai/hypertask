@@ -47,7 +47,9 @@ test("timers, type escapes and lint silences fail when one is added", async () =
     lintSilences: "eslint-disable-next-line no-console",
   };
   assert.equal(countText("useLayoutEffect(() => {})").effectHooks, 0);
+  assert.equal(countText("useEffect (() => {})").effectHooks, 1);
   assert.equal(countText("setInterval(() => {}, 0)").quickFixTimers, 0);
+  assert.equal(countText("setTimeout (() => {}, 0)").quickFixTimers, 1);
   assert.equal(countText("const value = input as anyone").typeEscapes, 0);
   const baseline = emptyCounts();
   for (const key of Object.keys(samples)) {
@@ -134,6 +136,14 @@ test("raising the baseline is refused and a bad exception does not add room", as
   });
   assert.match(bad.join("\n"), /ticket must be a full https:\/\/app\.hypertask\.ai\/detail\/project-<board>\/<number> link/);
   assert.match(bad.join("\n"), /Effect hooks went from 0 allowed to 1/);
+  const lowered = judge({
+    counts: { ...baseline, effectHooks: 1 },
+    baseBaseline: { ...baseline, effectHooks: 1 },
+    headBaseline: baseline,
+    baseExceptions: [],
+    headExceptions: [],
+  });
+  assert.match(lowered.join("\n"), /Effect hooks went from 0 allowed to 1/);
 });
 
 test("the first baseline has to match the code with no spare room", async () => {

@@ -13,12 +13,12 @@ export const PATTERNS = {
   effectHooks: {
     label: "Effect hooks",
     rightWay: "Handle the change in the event that caused it, or compute the value while rendering. useEffect is only for talking to a system outside React.",
-    source: "useEffect\\(",
+    source: "useEffect\\s*\\(",
   },
   quickFixTimers: {
     label: "Quick-fix timers",
     rightWay: "Wait for the real event or the promise. setTimeout is not a way to hope the screen is ready.",
-    source: "setTimeout\\(",
+    source: "setTimeout\\s*\\(",
   },
   typeEscapes: {
     label: "Type escapes",
@@ -132,7 +132,7 @@ export function judge({ counts, baseBaseline, headBaseline, headExceptions }) {
     if (headCap > baseCap) {
       failures.push(`${pattern.label} baseline went from ${baseCap} to ${headCap}. Do not raise scripts/risky-pattern-baseline.json. ${exceptionPath(key)}`);
     }
-    const limit = baseCap + headTally[key];
+    const limit = Math.min(baseCap, headCap) + headTally[key];
     if (count > limit) {
       failures.push(`${pattern.label} went from ${limit} allowed to ${count} in the code. ${pattern.rightWay} ${exceptionPath(key)}`);
     }
