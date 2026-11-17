@@ -12,7 +12,7 @@ test('active palette search follows late Pages availability without retyping', a
   const dom = new JSDOM('<div id="root"></div>');
   const globals = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT'];
   const previousGlobals = new Map(globals.map(key => [key, Object.getOwnPropertyDescriptor(global, key)]));
-  const modules = ['lib/state.tsx', 'store/index.ts', 'utils/getCurrentUser.ts', 'hooks/MultiPages/HTC/useHTC.tsx'].map(file => path.join(root, 'src', file));
+  const modules = ['lib/state.tsx', 'store/index.ts', 'utils/getCurrentUser.ts', 'hooks/useFlag.tsx', 'lib/flags/definitions/htpr-9030-htc-command-synonyms.ts', 'hooks/MultiPages/HTC/useHTC.tsx'].map(file => path.join(root, 'src', file));
   const previousModules = new Map(modules.map(file => [file, require.cache[file]]));
   let reactRoot;
   try {
@@ -24,10 +24,12 @@ test('active palette search follows late Pages availability without retyping', a
       [modules[0], { useRecoilState: atom => React.useState(atom.default) }],
       [modules[1], { currentProjectAtom: { default: null }, frequentlyUsedHTCAton: { default: {} } }],
       [modules[2], { getCurrentUserFromCookies: () => null }],
+      [modules[3], { useFlag: () => false }],
+      [modules[4], { HTPR_9030_HTC_COMMAND_SYNONYMS_FLAG: 'htpr-9030-htc-command-synonyms' }],
     ]) require.cache[file] = { id: file, filename: file, loaded: true, exports };
-    delete require.cache[modules[3]];
+    delete require.cache[modules[5]];
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') } });
-    const useHTC = jiti(modules[3]).default;
+    const useHTC = jiti(modules[5]).default;
     const { pageCommandGroups } = jiti(path.join(root, 'src/lib/pages/commands.ts'));
     const pages = pageCommandGroups('/detail/project-7049/1');
     const empty = [];

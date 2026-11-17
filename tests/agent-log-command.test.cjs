@@ -60,6 +60,10 @@ function searchCommands(commandGroups, query) {
       useCallback: (callback) => callback, useEffect: () => {},
       useState: (initial) => [initial, (value) => { result = value; }],
     };
+    if (specifier === "@/hooks/useFlag") return { useFlag: () => false };
+    if (specifier === "@/lib/flags/definitions/htpr-9030-htc-command-synonyms") {
+      return { HTPR_9030_HTC_COMMAND_SYNONYMS_FLAG: "htpr-9030-htc-command-synonyms" };
+    }
     if (specifier === "@/lib/state") return { useRecoilState: () => [{}] };
     if (specifier === "@/store") return {};
     if (specifier === "@/utils/getCurrentUser") return { getCurrentUserFromCookies: () => ({ id: 6 }) };

@@ -90,8 +90,10 @@ test("mobile commands select no row until the user searches", async () => {
   const storePath = path.join(root, "src/store/index.ts");
   const userPath = path.join(root, "src/utils/getCurrentUser.ts");
   const hookPath = path.join(root, "src/hooks/MultiPages/HTC/useHTC.tsx");
+  const useFlagPath = path.join(root, "src/hooks/useFlag.tsx");
+  const synonymsFlagPath = path.join(root, "src/lib/flags/definitions/htpr-9030-htc-command-synonyms.ts");
   const previousModules = new Map(
-    [statePath, storePath, userPath, hookPath].map((filename) => [
+    [statePath, storePath, userPath, useFlagPath, synonymsFlagPath, hookPath].map((filename) => [
       filename,
       require.cache[filename],
     ]),
@@ -126,6 +128,18 @@ test("mobile commands select no row until the user searches", async () => {
       filename: userPath,
       loaded: true,
       exports: { getCurrentUserFromCookies: () => null },
+    };
+    require.cache[useFlagPath] = {
+      id: useFlagPath,
+      filename: useFlagPath,
+      loaded: true,
+      exports: { useFlag: () => false },
+    };
+    require.cache[synonymsFlagPath] = {
+      id: synonymsFlagPath,
+      filename: synonymsFlagPath,
+      loaded: true,
+      exports: { HTPR_9030_HTC_COMMAND_SYNONYMS_FLAG: "htpr-9030-htc-command-synonyms" },
     };
 
     const jiti = createJiti(__filename, {

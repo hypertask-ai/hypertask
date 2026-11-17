@@ -1,6 +1,9 @@
 import { CommandGroup, ICommandList } from "@/components/Modals/commands/HTC/HTCTypes";
 import { getHTCFrecencyScore } from "@/components/Modals/commands/HTC/htcFrecency";
 import { getSearchTasksHandover } from "@/components/Modals/commands/HTC/searchTasksHandover";
+import { commandSynonymText } from "@/lib/htc/commandSynonyms";
+import { HTPR_9030_HTC_COMMAND_SYNONYMS_FLAG } from "@/lib/flags/definitions/htpr-9030-htc-command-synonyms";
+import { useFlag } from "@/hooks/useFlag";
 import { useRecoilState } from "@/lib/state";
 import { currentProjectAtom, frequentlyUsedHTCAton } from "@/store";
 import { getCurrentUserFromCookies } from "@/utils/getCurrentUser";
@@ -34,7 +37,13 @@ const isEditDistanceOne = (left: string, right: string) => {
   return true;
 };
 
-const scoreToken = (command: ICommandList, token: string) => {
+const FILLER_WORDS = new Set([
+  "a", "an", "the", "to", "my", "i", "in", "on", "off", "of", "for", "is",
+  "it", "this", "that", "do", "can", "please", "how", "and", "at", "from",
+  "be", "up", "im", "into", "with", "what", "where", "when", "let",
+]);
+
+const scoreToken = (command: ICommandList, token: string, synonyms: string) => {
   const name = command.name.toLowerCase();
   const keywords = command.keywords?.toLowerCase() ?? "";
   const nameWords = name.split(/[^a-z0-9]+/).filter(Boolean);
@@ -45,9 +54,15 @@ const scoreToken = (command: ICommandList, token: string) => {
   if (name.includes(token)) return 60;
   if (keywordWords.some((word) => word.startsWith(token))) return 40;
   if (keywords.includes(token)) return 20;
+
+  const synonymWords = synonyms.split(/[^a-z0-9]+/).filter(Boolean);
+  if (synonymWords.some((word) => word.startsWith(token))) return 35;
+  if (synonyms.includes(token)) return 18;
+
   if (token.length < 4) return 0;
   if (nameWords.some((word) => isEditDistanceOne(token, word))) return 10;
   if (keywordWords.some((word) => isEditDistanceOne(token, word))) return 5;
+  if (synonymWords.some((word) => isEditDistanceOne(token, word))) return 4;
   return 0;
 };
 
@@ -57,6 +72,7 @@ const useHTC = (
   selectFirstOnEmpty = true,
   refreshSearchOnCommandsChange = false,
 ) => {
+  const commandSynonyms = useFlag(HTPR_9030_HTC_COMMAND_SYNONYMS_FLAG);
   const [_currentProject] = useRecoilState(currentProjectAtom);
   const [frequentlyUsed] = useRecoilState(frequentlyUsedHTCAton);
   const currentUser = getCurrentUserFromCookies();
@@ -74,12 +90,11 @@ const useHTC = (
     return _currentProject?.team?.googleAccount?.userId === currentUser?.id;
   }, [_currentProject?.team?.googleAccount?.userId, currentUser?.id]);
 
-  const filterData = useCallback((searchTerm: string) => {
+  const collectResults = useCallback((searchTerm: string, synonymsEnabled: boolean) => {
     const tokens = searchTerm.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) {
-      setFilteredCommands(emptyQueryCommands);
-      return;
-    }
+    const searched = synonymsEnabled ? tokens.filter((token) => !FILLER_WORDS.has(token)) : tokens;
+    if (tokens.length === 0) return emptyQueryCommands;
+    if (searched.length === 0) return [{ group: "Results", commandLists: [] }];
 
     const seen = new Set<string>();
     const ranked = allCommands_
@@ -92,7 +107,8 @@ const useHTC = (
         return true;
       })
       .map((command) => {
-        const tokenScores = tokens.map((token) => scoreToken(command, token));
+        const synonyms = synonymsEnabled ? commandSynonymText(command.key) : "";
+        const tokenScores = searched.map((token) => scoreToken(command, token, synonyms));
         if (tokenScores.some((score) => score === 0)) return null;
 
         const usage = frequentlyUsed[command.key];
@@ -111,14 +127,22 @@ const useHTC = (
       .map(({ command }) => command);
     const searchTasksHandover = getSearchTasksHandover(searchTerm);
 
-    setFilteredCommands([{
+    return [{
       group: "Results",
       commandLists: [
         ...ranked,
         ...(searchTasksHandover ? [searchTasksHandover] : []),
       ],
-    }]);
+    }];
   }, [allCommands_, canUseCommand, emptyQueryCommands, frequentlyUsed]);
+
+  const filterData = useCallback((searchTerm: string) => {
+    if (commandSynonyms) {
+      setFilteredCommands(collectResults(searchTerm, true));
+      return;
+    }
+    setFilteredCommands(collectResults(searchTerm, false));
+  }, [collectResults, commandSynonyms]);
 
   const onKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
     setKeyword(event.target.value);
