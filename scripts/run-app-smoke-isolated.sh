@@ -20,6 +20,9 @@ fi
 if [ -d "$candidate_root/src/lib/flags/definitions" ]; then
   node "$trusted_root/scripts/generate-flag-index.mjs" "$candidate_root"
 fi
+if [ -d "$trusted_root/src/lib/flags/definitions" ]; then
+  node "$trusted_root/scripts/generate-flag-index.mjs" "$trusted_root"
+fi
 
 # Docker cannot create nested mount targets beneath the read-only /app bind.
 for candidate_mount in node_modules .next; do
@@ -304,6 +307,7 @@ docker exec "$database" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
 common_env=(
   -e DATABASE_URL=postgresql://core_smoke:core_smoke@"$database":5432/hypertask_smoke # trufflehog:ignore
   -e SESSION_SECRET=core-actions-"$run_key"
+  -e JWT_SECRET=core-mcp-"$run_key"
   -e NEXT_TELEMETRY_DISABLED=1
   -e GITHUB_ACTIONS="${GITHUB_ACTIONS:-false}"
   -e QSTASH_CALLBACK_BASE_URL=http://"$app":3100
