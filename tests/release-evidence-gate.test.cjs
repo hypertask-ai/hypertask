@@ -89,6 +89,21 @@ test('artifact lookup uses the pull request head, not the production merge commi
   assert.equal(evidenceSha(null, 'merge-sha'), 'merge-sha')
 })
 
+test('inbox evidence follows every inbox file, and downloads skip everything else', async () => {
+  const { inboxRecordingPlan, artifactsToFetch, recordingRequired } = await load()
+  const mixed = ['src/app/inbox/page.tsx', 'src/lib/auth/session.ts', 'src/lib/auth/token.ts', 'src/proxy.ts']
+  const record = { required: true, recordNow: true, upload: true }
+  assert.deepEqual(inboxRecordingPlan(mixed, 'login.md'), record)
+  assert.deepEqual(inboxRecordingPlan(mixed, null), record)
+  assert.deepEqual(inboxRecordingPlan(['src/app/inbox/page.tsx'], 'inbox.md'), { required: true, recordNow: false, upload: true })
+  assert.deepEqual(inboxRecordingPlan(['src/lib/auth/session.ts'], 'login.md'), { required: false, recordNow: false, upload: false })
+  const listed = [{ name: 'app-build', id: 1 }, { name: 'verify-qa-video-inbox', id: 2 }, { name: 'ci-test-shards', id: 3 }]
+  assert.equal(recordingRequired(['src/app/inbox/page.tsx']), true)
+  assert.deepEqual(artifactsToFetch(listed, ['src/app/inbox/page.tsx']).map((artifact) => artifact.name), ['verify-qa-video-inbox'])
+  assert.equal(recordingRequired(['docs/ci.md']), false)
+  assert.deepEqual(artifactsToFetch(listed, ['docs/ci.md']), [])
+})
+
 test('a saved zip lists its recording names', async () => {
   const { listZipEntries } = await load()
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-evidence-test-'))

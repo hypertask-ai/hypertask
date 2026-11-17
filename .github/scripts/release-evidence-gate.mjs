@@ -53,6 +53,25 @@ export function evidenceSha(merged, fallbackSha) {
   return fallbackSha
 }
 
+export function recordingRequired(files) {
+  return changedPages(files).some((page) => Object.hasOwn(RECORDED_ARTIFACTS, page))
+}
+
+export function inboxRecordingPlan(files, matchedPage) {
+  const required = changedPages(files).includes('inbox.md')
+  return {
+    required,
+    recordNow: required && matchedPage !== 'inbox.md',
+    upload: required,
+  }
+}
+
+export function artifactsToFetch(listed, files) {
+  if (!recordingRequired(files)) return []
+  const wanted = new Set(Object.values(RECORDED_ARTIFACTS))
+  return (Array.isArray(listed) ? listed : []).filter((artifact) => artifact && wanted.has(artifact.name))
+}
+
 export function listZipEntries(zipPath) {
   const listing = spawnSync('unzip', ['-Z1', zipPath], { encoding: 'utf8' })
   if (listing.status !== 0) return []
@@ -103,17 +122,18 @@ export function prFiles({ repo, pr }) {
   return out.split('\n').map((line) => line.trim()).filter(Boolean)
 }
 
-export function prArtifacts({ repo, sha }) {
+export function prArtifacts({ repo, sha, files }) {
+  if (!recordingRequired(files)) return []
   const ids = lines(['api', '--paginate', `repos/${repo}/actions/runs?head_sha=${sha}&per_page=100`, '--jq', '.workflow_runs[].id'])
-  const artifacts = []
+  const listed = []
   for (const id of ids) {
-    const listed = lines(['api', '--paginate', `repos/${repo}/actions/runs/${id}/artifacts`, '--jq', '.artifacts[] | {name: .name, id: .id}'], { allowFail: true })
-    for (const row of listed) {
-      const artifact = JSON.parse(row)
-      artifacts.push({ name: artifact.name, files: artifactFiles({ repo, id: artifact.id }) })
-    }
+    const rows = lines(['api', '--paginate', `repos/${repo}/actions/runs/${id}/artifacts`, '--jq', '.artifacts[] | {name: .name, id: .id}'], { allowFail: true })
+    for (const row of rows) listed.push(JSON.parse(row))
   }
-  return artifacts
+  return artifactsToFetch(listed, files).map((artifact) => ({
+    name: artifact.name,
+    files: artifactFiles({ repo, id: artifact.id }),
+  }))
 }
 
 function artifactFiles({ repo, id }) {
@@ -156,7 +176,7 @@ function main() {
   }
   if (!sha) throw new Error('release-evidence-gate needs the pull request head commit')
   const files = prFiles({ repo: args.repo, pr })
-  const artifacts = prArtifacts({ repo: args.repo, sha })
+  const artifacts = prArtifacts({ repo: args.repo, sha, files })
   const result = evaluate({ files, artifacts })
   const summary = [
     `Changed feature areas: ${result.pages.join(', ') || 'none'}`,
