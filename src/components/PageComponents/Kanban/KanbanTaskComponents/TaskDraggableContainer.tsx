@@ -8,6 +8,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7614_SELECTED_CARD_BORDER_FLAG } from "@/lib/flags/keys";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 import { HTPR_8927_BOARD_CARD_OVERFLOW_FLAG } from "@/lib/flags/definitions/htpr-8927-board-card-overflow";
+import { HTPR_9070_CALM_FOCUS_BAR_FLAG } from "@/lib/flags/definitions/htpr-9070-calm-focus-bar";
 interface ITaskDraggableContainer {
   children: ReactNode;
   selectionControl?: ReactNode;
@@ -45,6 +46,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   const selectedCardBorder = useFlag(HTPR_7614_SELECTED_CARD_BORDER_FLAG);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   const cardOverflowClamp = useFlag(HTPR_8927_BOARD_CARD_OVERFLOW_FLAG);
+  const calmFocusBar = useFlag(HTPR_9070_CALM_FOCUS_BAR_FLAG);
   const selectionLine = selectedCardBorder
     ? "!outline-solid !outline-1 !-outline-offset-1 !outline-hypertasks-purple"
     : "ring-1 ring-inset ring-hypertasks-purple";
@@ -61,11 +63,12 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         : "plain";
   const legacyStroke = blocked ? "border-l-[3px]" : "border-l-4";
   const selectedKeepsLayout = Boolean(onSelectToggle) && active && !blocked;
+  const paintsFocusBar = calmFocusBar && cleanup && active && !blocked && !selected;
   const cleanupStroke = {
     "selected-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
     selected: selectedKeepsLayout ? "border-l-4 border-transparent" : "border-l-0",
     "active-blocked": "border-l-4 border-[hsl(0_62.8%_30.6%)]",
-    active: "border-l-4 border-white-black",
+    active: paintsFocusBar ? "border-l-0" : "border-l-4 border-white-black",
     blocked: "border-l-4 border-[hsl(0_62.8%_30.6%)]",
     plain: "border-l-0",
   }[cardState];
@@ -87,7 +90,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   }[cardState];
   const stroked =
     cardState === "blocked" ||
-    cardState === "active" ||
+    (cardState === "active" && !paintsFocusBar) ||
     cardState === "active-blocked" ||
     cardState === "selected-blocked" ||
     (cardState === "selected" && selectedKeepsLayout);
@@ -139,6 +142,13 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
       )}
     >
       {selectionControl}
+      {paintsFocusBar && (
+        <span
+          aria-hidden="true"
+          data-focus-bar="true"
+          className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-[3px] rounded-l-[5px] bg-white-black"
+        />
+      )}
       <Link
         prefetch={false}
         className={cn(
