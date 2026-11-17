@@ -10,6 +10,7 @@ interface IParams {
   creatorId: number;
   content?: string;
   previousContent?: string | null;
+  onlyIfContent?: string | string[];
   agentId?: string | null;
   teamScope?: AgentTokenTeamScope | null;
   actingUserId: number;
@@ -48,6 +49,10 @@ const upsertTaskDescription = async (
       where: { taskId },
       select: { content: true },
     });
+    if (data.onlyIfContent !== undefined) {
+      const allowed = new Set((Array.isArray(data.onlyIfContent) ? data.onlyIfContent : [data.onlyIfContent]).flatMap((item) => [item, normalizeBlockHtml(item)]));
+      if (!allowed.has(existing?.content ?? "")) return existing;
+    }
 
     const oldContent = existing?.content ?? data.previousContent ?? "";
     await enforceAgentWriting(actingUserId, agentId, { description: content }, { description: oldContent });

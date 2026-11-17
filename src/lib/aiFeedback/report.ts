@@ -10,6 +10,7 @@ import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import upsertTaskDescription from '@/utils/controllers/description/common-description-create'
+import { AgentMutationLeaseConflictError } from '@/lib/mcp/tasks/agentMutationFence'
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
@@ -340,12 +341,17 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
             const current = (await tx.description.findUnique({ where: { taskId: existing.id }, select: { content: true } }))?.content ?? ''
             const normalizedStale = normalizeBlockHtml(stale)
             if (current === stale || current === normalizedStale) {
-              await upsertTaskDescription({
-                taskId: existing.id,
-                creatorId: actorId,
-                content: next,
-                actingUserId: actorId,
-              }, tx)
+              try {
+                await upsertTaskDescription({
+                  taskId: existing.id,
+                  creatorId: actorId,
+                  content: next,
+                  actingUserId: actorId,
+                  onlyIfContent: [stale, normalizedStale],
+                }, tx)
+              } catch (error) {
+                if (!(error instanceof AgentMutationLeaseConflictError)) throw error
+              }
             }
           }
           const count = storedCount + 1

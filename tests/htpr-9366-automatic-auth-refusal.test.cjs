@@ -11,8 +11,9 @@ test.after(() => {
   else process.env.AI_FEEDBACK_AGENT_USER_ID = previousAgentUser
 })
 
-function setup({ off = [] } = {}) {
+function setup({ off = [], onDescriptionRead } = {}) {
   const created = [], comments = [], rows = [], lookups = [], versions = []
+  const lease = { active: false }
   const disabled = new Set(off)
   const on = async (key, userId) => {
     lookups.push({ flag: key, userId })
@@ -22,7 +23,10 @@ function setup({ off = [] } = {}) {
     description: {
       findUnique: async ({ where }) => {
         const row = rows.find((row) => row.id === where.taskId)
-        return row ? { content: row.description } : null
+        if (!row) return null
+        const content = row.description
+        onDescriptionRead?.(row)
+        return { content }
       },
       update: async ({ where, data }) => {
         const row = rows.find((row) => row.id === where.taskId)
@@ -64,7 +68,7 @@ function setup({ off = [] } = {}) {
     },
     $queryRaw: async (query) => {
       const text = Array.isArray(query) ? query.join('') : ''
-      if (text.includes('TaskLease')) return []
+      if (text.includes('TaskLease')) return lease.active ? [{ agentId: 'agent-2', token: 'lease', adoptionCount: 1 }] : []
       return [{ locked: true }]
     },
     $executeRaw: async () => 0,
@@ -90,7 +94,7 @@ function setup({ off = [] } = {}) {
   })
   return {
     ...load('src/lib/aiFeedback/report.ts'),
-    load, created, comments, lookups, versions,
+    load, created, comments, lookups, versions, lease,
     enable(key) { disabled.delete(key) },
   }
 }
@@ -177,5 +181,35 @@ test('a repeat report leaves an edited refusal description in place', async () =
   assert.equal(second.deduped, true)
   assert.match(f.created[0].description, /Investigation: the key was rotated/)
   assert.match(f.created[0].description, /An engineer should look/)
+  assert.equal(f.versions.length, 0)
+})
+
+test('a description edit that lands after the stale read is kept', async () => {
+  let reads = 0
+  const f = setup({
+    off: [flag],
+    onDescriptionRead(row) {
+      reads += 1
+      if (reads === 1) row.description += '<p>Investigation: the key was rotated.</p>'
+    },
+  })
+  await f.fileAiFeedback(refused, undefined, { origin: 'automatic' })
+  f.enable(flag)
+  const second = await f.fileAiFeedback(refused, undefined, { origin: 'automatic' })
+  assert.equal(second.count, 2)
+  assert.match(f.created[0].description, /Investigation: the key was rotated/)
+  assert.match(f.created[0].description, /An engineer should look/)
+  assert.equal(f.versions.length, 0)
+})
+
+test('an active lease skips the rewrite and still records the repeat', async () => {
+  const f = setup({ off: [flag] })
+  await f.fileAiFeedback(refused, undefined, { origin: 'automatic' })
+  const before = f.created[0].description
+  f.enable(flag)
+  f.lease.active = true
+  const second = await f.fileAiFeedback(refused, undefined, { origin: 'automatic' })
+  assert.equal(second.count, 2)
+  assert.equal(f.created[0].description, before)
   assert.equal(f.versions.length, 0)
 })
