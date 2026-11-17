@@ -133,6 +133,11 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         };
     }
 
+    if (options.actingAgentId ?? agentId) {
+        const { defaultAgentBrainLabelIds } = await import("@/lib/agents/defaultBrainLabel");
+        taskData.taskLabels = { create: (await defaultAgentBrainLabelIds(projectId, labelIds ?? [])).map(labelId => ({ labelId })) };
+    }
+
     if (priorityIndex > 0) {
         const priorityConstant = PriorityConstants.find(p => p.priority_index === priorityIndex);
         if (priorityConstant) {

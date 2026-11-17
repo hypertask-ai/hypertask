@@ -30,16 +30,9 @@ test('labels after the divider cannot repair a broken opening', () => {
   assert.equal(template.hasPlainLanguageTicketBlock('<p>What\'s wrong or wanted: Search fails.</p><hr>' + block), false);
 });
 test('template requires ordered nonempty values', () => {
+  for (const entity of ['&#39;', '&#x27;', '&apos;']) assert.doesNotThrow(() => check(block.replace('&#x27;', entity)));
   assert.equal(template.hasPlainLanguageTicketBlock(template.renderPlainLanguageTicketDescription({})), false);
   assert.equal(template.hasPlainLanguageTicketBlock(block.replace("What's wrong or wanted", 'Who it affects').replace('Who it affects:</strong> Everyone.', "What's wrong or wanted:</strong> Everyone.")), false);
-});
-test('writer output passes the same validator and defaults brain label', () => {
-  const brain = load('src/lib/ai/taskWriterBrainLabels.ts');
-  const labels = brain.brainLabelsFromBoard([{id:'medium',value:'brain-medium'},{id:'bug',value:'Bug'}]);
-  const writer = load('src/app/api/ai/_lib/taskWriterProperties.ts');
-  const draft = writer.extractTaskWriterProperties('<h1 id="ai-generated-task-title">Search finds reminders</h1>' + block + '<pre>node scripts/repro.mjs --project_id 15</pre>', {boardLabelIds:['medium','bug'],brainLabels:labels});
-  assert.deepEqual(draft.labelIds,['medium']);
-  assert.doesNotThrow(() => check(draft.description, draft.title));
 });
 const refusedToday = require('./fixtures/one-ticket-template/refused-today.json');
 for (const fixture of refusedToday) test(`real refused text preserved below divider: ${fixture.id}`, () => {

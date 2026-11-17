@@ -486,11 +486,6 @@ export async function createTask(data: {
         tags = validLabels.map(l => ({ id: l.id }));
     }
 
-    if (agentId) {
-        const { defaultAgentBrainLabelIds } = await import('@/lib/agents/defaultBrainLabel');
-        tags = (await defaultAgentBrainLabelIds(projectId, tags.map((tag) => tag.id))).map((id) => ({ id }));
-    }
-
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: {

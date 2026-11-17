@@ -60,7 +60,7 @@ function structuredText(html) {
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n"))
     .replace(/&nbsp;/gi, " ")
-    .replace(/&#x27;/gi, "'")
+    .replace(/&#(?:x27|39);/gi, "'")
     .replace(/&apos;/gi, "'")
     .replace(/&quot;/gi, '"')
     .replace(/&lt;/gi, "<")
