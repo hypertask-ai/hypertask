@@ -413,7 +413,7 @@
               "contentHeight": true,
               "box": {
                 "x": 10,
-                "y": 216,
+                "y": 240,
                 "width": 370,
                 "height": 267
               }
@@ -423,7 +423,7 @@
               "contentHeight": true,
               "box": {
                 "x": 10,
-                "y": 499,
+                "y": 523,
                 "width": 370,
                 "height": 88
               }
@@ -433,7 +433,7 @@
               "contentHeight": true,
               "box": {
                 "x": 10,
-                "y": 587,
+                "y": 611,
                 "width": 370,
                 "height": 88
               }
@@ -442,9 +442,9 @@
               "selector": "[data-testid=\"comment-composer\"]",
               "box": {
                 "x": 0,
-                "y": 775,
+                "y": 770,
                 "width": 390,
-                "height": 69
+                "height": 74
               }
             },
             "properties": {
@@ -452,18 +452,18 @@
               "contentHeight": true,
               "box": {
                 "x": 10,
-                "y": -160,
+                "y": 70,
                 "width": 370,
-                "height": 360
+                "height": 154
               }
             }
           },
           "order": [
             [
-              "properties"
+              "title"
             ],
             [
-              "title"
+              "properties"
             ],
             [
               "description"
@@ -771,10 +771,11 @@
       }
     }
   },
-  "sourceCommit": "3c4e12bf8bac0a9315cc4c1cda5086bff7dcbf70",
+  "sourceCommit": "d832892a544984234b6ac753ae32b57f504885d5",
   "flagMode": "live-like",
-  "flagSnapshotSha256": "dbe55bec498b41eea368b0b8f51e532ef208dfb6565338725bb755822439f505",
+  "flagSnapshotSha256": "364d4e12afe353ccc15903bb443b975c2c55e4688aca5f06750d6e8c8b7d8ddb",
   "approvedIn": {
+    "ticket/Mobile": "https://app.hypertask.ai/detail/project-15/8991",
     "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-15/6940",
     "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-15/6940",
     "ticket/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
