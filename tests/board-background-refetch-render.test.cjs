@@ -41,6 +41,7 @@ const moduleMocks = {
   "@/lib/flags/definitions/htpr-8243-board-switch-address": { HTPR_8243_BOARD_SWITCH_ADDRESS_FLAG: "htpr-8243-board-switch-address" },
   "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
   "@/lib/flags/definitions/htpr-8171-hide-tags": { HTPR_8171_HIDE_TAGS_FLAG: "htpr-8171-hide-tags" },
+  "@/lib/flags/definitions/htpr-9361-blocked-skips-done": { HTPR_9361_BLOCKED_SKIPS_DONE_FLAG: "htpr-9361-blocked-skips-done" },
   "../unauthorized/page": { __esModule: true, default: noopComponent },
   "@/components/Global/FirstScreenMobileChrome": { __esModule: true, default: noopComponent },
   "@/hooks/useConnectAgentOverlay": { useConnectAgentOverlay: () => ({ blocked: false }) },

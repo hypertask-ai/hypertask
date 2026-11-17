@@ -14,19 +14,23 @@ export default function CycleBoardMeta({
   const ruleEnabled = useFlag(HTPR_9361_BLOCKED_SKIPS_DONE_FLAG);
   const rule = ruleEnabled ? getBuiltinView(activeViewId)?.rule : undefined;
 
-  if (
-    !project.cyclesEnabled ||
-    (activeViewId !== BUILTIN_VIEW_IDS.currentCycle &&
-      activeViewId !== BUILTIN_VIEW_IDS.nextCycle)
-  ) {
-    return rule ? (
+  if (rule) {
+    return (
       <p
         className="w-[97%] text-dense text-text-light-gray"
         data-testid="builtin-view-rule"
       >
         {rule}
       </p>
-    ) : null;
+    );
+  }
+
+  if (
+    !project.cyclesEnabled ||
+    (activeViewId !== BUILTIN_VIEW_IDS.currentCycle &&
+      activeViewId !== BUILTIN_VIEW_IDS.nextCycle)
+  ) {
+    return null;
   }
 
   const window = resolveCycleWindow(project.cycles ?? []);
