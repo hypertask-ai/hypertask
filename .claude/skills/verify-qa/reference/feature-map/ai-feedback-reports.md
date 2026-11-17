@@ -4,7 +4,7 @@
 
 - `feature-map-automatic-ai-feedback-tickets` Feature map: automatic AI feedback tickets.
 - `plain-ai-feedback` With `htpr-7536-plain-ai-feedback` on, the ticket is plain sentences: what happened, who hit it, whether it looks like a bug, and what to do. An agent access refusal (wrong key, or a board or action the agent may not use) updates an open matching ticket and does not open a new one. A 5xx still files. Flag off keeps the previous report text.
-- `quiet-fixable-reports` With `htpr-7941-quiet-fixable-reports` on, an MCP 400 the caller can correct from the named field or listed value does not file a ticket. The same fingerprint already filed in the last 24 hours is not filed again. A refusal that names nothing the caller can fix still files. Flag off files every refusal.
+- `quiet-fixable-reports` With `htpr-7941-quiet-fixable-reports` on, an MCP 400 the caller can correct from the named field or listed value does not file a ticket. The same fingerprint already filed in the last 24 hours is not filed again. A refusal that names nothing the caller can fix still files. The flag ships at EVERYONE. Runners never switch it Off, so a live flag-off check is UNREACHABLE. Even in the off state, `fileAiFeedback` still drops an automatic 400 through `quietInputRefusal` in `src/lib/aiFeedback/callerFixable.ts` when the code is `unrecognized_keys`, `invalid_enum_value` or `unrecognized`, or a named-field code such as `invalid_type` that includes a field. The flag is unread on that drop. Other caller-fixable refusals file only in that off state. Proof is `tests/htpr-7941-quiet-fixable-reports.test.cjs`.
 - `agent-feedback-note` With `htpr-8275-agent-feedback-note` on, an internal Hypertask account keeps `kind` (`bug`, `friction`, `missing` or `idea`) and a short note of plain words, with credentials stripped. Any other account drops that free text. The title becomes `Agent feedback, <kind>: <note>`. Flag off drops the kind before filing.
 - `feedback-slack-line` With `htpr-8276-feedback-slack-line` on, a new board-15 ticket that carries the `ai-feedback` label posts one Slack line: kind, summary, and `https://app.hypertask.ai/detail/project-15/<index>`. No channel or no Slack install posts nothing and still creates the ticket. Flag off posts nothing.
 
@@ -38,7 +38,10 @@ after: a refusal that opens a ticket is the bug this page exists for.
 - `tests/htpr-7536-plain-ai-feedback.test.cjs` covers the plain sections and
   the access refusal that must not open a ticket.
 - `tests/htpr-7941-quiet-fixable-reports.test.cjs` covers a caller-fixable
-  refusal and the 24-hour fingerprint.
+  refusal and the 24-hour fingerprint. Do not turn
+  `htpr-7941-quiet-fixable-reports` Off. A live flag-off check is
+  UNREACHABLE. The test is the proof that `unrecognized_keys` and
+  `invalid_type` with a field stay dropped when the flag is off.
 - `tests/htpr-8275-agent-feedback-note.test.cjs` covers the internal note
   and the dropped customer text.
 - `tests/htpr-8276-feedback-slack-line.test.cjs` covers the one Slack line.
