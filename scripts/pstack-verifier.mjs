@@ -159,14 +159,16 @@ function sameSeries(seen, planned, key) {
   if (seen.length !== planned.length) return false;
   return seen.every((item, index) => item?.[key] == null || JSON.stringify(item[key]) === JSON.stringify(planned[index]));
 }
-export function decide({ model = {}, plan, evidence, binding, checksPassed = false }) {
+export function decide({ model = {}, plan, evidence, binding, checksPassed = false, checksPending = false }) {
   let parsed;
   try { parsed = readPlan(plan, binding); } catch { return { verdict: "FAIL", notes: "schema/binding mismatch" }; }
   if (parsed.fail) return { verdict: "FAIL", notes: String(parsed.fail).slice(0, 500) };
   if (!parsed.actions.length) {
     const reason = String(parsed.reason ?? "").replace(/\s+/g, " ").trim();
     const files = Array.isArray(parsed.files) ? parsed.files : [];
+    if (listWasTruncated(parsed, files)) return { verdict: "FAIL", notes: "file list truncated" };
     if (files.length && !hasAppPath(files) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
+    if (checksPending) return { verdict: "FAIL", notes: "checks still running" };
     return { verdict: "FAIL", notes: (reason ? `no user path verified: ${reason}` : "no user path verified").slice(0, 500) };
   }
   let seen;
@@ -228,9 +230,51 @@ export function hasAppPath(files) {
 export function confirmsNoUserPath(reason) {
   return /no user path|no user-facing/i.test(String(reason ?? ""));
 }
+export const FILE_LIST_CAP = 100;
+export const CI_WAIT_ROUNDS = 40;
+export const CI_WAIT_INTERVAL_MS = 30000;
+function relevantChecks(runs) {
+  return (Array.isArray(runs) ? runs : []).filter((run) => run?.name !== CONTEXT);
+}
+function listWasTruncated(plan, files) {
+  if (plan?.filesTruncated === true) return true;
+  if (plan?.filesTruncated === false) return false;
+  return files.length >= FILE_LIST_CAP;
+}
+export function takeFileList(names) {
+  const all = (Array.isArray(names) ? names : []).map((file) => String(file ?? "")).filter(Boolean);
+  return { files: all.slice(0, FILE_LIST_CAP), filesTruncated: all.length > FILE_LIST_CAP };
+}
+export function planFileList(request) {
+  const listed = takeFileList(Array.isArray(request?.files) ? request.files : []);
+  return { files: listed.files, filesTruncated: request?.filesTruncated === true || listed.filesTruncated };
+}
+export function ciChecksPending(runs) {
+  const relevant = relevantChecks(runs);
+  return relevant.length === 0 || relevant.some((run) => run?.conclusion == null);
+}
 export function ciChecksPassed(runs) {
-  const relevant = (Array.isArray(runs) ? runs : []).filter((run) => run?.name !== CONTEXT);
+  const relevant = relevantChecks(runs);
   return relevant.length > 0 && relevant.every((run) => run.conclusion === "success" || run.conclusion === "skipped");
+}
+export async function collectCheckRuns(readPage, pages = 5) {
+  const runs = [];
+  for (let page = 1; page <= pages; page += 1) {
+    const body = await readPage(page);
+    const chunk = Array.isArray(body?.check_runs) ? body.check_runs : [];
+    runs.push(...chunk);
+    if (runs.length >= Number(body?.total_count) || chunk.length < 100) return runs;
+  }
+  return runs;
+}
+export async function waitForCiChecks(read, { sleep = (ms) => new Promise((done) => { setTimeout(done, ms); }), rounds = CI_WAIT_ROUNDS, intervalMs = CI_WAIT_INTERVAL_MS } = {}) {
+  let runs = [];
+  for (let round = 0; round < rounds; round += 1) {
+    runs = await read();
+    if (!ciChecksPending(runs)) return runs;
+    if (round + 1 < rounds) await sleep(intervalMs);
+  }
+  return runs;
 }
 async function control(page, name, roles) {
   const locators = roles.map((role) => page.getByRole(role, { name, exact: true }).first());
@@ -435,20 +479,21 @@ async function resolveCommand() {
     output({ stop: "true" });
     return;
   }
-  const files = gh(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[].filename"]).split("\n").filter(Boolean).slice(0, 100);
+  const listed = takeFileList(gh(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[].filename"]).split("\n"));
   const diff = gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/pulls/${item.number}`]).slice(0, 12000);
   const dir = path.join(workDir(), "request");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "request.json"), `${JSON.stringify({ ...bound, pr: item.number, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files, author: gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" })}\n`, { mode: 0o600 });
+  writeFileSync(path.join(dir, "request.json"), `${JSON.stringify({ ...bound, pr: item.number, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" })}\n`, { mode: 0o600 });
   await postStatus({ repo, ...bound, state: "pending", description: "Planning a user check" });
-  output({ stop: "false", pr: String(item.number), sha, files: files.join("\n"), author: gate.author });
+  output({ stop: "false", pr: String(item.number), sha, files: listed.files.join("\n"), author: gate.author });
 }
 async function planCommand() {
   const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
   const binding = bindingNow();
   if (request.sha !== binding.sha || String(request.run) !== binding.run || String(request.attempt) !== binding.attempt) throw new Error("schema/binding mismatch");
   const picked = pickVerifier(request.author, process.env.PSTACK_VERIFIER_ALT_MODEL);
-  const plan = { ...binding, authorFamily: request.author, verifierModel: picked.model || "", actions: [], expect: [], reason: "", fail: picked.fail || "", files: Array.isArray(request.files) ? request.files.map(String).slice(0, 100) : [], claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
+  const listed = planFileList(request);
+  const plan = { ...binding, authorFamily: request.author, verifierModel: picked.model || "", actions: [], expect: [], reason: "", fail: picked.fail || "", files: listed.files, filesTruncated: listed.filesTruncated, claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
   if (!picked.fail) {
     try {
       const parsed = parsePlan(await completeWithOpenRouter(buildPrompt({ kind: "plan", ...request }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model }));
@@ -475,20 +520,17 @@ async function judgeCommand() {
     } catch (error) { model = { verdict: "FAIL", notes: failureText(error, 220) }; }
   }
   let checksPassed = false;
-  if (!plan.fail && !plan.actions.length) {
+  let checksPending = false;
+  const files = Array.isArray(plan.files) ? plan.files : [];
+  if (!plan.fail && !plan.actions.length && !listWasTruncated(plan, files)) {
     try {
       const repo = requireRepo(process.env.GITHUB_REPOSITORY);
-      const runs = [];
-      for (let page = 1; page <= 5; page += 1) {
-        const body = JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`]));
-        const chunk = Array.isArray(body.check_runs) ? body.check_runs : [];
-        runs.push(...chunk);
-        if (runs.length >= Number(body.total_count) || chunk.length < 100) break;
-      }
+      const runs = await waitForCiChecks(() => collectCheckRuns((page) => JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`]))));
       checksPassed = ciChecksPassed(runs);
+      checksPending = ciChecksPending(runs);
     } catch (error) { console.log(`ci checks unread: ${failureText(error)}`); }
   }
-  const verdict = decide({ model, plan, evidence, binding, checksPassed });
+  const verdict = decide({ model, plan, evidence, binding, checksPassed, checksPending });
   const dir = path.join(workDir(), "verdict");
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, authorFamily: plan.authorFamily || "", verifierModel: plan.verifierModel || "" })}\n`, { mode: 0o600 });

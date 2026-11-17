@@ -35,7 +35,7 @@ function tokenGaps(jobs) {
   return gaps;
 }
 
-test("each verifier job has the declared permissions, key and token", () => {
+test("each verifier job has the declared permissions, key and token", async () => {
   assert.deepEqual(request.permissions, {});
   assert.deepEqual(trusted.permissions, {});
   for (const [name, permissions] of Object.entries(expected)) assert.deepEqual(trusted.jobs[name].permissions, permissions, name);
@@ -63,4 +63,6 @@ test("each verifier job has the declared permissions, key and token", () => {
   assert.equal(policy.pstack_verifier.note, "enable after hosted proof");
   assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), false);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
+  const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS } = await import("../scripts/pstack-verifier.mjs");
+  assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
 });

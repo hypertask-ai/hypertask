@@ -53,6 +53,74 @@ test("an empty plan logs its reason and passes only for a non-app change with gr
   assert.equal(ciChecksPassed([{ name: CONTEXT, conclusion: "failure" }]), false);
 });
 
+test("a truncated file list cannot take the non-app pass", async () => {
+  const { decide, takeFileList, planFileList } = await load();
+  const names = [...Array.from({ length: 100 }, (_, index) => `docs/a${index}.md`), "src/app/page.tsx"];
+  const listed = takeFileList(names);
+  assert.equal(listed.files.length, 100);
+  assert.equal(listed.filesTruncated, true);
+  assert.equal(listed.files.includes("src/app/page.tsx"), false);
+  const reason = "no user path in this diff";
+  const hidden = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: listed.files, filesTruncated: listed.filesTruncated }), evidence: null, binding, checksPassed: true });
+  assert.equal(hidden.verdict, "FAIL");
+  assert.equal(hidden.notes, "file list truncated");
+  const kept = planFileList({ files: listed.files, filesTruncated: true });
+  assert.equal(kept.filesTruncated, true);
+  assert.equal(kept.files.length, 100);
+  const whole = takeFileList(["docs/ci.md", "scripts/pstack-verifier.mjs"]);
+  assert.deepEqual(whole, { files: ["docs/ci.md", "scripts/pstack-verifier.mjs"], filesTruncated: false });
+  const unmarked = decide({
+    model: { verdict: "", notes: "" },
+    plan: plan([], { reason, files: Array.from({ length: 100 }, () => "docs/ci.md") }),
+    evidence: null,
+    binding,
+    checksPassed: true,
+  });
+  assert.equal(unmarked.verdict, "FAIL");
+  assert.equal(unmarked.notes, "file list truncated");
+  const markedWhole = decide({
+    model: { verdict: "", notes: "" },
+    plan: plan([], { reason, files: Array.from({ length: 100 }, () => "docs/ci.md"), filesTruncated: false }),
+    evidence: null,
+    binding,
+    checksPassed: true,
+  });
+  assert.equal(markedWhole.verdict, "PASS+NOTES");
+});
+
+test("empty-plan checks wait until conclusions land", async () => {
+  const { waitForCiChecks, collectCheckRuns, ciChecksPassed, ciChecksPending, decide, CONTEXT } = await load();
+  const reason = "no user path in this diff";
+  const pending = [{ name: "ci-tests", conclusion: null, status: "in_progress" }];
+  const done = [{ name: "ci-tests", conclusion: "success", status: "completed" }, { name: "browser-smoke", conclusion: "skipped" }, { name: CONTEXT, conclusion: null }];
+  let reads = 0;
+  const runs = await waitForCiChecks(async () => {
+    reads += 1;
+    return reads < 3 ? pending : done;
+  }, { sleep: async () => {}, rounds: 5, intervalMs: 25 });
+  assert.equal(reads, 3);
+  assert.equal(ciChecksPending(runs), false);
+  assert.equal(ciChecksPassed(runs), true);
+  const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: ciChecksPassed(runs), checksPending: ciChecksPending(runs) });
+  assert.equal(passed.verdict, "PASS+NOTES");
+  const early = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: false, checksPending: true });
+  assert.equal(early.verdict, "FAIL");
+  assert.equal(early.notes, "checks still running");
+  const stuck = await waitForCiChecks(async () => pending, { sleep: async () => {}, rounds: 3, intervalMs: 1 });
+  assert.equal(ciChecksPending(stuck), true);
+  assert.equal(ciChecksPassed(stuck), false);
+  const pages = [];
+  const collected = await collectCheckRuns(async (page) => {
+    pages.push(page);
+    if (page === 1) return { total_count: 101, check_runs: Array.from({ length: 100 }, (_, index) => ({ name: `check-${index}`, conclusion: "success" })) };
+    return { total_count: 101, check_runs: [{ name: "last", conclusion: "failure" }] };
+  });
+  assert.deepEqual(pages, [1, 2]);
+  assert.equal(collected.length, 101);
+  assert.equal(ciChecksPassed(collected), false);
+  assert.equal(ciChecksPending([]), true);
+});
+
 test("a failed expect fails even when the model says PASS", async () => {
   const { decide } = await load();
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
