@@ -372,7 +372,7 @@ async function control(page, name, roles) {
     }));
   } catch { return null; }
 }
-async function perform(page, action, base, projectId, navigations, taskId, mcpToken) {
+async function perform(page, action, base, projectId, navigations, taskId, bearer) {
   if (action.op === "goto") {
     const target = new URL(seedPath(action.path, projectId), base).toString();
     const response = await page.goto(target, { waitUntil: "domcontentloaded", timeout: 20000 });
@@ -409,14 +409,14 @@ async function perform(page, action, base, projectId, navigations, taskId, mcpTo
     return;
   }
   if (action.op === "shot") return "";
-  if (action.op === "api") return callApi(page, action, base, projectId, taskId, mcpToken);
+  if (action.op === "api") return callApi(page, action, base, projectId, taskId, bearer);
   throw new Error("not actionable");
 }
-async function callApi(page, action, base, projectId, taskId, mcpToken) {
+async function callApi(page, action, base, projectId, taskId, bearer) {
   const target = fillApiPath(action.path, projectId, taskId, base);
   const mcp = target.pathname === "/api/mcp" || target.pathname.startsWith("/api/mcp/");
-  if (mcp && !mcpToken) throw new Error("mcp token is missing");
-  const headers = mcp ? { Authorization: `Bearer ${mcpToken}` } : {};
+  if (mcp && !bearer) throw new Error("mcp token is missing");
+  const headers = mcp ? { Authorization: `Bearer ${bearer}` } : {};
   const options = { method: action.method, headers, maxRedirects: 0, failOnStatusCode: false };
   if (action.method !== "GET") options.data = action.body ?? {};
   const response = await page.request.fetch(target.toString(), options);
@@ -425,14 +425,14 @@ async function callApi(page, action, base, projectId, taskId, mcpToken) {
   if (status !== action.expectStatus) throw new Error(`api status ${status}`);
   if (!raw.includes(action.expectText)) throw new Error("response text missing");
   const at = raw.indexOf(action.expectText);
-  return redact(raw.slice(Math.max(0, at - 40), at + action.expectText.length + 80), [mcpToken, ...secretValues()]).slice(0, 180);
+  return redact(raw.slice(Math.max(0, at - 40), at + action.expectText.length + 80), [bearer, ...secretValues()]).slice(0, 180);
 }
-export async function runPlan({ page, plan, base, projectId, taskId, mcpToken, shotsDir, navigations }) {
+export async function runPlan({ page, plan, base, projectId, taskId, bearer, shotsDir, navigations }) {
   const steps = [], expects = [];
   const apiOnly = plan.actions.every((action) => action.op === "api");
   for (const [index, action] of plan.actions.entries()) {
     let ok = true, error = "", text = "";
-    try { text = (await perform(page, action, base, projectId, navigations, taskId, mcpToken)) || ""; }
+    try { text = (await perform(page, action, base, projectId, navigations, taskId, bearer)) || ""; }
     catch (caught) { ok = false; error = failureText(caught); }
     if (!apiOnly) {
       try {

@@ -565,7 +565,7 @@ test("an api action passes from the preview response with no page navigation", a
     async screenshot() { throw new Error("screenshot"); },
     request: { async fetch(url, options) { calls.push({ url, options }); return { status: () => 200, async text() { return '{"ok":true,"saved":true}'; } }; } },
   };
-  const drive = { base: "http://127.0.0.1:3100", projectId: "4", taskId: "7", mcpToken: "smoke-token", shotsDir: "/tmp", navigations: [] };
+  const drive = { base: "http://127.0.0.1:3100", projectId: "4", taskId: "7", bearer: "smoke-token", shotsDir: "/tmp", navigations: [] };
   const body = plan(parsed.actions);
   const run = await runPlan({ page, plan: body, ...drive });
   assert.deepEqual(calls, [{ url: "http://127.0.0.1:3100/api/mcp/tasks/7", options: { method: "POST", headers: { Authorization: "Bearer smoke-token" }, maxRedirects: 0, failOnStatusCode: false, data: {} } }]);
