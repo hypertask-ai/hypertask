@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process'
+import { closeSync, mkdtempSync, openSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { selectJourney } from './verify-qa-premerge.mjs'
 
 export const RECORDED_ARTIFACTS = {
@@ -43,6 +46,17 @@ export function failureMessage(result, { pr = null, sha = null } = {}) {
   const where = pr ? `PR #${pr}` : sha ? `commit ${sha}` : 'this release'
   const named = result.missing.map((entry) => `${entry.page} (expected artifact ${entry.artifact})`).join(', ')
   return `Release evidence missing for changed feature area: ${named} on ${where}. Record the changed screen and upload the artifact before releasing.`
+}
+
+export function evidenceSha(merged, fallbackSha) {
+  if (merged && merged.headSha) return merged.headSha
+  return fallbackSha
+}
+
+export function listZipEntries(zipPath) {
+  const listing = spawnSync('unzip', ['-Z1', zipPath], { encoding: 'utf8' })
+  if (listing.status !== 0) return []
+  return listing.stdout.split('\n').map((line) => line.trim()).filter(Boolean)
 }
 
 export function parseArgs(argv) {
@@ -103,9 +117,23 @@ export function prArtifacts({ repo, sha }) {
 }
 
 function artifactFiles({ repo, id }) {
-  const listing = spawnSync('bash', ['-c', `gh api repos/${repo}/actions/artifacts/${id}/zip | unzip -Z1 -`], { encoding: 'utf8', env: process.env })
-  if (listing.status !== 0) return []
-  return listing.stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+  const dir = mkdtempSync(join(tmpdir(), 'release-evidence-'))
+  const file = join(dir, 'artifact.zip')
+  const output = openSync(file, 'w')
+  let closed = false
+  try {
+    const download = spawnSync('gh', ['api', `repos/${repo}/actions/artifacts/${id}/zip`], {
+      stdio: ['ignore', output, 'pipe'],
+      env: process.env,
+    })
+    closeSync(output)
+    closed = true
+    if (download.status !== 0) return []
+    return listZipEntries(file)
+  } finally {
+    if (!closed) closeSync(output)
+    rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 function main() {
@@ -120,7 +148,7 @@ function main() {
       return
     }
     pr = merged.number
-    sha = sha || merged.headSha
+    sha = evidenceSha(merged, sha)
   }
   if (!sha) {
     const pull = ghJson(['api', `repos/${args.repo}/pulls/${pr}`, '--jq', '{sha: .head.sha}'])

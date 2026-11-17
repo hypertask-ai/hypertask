@@ -27,9 +27,6 @@ export default defineConfig({
     // view without exposing the smoke account's session cookie.
     trace: 'off',
     screenshot: 'only-on-failure',
-    // VERIFY_QA_RECORD is set only by the premerge verify-qa journey, whose
-    // recording is the release evidence (HTPR-9413). Traces stay off because
-    // they carry authenticated network traffic; video carries pixels only.
     video: process.env.VERIFY_QA_RECORD === '1' ? 'on' : 'off',
   },
   globalSetup: './e2e/smoke/global-setup.ts',

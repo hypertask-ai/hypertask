@@ -2177,9 +2177,23 @@ jobs:
           path: verify-qa-premerge/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Decide whether this recording is the inbox journey
+        id: inbox-recording
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        run: |
+          set -euo pipefail
+          page=""
+          if [ -f verify-qa-premerge/result.json ]; then
+            page="$(node -e "const fs=require('node:fs'); const result=JSON.parse(fs.readFileSync('verify-qa-premerge/result.json','utf8')); process.stdout.write(result.matchedPage||'')")"
+          fi
+          if [ "$page" = "inbox.md" ]; then
+            echo "upload=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Upload the recorded inbox video
         id: verify-qa-video
-        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        if: always() && steps.inbox-recording.outputs.upload == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verify-qa-video-inbox

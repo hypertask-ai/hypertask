@@ -232,12 +232,15 @@ async function runSeededInboxCycle({ base, stateFile, items, outDir }) {
   let browser
   let page
   const runId = process.env.GITHUB_RUN_ID || 'local'
+  const videoDir = path.join(outDir, 'test-results', 'inbox-cycle')
   try {
+  await mkdir(videoDir, { recursive: true })
   browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     baseURL: base,
     storageState: stateFile,
+    recordVideo: { dir: videoDir, size: { width: 1440, height: 900 } },
   })
   page = await context.newPage()
   async function gate(name, fn) {
