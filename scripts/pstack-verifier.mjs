@@ -729,6 +729,7 @@ async function main() {
   else if (command === "post") await postCommand();
   else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|post");
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
+if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   main().catch((error) => { console.error(redact(error.message ?? String(error), secretValues())); process.exitCode = 1; });
 }

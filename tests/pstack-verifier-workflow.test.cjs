@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
-const { spawnSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } = require("node:fs");
+const { createServer } = require("node:http");
 const { tmpdir } = require("node:os");
 const { dirname, join } = require("node:path");
 const test = require("node:test");
@@ -174,6 +175,63 @@ test("the held smoke records the host preview url when the preview check passes"
   const { result, ready, dir } = runHeldSmoke(t, true);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
+});
+
+function listenPreview(t) {
+  const server = createServer((_, response) => {
+    response.writeHead(200, { "content-type": "text/plain" });
+    response.end("ok");
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(3100, "127.0.0.1", () => {
+      t.after(() => new Promise((done) => server.close(done)));
+      resolve();
+    });
+  });
+}
+
+test("a listening preview stays ready when node -e imports the verifier", async (t) => {
+  await listenPreview(t);
+  const dir = mkdtempSync(join(tmpdir(), "pstack-preview-live-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, "bin");
+  mkdirSync(bin);
+  mkdirSync(join(dir, "candidate"));
+  mkdirSync(join(dir, "trusted", "scripts"), { recursive: true });
+  copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(dir, "trusted", "scripts", "pstack-verifier.mjs"));
+  writeFileSync(join(bin, "docker"), dockerStub(join(dir, "docker.log")), { mode: 0o755 });
+  const ready = join(dir, "ready.env");
+  const stop = join(dir, "stop");
+  writeFileSync(stop, "");
+  const result = await new Promise((resolve) => {
+    const child = spawn("bash", [join(root, "scripts/run-app-smoke-isolated.sh"), join(dir, "candidate"), join(dir, "trusted")], {
+      env: {
+        PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
+        PSTACK_VERIFIER_HOLD: "1",
+        PSTACK_VERIFIER_READY: ready,
+        PSTACK_VERIFIER_STOP: stop,
+        RUNNER_TEMP: dir,
+        CORE_SMOKE_TRUSTED_DEPENDENCIES: "false",
+        TMPDIR: dir,
+      },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    const timer = setTimeout(() => child.kill("SIGKILL"), 20000);
+    child.on("close", (status) => {
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr });
+    });
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(result.stderr.includes("preview did not start"), false);
+  assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
+  const cli = spawnSync(process.execPath, [join(root, "scripts/pstack-verifier.mjs")], { encoding: "utf8" });
+  assert.equal(cli.status, 1);
+  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|post/);
 });
 
 function playwrightModules() {
