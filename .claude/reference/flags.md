@@ -117,3 +117,11 @@ Use one ticket-specific flag for new features, deliberate behavior/design change
 | Cleanup after 7 days for bugfixes, otherwise 14; money/access/deletion stay 14 | Feature-flag-removals cron files up to 10 tickets daily; never switches flags |
 
 Mechanical title exemptions are bounded heuristics, not permission to omit a required flag. Never retitle a PR or weaken a check to pass it. See [flag-release detail](../../.claude/reference/flags.md) and the gate implementation for syntax and thresholds.
+
+## Switching flags from a session
+
+Use `ht-flag` through your session identity. Existing switches require the supported approval path: a clear unedited yes within seven days, matched to the named flag and mode. A thumbs-up, Valentin's own comment, or an HT Product Lead record of his exact chat words may qualify. Re-read comments and reactions before repeating a wait. Ambiguous yes is not approval. Batch approvals must name every switch together.
+
+The reason must link to the exact approval comment. A later human no withdraws approval; edited, conditional, or ambiguous answers do not approve. Everyone review switches require policy approval, another flag-owner agent's independent review, and live evidence; the writer cannot review itself. Reviews are single-use within 24 hours. High-risk flags retain the human-approval path. Run the core inbox cycle as QA 985 before requesting Everyone and immediately afterward. A failure means Owner + QA first, never Off. Never park a ticket in Valentin Review merely to request a flag switch.
+
+For any flagged failure, a flag-owner write/admin agent holds the flag at Owner + QA with `ht-flag set KEY owner-qa --failure "<reason>"`, then repairs. Never switch a flag Off: Off is Valentin's own safety switch. A hold narrows who sees a broken feature, so it needs no approval and applies to every flag, including high-risk and bugfix. The action is audited and refuses no-ops. Other modes retain approval requirements. A held flag stays held until Valentin decides its next mode; never turn a failed flag back on automatically. Only Valentin may open the admin page with his login; runners use approved APIs.

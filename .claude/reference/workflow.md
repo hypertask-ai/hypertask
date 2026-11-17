@@ -15,7 +15,7 @@ Every access or security fix adds a "still allowed" test next to its "now refuse
 - Hypertask skills reuse the shared agent method. Never duplicate that method here. (2026-10-25, why: prevent conflicting copies)
 - Plain ticket comments use the agent lane. Verbose is fine. `question`, `qa`, and `done` use human threads. Use plain words, eight words per sentence. (2026-10-25, why: separate agent notes from human updates)
 - Hypertask AI task-writer changes need Valentin's approval. This covers prompts, models, and output formats. (2026-10-25, why: preserve the approved writing behavior)
-- Switch flags through the [existing request path](../skills/ship/SKILL.md#switching-flags-from-a-session-yper4-215). Follow its current approval requirements. (2026-10-25, why: keep one flag approval path)
+- Switch flags through the [existing request path](flags.md#switching-flags-from-a-session). Follow its current approval requirements. (2026-10-25, why: keep one flag approval path)
 
 ## Claude Code and Codex sessions
 

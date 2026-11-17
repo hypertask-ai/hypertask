@@ -35,6 +35,31 @@ test("the startup map reaches existing reference files and headings", () => {
   }
 });
 
+test("the every-ticket shipping guide stays under its reading budget", () => {
+  const guide = "skills/ship/SKILL.md";
+  const contents = fs.readFileSync(path.join(root, ".claude", guide));
+  assert.ok(
+    contents.length < 17000,
+    `${guide}: ${contents.length} bytes. Move occasional operations into .claude/reference/ship-operations.md or flags.md instead of adding prose to the step guide.`,
+  );
+});
+
+test("every guide the shipping skill links to still resolves", () => {
+  const guide = path.join(root, ".claude/skills/ship/SKILL.md");
+  const links = [...fs.readFileSync(guide, "utf8").matchAll(/\]\(([^)#]+)(?:#([^)]+))?\)/g)];
+  assert.ok(links.length > 0);
+  for (const [, target, anchor] of links) {
+    const resolved = path.resolve(path.dirname(guide), target);
+    assert.ok(fs.existsSync(resolved), `Missing path: ${target}`);
+    if (!anchor || fs.statSync(resolved).isDirectory()) continue;
+    const contents = fs.readFileSync(resolved, "utf8");
+    const headings = [...contents.matchAll(/^#+ (.+)$/gm)].map(([, heading]) =>
+      heading.toLowerCase().replace(/[^\w -]/g, "").replaceAll(" ", "-"),
+    );
+    assert.ok(headings.includes(anchor), `Missing heading: ${target}#${anchor}`);
+  }
+});
+
 test("the startup map agrees with the retained emergency flag rule", () => {
   const map = fs.readFileSync(path.join(root, "AGENTS.md"), "utf8");
   const flags = fs.readFileSync(path.join(root, ".claude/reference/flags.md"), "utf8");

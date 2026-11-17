@@ -52,7 +52,7 @@ Reused UI needs no new wireframe. New component files require Valentin's design 
 
 ## Stay active until Done
 
-Nobody prompts a runner again after its turn ends. Ending the turn while CI, review bots, merge, deploy, or QA are pending stops the ticket. Keep working from claim to Done. To wait, run one bounded watcher, such as `gh pr checks <pr> --watch --interval 300`, then act on what it reports. Stop early only for a blocker or a Valentin Question from the exceptions below.
+Nobody prompts a runner again after its turn ends. Ending the turn while CI, review bots, merge, deploy, or QA are pending stops the ticket. Keep working from claim to Done. To wait, run the sanctioned `ci-wait` command with a timeout, then act on what it reports. Stop early only for a blocker or a Valentin Question from the exceptions below.
 
 The done comment lists every decision you made on Valentin's behalf, one line each with its reason. Write "Decisions: none" when there were none.
 
@@ -62,7 +62,7 @@ Use `scripts/ship-chores rebase` in a clean ticket worktree. It honors `SHIP_BAS
 
 `scripts/ship-chores sweep` discovers bound runner-App production PRs. It excludes protected files, drafts, human PRs and truncated inventories. One five-minute timer retries required workflows once per head, pins merges through the installed guard, then requires `ship-check deployed` and live HTTP health. Non-required reds never block. Changed heads HOLD; second failures stop RED. Inspect `~/.local/state/ship-chores/fleet/TICKET.json`. Review a changed head before removing its held job to re-enroll it. Feature QA and Done stay with the builder.
 
-Install the merged executable to `~/.local/lib/hypertask/ship-chores/ship-chores` and its unit templates to `~/.config/systemd/user/`. Validate both with `user-unit-check`, reload systemd, enable only your own `ship-chores@NUMBER.timer`, then verify `user-unit-check --first-run ship-chores@NUMBER.service`. Never choose another identity. Shared locking and durable head history prevent overlap. The sweep never touches `~/.local/state/fleet/one-run.on`; the picker hold belongs to the merger that already runs on this server. Do not enable the sweep timer while that merger runs, or two mergers race for the same PR. Protected work still needs its authorized merger.
+Timer installation lives in [occasional shipping operations](../../reference/ship-operations.md#runner-timer-installation). Never enable the sweep timer while the existing server merger runs, or two mergers race for the same PR. Protected work still needs its authorized merger.
 
 ## Helpers
 
@@ -78,18 +78,11 @@ Record branch ownership with `ship-check branch` immediately after creating each
 
 ## Keep checks authoritative
 
-| Rule | Enforced by |
-|---|---|
-| Real ticket and accepted PR title | `ship-check title/pr`; title format is ticket, bracketed type, description |
-| Own PR bound to ticket; latest head passes tests | `ship-check bind`, `ci-tests`, and merge guard |
-| Current-head premerge evidence | `ship-check pr` and guard publish it; trusted poster refreshes it |
-| Successful production deployment before completion | `ship-check deployed` and Done guard |
-| Live proof matches merge and evidence contract | `ship-check proof`; app tickets require screenshots |
-| Correct board completion and session cleanup | `ship-check done/cleaned` |
+The workflow table above names every check that gates a step. `ship-check` owns the syntax and refuses a wrong title, an unbound PR, a stale head, an undeployed merge, missing proof, or an incomplete close; never restate a check in prose or weaken one.
 
 Codex has no hook: run the same guard and completion checks explicitly. Read the PR merge state before diagnosing checks; resolve conflicts first. Read fresh ticket comments again before merging. Green checks never override a later correction. Follow [CI policy](../../../docs/ci.md); use runner App credentials, never human GitHub login. Wait with `~/.local/lib/hypertask/runner-pickup/ci-wait <PR> --repo hypertask-ai/hypertask --timeout 1800 --head <PUSHED_SHA>` using the runner App token. Use the known pushed commit SHA, not a fresh GitHub read. GitHub notifications trigger fresh reads; the fallback is ten minutes. Never use `gh pr checks --watch` or `gh run watch`.
 
-For non-app repositories, configure `SHIP_REPO`, `SHIP_BASE`, and `SHIP_CHECKOUT` before generating gates and repeat them for checks and the Done move. The gate generator persists them. Native CLI uses `hypertask-ai/cli`, base `main`; verify uses `hypertask-ai/verify`, base `app-suite`. Verify releases require a merge-SHA release and an updated nightly checkout. Release-less repos may use `SHIP_DEPLOY=none`; a real release takes precedence. Cloudflare workers additionally use `SHIP_WORKER`; deployment proof requires the merge version active at 100%. See script validation before choosing settings.
+Non-app repositories need their own settings; read [other repositories](../../reference/ship-operations.md#other-repositories) before generating gates for one.
 
 ## Record state on the ticket
 
@@ -99,15 +92,11 @@ Human comments are for decisions, QA, and completion. Claims, releases, handoffs
 
 Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Mark each case PASS, FAIL, or UNREACHABLE with evidence; failures include steps and actual behavior. Record account ID and role, never credentials. Use verify-qa's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA verdict with the report link and key attachments. No bare "tests pass" claims.
 
-After successful live proof, explain the user-visible problem and changed result before Done. Link the PR and report. Put the flag's dedicated link last in its ticket description, preserving other text; use the same link whenever naming it. Make the required release announcement with Valentin's mention. Follow [flag policy](../../../AGENTS.md#feature-flags-for-new-user-facing-behavior), not historical defaults in old comments.
+After successful live proof, explain the user-visible problem and changed result before Done. Link the PR and report. Put the flag's dedicated link last in its ticket description, preserving other text; use the same link whenever naming it. Make the required release announcement with Valentin's mention. Follow [flag policy](../../reference/flags.md#feature-flags-for-new-user-facing-behavior), not historical defaults in old comments.
 
-## Switching flags from a session (YPER4-215)
+## Switching flags from a session
 
-Use `ht-flag` through your session identity. Existing switches require the supported approval path: a clear unedited yes within seven days, matched to the named flag and mode. A thumbs-up, Valentin's own comment, or an HT Product Lead record of his exact chat words may qualify. Re-read comments and reactions before repeating a wait. Ambiguous yes is not approval. Batch approvals must name every switch together.
-
-The reason must link to the exact approval comment. A later human no withdraws approval; edited, conditional, or ambiguous answers do not approve. Everyone review switches require policy approval, another flag-owner agent's independent review, and live evidence; the writer cannot review itself. Reviews are single-use within 24 hours. High-risk flags retain the human-approval path. Run the core inbox cycle as QA 985 before requesting Everyone and immediately afterward. A failure means Owner + QA first, never Off. Never park a ticket in Valentin Review merely to request a flag switch.
-
-For any flagged failure, a flag-owner write/admin agent holds the flag at Owner + QA with `ht-flag set KEY owner-qa --failure "<reason>"`, then repairs. Never switch a flag Off: Off is Valentin's own safety switch. A hold narrows who sees a broken feature, so it needs no approval and applies to every flag, including high-risk and bugfix. The action is audited and refuses no-ops. Other modes retain approval requirements. A held flag stays held until Valentin decides its next mode; never turn a failed flag back on automatically. Only Valentin may open the admin page with his login; runners use approved APIs.
+Use `ht-flag` through your session identity and follow [the switch approval path](../../reference/flags.md#switching-flags-from-a-session). Never switch a flag Off: Off is Valentin's own safety switch. For any flagged failure, hold it at Owner + QA with `ht-flag set KEY owner-qa --failure "<reason>"`, then repair. A hold needs no approval and covers every flag. A held flag stays held until Valentin decides its next mode.
 
 ## Ticket-only runner handoffs
 
@@ -127,7 +116,5 @@ For a broken tool or server after two failed attempts, record the exact error an
 - **Archived:** read the archive state first. Done means verify the existing live result. Otherwise restore through the product surface before working. Search Normal, Archive, and Deleted before declaring a ticket missing; board moves can change its number.
 
 When the Agent Kit blocks work, search board 11514 first and +1 the existing ticket with `vcc activity add`; file a new one only if none exists and the board is under its cap (`vcc` refuses otherwise). Never duplicate another active repair. Fix only the blocker through the normal ticket/PR path. Protected parts require Chief Of Staff review and merge: `ship-gates`, the guard part of `ship-check`, `ship-identity`, the `vcc` wrapper, `.claude/skills/unlazy/`, `.claude/hooks/`, `.claude/settings.json`, `CLAUDE.md`, and `AGENTS.md`. Hand the PR over on its ticket; do not self-merge.
-
-Runner timers, webhooks, pickup, and self-update have their own scripts. Read them only for an installation or dispatch task, not every ticket. New user timers require `user-unit-check` before enablement and one successful first real run afterward.
 
 After Done, clean only this session's finished worktree and branch. Keep evidence and unfinished work. Record cleanup proof and suggest the next freshly checked free ticket, without claiming it. Nothing is live until the merge's Production deployment succeeds and its real behavior is proven.
