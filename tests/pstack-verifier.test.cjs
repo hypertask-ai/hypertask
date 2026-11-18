@@ -121,6 +121,23 @@ test("empty-plan checks wait until conclusions land", async () => {
   assert.equal(ciChecksPending([]), true);
 });
 
+test("checks read only the latest run of each check", async () => {
+  const { ciChecksPassed, ciChecksPending, CONTEXT } = await load();
+  const run = (conclusion, at) => ({ name: "ci-tests", conclusion, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
+  const red = run("failure", "15:50:49");
+  const green = run("success", "16:09:59");
+  const redLater = run("failure", "16:20:00");
+  const running = { name: "ci-tests", conclusion: null, started_at: "2026-11-18T16:21:00Z", completed_at: null };
+  assert.equal(ciChecksPassed([red, green]), true);
+  assert.equal(ciChecksPending([red, green]), false);
+  assert.equal(ciChecksPassed([green, red]), true);
+  assert.equal(ciChecksPassed([green, redLater]), false);
+  assert.equal(ciChecksPending([green, redLater]), false);
+  assert.equal(ciChecksPassed([green, running]), false);
+  assert.equal(ciChecksPending([green, running]), true);
+  assert.equal(ciChecksPassed([red, green, { name: CONTEXT, conclusion: "failure" }]), true);
+});
+
 test("a non-app pass waits until every required context is green", async () => {
   const { ciGate, ciStatusesPassed, ciStatusesPending, decide, waitForCiChecks, CONTEXT, REQUIRED_CI_CONTEXTS } = await load();
   const reason = "no user path in this diff";
