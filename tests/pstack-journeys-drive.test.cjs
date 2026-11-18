@@ -37,6 +37,7 @@ test("a mapped page gets its own journey from the page text, then the change jou
     mapSha: MAP,
     pages: [page("inbox", INBOX_PAGE)],
     entries: [],
+    compare: true,
     ask(prompt) {
       prompts.push(prompt);
       return prompts.length === 1 ? pagePlan() : changePlan();
@@ -61,6 +62,7 @@ for (const [name, text, entries, calls, want] of areaCases) test(name, async () 
     mapSha: MAP,
     pages: [page("inbox", text)],
     entries,
+    compare: true,
     ask(prompt) {
       asked.push(prompt);
       return asked.length === 1 && calls > 1 ? pagePlan() : changePlan();
@@ -79,9 +81,16 @@ test("a change that matches no page plans only the change journey", async () => 
     mapSha: MAP,
     pages: [page("inbox", INBOX_PAGE)],
     entries: [],
+    compare: true,
     ask: () => changePlan(),
   });
   assert.deepEqual(plan.journeys.map((item) => item.journey), ["change:repro"]);
+});
+
+test("area planning waits for the comparison, so a page failure cannot reach the legacy plan", async () => {
+  const asked = [];
+  const plan = await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), { binding, mapSha: MAP, pages: [page("inbox", INBOX_PAGE)], entries: [], ask(prompt) { asked.push(prompt); return changePlan(); } });
+  assert.deepEqual([asked.length, plan.fail, plan.journeys.map((item) => item.journey)], [1, "", ["change:repro"]]);
 });
 
 test("journeys stay inert unless the workflow asks for the comparison", async () => {

@@ -307,44 +307,33 @@ export function selectPlan(files, filesTruncated = false) {
   if (filesTruncated || hasAppPath(list)) return null;
   return { actions: [], expect: [], reason: "no user path: non-app files only" };
 }
-export function readFeaturePages(dir = FEATURE_MAP_DIR) {
+const readDir = (dir) => {
   try {
-    return readdirSync(dir)
-      .filter((name) => name.endsWith(".md") && name !== "INDEX.md")
-      .sort()
-      .map((name) => ({ name: name.slice(0, -3), text: readFileSync(path.join(dir, name), "utf8") }));
+    return readdirSync(dir).sort();
   } catch {
     return [];
   }
+};
+export function readFeaturePages(dir = FEATURE_MAP_DIR) {
+  return readDir(dir)
+    .filter((name) => name.endsWith(".md") && name !== "INDEX.md")
+    .map((name) => ({ name: name.slice(0, -3), text: readFileSync(path.join(dir, name), "utf8") }));
 }
 export function readBaseCache(dir) {
-  try {
-    return readdirSync(dir)
-      .filter((name) => name.endsWith(".json"))
-      .sort()
-      .flatMap((name) => {
-        try {
-          const parsed = journeyLib.parseCacheEntry(readFileSync(path.join(dir, name), "utf8"));
-          return parsed ? [parsed] : [];
-        } catch {
-          return [];
-        }
-      });
-  } catch {
-    return [];
-  }
+  return readDir(dir)
+    .filter((name) => name.endsWith(".json"))
+    .flatMap((name) => {
+      try {
+        const parsed = journeyLib.parseCacheEntry(readFileSync(path.join(dir, name), "utf8"));
+        return parsed ? [parsed] : [];
+      } catch {
+        return [];
+      }
+    });
 }
-export function pageHash(text) {
-  return journeyLib.sha256(text);
-}
+export const pageHash = (text) => journeyLib.sha256(text);
 export function cachedJourney(entries, { baseSha, mapSha, journey, page }) {
-  const wanted = { baseSha, mapSha, journey };
-  for (const entry of Array.isArray(entries) ? entries : []) {
-    if (entry.baseSha !== wanted.baseSha || entry.mapSha !== wanted.mapSha || entry.journey !== wanted.journey) continue;
-    if (entry.pageHash !== pageHash(page?.text ?? "")) continue;
-    return entry;
-  }
-  return null;
+  return (Array.isArray(entries) ? entries : []).find((entry) => entry.baseSha === baseSha && entry.mapSha === mapSha && entry.journey === journey && entry.pageHash === pageHash(page?.text ?? "")) ?? null;
 }
 export function bugfixTitle(title) {
   return /\[BUGFIX\]/i.test(String(title ?? ""));
@@ -869,6 +858,7 @@ export async function planFromRequest(request, deps = {}) {
   else if (selected) Object.assign(plan, selected);
   else if (!plan.fail) {
     const bugfix = bugfixTitle(request.title);
+    const compare = deps.compare ?? process.env.PSTACK_VERIFIER_COMPARE === "true";
     const journeys = await planJourneys({
       request,
       pages: deps.pages ?? readFeaturePages(),
@@ -879,6 +869,7 @@ export async function planFromRequest(request, deps = {}) {
       mapSha: deps.mapSha ?? process.env.GITHUB_SHA,
       baseSha: request.baseSha,
       bugfix,
+      compare,
     });
     plan.journeys = journeys.items;
     plan.bugfix = bugfix;
@@ -887,13 +878,13 @@ export async function planFromRequest(request, deps = {}) {
     plan.expect = journeys.expect;
     plan.reason = journeys.reason;
     if (journeys.fail) plan.fail = journeys.fail;
+    if (compare && plan.journeys.length) plan.compare = true;
   }
-  if (Array.isArray(plan.journeys) && plan.journeys.length && process.env.PSTACK_VERIFIER_COMPARE === "true") plan.compare = true;
   return plan;
 }
-export async function planJourneys({ request, pages, entries, ask, key, model, mapSha, baseSha, bugfix = false }) {
+export async function planJourneys({ request, pages, entries, ask, key, model, mapSha, baseSha, bugfix = false, compare = false }) {
   const items = [];
-  const chosen = journeyLib.pagesForFiles({ files: request.files, diff: request.diff, pages });
+  const chosen = compare ? journeyLib.pagesForFiles({ files: request.files, diff: request.diff, pages }) : [];
   for (const item of chosen) {
     const page = pages.find((candidate) => candidate.name === item.page);
     const journey = `area:${item.page}`;
@@ -968,7 +959,7 @@ async function judgeCommand() {
   let model = { verdict: "", notes: "" };
   notePreviewDown(plan, evidence);
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
-  const comparing = plan.compare === true && Array.isArray(plan.journeys) && plan.journeys.length > 0;
+  const comparing = plan.compare === true && !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
   let compared = null;
   if (comparing) {
     try {
