@@ -118,3 +118,26 @@ slower one. Each shard runs one quarter of the pages on `ubuntu-latest` and
 builds its own candidate from the same warm Next.js cache, so the check costs one
 build plus the slowest quarter. Four builds cost nothing on this public repo, and
 the count is 24 jobs per push: four shards plus the summary.
+
+### What the second pass took off pull requests (HTPR-9450)
+
+A check stays on every pull request only when no journey and no cheap rule covers
+it. Two lanes re-ran work another lane already owned, so both are gone:
+
+- `bugfix-regression.yml` replayed the changed tests on the merge base and on the
+  head for every `[BUGFIX]` pull request. The `repro-first` job inside
+  `ci-tests.yml` already does that replay, and `break-it-review.yml` adds the
+  edge-case tests for the same tag, so the report-only replay was a third copy.
+  `docs/ci-policy.yml` records `bugfix_regression` as deleted and replaced by
+  `repro_first`.
+- `quick-check-proof.yml` measured the pre-push hook, and the hook's own tests
+  (`tests/quick-check.test.cjs`, `tests/install-git-hooks.test.cjs`) run in the
+  `ci-tests` shards, so the lane re-ran a subset of what those shards prove.
+
+The `next-public-secrets` job stays. It is a summary over the scan, and the
+verifier still waits on that context, so folding it into `secret-scan` would
+leave a docs-only pull request pending a context no job publishes.
+
+A pull request now starts one job fewer from these lanes on a `[BUGFIX]` pull
+request, and none fewer on an ordinary one: `quick-check-proof` was path-filtered
+already. `break-it-review` stays on `[BUGFIX]` pull requests (3707), not on demand.

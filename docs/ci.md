@@ -184,6 +184,29 @@ builds its own candidate from the same warm Next.js cache, so the check costs on
 build plus the slowest quarter. Four builds cost nothing on this public repo, and
 the count is 24 jobs per push: four shards plus the summary.
 
+### What the second pass took off pull requests (HTPR-9450)
+
+A check stays on every pull request only when no journey and no cheap rule covers
+it. Two lanes re-ran work another lane already owned, so both are gone:
+
+- `bugfix-regression.yml` replayed the changed tests on the merge base and on the
+  head for every `[BUGFIX]` pull request. The `repro-first` job inside
+  `ci-tests.yml` already does that replay, and `break-it-review.yml` adds the
+  edge-case tests for the same tag, so the report-only replay was a third copy.
+  `docs/ci-policy.yml` records `bugfix_regression` as deleted and replaced by
+  `repro_first`.
+- `quick-check-proof.yml` measured the pre-push hook, and the hook's own tests
+  (`tests/quick-check.test.cjs`, `tests/install-git-hooks.test.cjs`) run in the
+  `ci-tests` shards, so the lane re-ran a subset of what those shards prove.
+
+The `next-public-secrets` job stays. It is a summary over the scan, and the
+verifier still waits on that context, so folding it into `secret-scan` would
+leave a docs-only pull request pending a context no job publishes.
+
+A pull request now starts one job fewer from these lanes on a `[BUGFIX]` pull
+request, and none fewer on an ordinary one: `quick-check-proof` was path-filtered
+already. `break-it-review` stays on `[BUGFIX]` pull requests (3707), not on demand.
+
 ## PR size check (HYCI-29)
 
 - Trusted production code counts additions and deletions against the current production commit and PR head, not the cached PR file list.
@@ -1228,30 +1251,6 @@ network, `CORE_APP_SMOKE`) and no network, so this artifact cannot serve it.
 
 Docs-only PRs skip the build and every heavy step, as before.
 
-## Bugfix regression report (HYCI-14)
-
-Unit 1 of [HYCI-14](https://app.hypertask.ai/detail/project-11514/14) adds a
-report-only job for bug fixes. It signals on the pull request title tag, so
-only `HTPR`, `HYFA`, `YPER4` and `HYCI` titles carrying `[BUGFIX]` are evaluated. Set
-the `no-regression-test` label and write the reason in the pull request body to
-be exempt; a reason inside an HTML comment does not count, because reviewers
-cannot see it.
-
-The job replays every changed test in `tests/` twice: on the merge base and on
-the pull request head. A test that passes on the head but also passes on the
-merge base does not reproduce the bug, and the job names that file in a warning
-and in the run summary. A test that fails on the head is named for the same
-reason. Tests outside `tests/` (for example `*.test.mjs` beside a ship script)
-are reported as unreplayable rather than missing. Dependency, lockfile or Prisma
-schema changes make the replay unproven: the base would run with the fixed
-dependencies.
-
-`bugfix-regression` is not a required check, never blocks a merge, and changes
-no release permission. Its workflow states this in
-[`tests/bugfix-regression-check.test.cjs`](../tests/bugfix-regression-check.test.cjs).
-The job also runs `.github/scripts/bugfix-regression-check.mjs --backtest <n>`
-by hand to summarise how recent merged bugfix pull requests would have fared.
-
 ## CI failure log (HYCI-17)
 
 `CI Failure Log` (`.github/workflows/ci-failure-log.yml`) records one line per
@@ -1344,10 +1343,11 @@ The hook reads Git's ref updates and passes the push without checking when the
 pushed commit is not the checked-out one, because the tools read the working
 copy.
 
-`.github/workflows/quick-check-proof.yml` measures the real hook on hosted
-Ubuntu, is path-filtered to the hook files, and adds no job to ordinary pull
-requests. It fails the run when the measured run reaches 10 seconds and proves
-that a file with a type error stops the push.
+The hook's own tests, `tests/quick-check.test.cjs` and
+`tests/install-git-hooks.test.cjs`, run in the `ci-tests` shards. The separate
+`quick-check-proof.yml` lane measured the same hook on hosted Ubuntu and proved a
+type error stops the push; it re-ran a subset of those shards and is gone
+(HTPR-9450).
 
 ## Session ledger guard (HYCI-16)
 
