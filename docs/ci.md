@@ -595,12 +595,15 @@ unmapped names and the map rows out of sync in the job summary. `M` is every
 Bugfix and internal flags are repairs, not extra features.
 
 A production pull request fails when the counter reports an unmapped feature, an
-area page with no row in `rows/`, or a row with no area page (HTPR-9415). A
-manual dispatch runs the same counter without `--strict`, so a maintainer can
-read the list from production and the weekly feature-map jobs keep their report-only
-pass. The job runs the counter only: no browser, no secrets, no database. The job
-is not a required context, so a red run needs a ruleset change before it stops a
-merge on its own.
+area page with no row in `rows/`, or a row with no area page (HTPR-9415). A manual
+dispatch runs the same counter without `--strict`, so a maintainer can read the
+list from production and the weekly feature-map jobs keep their report-only pass.
+The job runs the counter only: no browser, no secrets, no database. The job is not
+a required context, so a red run needs a ruleset change before it stops a merge on
+its own.
+
+The unit test fails if the counter stops telling mapped and unmapped apart, or if
+strict mode stops failing on a row gap.
 
 ## Docs-only CI lane (YPER4-548 / YPER4-663)
 
