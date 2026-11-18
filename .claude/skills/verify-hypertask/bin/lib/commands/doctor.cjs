@@ -46,9 +46,14 @@ async function localChecks(values) {
   const status = await httpStatus(`${base}/login`);
   const checks = [recorded({ name: "page /login", ok: status === 200, detail: `${base}/login answered ${status || "no response"}` })];
   if (env.databaseUrl) {
-    const target = new URL(env.databaseUrl);
-    const reachable = await tcpReachable(target.hostname, Number(target.port || 5432));
-    checks.push(recorded({ name: "database", ok: reachable, detail: `${target.hostname}:${target.port || 5432} reachable: ${reachable}` }));
+    let target = null;
+    try {
+      target = new URL(env.databaseUrl);
+    } catch {
+      target = null;
+    }
+    const reachable = target ? await tcpReachable(target.hostname, Number(target.port || 5432)) : false;
+    checks.push(recorded({ name: "database", ok: reachable, detail: target ? `${target.hostname}:${target.port || 5432} reachable: ${reachable}` : "databaseUrl in env.json is not a URL" }));
   } else {
     checks.push(recorded({ name: "database", ok: false, detail: "no databaseUrl in the run folder env.json; run ht-verify up first" }));
   }
@@ -60,11 +65,11 @@ async function localChecks(values) {
     pidAlive = false;
   }
   checks.push(recorded({ name: "dev pid", ok: pidAlive, detail: Number.isInteger(pid) && pid > 0 ? `pid ${pid} alive: ${pidAlive}` : "no dev pid recorded" }));
-  if (values.state && !existsSync(values.state)) {
-    checks.push(recorded({ name: "identity", ok: false, detail: `no auth state at ${values.state}` }));
-  } else if (state && existsSync(state)) {
+  if (state && existsSync(state)) {
     const identity = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-identity"), [state, "--base-url", new URL(base).origin], { timeout: 30_000 });
     checks.push(recorded({ name: "identity", ok: identity.status === 0, detail: (identity.stdout || identity.stderr).trim().split("\n").pop() }));
+  } else {
+    checks.push(recorded({ name: "identity", ok: false, detail: `no auth state at ${state}; run ht-verify seed` }));
   }
   if (status !== 200) {
     const symlink = env.nodeModulesSymlink;
@@ -84,7 +89,12 @@ function productionChecks(values) {
     const account = values.account || "flags";
     const selected = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-login"), [account], { timeout: 15_000 });
     if (selected.status !== 0) fail(`qa-login refused ${account}`, "Run ht-verify login <account> to list the accounts it accepts.", "usage", 2);
-    const parsed = JSON.parse(selected.stdout);
+    let parsed;
+    try {
+      parsed = JSON.parse(selected.stdout);
+    } catch {
+      fail(`qa-login printed something other than JSON for ${account}`, "Run ht-verify login without --no-verify to see the error, then retry.", "unreadable", 2);
+    }
     state = parsed.stateFile;
     expect = expect ?? String(parsed.userId);
   }

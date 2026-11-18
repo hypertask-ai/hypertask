@@ -17,6 +17,11 @@ Examples:
   ht-verify down
   ht-verify down --keep-db`;
 
+function ownsPid(pid) {
+  const result = run("ps", ["-p", String(pid), "-o", "command="]);
+  return result.status === 0 && /\b(next|npm|npx|node)\b/.test(result.stdout);
+}
+
 module.exports = {
   name: "down",
   summary: "stop only what ht-verify up started",
@@ -49,10 +54,13 @@ module.exports = {
       }
     }
     if (!values["keep-db"]) {
-      run("docker", ["rm", "-f", container]);
-      run("docker", ["volume", "rm", container]);
-      stopped.push(`container and volume ${container}`);
+      const results = [run("docker", ["rm", "-f", container]), run("docker", ["volume", "rm", container])];
+      const failed = results.filter((result) => result.status !== 0 && !/no such (container|volume)/i.test(result.stderr));
+      if (failed.length) {
+        fail(`docker could not remove ${container}: ${(failed[0].stderr || failed[0].stdout).trim().split("\n").pop()}`, "Run docker rm -f hypertask-verify-db by hand, then retry.", "failed");
+      }
+      if (results.some((result) => result.status === 0)) stopped.push(`container and volume ${container}`);
     }
-    return { target: "local", data: { stopped, keptDatabase: Boolean(values["keep-db"]) } };
+    return { target: "local", data: { stopped, skipped, keptDatabase: Boolean(values["keep-db"]) } };
   },
 };
