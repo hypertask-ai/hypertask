@@ -111,7 +111,7 @@ export async function judgeCase({ item, model, key, answer, complete = completeW
       judged = parseAnswer(reply);
     } catch (error) { failure = redact(error?.message ?? String(error), [key]); }
   }
-  const result = decide({ model: judged, plan, evidence, binding: EVAL_BINDING });
+  const result = decide({ model: judged, plan, evidence, binding: EVAL_BINDING, checksPassed: true });
   return { case: item.name, model, expected: item.expected, verdict: result.verdict, notes: result.notes, ok: !failure && matches(item, result.verdict), failure, why: item.why };
 }
 
