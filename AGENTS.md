@@ -39,8 +39,8 @@ Read linked sections on demand, not every reference.
 | Workflows, runners, rulesets, checks, previews | [CI contract](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |
 | Preview creation, polling, or login | [.claude/reference/previews.md](.claude/reference/previews.md) |
 | UI code, layout, choices, or selection | [Shared UI rules](.claude/reference/ui.md#reuse-existing-ui-enforced), [.claude/skills/reuse-existing-ui/SKILL.md](.claude/skills/reuse-existing-ui/SKILL.md) |
-| Behavior, flags, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [.claude/skills/verify-qa/SKILL.md](.claude/skills/verify-qa/SKILL.md) |
-| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-on-phone/SKILL.md](.claude/skills/verify-on-phone/SKILL.md) |
+| Behavior, flags, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
+| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
 | App architecture or tracing a feature | [Stack orientation](.claude/reference/architecture.md#stack-orientation) |
 | pstack skills or model selection | [pstack rules](.claude/reference/architecture.md#pstack-in-hax-and-codex-sessions) |
 | Changing AI models or saved model choices | [Model rules](.claude/reference/architecture.md#ai-models) |

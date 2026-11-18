@@ -124,7 +124,7 @@ class DispatchTests(unittest.TestCase):
         skills = Path(__file__).resolve().parents[2]
         ship = (skills / "ship/SKILL.md").read_text()
         reflect = (skills / "reflect/SKILL.md").read_text()
-        qa = (skills / "verify-qa/SKILL.md").read_text()
+        qa = (skills / "verify-hypertask/SKILL.md").read_text()
         synthesizer = (skills / "reflect/references/synthesizer.md").read_text()
         self.assertNotIn("with SendMessage", reflect)
         self.assertIn("Do not send a session message or wait for a lead response", reflect)
