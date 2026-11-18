@@ -1,201 +1,143 @@
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
-const { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
+const head = "b".repeat(40);
 const load = () => import(path.join(root, ".github/scripts/break-it-review.mjs"));
-
+const pull = (body, extra = {}) => ({ title: "HTPR-9408 [BUGFIX] keep the empty title from saving", body, base: { sha: "a".repeat(40), ref: "production" }, ...extra });
 const good = "const assert = require(\"node:assert/strict\");\nconst test = require(\"node:test\");\nconst { loadModule } = require(\"../helpers/loadModule.cjs\");\ntest(\"adds\", () => { assert.equal(loadModule(\"src/lib/flags/index.ts\") ? 2 : 2, 2); });\n";
+
+async function runMain({ reply, name = "blank-title", io = {}, item = pull("Author-Model: claude"), key = "sk-test-break-it-secret", token = "ghs-test" } = {}) {
+  const { main } = await load();
+  const posts = [];
+  const fetchImpl = async (url, init) => {
+    posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
+    const content = !reply || !String(url).includes("openrouter") ? {} : { choices: [{ message: { content: JSON.stringify({ tests: [{ name, code: reply }] }) } }] };
+    return { ok: true, json: async () => content };
+  };
+  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: head, OPENROUTER_EVAL_KEY: key, GH_TOKEN: token });
+  try {
+    await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: () => JSON.stringify(item), ...io });
+  } finally {
+    delete process.env.OPENROUTER_EVAL_KEY;
+    delete process.env.GH_TOKEN;
+  }
+  return posts;
+}
+
+function needsBubblewrap() {
+  if (spawnSync("bwrap", ["--version"]).status === 0) return;
+  const install = spawnSync("bash", ["-lc", "sudo apt-get update -qq && sudo apt-get install -y bubblewrap"], { encoding: "utf8", timeout: 180000 });
+  assert.equal(install.status, 0, (install.stderr || "bubblewrap missing").slice(0, 300));
+}
 
 test("the break prompt carries the diff, the author family and the ticket, never the key", async () => {
   const { breakPrompt } = await load();
   process.env.OPENROUTER_EVAL_KEY = "sk-test-break-it-secret";
   const prompt = breakPrompt({ author: "deepseek", ticket: "https://app.hypertask.ai/detail/project-15/9408", diff: "- old line\n+ new line", files: ["src/app/page.tsx"] });
   delete process.env.OPENROUTER_EVAL_KEY;
-  assert.match(prompt, /author model family is deepseek/);
-  assert.match(prompt, /\+ new line/);
-  assert.match(prompt, /https:\/\/app\.hypertask\.ai\/detail\/project-15\/9408/);
-  assert.match(prompt, /src\/app\/page\.tsx/);
+  for (const expected of [/author model family is deepseek/, /\+ new line/, /https:\/\/app\.hypertask\.ai\/detail\/project-15\/9408/, /src\/app\/page\.tsx/, /at most 3 tests/]) assert.match(prompt, expected);
   assert.equal(prompt.includes("sk-test-break-it-secret"), false);
-  assert.match(prompt, /at most 3 tests/);
 });
 
 test("the parser accepts one honest test and refuses the ways a model answer goes wrong", async () => {
   const { parseBreakTests } = await load();
   const parsed = parseBreakTests(JSON.stringify({ tests: [{ name: "Empty Title", code: good }] }));
   assert.deepEqual(parsed.map((item) => item.file), ["break-it-empty-title.test.cjs"]);
-  assert.throws(() => parseBreakTests(JSON.stringify({ tests: [{ name: "a", code: good }, { name: "b", code: good }, { name: "c", code: good }, { name: "d", code: good }] })), /no usable tests/);
-  assert.throws(() => parseBreakTests(JSON.stringify({ tests: [{ name: "a", code: good.replace('require("node:test")', 'require("node:assert")') }] })), /does not use node:test/);
-  const sneaky = `${good}\nrequire("node:" + "child_process");\n`;
-  assert.equal(parseBreakTests(JSON.stringify({ tests: [{ name: "sneaky", code: sneaky }] }))[0].name, "sneaky");
-  assert.throws(() => parseBreakTests(JSON.stringify({ tests: [{ name: "a", code: "tiny" }] })), /wrong size/);
+  assert.equal(parseBreakTests(JSON.stringify({ tests: [{ name: "sneaky", code: `${good}\nrequire("node:" + "child_process");\n` }] }))[0].name, "sneaky");
+  for (const [payload, refused] of [
+    [{ tests: ["a", "b", "c", "d"].map((name) => ({ name, code: good })) }, /no usable tests/],
+    [{ tests: [{ name: "a", code: good.replace('require("node:test")', 'require("node:assert")') }] }, /does not use node:test/],
+    [{ tests: [{ name: "a", code: "tiny" }] }, /wrong size/],
+  ]) assert.throws(() => parseBreakTests(JSON.stringify(payload)), refused);
   assert.throws(() => parseBreakTests("not json at all"), /was not JSON/);
 });
 
-test("broken attempts are named as broken and passing attempts as held", async () => {
+test("broken attempts are named as broken, held attempts as held, and the rest unproven", async () => {
   const { breakSummary } = await load();
   const tests = [{ name: "one", file: "break-it-one.test.cjs" }, { name: "two", file: "break-it-two.test.cjs" }];
-  const broke = breakSummary({ author: "claude", model: "deepseek/deepseek-v4.1-flash", tests, results: [{ file: tests[0].file, code: 1, output: "not ok 1 - adds\n  AssertionError: expected 1 to be 2" }, { file: tests[1].file, code: 0, output: "" }] });
-  assert.equal(broke.broke, 1);
-  assert.match(broke.text, /^BROKE one$/m);
-  assert.match(broke.text, /^HELD two$/m);
-  assert.match(broke.text, /1 of 2 break attempts found a hole/);
-  const held = breakSummary({ author: "claude", model: "deepseek/deepseek-v4.1-flash", tests, results: tests.map((item) => ({ file: item.file, code: 0, output: "" })) });
-  assert.equal(held.broke, 0);
-  assert.match(held.text, /the fix held/);
-  assert.match(breakSummary({ author: "grok", model: "m", tests, results: [] }).text, /unproven/);
+  const summary = (results) => breakSummary({ author: "claude", model: "deepseek/deepseek-v4.1-flash", tests, results });
+  const broke = summary([{ file: tests[0].file, code: 1, output: "not ok 1 - adds\n  AssertionError: expected 1 to be 2" }, { file: tests[1].file, code: 0, output: "" }]);
+  assert.deepEqual([broke.broke, /^BROKE one$/m.test(broke.text), /^HELD two$/m.test(broke.text), /1 of 2 break attempts found a hole/.test(broke.text)], [1, true, true, true]);
+  const held = summary(tests.map((item) => ({ file: item.file, code: 0, output: "" })));
+  assert.deepEqual([held.broke, /the fix held/.test(held.text)], [0, true]);
+  assert.match(summary([]).text, /unproven/);
+  for (const result of [{ status: null, signal: "SIGTERM", error: "timed out", output: "" }, { code: 1, output: "not ok 1 - one\nSyntaxError: Unexpected token" }]) {
+    const unproven = summary([{ file: tests[0].file, ...result }]);
+    assert.equal(unproven.broke, 0);
+    assert.match(unproven.text, /^UNPROVEN one$[\s\S]*break attempts were unproven/m);
+  }
 });
 
 test("the breaker is never the author's own model family", async () => {
   const { modelFor } = await load();
-  assert.equal(modelFor("claude", ""), "deepseek/deepseek-v4.1-flash");
-  assert.equal(modelFor("grok", "x-ai/grok-4"), "deepseek/deepseek-v4.1-flash");
+  assert.deepEqual([modelFor("claude", ""), modelFor("grok", "x-ai/grok-4"), modelFor("deepseek", "x-ai/grok-4")], ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4.1-flash", "x-ai/grok-4"]);
   assert.throws(() => modelFor("deepseek", ""), /no other-family verifier configured/);
   assert.throws(() => modelFor("deepseek", "deepseek/deepseek-v4.1-flash"), /no other-family/);
-  assert.equal(modelFor("deepseek", "x-ai/grok-4"), "x-ai/grok-4");
 });
 
 test("a broken fix posts a red break-it status and a comment that names the failure", async () => {
-  const { main } = await load();
-  const posts = [];
-  const pr = { title: "HTPR-9408 [BUGFIX] keep the empty title from saving", body: "Summary.\n\nTicket: https://app.hypertask.ai/detail/project-15/9408\n\nAuthor-Model: claude", base: { sha: "a".repeat(40), ref: "production" } };
-  const fetchImpl = async (url, init) => {
-    posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
-    if (url.includes("openrouter")) return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ tests: [{ name: "blank-title", code: "const assert = require(\"node:assert/strict\");\nconst test = require(\"node:test\");\ntest(\"a blank title is rejected\", () => { assert.equal(1, 2); });\n" }] }) } }] }) };
-    return { ok: true, json: async () => ({}) };
-  };
-  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: "b".repeat(40), OPENROUTER_EVAL_KEY: "sk-test-break-it-secret", GH_TOKEN: "ghs-test" });
-  const spawn = () => ({ status: 1, stdout: "not ok 1 - a blank title is rejected\nAssertionError: expected 1 to be 2\n", stderr: "" });
-  await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: () => JSON.stringify(pr), spawn });
-  const status = posts.find((item) => item.url.endsWith(`/statuses/${"b".repeat(40)}`));
-  const comment = posts.find((item) => item.url.endsWith("/issues/7/comments"));
-  assert.equal(status.body.state, "failure");
-  assert.equal(status.body.context, "break-it");
+  const posts = await runMain({
+    reply: "const assert = require(\"node:assert/strict\");\nconst test = require(\"node:test\");\ntest(\"a blank title is rejected\", () => { assert.equal(1, 2); });\n",
+    item: pull("Summary.\n\nTicket: https://app.hypertask.ai/detail/project-15/9408\n\nAuthor-Model: claude"),
+    io: { spawn: () => ({ status: 1, stdout: "not ok 1 - a blank title is rejected\nAssertionError: expected 1 to be 2\n", stderr: "" }) },
+  });
+  const status = posts.find((entry) => entry.url.endsWith(`/statuses/${head}`));
+  const comment = posts.find((entry) => entry.url.endsWith("/issues/7/comments"));
+  assert.deepEqual([status.body.state, status.body.context], ["failure", "break-it"]);
   assert.match(comment.body.body, /BROKE blank-title/);
   assert.match(comment.body.body, /1 of 1 break attempts found a hole/);
-  assert.equal(JSON.stringify(posts).includes("sk-test-break-it-secret"), false);
-  assert.equal(JSON.stringify(posts).includes("ghs-test"), false);
-  assert.equal(existsSync(path.join(root, "tests", "break-it")), false);
+  const posted = JSON.stringify(posts);
+  assert.deepEqual([posted.includes("sk-test-break-it-secret"), posted.includes("ghs-test"), existsSync(path.join(root, "tests", "break-it"))], [false, false, false]);
 });
 
-test("a pull request with no author model gets no quiet pass", async () => {
-  const { main } = await load();
-  const posts = [];
-  const fetchImpl = async (url, init) => { posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) }); return { ok: true, json: async () => ({}) }; };
-  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "43", PR: "8", HEAD_SHA: "c".repeat(40), GH_TOKEN: "ghs-test" });
-  await main({ fetch: fetchImpl, git: () => "", gh: () => JSON.stringify({ title: "HTPR-9408 [BUGFIX] x", body: "no author line", base: { sha: "a".repeat(40) } }) });
-  assert.equal(posts[0].body.state, "failure");
-  assert.match(posts[0].body.description, /no Author-Model/);
+test("a pull request that cannot be judged fails closed instead of passing quietly", async () => {
+  const noAuthor = await runMain({ item: pull("no author line", { title: "HTPR-9408 [BUGFIX] x" }) });
+  assert.deepEqual([noAuthor[0].body.state, /no Author-Model/.test(noAuthor[0].body.description)], ["failure", true]);
+  const noDeps = await runMain({ io: { deps: "failure" }, item: pull("Author-Model: claude", { title: "HTPR-9408 [BUGFIX] x" }) });
+  assert.deepEqual([noDeps[0].body.state, /unproven/.test(noDeps[0].body.description), noDeps.some((entry) => /BROKE/.test(String(entry.body.body ?? "")))], ["failure", true, false]);
 });
 
-test("a failed install is unproven and does not claim the fix broke", async () => {
-  const { main } = await load();
-  const posts = [];
-  const fetchImpl = async (url, init) => { posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) }); return { ok: true, json: async () => ({}) }; };
-  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "44", PR: "9", HEAD_SHA: "d".repeat(40), GH_TOKEN: "ghs-test" });
-  await main({ deps: "failure", fetch: fetchImpl, git: () => "", gh: () => JSON.stringify({ title: "HTPR-9408 [BUGFIX] x", body: "Author-Model: claude", base: { sha: "a".repeat(40) } }) });
-  assert.equal(posts[0].body.state, "failure");
-  assert.match(posts[0].body.description, /unproven/);
-  assert.equal(posts.some((item) => /BROKE/.test(String(item.body.body ?? ""))), false);
-});
-
-test("a sandbox failure or a test that never ran is unproven", async () => {
-  const { breakSummary } = await load();
-  const tests = [{ name: "one", file: "break-it-one.test.cjs" }];
-  const timedOut = breakSummary({ author: "claude", model: "m", tests, results: [{ file: tests[0].file, status: null, signal: "SIGTERM", error: "timed out", output: "" }] });
-  assert.equal(timedOut.broke, 0);
-  assert.equal(/found a hole/.test(timedOut.text), false);
-  assert.match(timedOut.text, /UNPROVEN one/);
-  const syntax = breakSummary({ author: "claude", model: "m", tests, results: [{ file: tests[0].file, code: 1, output: "not ok 1 - one\nSyntaxError: Unexpected token" }] });
-  assert.equal(syntax.broke, 0);
-  assert.match(syntax.text, /were unproven/);
-});
-
-test("a generated test cannot see the key, the parent process, or the network", async () => {
+test("a generated test cannot see the key, the network, or the host", async () => {
+  needsBubblewrap();
   const { sandboxLaunch } = await load();
-  if (spawnSync("bwrap", ["--version"]).status !== 0) {
-    const install = spawnSync("bash", ["-lc", "sudo apt-get update -qq && sudo apt-get install -y bubblewrap"], { encoding: "utf8", timeout: 180000 });
-    assert.equal(install.status, 0, (install.stderr || "bubblewrap missing").slice(0, 300));
-  }
-  const dir = mkdtempSync(path.join(tmpdir(), "break-it-"));
-  mkdirSync(path.join(dir, "tests", "break-it"), { recursive: true });
-  const file = "break-it-hostile.test.cjs";
-  writeFileSync(path.join(dir, "tests", "break-it", file), "const assert=require('node:assert/strict');const test=require('node:test');const fs=require('node:fs');const net=require('node:net');test('hostile',async()=>{assert.equal(process.env.OPENROUTER_EVAL_KEY,undefined);assert.equal(process.env.GH_TOKEN,undefined);const env=fs.readFileSync('/proc/1/environ','utf8');assert.equal(env.includes('sk-hostile'),false);assert.equal(env.includes('ghs-hostile'),false);assert.equal(fs.existsSync('/home'),false);const open=await new Promise(r=>{const s=net.connect(443,'1.1.1.1');const t=setTimeout(()=>{s.destroy();r(false);},400);s.on('connect',()=>{clearTimeout(t);r(true);});s.on('error',()=>{clearTimeout(t);r(false);});});assert.equal(open,false);});\n");
-  process.env.OPENROUTER_EVAL_KEY = "sk-hostile";
-  process.env.GH_TOKEN = "ghs-hostile";
-  const launch = sandboxLaunch(dir, file);
-  const result = spawnSync(launch.cmd, launch.args, { encoding: "utf8", env: launch.env, timeout: 20000 });
-  delete process.env.OPENROUTER_EVAL_KEY;
-  delete process.env.GH_TOKEN;
-  rmSync(dir, { recursive: true, force: true });
-  assert.equal(launch.env.OPENROUTER_EVAL_KEY, undefined);
-  assert.ok(launch.args.includes("--unshare-net") && launch.args.includes("--unshare-pid"));
-  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-});
-
-test("a generated test that dodges a word filter still cannot see secrets, the network, or the host", async () => {
-  if (spawnSync("bwrap", ["--version"]).status !== 0) {
-    const install = spawnSync("bash", ["-lc", "sudo apt-get update -qq && sudo apt-get install -y bubblewrap"], { encoding: "utf8", timeout: 180000 });
-    assert.equal(install.status, 0, (install.stderr || "bubblewrap missing").slice(0, 300));
-  }
-  const { main } = await load();
   const outside = mkdtempSync(path.join(tmpdir(), "break-it-host-"));
   const hostFile = path.join(outside, "host-only.txt");
   const hostPwn = path.join(outside, "pwn.txt");
+  const key = "sk-break-canary";
+  const token = "ghs-break-canary";
   writeFileSync(hostFile, "host-only");
-  const code = [
-    "const assert = require(\"node:assert/strict\");",
-    "const test = require(\"node:test\");",
-    "const fs = require(\"node:fs\");",
-    "test(\"contained\", async () => {",
-    "  const hit = (buf) => buf.includes(\"sk-break-canary\") || buf.includes(\"ghs-break-canary\");",
-    "  assert.equal(hit(fs.readFileSync(\"/proc/\" + process.ppid + \"/environ\")), false);",
-    "  let leaked = false;",
-    "  for (const pid of fs.readdirSync(\"/proc\")) {",
-    "    if (!/^\\d+$/.test(pid)) continue;",
-    "    try { if (hit(fs.readFileSync(\"/proc/\" + pid + \"/environ\"))) leaked = true; } catch (error) {}",
-    "  }",
-    "  assert.equal(leaked, false);",
-    "  try { fs[\"write\" + \"FileSync\"](" + JSON.stringify(hostPwn) + ", \"pwn\"); } catch (error) {}",
-    "  let sawHost = false;",
-    "  try { sawHost = fs.readFileSync(" + JSON.stringify(hostFile) + ", \"utf8\").includes(\"host-only\"); } catch (error) { sawHost = false; }",
-    "  assert.equal(sawHost, false);",
-    "  const net = require(\"node:\" + \"net\");",
-    "  const open = await new Promise((resolve) => {",
-    "    const socket = net.connect(443, \"1.1.1.1\");",
-    "    const timer = setTimeout(() => { socket.destroy(); resolve(false); }, 400);",
-    "    socket.on(\"connect\", () => { clearTimeout(timer); resolve(true); });",
-    "    socket.on(\"error\", () => { clearTimeout(timer); resolve(false); });",
-    "  });",
-    "  assert.equal(open, false);",
-    "});",
-  ].join("\n");
-  const posts = [];
-  const fetchImpl = async (url, init) => {
-    posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
-    if (String(url).includes("openrouter")) {
-      return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ tests: [{ name: "contained", code }] }) } }] }) };
-    }
-    return { ok: true, json: async () => ({}) };
-  };
+  const code = `const assert = require("node:assert/strict");
+const test = require("node:test");
+const fs = require("node:fs");
+const net = require("node:" + "net");
+const hit = (buf) => buf.includes(${JSON.stringify(key)}) || buf.includes(${JSON.stringify(token)});
+test("contained", async () => {
+  assert.equal(process.env.OPENROUTER_EVAL_KEY, undefined);
+  assert.equal(hit(fs.readFileSync("/proc/" + process.ppid + "/environ")), false);
+  const leaked = fs.readdirSync("/proc").filter((pid) => /^\\d+$/.test(pid)).some((pid) => { try { return hit(fs.readFileSync("/proc/" + pid + "/environ")); } catch (error) { return false; } });
+  assert.equal(leaked, false);
+  assert.equal(fs.existsSync("/home"), false);
+  try { fs["write" + "FileSync"](${JSON.stringify(hostPwn)}, "pwn"); } catch (error) {}
+  const sawHost = () => { try { return fs.readFileSync(${JSON.stringify(hostFile)}, "utf8").includes("host-only"); } catch (error) { return false; } };
+  assert.equal(sawHost(), false);
+  const open = await new Promise((done) => { const socket = net.connect(443, "1.1.1.1"); const timer = setTimeout(() => { socket.destroy(); done(false); }, 400); socket.on("connect", () => { clearTimeout(timer); done(true); }); socket.on("error", () => { clearTimeout(timer); done(false); }); });
+  assert.equal(open, false);
+});
+`;
   const repo = mkdtempSync(path.join(tmpdir(), "break-it-repo-"));
-  const pr = { title: "HTPR-9408 [BUGFIX] keep the empty title", body: "Author-Model: claude\n\nTicket: https://app.hypertask.ai/detail/project-15/9408", base: { sha: "a".repeat(40), ref: "production" } };
-  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "99", PR: "11", HEAD_SHA: "e".repeat(40), OPENROUTER_EVAL_KEY: "sk-break-canary", GH_TOKEN: "ghs-break-canary" });
-  try {
-    await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: () => JSON.stringify(pr), repo });
-  } finally {
-    delete process.env.OPENROUTER_EVAL_KEY;
-    delete process.env.GH_TOKEN;
-  }
-  const comment = posts.find((item) => String(item.url).endsWith("/issues/11/comments"));
+  const launch = sandboxLaunch(repo, "break-it-contained.test.cjs");
+  assert.equal(launch.env.OPENROUTER_EVAL_KEY, undefined);
+  assert.ok(launch.args.includes("--unshare-net") && launch.args.includes("--unshare-pid"));
+  const posts = await runMain({ reply: code, name: "contained", io: { repo }, key, token, item: pull("Author-Model: claude\n\nTicket: https://app.hypertask.ai/detail/project-15/9408") });
+  const comment = posts.find((entry) => String(entry.url).endsWith("/issues/7/comments"));
   assert.match(comment.body.body, /HELD contained/);
-  assert.equal(existsSync(hostPwn), false);
-  assert.equal(readFileSync(hostFile, "utf8"), "host-only");
-  assert.equal(JSON.stringify(posts).includes("sk-break-canary"), false);
-  assert.equal(JSON.stringify(posts).includes("ghs-break-canary"), false);
+  const posted = JSON.stringify(posts);
+  assert.deepEqual([existsSync(hostPwn), readFileSync(hostFile, "utf8"), posted.includes(key), posted.includes(token)], [false, "host-only", false, false]);
   rmSync(repo, { recursive: true, force: true });
   rmSync(outside, { recursive: true, force: true });
 });
