@@ -38,7 +38,7 @@ try {
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) recordNav(current.navigations, response.url(), response.status());
   });
   const run = await runJourneys({ page, plan, base: ready.url, ...smokeDriveIds(seeded), shotsRoot: shotsDir, offOrigin, nextNavigations: () => (current.navigations = []) });
-  writeEvidence({ ...binding, journeys: run.journeys, steps: run.steps, expects: run.expects, navigations: run.navigations, offOrigin });
+  writeEvidence({ ...binding, journeys: run.journeys, steps: run.steps, expects: run.expects, navigations: run.navigations, offOrigin: run.offOrigin });
 } finally {
   await context?.close();
   await browser.close();

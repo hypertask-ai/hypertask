@@ -659,7 +659,7 @@ export async function runJourneys({ page, plan, base, projectId, taskId, bearer,
     journeys.push({ journey: item.journey, apiOnly: item.actions.every((action) => action.op === "api"), steps: result.steps, expects: result.expects, navigations, offOrigin: offOrigin.slice(before) });
   }
   const change = journeys.find((run) => run.journey.startsWith("change:")) ?? journeys[0] ?? { steps: [], expects: [], navigations: [] };
-  return { journeys, steps: change.steps, expects: change.expects, navigations: change.navigations, offOrigin };
+  return { journeys, steps: change.steps, expects: change.expects, navigations: change.navigations, offOrigin: change.offOrigin ?? [] };
 }
 export function githubEnv(base = process.env) {
   if (!base.GH_TOKEN) throw new Error("gh token is missing");
@@ -926,6 +926,9 @@ export async function planJourneys({ request, pages, entries, ask, key, model, m
   const change = parsed.actions.length ? [{ journey, page: "", actions: parsed.actions, expect: parsed.expect, scriptHash: journeyLib.scriptHash(parsed.actions, parsed.expect), base: null, planned: true }] : [];
   return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "" };
 }
+export function driveNeeded(plan) {
+  return !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
+}
 async function planCommand() {
   const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
   const plan = await planFromRequest(request);
@@ -934,8 +937,7 @@ async function planCommand() {
   const dir = path.join(workDir(), "plan");
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "plan.json"), `${JSON.stringify(plan)}\n`, { mode: 0o600 });
-  const runnable = (plan.journeys ?? []).filter((item) => item.actions.length > 0).length;
-  output({ empty: plan.actions.length || runnable ? "false" : "true", model: plan.verifierModel });
+  output({ empty: driveNeeded(plan) ? "false" : "true", model: plan.verifierModel });
 }
 function baseRunFor(plan, journey, baseEvidence) {
   const fresh = (baseEvidence?.journeys ?? []).find((run) => run.journey === journey);
@@ -963,6 +965,9 @@ export async function judgeJourneys({ plan, binding, evidence, picked, baseEvide
   }
   return compareLib.decideComparison({ journeys, bugfix: plan.bugfix === true });
 }
+export function comparisonMode(plan) {
+  return plan.compare === true && !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
+}
 async function judgeCommand() {
   const binding = bindingNow();
   const plan = readPlan(readFileSync(path.join(workDir(), "plan", "plan.json"), "utf8"), binding);
@@ -973,7 +978,7 @@ async function judgeCommand() {
   let model = { verdict: "", notes: "" };
   notePreviewDown(plan, evidence);
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
-  const comparing = plan.compare === true && !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
+  const comparing = comparisonMode(plan);
   let compared = null;
   if (comparing) {
     try {
