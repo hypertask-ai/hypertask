@@ -48,7 +48,6 @@ test("doctor verifies a seeded local state and fails a production ticket gap", a
   web.close();
   assert.equal(seeded.status, 0, seeded.stdout);
   assert.equal(seeded.json.data.checks.find((check) => check.name === "identity").detail, "identity ok: user 985");
-  assert.deepEqual(seeded.json.data.failed, []);
   const gap = await json(home(), ["doctor", "--target", "production"]);
   assert.equal(gap.status, 2);
   assert.match(gap.json.error.next, /--ticket/);

@@ -5,6 +5,11 @@ const { homedir } = require("node:os");
 const path = require("node:path");
 
 const repoRoot = path.resolve(__dirname, "../../../../..");
+const localSecrets = {
+  SESSION_SECRET: "local-verification-session-placeholder-32",
+  JWT_SECRET: "local-verification-jwt-placeholder-0000000000",
+  BETTER_AUTH_SECRET: "local-verification-auth-placeholder-32",
+};
 
 class CliError extends Error {
   constructor(message, options = {}) {
@@ -135,6 +140,7 @@ module.exports = {
   fail,
   httpStatus,
   localEnv,
+  localSecrets,
   parseArgs,
   readJson,
   repoRoot,

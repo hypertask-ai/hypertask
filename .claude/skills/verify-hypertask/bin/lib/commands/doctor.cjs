@@ -65,11 +65,17 @@ async function localChecks(values) {
     pidAlive = false;
   }
   checks.push(recorded({ name: "dev pid", ok: pidAlive, detail: Number.isInteger(pid) && pid > 0 ? `pid ${pid} alive: ${pidAlive}` : "no dev pid recorded" }));
-  if (state && existsSync(state)) {
-    const identity = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-identity"), [state, "--base-url", new URL(base).origin], { timeout: 30_000 });
+  let origin = null;
+  try {
+    origin = new URL(base).origin;
+  } catch {
+    origin = null;
+  }
+  if (state && existsSync(state) && origin) {
+    const identity = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-identity"), [state, "--base-url", origin], { timeout: 30_000 });
     checks.push(recorded({ name: "identity", ok: identity.status === 0, detail: (identity.stdout || identity.stderr).trim().split("\n").pop() }));
   } else {
-    checks.push(recorded({ name: "identity", ok: false, detail: `no auth state at ${state}; run ht-verify seed` }));
+    checks.push(recorded({ name: "identity", ok: false, detail: origin ? `no auth state at ${state}; run ht-verify seed` : `base URL is not a URL: ${base}` }));
   }
   if (status !== 200) {
     const symlink = env.nodeModulesSymlink;
