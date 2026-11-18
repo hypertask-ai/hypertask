@@ -25,8 +25,7 @@ Shared state: ${runDir()} (override with HT_VERIFY_RUN). up writes env.json, dev
 
 Examples:
   ht-verify up
-
-Run ht-verify help <command> for its flags and examples.`;
+Run ht-verify help <command> for its flags.`;
 
 function printHelp(name) {
   if (!name) {

@@ -105,9 +105,9 @@ module.exports = {
     ensureRunDir();
     if (run("docker", ["info"]).status !== 0) fail("Docker is not reachable on this machine", "Start Docker, then re-run ht-verify up.", "unreadable", 2);
     docker(["volume", "create", dbName], "Run ht-verify up --dry-run and check each docker command by hand.");
-    if (run("docker", ["inspect", dbName]).status !== 0) {
+    if (run("docker", ["container", "inspect", dbName]).status !== 0) {
       docker(["run", "-d", "--name", dbName, "-e", "POSTGRES_USER=verify", "-e", "POSTGRES_PASSWORD=verify", "-e", "POSTGRES_DB=hypertask", "-p", `${dbPort}:5432`, "postgres:14.0-alpine"], `Free port ${dbPort} or pass --db-port <free port>, then re-run.`);
-    } else if (!run("docker", ["inspect", "-f", "{{.State.Running}}", dbName]).stdout.includes("true")) {
+    } else if (!run("docker", ["container", "inspect", "-f", "{{.State.Running}}", dbName]).stdout.includes("true")) {
       docker(["start", dbName], `Run docker logs ${dbName} and read the first error.`);
     }
     if (!(await poll(() => run("docker", ["exec", dbName, "pg_isready", "-U", "verify"]).status === 0, Date.now() + 60_000, 1_000))) {
