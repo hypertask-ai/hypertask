@@ -19,7 +19,7 @@ Examples:
 
 function ownsPid(pid) {
   const result = run("ps", ["-p", String(pid), "-o", "command="]);
-  return result.status === 0 && /\b(next|npm|npx|node)\b/.test(result.stdout);
+  return result.status === 0 && /next/.test(result.stdout);
 }
 
 module.exports = {
@@ -40,13 +40,19 @@ module.exports = {
     if (!values["keep-db"]) steps.push(`docker rm -f ${container}`, `docker volume rm ${container}`);
     if (values["dry-run"]) return { target: "local", data: dryRun("down", steps, { keptDatabase: Boolean(values["keep-db"]) }).data };
     const stopped = [];
-    if (pid) {
-      try {
-        process.kill(pidFile.pid, "SIGTERM");
-        stopped.push(`pid ${pidFile.pid}`);
-      } catch {
-        stopped.push(`pid ${pidFile.pid} was already gone`);
-      }
+    let skipped = null;
+    if (pid && !ownsPid(pid)) {
+      skipped = `pid ${pid} no longer runs Next, left alone`;
+    } else if (pid) {
+      const signalled = [-pid, pid].some((target) => {
+        try {
+          process.kill(target, "SIGTERM");
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      stopped.push(signalled ? `process group ${pid}` : `pid ${pid} was already gone`);
       try {
         unlinkSync(path.join(runDir(), "dev.pid"));
       } catch {
