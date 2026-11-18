@@ -19,7 +19,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitPstackVerifier = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitPstackVerifier = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '', commitStatuses } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -30,6 +30,11 @@ async function runWorkflow({ failTemp = false, failList = false, failView = fals
   const prTitle = title ?? (speed ? '[SPEED] Optimize the app' : 'Safe change')
   const commentsJson = JSON.stringify(comments ?? [{ body: `APPROVE\nreviewed-commit: ${head}` }])
   const reviewChecksJson = JSON.stringify(reviewChecks ?? [{ name: 'claude-review', conclusion: 'SUCCESS', startedAt: '2026-08-11T10:00:00Z' }]).slice(1, -1)
+  const appStatus = { context: 'pstack-verifier', state: 'success', creator: { login: 'hypertask-runners[bot]' }, updated_at: '2026-08-11T10:00:00Z' }
+  const statusRows = [
+    ...(speed && speedQa ? [{ context: 'speed-qa', state: 'success', creator: { login: speedQaCreator }, updated_at: '2026-08-11T10:00:00Z' }] : []),
+    ...(omitPstackVerifier ? [] : (commitStatuses ?? [appStatus])),
+  ]
   const gh = `#!/usr/bin/env bash
 set -u
 if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/issues/42/comments"* ]]; then
@@ -79,7 +84,7 @@ if [ "$1" = "api" ] && [[ " $* " == *"/issues/42/events"* ]]; then
   exit 0
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"/statuses"* ]]; then
-  ${speed && speedQa ? `echo '[{"context":"speed-qa","state":"success","creator":{"login":"${speedQaCreator}"},"updated_at":"2026-08-11T10:00:00Z"}]'` : "echo '[]'"}
+  printf '%s\\n' ${JSON.stringify(JSON.stringify(statusRows))}
   exit 0
 fi
 if [ "$1 $2" = "pr diff" ]; then echo ${JSON.stringify(changedFile)}; exit 0; fi
@@ -284,6 +289,15 @@ test('auto-merge refuses a PR without the pstack verifier result', async () => {
   assert.match(result.stdout, /check pstack-verifier = MISSING/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge reads the app status, not the Actions rollup, for the verifier', async () => {
+  const row = (login, state, at) => ({ context: 'pstack-verifier', state, creator: { login }, updated_at: at })
+  const forged = await runWorkflow({ commitStatuses: [row('github-actions[bot]', 'success', '2026-08-11T11:00:00Z'), row('hypertask-runners[bot]', 'failure', '2026-08-11T10:00:00Z')] })
+  assert.match(forged.result.stdout, /check pstack-verifier = FAILURE hypertask-runners\[bot\]/)
+  assert.doesNotMatch(forged.result.stdout, /MERGED #42/)
+  const ignored = await runWorkflow({ commitStatuses: [row('github-actions[bot]', 'failure', '2026-08-11T11:00:00Z'), row('hypertask-runners[bot]', 'success', '2026-08-11T10:00:00Z')] })
+  assert.match(ignored.result.stdout, /MERGED #42/)
 })
 
 test('a Prisma migration auto-merges like any other change', async () => {
