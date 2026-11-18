@@ -63,9 +63,8 @@ concurrency:
 # slowest leg on a real run is recorded on the ticket, and the required check
 # stays ci-tests.
 env:
-  # 6 pool lanes plus 2 serial lanes, so CI Test is 8 lanes.
-  CI_TEST_SHARDS: "6"
-  CI_SERIAL_SHARDS: "2"
+  CI_TEST_SHARDS: ${{ github.event_name == 'pull_request' && '3' || '6' }}
+  CI_SERIAL_SHARDS: ${{ github.event_name == 'pull_request' && '1' || '2' }}
 
 jobs:
   ci-prepare:
@@ -555,6 +554,15 @@ jobs:
             node .github/scripts/feature-map-change-guard.mjs "$BASE_SHA" "$HEAD_SHA" "$PR_TITLE"
           }
 
+          lane_feature_map_coverage() {
+            if [ -n "$BASE_SHA" ] && git diff --name-only "$BASE_SHA" "$HEAD_SHA" \
+              | grep -qE '^(src/app/|src/lib/flags/definitions/|\.claude/skills/verify-qa/reference/feature-map/)'; then
+              node .github/scripts/feature-map-coverage.cjs --strict
+            else
+              echo "feature map coverage: no mapped area, flag definition or map file changed"
+            fi
+          }
+
           run_lane() {
             local name=$1
             ( set -euo pipefail; "lane_${name//-/_}" ) > "$LOGS/$name.log" 2>&1 &
@@ -579,6 +587,7 @@ jobs:
               run_lane changed-style-tokens
               run_lane paid-api-cost-notes
               run_lane feature-map-change
+              run_lane feature-map-coverage
             fi
           fi
 
@@ -937,6 +946,52 @@ jobs:
             success|skipped) ;;
             *) exit 1 ;;
           esac
+
+
+  repro-first:
+    name: repro-first
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && contains(github.event.pull_request.title, '[BUGFIX]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Fetch the base branch
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --unshallow origin
+          git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
+
+      - name: Skip when no source file changed
+        id: scope
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node .github/scripts/repro-first.mjs --scope
+
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund && npx prisma generate
+
+      - name: Require a changed test to fail on the old code
+        if: steps.scope.outputs.run == 'true'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node .github/scripts/repro-first.mjs
 
   browser-build:
     name: browser-build
