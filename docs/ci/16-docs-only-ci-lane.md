@@ -5,7 +5,7 @@ This includes docs-only and source-changing PRs.
 Neither stub starts services, builds, or browsers.
 The real browser shards run on production pushes.
 They also run nightly, using the existing scope detector.
-`app-smoke-nightly.yml` runs against the event's production SHA.
+`app-smoke-nightly.yml` runs against the event's production SHA, and only when the ref is `production`, so a manual dispatch from a branch cannot smoke the branch.
 Manual App Smoke requests retain their scope detector.
 Visual comparison runs nightly and remains available manually.
 

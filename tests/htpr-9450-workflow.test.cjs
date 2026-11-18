@@ -75,6 +75,7 @@ test('nightly app smoke checks out only the event production SHA', () => {
   const nightly = workflow('app-smoke-nightly');
   assert.deepEqual(nightly.on.schedule, [{ cron: '47 3 * * *' }]);
   const job = nightly.jobs['app-smoke-nightly'];
+  assert.equal(job.if, "github.ref == 'refs/heads/production'");
   for (const step of job.steps.filter(step => step.uses?.startsWith('actions/checkout@'))) {
     assert.equal(step.with.ref, '${{ github.sha }}');
     assert.equal(step.with['persist-credentials'], false);

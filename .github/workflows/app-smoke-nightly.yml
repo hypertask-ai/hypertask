@@ -9,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   app-smoke-nightly:
+    if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
