@@ -56,7 +56,7 @@ in scope:
 
 ```bash
 BROWSER_SMOKE_STATE_FILE=<run-folder>/state.json GITHUB_OUTPUT=<run-folder>/seed.out \
-  node scripts/seed-browser-smoke.mjs --all-flags-on
+  node scripts/seed-browser-smoke.mjs
 .claude/skills/verify-qa/scripts/qa-identity <run-folder>/state.json --base-url http://127.0.0.1:3000
 ```
 
@@ -225,7 +225,9 @@ and `ai-chat-drive.mjs` take the same arguments.
 ```
 
 Repeat for every theme the brief changes, with `amoled` for AMOLED and `graphite-2` for
-Graphite 2. Every theme the brief changes needs its own approved frame; a theme with no frame
+Graphite 2. `--press "<keys>"` opens an overlay such as the AI chat or the task writer before
+the shot. The theme is a cookie per browser context, so parallel runs never clobber each
+other. Every theme the brief changes needs its own approved frame; a theme with no frame
 stops the pass and asks on the ticket, and one frame compared against all the themes is not
 coverage. A theme the brief does not change gets a no-change check against production before
 the merge. The approved frame wins over ticket text and over the style guide. Frames come from
@@ -234,7 +236,8 @@ design-pass frames are 1920x1032, so a different viewport makes the score meanin
 builder never passes its own design QA; a different runner reads every side-by-side and marks
 the checklist. Any purple, any sparkle icon, any corner other than 0, 2 or 4px is a FAIL,
 except a round element whose class or data-testid names it avatar or status-dot. A FAIL goes
-back to the intake column the board has (`design-check fail-column`), never Done.
+back to the intake column the board has (`design-check fail-column`), never Done and never to
+Everyone.
 
 A design run writes `~/.local/state/vcc-evidence/<TICKET>/<YYYY-MM-DD>-design-run-<n>/` with
 `frames/`, `live-<theme>.png`, `audit-<theme>.json`, a labelled `side-<theme>.png` and
@@ -263,8 +266,9 @@ setup-failed run, not a pixel match; the artifact uploads only on failure and ma
 before capture. A real regression is fixed, never blessed by regenerating expected images from
 head, masking the change or loosening the threshold. An intended change needs
 `Visual change approved: <ticket URL>` in the PR description, and that approval must cover the
-observed screen change; it does not turn the job green or waive an unrelated regression. Never
-upload auth state, tokens, traces or raw app logs.
+observed screen change; it does not turn the job green or waive an unrelated regression. This
+comparison is advisory: it never replaces browser-smoke, layout locks, premerge evidence or
+live QA. Never upload auth state, tokens, traces or raw app logs.
 
 For a mobile or responsive ticket, reading code or a desktop-width window is never
 verification. Anything short of a real 390x844 screenshot on production with the flag on is not
@@ -349,7 +353,8 @@ Every script below is executable and is invoked exactly as shown.
 paths and the tests together if they move. The skill pack eval
 `.claude/skills/evals/run-evals.sh` checks that every `SKILL.md` is indexed, that each INDEX
 path exists, and that every script a skill names is present. When the workflow, spec, config or
-screen paths change, reconcile this file's screen map with source: the drift check
+screen paths change, reconcile this file's screen map with source, and review every mapped
+screen in the next natural GitHub run: the drift check
 `tests/verify-visual-skill.test.cjs` runs in GitHub CI, never on the VPS, and fails when a
 screen is documented but not captured, or captured but not documented. Keep the maps honest
 with [maintain-verification-skill](../maintain-verification-skill/SKILL.md), which owns the
