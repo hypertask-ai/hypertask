@@ -401,14 +401,13 @@ export function ciStatusesPassed(statuses) {
   const latest = relevantStatuses(statuses);
   return latest.length > 0 && latest.every((status) => status?.state === "success");
 }
-function runStartedAt(run) {
-  const at = Date.parse(run?.started_at ?? run?.completed_at ?? "");
-  return Number.isNaN(at) ? 0 : at;
+function runCreatedAt(run) {
+  const at = Date.parse(run?.created_at ?? run?.started_at ?? run?.completed_at ?? "");
+  return Number.isNaN(at) ? null : at;
 }
 function latestRuns(runs) {
-  const ordered = relevantChecks(runs)
-    .map((run, index) => ({ run, index, at: runStartedAt(run) }))
-    .sort((a, b) => b.at - a.at || a.index - b.index);
+  const ordered = relevantChecks(runs).map((run, index) => ({ run, index, at: runCreatedAt(run) }));
+  if (ordered.every((entry) => entry.at != null)) ordered.sort((a, b) => b.at - a.at || a.index - b.index);
   const seen = new Set();
   const latest = [];
   for (const { run } of ordered) {

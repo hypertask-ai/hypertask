@@ -123,11 +123,11 @@ test("empty-plan checks wait until conclusions land", async () => {
 
 test("checks read only the latest run of each check", async () => {
   const { ciChecksPassed, ciChecksPending, CONTEXT } = await load();
-  const run = (conclusion, at) => ({ name: "ci-tests", conclusion, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
+  const run = (conclusion, at) => ({ name: "ci-tests", conclusion, created_at: `2026-11-18T${at}Z`, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
   const red = run("failure", "15:50:49");
   const green = run("success", "16:09:59");
   const redLater = run("failure", "16:20:00");
-  const running = { name: "ci-tests", conclusion: null, started_at: "2026-11-18T16:21:00Z", completed_at: null };
+  const running = { name: "ci-tests", conclusion: null, created_at: "2026-11-18T16:21:00Z", started_at: null, completed_at: null };
   assert.equal(ciChecksPassed([red, green]), true);
   assert.equal(ciChecksPending([red, green]), false);
   assert.equal(ciChecksPassed([green, red]), true);
@@ -135,6 +135,8 @@ test("checks read only the latest run of each check", async () => {
   assert.equal(ciChecksPending([green, redLater]), false);
   assert.equal(ciChecksPassed([green, running]), false);
   assert.equal(ciChecksPending([green, running]), true);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: "success" }, { name: "ci-tests", conclusion: "failure" }]), true);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: "failure" }, { name: "ci-tests", conclusion: "success" }]), false);
   assert.equal(ciChecksPassed([red, green, { name: CONTEXT, conclusion: "failure" }]), true);
 });
 
