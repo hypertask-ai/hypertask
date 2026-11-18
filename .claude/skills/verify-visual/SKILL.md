@@ -7,6 +7,6 @@ pstack: 0.15.43
 
 # verify-visual moved
 
-This skill is now [verify-hypertask](../verify-hypertask/SKILL.md). Its Drive section holds
-the Visual Regression recipe and the screen map, and its Evidence section holds the diff
-artifact and approval rules.
+This skill is now [verify-hypertask](../verify-hypertask/SKILL.md). Its Launch, Doctor and
+Drive sections hold the Visual Regression job, the ref checks, the screen map and the diff
+artifact, and its Evidence section holds the proof line and approval rules.

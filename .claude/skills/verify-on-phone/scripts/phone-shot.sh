@@ -146,7 +146,7 @@ if [ "$DRY_RUN" = "yes" ]; then
 fi
 
 [ -f "$STATE_FILE" ] \
-  || die "There is no reusable auth state at $STATE_FILE, so the shot would be of a logged-out page." "Follow the login recipe in .claude/skills/verify-qa/SKILL.md 'Logins' to write that file, then re-run."
+  || die "There is no reusable auth state at $STATE_FILE, so the shot would be of a logged-out page." "Follow the login recipe in .claude/skills/verify-qa/reference/logins.md to write that file, then re-run."
 
 mkdir -p "$OUT_DIR" \
   || die "Could not create the output directory $OUT_DIR." "Pick a path you can write to, for example under \$HOME, and re-run."
