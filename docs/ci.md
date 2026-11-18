@@ -1,6 +1,6 @@
 # CI contract
 
-_Last updated: 2026-10-31._
+_Last updated: 2026-11-18._
 
 **Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), gates merges on Codex's built-in GitHub code review, and deploys production directly from the `production` branch.** No self-hosted runners remain on the Contabo host; private fleet repos use GitHub-hosted `ubuntu-latest`. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
 
@@ -75,7 +75,7 @@ Small guards share scanner work and trusted metadata:
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. A newer pull request event cancels the older run of that same pull request. The group is `feature-flag-gate-${{ github.event.pull_request.number || github.ref }}` with `cancel-in-progress: true`. A scheduled sweep uses the ref, so it does not cancel a pull request run. HYCI-298 replaces the legacy `feature-flag-gate-production` queue, whose orphaned run no longer responds to cancellation. The replacement no longer uses `queue: max`, because GitHub rejects that next to cancellation (HYCI-182). Gate jobs retain five-minute and ten-minute timeouts. The existing stuck-job sweep cancels flag gate runs that are queued, pending, requested, waiting or in progress for thirty minutes or more, and tries the force-cancel endpoint when GitHub refuses the plain cancel, names each run GitHub still refuses once per chained link and counts those refused runs on every tick line; cancellation publishes no verdict, so scheduled reconciliation must repair the missing status. A future scheduler-level orphan may still require GitHub intervention; job timeouts do not bound time awaiting a runner.
   The gate's `ghApi` retries HTTP 500, 502, 503, and 504 up to twice, after one and two seconds, including status posts. `GH_API_NO_WAIT` still skips rate-limit waits but does not disable these server-error retries. Read-token fallback remains separate and happens first.
-- `ux-signoff-gate.yml` evaluates only the event PR on `pull_request_target`; the hourly chain dispatches `workflow_dispatch` sweeps of all open PRs. A newer event for the same pull request cancels the older run. The group names the pull request number.
+- `ux-signoff-gate.yml` runs only as the hourly chain's `workflow_dispatch` sweep of all open PRs (HTPR-9450); a pull request event pays nothing for it. Per pull request the group is the ref, so one dispatch never cancels another.
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Per-PR smoke guards and most workflows cancel superseded runs. CI Tests and the trusted guard publish a required status and cancel a superseded run of the same pull request. `queue: max` is not set, because GitHub rejects it next to cancellation (HYCI-29, HYCI-182). The Dependabot lane cancels a superseded run of the same pull request. A sweep uses its own group key, so it does not cancel a pull request that is filing a ticket, and the shared auto-merge sweeper stays non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 - Every pull request workflow cancels a superseded run, including `ci-tests`, `pr-guards-trusted`, `feature-flag-gate`, `ux-signoff-gate`, `codex-review-gate` and `dependabot-lane`. Each group names the pull request and `cancel-in-progress` is true. `.github/scripts/pr-run-concurrency-guard.cjs` fails CI when any of those workflows loses that group or stops cancelling. `queue: max` stays off, because GitHub rejected it beside cancellation and left `ci-tests` missing (HYCI-182). `ci-images.yml` no longer has a `push` trigger on the missing seed branch `yper4-231-ghcr-ci-images`.
@@ -88,7 +88,10 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **24 jobs** per synchronize and opening event
+Static normal non-draft app PR budget after HTPR-9450: **12 jobs** per synchronize
+and opening event: `ci-tests` 7 (prepare, checks, 4 test lanes, summary), the
+verifier and its request shim, `secret-scan`, `pr-guards-trusted` and
+`feature-flag-gate`. The historical count was **24 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes;
 HYCI-45 adds a second serial lane; HYCI-32 adds the second browser half and its
 required summary job; HYCI-57 takes the page tests to four shards). The browser
@@ -108,6 +111,63 @@ which splits setup, fetch and working-tree time from the run's own log.
 CodeQL uses GitHub default setup; path filtering would require advanced setup,
 which this change does not introduce.
 
+### PR checks follow pstack (HTPR-9450)
+
+Counted workflow jobs for a ready internal app PR.
+Assumptions include four test lanes on a pull request (six pool plus two serial
+on a production push) and no reruns.
+Fixtures stay off, and one verifier journey runs.
+Repository jobs fall from 39 to 31.
+Including CodeQL's three analysis jobs, 42 becomes 34.
+CI Tests falls from 18 to 12 jobs.
+App Smoke falls from four to two jobs.
+Skipped jobs and synthetic check contexts are excluded.
+Path-specific gates can add jobs on both sides.
+
+PRs keep cheap checks and the independent verifier.
+The existing ruleset still requires all ten contexts.
+This PR leaves that ruleset unchanged.
+An admin must remove requirements before deleting stubs.
+
+Everything that drives the UI left the pull request:
+
+- `browser-build`, `browser-smoke-desktop`, `browser-smoke-mobile`,
+  `browser-smoke-matrix` and `browser-smoke-flags` run after production pushes.
+  They also run nightly at 03:23 UTC.
+  PRs retain a cheap `browser-smoke` summary stub.
+- PR `visual-compare` stays dormant behind skipped `browser-build`.
+  `visual-regression.yml` owns the nightly screen comparison.
+  Production pushes and manual comparisons remain available.
+- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
+  request gets a status stub from `app-smoke.yml`.
+  That trusted job checks out no candidate code.
+  `app-smoke-request.yml` requests that status after each PR.
+  Manual dispatch retains the validated smoke path.
+- `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
+  own nightly crons.
+
+The verifier still drives the journeys for the features a pull request touches,
+using the diff to choose them, and it boots the candidate with the same
+`run-app-smoke-isolated.sh` harness App Smoke uses. A bug fix's repro proof is the
+`repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
+base and on the head.
+
+`pstack-verifier` is the only required context in the ruleset.
+Cheap checks gate the verifier instead: it waits for `ci-tests`,
+`feature-flag-gate`, `pr-title`, `next-public-secrets` and `secret-scan`, and a
+red or pending one fails or holds its verdict.
+Both smoke contexts stay PR stubs that publish a status.
+Each says "moved to nightly (HTPR-9450)".
+Neither stub builds or starts a browser.
+`app-smoke.yml` publishes the `app-smoke` commit status.
+`ci-tests.yml` reports the `browser-smoke` job summary.
+Automerge waits for `pstack-verifier` alone.
+The verifier's empty-plan pass does not wait on either smoke stub.
+It reads no review status: a red or pending `ai-review` or `claude-review`
+never fails or holds its verdict, because a bot review is not a verdict.
+The hourly monitor fails on any other live required set.
+Emergency path unchanged. Revert first, then fix forward.
+
 HYCI-32 spent two of the remaining three job slots on the browser check: the
 single 723 s lane became `browser-smoke-desktop` and `browser-smoke-mobile`, which
 run in parallel, plus the small `browser-smoke` summary job that keeps the
@@ -123,6 +183,29 @@ slower one. Each shard runs one quarter of the pages on `ubuntu-latest` and
 builds its own candidate from the same warm Next.js cache, so the check costs one
 build plus the slowest quarter. Four builds cost nothing on this public repo, and
 the count is 24 jobs per push: four shards plus the summary.
+
+### What the second pass took off pull requests (HTPR-9450)
+
+A check stays on every pull request only when no journey and no cheap rule covers
+it. Two lanes re-ran work another lane already owned, so both are gone:
+
+- `bugfix-regression.yml` replayed the changed tests on the merge base and on the
+  head for every `[BUGFIX]` pull request. The `repro-first` job inside
+  `ci-tests.yml` already does that replay, and `break-it-review.yml` adds the
+  edge-case tests for the same tag, so the report-only replay was a third copy.
+  `docs/ci-policy.yml` records `bugfix_regression` as deleted and replaced by
+  `repro_first`.
+- `quick-check-proof.yml` measured the pre-push hook, and the hook's own tests
+  (`tests/quick-check.test.cjs`, `tests/install-git-hooks.test.cjs`) run in the
+  `ci-tests` shards, so the lane re-ran a subset of what those shards prove.
+
+The `next-public-secrets` job stays. It is a summary over the scan, and the
+verifier still waits on that context, so folding it into `secret-scan` would
+leave a docs-only pull request pending a context no job publishes.
+
+A pull request now starts one job fewer from these lanes on a `[BUGFIX]` pull
+request, and none fewer on an ordinary one: `quick-check-proof` was path-filtered
+already. `break-it-review` stays on `[BUGFIX]` pull requests (3707), not on demand.
 
 ## PR size check (HYCI-29)
 
@@ -172,10 +255,11 @@ the count is 24 jobs per push: four shards plus the summary.
 ## Review gate
 
 - AI review is Codex's built-in GitHub code review (the `chatgpt-codex-connector` bot), turned on for this repository with Automatic review, Review: All PRs, and Review trigger: On every push. It posts a standard pull request review with one inline comment per finding, each carrying a priority badge such as P1 or P2 ([OpenAI Codex GitHub integration](https://developers.openai.com/codex/integrations/github), which redirects to https://learn.chatgpt.com/docs/third-party/github).
-- The required review gate is GitHub AI Review (`ai-review`). The legacy `claude-review` context stays in the live ruleset, and the gate sets both to the same state.
+- A review is advice, never a verdict. `ci-tests` builds and tests every non-draft pull request whatever the review state says, so a red review can no longer stop the build before it starts (HTPR-9450). The retry is a new push, not a blocked job, and the agent verdict that counts is `pstack-verifier`.
+- The required review gate is GitHub AI Review (`ai-review`). The legacy `claude-review` context is no longer in the ruleset (HTPR-9450), and the gate still sets both to the same state.
 - [Codex review gate](../.github/workflows/codex-review-gate.yml) turns the bot's review into that commit status. It runs on GitHub-hosted `ubuntu-latest` with the built-in workflow token only, wakes on every push to a pull request (opened, reopened, synchronize, ready for review) so the head gets its pending status and one review request at once, wakes on a Codex review, review comment or issue comment, and sweeps every open PR on a ten minute timer that GitHub runs only every few hours (22 runs in 5.5 days, HYCI-415). It loads its script from the `production` branch and reads PR content only as data.
 - The gate reads every PR through REST: an event or a single-PR run reads only its own PR, and the timer sweep pages through the open production PRs. Nothing reads PRs through GraphQL, which exhausted the 5,000-point installation quota (HYCI-293). Reviews, inline comments, issue comments and current-head statuses are read in full, so a late-page P1 still fails the gate. Before it publishes a success, the gate re-reads that PR and publishes nothing when the review state changed in between, so a sweep cannot overwrite a newer P1 verdict.
-- If a non-draft PR has no current-head review or running current-head summary, the sweep requests `@codex review` once per head, with a trusted workflow comment marker. It rechecks the head before requesting and leaves both required statuses pending; the request itself is never approval.
+- If a non-draft PR has no current-head review or running current-head summary, the sweep requests `@codex review` once per head, with a trusted workflow comment marker. It rechecks the head before requesting and leaves both statuses pending; the request itself is never approval.
 - Codex also keeps one summary comment per PR with a hidden `codex-review-state:v1` JSON block naming the reviewed commit, a status (`running` or `completed`) and whether there were findings. Reactions and timestamps are never used, because they cannot say which commit they cover.
 - Rules for each open same-repository PR to `production`, using the current head commit only (a review of an older commit never counts by itself). Each inline comment is counted by its own commit as well as by the commit of the review that carries it. A comment whose own commit is older is not attributed to the head. Every comment inside a review of the head counts wherever it sits, so a P0 or P1 there still fails. A later clean head review clears only earlier submitted reviews; missing or equal timestamps fail closed. A P0 or P1 that GitHub has moved onto the head from an older review still fails until the head has been reviewed. The head has been reviewed when a Codex review is on that commit, or the summary for that commit is `completed` with no findings or no unresolved findings, or that summary is `completed` and a Codex pull-request comment says it found no major issues for that commit (the comment names the commit after "Reviewed commit"). After the head has been reviewed, those older comments no longer fail the gate. Success: the head has been reviewed and no comment that still counts has a P0 or P1 badge, or the summary block for that head says `completed` with no findings, or `completed` with no unresolved findings, or `completed` with unresolved findings when no comment that still counts carries a P0 or P1 badge (the summary alone cannot raise priority). P2 and lower findings do not fail the gate. Failure: a comment that still counts has a P0 or P1 badge, or no badge at all, or an older review left more comments unread than the gate could page through while the head had no review of its own. Pending: Codex has not answered for that head. A new push gets a fresh review, but on 2026-11-08 two pushes drew none in ten minutes and `@codex review` started one within seconds, so a PR still waiting needs that comment.
 - Claude review: while a `review-switch` issue names `claude`, Claude reviews every non-draft same-repository PR on a GitHub-hosted runner, one run per PR, all PRs in parallel, no queue and no daily cap. It runs in two stages. [Claude review request](../.github/workflows/claude-review-request.yml) runs on `pull_request` with no secret and no checkout. [Claude review](../.github/workflows/claude-review.yml) then runs on `workflow_run` from the `production` branch with the Claude subscription token (`CLAUDE_CODE_OAUTH_TOKEN`), so the review never executes code from the PR. It reads the PR number from the event, takes the diff from the GitHub API for that exact head, and skips a stale head, a fork and Dependabot. It never falls back to a paid API key. It posts one comment per head with a `claude-review:v1` marker and then sets `ai-review` and `claude-review` for that head itself, so the gate does not have to wake. A clean verdict clears a P0 or P1 that GitHub moved onto the head from an older Codex review; a P0 or P1 on a Codex review of the head itself still fails. When Claude has findings on the head, both checks report that review, so a head stays red on the active reviewer's finding and never on an older Codex one. A `workflow_dispatch` run with a `pr` number backfills an open PR. One transitional `pull_request` path in the trusted workflow covers PR 3506 only, because a `workflow_run` workflow cannot review the PR that introduces it; remove it after that PR merges.
@@ -190,7 +274,7 @@ the count is 24 jobs per push: four shards plus the summary.
 - CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. PR and production ESLint both cover the full repository through `npm run lint`, including unchanged files (HYCI-261). Before restoring dependencies or lint caches, PR static checks fetch and merge the current `production` tip into the checked-out PR merge result; conflicts fail the job. Unchanged file results are restored through the content-validated cache; a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
 - CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. The lint stage is split (HTPR-8233): Oxlint lints the whole repository in under a second for the rule ids listed in `.oxlintrc.json`, and ESLint runs only the rules Oxlint lacks. `eslint.config.mjs` reads that same rule list and switches each id off, so no rule runs twice, and `tests/oxlint-overlap.test.cjs` fails when the two files drift or when Oxlint stops reporting a handed-over rule. Both pull requests and `production` pushes lint the full repository with the content-validated cache; `lint:changed` remains a developer command, not a merge gate. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
 - TypeScript and the selected PR tests (full suite on production pushes) remain correctness checks on every non-docs CI Tests run. The Test step is `CI_TEST_SHARDS` pool lanes plus `CI_SERIAL_SHARDS` serial lanes, and they split that same file list by measured run time (see the shard balance note below). Shard count, not only balance, sets the wall: CI waits on the slowest lane, and a hosted runner's throughput moves up to a third between VMs. One aggregate job is still named `ci-tests`, and it is green only after every lane succeeds and the uploaded file lists union to the full set with no duplicate. Dependency installation and test selection stay in `ci-prepare`. `ci-checks` restores dependencies and runs the board-scope guard, typecheck and lint beside the test lanes, not before them. The required `ci-tests` aggregate waits for successful preparation, static checks, every lane and the exact-file execution proof. Docs-only runs require both heavy jobs to be skipped explicitly. Only production pushes save caches; each job uses its own workspace. The pool-lane count is the workflow env `CI_TEST_SHARDS`; the plan adds the serial lane on top of it.
-- Typecheck cache ([HTPR-8234](https://app.hypertask.ai/detail/project-15/8234)): the `ci-checks` Typecheck step keeps one cache holding the incremental `tsbuildinfo` and the generated route types (`.next/types`, `next-env.d.ts`). Pull requests write under their own `tsc-pr-<number>` namespace, so a branch that pushes again reuses its own state; `production` restores only `tsc-prod-` keys and can never read a pull-request cache, the same trust rule the ESLint cache follows. The cache fingerprint also includes `src/prisma/schema.prisma` and `prisma.config.ts`, and `ci-checks` runs `npx prisma generate` before restoring that cache, so a Prisma schema change never pairs fresh source with stale generated client types (HYCI-179). The shared `node_modules` cache key includes the same Prisma inputs, and `ci-prepare` regenerates the client before it saves a production cache. `next typegen` reruns unless the restored types came from an identical digest of the route inputs (tracked App and Pages router files, `next.config.js`, middleware, `package-lock.json`), computed by `.github/scripts/ts-route-surface.mjs`; a missing digest, a missing types directory or any git error regenerates. Because `next typegen` also writes the feature-flag index through `next.config.js`, the step builds that index with `scripts/generate-flag-index.mjs` first, so no check depends on the Next generator running. The `tsc --noEmit --incremental` command is unchanged, so the same diagnostics still fail the step.
+- Typecheck cache ([HTPR-8234](https://app.hypertask.ai/detail/project-15/8234)): the `ci-checks` Typecheck step keeps one cache holding the incremental `tsbuildinfo` and the generated route types (`.next/types`, `next-env.d.ts`). Pull requests restore their `tsc-pr-<number>` namespace. Only production pushes publish TypeScript caches; `production` restores only `tsc-prod-` keys and can never read a pull-request cache, the same trust rule the ESLint cache follows. The cache fingerprint also includes `src/prisma/schema.prisma` and `prisma.config.ts`, and `ci-checks` runs `npx prisma generate` before restoring that cache, so a Prisma schema change never pairs fresh source with stale generated client types (HYCI-179). The shared `node_modules` cache key includes the same Prisma inputs, and `ci-prepare` regenerates the client before it saves a production cache. `next typegen` reruns unless the restored types came from an identical digest of the route inputs (tracked App and Pages router files, `next.config.js`, middleware, `package-lock.json`), computed by `.github/scripts/ts-route-surface.mjs`; a missing digest, a missing types directory or any git error regenerates. Because `next typegen` also writes the feature-flag index through `next.config.js`, the step builds that index with `scripts/generate-flag-index.mjs` first, so no check depends on the Next generator running. The `tsc --noEmit --incremental` command is unchanged, so the same diagnostics still fail the step.
 - Shard list download (HYCI-129): each test shard retries a failed artifact download once for reliability. A failed retry fails the job; test execution is not retried.
 - Test lanes (HYCI-7): `scripts/run-tests.mjs` sizes the pooled lane count from the machine (`os.availableParallelism()`), so a shard runs one lane per core - four on `ubuntu-latest` - and never oversubscribes a smaller runner. The shared VPS keeps a two-lane cap, `TEST_CONCURRENCY` overrides both, and a non-positive or non-integer override fails the run instead of guessing. Each shard prints `Test lanes: N of M cores.` and records `cores` in `test-durations.json`.
 - Shard balance (YPER4-777): the split is measured, not counted. `config/test-duration-weights.json` holds one work figure per test file, taken from the `test-durations` artifact of finished production runs; a file that runs in a serial lane costs its whole time and a pooled file costs 1/concurrency of it. `partition()` places files heaviest first onto the least-loaded shard, and the shard count is chosen from the slowest-VM case rather than the average one, and `--check`/`--prove` recompute that same plan, so the union and no-duplicate proof is unchanged. A file missing from the weights file costs `defaultWorkMs`, and with no weights file at all the split falls back to the old count split. Both shard job logs print `shard-plan … measured=…s,…s`; a balanced plan shows the two shards within a second of each other. Refresh the weights after a test-harness or dependency change: `gh run download <run-id> --repo hypertask-ai/hypertask -n test-durations -D runs/<run-id>` for ten or more finished production runs, then `node scripts/test-duration-weights.mjs --input runs --source "<what these runs are>"`. The generator takes the median across runs so one slow box cannot set the plan, and the file is generated, never hand-edited.
@@ -205,7 +289,7 @@ the count is 24 jobs per push: four shards plus the summary.
 - No application or review workflow uses a self-hosted runner. The former `contabo-1` review runner is retired with the self-hosted reviewer.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
 - App Smoke validation quietly skips skipped request workflows and successful requests whose exact open production PR is still a draft (HYCI-316), including requests without a PR number in the event payload. It publishes no status and starts no build; `ready_for_review` requests validation again. Failed request workflows, ambiguous PR matches and invalid bases still fail.
-- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. Both contexts run on every non-draft PR without a label gate; `browser-smoke` is a summary over its two halves (HYCI-32). CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request uses the same four events. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
+- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`: `pstack-verifier` alone (HTPR-9450; see "PR checks follow pstack"). `ci-tests` still runs on every non-draft PR without a label gate, and the verifier waits for it. CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request starts the cheap status producer, and App Smoke publishes a cheap PR status stub; its real smoke runs nightly on production. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.
@@ -288,14 +372,13 @@ runs the dependency-free [verifier](../.github/scripts/verify-required-check-set
 on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
 checkout always uses `production`. It verifies the default branch, exactly one
 active `production-required-checks` ruleset, its branch target and production
-include/exclude conditions, and the exact required-context set (including both
-review contexts, without aliasing). Drift and unreadable settings still fail
-the monitor; this is not a required PR context. Detection can lag until the next
-hourly run, plus GitHub scheduling and any rate-limit wait.
+include/exclude conditions, and the exact required-context set (without
+aliasing). HTPR-9450 makes `pstack-verifier` that whole set, and the monitor
+requires exactly it. Drift and unreadable settings still fail the monitor; this
+is not a required PR context. Detection lags until the next hourly run, plus
+scheduling and any rate-limit wait.
 
-CI Tests no longer reads repository settings on PRs or production pushes.
-Its optional review precheck reads commit statuses once. Read failures warn
-and let tests run; an observed failed review still stops tests. Independent
+CI Tests no longer reads repository settings on PRs or production pushes, and it no longer reads review commit statuses: every non-draft pull request builds and tests, whatever `ai-review` or `claude-review` says (HTPR-9450). Independent
 required review contexts continue to block merging without approval.
 Previously every production push and CI-policy PR made three settings API calls.
 The hourly monitor makes three on a successful first attempt: repository
@@ -348,9 +431,11 @@ trusted validation recheck requests `actions: write` and
 request `contents: read`, `pull-requests: read`, and `statuses: read`.
 
 A missing secret, failed mint, or failed App request falls back to `github.token`.
-Fallback success is not proof that requests used the separate pool. CI Tests
-deliberately keeps its single review precheck on `github.token`, so its
-PR-controlled workflow never receives the App private key. Status writes remain
+Fallback success is not proof that requests used the separate pool. CI Tests asks
+for `contents: read`, `pull-requests: read`, `issues: read`, `checks: read` and
+`packages: read`, and reads no commit statuses at all since HTPR-9450 removed its
+review precheck, so its PR-controlled workflow never needs the App private key.
+Status writes remain
 on `github.token` because required status authorship
 is pinned to the GitHub Actions integration. This changes no repository
 settings, runners, or required checks.
@@ -542,8 +627,9 @@ and null for unpinned checks. Text marks observed checks with unknown apps as
 
 The non-required `feature-map-check` job in
 [feature-map-weekly.yml](../.github/workflows/feature-map-weekly.yml) runs Mondays
-at 03:37 UTC, on manual dispatch and on production PRs changing the maintenance
-skill, feature-map or ops-map pages, or that workflow. It runs only the tiny offline fixture
+at 03:37 UTC and on manual dispatch. The pull request trigger moved into
+`skills-evals` (HTPR-9450), whose paths cover the maintenance skill, the
+feature-map and ops-map pages, this workflow and the weekly live file. It runs only the tiny offline fixture
 test and dependency-free checker with Node 24 on free GitHub-hosted Ubuntu,
 pinned actions, `contents: read`, no installs, secrets or paid AI calls.
 It checks index completeness, repository-path citations and API-route resolution;
@@ -583,36 +669,16 @@ rerun on a title edit, so the same check runs again in the title-sensitive
 the pull request API and fails the required `pr-title` context, which keeps a
 retag from slipping past the gate.
 
-## Feature-map coverage count (HTPR-9406)
-
-The non-required `feature-map-coverage` job in
-[feature-map-coverage.yml](../.github/workflows/feature-map-coverage.yml) runs on
-manual dispatch and on production pull requests that change app pages, product
-flag definitions, the feature map, or this checker. It prints `N of M` and the
-unmapped names in the job summary. `M` is every `page.tsx` route under `src/app`
-plus flag definitions whose kind is `feature` or `improvement`. `N` is how many
-of those names appear in a feature-map area page. Bugfix and internal flags are
-repairs, not extra features. A gap does not fail the job. The unit test fails
-if the counter stops telling mapped and unmapped apart.
-
 ## Docs-only CI lane (YPER4-548 / YPER4-663)
 
-Required `app-smoke` and `browser-smoke` still report success when every changed
-file is documentation, skills or `tests/**` outside `src/`; both browser halves
-skip their heavy steps and the summary job reads their success (HYCI-32). The shared
-`.github/scripts/ci-change-scope.cjs` emits `heavy_needed=false` for `docs/**`,
-`.claude/**`, `skills/**`, `.agents/skills/**`, `tests/**` and Markdown outside
-`src/`. Source files (even Markdown), dependency files and CI/harness code run
-smoke normally. Empty/unknown diffs and detector failures run the heavy lane.
-Production pushes always run everything.
-
-App Smoke determines scope in its trusted validation job and publishes
-`app-smoke: success` with `docs-only change, skipped` without starting its build
-job. Browser smoke keeps its successful required job and explicit scope output,
-but skips install/build/tests with a clear log line. Its PostgreSQL, Redis and
-Soketi job-level services still start. Neither required workflow uses path skips.
-Visual Regression keeps its narrow screen/harness path filter and excludes
-Markdown; unit-test-only changes do not start it.
+HTPR-9450 keeps both smoke contexts as PR stubs.
+This includes docs-only and source-changing PRs.
+Neither stub starts services, builds, or browsers.
+The real browser shards run on production pushes.
+They also run nightly, using the existing scope detector.
+`app-smoke-nightly.yml` runs against the event's production SHA, and only when the ref is `production`, so a manual dispatch from a branch cannot smoke the branch.
+Manual App Smoke requests retain their scope detector.
+Visual comparison runs nightly and remains available manually.
 
 The stricter existing `build_needed` output for `ci-tests` is unchanged: changed
 unit tests still run. Its legacy docs-only exclusions remain `docs/`, `.claude/`,
@@ -632,6 +698,7 @@ removed source file. Its self-check covers both outputs and fail-closed cases:
 ## Visual regression (informational v1)
 
 `Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on production pushes and on manual runs, which accept `base` and `head` refs.
+It also runs the screen comparison nightly at 03:53 UTC (HTPR-9450), now that pull requests no longer start `visual-compare`; the Monday 04:05 UTC cron keeps the `verify-qa` inbox journey and its weekly board filing, and only that cron starts them.
 Pull-request comparisons run as `visual-compare` in `.github/workflows/ci-tests.yml`, on non-draft production PRs touching screen or harness files (`.github/scripts/visual-change-scope.cjs` holds the list); HYCI-10 moved them there so the head reuses the one app build instead of building a second time; HYCI-77 made it need only that build, so it runs alongside the four page shards instead of after their summary.
 Base always builds from its own checkout with a fresh disposable database and creates temporary expected PNGs; head compares against them.
 HYCI-82 publishes those ten validated expected PNGs from the production capture as a `visual-baseline-<font fingerprint>-<render source>-<harness hash>` artifact as well as the cache entry. The 2 MB baseline shares a 10 GB cache pool with the build caches, so recent production baselines are usually evicted before a pull request asks for them: eight of the twelve captured on 2026-11-01 and 2026-11-02 were already gone, and each miss rebuilt the base app for 333 s of a 513 s step. `visual-compare` now restores the cache entry first and falls back to the newest unexpired artifact with that exact name before it builds anything; an artifact counts only when a successful `visual-regression.yml` run on a production push at the base commit produced it (`.github/scripts/published-baseline.mjs`), because the artifact list filters by name alone and a pull request could otherwise publish the screenshots another pull request compares against. Both paths hand the existing cache-hit branch ten validated screenshots, so the base build, its Next.js cache restore and its capture are skipped together. A miss still builds the base exactly as before.
@@ -814,11 +881,12 @@ Before the second dedicated runner was restored, the latest 100 AI-review workfl
 
 ## MCP, CLI and API contract
 
-The contract is asserted by a step of the required `browser-smoke` summary (HYCI-108; it was a
-separate `mcp-cli-api-contract` job until then). It is not in the ruleset itself: it blocks merges
-because the contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails
-that half and the required `browser-smoke` summary over it, and the assertion step proves the
-contract reported `passed`. It uses the disposable server before any layout flag reseed. The owner,
+The contract is asserted by a step of the `browser-smoke` summary (HYCI-108; it was a
+separate `mcp-cli-api-contract` job until then). It is not in the ruleset: the contract step runs
+inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails that half and the
+`browser-smoke` summary over it, and the assertion step proves the contract reported `passed`.
+HTPR-9450 made `pstack-verifier` the only required context, and the browser halves run nightly and
+on production pushes rather than on a pull request, so this coverage lands after a merge. It uses the disposable server before any layout flag reseed. The owner,
 team member, accepted external board guest, owner-created write agent and ordinary
 OAuth client exercise catalog discovery, keyword search, task/comment/column writes
 and readbacks, labels and pages. A read-role agent remains readable but cannot write;
@@ -873,11 +941,33 @@ tracked in https://app.hypertask.ai/detail/project-15/7508.
 
 `production-revert-pr.yml` handles failed production CI runs. It opens a revert PR, never merges or pushes production. Existing live-health rollback stays unchanged.
 
+Emergency rule, recorded as `production_revert_proposal.emergency_rule` in `docs/ci-policy.yml`: the revert goes first and takes the same required checks as any change; the fix follows the normal steps.
+
 The read-only job replays named failing Node tests twice inside network-disabled containers. A locally built scratch image mounts system binaries, dependencies, and Git objects read-only. Runner control files, credentials, and the Docker socket stay outside. The last green production commit must pass. Git history identifies the first failing commit, whose parent must pass. The same checks must pass twice after reverting only that commit on current production. Later merges remain intact. Rate-limit, network, timeout, inconsistent, unsupported setup, dependency-lock changes, and already-fixed failures produce no proposal. The history search stops at 50 commits.
 
 The separate publisher executes no candidate code. It rechecks production, pushes one deterministic branch per culprit, and leaves auto-merge off. The existing `AUTOMERGE_TOKEN` lets the proposal trigger normal required checks. No new credential or runner is needed.
 
 Relevant PRs also replay the recorded incident without publishing. Manual dispatch accepts a failed CI run ID. It replays that historical head without opening a PR. For the 25 October source-regex incident, use run `40201291546`: the expected culprit is `73cc4b70870fb411935a3a169779a8fb8b49f168` (PR #2129). Hosted fixtures also prove publication against a disposable local Git remote, not production.
+
+## Base-head verifier
+
+`pstack-verifier.yml` runs the change on the base commit and on the pull request head, then compares. A verdict says what the change did, not only that the head still works.
+
+Journeys come from the feature map. The plan lane reads `.claude/skills/verify-qa/reference/feature-map` from the production checkout, never from the candidate, and picks every page whose code the pull request touches: a changed flag definition, a flag key in the diff, a named source or API path, a named component directory, or a distinctive file name. Each matched page gives one `area:<page>` journey planned from that page's own text, so the same page on the same base always gives the same script. One `change:primary` journey is planned from the pull request, and a `[BUGFIX]` title plans `change:repro` instead: the repro must fail on base and pass on head. A change that matches no page keeps the change journey alone and is never worse than the previous behaviour.
+
+The base lane checks out `base.sha` and uses that checkout as both candidate and trusted root, so its seed, migrations, auth and harness all come from the base commit. The head lane runs the same trusted root with the head only as candidate. Both lanes classify a journey the same way: unavailable when the preview did not start, failed with the first failing step or expect, otherwise ok. A lane whose steps passed is judged by the same model and prompt, so a model cannot invent a regression by faulting only one lane.
+
+The plan lane restores `actions/cache` entries written by earlier runs on the same base commit, keyed `pstack-base-<base.sha>-<production sha>` with `restore-keys: pstack-base-<base.sha>-`. An entry carries the journey script and its base result, so a warm cache pays no model call and no base drive for that journey. Entries are reused only for the same base, the same production checkout, the same journey and the same script hash; anything else is a miss. The base job declares `cache-mode: write` because the cache save is blocked by default for a `workflow_run` trigger.
+
+Verdicts:
+
+- every journey passed on head and the base comparison ran: PASS.
+- a head journey failed at or before the base's first failure, or the repro passed on base: FAIL.
+- an unavailable base comparison: FAIL, and the note says the base lane is what failed.
+- some journey got further than base without passing: PASS+NOTES naming it.
+- non-app files only: PASS+NOTES, no app path.
+
+An identical diff is not an identity: a rebase onto a new base can bring production files the diff never shows, and `git patch-id --stable` ignores whitespace inside a value. Reuse is therefore anchored on the head tree, and the recheck re-runs a green head whose base has moved. That machinery is not in this change yet.
 
 ## Task writer and chip quality baseline
 
@@ -1090,11 +1180,12 @@ The decision, for the two alternatives HYCI-49 offers:
   8 percent saving against a lost reload signal is not a trade to take blind;
   revisit only with a run proving a shorter window still fails the same way.
 
-Required contexts do not change: `browser-smoke` stays the required summary,
+Required contexts did not change then: `browser-smoke` was the required summary,
 `browser-smoke-desktop` and `browser-smoke-mobile` keep their names (HYCI-57 gave
 `browser-smoke-mobile` only the phone pages and split the rest into
 `browser-smoke-matrix` and `browser-smoke-flags`), and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
-config line, so the undo is that there is nothing to undo.
+config line, so the undo is that there is nothing to undo. HTPR-9450 later made
+`pstack-verifier` the only required context; the summary keeps its name.
 
 ## GitHub completion notifications (YPER4-881)
 
@@ -1159,30 +1250,6 @@ network, `CORE_APP_SMOKE`) and no network, so this artifact cannot serve it.
 (`premerge_verify_qa.app_smoke_build_reuse`).
 
 Docs-only PRs skip the build and every heavy step, as before.
-
-## Bugfix regression report (HYCI-14)
-
-Unit 1 of [HYCI-14](https://app.hypertask.ai/detail/project-11514/14) adds a
-report-only job for bug fixes. It signals on the pull request title tag, so
-only `HTPR`, `HYFA`, `YPER4` and `HYCI` titles carrying `[BUGFIX]` are evaluated. Set
-the `no-regression-test` label and write the reason in the pull request body to
-be exempt; a reason inside an HTML comment does not count, because reviewers
-cannot see it.
-
-The job replays every changed test in `tests/` twice: on the merge base and on
-the pull request head. A test that passes on the head but also passes on the
-merge base does not reproduce the bug, and the job names that file in a warning
-and in the run summary. A test that fails on the head is named for the same
-reason. Tests outside `tests/` (for example `*.test.mjs` beside a ship script)
-are reported as unreplayable rather than missing. Dependency, lockfile or Prisma
-schema changes make the replay unproven: the base would run with the fixed
-dependencies.
-
-`bugfix-regression` is not a required check, never blocks a merge, and changes
-no release permission. Its workflow states this in
-[`tests/bugfix-regression-check.test.cjs`](../tests/bugfix-regression-check.test.cjs).
-The job also runs `.github/scripts/bugfix-regression-check.mjs --backtest <n>`
-by hand to summarise how recent merged bugfix pull requests would have fared.
 
 ## CI failure log (HYCI-17)
 
@@ -1276,10 +1343,11 @@ The hook reads Git's ref updates and passes the push without checking when the
 pushed commit is not the checked-out one, because the tools read the working
 copy.
 
-`.github/workflows/quick-check-proof.yml` measures the real hook on hosted
-Ubuntu, is path-filtered to the hook files, and adds no job to ordinary pull
-requests. It fails the run when the measured run reaches 10 seconds and proves
-that a file with a type error stops the push.
+The hook's own tests, `tests/quick-check.test.cjs` and
+`tests/install-git-hooks.test.cjs`, run in the `ci-tests` shards. The separate
+`quick-check-proof.yml` lane measured the same hook on hosted Ubuntu and proved a
+type error stops the push; it re-ran a subset of those shards and is gone
+(HTPR-9450).
 
 ## Session ledger guard (HYCI-16)
 
@@ -1905,4 +1973,80 @@ lands. No new required check is added.
 
 ## Break-it review (HTPR-9408)
 
-A `[BUGFIX]` pull request gets up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one `break-it` status. The job is report-only and never blocks a merge. It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`, which a `deepseek` author needs because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml).
+A `[BUGFIX]` pull request gets up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one `break-it` status. Each test file stays under 1200 characters and the whole model answer under 3500, because a longer answer is cut off at the model's 1200-token cap and the review cannot run.
+
+The answer is read as JSON whether the model fences it, wraps it in prose, or does both: the parser walks the reply for balanced JSON objects and takes the first one that carries a `tests` array, so a closing brace in the surrounding sentence no longer breaks the review. If no answer can be read, the script asks the model once more and prints why the first one failed; after the second failure it reports the reason. A `[BUGFIX]` pull request therefore costs at most two model requests, and the retry only happens on a parse failure, never on an HTTP error.
+
+The job fails its own step when the review could not run or a break attempt found a hole, and prints the reason in the run log as well as in the comment and the status. `break-it` is not one of the required checks: per pstack's shipping playbook the one verdict on a bug fix comes from the independent verifier, so this result is that verifier's edge-case input rather than a second gate.
+
+It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`, which a `deepseek` author needs because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml).
+
+## Checks a verdict replaces (HTPR-9450, second pass)
+
+pstack's shipping playbook: green CI and an approving bot review are not
+verdicts, and a few cheap checks plus an independent agent verdict beat a wall of
+gates. The first pass made `pstack-verifier` the only required context. This pass
+takes three more lanes off the pull request, each because a rule it enforced is
+now enforced by the verifier or by a lane that was already running.
+
+### UX sign-off
+
+[`ux-signoff-gate.yml`](../.github/workflows/ux-signoff-gate.yml) no longer runs on
+a pull request event. It runs on manual dispatch and on the hourly sweep
+[`ux-signoff-chain.yml`](../.github/workflows/ux-signoff-chain.yml) dispatches,
+which reconciles every open production pull request from its ticket comments and
+posts the same `ux-signoff` status. A person's sign-off is not something a check
+can produce, and the verifier drives the journeys the sign-off is about, so the
+status is a signal within the hour instead of a job on every push. The rules in
+[`.claude/reference/flags.md`](../../.claude/reference/flags.md) are unchanged.
+
+### Feature-map coverage
+
+The separate `feature-map-coverage` workflow is gone; its strict counter runs in
+the `ci-checks` lane of `ci-tests.yml` (`feature-map-coverage`), which was already
+paid for. The counter prints `N of M`, the unmapped names and the map rows out of
+sync. `M` is every `page.tsx` route under `src/app` plus flag definitions whose
+kind is `feature` or `improvement`, and `N` is how many of those names appear in a
+feature-map area page. Bugfix and internal flags are repairs, not extra features.
+
+The strict counter fails when a mapped area is unmapped, an area page has no row
+in `rows/`, or a row has no area page (HTPR-9415). It runs only when the diff
+touches `src/app/`, `src/lib/flags/definitions/` or the feature-map pages, so a
+pull request that cannot change the count pays nothing for it. The unit test
+`tests/feature-map-coverage.test.cjs` runs in the test shards, and the counter
+itself runs no browser, no secrets and no database.
+
+### The feature-map citation check
+
+It stays in the Monday 03:37 UTC run of
+[`feature-map-weekly.yml`](../.github/workflows/feature-map-weekly.yml) and on
+manual dispatch. The pull request trigger moved into `skills-evals`: the same
+offline fixture test and the same dependency-free checker run in that job when a
+skill, map, ops-map or weekly-file path changes, so a stale citation still fails
+the pull request that introduced it without a second workflow.
+
+### Repro first
+
+A `[BUGFIX]` pull request's proof is now the `repro-first` job inside
+`ci-tests.yml`, which replaced the separate workflow. It is the same job and the
+same script: it skips when no source file changed, and otherwise requires a
+changed test to fail on the merge base and pass on the head. It fails its own
+step and is not part of the `ci-tests` summary, so a missing proof is loud without
+silently reddening the build check.
+
+### The review precheck in CI Tests
+
+`ci-tests` no longer reads `ai-review` or `claude-review` before it starts. The
+prepare step that stopped the build on an already-red review is gone, with the
+`statuses: read` permission it needed, so a review is advice and never a gate: a
+non-draft pull request builds and tests whatever the bots said. pstack's
+shipping playbook counts only the independent agent verdict, and a review that
+steps a build away buys nothing a red check on the head does not already say.
+
+### Test lanes on a pull request
+
+A production push still runs the full suite in six pool lanes plus two serial
+lanes. A pull request runs the selector's scoped pick in three pool lanes plus one
+serial lane, so a head pays four test jobs instead of eight. The lane plan is the
+same `shard-tests.mjs` partition; only its lane count changes, and `--check`,
+`--prove` and the shard matrix all read the same two numbers.

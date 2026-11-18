@@ -69,14 +69,11 @@ test('runner policy installs its parser even after an earlier guard fails', () =
   assert.equal(runner.env.NODE_PATH, '${{ github.workspace }}/.github/scripts/node-version-guard/node_modules');
 });
 
-test('CI policy preserves every required context and describes native guard publication', () => {
+test('CI policy requires only the verifier and describes native guard publication', () => {
   const policy = yaml.load(read('docs/ci-policy.yml'));
   assert.deepEqual(policy.pr_job_budget.pull_request_guards.native_checks, ['secret-scan', 'next-public-secrets']);
   assert.deepEqual(policy.pr_job_budget.trusted_pull_request_guards.published_statuses, ['pr-title']);
-  assert.deepEqual(policy.required_checks.contexts, [
-    'app-smoke', 'browser-smoke', 'ci-tests', 'ai-review', 'claude-review',
-    'feature-flag-gate', 'pr-title', 'next-public-secrets', 'secret-scan', 'pstack-verifier',
-  ]);
+  assert.deepEqual(policy.required_checks.contexts, ['pstack-verifier']);
   assert.deepEqual(policy.policies.production_ruleset.required_status_checks, policy.required_checks.contexts);
 });
 

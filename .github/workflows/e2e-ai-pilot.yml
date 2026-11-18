@@ -1,10 +1,8 @@
 name: AI smoke pilot
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - .github/workflows/e2e-ai-pilot.yml
-      - e2e/ai-pilot/**
+  schedule:
+    - cron: '9 4 * * *'
 # A newer push on the same pull request owns the result; the older run's jobs
 # would only queue behind it (YPER4-663).
 concurrency:
@@ -17,7 +15,6 @@ permissions:
   packages: read
 jobs:
   static:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -57,7 +54,7 @@ jobs:
     permissions:
       contents: read
       packages: read
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     services:

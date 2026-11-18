@@ -3,6 +3,8 @@ name: verify-qa
 description: After deployment, verify real production behavior and record proof before closing the ticket.
 ---
 
+pstack: 0.15.43
+
 # Verify production
 
 ## Goal and proof bar

@@ -4,7 +4,7 @@ const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
 const source = file => readFileSync(path.join(__dirname, "..", file), "utf8");
-const skill = source(".claude/skills/verify-visual/SKILL.md");
+const skill = source(".claude/skills/verify-hypertask/SKILL.md");
 const workflowPath = ".github/workflows/visual-regression.yml";
 const specPath = "e2e/visual/visual.spec.ts";
 const configPath = "e2e/visual/playwright.visual.config.ts";
@@ -14,7 +14,9 @@ const spec = source(specPath);
 const config = source(configPath);
 
 function checkMap(text, specSource = spec) {
-  const documented = [...text.matchAll(/^\| `([^`]+)` \|/gm)].map(match => match[1]);
+  const table = text.match(/^\| Screen ID \|.*\n((?:\|.*\n)+)/m);
+  assert.ok(table, "skill must carry the screen map table");
+  const documented = [...table[1].matchAll(/^\| `([^`]+)` \|/gm)].map(match => match[1]);
   const declared = specSource.match(/const screens = \[([^\]]+)\]/);
   assert.ok(declared, "visual spec must declare its screen inventory");
   const screens = [...declared[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
@@ -23,8 +25,8 @@ function checkMap(text, specSource = spec) {
 }
 
 test("visual skill is registered and every named repository path exists", () => {
-  assert.match(skill, /^---\nname: verify-visual\ndescription: .+\n---/);
-  assert.match(source(".claude/skills/INDEX.md"), /^\| verify-visual \| .+ \| \.claude\/skills\/verify-visual\/SKILL\.md \|$/m);
+  assert.match(skill, /^---\nname: verify-hypertask\ndescription: .+\n---/);
+  assert.match(source(".claude/skills/INDEX.md"), /^\| verify-hypertask \| .+ \| \.claude\/skills\/verify-hypertask\/SKILL\.md \|$/m);
   for (const file of [workflowPath, specPath, configPath, runnerPath, "scripts/seed-browser-smoke.mjs", "tests/verify-visual-skill.test.cjs"]) {
     assert.ok(skill.includes(file), `skill must name ${file}`);
     assert.ok(source(file).length > 0, `${file} must exist`);
