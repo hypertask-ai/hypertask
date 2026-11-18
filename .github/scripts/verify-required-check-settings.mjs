@@ -149,13 +149,17 @@ try {
     }
     const expected = [
       "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
-      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke",
+      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "pstack-verifier",
     ].sort();
-    const actual = [...new Set(ruleset.rules
+    const checks = ruleset.rules
       .filter((rule) => rule.type === "required_status_checks")
-      .flatMap((rule) => rule.parameters.required_status_checks.map((check) => check.context)))].sort();
+      .flatMap((rule) => rule.parameters.required_status_checks);
+    const actual = [...new Set(checks.map((check) => check.context))].sort();
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
       throw new Error("Live required checks do not match docs/ci-policy.yml.");
+    }
+    if (checks.some((check) => check.integration_id !== 15368)) {
+      throw new Error("A required check is missing GitHub Actions integration_id 15368.");
     }
     recordVerified({
       repository: repo,
