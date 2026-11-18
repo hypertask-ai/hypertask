@@ -87,15 +87,20 @@ using the diff to choose them, and it boots the candidate with the same
 `repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
 base and on the head.
 
-Cheap checks remain required alongside `pstack-verifier`.
-Both smoke contexts remain required PR stubs.
+`pstack-verifier` is the only required context in the ruleset.
+Cheap checks gate the verifier instead: it waits for `ci-tests`,
+`feature-flag-gate`, `pr-title`, `next-public-secrets` and `secret-scan`, and a
+red or pending one fails or holds its verdict.
+Both smoke contexts stay PR stubs that publish a status.
 Each says "moved to nightly (HTPR-9450)".
 Neither stub builds or starts a browser.
 `app-smoke.yml` publishes the `app-smoke` commit status.
 `ci-tests.yml` reports the `browser-smoke` job summary.
-Automerge and the verifier wait for both contexts.
-Only an admin can remove these ruleset requirements.
-Keep the stubs until that happens.
+Automerge waits for `pstack-verifier` alone.
+The verifier's empty-plan pass does not wait on either smoke stub.
+It reads no review status: a red or pending `ai-review` or `claude-review`
+never fails or holds its verdict, because a bot review is not a verdict.
+The hourly monitor fails on any other live required set.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the

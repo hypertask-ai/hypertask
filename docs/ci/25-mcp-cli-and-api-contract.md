@@ -1,10 +1,11 @@
 ## MCP, CLI and API contract
 
-The contract is asserted by a step of the required `browser-smoke` summary (HYCI-108; it was a
-separate `mcp-cli-api-contract` job until then). It is not in the ruleset itself: it blocks merges
-because the contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails
-that half and the required `browser-smoke` summary over it, and the assertion step proves the
-contract reported `passed`. It uses the disposable server before any layout flag reseed. The owner,
+The contract is asserted by a step of the `browser-smoke` summary (HYCI-108; it was a
+separate `mcp-cli-api-contract` job until then). It is not in the ruleset: the contract step runs
+inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails that half and the
+`browser-smoke` summary over it, and the assertion step proves the contract reported `passed`.
+HTPR-9450 made `pstack-verifier` the only required context, and the browser halves run nightly and
+on production pushes rather than on a pull request, so this coverage lands after a merge. It uses the disposable server before any layout flag reseed. The owner,
 team member, accepted external board guest, owner-created write agent and ordinary
 OAuth client exercise catalog discovery, keyword search, task/comment/column writes
 and readbacks, labels and pages. A read-role agent remains readable but cannot write;

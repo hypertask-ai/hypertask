@@ -152,15 +152,20 @@ using the diff to choose them, and it boots the candidate with the same
 `repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
 base and on the head.
 
-Cheap checks remain required alongside `pstack-verifier`.
-Both smoke contexts remain required PR stubs.
+`pstack-verifier` is the only required context in the ruleset.
+Cheap checks gate the verifier instead: it waits for `ci-tests`,
+`feature-flag-gate`, `pr-title`, `next-public-secrets` and `secret-scan`, and a
+red or pending one fails or holds its verdict.
+Both smoke contexts stay PR stubs that publish a status.
 Each says "moved to nightly (HTPR-9450)".
 Neither stub builds or starts a browser.
 `app-smoke.yml` publishes the `app-smoke` commit status.
 `ci-tests.yml` reports the `browser-smoke` job summary.
-Automerge and the verifier wait for both contexts.
-Only an admin can remove these ruleset requirements.
-Keep the stubs until that happens.
+Automerge waits for `pstack-verifier` alone.
+The verifier's empty-plan pass does not wait on either smoke stub.
+It reads no review status: a red or pending `ai-review` or `claude-review`
+never fails or holds its verdict, because a bot review is not a verdict.
+The hourly monitor fails on any other live required set.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the
@@ -227,10 +232,11 @@ the count is 24 jobs per push: four shards plus the summary.
 ## Review gate
 
 - AI review is Codex's built-in GitHub code review (the `chatgpt-codex-connector` bot), turned on for this repository with Automatic review, Review: All PRs, and Review trigger: On every push. It posts a standard pull request review with one inline comment per finding, each carrying a priority badge such as P1 or P2 ([OpenAI Codex GitHub integration](https://developers.openai.com/codex/integrations/github), which redirects to https://learn.chatgpt.com/docs/third-party/github).
-- The required review gate is GitHub AI Review (`ai-review`). The legacy `claude-review` context stays in the live ruleset, and the gate sets both to the same state.
+- A review is advice, never a verdict. `ci-tests` builds and tests every non-draft pull request whatever the review state says, so a red review can no longer stop the build before it starts (HTPR-9450). The retry is a new push, not a blocked job, and the agent verdict that counts is `pstack-verifier`.
+- The required review gate is GitHub AI Review (`ai-review`). The legacy `claude-review` context is no longer in the ruleset (HTPR-9450), and the gate still sets both to the same state.
 - [Codex review gate](../.github/workflows/codex-review-gate.yml) turns the bot's review into that commit status. It runs on GitHub-hosted `ubuntu-latest` with the built-in workflow token only, wakes on every push to a pull request (opened, reopened, synchronize, ready for review) so the head gets its pending status and one review request at once, wakes on a Codex review, review comment or issue comment, and sweeps every open PR on a ten minute timer that GitHub runs only every few hours (22 runs in 5.5 days, HYCI-415). It loads its script from the `production` branch and reads PR content only as data.
 - The gate reads every PR through REST: an event or a single-PR run reads only its own PR, and the timer sweep pages through the open production PRs. Nothing reads PRs through GraphQL, which exhausted the 5,000-point installation quota (HYCI-293). Reviews, inline comments, issue comments and current-head statuses are read in full, so a late-page P1 still fails the gate. Before it publishes a success, the gate re-reads that PR and publishes nothing when the review state changed in between, so a sweep cannot overwrite a newer P1 verdict.
-- If a non-draft PR has no current-head review or running current-head summary, the sweep requests `@codex review` once per head, with a trusted workflow comment marker. It rechecks the head before requesting and leaves both required statuses pending; the request itself is never approval.
+- If a non-draft PR has no current-head review or running current-head summary, the sweep requests `@codex review` once per head, with a trusted workflow comment marker. It rechecks the head before requesting and leaves both statuses pending; the request itself is never approval.
 - Codex also keeps one summary comment per PR with a hidden `codex-review-state:v1` JSON block naming the reviewed commit, a status (`running` or `completed`) and whether there were findings. Reactions and timestamps are never used, because they cannot say which commit they cover.
 - Rules for each open same-repository PR to `production`, using the current head commit only (a review of an older commit never counts by itself). Each inline comment is counted by its own commit as well as by the commit of the review that carries it. A comment whose own commit is older is not attributed to the head. Every comment inside a review of the head counts wherever it sits, so a P0 or P1 there still fails. A later clean head review clears only earlier submitted reviews; missing or equal timestamps fail closed. A P0 or P1 that GitHub has moved onto the head from an older review still fails until the head has been reviewed. The head has been reviewed when a Codex review is on that commit, or the summary for that commit is `completed` with no findings or no unresolved findings, or that summary is `completed` and a Codex pull-request comment says it found no major issues for that commit (the comment names the commit after "Reviewed commit"). After the head has been reviewed, those older comments no longer fail the gate. Success: the head has been reviewed and no comment that still counts has a P0 or P1 badge, or the summary block for that head says `completed` with no findings, or `completed` with no unresolved findings, or `completed` with unresolved findings when no comment that still counts carries a P0 or P1 badge (the summary alone cannot raise priority). P2 and lower findings do not fail the gate. Failure: a comment that still counts has a P0 or P1 badge, or no badge at all, or an older review left more comments unread than the gate could page through while the head had no review of its own. Pending: Codex has not answered for that head. A new push gets a fresh review, but on 2026-11-08 two pushes drew none in ten minutes and `@codex review` started one within seconds, so a PR still waiting needs that comment.
 - Claude review: while a `review-switch` issue names `claude`, Claude reviews every non-draft same-repository PR on a GitHub-hosted runner, one run per PR, all PRs in parallel, no queue and no daily cap. It runs in two stages. [Claude review request](../.github/workflows/claude-review-request.yml) runs on `pull_request` with no secret and no checkout. [Claude review](../.github/workflows/claude-review.yml) then runs on `workflow_run` from the `production` branch with the Claude subscription token (`CLAUDE_CODE_OAUTH_TOKEN`), so the review never executes code from the PR. It reads the PR number from the event, takes the diff from the GitHub API for that exact head, and skips a stale head, a fork and Dependabot. It never falls back to a paid API key. It posts one comment per head with a `claude-review:v1` marker and then sets `ai-review` and `claude-review` for that head itself, so the gate does not have to wake. A clean verdict clears a P0 or P1 that GitHub moved onto the head from an older Codex review; a P0 or P1 on a Codex review of the head itself still fails. When Claude has findings on the head, both checks report that review, so a head stays red on the active reviewer's finding and never on an older Codex one. A `workflow_dispatch` run with a `pr` number backfills an open PR. One transitional `pull_request` path in the trusted workflow covers PR 3506 only, because a `workflow_run` workflow cannot review the PR that introduces it; remove it after that PR merges.
@@ -260,7 +266,7 @@ the count is 24 jobs per push: four shards plus the summary.
 - No application or review workflow uses a self-hosted runner. The former `contabo-1` review runner is retired with the self-hosted reviewer.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
 - App Smoke validation quietly skips skipped request workflows and successful requests whose exact open production PR is still a draft (HYCI-316), including requests without a PR number in the event payload. It publishes no status and starts no build; `ready_for_review` requests validation again. Failed request workflows, ambiguous PR matches and invalid bases still fail.
-- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. `ci-tests` still runs on every non-draft PR without a label gate (HTPR-9450 retains `browser-smoke` and `app-smoke` as PR stubs; see "PR checks follow pstack" above). CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request starts the cheap status producer. App Smoke publishes a cheap PR status stub. Its real smoke runs nightly on production. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
+- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`: `pstack-verifier` alone (HTPR-9450; see "PR checks follow pstack"). `ci-tests` still runs on every non-draft PR without a label gate, and the verifier waits for it. CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request starts the cheap status producer, and App Smoke publishes a cheap PR status stub; its real smoke runs nightly on production. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.
@@ -343,14 +349,13 @@ runs the dependency-free [verifier](../.github/scripts/verify-required-check-set
 on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
 checkout always uses `production`. It verifies the default branch, exactly one
 active `production-required-checks` ruleset, its branch target and production
-include/exclude conditions, and the exact required-context set (including both
-review contexts, without aliasing). Drift and unreadable settings still fail
-the monitor; this is not a required PR context. Detection can lag until the next
-hourly run, plus GitHub scheduling and any rate-limit wait.
+include/exclude conditions, and the exact required-context set (without
+aliasing). HTPR-9450 makes `pstack-verifier` that whole set, and the monitor
+requires exactly it. Drift and unreadable settings still fail the monitor; this
+is not a required PR context. Detection lags until the next hourly run, plus
+scheduling and any rate-limit wait.
 
-CI Tests no longer reads repository settings on PRs or production pushes.
-Its optional review precheck reads commit statuses once. Read failures warn
-and let tests run; an observed failed review still stops tests. Independent
+CI Tests no longer reads repository settings on PRs or production pushes, and it no longer reads review commit statuses: every non-draft pull request builds and tests, whatever `ai-review` or `claude-review` says (HTPR-9450). Independent
 required review contexts continue to block merging without approval.
 Previously every production push and CI-policy PR made three settings API calls.
 The hourly monitor makes three on a successful first attempt: repository
@@ -403,9 +408,11 @@ trusted validation recheck requests `actions: write` and
 request `contents: read`, `pull-requests: read`, and `statuses: read`.
 
 A missing secret, failed mint, or failed App request falls back to `github.token`.
-Fallback success is not proof that requests used the separate pool. CI Tests
-deliberately keeps its single review precheck on `github.token`, so its
-PR-controlled workflow never receives the App private key. Status writes remain
+Fallback success is not proof that requests used the separate pool. CI Tests asks
+for `contents: read`, `pull-requests: read`, `issues: read`, `checks: read` and
+`packages: read`, and reads no commit statuses at all since HTPR-9450 removed its
+review precheck, so its PR-controlled workflow never needs the App private key.
+Status writes remain
 on `github.token` because required status authorship
 is pinned to the GitHub Actions integration. This changes no repository
 settings, runners, or required checks.
@@ -851,11 +858,12 @@ Before the second dedicated runner was restored, the latest 100 AI-review workfl
 
 ## MCP, CLI and API contract
 
-The contract is asserted by a step of the required `browser-smoke` summary (HYCI-108; it was a
-separate `mcp-cli-api-contract` job until then). It is not in the ruleset itself: it blocks merges
-because the contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails
-that half and the required `browser-smoke` summary over it, and the assertion step proves the
-contract reported `passed`. It uses the disposable server before any layout flag reseed. The owner,
+The contract is asserted by a step of the `browser-smoke` summary (HYCI-108; it was a
+separate `mcp-cli-api-contract` job until then). It is not in the ruleset: the contract step runs
+inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails that half and the
+`browser-smoke` summary over it, and the assertion step proves the contract reported `passed`.
+HTPR-9450 made `pstack-verifier` the only required context, and the browser halves run nightly and
+on production pushes rather than on a pull request, so this coverage lands after a merge. It uses the disposable server before any layout flag reseed. The owner,
 team member, accepted external board guest, owner-created write agent and ordinary
 OAuth client exercise catalog discovery, keyword search, task/comment/column writes
 and readbacks, labels and pages. A read-role agent remains readable but cannot write;
@@ -1149,11 +1157,12 @@ The decision, for the two alternatives HYCI-49 offers:
   8 percent saving against a lost reload signal is not a trade to take blind;
   revisit only with a run proving a shorter window still fails the same way.
 
-Required contexts do not change: `browser-smoke` stays the required summary,
+Required contexts did not change then: `browser-smoke` was the required summary,
 `browser-smoke-desktop` and `browser-smoke-mobile` keep their names (HYCI-57 gave
 `browser-smoke-mobile` only the phone pages and split the rest into
 `browser-smoke-matrix` and `browser-smoke-flags`), and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
-config line, so the undo is that there is nothing to undo.
+config line, so the undo is that there is nothing to undo. HTPR-9450 later made
+`pstack-verifier` the only required context; the summary keeps its name.
 
 ## GitHub completion notifications (YPER4-881)
 
@@ -1966,6 +1975,8 @@ lands. No new required check is added.
 
 A `[BUGFIX]` pull request gets up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one `break-it` status. Each test file stays under 1200 characters and the whole model answer under 3500, because a longer answer is cut off at the model's 1200-token cap and the review cannot run.
 
+The answer is read as JSON whether the model fences it, wraps it in prose, or does both: the parser walks the reply for balanced JSON objects and takes the first one that carries a `tests` array, so a closing brace in the surrounding sentence no longer breaks the review. If no answer can be read, the script asks the model once more and prints why the first one failed; after the second failure it reports the reason. A `[BUGFIX]` pull request therefore costs at most two model requests, and the retry only happens on a parse failure, never on an HTTP error.
+
 The job fails its own step when the review could not run or a break attempt found a hole, and prints the reason in the run log as well as in the comment and the status. `break-it` is not one of the required checks: per pstack's shipping playbook the one verdict on a bug fix comes from the independent verifier, so this result is that verifier's edge-case input rather than a second gate.
 
 It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`, which a `deepseek` author needs because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml).
@@ -2022,6 +2033,15 @@ same script: it skips when no source file changed, and otherwise requires a
 changed test to fail on the merge base and pass on the head. It fails its own
 step and is not part of the `ci-tests` summary, so a missing proof is loud without
 silently reddening the build check.
+
+### The review precheck in CI Tests
+
+`ci-tests` no longer reads `ai-review` or `claude-review` before it starts. The
+prepare step that stopped the build on an already-red review is gone, with the
+`statuses: read` permission it needed, so a review is advice and never a gate: a
+non-draft pull request builds and tests whatever the bots said. pstack's
+shipping playbook counts only the independent agent verdict, and a review that
+steps a build away buys nothing a red check on the head does not already say.
 
 ### Test lanes on a pull request
 

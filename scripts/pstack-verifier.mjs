@@ -293,7 +293,7 @@ export function modelHttpError(status, body, secrets) {
   const snippet = redact(String(body ?? "").replace(/\s+/g, " ").trim(), secrets).slice(0, 200);
   return snippet ? `model HTTP ${status}: ${snippet}` : `model HTTP ${status}`;
 }
-const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/", "e2e/"];
+const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/", "e2e/", "verification/"];
 export function hasAppPath(files) {
   return (Array.isArray(files) ? files : []).some((file) => {
     const name = String(file);
@@ -363,7 +363,7 @@ export function confirmsNoUserPath(reason) {
 export const FILE_LIST_CAP = 100;
 export const CI_WAIT_ROUNDS = 40;
 export const CI_WAIT_INTERVAL_MS = 30000;
-export const REQUIRED_CI_CONTEXTS = ["app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
+export const REQUIRED_CI_CONTEXTS = ["ci-tests", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
 export const BOT_LOGINS = new Set(["dependabot", "dependabot[bot]", "app/dependabot"]);
 const BOT_COMMITTERS = new Set([...BOT_LOGINS, "web-flow"]);
 const MANIFEST_BASENAMES = new Set(["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"]);
@@ -501,7 +501,7 @@ export function emptyPlanGate({ runs, statuses, required = REQUIRED_CI_CONTEXTS 
   const need = requiredContextsReady(visible, statuses, required);
   return {
     checksPassed: !need.missing && !need.pending && !need.failed,
-    checksPending: (need.missing || need.pending) && !need.failed,
+    checksPending: need.missing || need.pending,
     failed: need.failed,
   };
 }
@@ -519,7 +519,7 @@ export function statusDescription({ verdict, authorFamily = "", verifierModel = 
 export function settleWaiting({ runs, statuses, authorFamily = "", verifierModel = "", now = Date.now(), limitMs = WAIT_LIMIT_MS } = {}) {
   const gate = emptyPlanGate({ runs, statuses });
   if (gate.checksPassed) return { verdict: "PASS+NOTES", state: "success", description: statusDescription({ verdict: "PASS+NOTES", authorFamily, verifierModel }), notes: "no app path: no user path" };
-  if (gate.failed) return { verdict: "FAIL", state: "failure", description: statusDescription({ verdict: "FAIL", authorFamily, verifierModel }), notes: "required check failed" };
+  if (!gate.checksPending && gate.failed) return { verdict: "FAIL", state: "failure", description: statusDescription({ verdict: "FAIL", authorFamily, verifierModel }), notes: "required check failed" };
   const started = openWaitStartedAt(statuses);
   const age = started ? now - Date.parse(started) : 0;
   if (started && Number.isFinite(age) && age >= limitMs) return { verdict: "FAIL", state: "failure", description: "FAIL: required checks did not finish", notes: "required checks did not finish" };

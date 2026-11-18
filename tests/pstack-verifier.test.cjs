@@ -121,6 +121,15 @@ test("empty-plan checks wait until conclusions land", async () => {
   assert.equal(ciChecksPending([]), true);
 });
 
+test("a red or pending cheap check fails the empty-plan gate", async () => {
+  const { ciGate, REQUIRED_CI_CONTEXTS } = await load();
+  for (const name of REQUIRED_CI_CONTEXTS) {
+    const runs = REQUIRED_CI_CONTEXTS.map((item) => ({ name: item, conclusion: item === name ? "failure" : "success" }));
+    const statuses = REQUIRED_CI_CONTEXTS.filter((item) => item !== name).map((context) => ({ context, state: "success" }));
+    assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: false, checksPending: false }, name);
+  }
+});
+
 test("checks read only the latest run of each check", async () => {
   const { ciChecksPassed, ciChecksPending, CONTEXT } = await load();
   const run = (conclusion, at) => ({ name: "ci-tests", conclusion, created_at: `2026-11-18T${at}Z`, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
@@ -169,18 +178,18 @@ test("a non-app pass waits until every required context is green", async () => {
   assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: true, checksPending: false });
   const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, ...ciGate({ runs, statuses }) });
   assert.equal(passed.verdict, "PASS+NOTES");
-  const partial = statuses.filter((status) => status.context !== "app-smoke");
+  const partial = statuses.filter((status) => status.context !== "pr-title");
   assert.deepEqual(ciGate({ runs, statuses: partial }), { checksPassed: false, checksPending: true });
-  const red = statuses.map((status) => status.context === "ai-review" ? { context: "ai-review", state: "failure" } : status);
+  const red = statuses.map((status) => status.context === "pr-title" ? { context: "pr-title", state: "failure" } : status);
   const blockedGate = ciGate({ runs, statuses: red });
   assert.deepEqual(blockedGate, { checksPassed: false, checksPending: false });
   const blocked = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: blockedGate.checksPassed, checksPending: blockedGate.checksPending });
   assert.equal(blocked.verdict, "FAIL");
   assert.match(blocked.notes, /no user path verified/);
-  const pending = statuses.map((status) => status.context === "app-smoke" ? { context: "app-smoke", state: "pending" } : status);
+  const pending = statuses.map((status) => status.context === "pr-title" ? { context: "pr-title", state: "pending" } : status);
   assert.deepEqual(ciGate({ runs, statuses: pending }), { checksPassed: false, checksPending: true });
   assert.deepEqual(ciGate({ runs, statuses: [] }), { checksPassed: false, checksPending: true });
-  const skipped = runs.map((run) => run.name === "browser-smoke" ? { name: "browser-smoke", conclusion: "skipped" } : run);
+  const skipped = runs.map((run) => run.name === "secret-scan" ? { name: "secret-scan", conclusion: "skipped" } : run);
   assert.deepEqual(ciGate({ runs: skipped, statuses }), { checksPassed: false, checksPending: false });
   const queued = [...runs, { name: "feature-flag-gate", conclusion: null }];
   assert.equal(ciGate({ runs: queued, statuses }).checksPending, true);
@@ -254,6 +263,75 @@ test("agent docs and root markdown are non-app; a src file stays app", async () 
   assert.match(app.notes, /no user path verified/);
 });
 
+test("a red or pending bot review never fails or holds the empty plan", async () => {
+  const { decide, emptyPlanGate, settleWaiting, REQUIRED_CI_CONTEXTS } = await load();
+  const kept = ["ci-tests", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
+  assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...kept].sort());
+  const greenRuns = kept.map((name) => ({ name, conclusion: "success" }));
+  const greenStatuses = kept.map((context) => ({ context, state: "success" }));
+  const redReview = [
+    { name: "ai-review", conclusion: "failure" },
+    { name: "claude-review", conclusion: "failure" },
+    { name: "app-smoke", conclusion: "failure" },
+    { name: "browser-smoke", conclusion: "failure" },
+  ];
+  const redStatuses = [
+    { context: "ai-review", state: "failure" },
+    { context: "claude-review", state: "failure" },
+    { context: "app-smoke", state: "failure" },
+    { context: "browser-smoke", state: "failure" },
+    { context: "ai-review", state: "pending" },
+  ];
+  const runs = [...greenRuns, ...redReview];
+  const statuses = [...greenStatuses, ...redStatuses];
+  const gate = emptyPlanGate({ runs, statuses });
+  assert.deepEqual(gate, { checksPassed: true, checksPending: false, failed: false });
+  const passed = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: gate.checksPassed, checksPending: gate.checksPending });
+  assert.deepEqual([passed.verdict, passed.notes], ["PASS+NOTES", "no app path: no user path"]);
+  const settled = settleWaiting({ runs, statuses, now: Date.parse("2026-11-18T20:00:00Z") });
+  assert.deepEqual([settled.verdict, settled.state], ["PASS+NOTES", "success"]);
+  for (const absent of ["ai-review", "claude-review", "app-smoke", "browser-smoke"]) {
+    assert.deepEqual(emptyPlanGate({ runs: greenRuns, statuses: [...greenStatuses, { context: absent, state: "pending" }] }), { checksPassed: true, checksPending: false, failed: false }, absent);
+  }
+});
+
+test("a finished required failure waits for a running check and fails the moment none is left", async () => {
+  const { decide, emptyPlanGate, settleWaiting, REQUIRED_CI_CONTEXTS, CONTEXT, WAIT_LIMIT_MS } = await load();
+  const redThenRunning = {
+    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ci-tests" ? "failure" : name === "secret-scan" ? null : "success" })),
+    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: context === "ci-tests" ? "failure" : context === "secret-scan" ? "pending" : "success" })),
+  };
+  const gate = emptyPlanGate(redThenRunning);
+  assert.deepEqual(gate, { checksPassed: false, checksPending: true, failed: true });
+  const waiting = decide({ model: {}, plan: plan([], { reason: "no user path", files: [".claude/skills/INDEX.md", "AGENTS.md"], filesTruncated: false }), evidence: null, binding, checksPassed: gate.checksPassed, checksPending: gate.checksPending });
+  assert.deepEqual(waiting, { verdict: "PENDING", notes: "waiting for required checks" });
+  const stillWaiting = settleWaiting({ ...redThenRunning, now: Date.parse("2026-11-18T20:00:00Z") });
+  assert.deepEqual([stillWaiting.verdict, stillWaiting.state], ["PENDING", "pending"]);
+  const settled = { runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ci-tests" ? "failure" : "success" })), statuses: [] };
+  assert.deepEqual(emptyPlanGate(settled), { checksPassed: false, checksPending: false, failed: true });
+  const failed = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: false, checksPending: false });
+  assert.equal(failed.verdict, "FAIL");
+  assert.match(failed.notes, /no user path verified/);
+  assert.deepEqual([settleWaiting({ ...settled, now: Date.parse("2026-11-18T20:00:00Z") }).verdict], ["FAIL"]);
+  const late = {
+    ...redThenRunning,
+    statuses: [...redThenRunning.statuses, { context: CONTEXT, state: "pending", description: "waiting for required checks", created_at: "2026-11-18T20:00:00Z" }],
+  };
+  const timedOut = settleWaiting({ ...late, now: Date.parse("2026-11-18T20:00:00Z") + WAIT_LIMIT_MS });
+  assert.deepEqual([timedOut.verdict, timedOut.notes], ["FAIL", "required checks did not finish"]);
+});
+
+test("formal models and repros under verification are non-app; a src file stays app", async () => {
+  const { hasAppPath, decide } = await load();
+  assert.equal(hasAppPath(["verification/formal/x.tla"]), false);
+  assert.equal(hasAppPath(["verification/formal/Board.tla", "verification/repros/hang.md"]), false);
+  assert.equal(hasAppPath(["src/app/page.tsx"]), true);
+  assert.equal(hasAppPath(["verification/formal/x.tla", "src/app/page.tsx"]), true);
+  const result = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason: "no user path: formal models are never shipped", files: ["verification/formal/x.tla"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(result.verdict, "PASS+NOTES");
+  assert.match(result.notes, /^no app path: /);
+});
+
 test("a failed expect fails even when the model says PASS", async () => {
   const { decide } = await load();
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
@@ -291,7 +369,7 @@ test("a recorded off-origin subresource fails the verdict", async () => {
   ]);
   const body = plan([{ op: "goto", path: "/" }]);
   assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence({ offOrigin }), binding }).verdict, "FAIL");
-  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding }).verdict, "PASS");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding, checksPassed: true }).verdict, "PASS");
 });
 
 test("status 500 on the first goto fails", async () => {
@@ -679,7 +757,7 @@ test("an api action passes from the preview response with no page navigation", a
   assert.equal(run.steps[0].ok, true);
   assert.equal(run.steps[0].text.includes("saved"), true);
   const seen = evidence({ steps: run.steps, expects: run.expects, navigations: [] });
-  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding }).verdict, "PASS");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding, checksPassed: true }).verdict, "PASS");
   assert.equal(decide({ model: { verdict: "", notes: "" }, plan: body, evidence: seen, binding }).verdict, "FAIL");
   const miss = await runPlan({
     page: { ...page, request: { async fetch() { return { status: () => 200, async text() { return "nope"; } }; } } },
@@ -840,6 +918,7 @@ test("one bad model reply is retried and two bad replies fail closed", async () 
     plan: plan([{ op: "goto", path: "/" }]),
     evidence: evidence(),
     binding,
+    checksPassed: true,
   });
   assert.equal(passed.verdict, "PASS");
   assert.equal(passed.notes, "");
@@ -910,8 +989,8 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: [file], filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "PASS+NOTES", file);
   }
   const failedRequired = emptyPlanGate({
-    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ai-review" ? "failure" : "success" })),
-    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: context === "ai-review" ? "failure" : "success" })),
+    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ci-tests" ? "failure" : "success" })),
+    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: context === "ci-tests" ? "failure" : "success" })),
   });
   assert.deepEqual([failedRequired.failed, failedRequired.checksPending], [true, false]);
   const bot = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false, botLogin: "dependabot[bot]" }), evidence: null, binding, checksPassed: true });

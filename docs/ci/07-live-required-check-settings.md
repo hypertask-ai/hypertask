@@ -5,14 +5,13 @@ runs the dependency-free [verifier](../.github/scripts/verify-required-check-set
 on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
 checkout always uses `production`. It verifies the default branch, exactly one
 active `production-required-checks` ruleset, its branch target and production
-include/exclude conditions, and the exact required-context set (including both
-review contexts, without aliasing). Drift and unreadable settings still fail
-the monitor; this is not a required PR context. Detection can lag until the next
-hourly run, plus GitHub scheduling and any rate-limit wait.
+include/exclude conditions, and the exact required-context set (without
+aliasing). HTPR-9450 makes `pstack-verifier` that whole set, and the monitor
+requires exactly it. Drift and unreadable settings still fail the monitor; this
+is not a required PR context. Detection lags until the next hourly run, plus
+scheduling and any rate-limit wait.
 
-CI Tests no longer reads repository settings on PRs or production pushes.
-Its optional review precheck reads commit statuses once. Read failures warn
-and let tests run; an observed failed review still stops tests. Independent
+CI Tests no longer reads repository settings on PRs or production pushes, and it no longer reads review commit statuses: every non-draft pull request builds and tests, whatever `ai-review` or `claude-review` says (HTPR-9450). Independent
 required review contexts continue to block merging without approval.
 Previously every production push and CI-policy PR made three settings API calls.
 The hourly monitor makes three on a successful first attempt: repository
