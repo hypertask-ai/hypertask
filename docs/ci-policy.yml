@@ -676,7 +676,7 @@ ci_app_api_pool:
     ux_signoff_reconciliation: [contents_read, pull_requests_read, statuses_read]
   fallback: github_token_on_missing_secret_failed_mint_or_app_request
   fallback_is_pool_migration_proof: false
-  ci_tests_review_precheck: github_token_no_app_private_key_in_pr_workflow
+  ci_tests_reads_review_statuses: false
   status_writes: github_token_for_required_status_author_integration_pin
   repository_settings_runners_required_checks: unchanged
 
@@ -685,6 +685,7 @@ ci_tests:
   file: .github/workflows/ci-tests.yml
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
+  review_gate: none_build_and_tests_always_run_on_a_pull_request
   browser_halves:
     ticket: https://app.hypertask.ai/detail/project-11514/59
     required_context: browser-smoke
@@ -1010,7 +1011,7 @@ break_it_review:
   jobs_per_push: 1
   new_dependency: false
   paid_service: true
-  paid_requests_per_bugfix_pr: "at most 1"
+  paid_requests_per_bugfix_pr: "at most 2"
   forks_trusted: false
 
 session_ledgers:
