@@ -19,14 +19,14 @@ function assertNormalTriggers(ci, request) {
   for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
     assert.equal(ci.jobs[key].if, "github.event_name != 'pull_request'", key);
   }
-  assert.equal(ci.jobs["browser-smoke"].if, "always() && github.event_name != 'pull_request'");
+  assert.equal(ci.jobs["browser-smoke"].if, "always()");
   assert.equal(ci.jobs["ci-tests"].name, "ci-tests");
   assert.equal(
     ci.jobs["ci-tests"].if,
     "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)",
   );
   assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-checks", "ci-test", "ci-fixtures"]);
-  assert.deepEqual(request.on, { workflow_dispatch: null });
+  assert.deepEqual(request.on.pull_request.types, prTypes);
   assert.equal(request.jobs.request.if, undefined);
 }
 

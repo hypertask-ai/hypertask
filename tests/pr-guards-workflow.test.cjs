@@ -93,7 +93,7 @@ test('heavy scope skips docs/skills/unit tests but never src, CI, dependencies, 
   assert.match(smoke.jobs['app-smoke'].if, /needs.validate.outputs.docs-only != 'true'/);
   assert.match(smoke.jobs.report.steps[0].run, /description='docs-only change, skipped'/);
   assert.deepEqual(smoke.concurrency, {
-    group: "${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
+    group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
     'cancel-in-progress': true,
   });
   assert.equal(smoke.jobs['app-smoke'].concurrency, undefined);

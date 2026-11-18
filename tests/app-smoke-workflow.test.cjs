@@ -96,12 +96,12 @@ test("app smoke validates the head before isolated build and route checks", asyn
 
   assert.match(workflow, /name: run app-smoke/);
   assert.match(workflow, /timeout-minutes: 15/);
-  assert.deepEqual(yaml.load(request).on, { workflow_dispatch: null });
-  assert.deepEqual(parsedWorkflow.on.schedule, [{ cron: "47 3 * * *" }]);
+  assert.deepEqual(yaml.load(request).on.pull_request.types, ["opened", "synchronize", "reopened", "ready_for_review"]);
+  assert.equal(parsedWorkflow.on.schedule, undefined);
   assert.match(workflow, /workflow_run:/);
   assert.match(workflow, /workflows: \["App Smoke Request"\]/);
   assert.deepEqual(parsedWorkflow.concurrency, {
-    group: "${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
+    group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
     "cancel-in-progress": true,
   });
   assert.equal(parsedWorkflow.jobs["app-smoke"].concurrency, undefined);
@@ -123,11 +123,11 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(
     parsedWorkflow.jobs.validate.if,
-    "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
+    "github.event_name == 'workflow_run' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'",
   );
   assert.equal(
     parsedWorkflow.jobs.report.if,
-    "always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
+    "always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
   );
   assert.match(
     workflow,
@@ -367,11 +367,10 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
     workflow,
-    /REQUIRED="ci-tests ai-review next-public-secrets pr-title"/,
+    /REQUIRED="app-smoke browser-smoke ci-tests ai-review next-public-secrets pr-title"/,
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED pstack-verifier"/);
-  assert.doesNotMatch(workflow, /REQUIRED="\$REQUIRED (app-smoke|browser-smoke)"/);
 });
 
 test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {

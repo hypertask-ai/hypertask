@@ -298,7 +298,7 @@ export function confirmsNoUserPath(reason) {
 export const FILE_LIST_CAP = 100;
 export const CI_WAIT_ROUNDS = 40;
 export const CI_WAIT_INTERVAL_MS = 30000;
-export const REQUIRED_CI_CONTEXTS = ["ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
+export const REQUIRED_CI_CONTEXTS = ["app-smoke", "browser-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
 export const BOT_LOGINS = new Set(["dependabot", "dependabot[bot]", "app/dependabot"]);
 const BOT_COMMITTERS = new Set([...BOT_LOGINS, "web-flow"]);
 const MANIFEST_BASENAMES = new Set(["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"]);

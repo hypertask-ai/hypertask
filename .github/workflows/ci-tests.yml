@@ -563,7 +563,7 @@ jobs:
             # Lanes that diff against the base share one fetch here, so no two
             # lanes write to .git at the same time.
             if [ -n "$BASE_SHA" ]; then
-              git fetch --no-tags --depth=1000 origin "$BASE_SHA" "$HEAD_SHA"
+              git fetch --no-tags --depth=1000 origin "$BASE_SHA"
             fi
             run_lane agent-board-scope
             run_lane typescript
@@ -602,7 +602,7 @@ jobs:
           key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
 
       - name: Save TypeScript cache
-        if: needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
+        if: needs.ci-prepare.outputs.run_tests == 'true' && github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -2231,12 +2231,16 @@ jobs:
     # HYCI-59: the one build is a need of its own, so a build that fails or is
     # cancelled before any shard starts is a red check, never a skipped one.
     needs: [browser-build, browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix, browser-smoke-flags]
-    if: always() && github.event_name != 'pull_request'
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
+      - name: Report the required browser-smoke stub
+        if: github.event_name == 'pull_request'
+        run: echo 'moved to nightly (HTPR-9450)' >> "$GITHUB_STEP_SUMMARY"
       - name: Require every browser shard
+        if: github.event_name != 'pull_request'
         env:
           BUILD: ${{ needs.browser-build.result }}
           DESKTOP: ${{ needs.browser-smoke-desktop.result }}
@@ -2256,6 +2260,7 @@ jobs:
       # seconds of work. It reads only the desktop shard's outputs, so it runs
       # here: same fail-closed answer, one machine instead of two.
       - name: Require the MCP CLI API contract
+        if: github.event_name != 'pull_request'
         env:
           CONTRACT_RESULT: ${{ needs.browser-smoke-desktop.outputs.contract }}
           DOCS_ONLY: ${{ needs.browser-smoke-desktop.outputs.docs_only }}

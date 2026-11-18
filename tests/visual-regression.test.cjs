@@ -89,7 +89,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   const visualRegressionOnly = yaml.dump({ jobs: { "visual-regression": job } });
   assert.doesNotMatch(visualRegressionOnly, /secrets\.|: write|workflow_run|pull_request_target/);
   assert.doesNotMatch(workflow, /workflow_run|pull_request_target/);
-  assert.deepEqual(parsed.on.schedule.map(entry => entry.cron), ["5 4 * * 1"]);
+  assert.deepEqual(parsed.on.schedule.map(entry => entry.cron), ["5 4 * * 1", "53 3 * * *"]);
   const weeklyFiling = parsed.jobs["verify-qa"].steps.find(step => step.name === "File fleet-board weekly result");
   assert.equal(weeklyFiling.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}");
   const filesWeekly = (event, { journey = "", head = "" } = {}) => vm.runInNewContext(
@@ -106,7 +106,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   });
   for (const [event, journey, group, cancel, visual, verify] of [
     ["push", "", "visual-regression-push-sha", false, true, false],
-    ["schedule", "", "feature-map-live-weekly", false, false, true],
+    ["schedule", "", "feature-map-live-weekly", false, true, true],
     ["workflow_dispatch", "", "visual-regression-push-sha", true, true, false],
     ["workflow_dispatch", "visual", "visual-regression-push-sha", true, true, false],
     ["workflow_dispatch", "inbox-cycle", "verify-qa", false, false, true],

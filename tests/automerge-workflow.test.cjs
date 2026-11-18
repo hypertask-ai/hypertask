@@ -303,12 +303,12 @@ test('auto-merge refuses fork and shared heads at the final feature-flag boundar
   }
 })
 
-test('auto-merge no longer waits for the app smoke or browser smoke results', async () => {
+test('auto-merge waits for both required smoke stubs', async () => {
   const { result, scratchEntries } = await runWorkflow({ omitAppSmoke: true, omitBrowserSmoke: true })
 
   assert.equal(result.status, 0, result.stderr)
-  assert.doesNotMatch(result.stdout, /check (app-smoke|browser-smoke) = MISSING/)
-  assert.match(result.stdout, /MERGED #42/)
+  assert.match(result.stdout, /check (app-smoke|browser-smoke) = MISSING/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })
 
