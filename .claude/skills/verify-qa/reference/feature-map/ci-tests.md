@@ -51,7 +51,7 @@ These isolated checks do not prove hosted scheduling.
 
 ### CI App API pool
 
-Confirm CI Tests' single review precheck uses `github.token` and its
+Confirm CI Tests' prepare job asks for no `statuses` permission and its
 PR-controlled workflow does not receive the App private key. For the current
 head, inspect mint and fallback logs in trusted App Smoke, Feature Flag Gate, and
 UX Signoff runs. Record evidence of actual App-authenticated requests without
