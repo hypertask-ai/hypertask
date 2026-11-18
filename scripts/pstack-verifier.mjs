@@ -654,7 +654,7 @@ export function cacheEntryFor({ plan, run, baseSha, mapSha }) {
     scriptHash: journeyLib.scriptHash(item.actions, item.expect ?? []),
     pageHash: item.page ? pageHash((readFeaturePages().find((page) => page.name === item.page) ?? { text: "" }).text) : "",
     apiOnly: run.apiOnly === true,
-    ok: compareLib.classifyRun(run).state === "ok",
+    ok: compareLib.classifyRun(run, item).state === "ok",
     judged: { verdict: String(run.judged ?? "") },
     steps: run.steps,
     expects: run.expects,
@@ -1037,14 +1037,14 @@ function baseRunFor(plan, journey, baseEvidence) {
   if (fresh) return fresh;
   const item = (plan.journeys ?? []).find((entry) => entry.journey === journey);
   if (!item?.base) return null;
-  return { journey, steps: item.base.steps, expects: item.base.expects, navigations: item.base.navigations, offOrigin: item.base.offOrigin, judged: item.base.judged?.verdict ?? "" };
+  return { journey, apiOnly: item.base.apiOnly === true, steps: item.base.steps, expects: item.base.expects, navigations: item.base.navigations, offOrigin: item.base.offOrigin, judged: item.base.judged?.verdict ?? "" };
 }
 export async function judgeJourneys({ plan, binding, evidence, picked, baseEvidence, ask = askModel, key = process.env.OPENROUTER_EVAL_KEY }) {
   const journeys = [];
   for (const [index, item] of plan.journeys.entries()) {
     const head = (evidence?.journeys ?? []).find((run) => run.journey === item.journey) ?? null;
     let judged = head ? String(head.judged ?? "") : "";
-    if (head && !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head).state.match(/failed|unavailable/)) {
+    if (head && !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head, item).state.match(/failed|unavailable/)) {
       try {
         const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: head }), { key, model: picked.model, images: imagesIn(shotsDirFor(path.join(workDir(), "evidence", "shots"), index)) }, parseAnswer);
         judged = parsed.verdict;
@@ -1054,7 +1054,7 @@ export async function judgeJourneys({ plan, binding, evidence, picked, baseEvide
         console.log(`journey ${item.journey}: ${failureText(error, 160)}`);
       }
     }
-    journeys.push({ journey: item.journey, base: baseRunFor(plan, item.journey, baseEvidence), head: head ? { ...head, judged } : null });
+    journeys.push({ journey: item.journey, plan: item, base: baseRunFor(plan, item.journey, baseEvidence), head: head ? { ...head, judged } : null });
   }
   return compareLib.decideComparison({ journeys, bugfix: plan.bugfix === true });
 }
@@ -1069,7 +1069,7 @@ export async function judgeBaseCommand({ work = workDir(), ask = askModel, key =
     const run = (evidence?.journeys ?? []).find((entry) => entry.journey === item.journey) ?? null;
     let judged = "";
     let unusable = false;
-    if (run && picked.model && !compareLib.classifyRun(run).state.match(/failed|unavailable/)) {
+    if (run && picked.model && !compareLib.classifyRun(run, item).state.match(/failed|unavailable/)) {
       try {
         const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: run }), { key, model: picked.model, images: imagesIn(shotsDirFor(path.join(work, "evidence", "shots"), index)) }, parseAnswer);
         judged = parsed.verdict;
@@ -1079,7 +1079,7 @@ export async function judgeBaseCommand({ work = workDir(), ask = askModel, key =
       }
     }
     if (unusable) continue;
-    journeys.push({ journey: item.journey, apiOnly: run?.apiOnly === true, steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
+    journeys.push({ journey: item.journey, apiOnly: item.actions.every((action) => action.op === "api"), steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
   }
   writeFileSync(path.join(work, "base-evidence.json"), `${JSON.stringify({ ...binding, journeys })}\n`, { mode: 0o600 });
   console.log(`base evidence: ${journeys.map((item) => `${item.journey} ${item.judged || compareLib.classifyRun(item).state}`).join(", ")}`);
