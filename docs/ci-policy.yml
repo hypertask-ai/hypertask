@@ -1015,6 +1015,13 @@ pstack_verifier:
   required: true
   note: https://app.hypertask.ai/detail/project-15/9411
 
+pstack_verifier_eval:
+  ticket: https://app.hypertask.ai/detail/project-15/9409
+  workflow: .github/workflows/pstack-verifier-eval.yml
+  context: null
+  required: false
+  note: weekly and manual eval of the verifier itself; a planted bug must fail and a clean change must pass
+
 repro_first:
   ticket: https://app.hypertask.ai/detail/project-15/9407
   workflow: .github/workflows/repro-first.yml
