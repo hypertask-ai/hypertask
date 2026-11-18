@@ -195,7 +195,7 @@ export function readVerdict(text, binding) {
   let body;
   try { body = JSON.parse(text); } catch { return fail("schema/binding mismatch"); }
   if (!sameBinding(body, binding) || !["PASS", "PASS+NOTES", "FAIL", "PENDING"].includes(body.verdict)) return fail("schema/binding mismatch");
-  return { verdict: body.verdict, notes: String(body.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500), sha: binding.sha, run: String(binding.run), attempt: String(binding.attempt), authorFamily: String(body.authorFamily ?? "").slice(0, 40), verifierModel: String(body.verifierModel ?? "").slice(0, 80) };
+  return { verdict: body.verdict, notes: String(body.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500), sha: binding.sha, run: String(binding.run), attempt: String(binding.attempt), baseSha: String(body.baseSha ?? "").slice(0, 40), tree: String(body.tree ?? "").slice(0, 40), authorFamily: String(body.authorFamily ?? "").slice(0, 40), verifierModel: String(body.verifierModel ?? "").slice(0, 80) };
 }
 function sameSeries(seen, planned, key) {
   if (seen.length !== planned.length) return false;
@@ -368,6 +368,7 @@ export const BOT_LOGINS = new Set(["dependabot", "dependabot[bot]", "app/dependa
 const BOT_COMMITTERS = new Set([...BOT_LOGINS, "web-flow"]);
 const MANIFEST_BASENAMES = new Set(["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"]);
 export const WAIT_LIMIT_MS = 90 * 60 * 1000;
+export const VERIFIER_LOGINS = ["github-actions[bot]", "hypertask-runners[bot]"];
 const VERIFIER_JOBS = new Set(["resolve", "plan", "drive", "judge", "post", "cancel", "pstack-verifier"]);
 export function docsShortcut(files, filesTruncated = false) {
   return filesTruncated !== true && heavyNeeded(files) === false;
@@ -787,6 +788,9 @@ function output(values) {
 function workDir() {
   return process.env.WORK || path.join(process.env.RUNNER_TEMP || "/tmp", "pstack-verifier");
 }
+function guardSha(sha) {
+  return String(sha ?? "");
+}
 function bindingNow(sha = process.env.HEAD_SHA) {
   return { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
 }
@@ -829,6 +833,63 @@ function ownsVerifierStatus(statuses, repo, run, attempt) {
 function pullUrl(repo, number) {
   return `repos/${repo}/pulls/${number}`;
 }
+export function patchIdOf(diff, spawn = spawnSync) {
+  const result = spawn("git", ["patch-id", "--stable"], { input: String(diff ?? ""), encoding: "utf8" });
+  if (result.status !== 0) return "";
+  const first = String(result.stdout ?? "").trim().split(/\s+/)[0] ?? "";
+  return /^[0-9a-f]{40}$/.test(first) ? first : "";
+}
+export function reusePayload({ item, sha, tree, diff, patchId, comments, artifact, status, repo }) {
+  return compareLib.reusableVerdict({
+    comments,
+    artifact,
+    status,
+    current: { baseSha: String(item?.base?.sha ?? ""), tree, patchId, diffSha256: compareLib.sha256(diff) },
+    logins: VERIFIER_LOGINS,
+    repo,
+  });
+}
+async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
+  const call = io.gh ?? gh;
+  let comments;
+  try {
+    comments = JSON.parse(call(["api", "--paginate", `repos/${repo}/issues/${item.number}/comments?per_page=100`]));
+  } catch {
+    return false;
+  }
+  const markers = compareLib.summaryMarkers({ comments, logins: VERIFIER_LOGINS });
+  const marker = markers.at(-1);
+  if (!marker) return false;
+  let artifact = null;
+  try {
+    const dir = path.join(process.env.RUNNER_TEMP || "/tmp", `pstack-reuse-${marker.run}`);
+    call(["run", "download", marker.run, "--name", `pstack-verdict-${marker.run}-${marker.attempt}`, "--dir", dir]);
+    artifact = JSON.parse(readFileSync(path.join(dir, "verdict.json"), "utf8"));
+  } catch {
+    return false;
+  }
+  let status = null;
+  try {
+    const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${artifact.head || artifact.sha}/statuses`]));
+    status = (Array.isArray(statuses) ? statuses : []).find((row) => row?.context === CONTEXT) ?? null;
+  } catch {
+    return false;
+  }
+  const decision = reusePayload({ item, sha, tree, diff, patchId, comments, artifact, status, repo });
+  if (!decision.reuse) {
+    console.log(`reuse skipped: ${decision.reason}`);
+    return false;
+  }
+  const send = io.postStatus ?? postStatus;
+  try {
+    await send({ repo, sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT), state: "success", description: statusDescription({ verdict: decision.verdict, authorFamily: artifact.authorFamily, verifierModel: artifact.verifierModel }) });
+  } catch {
+    return false;
+  }
+  console.log(decision.notes);
+  return true;
+}
+
 export async function resolveCommand(io = {}) {
   const call = io.gh ?? gh;
   const send = io.postStatus ?? postStatus;
@@ -883,8 +944,13 @@ export async function resolveCommand(io = {}) {
   const dir = path.join(workDir(), "request");
   mkdirSync(dir, { recursive: true });
   const baseSha = String(item.base?.sha ?? "");
+  const headSha = String(item.head?.sha ?? "");
+  const headTree = String(JSON.parse(call(["api", `repos/${repo}/commits/${headSha}`]))?.commit?.tree?.sha ?? "");
+  const fullDiff = call(["api", "-H", "Accept: application/vnd.github.diff", pullUrl(repo, number)]);
+  const patchId = patchIdOf(fullDiff, io.spawn ?? spawnSync);
+  if (await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId })) { output({ stop: "true" }); return; }
   if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true" }); return; }
-  const request = { ...bound, pr: item.number, baseSha, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  const request = { ...bound, pr: item.number, baseSha, tree: headTree, patchId, diffSha256: compareLib.sha256(fullDiff), title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
   if (botLogin) request.botLogin = botLogin;
   writeFileSync(path.join(dir, "request.json"), `${JSON.stringify(request)}\n`, { mode: 0o600 });
   await send({ repo, ...bound, state: "pending", description: "Planning a user check" });
@@ -897,7 +963,7 @@ export async function planFromRequest(request, deps = {}) {
   const botLogin = BOT_LOGINS.has(request.botLogin) ? request.botLogin : "";
   const picked = pickVerifier(request.author, deps.altModel ?? process.env.PSTACK_VERIFIER_ALT_MODEL);
   const listed = planFileList(request);
-  const plan = { ...binding, authorFamily: botLogin || request.author || "", verifierModel: botLogin ? "" : (picked.model || ""), actions: [], expect: [], reason: "", fail: botLogin ? "" : (picked.fail || ""), files: listed.files, filesTruncated: listed.filesTruncated, claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
+  const plan = { ...binding, authorFamily: botLogin || request.author || "", verifierModel: botLogin ? "" : (picked.model || ""), actions: [], expect: [], reason: "", fail: botLogin ? "" : (picked.fail || ""), files: listed.files, filesTruncated: listed.filesTruncated, baseSha: request.baseSha || "", tree: request.tree || "", patchId: request.patchId || "", diffSha256: request.diffSha256 || "", claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
   const selected = botLogin || plan.fail ? null : selectPlan(listed.files, listed.filesTruncated);
   if (botLogin) { plan.reason = "no user path"; plan.botLogin = botLogin; }
   else if (!plan.fail && docsShortcut(listed.files, listed.filesTruncated)) plan.reason = "no user path";
@@ -919,7 +985,6 @@ export async function planFromRequest(request, deps = {}) {
     });
     plan.journeys = journeys.items;
     plan.bugfix = bugfix;
-    plan.baseSha = request.baseSha;
     plan.actions = journeys.actions;
     plan.expect = journeys.expect;
     plan.reason = journeys.reason;
@@ -1067,7 +1132,7 @@ async function judgeCommand() {
   const verdict = compared ?? decide({ model, plan, evidence, binding, checksPassed, checksPending });
   const dir = path.join(workDir(), "verdict");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, authorFamily: verdict.authorFamily || plan.botLogin || plan.authorFamily || "", verifierModel: plan.botLogin ? "" : (plan.verifierModel || "") })}\n`, { mode: 0o600 });
+  writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, baseSha: plan.baseSha || "", tree: plan.tree || "", patchId: plan.patchId || "", diffSha256: plan.diffSha256 || "", authorFamily: verdict.authorFamily || plan.botLogin || plan.authorFamily || "", verifierModel: plan.botLogin ? "" : (plan.verifierModel || "") })}\n`, { mode: 0o600 });
 }
 export function runMinutes(startedAt, now = Date.now()) {
   const started = Date.parse(String(startedAt ?? ""));
@@ -1092,6 +1157,11 @@ export async function postCommand(io = {}) {
   const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
   const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
   if (!eligiblePull(item, repo, binding.sha) || !ownsVerifierStatus(statuses, repo, binding.run, binding.attempt)) return;
+  if (saved.baseSha && compareLib.baseMoved({ item, plan: { sha: guardSha(binding.sha), baseSha: saved.baseSha } }).moved) {
+    await postStatus({ repo, ...binding, state: "pending", description: "waiting for required checks", fetchImpl: io.fetch });
+    console.log("the base or the head moved during the run; the recheck will drive it again");
+    return;
+  }
   let state = saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure";
   let description = statusDescription(saved);
   if (saved.verdict === "PENDING") {
@@ -1105,7 +1175,8 @@ export async function postCommand(io = {}) {
   if (saved.verdict === "PENDING") return;
   const minutes = runMinutes(io.startedAt ?? process.env.RUN_STARTED_AT, io.now);
   const notes = redact(saved.notes, secretValues());
-  await postComment(repo, pr, verdictComment(saved.verdict, notes, minutes), io.fetch);
+  const marker = saved.tree && saved.baseSha ? compareLib.buildMarker({ run: binding.run, attempt: binding.attempt, head: binding.sha, tree: saved.tree, base: saved.baseSha }) : "";
+  await postComment(repo, pr, marker ? `${verdictComment(saved.verdict, notes, minutes)}\n\n${marker}` : verdictComment(saved.verdict, notes, minutes), io.fetch);
 }
 async function main() {
   const command = process.argv[2];

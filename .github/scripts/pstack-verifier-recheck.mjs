@@ -1,8 +1,11 @@
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+const compare = createRequire(import.meta.url)("../../scripts/lib/pstack-compare.cjs");
+const VERIFIER_LOGINS = ["github-actions[bot]", "hypertask-runners[bot]"];
 export const VERIFIER_WORKFLOW = ".github/workflows/pstack-verifier.yml";
 export const SOURCE_WORKFLOWS = ["CI Tests", "PR Guards"];
 export const RERUN_LIMIT = 10;
@@ -42,6 +45,16 @@ export function selectReruns(items, limit = RERUN_LIMIT) {
     .slice(0, limit);
 }
 
+export function driftOf({ item, comments, logins = VERIFIER_LOGINS } = {}) {
+  const marker = compare.summaryMarkers({ comments, logins }).at(-1);
+  if (!marker) return null;
+  const base = String(item?.base?.sha ?? "");
+  if (!/^[0-9a-f]{40}$/.test(base) || marker.base === base) return null;
+  return { number: item.number, sha: String(item?.head?.sha ?? ""), verifiedBase: marker.base, base };
+}
+export function selectDrift(items, limit = RERUN_LIMIT) {
+  return [...(Array.isArray(items) ? items : [])].filter((item) => item?.verifiedBase).slice(0, limit);
+}
 export async function listProductionPulls(readPage) {
   const pulls = [];
   for (let page = 1; ; page += 1) {
@@ -112,6 +125,21 @@ async function sweep(repo, call) {
     waiting.push({ number: item.number, sha, waitingSince: status.created_at });
   }
   for (const item of selectReruns(waiting)) rerunRequest(repo, item.sha, call);
+  const drifted = [];
+  for (const item of pulls) {
+    const sha = item?.head?.sha;
+    if (!/^[0-9a-f]{40}$/.test(String(sha ?? ""))) continue;
+    const status = newestVerifierStatus(JSON.parse(call(["api", `repos/${repo}/commits/${sha}/statuses`])));
+    if (!status || status.state !== "success") continue;
+    const comments = JSON.parse(call(["api", "--paginate", `repos/${repo}/issues/${item.number}/comments?per_page=100`]));
+    const drift = driftOf({ item, comments });
+    if (drift) drifted.push({ ...drift, run: runIdFromUrl(status.target_url) });
+  }
+  for (const item of selectDrift(drifted)) {
+    if (!item.run) continue;
+    call(["api", "--method", "POST", `repos/${repo}/actions/runs/${item.run}/rerun`]);
+    console.log(`rerun ${item.run} for ${item.sha}: verified against ${item.verifiedBase}, base is ${item.base}`);
+  }
 }
 
 async function main() {

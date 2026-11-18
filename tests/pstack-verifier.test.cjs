@@ -1086,6 +1086,8 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
         calls.push(args);
         const url = args.join(" ");
         if (url.includes("/pulls/7/commits")) return JSON.stringify(args.includes("--paginate") ? commits : commits.slice(0, 30));
+        if (url.includes(`/commits/${head}`) && !url.includes("/statuses") && !url.includes("/check-runs")) return JSON.stringify({ commit: { tree: { sha: "e".repeat(40) } } });
+        if (url.includes("/issues/7/comments")) return "[]";
         if (url.includes("/pulls/7/files")) return lines(files);
         if (url.includes("vnd.github.diff")) return "";
         if (url.includes("/pulls/7")) return JSON.stringify(pulls.shift());
