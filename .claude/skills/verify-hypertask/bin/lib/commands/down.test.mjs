@@ -12,6 +12,7 @@ test("down --dry-run names the recorded pid and the container", async () => {
   const result = await json(dir, ["down", "--dry-run"]);
   assert.equal(result.status, 0);
   assert.deepEqual(result.json.data.steps, ["kill 4242", "docker rm -f hypertask-verify-db", "docker volume rm hypertask-verify-db"]);
+  assert.equal(result.json.data.dryRun, true);
 });
 
 test("down --keep-db leaves the database alone", async () => {

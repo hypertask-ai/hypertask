@@ -10,8 +10,9 @@ Usage:
   --dry-run   Print what would be killed and removed, change nothing.
   --keep-db   Keep the Postgres container and volume, for a faster next run.
 
-Kills only the pid recorded in dev.pid, then removes the hypertask-verify-db
-container and volume. Never kills by process name or another session's server.
+Kills the process group recorded in dev.pid, then removes the
+hypertask-verify-db container and volume. Never kills by process name or
+another session's server.
 
 Examples:
   ht-verify down
@@ -33,10 +34,15 @@ module.exports = {
     const stopped = [];
     if (pidFile.pid) {
       try {
-        process.kill(pidFile.pid, "SIGTERM");
-        stopped.push(`pid ${pidFile.pid}`);
+        process.kill(-pidFile.pid, "SIGTERM");
+        stopped.push(`process group ${pidFile.pid}`);
       } catch {
-        stopped.push(`pid ${pidFile.pid} was already gone`);
+        try {
+          process.kill(pidFile.pid, "SIGTERM");
+          stopped.push(`pid ${pidFile.pid}`);
+        } catch {
+          stopped.push(`pid ${pidFile.pid} was already gone`);
+        }
       }
       try {
         unlinkSync(path.join(runDir(), "dev.pid"));
