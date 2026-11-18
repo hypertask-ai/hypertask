@@ -429,7 +429,7 @@ feature_map_coverage:
   workflow: .github/workflows/feature-map-coverage.yml
   runs_on: ubuntu-latest
   required: false
-  report_only: true
+  report_only: false
   blocks_merge: false
   triggers: [workflow_dispatch, pull_request]
   pull_request_base: production
@@ -444,7 +444,7 @@ feature_map_coverage:
   permissions: [contents_read]
   commands:
     - node --test tests/feature-map-coverage.test.cjs
-    - node .github/scripts/feature-map-coverage.cjs
+    - node .github/scripts/feature-map-coverage.cjs --strict
   fixtures: offline_with_temporary_home_and_no_secrets
   app_driving: false
 
