@@ -404,6 +404,9 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.ok(spec.includes("test.step('page height settles before scrolling to the last comment'"));
   assert.doesNotMatch(spec, /scrollIntoViewIfNeeded|parent\.scrollTop|scrollingElement|ticket-comment'\)\.last\(\)|data-task-composer-slot/);
   assert.match(spec, /keyboard\.press\('Control\+j'\)/);
+  assert.match(spec, /readFileSync\(path\.join\(__dirname, '\.\.\/\.\.\/src\/lib\/firstScreen\/inboxZero\.ts'\)/);
+  assert.match(spec, /page\.route\(url => rewardImageUrls\.some\(image => url\.href\.includes\(image\) \|\| url\.href\.includes\(encodeURIComponent\(image\)\)\), route => route\.fulfill\(\{/);
+  assert.ok(spec.indexOf('page.route(') < spec.indexOf("navigate(page, '/inbox')"));
   assert.match(spec, /navigate\(page, '\/inbox'\)/);
   assert.match(spec, /getByAltText\('Inbox zero reward background'\)/);
   assert.match(spec, /image\.complete\)/);
