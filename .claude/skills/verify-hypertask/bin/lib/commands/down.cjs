@@ -13,8 +13,7 @@ Usage:
 Kills only the pid recorded in dev.pid, then removes the hypertask-verify-db
 container and volume. Never kills by process name or another session's server.
 
-Examples:
-  ht-verify down
+Example:
   ht-verify down --keep-db`;
 
 function ownsPid(pid) {
