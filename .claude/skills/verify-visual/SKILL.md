@@ -3,6 +3,8 @@ name: verify-visual
 description: Before merging a Hypertask UI PR, check whether it moved a main screen using the Visual Regression workflow and diff PNGs.
 ---
 
+pstack: 0.15.43
+
 # verify-visual
 
 ## Launch
